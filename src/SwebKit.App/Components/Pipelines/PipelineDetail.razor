@@ -39,18 +39,19 @@
                     <label class="form-label">Branch</label>
                     @if (_branches is { Count: > 0 })
                     {
-                        <select class="form-input" @bind="_branch">
+                        <AppSelect CssClass="form-input" Value="@_branch"
+                                   ValueChanged="value => _branch = value ?? string.Empty">
                             @foreach (var b in _branches)
                             {
                                 <option value="@b">@b</option>
                             }
-                        </select>
+                        </AppSelect>
                     }
                     else if (_loadingBranches)
                     {
-                        <select class="form-input" disabled>
+                        <AppSelect CssClass="form-input" Disabled="true">
                             <option>Loading branches…</option>
-                        </select>
+                        </AppSelect>
                     }
                     else
                     {
@@ -138,11 +139,11 @@
                                 </td>
                                 <td class="env-table__td">
                                     <span class="text-mono text-sm">@(env.RunName ?? (env.LatestRunId.HasValue ?
-                                                                    $"#{env.LatestRunId}" : "—"))</span>
+                                                                                                            $"#{env.LatestRunId}" : "—"))</span>
                                     </td>
                                     <td class="env-table__td">
-                                        <span class="text-muted text-sm">@(env.FinishedAt.HasValue ? RelativeTime(env.FinishedAt.Value)
-                                                                    : "—")</span>
+                                        <span class="text-muted text-sm">@(env.FinishedAt.HasValue? RelativeTime(env.FinishedAt.Value)
+                                                                                                            : "—")</span>
                                         </td>
                                         <td class="env-table__td">
                                             <span class="text-muted text-sm">@(env.TriggeredBy ?? "—")</span>

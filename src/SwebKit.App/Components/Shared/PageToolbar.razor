@@ -1,4 +1,4 @@
-<div class="page-toolbar">
+<div class="@ToolbarClass">
     @if (LeadingContent is not null)
     {
         <div class="page-toolbar-leading">@LeadingContent</div>
@@ -17,4 +17,30 @@
     [Parameter] public RenderFragment? LeadingContent { get; set; }
     [Parameter] public RenderFragment? CenterContent { get; set; }
     [Parameter] public RenderFragment? TrailingContent { get; set; }
+    [Parameter] public string Density { get; set; } = "Compact";
+    [Parameter] public bool Wrap { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+
+    private string ToolbarClass
+    {
+        get
+        {
+            var density = NormalizeDensity(Density);
+            var stateClasses = string.Join(' ', new[]
+            {
+                $"page-toolbar--density-{density}",
+                Wrap ? "page-toolbar--wrap" : null,
+                CssClass
+            }.Where(static cssClass => !string.IsNullOrWhiteSpace(cssClass)));
+
+            return $"page-toolbar {stateClasses}";
+        }
+    }
+
+    private static string NormalizeDensity(string? density)
+        => density?.Trim().ToLowerInvariant() switch
+        {
+            "comfortable" => "comfortable",
+            _ => "compact"
+        };
 }

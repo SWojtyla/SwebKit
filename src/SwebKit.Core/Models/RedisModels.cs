@@ -118,6 +118,7 @@ public class RedisServerInfo
     public long UptimeSeconds { get; set; }
     public long ConnectedClients { get; set; }
     public long UsedMemoryBytes { get; set; }
+    public long MaxMemoryBytes { get; set; }
     public string UsedMemoryHuman { get; set; } = string.Empty;
     public long TotalCommandsProcessed { get; set; }
     public double KeyspaceHitRatio { get; set; }

@@ -1,0 +1,233 @@
+.col-export-dialog__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 400;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.col-export-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 401;
+    background: var(--surface-raised, #2a2a3a);
+    border: 1px solid var(--border-color, #3a3a4a);
+    border-radius: 8px;
+    padding: 20px 24px;
+    min-width: 360px;
+    max-width: 500px;
+    width: 90vw;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Tab strip ────────────────────────────────────────────────────────────── */
+
+.col-export-dialog__tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border-color, #3a3a4a);
+}
+
+.col-export-dialog__tab {
+    padding: 6px 14px;
+    background: none;
+    border: none;
+    color: var(--text-muted, #8a8a9a);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.col-export-dialog__tab--active {
+    color: var(--text-primary, #e0e0ef);
+    border-bottom-color: var(--accent-border, #4a6aaa);
+}
+
+/* ── Section titles ───────────────────────────────────────────────────────── */
+
+.col-export-dialog__section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted, #8a8a9a);
+    margin-bottom: 8px;
+}
+
+.col-export-dialog__section-title--gap {
+    margin-top: 14px;
+}
+
+/* ── Format selector ──────────────────────────────────────────────────────── */
+
+.col-export-dialog__format-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.col-export-dialog__format-radio {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary, #e0e0ef);
+}
+
+.col-export-dialog__format-ext {
+    font-size: 11px;
+    color: var(--text-muted, #8a8a9a);
+    margin-left: auto;
+}
+
+/* ── Checkbox row ─────────────────────────────────────────────────────────── */
+
+.col-export-dialog__check-row {
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text-primary, #e0e0ef);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.col-export-dialog__env-count {
+    font-size: 11px;
+    color: var(--text-muted, #8a8a9a);
+}
+
+/* ── Note / hint text ─────────────────────────────────────────────────────── */
+
+.col-export-dialog__note {
+    font-size: 11px;
+    color: var(--text-muted, #8a8a9a);
+    margin-bottom: 14px;
+}
+
+/* ── File picker row ──────────────────────────────────────────────────────── */
+
+.col-export-dialog__file-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.col-export-dialog__file-name {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-secondary, #b0b0c0);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── State indicators ─────────────────────────────────────────────────────── */
+
+.col-export-dialog__busy {
+    font-size: 12px;
+    color: var(--text-muted, #8a8a9a);
+    margin: 10px 0;
+    text-align: center;
+}
+
+.col-export-dialog__error {
+    font-size: 12px;
+    color: #e06060;
+    background: #3a1a1a;
+    border: 1px solid #6a3030;
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin: 10px 0;
+}
+
+/* ── Import summary ───────────────────────────────────────────────────────── */
+
+.col-export-dialog__summary {
+    background: #1a3a1a;
+    border: 1px solid #306030;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin: 10px 0;
+}
+
+.col-export-dialog__summary-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #60c060;
+    margin-bottom: 6px;
+}
+
+.col-export-dialog__summary-list {
+    margin: 0;
+    padding: 0 0 0 16px;
+    font-size: 12px;
+    color: var(--text-secondary, #b0b0c0);
+}
+
+.col-export-dialog__summary-list li {
+    margin-bottom: 2px;
+}
+
+.col-export-dialog__summary-warn {
+    color: #e0c060;
+}
+
+.col-export-dialog__summary-warnings {
+    margin-top: 8px;
+    border-top: 1px solid #306030;
+    padding-top: 6px;
+}
+
+.col-export-dialog__summary-warning {
+    font-size: 11px;
+    color: #e0a040;
+    margin-bottom: 2px;
+}
+
+/* ── Action buttons ───────────────────────────────────────────────────────── */
+
+.col-export-dialog__actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-color, #3a3a4a);
+}
+
+.col-export-dialog__btn {
+    padding: 6px 16px;
+    background: var(--surface-raised, #2a2a3a);
+    border: 1px solid var(--border-color, #3a3a4a);
+    border-radius: 4px;
+    color: var(--text-secondary, #b0b0c0);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.col-export-dialog__btn:hover:not(:disabled) {
+    background: var(--surface-hover, #353545);
+}
+
+.col-export-dialog__btn--primary {
+    background: var(--accent-btn, #3a5a9a);
+    border-color: var(--accent-border, #4a6aaa);
+    color: #e8e8ff;
+    font-weight: 500;
+}
+
+.col-export-dialog__btn--primary:hover:not(:disabled) {
+    background: var(--accent-btn-hover, #4a6aaa);
+}
+
+.col-export-dialog__btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

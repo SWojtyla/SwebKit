@@ -1,0 +1,60 @@
+@* Basic auth form: username (plain) + password (credential store) *@
+@inject ICredentialStore CredentialStore
+
+<div class="basic-form">
+    <div class="basic-form__row">
+        <label class="basic-form__label">Username</label>
+        <input type="text" class="basic-form__input" placeholder="Username" value="@Auth.BasicUsername"
+               @oninput="OnUsernameInput" autocomplete="off" />
+    </div>
+
+    <div class="basic-form__row">
+        <label class="basic-form__label">Password</label>
+        <div class="basic-form__input-row">
+            <input type="@(_showPassword ? "text" : "password")" class="basic-form__input" placeholder="Password…"
+                   value="@_passwordDisplay" @oninput="OnPasswordInput" autocomplete="new-password" />
+            <button type="button" class="basic-form__toggle" title="@(_showPassword ? "Hide" : "Show")"
+                    @onclick="() => _showPassword = !_showPassword">
+                @(_showPassword ? "🙈" : "👁")
+            </button>
+        </div>
+    </div>
+
+    <p class="basic-form__hint">Sent as <code>Authorization: Basic &lt;base64(user:pass)&gt;</code></p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AuthConfig Auth { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _showPassword;
+    private string _passwordDisplay = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrEmpty(Auth.CredentialKey))
+            _passwordDisplay = CredentialStore.Get(Auth.CredentialKey) ?? string.Empty;
+    }
+
+    private async Task OnUsernameInput(ChangeEventArgs e)
+    {
+        Auth.BasicUsername = e.Value?.ToString() ?? string.Empty;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task OnPasswordInput(ChangeEventArgs e)
+    {
+        var password = e.Value?.ToString() ?? string.Empty;
+        _passwordDisplay = password;
+
+        if (string.IsNullOrEmpty(Auth.CredentialKey))
+            Auth.CredentialKey = $"api-client:basic:{Guid.NewGuid():N}";
+
+        if (string.IsNullOrEmpty(password))
+            CredentialStore.Delete(Auth.CredentialKey);
+        else
+            CredentialStore.Save(Auth.CredentialKey, password);
+
+        await OnChanged.InvokeAsync();
+    }
+}

@@ -1,0 +1,629 @@
+@using SwebKit.Core.Models
+@using SwebKit.Core.Domain
+@inject AppStateService AppState
+@inject IAksClientFactory AksClientFactory
+@inject IMonitoringConnectionPool Pool
+
+<div class="alert-rule-modal-backdrop @(IsOpen ? "alert-rule-modal-backdrop--visible" : string.Empty)"
+     @onclick="HandleBackdropClick">
+    <div class="alert-rule-modal" role="dialog" aria-label="@DrawerTitle" aria-modal="true"
+         @onclick:stopPropagation="true">
+        <div class="alert-rule-modal__header">
+            <span class="alert-rule-modal__title">@DrawerTitle</span>
+            <button class="alert-rule-modal__close-btn" @onclick="OnClose" aria-label="Close">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
+            </button>
+        </div>
+
+        <div class="alert-rule-modal__body">
+            @if (_nameError is not null)
+            {
+                <ErrorCallout Message="@_nameError" />
+            }
+
+            <fieldset class="alert-rule-drawer__fieldset">
+                <legend>General</legend>
+
+                <div class="alert-rule-drawer__field">
+                    <label for="rule-name" class="alert-rule-drawer__label">Name *</label>
+                    <input id="rule-name" type="text" class="app-native-control" @bind="_name" @bind:event="oninput"
+                           @ref="_nameRef" maxlength="100" placeholder="e.g. Prod pod health" aria-required="true" />
+                </div>
+
+                <div class="alert-rule-drawer__field">
+                    <label for="rule-source" class="alert-rule-drawer__label">Source *</label>
+                    <select id="rule-source" class="app-native-control" @bind="_source" @bind:event="onchange">
+                        @foreach (var src in Enum.GetValues<AlertRuleSource>())
+                        {
+                            <option value="@src">@FormatSourceLabel(src)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
+                    <label class="alert-rule-drawer__label">Severity</label>
+                    <div role="radiogroup" class="alert-rule-drawer__radio-group">
+                        <label>
+                            <input type="radio" name="severity-@_uid" value="Warning"
+                                   checked="@(_severity == AlertSeverity.Warning)"
+                                   @onchange="() => _severity = AlertSeverity.Warning" />
+                            ⚠ Warning
+                        </label>
+                        <label>
+                            <input type="radio" name="severity-@_uid" value="Critical"
+                                   checked="@(_severity == AlertSeverity.Critical)"
+                                   @onchange="() => _severity = AlertSeverity.Critical" />
+                            🔴 Critical
+                        </label>
+                    </div>
+                </div>
+
+                <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
+                    <label for="rule-interval" class="alert-rule-drawer__label">Interval</label>
+                    <div class="alert-rule-drawer__number-row">
+                        <input id="rule-interval" type="number"
+                               class="app-native-control alert-rule-drawer__number-input" min="10"
+                               @bind="_intervalSeconds" />
+                        <span class="alert-rule-drawer__unit">s</span>
+                    </div>
+                </div>
+
+                <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
+                    <label for="rule-cooldown" class="alert-rule-drawer__label">Cooldown</label>
+                    <div class="alert-rule-drawer__number-row">
+                        <input id="rule-cooldown" type="number"
+                               class="app-native-control alert-rule-drawer__number-input" min="1"
+                               @bind="_cooldownMinutes" />
+                        <span class="alert-rule-drawer__unit">min</span>
+                    </div>
+                </div>
+
+                <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
+                    <label for="rule-enabled" class="alert-rule-drawer__label">Enabled</label>
+                    <input id="rule-enabled" type="checkbox" role="switch" @bind="_enabled" />
+                </div>
+            </fieldset>
+
+            @if (IsAksSource)
+            {
+                <fieldset class="alert-rule-drawer__fieldset">
+                    <legend>AKS</legend>
+
+                    @* ── Context ── *@
+                    <div class="alert-rule-drawer__field">
+                        <label for="aks-context" class="alert-rule-drawer__label">Context</label>
+                        @if (_aksContexts.Count > 0)
+                        {
+                            <select id="aks-context" class="app-native-control" @bind="_aksKubeconfigContext">
+                                @foreach (var ctx in _aksContexts)
+                                {
+                                    <option value="@ctx.Name">
+                                        @ctx.Name @(ctx.IsCurrent ? "(current)" : string.Empty)
+                                    </option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <div class="alert-rule-drawer__inline-load">
+                                <input id="aks-context" type="text" class="app-native-control" @bind="_aksKubeconfigContext"
+                                       placeholder="Leave blank to use global context" />
+                                @if (!_aksContextsLoaded)
+                                {
+                                    <button class="alert-rule-drawer__load-btn" @onclick="LoadAksDataAsync"
+                                            title="Load contexts from kubeconfig" disabled="@_aksDataLoading">
+                                        @if (_aksDataLoading)
+                                        {
+                                            <FluentProgressRing Width="12px" />
+                                        }
+                                        else
+                                        {
+                                            <span>↻</span>
+                                        }
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    @* ── Namespace ── *@
+                    <div class="alert-rule-drawer__field">
+                        <label for="aks-namespace" class="alert-rule-drawer__label">Namespace</label>
+                        @if (_aksNamespaces.Count > 0)
+                        {
+                            <select id="aks-namespace" class="app-native-control" @bind="_aksNamespace">
+                                <option value="">(all namespaces)</option>
+                                @foreach (var ns in _aksNamespaces)
+                                {
+                                    <option value="@ns">@ns</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <input id="aks-namespace" type="text" class="app-native-control" @bind="_aksNamespace"
+                                   placeholder="Leave blank for all namespaces" />
+                        }
+                    </div>
+
+                    @if (_source == AlertRuleSource.AksPodRestartRate)
+                    {
+                        <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
+                            <label for="aks-restart-threshold" class="alert-rule-drawer__label">Restart threshold</label>
+                            <input id="aks-restart-threshold" type="number"
+                                   class="app-native-control alert-rule-drawer__number-input" min="1"
+                                   @bind="_aksRestartThreshold" />
+                        </div>
+                    }
+                    @if (_source == AlertRuleSource.AksNamespaceHealthScore)
+                    {
+                        <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
+                            <label for="aks-health-threshold" class="alert-rule-drawer__label">Not-ready threshold %</label>
+                            <input id="aks-health-threshold" type="range" min="1" max="100"
+                                   @bind="_aksHealthScoreThresholdPct" />
+                            <span class="alert-rule-drawer__range-value">@_aksHealthScoreThresholdPct%</span>
+                        </div>
+                    }
+                </fieldset>
+            }
+
+            @if (IsServiceBusSource)
+            {
+                var sbNamespaces = AppState.ServiceBusNamespaces;
+                <fieldset class="alert-rule-drawer__fieldset">
+                    <legend>Service Bus</legend>
+                    <div class="alert-rule-drawer__field">
+                        <label for="sb-namespace" class="alert-rule-drawer__label">Namespace *</label>
+                        @if (sbNamespaces.Count > 0)
+                        {
+                            <select id="sb-namespace" class="app-native-control"
+                                    value="@_sbNamespaceAlias"
+                                    @onchange="OnSbNamespaceChangedAsync">
+                                <option value="">— select namespace —</option>
+                                @foreach (var ns in sbNamespaces)
+                                {
+                                    <option value="@ns.Alias">@ns.Alias (@ns.FullyQualifiedNamespace)</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <input id="sb-namespace" type="text" class="app-native-control" @bind="_sbNamespaceAlias"
+                                   placeholder="Alias from configured namespaces" />
+                            <span class="alert-rule-drawer__hint">No Service Bus namespaces configured yet.</span>
+                        }
+                    </div>
+                    <div class="alert-rule-drawer__field">
+                        <label for="sb-entity" class="alert-rule-drawer__label">Entity path *</label>
+                        <div class="alert-rule-drawer__entity-wrap">
+                            <input id="sb-entity" type="text" class="app-native-control"
+                                   list="sb-entity-list"
+                                   @bind="_sbEntityPath"
+                                   placeholder="@(_sbEntitiesLoading ? "Loading entities…" : "queue-name or topic/Subscriptions/sub")" />
+                            @if (_sbEntitiesLoading)
+                            {
+                                <FluentProgressRing Width="14px" class="alert-rule-drawer__entity-spinner" />
+                            }
+                        </div>
+                        <datalist id="sb-entity-list">
+                            @foreach (var path in _sbEntityOptions)
+                            {
+                                <option value="@path" />
+                            }
+                        </datalist>
+                        @if (_sbEntityOptions.Count == 0 && !string.IsNullOrWhiteSpace(_sbNamespaceAlias) && !_sbEntitiesLoading)
+                        {
+                            <span class="alert-rule-drawer__hint">Could not load entities — type path manually.</span>
+                        }
+                    </div>
+                    <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
+                        <label for="sb-threshold" class="alert-rule-drawer__label">Threshold</label>
+                        <div class="alert-rule-drawer__number-row">
+                            <input id="sb-threshold" type="number"
+                                   class="app-native-control alert-rule-drawer__number-input" min="1"
+                                   @bind="_sbMessageCountThreshold" />
+                            <span class="alert-rule-drawer__unit">messages</span>
+                        </div>
+                    </div>
+                </fieldset>
+            }
+
+            @if (IsRedisSource)
+            {
+                var redisCaches = AppState.Config.RedisConfig?.Caches ?? [];
+                <fieldset class="alert-rule-drawer__fieldset">
+                    <legend>Redis</legend>
+                    <div class="alert-rule-drawer__field">
+                        <label for="redis-connection" class="alert-rule-drawer__label">Connection *</label>
+                        @if (redisCaches.Count > 0)
+                        {
+                            <select id="redis-connection" class="app-native-control" @bind="_redisConnectionAlias">
+                                <option value="">— select cache —</option>
+                                @foreach (var cache in redisCaches)
+                                {
+                                    <option value="@cache.DisplayName">@cache.DisplayName</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <input id="redis-connection" type="text" class="app-native-control" @bind="_redisConnectionAlias"
+                                   placeholder="Display name from Redis configuration" />
+                            <span class="alert-rule-drawer__hint">No Redis caches configured yet.</span>
+                        }
+                    </div>
+                    @if (_source == AlertRuleSource.RedisMemoryUsage)
+                    {
+                        <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
+                            <label for="redis-memory-threshold" class="alert-rule-drawer__label">Memory threshold %</label>
+                            <input id="redis-memory-threshold" type="number"
+                                   class="app-native-control alert-rule-drawer__number-input" min="1" max="100"
+                                   @bind="_redisMemoryThresholdPct" />
+                            <span class="alert-rule-drawer__unit">%</span>
+                        </div>
+                    }
+                    @if (_source == AlertRuleSource.RedisConnectedClients)
+                    {
+                        <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
+                            <label for="redis-client-min" class="alert-rule-drawer__label">Minimum clients</label>
+                            <input id="redis-client-min" type="number"
+                                   class="app-native-control alert-rule-drawer__number-input" min="0"
+                                   @bind="_redisClientLowerBound" />
+                        </div>
+                    }
+                </fieldset>
+            }
+
+            @if (IsStorageSource)
+            {
+                <fieldset class="alert-rule-drawer__fieldset">
+                    <legend>Storage</legend>
+                    <div class="alert-rule-drawer__field">
+                        <label for="storage-account" class="alert-rule-drawer__label">Account alias *</label>
+                        <input id="storage-account" type="text" class="app-native-control" @bind="_storageAccountAlias"
+                               placeholder="Storage account alias" />
+                    </div>
+                    <div class="alert-rule-drawer__field">
+                        <label for="storage-container" class="alert-rule-drawer__label">Container *</label>
+                        <input id="storage-container" type="text" class="app-native-control" @bind="_storageContainerName"
+                               placeholder="Container name" />
+                    </div>
+                    <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
+                        <label for="storage-blob-threshold" class="alert-rule-drawer__label">Blob count threshold</label>
+                        <input id="storage-blob-threshold" type="number"
+                               class="app-native-control alert-rule-drawer__number-input" min="1"
+                               @bind="_storageBlobCountThreshold" />
+                    </div>
+                </fieldset>
+            }
+        </div>
+
+        <div class="alert-rule-modal__footer">
+            <button class="alert-rule-drawer__btn alert-rule-drawer__btn--ghost" @onclick="OnClose">Cancel</button>
+            <button class="alert-rule-drawer__btn alert-rule-drawer__btn--primary" disabled="@(!IsValid)"
+                    @onclick="HandleSaveAsync">Save rule</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public MonitoringAlertRule? Rule { get; set; }
+    [Parameter] public EventCallback<MonitoringAlertRule> OnSave { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    // Common fields
+    private string _name = string.Empty;
+    private AlertRuleSource _source;
+    private AlertSeverity _severity = AlertSeverity.Warning;
+    private int _intervalSeconds = 60;
+    private int _cooldownMinutes = 5;
+    private bool _enabled = true;
+
+    // AKS
+    private string _aksNamespace = string.Empty;
+    private int _aksRestartThreshold = 5;
+    private int _aksHealthScoreThresholdPct = 25;
+
+    // Service Bus
+    private string _sbNamespaceAlias = string.Empty;
+    private string _sbEntityPath = string.Empty;
+    private long _sbMessageCountThreshold = 1;
+    private List<string> _sbEntityOptions = [];
+    private bool _sbEntitiesLoading;
+    private string _sbLastLoadedAlias = string.Empty;
+
+    // Redis
+    private string _redisConnectionAlias = string.Empty;
+    private double _redisMemoryThresholdPct = 80.0;
+    private int _redisClientLowerBound = 1;
+
+    // Storage
+    private string _storageAccountAlias = string.Empty;
+    private string _storageContainerName = string.Empty;
+    private long _storageBlobCountThreshold = 1000;
+
+    private string? _nameError;
+    private ElementReference _nameRef;
+    private readonly string _uid = Guid.NewGuid().ToString("N")[..8];
+
+    // AKS data loading
+    private List<KubeContextInfo> _aksContexts = [];
+    private List<string> _aksNamespaces = [];
+    private bool _aksContextsLoaded;
+    private bool _aksDataLoading;
+    // Bound to the context text input when no contexts could be loaded
+    private string _aksKubeconfigContext = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (Rule is not null)
+        {
+            _name = Rule.Name;
+            _source = Rule.Source;
+            _severity = Rule.Severity;
+            _intervalSeconds = Rule.IntervalSeconds;
+            _cooldownMinutes = Rule.CooldownMinutes;
+            _enabled = Rule.Enabled;
+
+            if (Rule.AksPodParams is { } aks)
+            {
+                _aksKubeconfigContext = aks.KubeconfigContext;
+                _aksNamespace = aks.Namespace;
+                _aksRestartThreshold = aks.RestartThreshold;
+                _aksHealthScoreThresholdPct = (int)(aks.HealthScoreThreshold * 100);
+            }
+            if (Rule.ServiceBusParams is { } sb)
+            {
+                _sbNamespaceAlias = sb.NamespaceConnectionAlias;
+                _sbEntityPath = sb.EntityPath;
+                _sbMessageCountThreshold = sb.MessageCountThreshold;
+                // Pre-load entities for the already-configured namespace
+                if (!string.IsNullOrWhiteSpace(_sbNamespaceAlias) && _sbLastLoadedAlias != _sbNamespaceAlias)
+                    _ = LoadSbEntitiesAsync(_sbNamespaceAlias);
+            }
+            if (Rule.RedisAlertParams is { } redis)
+            {
+                _redisConnectionAlias = redis.ConnectionAlias;
+                _redisMemoryThresholdPct = redis.MemoryUsageThresholdPercent;
+                _redisClientLowerBound = redis.ClientCountLowerBound;
+            }
+            if (Rule.StorageParams is { } storage)
+            {
+                _storageAccountAlias = storage.AccountAlias;
+                _storageContainerName = storage.ContainerName;
+                _storageBlobCountThreshold = storage.BlobCountThreshold;
+            }
+        }
+        else
+        {
+            ResetFields();
+        }
+
+        // Kick off AKS data loading as a background task — never block the render pipeline.
+        // Guarded: only when the modal is open, an AKS source is selected, and not yet loaded.
+        if (IsOpen && IsAksSource && !_aksContextsLoaded && AppState.Config.AksConfig is not null)
+            _ = LoadAksDataAsync();
+    }
+
+    private async Task LoadAksDataAsync()
+    {
+        if (_aksDataLoading) return;
+        _aksDataLoading = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var cfg = AppState.Config.AksConfig;
+            if (cfg is null) return;
+            var client = AksClientFactory.Create(cfg.KubeconfigContext, cfg.KubeconfigPath);
+
+            // Load contexts and namespaces in parallel
+            var contextsTask = client.GetContextsAsync();
+            var namespacesTask = client.GetNamespacesAsync();
+            await Task.WhenAll(contextsTask, namespacesTask);
+
+            _aksContexts = (await contextsTask).OrderBy(c => c.Name).ToList();
+            _aksNamespaces = (await namespacesTask).OrderBy(n => n).ToList();
+
+            // Pre-select the currently configured context
+            if (!string.IsNullOrWhiteSpace(_aksKubeconfigContext) && _aksContexts.Any(c => c.Name == _aksKubeconfigContext))
+            {
+                // already set
+            }
+            else if (string.IsNullOrWhiteSpace(_aksKubeconfigContext))
+            {
+                // Default to the globally configured context
+                _aksKubeconfigContext = cfg.KubeconfigContext ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(_aksKubeconfigContext))
+                    _aksKubeconfigContext = _aksContexts.FirstOrDefault(c => c.IsCurrent)?.Name ?? string.Empty;
+            }
+
+            _aksContextsLoaded = true;
+        }
+        catch
+        {
+            // silent — falls back to free-text input
+        }
+        finally
+        {
+            _aksDataLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ResetFields()
+    {
+        _name = string.Empty;
+        _source = AlertRuleSource.AksPodHealth;
+        _severity = AlertSeverity.Warning;
+        _intervalSeconds = 60;
+        _cooldownMinutes = 5;
+        _enabled = true;
+        _aksNamespace = string.Empty;
+        _aksRestartThreshold = 5;
+        _aksHealthScoreThresholdPct = 25;
+        _sbNamespaceAlias = string.Empty;
+        _sbEntityPath = string.Empty;
+        _sbMessageCountThreshold = 1;
+        _sbEntityOptions = [];
+        _sbEntitiesLoading = false;
+        _sbLastLoadedAlias = string.Empty;
+        _redisConnectionAlias = string.Empty;
+        _redisMemoryThresholdPct = 80.0;
+        _redisClientLowerBound = 1;
+        _storageAccountAlias = string.Empty;
+        _storageContainerName = string.Empty;
+        _storageBlobCountThreshold = 1000;
+        _nameError = null;
+        _aksContexts = [];
+        _aksNamespaces = [];
+        _aksContextsLoaded = false;
+        _aksKubeconfigContext = string.Empty;
+    }
+
+    private bool IsAksSource => _source is AlertRuleSource.AksPodHealth
+        or AlertRuleSource.AksPodRestartRate
+        or AlertRuleSource.AksNamespaceHealthScore;
+
+    private bool IsServiceBusSource => _source is AlertRuleSource.ServiceBusDlqDepth
+        or AlertRuleSource.ServiceBusActiveDepth
+        or AlertRuleSource.ServiceBusDeadSubscription;
+
+    private bool IsRedisSource => _source is AlertRuleSource.RedisMemoryUsage
+        or AlertRuleSource.RedisConnectedClients;
+
+    private bool IsStorageSource => _source == AlertRuleSource.StorageBlobCount;
+
+    private bool IsValid =>
+        !string.IsNullOrWhiteSpace(_name)
+        && _intervalSeconds >= 10
+        && _cooldownMinutes >= 1
+        && (!IsServiceBusSource || (!string.IsNullOrWhiteSpace(_sbNamespaceAlias) && !string.IsNullOrWhiteSpace(_sbEntityPath)))
+        && (!IsRedisSource || !string.IsNullOrWhiteSpace(_redisConnectionAlias))
+        && (!IsStorageSource || (!string.IsNullOrWhiteSpace(_storageAccountAlias) &&
+!string.IsNullOrWhiteSpace(_storageContainerName)));
+
+    private string DrawerTitle => Rule is null ? "Create alert rule" : $"Edit: \"{Rule.Name}\"";
+
+    private async Task HandleSaveAsync()
+    {
+        _nameError = null;
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _nameError = "Name is required.";
+            return;
+        }
+
+        var rule = Rule is not null
+            ? new MonitoringAlertRule { Id = Rule.Id, Name = _name }
+            : new MonitoringAlertRule { Name = _name };
+
+        rule.Source = _source;
+        rule.Severity = _severity;
+        rule.IntervalSeconds = Math.Max(10, _intervalSeconds);
+        rule.CooldownMinutes = Math.Max(1, _cooldownMinutes);
+        rule.Enabled = _enabled;
+
+        if (IsAksSource)
+            rule.AksPodParams = new AksPodAlertParams
+            {
+                KubeconfigContext = _aksKubeconfigContext,
+                Namespace = _aksNamespace,
+                RestartThreshold = _aksRestartThreshold,
+                HealthScoreThreshold = _aksHealthScoreThresholdPct / 100.0,
+            };
+
+        if (IsServiceBusSource)
+            rule.ServiceBusParams = new ServiceBusAlertParams
+            {
+                NamespaceConnectionAlias = _sbNamespaceAlias,
+                EntityPath = _sbEntityPath,
+                MessageCountThreshold = Math.Max(1, _sbMessageCountThreshold),
+            };
+
+        if (IsRedisSource)
+            rule.RedisAlertParams = new RedisAlertParams
+            {
+                ConnectionAlias = _redisConnectionAlias,
+                MemoryUsageThresholdPercent = _redisMemoryThresholdPct,
+                ClientCountLowerBound = _redisClientLowerBound,
+            };
+
+        if (IsStorageSource)
+            rule.StorageParams = new StorageAlertParams
+            {
+                AccountAlias = _storageAccountAlias,
+                ContainerName = _storageContainerName,
+                BlobCountThreshold = Math.Max(1, _storageBlobCountThreshold),
+            };
+
+        await OnSave.InvokeAsync(rule);
+    }
+
+    private static string FormatSourceLabel(AlertRuleSource source) => source switch
+    {
+        AlertRuleSource.AksPodHealth => "AKS — Pod health",
+        AlertRuleSource.AksPodRestartRate => "AKS — Pod restart rate",
+        AlertRuleSource.AksNamespaceHealthScore => "AKS — Namespace health score",
+        AlertRuleSource.ServiceBusDlqDepth => "Service Bus — DLQ depth",
+        AlertRuleSource.ServiceBusActiveDepth => "Service Bus — Active depth",
+        AlertRuleSource.ServiceBusDeadSubscription => "Service Bus — Dead subscription",
+        AlertRuleSource.RedisMemoryUsage => "Redis — Memory usage",
+        AlertRuleSource.RedisConnectedClients => "Redis — Connected clients",
+        AlertRuleSource.StorageBlobCount => "Storage — Blob count",
+        _ => source.ToString()
+    };
+
+    private async Task OnSbNamespaceChangedAsync(ChangeEventArgs e)
+    {
+        _sbNamespaceAlias = e.Value?.ToString() ?? string.Empty;
+        _sbEntityPath = string.Empty; // reset path when namespace changes
+        _sbEntityOptions = [];
+        if (!string.IsNullOrWhiteSpace(_sbNamespaceAlias))
+            await LoadSbEntitiesAsync(_sbNamespaceAlias);
+    }
+
+    private async Task LoadSbEntitiesAsync(string alias)
+    {
+        if (_sbEntitiesLoading || alias == _sbLastLoadedAlias) return;
+        _sbEntitiesLoading = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var client = Pool.GetServiceBusClient(alias);
+            if (client is null) return;
+
+            // Load queues and topics in parallel
+            var queuesTask = client.ListQueuesAsync();
+            var topicsTask = client.ListTopicsAsync();
+            await Task.WhenAll(queuesTask, topicsTask);
+
+            var options = new List<string>();
+            options.AddRange((await queuesTask).Select(q => q.EntityPath));
+
+            var topics = (await topicsTask).ToList();
+            options.AddRange(topics.Select(t => t.EntityPath));
+
+            // Load subscriptions for each topic (up to 25 topics to avoid overload)
+            var topicsToExpand = topics.Take(25).ToList();
+            var subTasks = topicsToExpand.Select(t => client.ListSubscriptionsAsync(t.Name)).ToList();
+            var subResults = await Task.WhenAll(subTasks);
+            foreach (var subs in subResults)
+                options.AddRange(subs.Select(s => s.EntityPath));
+
+            _sbEntityOptions = [.. options.OrderBy(p => p)];
+            _sbLastLoadedAlias = alias;
+        }
+        catch
+        {
+            // silent — user can still type the path manually
+        }
+        finally
+        {
+            _sbEntitiesLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task HandleBackdropClick() => OnClose.InvokeAsync();
+}

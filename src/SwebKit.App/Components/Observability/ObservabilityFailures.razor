@@ -127,8 +127,8 @@
                         </button>
                         @if (_selected.SampleStackTrace is not null)
                         {
-                            <button class="obs-copy-btn" @onclick="CopyStackAsync" title="Copy stack trace">Copy stack
-                                trace</button>
+                            <AppButton CssClass="obs-copy-btn" OnClick="CopyStackAsync" Title="Copy stack trace">Copy stack
+                                trace</AppButton>
                             }
                         </div>
 

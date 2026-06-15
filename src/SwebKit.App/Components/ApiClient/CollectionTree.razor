@@ -1,0 +1,506 @@
+@* Flattened + virtualized collection tree (BL-5 guard on ShouldRender) *@
+@inject IJSRuntime JS
+
+<div class="collection-tree">
+
+    <div class="collection-tree__search">
+        <input type="text" placeholder="Filter..." class="collection-tree__search-input" value="@_filter"
+               @oninput="OnFilterInput" aria-label="Filter collection tree" />
+    </div>
+
+    <div class="collection-tree__rows" role="tree">
+        <Virtualize Items="@_visibleNodes" Context="node" ItemSize="28" OverscanCount="8">
+            <div @key="node.Id" class="collection-tree__row @GetRowClass(node)"
+                 style="padding-left: @(8 + node.Depth * 16)px" role="treeitem"
+                 aria-selected="@(node.Node.Request?.Id == SelectedRequestId)" @onclick="() => OnRowClickAsync(node)"
+                 @oncontextmenu="e => ShowContextMenu(e, node)" @oncontextmenu:preventDefault="true">
+
+                @if (node.Kind is FlatTreeNodeKind.Group)
+                {
+                    <span class="collection-tree__group-label">@node.Node.Name</span>
+                }
+                else
+                {
+                    @if (node.Node.Type == ApiCollectionNodeType.Folder)
+                    {
+                        <button type="button" class="collection-tree__chevron"
+                                aria-label="@(node.IsExpanded ? "Collapse" : "Expand")" @onclick:stopPropagation="true"
+                                @onclick="() => ToggleExpand(node)">
+                            @(node.IsExpanded ? "v" : ">")
+                        </button>
+                    }
+                    else
+                    {
+                        <span class="collection-tree__chevron collection-tree__chevron--spacer" aria-hidden="true"></span>
+                    }
+
+                    @if (node.Kind == FlatTreeNodeKind.LinkedRoot)
+                    {
+                        <span class="collection-tree__icon" aria-hidden="true">🔗</span>
+                    }
+                    else if (node.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
+                    {
+                        <span class="collection-tree__icon" aria-hidden="true">📂</span>
+                    }
+                    else if (node.Node.Type == ApiCollectionNodeType.Folder)
+                    {
+                        <span class="collection-tree__icon" aria-hidden="true">@(node.IsExpanded ? "📂" : "📁")</span>
+                    }
+                    else if (node.Node.Request is not null)
+                    {
+                        <span
+                            class="collection-tree__method-badge collection-tree__method-badge--@node.Node.Request.Method.ToString().ToLowerInvariant()"
+                            aria-hidden="true">
+                            @GetMethodLabel(node.Node.Request.Method)
+                        </span>
+                    }
+
+                    @if (node.Id == _renamingNodeId)
+                    {
+                        <input class="collection-tree__rename-input" value="@_renameValue"
+                               @oninput="e => _renameValue = e.Value as string ?? _renameValue" @onkeydown="OnRenameKeyDownAsync"
+                               @onblur="CommitRenameAsync" @onclick:stopPropagation="true" @ref="_renameInput" />
+                    }
+                    else
+                    {
+                        <span class="collection-tree__label" title="@node.Node.Name">@node.Node.Name</span>
+                    }
+
+                    @if (node.Kind == FlatTreeNodeKind.LinkedRoot && node.LinkedRoot is not null)
+                    {
+                        @if (!string.IsNullOrWhiteSpace(node.LinkedRoot.Branch))
+                        {
+                            <span class="collection-tree__git-badge" title="Current branch">@node.LinkedRoot.Branch</span>
+                        }
+                        <span
+                            class="collection-tree__git-badge @(node.LinkedRoot.ChangedFileCount > 0 ? "collection-tree__git-badge--dirty" : "")"
+                            title="SwebKit API file changes">
+                            @(node.LinkedRoot.ChangedFileCount > 0 ? $"{node.LinkedRoot.ChangedFileCount} changed" : "clean")
+                        </span>
+                    }
+                    else if (node.Node.Type == ApiCollectionNodeType.Folder && !node.IsExpanded && node.HasChildren)
+                    {
+                        <span class="collection-tree__count-badge" aria-label="@node.Node.Children.Count children">
+                            @node.Node.Children.Count
+                        </span>
+                    }
+                }
+
+            </div>
+        </Virtualize>
+    </div>
+
+    @if (_ctxNode is not null && _ctxNode.Kind == FlatTreeNodeKind.Node)
+    {
+        <div class="ctx-backdrop" @onclick="() => _ctxNode = null"></div>
+        <div class="ctx-menu"
+             style="top:@(_ctxY.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))px; left:@(_ctxX.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))px;">
+            @{
+                var isCollRoot = _ctxNode.Node.Id.StartsWith("__col__", StringComparison.Ordinal);
+                var isFolder = _ctxNode.Node.Type == ApiCollectionNodeType.Folder;
+            }
+            @if (isFolder)
+            {
+                <button class="ctx-item" @onclick="AddSubFolderCtxAsync">
+                    <span class="ctx-item-icon" aria-hidden="true">▸</span>
+                    <span>New sub-folder</span>
+                </button>
+                <button class="ctx-item" @onclick="AddRequestCtxAsync">
+                    <span class="ctx-item-icon" aria-hidden="true">+</span>
+                    <span>New request here</span>
+                </button>
+                <div class="ctx-separator"></div>
+            }
+            @if (isCollRoot && !IsLinkedCollection(_ctxNode.CollectionId))
+            {
+                <button class="ctx-item" @onclick="LinkToRepoCtxAsync">
+                    <span class="ctx-item-icon" aria-hidden="true">🔗</span>
+                    <span>Link to Git repo…</span>
+                </button>
+                <div class="ctx-separator"></div>
+            }
+            <button class="ctx-item" @onclick="BeginRenameCtx">
+                <span class="ctx-item-icon" aria-hidden="true">✎</span>
+                <span>@(isCollRoot ? "Rename collection" : "Rename")</span>
+            </button>
+            <div class="ctx-separator"></div>
+            <button class="ctx-item destructive" @onclick="DeleteNodeCtxAsync">
+                <span class="ctx-item-icon" aria-hidden="true">×</span>
+                <span>@(isCollRoot ? "Delete collection" : "Delete")</span>
+            </button>
+        </div>
+    }
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ApiCollection> Collections { get; set; } = [];
+    [Parameter] public IReadOnlyList<LinkedCollectionTreeInfo> LinkedRoots { get; set; } = [];
+    [Parameter] public string? SelectedRequestId { get; set; }
+    [Parameter] public string? ActiveCollectionId { get; set; }
+    [Parameter] public string? ActiveLinkedRootId { get; set; }
+    [Parameter] public EventCallback<HttpRequestEntry> OnRequestSelected { get; set; }
+    [Parameter] public EventCallback<string> OnCollectionSelected { get; set; }
+    [Parameter] public EventCallback<string> OnLinkedRootSelected { get; set; }
+    [Parameter] public EventCallback<(string CollectionId, ApiCollectionNode ParentNode)> OnAddFolder { get; set; }
+    [Parameter] public EventCallback<(string CollectionId, ApiCollectionNode ParentNode)> OnAddRequest { get; set; }
+    [Parameter] public EventCallback<(ApiCollectionNode Node, string NewName)> OnRenameNode { get; set; }
+    [Parameter] public EventCallback<ApiCollectionNode> OnDeleteNode { get; set; }
+    [Parameter] public EventCallback<(string CollectionId, string NewName)> OnRenameCollection { get; set; }
+    [Parameter] public EventCallback<string> OnDeleteCollection { get; set; }
+    [Parameter] public EventCallback<string> OnLinkCollectionToRepo { get; set; }
+
+    private enum FlatTreeNodeKind
+    {
+        Group,
+        Node,
+        LinkedRoot,
+    }
+
+    private record FlatTreeNode(
+        ApiCollectionNode Node,
+        int Depth,
+        bool IsExpanded,
+        bool HasChildren,
+        string CollectionId,
+        FlatTreeNodeKind Kind = FlatTreeNodeKind.Node,
+        LinkedCollectionTreeInfo? LinkedRoot = null)
+    {
+        public string Id => Node.Id;
+    }
+
+    private List<FlatTreeNode> _flatNodes = [];
+    private List<FlatTreeNode> _visibleNodes = [];
+    private string _filter = string.Empty;
+
+    private IReadOnlyList<ApiCollection>? _prevCollections;
+    private IReadOnlyList<LinkedCollectionTreeInfo>? _prevLinkedRoots;
+    private string? _prevSelectedRequestId;
+
+    protected override void OnParametersSet()
+    {
+        var collectionsChanged = !ReferenceEquals(_prevCollections, Collections);
+        var linkedRootsChanged = !ReferenceEquals(_prevLinkedRoots, LinkedRoots);
+        var selectionChanged = _prevSelectedRequestId != SelectedRequestId;
+
+        if (collectionsChanged || linkedRootsChanged)
+        {
+            _prevCollections = Collections;
+            _prevLinkedRoots = LinkedRoots;
+            RebuildFlatTree();
+        }
+        else if (selectionChanged)
+        {
+            _prevSelectedRequestId = SelectedRequestId;
+        }
+    }
+
+    protected override bool ShouldRender() => true;
+
+    private void RebuildFlatTree()
+    {
+        _flatNodes = [];
+
+        if (Collections.Any(c => !IsLinkedCollection(c.Id)))
+        {
+            AddGroup("__group__local", "Local Collections");
+            foreach (var collection in Collections.Where(c => !IsLinkedCollection(c.Id)))
+            {
+                AddCollection(collection, depth: 1);
+            }
+        }
+
+        if (LinkedRoots.Count > 0)
+        {
+            AddGroup("__group__linked", "Linked Repositories");
+            foreach (var root in LinkedRoots)
+            {
+                AddLinkedRoot(root);
+                if (_GetExpandedState($"__linked__{root.Id}", true))
+                {
+                    foreach (var collectionId in root.CollectionIds)
+                    {
+                        var collection = Collections.FirstOrDefault(c => c.Id == collectionId);
+                        if (collection is not null)
+                        {
+                            AddCollection(collection, depth: 2);
+                        }
+                    }
+                }
+            }
+        }
+
+        ApplyFilter();
+    }
+
+    private void AddGroup(string id, string name)
+    {
+        var groupNode = new ApiCollectionNode
+        {
+            Id = id,
+            Type = ApiCollectionNodeType.Folder,
+            Name = name,
+            IsExpanded = true,
+        };
+        _flatNodes.Add(new FlatTreeNode(groupNode, 0, true, false, string.Empty, FlatTreeNodeKind.Group));
+    }
+
+    private void AddLinkedRoot(LinkedCollectionTreeInfo root)
+    {
+        var rootNode = new ApiCollectionNode
+        {
+            Id = $"__linked__{root.Id}",
+            Type = ApiCollectionNodeType.Folder,
+            Name = root.Name,
+            IsExpanded = _GetExpandedState($"__linked__{root.Id}", true),
+        };
+
+        _flatNodes.Add(new FlatTreeNode(
+            Node: rootNode,
+            Depth: 1,
+            IsExpanded: rootNode.IsExpanded,
+            HasChildren: root.CollectionIds.Count > 0,
+            CollectionId: string.Empty,
+            Kind: FlatTreeNodeKind.LinkedRoot,
+            LinkedRoot: root));
+    }
+
+    private void AddCollection(ApiCollection collection, int depth)
+    {
+        var collectionRootNode = new ApiCollectionNode
+        {
+            Id = $"__col__{collection.Id}",
+            Type = ApiCollectionNodeType.Folder,
+            Name = collection.Name,
+            IsExpanded = _GetExpandedState($"__col__{collection.Id}", true),
+            Children = collection.Nodes,
+        };
+
+        _flatNodes.Add(new FlatTreeNode(
+            Node: collectionRootNode,
+            Depth: depth,
+            IsExpanded: collectionRootNode.IsExpanded,
+            HasChildren: collection.Nodes.Count > 0,
+            CollectionId: collection.Id));
+
+        if (collectionRootNode.IsExpanded)
+        {
+            FlattenNodes(collection.Nodes, depth + 1, collection.Id);
+        }
+    }
+
+    private void FlattenNodes(List<ApiCollectionNode> nodes, int depth, string collectionId)
+    {
+        foreach (var node in nodes)
+        {
+            var isExpanded = _GetExpandedState(node.Id, node.IsExpanded);
+            _flatNodes.Add(new FlatTreeNode(
+                Node: node,
+                Depth: depth,
+                IsExpanded: isExpanded,
+                HasChildren: node.Children.Count > 0,
+                CollectionId: collectionId));
+
+            if (node.Type == ApiCollectionNodeType.Folder && isExpanded)
+            {
+                FlattenNodes(node.Children, depth + 1, collectionId);
+            }
+        }
+    }
+
+    private readonly Dictionary<string, bool> _expandedOverrides = new(StringComparer.Ordinal);
+
+    private bool _GetExpandedState(string nodeId, bool defaultExpanded) =>
+        _expandedOverrides.TryGetValue(nodeId, out var val) ? val : defaultExpanded;
+
+    private void ToggleExpand(FlatTreeNode flatNode)
+    {
+        var current = _GetExpandedState(flatNode.Node.Id, flatNode.Node.IsExpanded);
+        _expandedOverrides[flatNode.Node.Id] = !current;
+        RebuildFlatTree();
+    }
+
+    private void OnFilterInput(ChangeEventArgs e)
+    {
+        _filter = e.Value as string ?? string.Empty;
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_filter))
+        {
+            _visibleNodes = _flatNodes;
+            return;
+        }
+
+        _visibleNodes = _flatNodes
+            .Where(n => n.Kind != FlatTreeNodeKind.Group && n.Node.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private async Task OnRowClickAsync(FlatTreeNode flatNode)
+    {
+        if (flatNode.Kind == FlatTreeNodeKind.Group)
+        {
+            return;
+        }
+
+        if (flatNode.Kind == FlatTreeNodeKind.LinkedRoot)
+        {
+            if (flatNode.LinkedRoot is not null)
+            {
+                await OnLinkedRootSelected.InvokeAsync(flatNode.LinkedRoot.Id);
+            }
+
+            ToggleExpand(flatNode);
+            return;
+        }
+
+        if (flatNode.Node.Type == ApiCollectionNodeType.Folder)
+        {
+            if (flatNode.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
+            {
+                await OnCollectionSelected.InvokeAsync(flatNode.CollectionId);
+            }
+
+            ToggleExpand(flatNode);
+            return;
+        }
+
+        if (flatNode.Node.Request is not null)
+        {
+            await OnCollectionSelected.InvokeAsync(flatNode.CollectionId);
+            await OnRequestSelected.InvokeAsync(flatNode.Node.Request);
+        }
+    }
+
+    private void ShowContextMenu(MouseEventArgs e, FlatTreeNode node)
+    {
+        if (node.Kind != FlatTreeNodeKind.Node)
+        {
+            return;
+        }
+
+        _ctxNode = node;
+        _ctxX = e.ClientX;
+        _ctxY = e.ClientY;
+    }
+
+    private FlatTreeNode? _ctxNode;
+    private double _ctxX;
+    private double _ctxY;
+
+    private string? _renamingNodeId;
+    private string _renameValue = "";
+    private ElementReference _renameInput;
+    private bool _shouldFocusRename;
+
+    private void BeginRenameCtx()
+    {
+        if (_ctxNode is null) return;
+        _renamingNodeId = _ctxNode.Id;
+        _renameValue = _ctxNode.Node.Name;
+        _ctxNode = null;
+        _shouldFocusRename = true;
+    }
+
+    private async Task AddSubFolderCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        if (node is not null) await OnAddFolder.InvokeAsync((node.CollectionId, node.Node));
+    }
+
+    private async Task AddRequestCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        if (node is not null) await OnAddRequest.InvokeAsync((node.CollectionId, node.Node));
+    }
+
+    private async Task LinkToRepoCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        if (node is not null)
+            await OnLinkCollectionToRepo.InvokeAsync(node.CollectionId);
+    }
+
+    private async Task DeleteNodeCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        if (node is null) return;
+        if (node.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
+            await OnDeleteCollection.InvokeAsync(node.CollectionId);
+        else
+            await OnDeleteNode.InvokeAsync(node.Node);
+    }
+
+    private async Task CommitRenameAsync()
+    {
+        if (_renamingNodeId is null) return;
+        var flatNode = _flatNodes.FirstOrDefault(n => n.Id == _renamingNodeId);
+        _renamingNodeId = null;
+        if (flatNode is null || string.IsNullOrWhiteSpace(_renameValue)) return;
+
+        if (flatNode.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
+        {
+            if (_renameValue != flatNode.Node.Name)
+                await OnRenameCollection.InvokeAsync((flatNode.CollectionId, _renameValue));
+        }
+        else if (_renameValue != flatNode.Node.Name)
+        {
+            await OnRenameNode.InvokeAsync((flatNode.Node, _renameValue));
+        }
+    }
+
+    private async Task OnRenameKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitRenameAsync();
+        else if (e.Key == "Escape") _renamingNodeId = null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldFocusRename)
+        {
+            _shouldFocusRename = false;
+            try { await _renameInput.FocusAsync(); }
+            catch { }
+        }
+    }
+
+    private string GetRowClass(FlatTreeNode node)
+    {
+        if (node.Kind == FlatTreeNodeKind.Group)
+            return "collection-tree__row--group";
+        if (node.Kind == FlatTreeNodeKind.LinkedRoot)
+            return node.LinkedRoot?.Id == ActiveLinkedRootId
+                ? "collection-tree__row--linked-root collection-tree__row--active-linked-root"
+                : "collection-tree__row--linked-root";
+        if (node.Node.Request?.Id == SelectedRequestId && SelectedRequestId is not null)
+            return "collection-tree__row--selected";
+        if (node.Node.Id == $"__col__{ActiveCollectionId}" && ActiveCollectionId is not null)
+            return "collection-tree__row--active-collection";
+        return string.Empty;
+    }
+
+    private static string GetMethodLabel(ApiRequestMethod method) => method switch
+    {
+        ApiRequestMethod.Get => "GET",
+        ApiRequestMethod.Post => "POST",
+        ApiRequestMethod.Put => "PUT",
+        ApiRequestMethod.Patch => "PATCH",
+        ApiRequestMethod.Delete => "DEL",
+        ApiRequestMethod.Head => "HEAD",
+        ApiRequestMethod.Options => "OPT",
+        ApiRequestMethod.GraphQl => "GQL",
+        ApiRequestMethod.WebSocket => "WS",
+        _ => "GET",
+    };
+
+    private bool IsLinkedCollection(string collectionId) =>
+        LinkedRoots.Any(root => root.CollectionIds.Contains(collectionId));
+}

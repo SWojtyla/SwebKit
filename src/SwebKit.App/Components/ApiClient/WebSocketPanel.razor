@@ -1,0 +1,443 @@
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+
+<div class="ws-panel">
+
+    @* ── URL bar + connect/disconnect ──────────────────────────────────────── *@
+    <div class="ws-panel__url-bar">
+        <input class="ws-panel__url-input" type="text" value="@Request.Url" placeholder="wss://api.example.com/ws"
+               disabled="@(_state != WebSocketConnectionState.Disconnected)" @oninput="OnUrlInputAsync" />
+
+        <div class="ws-panel__state-badge ws-panel__state-badge--@StateCss">
+            @StateLabel
+        </div>
+
+        @if (_state == WebSocketConnectionState.Disconnected || _state == WebSocketConnectionState.Faulted)
+        {
+            <button type="button" class="ws-panel__connect-btn" disabled="@(string.IsNullOrWhiteSpace(Request.Url))"
+                    @onclick="ConnectAsync">
+                Connect
+            </button>
+        }
+        else
+        {
+            <button type="button" class="ws-panel__disconnect-btn" @onclick="DisconnectAsync">
+                Disconnect
+            </button>
+        }
+    </div>
+
+    @* ── Subprotocol strip (visible always) ──────────────────────────────── *@
+    <div class="ws-panel__sub-strip">
+        <label class="ws-panel__sub-label">Subprotocol:</label>
+        <input class="ws-panel__sub-input" type="text" value="@Request.WsSubProtocol" placeholder="e.g. chat (optional)"
+               disabled="@(_state != WebSocketConnectionState.Disconnected)" @oninput="OnSubProtocolInputAsync" />
+    </div>
+
+    @* ── Headers tab (for custom upgrade headers) ───────────────────────── *@
+    <div class="ws-panel__section-header">
+        <span>Upgrade Headers</span>
+        @if (Request.Headers.Any(h => h.IsEnabled && !string.IsNullOrWhiteSpace(h.Key)))
+        {
+            <span class="ws-panel__section-count">@Request.Headers.Count(h => h.IsEnabled)</span>
+        }
+    </div>
+    <div class="ws-panel__headers-wrap">
+        <KeyValueGrid Pairs="@Request.Headers" OnChanged="OnChanged" />
+    </div>
+
+    @* ── Divider ──────────────────────────────────────────────────────────── *@
+    <div class="ws-panel__divider"></div>
+
+    @* ── Message log ─────────────────────────────────────────────────────── *@
+    <div class="ws-panel__log-header">
+        <span>Message Log</span>
+        @if (_messages.Count > 0)
+        {
+            <span class="ws-panel__section-count">@_messages.Count</span>
+            <button type="button" class="ws-panel__clear-btn" title="Clear log" @onclick="ClearLog">
+                Clear
+            </button>
+        }
+    </div>
+    <div class="ws-panel__log" @ref="_logContainerRef">
+        @if (_messages.Count == 0)
+        {
+            <div class="ws-panel__log-empty">
+                @if (_state == WebSocketConnectionState.Connected)
+                {
+                    <span>Connected. Send a message or wait for server messages.</span>
+                }
+                else
+                {
+                    <span>Connect to start a session.</span>
+                }
+            </div>
+        }
+        else
+        {
+            <Virtualize TItem="WebSocketMessage" Items="@_messages.ToList()" Context="msg">
+                <div
+                    class="ws-panel__log-entry ws-panel__log-entry--@(msg.Direction == WebSocketMessageDirection.Sent ? "sent" : "received")">
+                    <div class="ws-panel__log-entry-header">
+                        <span class="ws-panel__log-dir">@(msg.Direction == WebSocketMessageDirection.Sent ? "↑" :
+                                                                   "↓")</span>
+                            <span class="ws-panel__log-time">@msg.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</span>
+                            @if (msg.FrameType == WebSocketFrameType.Binary)
+                            {
+                                <span class="ws-panel__log-binary-badge">Binary</span>
+                            }
+                            <span class="ws-panel__log-size">@FormatSize(msg.ByteCount)</span>
+                        </div>
+                        <pre class="ws-panel__log-content">@msg.Content</pre>
+                    </div>
+                </Virtualize>
+            }
+        </div>
+
+        @* ── Error banner ─────────────────────────────────────────────────────── *@
+        @if (_error is not null)
+        {
+            <div class="ws-panel__error-banner" role="alert">
+                <span>⚠ @_error</span>
+                <button type="button" class="ws-panel__error-dismiss" @onclick="() => _error = null">✕</button>
+            </div>
+        }
+
+        @* ── Composer ──────────────────────────────────────────────────────────── *@
+        <div class="ws-panel__composer">
+
+            @* Frame type + saved message picker *@
+            <div class="ws-panel__composer-top">
+                <div class="ws-panel__frame-type-toggle">
+                    <button type="button"
+                            class="ws-panel__frame-btn @(_frameType == WebSocketFrameType.Text ? "ws-panel__frame-btn--active" : "")"
+                            @onclick="() => _frameType = WebSocketFrameType.Text">Text</button>
+                    <button type="button"
+                            class="ws-panel__frame-btn @(_frameType == WebSocketFrameType.Binary ? "ws-panel__frame-btn--active" : "")"
+                            @onclick="() => _frameType = WebSocketFrameType.Binary">Binary</button>
+                </div>
+
+                @if (Request.SavedMessages.Count > 0)
+                {
+                    <AppDropdown IsOpen="@_showSavedDropdown" OnClose="@(() => _showSavedDropdown = false)"
+                                 CssClass="ws-panel__saved-wrap" MenuCssClass="ws-panel__saved-dropdown"
+                                 Label="Saved WebSocket messages">
+                        <TriggerContent>
+                            <button type="button" class="ws-panel__saved-btn"
+                                    @onclick="() => _showSavedDropdown = !_showSavedDropdown">
+                                Saved Messages ▾
+                            </button>
+                        </TriggerContent>
+                        <ChildContent>
+                            @foreach (var saved in Request.SavedMessages)
+                            {
+                                var s = saved;
+                                <button type="button" class="ctx-item" @onclick="() => LoadSavedMessage(s)">
+                                    @s.Name
+                                </button>
+                            }
+                        </ChildContent>
+                    </AppDropdown>
+                }
+
+                <div class="ws-panel__composer-actions">
+                    <button type="button" class="ws-panel__save-msg-btn"
+                            disabled="@string.IsNullOrWhiteSpace(_composerText)" title="Save this message as a template"
+                            @onclick="OpenSaveMsgDialogAsync">
+                        Save…
+                    </button>
+                    <button type="button" class="ws-panel__send-btn"
+                            disabled="@(_state != WebSocketConnectionState.Connected || string.IsNullOrWhiteSpace(_composerText))"
+                            @onclick="SendAsync">
+                        Send
+                    </button>
+                </div>
+            </div>
+
+            <textarea class="ws-panel__composer-area" value="@_composerText"
+                      placeholder="@(_frameType == WebSocketFrameType.Binary ? "Hex bytes, e.g. 48 65 6C 6C 6F" : "Message…")"
+                      @oninput="e => _composerText = e.Value?.ToString() ?? string.Empty" spellcheck="false" rows="3"
+                      disabled="@(_state != WebSocketConnectionState.Connected)"></textarea>
+
+        </div>
+
+        @* ── Save message dialog ───────────────────────────────────────────────── *@
+        @if (_saveMsgDialogOpen)
+        {
+            <div class="ws-panel__dialog-backdrop" @onclick="() => _saveMsgDialogOpen = false"></div>
+            <div class="ws-panel__dialog" role="dialog" aria-modal="true" aria-label="Save Message">
+                <div class="ws-panel__dialog-title">Save Message Template</div>
+                <input type="text" class="ws-panel__dialog-input" placeholder="Template name…" value="@_saveMsgName"
+                       @oninput="e => _saveMsgName = e.Value?.ToString() ?? string.Empty" @onkeydown="OnSaveMsgKeyDownAsync"
+                       @ref="_saveMsgInputRef" />
+                <div class="ws-panel__dialog-actions">
+                    <button type="button" class="ws-panel__dialog-btn ws-panel__dialog-btn--primary"
+                            disabled="@string.IsNullOrWhiteSpace(_saveMsgName)" @onclick="ConfirmSaveMsgAsync">Save</button>
+                    <button type="button" class="ws-panel__dialog-btn"
+                            @onclick="() => _saveMsgDialogOpen = false">Cancel</button>
+                </div>
+            </div>
+        }
+
+    </div>
+
+@code {
+    [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    [Inject] private IWebSocketClientService WsService { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private WebSocketConnectionState _state = WebSocketConnectionState.Disconnected;
+    private readonly List<WebSocketMessage> _messages = [];
+    private string? _error;
+    private string _composerText = string.Empty;
+    private WebSocketFrameType _frameType = WebSocketFrameType.Text;
+    private bool _showSavedDropdown;
+
+    // Save message dialog
+    private bool _saveMsgDialogOpen;
+    private string _saveMsgName = string.Empty;
+    private ElementReference _saveMsgInputRef;
+    private bool _shouldFocusSaveMsgInput;
+
+    private ElementReference _logContainerRef;
+    private CancellationTokenSource? _readLoopCts;
+    private Task? _readLoop;
+
+    private string StateCss => _state switch
+    {
+        WebSocketConnectionState.Connected => "connected",
+        WebSocketConnectionState.Connecting => "connecting",
+        WebSocketConnectionState.Faulted => "faulted",
+        _ => "disconnected",
+    };
+
+    private string StateLabel => _state switch
+    {
+        WebSocketConnectionState.Connected => "Connected",
+        WebSocketConnectionState.Connecting => "Connecting…",
+        WebSocketConnectionState.Faulted => "Faulted",
+        _ => "Disconnected",
+    };
+
+    // ── Connect / disconnect ───────────────────────────────────────────────────
+
+    private async Task ConnectAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Request.Url)) return;
+
+        _error = null;
+        _state = WebSocketConnectionState.Connecting;
+        await InvokeAsync(StateHasChanged); // BL-2
+
+        try
+        {
+            var headers = Request.Headers
+                .Where(h => h.IsEnabled && !string.IsNullOrWhiteSpace(h.Key))
+                .Select(h => (h.Key, h.Value ?? string.Empty))
+                .ToList();
+
+            var subProto = string.IsNullOrWhiteSpace(Request.WsSubProtocol) ? null : Request.WsSubProtocol;
+            await WsService.ConnectAsync(Request.Url, headers, subProto);
+            _state = WebSocketConnectionState.Connected;
+
+            // Start background read loop (BL-7: CTS tied to this panel lifetime)
+            _readLoopCts = new CancellationTokenSource();
+            _readLoop = RunReadLoopAsync(_readLoopCts.Token);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Connection failed: {ex.Message}";
+            _state = WebSocketConnectionState.Faulted;
+        }
+
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task DisconnectAsync()
+    {
+        _readLoopCts?.Cancel();
+        try { await WsService.CloseAsync(); } catch { /* ignore */ }
+        _state = WebSocketConnectionState.Disconnected;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // ── Background read loop ──────────────────────────────────────────────────
+
+    private async Task RunReadLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var msg = await WsService.ReadAsync(cancellationToken);
+                if (msg is null) break; // connection closed
+
+                _messages.Add(msg);
+                await InvokeAsync(StateHasChanged); // BL-2 (BL-8: could batch, but WS traffic is low)
+            }
+        }
+        catch (OperationCanceledException) { /* normal */ }
+        catch (Exception ex)
+        {
+            _error = $"Connection error: {ex.Message}";
+            _state = WebSocketConnectionState.Faulted;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        finally
+        {
+            if (_state == WebSocketConnectionState.Connected)
+                _state = WebSocketConnectionState.Disconnected;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+    }
+
+    // ── Send ──────────────────────────────────────────────────────────────────
+
+    private async Task SendAsync()
+    {
+        if (_state != WebSocketConnectionState.Connected || string.IsNullOrWhiteSpace(_composerText)) return;
+
+        try
+        {
+            if (_frameType == WebSocketFrameType.Binary)
+            {
+                var hex = _composerText.Replace(" ", "").Replace("\n", "");
+                var bytes = Convert.FromHexString(hex);
+                await WsService.SendBinaryAsync(bytes);
+                var sent = new WebSocketMessage
+                {
+                    Direction = WebSocketMessageDirection.Sent,
+                    FrameType = WebSocketFrameType.Binary,
+                    Content = _composerText.Trim(),
+                    ByteCount = bytes.Length,
+                };
+                _messages.Add(sent);
+            }
+            else
+            {
+                await WsService.SendTextAsync(_composerText);
+                var sent = new WebSocketMessage
+                {
+                    Direction = WebSocketMessageDirection.Sent,
+                    FrameType = WebSocketFrameType.Text,
+                    Content = _composerText,
+                    ByteCount = System.Text.Encoding.UTF8.GetByteCount(_composerText),
+                };
+                _messages.Add(sent);
+            }
+
+            _composerText = string.Empty;
+            await InvokeAsync(StateHasChanged); // BL-2
+            await ScrollLogToBottomAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Send failed: {ex.Message}";
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+    }
+
+    // ── Save message dialog ────────────────────────────────────────────────────
+
+    private async Task OpenSaveMsgDialogAsync()
+    {
+        _saveMsgName = string.Empty;
+        _saveMsgDialogOpen = true;
+        _shouldFocusSaveMsgInput = true;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task ConfirmSaveMsgAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_saveMsgName)) return;
+
+        Request.SavedMessages.Add(new WebSocketSavedMessage
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = _saveMsgName.Trim(),
+            Content = _composerText,
+            FrameType = _frameType,
+        });
+
+        _saveMsgDialogOpen = false;
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnSaveMsgKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ConfirmSaveMsgAsync();
+        else if (e.Key == "Escape") _saveMsgDialogOpen = false;
+    }
+
+    private void LoadSavedMessage(WebSocketSavedMessage saved)
+    {
+        _composerText = saved.Content;
+        _frameType = saved.FrameType;
+        _showSavedDropdown = false;
+    }
+
+    // ── Clear log ─────────────────────────────────────────────────────────────
+
+    private void ClearLog()
+    {
+        _messages.Clear();
+        StateHasChanged();
+    }
+
+    // ── Param inputs ──────────────────────────────────────────────────────────
+
+    private async Task OnUrlInputAsync(ChangeEventArgs e)
+    {
+        Request.Url = e.Value?.ToString() ?? string.Empty;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task OnSubProtocolInputAsync(ChangeEventArgs e)
+    {
+        Request.WsSubProtocol = e.Value?.ToString() ?? string.Empty;
+        await OnChanged.InvokeAsync();
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldFocusSaveMsgInput)
+        {
+            _shouldFocusSaveMsgInput = false;
+            try { await _saveMsgInputRef.FocusAsync(); } catch { }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _readLoopCts?.Cancel();
+        _readLoopCts?.Dispose();
+        if (_readLoop is not null)
+        {
+            try { await _readLoop; } catch { }
+        }
+        await WsService.DisposeAsync();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private async Task ScrollLogToBottomAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKitUi.scrollToBottom", _logContainerRef);
+        }
+        catch { /* JS interop may fail in some render contexts */ }
+    }
+
+    private static string FormatSize(int bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        return $"{bytes / 1024.0:F1} KB";
+    }
+}

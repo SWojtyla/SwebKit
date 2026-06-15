@@ -1,0 +1,86 @@
+@using SwebKit.Core.Models
+
+@if (Rules.Count == 0)
+{
+    <EmptyState Icon="bell-outline" Title="No alert rules"
+                Subtitle="Click Add rule to define your first monitoring alert." />
+}
+else
+{
+    @foreach (var group in Groups)
+    {
+        var groupRules = Rules.Where(r => group.Sources.Contains(r.Source)).ToList();
+        var firingInGroup = groupRules.Count(r => UiStates.TryGetValue(r.Id, out var s) && s.Kind ==
+AlertRuleUiStateKind.Firing);
+
+        <div class="alert-rule-group">
+            <button class="alert-rule-group__header" @onclick="() => ToggleGroup(group.Label)">
+                <span class="alert-rule-group__toggle">@(IsExpanded(group.Label) ? "▼" : "▶")</span>
+                <span class="alert-rule-group__icon">@group.Icon</span>
+                <span class="alert-rule-group__label">@group.Label</span>
+                <span class="alert-rule-group__badge @(firingInGroup > 0 ? "alert-rule-group__badge--firing" : string.Empty)">
+                    @if (firingInGroup > 0)
+                    {
+                        <span>@firingInGroup firing</span>
+                    }
+                    else
+                    {
+                        <span>@groupRules.Count rule@(groupRules.Count == 1 ? "" : "s")</span>
+                    }
+                </span>
+            </button>
+
+            @if (IsExpanded(group.Label))
+            {
+                @if (groupRules.Count == 0)
+                {
+                    var emptyTitle = $"No {group.Label} rules";
+                    var emptySubtitle = $"Click Add rule to monitor {group.Label} resources.";
+                    <div class="alert-rule-group__empty">
+                        <EmptyState Icon="add-circle-outline" Title="@emptyTitle" Subtitle="@emptySubtitle" />
+                    </div>
+                }
+                else
+                {
+                    <div class="alert-rule-group__rows">
+                        @foreach (var rule in groupRules)
+                        {
+                            UiStates.TryGetValue(rule.Id, out var uiState);
+                            <AlertRuleRow Rule="rule" UiState="uiState" OnEdit="OnEdit" OnDelete="OnDelete" OnToggle="OnToggle" />
+                        }
+                    </div>
+                }
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public IReadOnlyList<MonitoringAlertRule> Rules { get; set; } = [];
+    [Parameter] public Dictionary<string, AlertRuleUiState> UiStates { get; set; } = [];
+    [Parameter] public EventCallback<MonitoringAlertRule> OnEdit { get; set; }
+    [Parameter] public EventCallback<MonitoringAlertRule> OnDelete { get; set; }
+    [Parameter] public EventCallback<MonitoringAlertRule> OnToggle { get; set; }
+
+    private record GroupDef(string Label, string Icon, AlertRuleSource[] Sources);
+
+    private static readonly IReadOnlyList<GroupDef> Groups =
+    [
+        new("AKS", "☸", [AlertRuleSource.AksPodHealth, AlertRuleSource.AksPodRestartRate,
+AlertRuleSource.AksNamespaceHealthScore]),
+        new("Service Bus", "⇄", [AlertRuleSource.ServiceBusDlqDepth, AlertRuleSource.ServiceBusActiveDepth,
+AlertRuleSource.ServiceBusDeadSubscription]),
+        new("Redis", "⬡", [AlertRuleSource.RedisMemoryUsage, AlertRuleSource.RedisConnectedClients]),
+        new("Storage", "🗄", [AlertRuleSource.StorageBlobCount]),
+    ];
+
+    private readonly HashSet<string> _collapsedGroups = [];
+
+    private bool IsExpanded(string label) => !_collapsedGroups.Contains(label);
+
+    private void ToggleGroup(string label)
+    {
+        if (!_collapsedGroups.Remove(label))
+            _collapsedGroups.Add(label);
+    }
+}

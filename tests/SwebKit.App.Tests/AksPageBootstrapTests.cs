@@ -140,6 +140,24 @@ public sealed class AksPageBootstrapTests : TestContext
         Assert.Equal(string.Empty, _bootstrapper.Requests[^1].RequestedNamespace);
     }
 
+    [Fact]
+    public void BootstrapWithNoNamespaces_StopsLoadingShell()
+    {
+        _bootstrapper.EnqueueImmediateResult(new AksClientBootstrapResult(
+            AksClientBootstrapStatus.Connected,
+            new StubAksClient(),
+            [new KubeContextInfo { Name = "test-context", IsCurrent = true }],
+            [],
+            "test-context",
+            string.Empty,
+            ErrorMessage: null));
+
+        var cut = RenderComponent<AksPage>();
+
+        cut.WaitForAssertion(() =>
+            Assert.DoesNotContain("Connecting to cluster…", cut.Markup, StringComparison.Ordinal));
+    }
+
     private sealed class FakeAksClientBootstrapper : IAksClientBootstrapper
     {
         private readonly Queue<TaskCompletionSource<AksClientBootstrapResult>> _pendingResults = new();

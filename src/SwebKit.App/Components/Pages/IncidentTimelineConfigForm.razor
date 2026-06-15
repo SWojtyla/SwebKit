@@ -9,17 +9,16 @@
                 The incident page only loads non-AKS evidence when those mappings exist.
             </p>
             <p class="incident-timeline-config__hint">
-                Sources marked Not configured still need their base Service Bus, DevOps, or Observability settings on the other tabs.
+                Sources marked Not configured still need their base Service Bus, DevOps, or Observability settings on
+                the other tabs.
             </p>
         </div>
 
         <div class="incident-timeline-config__intro-actions">
-            <button type="button"
-                    class="incident-timeline-config__button"
-                    data-testid="incident-mapping-add-button"
-                    @onclick="AddMappingAsync">
+            <AppButton Variant="Secondary" Size="Small" CssClass="incident-timeline-config__button"
+                       data-testid="incident-mapping-add-button" OnClick="AddMappingAsync">
                 Add mapping
-            </button>
+            </AppButton>
         </div>
     </div>
 
@@ -37,12 +36,11 @@
             }
             else
             {
-                <button type="button"
-                        class="incident-timeline-config__button incident-timeline-config__button--secondary"
-                        data-testid="incident-mapping-add-suggested"
-                        @onclick="AddSuggestedMappingAsync">
+                <AppButton Variant="Subtle" Size="Small"
+                           CssClass="incident-timeline-config__button incident-timeline-config__button--secondary"
+                           data-testid="incident-mapping-add-suggested" OnClick="AddSuggestedMappingAsync">
                     Add mapping for current incident scope
-                </button>
+                </AppButton>
             }
         </div>
     }
@@ -52,7 +50,8 @@
         <div class="incident-timeline-config__empty">
             <strong>No workload mappings yet.</strong>
             <p>
-                Add at least one mapping so Incident Timeline can explain which App Insights, Service Bus, and release evidence belongs to a workload.
+                Add at least one mapping so Incident Timeline can explain which App Insights, Service Bus, and release
+                evidence belongs to a workload.
             </p>
         </div>
     }
@@ -63,8 +62,9 @@
             {
                 var mapping = Config.WorkloadMappings[mappingIndex];
 
-                <section class="incident-timeline-config__card @(IsSuggestedMatch(mapping) ? "incident-timeline-config__card--suggested" : null)"
-                         data-testid="@($"incident-mapping-card-{mappingIndex}")">
+                <section
+                    class="incident-timeline-config__card @(IsSuggestedMatch(mapping) ? "incident-timeline-config__card--suggested" : null)"
+                    data-testid="@($"incident-mapping-card-{mappingIndex}")">
                     <header class="incident-timeline-config__card-header">
                         <div>
                             <h4>@GetMappingTitle(mapping, mappingIndex)</h4>
@@ -75,27 +75,23 @@
                             }
                         </div>
 
-                        <button type="button"
-                                class="incident-timeline-config__button incident-timeline-config__button--danger"
-                                @onclick="() => RemoveMappingAsync(mapping)">
+                        <AppButton Variant="Danger" Size="Small"
+                                   CssClass="incident-timeline-config__button incident-timeline-config__button--danger"
+                                   OnClick="() => RemoveMappingAsync(mapping)">
                             Remove
-                        </button>
+                        </AppButton>
                     </header>
 
                     <div class="incident-timeline-config__field-grid">
                         <label class="incident-timeline-config__field">
                             <span>Namespace</span>
-                            <input class="incident-timeline-config__input"
-                                   @bind="mapping.Namespace"
-                                   @bind:event="oninput"
-                                   @bind:after="NotifyChangedAsync"
-                                   placeholder="prd-phonotif" />
+                            <input class="incident-timeline-config__input" @bind="mapping.Namespace" @bind:event="oninput"
+                                   @bind:after="NotifyChangedAsync" placeholder="prd-phonotif" />
                         </label>
 
                         <label class="incident-timeline-config__field">
                             <span>Workload kind</span>
-                            <select class="incident-timeline-config__input"
-                                    @bind="mapping.WorkloadKind"
+                            <select class="incident-timeline-config__input" @bind="mapping.WorkloadKind"
                                     @bind:after="NotifyChangedAsync">
                                 @foreach (var kind in _workloadKinds)
                                 {
@@ -106,20 +102,14 @@
 
                         <label class="incident-timeline-config__field">
                             <span>Workload name</span>
-                            <input class="incident-timeline-config__input"
-                                   @bind="mapping.WorkloadName"
-                                   @bind:event="oninput"
-                                   @bind:after="NotifyChangedAsync"
-                                   placeholder="phonotif-api" />
+                            <input class="incident-timeline-config__input" @bind="mapping.WorkloadName" @bind:event="oninput"
+                                   @bind:after="NotifyChangedAsync" placeholder="phonotif-api" />
                         </label>
 
                         <label class="incident-timeline-config__field">
                             <span>Display name</span>
-                            <input class="incident-timeline-config__input"
-                                   @bind="mapping.DisplayName"
-                                   @bind:event="oninput"
-                                   @bind:after="NotifyChangedAsync"
-                                   placeholder="Phonotif API" />
+                            <input class="incident-timeline-config__input" @bind="mapping.DisplayName" @bind:event="oninput"
+                                   @bind:after="NotifyChangedAsync" placeholder="Phonotif API" />
                         </label>
                     </div>
 
@@ -132,318 +122,303 @@
 
                             @if (mapping.Observability is null)
                             {
-                                <button type="button"
-                                        class="incident-timeline-config__button incident-timeline-config__button--secondary"
-                                        @onclick="() => EnableObservabilityAsync(mapping)">
+                                <AppButton Variant="Subtle" Size="Small"
+                                           CssClass="incident-timeline-config__button incident-timeline-config__button--secondary"
+                                           OnClick="() => EnableObservabilityAsync(mapping)">
                                     Add App Insights mapping
-                                </button>
+                                </AppButton>
                             }
                             else
                             {
-                                <button type="button"
-                                        class="incident-timeline-config__button incident-timeline-config__button--secondary"
-                                        @onclick="() => ClearObservabilityAsync(mapping)">
+                                <AppButton Variant="Subtle" Size="Small"
+                                           CssClass="incident-timeline-config__button incident-timeline-config__button--secondary"
+                                           OnClick="() => ClearObservabilityAsync(mapping)">
                                     Clear section
-                                </button>
+                                </AppButton>
                             }
                         </div>
 
                         @if (mapping.Observability is null)
                         {
-                            <div class="incident-timeline-config__section-empty">No App Insights mapping configured for this workload.</div>
-                        }
+                            <div class="incident-timeline-config__section-empty">No App Insights mapping configured for this
+                                workload.</div>
+                            }
                         else
-                        {
-                            <div class="incident-timeline-config__section-body">
-                                <label class="incident-timeline-config__field incident-timeline-config__field--full">
-                                    <span>Resource ID</span>
-                                    <input class="incident-timeline-config__input"
-                                           @bind="mapping.Observability.ResourceId"
-                                           @bind:event="oninput"
-                                           @bind:after="NotifyChangedAsync"
-                                           placeholder="/subscriptions/.../providers/microsoft.insights/components/phonotif-ai" />
-                                </label>
+                            {
+                                <div class="incident-timeline-config__section-body">
+                                    <label class="incident-timeline-config__field incident-timeline-config__field--full">
+                                        <span>Resource ID</span>
+                                        <input class="incident-timeline-config__input" @bind="mapping.Observability.ResourceId"
+                                               @bind:event="oninput" @bind:after="NotifyChangedAsync"
+                                               placeholder="/subscriptions/.../providers/microsoft.insights/components/phonotif-ai" />
+                                    </label>
 
-                                <div class="incident-timeline-config__list-group">
-                                    <div class="incident-timeline-config__list-header">
-                                        <span>Cloud role names</span>
-                                        <button type="button"
-                                                class="incident-timeline-config__button incident-timeline-config__button--secondary"
-                                                @onclick="() => AddStringItemAsync(mapping.Observability.CloudRoleNames)">
-                                            Add role
-                                        </button>
-                                    </div>
-
-                                    @if (mapping.Observability.CloudRoleNames.Count == 0)
-                                    {
-                                        <div class="incident-timeline-config__list-empty">No cloud role names configured yet.</div>
-                                    }
-                                    else
-                                    {
-                                        @for (var roleIndex = 0; roleIndex < mapping.Observability.CloudRoleNames.Count; roleIndex++)
-                                        {
-                                            var currentRoleIndex = roleIndex;
-                                            <div class="incident-timeline-config__list-row">
-                                                <input class="incident-timeline-config__input"
-                                                       @bind="mapping.Observability.CloudRoleNames[currentRoleIndex]"
-                                                       @bind:event="oninput"
-                                                       @bind:after="NotifyChangedAsync"
-                                                       placeholder="phonotif-api" />
-                                                <button type="button"
-                                                        class="incident-timeline-config__button incident-timeline-config__button--danger"
-                                                        @onclick="() => RemoveStringItemAsync(mapping.Observability.CloudRoleNames, currentRoleIndex)">
-                                                    Remove
-                                                </button>
-                                            </div>
-                                        }
-                                    }
-                                </div>
-
-                                <div class="incident-timeline-config__list-group">
-                                    <div class="incident-timeline-config__list-header">
-                                        <span>Operation names</span>
-                                        <button type="button"
-                                                class="incident-timeline-config__button incident-timeline-config__button--secondary"
-                                                @onclick="() => AddStringItemAsync(mapping.Observability.OperationNames)">
-                                            Add operation
-                                        </button>
-                                    </div>
-
-                                    @if (mapping.Observability.OperationNames.Count == 0)
-                                    {
-                                        <div class="incident-timeline-config__list-empty">No operation names configured yet.</div>
-                                    }
-                                    else
-                                    {
-                                        @for (var operationIndex = 0; operationIndex < mapping.Observability.OperationNames.Count; operationIndex++)
-                                        {
-                                            var currentOperationIndex = operationIndex;
-                                            <div class="incident-timeline-config__list-row">
-                                                <input class="incident-timeline-config__input"
-                                                       @bind="mapping.Observability.OperationNames[currentOperationIndex]"
-                                                       @bind:event="oninput"
-                                                       @bind:after="NotifyChangedAsync"
-                                                       placeholder="POST /notifications" />
-                                                <button type="button"
-                                                        class="incident-timeline-config__button incident-timeline-config__button--danger"
-                                                        @onclick="() => RemoveStringItemAsync(mapping.Observability.OperationNames, currentOperationIndex)">
-                                                    Remove
-                                                </button>
-                                            </div>
-                                        }
-                                    }
-                                </div>
-                            </div>
-                        }
-                    </section>
-
-                    <section class="incident-timeline-config__section">
-                        <div class="incident-timeline-config__section-header">
-                            <div>
-                                <h5>Service Bus mappings</h5>
-                                <p>Map the namespace and entity paths that represent this workload's queues, topics, or subscriptions.</p>
-                            </div>
-
-                            <button type="button"
-                                    class="incident-timeline-config__button incident-timeline-config__button--secondary"
-                                    @onclick="() => AddServiceBusEntityAsync(mapping)">
-                                Add Service Bus entity
-                            </button>
-                        </div>
-
-                        @if (mapping.ServiceBusEntities.Count == 0)
-                        {
-                            <div class="incident-timeline-config__section-empty">No Service Bus entities configured for this workload.</div>
-                        }
-                        else
-                        {
-                            <div class="incident-timeline-config__stack">
-                                @for (var entityIndex = 0; entityIndex < mapping.ServiceBusEntities.Count; entityIndex++)
-                                {
-                                    var entity = mapping.ServiceBusEntities[entityIndex];
-                                    <div class="incident-timeline-config__compound-card">
-                                        <div class="incident-timeline-config__compound-grid">
-                                            <label class="incident-timeline-config__field">
-                                                <span>Namespace ID</span>
-                                                <input class="incident-timeline-config__input"
-                                                       type="text"
-                                                       value="@FormatGuid(entity.NamespaceId)"
-                                                       placeholder="00000000-0000-0000-0000-000000000000"
-                                                       @onchange="args => UpdateNamespaceIdAsync(entity, args)" />
-                                            </label>
-
-                                            <label class="incident-timeline-config__field">
-                                                <span>Entity path</span>
-                                                <input class="incident-timeline-config__input"
-                                                       @bind="entity.EntityPath"
-                                                       @bind:event="oninput"
-                                                       @bind:after="NotifyChangedAsync"
-                                                       placeholder="orders/deadletter" />
-                                            </label>
-
-                                            <label class="incident-timeline-config__field">
-                                                <span>Alias</span>
-                                                <input class="incident-timeline-config__input"
-                                                       @bind="entity.Alias"
-                                                       @bind:event="oninput"
-                                                       @bind:after="NotifyChangedAsync"
-                                                       placeholder="Order DLQ" />
-                                            </label>
+                                    <div class="incident-timeline-config__list-group">
+                                        <div class="incident-timeline-config__list-header">
+                                            <span>Cloud role names</span>
+                                            <AppButton Variant="Subtle" Size="Small"
+                                                       CssClass="incident-timeline-config__button incident-timeline-config__button--secondary"
+                                                       OnClick="() => AddStringItemAsync(mapping.Observability.CloudRoleNames)">
+                                                Add role
+                                            </AppButton>
                                         </div>
 
-                                        <button type="button"
-                                                class="incident-timeline-config__button incident-timeline-config__button--danger"
-                                                @onclick="() => RemoveServiceBusEntityAsync(mapping, entity)">
-                                            Remove entity
-                                        </button>
+                                        @if (mapping.Observability.CloudRoleNames.Count == 0)
+                                        {
+                                            <div class="incident-timeline-config__list-empty">No cloud role names configured yet.</div>
+                                        }
+                                        else
+                                        {
+                                            @for (var roleIndex = 0; roleIndex < mapping.Observability.CloudRoleNames.Count; roleIndex++)
+                                            {
+                                                var currentRoleIndex = roleIndex;
+                                                <div class="incident-timeline-config__list-row">
+                                                    <input class="incident-timeline-config__input"
+                                                           @bind="mapping.Observability.CloudRoleNames[currentRoleIndex]" @bind:event="oninput"
+                                                           @bind:after="NotifyChangedAsync" placeholder="phonotif-api" />
+                                                    <AppButton Variant="Danger" Size="Small"
+                                                               CssClass="incident-timeline-config__button incident-timeline-config__button--danger"
+                                                               OnClick="() => RemoveStringItemAsync(mapping.Observability.CloudRoleNames, currentRoleIndex)">
+                                                        Remove
+                                                    </AppButton>
+                                                </div>
+                                            }
+                                        }
                                     </div>
+
+                                    <div class="incident-timeline-config__list-group">
+                                        <div class="incident-timeline-config__list-header">
+                                            <span>Operation names</span>
+                                            <AppButton Variant="Subtle" Size="Small"
+                                                       CssClass="incident-timeline-config__button incident-timeline-config__button--secondary"
+                                                       OnClick="() => AddStringItemAsync(mapping.Observability.OperationNames)">
+                                                Add operation
+                                            </AppButton>
+                                        </div>
+
+                                        @if (mapping.Observability.OperationNames.Count == 0)
+                                        {
+                                            <div class="incident-timeline-config__list-empty">No operation names configured yet.</div>
+                                        }
+                                        else
+                                        {
+                                            @for (var operationIndex = 0; operationIndex < mapping.Observability.OperationNames.Count;
+                            operationIndex++)
+                                            {
+                                                var currentOperationIndex = operationIndex;
+                                                <div class="incident-timeline-config__list-row">
+                                                    <input class="incident-timeline-config__input"
+                                                           @bind="mapping.Observability.OperationNames[currentOperationIndex]"
+                                                           @bind:event="oninput" @bind:after="NotifyChangedAsync"
+                                                           placeholder="POST /notifications" />
+                                                    <AppButton Variant="Danger" Size="Small"
+                                                               CssClass="incident-timeline-config__button incident-timeline-config__button--danger"
+                                                               OnClick="() => RemoveStringItemAsync(mapping.Observability.OperationNames, currentOperationIndex)">
+                                                        Remove
+                                                    </AppButton>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </section>
+
+                        <section class="incident-timeline-config__section">
+                            <div class="incident-timeline-config__section-header">
+                                <div>
+                                    <h5>Service Bus mappings</h5>
+                                    <p>Map the namespace and entity paths that represent this workload's queues, topics, or
+                                        subscriptions.</p>
+                                    </div>
+
+                                    <AppButton Variant="Subtle" Size="Small"
+                                               CssClass="incident-timeline-config__button incident-timeline-config__button--secondary"
+                                               OnClick="() => AddServiceBusEntityAsync(mapping)">
+                                        Add Service Bus entity
+                                    </AppButton>
+                                </div>
+
+                                @if (mapping.ServiceBusEntities.Count == 0)
+                                {
+                                    <div class="incident-timeline-config__section-empty">No Service Bus entities configured for this
+                                        workload.</div>
+                                    }
+                        else
+                                    {
+                                        <div class="incident-timeline-config__stack">
+                                            @for (var entityIndex = 0; entityIndex < mapping.ServiceBusEntities.Count; entityIndex++)
+                                            {
+                                                var entity = mapping.ServiceBusEntities[entityIndex];
+                                                <div class="incident-timeline-config__compound-card">
+                                                    <div class="incident-timeline-config__compound-grid">
+                                                        <label class="incident-timeline-config__field">
+                                                            <span>Namespace ID</span>
+                                                            <input class="incident-timeline-config__input" type="text"
+                                                                   value="@FormatGuid(entity.NamespaceId)"
+                                                                   placeholder="00000000-0000-0000-0000-000000000000"
+                                                                   @onchange="args => UpdateNamespaceIdAsync(entity, args)" />
+                                                        </label>
+
+                                                        <label class="incident-timeline-config__field">
+                                                            <span>Entity path</span>
+                                                            <input class="incident-timeline-config__input" @bind="entity.EntityPath"
+                                                                   @bind:event="oninput" @bind:after="NotifyChangedAsync"
+                                                                   placeholder="orders/deadletter" />
+                                                        </label>
+
+                                                        <label class="incident-timeline-config__field">
+                                                            <span>Alias</span>
+                                                            <input class="incident-timeline-config__input" @bind="entity.Alias"
+                                                                   @bind:event="oninput" @bind:after="NotifyChangedAsync" placeholder="Order DLQ" />
+                                                        </label>
+                                                    </div>
+
+                                                    <AppButton Variant="Danger" Size="Small"
+                                                               CssClass="incident-timeline-config__button incident-timeline-config__button--danger"
+                                                               OnClick="() => RemoveServiceBusEntityAsync(mapping, entity)">
+                                                        Remove entity
+                                                    </AppButton>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </section>
+
+                                <section class="incident-timeline-config__section">
+                                    <div class="incident-timeline-config__section-header">
+                                        <div>
+                                            <h5>Azure DevOps mappings</h5>
+                                            <p>Map the pipeline bindings and deployment environments that should show up as contextual
+                                                release evidence.</p>
+                                            </div>
+
+                                            @if (mapping.DevOps is null)
+                                            {
+                                                <AppButton Variant="Subtle" Size="Small"
+                                                           CssClass="incident-timeline-config__button incident-timeline-config__button--secondary"
+                                                           OnClick="() => EnableDevOpsAsync(mapping)">
+                                                    Add Azure DevOps mapping
+                                                </AppButton>
+                                            }
+                                            else
+                                            {
+                                                <AppButton Variant="Subtle" Size="Small"
+                                                           CssClass="incident-timeline-config__button incident-timeline-config__button--secondary"
+                                                           OnClick="() => ClearDevOpsAsync(mapping)">
+                                                    Clear section
+                                                </AppButton>
+                                            }
+                                        </div>
+
+                                        @if (mapping.DevOps is null)
+                                        {
+                                            <div class="incident-timeline-config__section-empty">No Azure DevOps mapping configured for this
+                                                workload.</div>
+                                            }
+                        else
+                                            {
+                                                <div class="incident-timeline-config__section-body">
+                                                    <div class="incident-timeline-config__list-group">
+                                                        <div class="incident-timeline-config__list-header">
+                                                            <span>Pipeline bindings</span>
+                                                            <AppButton Variant="Subtle" Size="Small"
+                                                                       CssClass="incident-timeline-config__button incident-timeline-config__button--secondary"
+                                                                       OnClick="() => AddPipelineAsync(mapping.DevOps)">
+                                                                Add pipeline
+                                                            </AppButton>
+                                                        </div>
+
+                                                        @if (mapping.DevOps.Pipelines.Count == 0)
+                                                        {
+                                                            <div class="incident-timeline-config__list-empty">No pipelines configured yet.</div>
+                                                        }
+                                                        else
+                                                        {
+                                                            @for (var pipelineIndex = 0; pipelineIndex < mapping.DevOps.Pipelines.Count; pipelineIndex++)
+                                                            {
+                                                                var pipeline = mapping.DevOps.Pipelines[pipelineIndex];
+                                                                <div class="incident-timeline-config__compound-card">
+                                                                    <div class="incident-timeline-config__compound-grid">
+                                                                        <label class="incident-timeline-config__field">
+                                                                            <span>Project name</span>
+                                                                            <input class="incident-timeline-config__input" @bind="pipeline.ProjectName"
+                                                                                   @bind:event="oninput" @bind:after="NotifyChangedAsync"
+                                                                                   placeholder="platform-services" />
+                                                                        </label>
+
+                                                                        <label class="incident-timeline-config__field">
+                                                                            <span>Pipeline ID</span>
+                                                                            <input class="incident-timeline-config__input" type="number" min="1"
+                                                                                   value="@FormatPipelineId(pipeline.PipelineId)" placeholder="101"
+                                                                                   @onchange="args => UpdatePipelineIdAsync(pipeline, args)" />
+                                                                        </label>
+
+                                                                        <label class="incident-timeline-config__field">
+                                                                            <span>Alias</span>
+                                                                            <input class="incident-timeline-config__input" @bind="pipeline.Alias"
+                                                                                   @bind:event="oninput" @bind:after="NotifyChangedAsync"
+                                                                                   placeholder="phonotif-api-ci-cd" />
+                                                                        </label>
+                                                                    </div>
+
+                                                                    <AppButton Variant="Danger" Size="Small"
+                                                                               CssClass="incident-timeline-config__button incident-timeline-config__button--danger"
+                                                                               OnClick="() => RemovePipelineAsync(mapping.DevOps, pipeline)">
+                                                                        Remove pipeline
+                                                                    </AppButton>
+                                                                </div>
+                                                            }
+                                                        }
+                                                    </div>
+
+                                                    <div class="incident-timeline-config__list-group">
+                                                        <div class="incident-timeline-config__list-header">
+                                                            <span>Environment names</span>
+                                                            <AppButton Variant="Subtle" Size="Small"
+                                                                       CssClass="incident-timeline-config__button incident-timeline-config__button--secondary"
+                                                                       OnClick="() => AddStringItemAsync(mapping.DevOps.EnvironmentNames)">
+                                                                Add environment
+                                                            </AppButton>
+                                                        </div>
+
+                                                        @if (mapping.DevOps.EnvironmentNames.Count == 0)
+                                                        {
+                                                            <div class="incident-timeline-config__list-empty">No environment filters configured yet.</div>
+                                                        }
+                                                        else
+                                                        {
+                                                            @for (var environmentIndex = 0; environmentIndex < mapping.DevOps.EnvironmentNames.Count;
+                                            environmentIndex++)
+                                                            {
+                                                                var currentEnvironmentIndex = environmentIndex;
+                                                                <div class="incident-timeline-config__list-row">
+                                                                    <input class="incident-timeline-config__input"
+                                                                           @bind="mapping.DevOps.EnvironmentNames[currentEnvironmentIndex]" @bind:event="oninput"
+                                                                           @bind:after="NotifyChangedAsync" placeholder="Production" />
+                                                                    <AppButton Variant="Danger" Size="Small"
+                                                                               CssClass="incident-timeline-config__button incident-timeline-config__button--danger"
+                                                                               OnClick="() => RemoveStringItemAsync(mapping.DevOps.EnvironmentNames, currentEnvironmentIndex)">
+                                                                        Remove
+                                                                    </AppButton>
+                                                                </div>
+                                                            }
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        </section>
+                                    </section>
                                 }
                             </div>
                         }
-                    </section>
 
-                    <section class="incident-timeline-config__section">
-                        <div class="incident-timeline-config__section-header">
-                            <div>
-                                <h5>Azure DevOps mappings</h5>
-                                <p>Map the pipeline bindings and deployment environments that should show up as contextual release evidence.</p>
-                            </div>
-
-                            @if (mapping.DevOps is null)
-                            {
-                                <button type="button"
-                                        class="incident-timeline-config__button incident-timeline-config__button--secondary"
-                                        @onclick="() => EnableDevOpsAsync(mapping)">
-                                    Add Azure DevOps mapping
-                                </button>
-                            }
-                            else
-                            {
-                                <button type="button"
-                                        class="incident-timeline-config__button incident-timeline-config__button--secondary"
-                                        @onclick="() => ClearDevOpsAsync(mapping)">
-                                    Clear section
-                                </button>
-                            }
+                        <div class="incident-timeline-config__footer">
+                            <FluentButton Appearance="Appearance.Accent" data-testid="incident-mapping-save-button" @onclick="SaveAsync">
+                                Save Incident Timeline mappings
+                            </FluentButton>
                         </div>
-
-                        @if (mapping.DevOps is null)
-                        {
-                            <div class="incident-timeline-config__section-empty">No Azure DevOps mapping configured for this workload.</div>
-                        }
-                        else
-                        {
-                            <div class="incident-timeline-config__section-body">
-                                <div class="incident-timeline-config__list-group">
-                                    <div class="incident-timeline-config__list-header">
-                                        <span>Pipeline bindings</span>
-                                        <button type="button"
-                                                class="incident-timeline-config__button incident-timeline-config__button--secondary"
-                                                @onclick="() => AddPipelineAsync(mapping.DevOps)">
-                                            Add pipeline
-                                        </button>
-                                    </div>
-
-                                    @if (mapping.DevOps.Pipelines.Count == 0)
-                                    {
-                                        <div class="incident-timeline-config__list-empty">No pipelines configured yet.</div>
-                                    }
-                                    else
-                                    {
-                                        @for (var pipelineIndex = 0; pipelineIndex < mapping.DevOps.Pipelines.Count; pipelineIndex++)
-                                        {
-                                            var pipeline = mapping.DevOps.Pipelines[pipelineIndex];
-                                            <div class="incident-timeline-config__compound-card">
-                                                <div class="incident-timeline-config__compound-grid">
-                                                    <label class="incident-timeline-config__field">
-                                                        <span>Project name</span>
-                                                        <input class="incident-timeline-config__input"
-                                                               @bind="pipeline.ProjectName"
-                                                               @bind:event="oninput"
-                                                               @bind:after="NotifyChangedAsync"
-                                                               placeholder="platform-services" />
-                                                    </label>
-
-                                                    <label class="incident-timeline-config__field">
-                                                        <span>Pipeline ID</span>
-                                                        <input class="incident-timeline-config__input"
-                                                               type="number"
-                                                               min="1"
-                                                               value="@FormatPipelineId(pipeline.PipelineId)"
-                                                               placeholder="101"
-                                                               @onchange="args => UpdatePipelineIdAsync(pipeline, args)" />
-                                                    </label>
-
-                                                    <label class="incident-timeline-config__field">
-                                                        <span>Alias</span>
-                                                        <input class="incident-timeline-config__input"
-                                                               @bind="pipeline.Alias"
-                                                               @bind:event="oninput"
-                                                               @bind:after="NotifyChangedAsync"
-                                                               placeholder="phonotif-api-ci-cd" />
-                                                    </label>
-                                                </div>
-
-                                                <button type="button"
-                                                        class="incident-timeline-config__button incident-timeline-config__button--danger"
-                                                        @onclick="() => RemovePipelineAsync(mapping.DevOps, pipeline)">
-                                                    Remove pipeline
-                                                </button>
-                                            </div>
-                                        }
-                                    }
-                                </div>
-
-                                <div class="incident-timeline-config__list-group">
-                                    <div class="incident-timeline-config__list-header">
-                                        <span>Environment names</span>
-                                        <button type="button"
-                                                class="incident-timeline-config__button incident-timeline-config__button--secondary"
-                                                @onclick="() => AddStringItemAsync(mapping.DevOps.EnvironmentNames)">
-                                            Add environment
-                                        </button>
-                                    </div>
-
-                                    @if (mapping.DevOps.EnvironmentNames.Count == 0)
-                                    {
-                                        <div class="incident-timeline-config__list-empty">No environment filters configured yet.</div>
-                                    }
-                                    else
-                                    {
-                                        @for (var environmentIndex = 0; environmentIndex < mapping.DevOps.EnvironmentNames.Count; environmentIndex++)
-                                        {
-                                            var currentEnvironmentIndex = environmentIndex;
-                                            <div class="incident-timeline-config__list-row">
-                                                <input class="incident-timeline-config__input"
-                                                       @bind="mapping.DevOps.EnvironmentNames[currentEnvironmentIndex]"
-                                                       @bind:event="oninput"
-                                                       @bind:after="NotifyChangedAsync"
-                                                       placeholder="Production" />
-                                                <button type="button"
-                                                        class="incident-timeline-config__button incident-timeline-config__button--danger"
-                                                        @onclick="() => RemoveStringItemAsync(mapping.DevOps.EnvironmentNames, currentEnvironmentIndex)">
-                                                    Remove
-                                                </button>
-                                            </div>
-                                        }
-                                    }
-                                </div>
-                            </div>
-                        }
-                    </section>
-                </section>
-            }
-        </div>
-    }
-
-    <div class="incident-timeline-config__footer">
-        <FluentButton Appearance="Appearance.Accent"
-                      data-testid="incident-mapping-save-button"
-                      @onclick="SaveAsync">
-            Save Incident Timeline mappings
-        </FluentButton>
-    </div>
-</div>
+                    </div>
 
 @code {
     private static readonly IncidentWorkloadKind[] _workloadKinds =
@@ -596,7 +571,8 @@
     {
         Config.WorkloadMappings = Config.WorkloadMappings
             .Select(SanitizeMapping)
-            .Where(static mapping => !string.IsNullOrWhiteSpace(mapping.Namespace) || !string.IsNullOrWhiteSpace(mapping.WorkloadName) || !string.IsNullOrWhiteSpace(mapping.DisplayName))
+            .Where(static mapping => !string.IsNullOrWhiteSpace(mapping.Namespace) ||
+!string.IsNullOrWhiteSpace(mapping.WorkloadName) || !string.IsNullOrWhiteSpace(mapping.DisplayName))
             .ToList();
     }
 
@@ -672,7 +648,8 @@
         return value.Trim();
     }
 
-    private string GetMappingTitle(IncidentTimelineWorkloadMapping mapping, int index) => !string.IsNullOrWhiteSpace(mapping.DisplayName)
+    private string GetMappingTitle(IncidentTimelineWorkloadMapping mapping, int index) =>
+!string.IsNullOrWhiteSpace(mapping.DisplayName)
         ? mapping.DisplayName
         : !string.IsNullOrWhiteSpace(mapping.WorkloadName)
             ? mapping.WorkloadName
@@ -708,5 +685,6 @@
 
     private static string FormatGuid(Guid value) => value == Guid.Empty ? string.Empty : value.ToString();
 
-    private static string FormatPipelineId(int value) => value > 0 ? value.ToString(CultureInfo.InvariantCulture) : string.Empty;
+    private static string FormatPipelineId(int value) => value > 0 ? value.ToString(CultureInfo.InvariantCulture) :
+string.Empty;
 }

@@ -4,10 +4,17 @@
     gap: 12px;
 }
 
-.approval-toolbar {
+.approval-center ::deep .approval-toolbar {
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.approval-center ::deep .approval-toolbar .page-toolbar-leading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .approval-empty {

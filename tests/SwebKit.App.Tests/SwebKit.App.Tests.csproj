@@ -57,6 +57,13 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\StatusBar.razor" Link="Components\Layout\StatusBar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\CommandPalette.razor" Link="Components\Shared\CommandPalette.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfirmDialog.razor" Link="Components\Shared\ConfirmDialog.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\AppButton.razor" Link="Components\Shared\AppButton.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\AppIconButton.razor" Link="Components\Shared\AppIconButton.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\AppDropdown.razor" Link="Components\Shared\AppDropdown.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\FormField.razor" Link="Components\Shared\FormField.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\AppSelect.razor" Link="Components\Shared\AppSelect.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SegmentedControl.razor" Link="Components\Shared\SegmentedControl.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\StatusBadge.razor" Link="Components\Shared\StatusBadge.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\LoadingSpinner.razor" Link="Components\Shared\LoadingSpinner.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PageHeader.razor" Link="Components\Shared\PageHeader.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\RoutePageHeader.razor" Link="Components\Shared\RoutePageHeader.razor" />
@@ -73,6 +80,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SkeletonRows.razor" Link="Components\Shared\SkeletonRows.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessDashboard.razor" Link="Components\Shared\ConfigurationReadinessDashboard.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessAreaCard.razor" Link="Components\Shared\ConfigurationReadinessAreaCard.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ApiClient\PostRequestCaptureBuilder.razor" Link="Components\ApiClient\PostRequestCaptureBuilder.razor" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SwebKitComponentBase.cs" Link="Components\Shared\SwebKitComponentBase.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\DashboardTileModels.cs" Link="Components\Shared\DashboardTileModels.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SelectionService.cs" Link="Components\Shared\SelectionService.cs" />
@@ -86,6 +94,9 @@
         <Compile Include="..\..\src\SwebKit.App\Services\PerformanceBaselineRecorder.cs" Link="Services\PerformanceBaselineRecorder.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Aks\CronNextRun.cs" Link="Components\Aks\CronNextRun.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\IncidentInvestigationLauncher.cs" Link="Services\IncidentInvestigationLauncher.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\AlertMonitorService.cs" Link="Services\AlertMonitorService.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\MonitoringMigrationService.cs" Link="Services\MonitoringMigrationService.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\NullPodHealthMonitorService.cs" Link="Services\NullPodHealthMonitorService.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityTree.razor" Link="Components\ServiceBus\EntityTree.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ServiceBusGrid.razor" Link="Components\ServiceBus\ServiceBusGrid.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityCommandPalette.razor" Link="Components\ServiceBus\EntityCommandPalette.razor" />
@@ -139,5 +150,11 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobMetadataEditor.razor" Link="Components\Storage\BlobMetadataEditor.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobVersionDiffPane.razor" Link="Components\Storage\BlobVersionDiffPane.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobRecoveryPanel.razor" Link="Components\Storage\BlobRecoveryPanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Monitoring\MonitoringPage.razor" Link="Components\Monitoring\MonitoringPage.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Monitoring\AlertRuleGroups.razor" Link="Components\Monitoring\AlertRuleGroups.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Monitoring\AlertRuleRow.razor" Link="Components\Monitoring\AlertRuleRow.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Monitoring\AlertRuleDrawer.razor" Link="Components\Monitoring\AlertRuleDrawer.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Monitoring\MonitoringAlertHistoryPanel.razor" Link="Components\Monitoring\MonitoringAlertHistoryPanel.razor" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Monitoring\AlertRuleUiStateModels.cs" Link="Components\Monitoring\AlertRuleUiStateModels.cs" />
     </ItemGroup>
 </Project>

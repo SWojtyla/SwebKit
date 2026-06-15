@@ -1,0 +1,360 @@
+@* Export / import dialog for API client collections *@
+@inject SwebKitCollectionExporter SwebKitExporter
+@inject PostmanCollectionExporter PostmanExporter
+@inject BrunoCollectionExporter BrunoExporter
+@inject CollectionImportService ImportService
+@inject IFolderPickerService FolderPicker
+@inject IJSRuntime JS
+@inject ILogger<CollectionExportDialog> Logger
+
+@if (Visible)
+{
+    <div class="col-export-dialog__backdrop" @onclick="OnBackdropClick"></div>
+
+    <div class="col-export-dialog" role="dialog" aria-modal="true" aria-label="Export / Import Collection">
+
+        @* ── Tab strip ──────────────────────────────────────────────────────────── *@
+        <div class="col-export-dialog__tabs">
+            <button type="button"
+                    class="col-export-dialog__tab @(_activeTab == "export" ? "col-export-dialog__tab--active" : "")"
+                    @onclick='() => _activeTab = "export"'>Export</button>
+            <button type="button"
+                    class="col-export-dialog__tab @(_activeTab == "import" ? "col-export-dialog__tab--active" : "")"
+                    @onclick='() => _activeTab = "import"'>Import</button>
+        </div>
+
+        @* ────────────────── EXPORT ──────────────────────────────────────── *@
+        @if (_activeTab == "export")
+        {
+            <div class="col-export-dialog__section-title">Format</div>
+            <div class="col-export-dialog__format-group">
+                @foreach (var fmt in _formats)
+                {
+                    var f = fmt;
+                    <label class="col-export-dialog__format-radio">
+                        <input type="radio" name="export-format" checked="@(_selectedFormat == f.Key)"
+                               @onchange="() => _selectedFormat = f.Key" />
+                        <span>@f.Label</span>
+                        <span class="col-export-dialog__format-ext">@f.Ext</span>
+                    </label>
+                }
+            </div>
+
+            @if (Environments.Count > 0)
+            {
+                <div class="col-export-dialog__check-row">
+                    <label>
+                        <input type="checkbox" checked="@_includeEnvironments"
+                               @onchange="e => _includeEnvironments = (bool)(e.Value ?? false)" />
+                        Include all environments
+                        <span class="col-export-dialog__env-count">(@Environments.Count)</span>
+                    </label>
+                </div>
+                <div class="col-export-dialog__note">
+                    Environments are only included in SwebKit and Bruno formats.
+                </div>
+            }
+
+            @if (_exporting)
+            {
+                <div class="col-export-dialog__busy">Exporting…</div>
+            }
+            else if (_exportError is not null)
+            {
+                <div class="col-export-dialog__error">⚠ @_exportError</div>
+            }
+
+            <div class="col-export-dialog__actions">
+                <button type="button" class="col-export-dialog__btn col-export-dialog__btn--primary"
+                        disabled="@(Collection is null || _exporting)" @onclick="ExportAsync">
+                    Save File…
+                </button>
+                <button type="button" class="col-export-dialog__btn" @onclick="Close">Cancel</button>
+            </div>
+        }
+
+        @* ────────────────── IMPORT ──────────────────────────────────────── *@
+        @if (_activeTab == "import")
+        {
+            @* ── Bruno folder ── *@
+            <div class="col-export-dialog__section-title">Bruno</div>
+            <div class="col-export-dialog__file-row">
+                <span class="col-export-dialog__file-name">@(_importBrunoFolderPath ?? "No folder selected")</span>
+                <button type="button" class="col-export-dialog__btn" @onclick="PickBrunoFolderAsync">
+                    Choose Folder…
+                </button>
+            </div>
+            <div class="col-export-dialog__note">
+                Select the root Bruno collection folder (the one containing <code>bruno.json</code>).
+                Requests, sub-folders, and environments are all imported at once.
+            </div>
+            @if (TargetLinkedRootApiPath is not null)
+            {
+                <div class="col-export-dialog__note col-export-dialog__note--target">
+                    → Will import into linked repo: <strong>@TargetLinkedRootApiPath</strong>
+                </div>
+            }
+
+            @* ── SwebKit / Postman file ── *@
+            <div class="col-export-dialog__section-title col-export-dialog__section-title--gap">
+                SwebKit or Postman
+            </div>
+            <div class="col-export-dialog__file-row">
+                <span class="col-export-dialog__file-name">@(_importFileName ?? "No file selected")</span>
+                <button type="button" class="col-export-dialog__btn" @onclick="PickImportFileAsync">
+                    Choose File…
+                </button>
+            </div>
+            <div class="col-export-dialog__note">Supports: SwebKit JSON (.sweb.json), Postman v2.1</div>
+
+            @if (_importing)
+            {
+                <div class="col-export-dialog__busy">Importing…</div>
+            }
+            else if (_importSummary is not null)
+            {
+                <div class="col-export-dialog__summary">
+                    <div class="col-export-dialog__summary-title">Import complete</div>
+                    <ul class="col-export-dialog__summary-list">
+                        @if (_importSummary.RequestCount > 0)
+                        {
+                            <li>@_importSummary.RequestCount request(s) imported</li>
+                        }
+                        @if (_importSummary.CaptureRuleCount > 0)
+                        {
+                            <li>@_importSummary.CaptureRuleCount capture rule(s) imported</li>
+                        }
+                        @if (_importSummary.VariablesExtractedAsEnvironment > 0)
+                        {
+                            <li>@_importSummary.VariablesExtractedAsEnvironment variable(s) extracted as environment</li>
+                        }
+                        @if (_importSummary.AuthConfigsRequiringReEntry > 0)
+                        {
+                            <li class="col-export-dialog__summary-warn">
+                                @_importSummary.AuthConfigsRequiringReEntry auth config(s) require credential re-entry
+                            </li>
+                        }
+                    </ul>
+                    @if (_importSummary.Warnings.Count > 0)
+                    {
+                        <div class="col-export-dialog__summary-warnings">
+                            @foreach (var w in _importSummary.Warnings)
+                            {
+                                <div class="col-export-dialog__summary-warning">⚠ @w</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else if (_importError is not null)
+            {
+                <div class="col-export-dialog__error">⚠ @_importError</div>
+            }
+
+            <div class="col-export-dialog__actions">
+                @if (_importSummary is not null)
+                {
+                    <button type="button" class="col-export-dialog__btn col-export-dialog__btn--primary"
+                            @onclick="CloseAndRefresh">Done</button>
+                }
+                else
+                {
+                    <button type="button" class="col-export-dialog__btn col-export-dialog__btn--primary"
+                            disabled="@(_importPayload is null && _importBrunoFolderPath is null || _importing)" @onclick="ImportAsync">
+                        Import
+                    </button>
+                    <button type="button" class="col-export-dialog__btn" @onclick="Close">Cancel</button>
+                }
+            </div>
+        }
+
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public ApiCollection? Collection { get; set; }
+    [Parameter] public IReadOnlyList<ApiEnvironment> Environments { get; set; } = [];
+    [Parameter] public string InitialTab { get; set; } = "export";
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnImported { get; set; }
+    /// <summary>
+    /// When set, imported collections are written directly into this linked repo root
+    /// (as .swebreq.json files on disk) instead of local SwebKit storage.
+    /// </summary>
+    [Parameter] public string? TargetLinkedRootApiPath { get; set; }
+
+    private string _activeTab = "export";
+    private bool _wasVisible;
+
+    protected override void OnParametersSet()
+    {
+        if (Visible && !_wasVisible)
+        {
+            _activeTab = string.Equals(InitialTab, "import", StringComparison.OrdinalIgnoreCase)
+                ? "import"
+                : "export";
+        }
+
+        _wasVisible = Visible;
+    }
+
+    // ── Export state ──────────────────────────────────────────────────────────
+
+    private string _selectedFormat = "sweb";
+    private bool _includeEnvironments;
+    private bool _exporting;
+    private string? _exportError;
+
+    private record FormatDescriptor(string Key, string Label, string Ext);
+
+    private static readonly FormatDescriptor[] _formats =
+    [
+        new("sweb", "SwebKit JSON", ".sweb.json"),
+        new("postman", "Postman v2.1", ".postman_collection.json"),
+        new("bruno", "Bruno (.bru)", ".zip"),
+    ];
+
+    // ── Import state ──────────────────────────────────────────────────────────
+
+    private byte[]? _importPayload;
+    private string? _importFileName;
+    private string? _importBrunoFolderPath;
+    private bool _importing;
+    private CollectionImportResult? _importSummary;
+    private string? _importError;
+
+    // ── Export ────────────────────────────────────────────────────────────────
+
+    private async Task ExportAsync()
+    {
+        if (Collection is null) return;
+        _exporting = true;
+        _exportError = null;
+        await InvokeAsync(StateHasChanged); // BL-2
+
+        try
+        {
+            var envs = _includeEnvironments ? Environments : [];
+            var (bytes, fileName) = _selectedFormat switch
+            {
+                "postman" => (await PostmanExporter.ExportAsync(Collection, envs), $"{Collection.Name}.postman_collection.json"),
+                "bruno" => (await BrunoExporter.ExportAsync(Collection, envs), $"{Collection.Name}.zip"),
+                _ => (await SwebKitExporter.ExportAsync(Collection, envs), $"{Collection.Name}.sweb.json"),
+            };
+
+            var base64 = Convert.ToBase64String(bytes);
+            var mimeType = _selectedFormat == "bruno" ? "application/zip" : "application/json";
+            await JS.InvokeVoidAsync("SwebKitUi.downloadBinaryFile", fileName, base64, mimeType);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Export failed");
+            _exportError = ex.Message;
+        }
+        finally
+        {
+            _exporting = false;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+    }
+
+    // ── Import ────────────────────────────────────────────────────────────────
+
+    private async Task PickBrunoFolderAsync()
+    {
+        try
+        {
+            var path = await FolderPicker.PickFolderAsync("Select Bruno collection folder");
+            if (path is null) return;
+            _importBrunoFolderPath = path;
+            // Clear single-file state to avoid ambiguity
+            _importPayload = null;
+            _importFileName = null;
+            _importSummary = null;
+            _importError = null;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _importError = ex.Message; }
+    }
+
+    private async Task PickImportFileAsync()
+    {
+        try
+        {
+            var result = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Select collection file…",
+            });
+            if (result is null) return;
+            _importFileName = result.FileName;
+            using var stream = await result.OpenReadAsync();
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            _importPayload = ms.ToArray();
+            // Clear Bruno folder selection to avoid ambiguity
+            _importBrunoFolderPath = null;
+            _importSummary = null;
+            _importError = null;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _importError = ex.Message; }
+    }
+
+    private async Task ImportAsync()
+    {
+        _importing = true;
+        _importError = null;
+        _importSummary = null;
+        await InvokeAsync(StateHasChanged); // BL-2
+
+        try
+        {
+            CollectionImportResult? collResult = null;
+
+            if (_importBrunoFolderPath is not null)
+            {
+                collResult = TargetLinkedRootApiPath is not null
+                    ? await ImportService.ImportBrunoFolderToLinkedRootAsync(_importBrunoFolderPath, TargetLinkedRootApiPath)
+                    : await ImportService.ImportBrunoFolderAsync(_importBrunoFolderPath);
+            }
+            else if (_importPayload is not null)
+            {
+                collResult = TargetLinkedRootApiPath is not null
+                    ? await ImportService.ImportCollectionToLinkedRootAsync(_importPayload, TargetLinkedRootApiPath)
+                    : await ImportService.ImportCollectionAsync(_importPayload);
+            }
+
+            if (collResult is not null && (collResult.Collections.Count > 0 || collResult.Warnings.Count > 0))
+                _importSummary = collResult;
+            else if (collResult is not null && collResult.Collections.Count == 0)
+                _importError = string.Join("; ", collResult.Warnings.DefaultIfEmpty("No collections found."));
+
+            await OnImported.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Import failed");
+            _importError = ex.Message;
+        }
+        finally
+        {
+            _importing = false;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+    }
+
+    // ── Close ─────────────────────────────────────────────────────────────────
+
+    private void Close() => OnClose.InvokeAsync();
+
+    private async Task CloseAndRefresh()
+    {
+        await OnImported.InvokeAsync();
+        await OnClose.InvokeAsync();
+    }
+
+    private void OnBackdropClick() => OnClose.InvokeAsync();
+}

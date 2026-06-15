@@ -1,0 +1,64 @@
+@* Editable key/value grid for headers, query params, and form-data. *@
+
+<div class="kv-grid">
+    <div class="kv-grid__header">
+        <span class="kv-grid__col-check"></span>
+        <span class="kv-grid__col-key">Key</span>
+        <span class="kv-grid__col-value">Value</span>
+        <span class="kv-grid__col-del"></span>
+    </div>
+
+    @for (var i = 0; i < Pairs.Count; i++)
+    {
+        var idx = i;
+        var pair = Pairs[idx];
+        <div class="kv-grid__row @(!pair.IsEnabled ? "kv-grid__row--disabled" : "")">
+            <input type="checkbox" class="kv-grid__check" checked="@pair.IsEnabled"
+                   @onchange="e => ToggleRow(idx, (bool)(e.Value ?? false))" />
+            <input class="kv-grid__input kv-grid__input--key" type="text" placeholder="key" value="@pair.Key"
+                   @oninput="e => SetKey(idx, e.Value?.ToString() ?? string.Empty)" />
+            <input class="kv-grid__input kv-grid__input--value" type="text" placeholder="value" value="@pair.Value"
+                   @oninput="e => SetValue(idx, e.Value?.ToString())" />
+            <button type="button" class="kv-grid__del-btn" title="Remove row" @onclick="() => RemoveRow(idx)">×</button>
+        </div>
+    }
+
+    <div class="kv-grid__add-row">
+        <button type="button" class="kv-grid__add-btn" @onclick="AddRow">+ Add</button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<KeyValuePair<string>> Pairs { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private void AddRow()
+    {
+        Pairs.Add(new KeyValuePair<string> { IsEnabled = true });
+        OnChanged.InvokeAsync();
+    }
+
+    private void RemoveRow(int idx)
+    {
+        Pairs.RemoveAt(idx);
+        OnChanged.InvokeAsync();
+    }
+
+    private void ToggleRow(int idx, bool enabled)
+    {
+        Pairs[idx].IsEnabled = enabled;
+        OnChanged.InvokeAsync();
+    }
+
+    private void SetKey(int idx, string key)
+    {
+        Pairs[idx].Key = key;
+        OnChanged.InvokeAsync();
+    }
+
+    private void SetValue(int idx, string? value)
+    {
+        Pairs[idx].Value = value;
+        OnChanged.InvokeAsync();
+    }
+}

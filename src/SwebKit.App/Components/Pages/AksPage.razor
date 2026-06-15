@@ -10,7 +10,6 @@
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
 @inject ILogger<AksPage> Logger
-@inject IPodHealthMonitorService Monitor
 @inject IAksClientBootstrapper AksBootstrapper
 @inject IAksWarmupCache AksWarmupCache
 @inject OperatorWorkspaceService Workspaces
@@ -34,19 +33,6 @@
                       OnNamespaceChanged="HandleNamespaceChangedAsync" OnResourceTypeChanged="SwitchResourceType"
                       OnRefresh="LoadAsync" OnToggleEvents="HandleToggleEvents"
                       OnTogglePortForwardSessions="HandleTogglePortForwardSessions" />
-
-    @* ── Monitor bar ── *@
-    <div class="aks-monitor-bar">
-        <button class="aks-monitor-btn @(Monitor.IsMonitoring ? "active" : "")" @onclick="ToggleMonitorPanel"
-                title="Pod health monitoring">
-            <FluentIcon Value="@_iconAlert" Width="14px" style="vertical-align:middle;" />
-            @(Monitor.IsMonitoring ? $" Monitor ({Monitor.MonitoredNamespaces.Count})" : " Monitor")
-            @if (_recentAlertCount > 0)
-            {
-                <span class="aks-alert-badge">@_recentAlertCount</span>
-            }
-        </button>
-    </div>
 
     @* ── Error ── *@
     @if (ErrorMessage is not null)
@@ -73,21 +59,16 @@
     }
     else
     {
-        @* ── Monitor panel ── *@
-        @if (_showMonitorPanel)
-        {
-            <div class="aks-monitor-panel">
-                <NamespaceMonitorSelector AksClient="Client" CurrentClusterContext="@ActiveContext" />
-                <AlertHistoryPanel />
-            </div>
-        }
-
         <div class="aks-content @(HasAnyPanel ? "side-open" : "")">
             @* ── Main resource panel ── *@
             <div class="aks-resource-panel">
                 <div class="aks-section-header">
                     <span class="aks-section-title">@ActiveResourceType</span>
                     <span class="aks-section-count">@ActiveResourceCount</span>
+                    @if (_allPodsGreenBanner)
+                    {
+                        <span class="aks-pods-green-banner">🎉 Everything's fine. Suspiciously fine. — SW</span>
+                    }
                 </div>
                 <ResourceFilter Placeholder="@($"Filter {ActiveResourceType.ToLowerInvariant()}…")" Value="@ActiveFilter"
                                 ValueChanged="OnFilterChanged">
@@ -461,27 +442,29 @@
                                                                                                                                                                                                                                                         <div class="ctx-separator"></div>
                                                                                                                                                                                                                                                         <button class="ctx-item" @onclick="OnCtxRerunJob"><span class="ctx-item-icon">&#8635;</span> Rerun
                                                                                                                                                                                                                                                             job</button>
-                                                                                                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxToggleJobPause"><span class="ctx-item-icon">@(CtxJob?.Parallelism == 0 ? "▶" : "⏸")</span> @(CtxJob?.Parallelism == 0 ? "Resume job" : "Pause job")</button>
-                                                                                                                                                                                                                                                        </ContextMenu>
+                                                                                                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxToggleJobPause"><span class="ctx-item-icon">@(CtxJob?.Parallelism == 0 ?
+                                                                                                                                                                                                                                                                            "▶" : "⏸")</span> @(CtxJob?.Parallelism == 0 ? "Resume job" : "Pause job")</button>
+                                                                                                                                                                                                                                                            </ContextMenu>
 
-                                                                                                                                                                                                                                                        <ContextMenu @ref="CronJobMenu">
-                                                                                                                                                                                                                                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxCronJob?.Name)"><span
-                                                                                                                                                                                                                                                                class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewYamlCronJob"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                                                                                                                                                    YAML</button>
-                                                                                                                                                                                                                                                                    <div class="ctx-separator"></div>
-                                                                                                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxRunCronJob"><span class="ctx-item-icon">&#9654;</span> Run
-                                                                                                                                                                                                                                                                        now</button>
-                                                                                                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxToggleCronJobSuspend"><span class="ctx-item-icon">@(CtxCronJob?.Suspend == true ? "▶" : "⏸")</span> @(CtxCronJob?.Suspend == true ? "Resume" : "Suspend")</button>
-                                                                                                                                                                                                                                                                    </ContextMenu>
+                                                                                                                                                                                                                                                            <ContextMenu @ref="CronJobMenu">
+                                                                                                                                                                                                                                                                <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxCronJob?.Name)"><span
+                                                                                                                                                                                                                                                                    class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxViewYamlCronJob"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                                                                                                                                        YAML</button>
+                                                                                                                                                                                                                                                                        <div class="ctx-separator"></div>
+                                                                                                                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxRunCronJob"><span class="ctx-item-icon">&#9654;</span> Run
+                                                                                                                                                                                                                                                                            now</button>
+                                                                                                                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxToggleCronJobSuspend"><span class="ctx-item-icon">@(CtxCronJob?.Suspend
+                                                                                                                                                                                                                                                                                                == true ? "▶" : "⏸")</span> @(CtxCronJob?.Suspend == true ? "Resume" : "Suspend")</button>
+                                                                                                                                                                                                                                                                            </ContextMenu>
 
-                                                                                                                                                                                                                                                                </div>
+                                                                                                                                                                                                                                                                        </div>
 
-                                                                                                                                                                                                                                                                @* ── Port-forward sessions panel ── *@
-                                                                                                                                                                                                                                                                @if (ShowPortForwardSessions)
-                                                                                                                                                                                                                                                                {
-                                                                                                                                                                                                                                                                    <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
-                                                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                                                        @* ── Port-forward sessions panel ── *@
+                                                                                                                                                                                                                                                                        @if (ShowPortForwardSessions)
+                                                                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                                            <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
+                                                                                                                                                                                                                                                                        }
 
 @* ── Port-forward start dialog ── *@
 <PortForwardStartDialog Visible="@ShowPortForwardDialog" PodName="@(_pfDialogPod?.Name ?? "")"
@@ -492,8 +475,6 @@
                         OnPinRemove="@(async entry => await PinnedPortForwards.RemovePinAsync(ActiveContext, entry))" />
 
 @code {
-
-    private static readonly Icon _iconAlert = new Icons.Regular.Size16.Alert();
 
     private IAksClient? Client;
     private List<DeploymentInfo> Deployments = [];
@@ -718,12 +699,6 @@ false)
     private PodInfo? _pfDialogPod;
     private int _pfDialogRemotePort;
 
-    // Pod health monitor panel state
-    private bool _showMonitorPanel;
-    private int _recentAlertCount;
-
-
-
     // Context menu refs and targets
     private ContextMenu DeploymentMenu = default!;
     private ContextMenu PodMenu = default!;
@@ -789,6 +764,30 @@ false)
 
     private bool IsProduction => AppState.Config.IsProduction;
 
+    // ── Easter egg: all pods green ────────────────────────────────────────────
+    private bool _allPodsGreenBanner;
+    private System.Timers.Timer? _allPodsGreenTimer;
+
+    private void CheckAllPodsGreen()
+    {
+        var activePods = Pods.Where(p => !IsCompletedPod(p)).ToList();
+        if (activePods.Count == 0) return;
+        if (activePods.All(p => string.Equals(p.Status, "Running", StringComparison.OrdinalIgnoreCase)))
+        {
+            _allPodsGreenBanner = true;
+            _allPodsGreenTimer?.Dispose();
+            _allPodsGreenTimer = new System.Timers.Timer(5000) { AutoReset = false };
+            _allPodsGreenTimer.Elapsed += (_, _) =>
+            {
+                _allPodsGreenTimer?.Dispose();
+                _allPodsGreenTimer = null;
+                _allPodsGreenBanner = false;
+                InvokeAsync(StateHasChanged);
+            };
+            _allPodsGreenTimer.Start();
+        }
+    }
+
     [Parameter] public IAksClient? ClientOverride { get; set; }
 
     private sealed record AksBootstrapSignature(
@@ -802,22 +801,8 @@ false)
     {
         EventBus.Subscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         EventBus.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
-        Monitor.PodHealthDetected += OnMonitorPodHealthDetected;
         Workspaces.RegisterRestoreHandler("aks", RestoreWorkspaceAsync);
         RegisterAksCommands();
-    }
-
-    private void OnMonitorPodHealthDetected(PodHealthEvent evt)
-    {
-        _recentAlertCount++;
-        _ = InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private void ToggleMonitorPanel()
-    {
-        _showMonitorPanel = !_showMonitorPanel;
-        if (_showMonitorPanel)
-            _recentAlertCount = 0; // reset badge when user opens the panel
     }
 
     private void RegisterAksCommands()
@@ -1103,6 +1088,7 @@ OnCtxRestartDeployment();
             Jobs = [];
             CronJobs = [];
             PodMetricsList = [];
+            IsLoading = false;
             await InvokeAsync(StateHasChanged);
             return;
         }
@@ -1289,6 +1275,7 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
                 await PublishWorkspaceSnapshotAsync(recordRecent: false);
                 IsLoading = false;
                 await InvokeAsync(StateHasChanged); // BL-2
+                CheckAllPodsGreen();
             }
         }
     }
@@ -2756,7 +2743,6 @@ SelectedIngress.Namespace); break;
         cts?.Dispose();
         EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         EventBus.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
-        Monitor.PodHealthDetected -= OnMonitorPodHealthDetected;
         Workspaces.UnregisterRestoreHandler("aks");
         foreach (var id in new[] { "aks-refresh", "aks-restart-deployment", "aks-scale-deployment",
                                    "aks-view-logs", "aks-open-pod-shell", "aks-port-forward" })

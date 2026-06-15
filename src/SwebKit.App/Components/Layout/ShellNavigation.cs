@@ -96,6 +96,22 @@ public static class ShellNavigation
         "Signals",
         new Icons.Regular.Size24.Clock());
 
+    public static readonly ShellNavEntry Monitoring = new(
+        "monitoring",
+        "/monitoring",
+        "Monitoring",
+        "Define alert rules and receive Windows notifications when thresholds are breached.",
+        "Signals",
+        new Icons.Regular.Size24.AlertOn());
+
+    public static readonly ShellNavEntry ApiClient = new(
+        "api-client",
+        "/api-client",
+        "API Client",
+        "Build, send, and organise REST, GraphQL, and WebSocket requests with environments and secrets.",
+        "Tools",
+        new Icons.Regular.Size24.Globe());
+
     public static readonly ShellNavEntry Settings = new(
         "settings",
         "/settings",
@@ -115,6 +131,8 @@ public static class ShellNavigation
         Pipelines,
         Observability,
         IncidentTimeline,
+        Monitoring,
+        ApiClient,
         Settings,
     ];
 
@@ -123,7 +141,8 @@ public static class ShellNavigation
         new ShellNavGroup("Overview", [Dashboard]),
         new ShellNavGroup("Workspaces", [ServiceBus, Aks, Redis, Storage]),
         new ShellNavGroup("Delivery", [Pipelines]),
-        new ShellNavGroup("Signals", [Observability, IncidentTimeline]),
+        new ShellNavGroup("Signals", [Observability, IncidentTimeline, Monitoring]),
+        new ShellNavGroup("Tools", [ApiClient]),
         new ShellNavGroup("Configuration", [Settings], true),
     ];
 

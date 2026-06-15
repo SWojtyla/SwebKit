@@ -1,0 +1,485 @@
+@using BlazorMonaco
+@using BlazorMonaco.Editor
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@inject IGraphQlSchemaService SchemaService
+@inject IRequestBodyFormatter BodyFormatter
+
+<div class="gql-panel">
+
+    @* ── Tab strip ──────────────────────────────────────────────────────────── *@
+    <div class="gql-panel__tabstrip">
+        <button type="button" class="gql-panel__tab @(_activeTab == "query" ? "gql-panel__tab--active" : "")"
+                @onclick='() => SwitchTab("query")'>Query</button>
+        <button type="button" class="gql-panel__tab @(_activeTab == "variables" ? "gql-panel__tab--active" : "")"
+                @onclick='() => SwitchTab("variables")'>
+            Variables
+            @if (!string.IsNullOrWhiteSpace(Request.GraphQlVariables))
+            {
+                <span class="gql-panel__tab-dot">●</span>
+            }
+        </button>
+        <button type="button" class="gql-panel__tab @(_activeTab == "schema" ? "gql-panel__tab--active" : "")"
+                @onclick='() => SwitchTab("schema")'>
+            Schema
+            @if (_schemaLoaded)
+            {
+                <span class="gql-panel__tab-ok">✓</span>
+            }
+        </button>
+
+        <div class="gql-panel__tabstrip-spacer"></div>
+
+        @if (_operationNames.Count > 1)
+        {
+            <div class="gql-panel__op-wrap">
+                <span class="gql-panel__op-label">Op:</span>
+                <AppDropdown IsOpen="@_showOpDropdown" OnClose="@(() => _showOpDropdown = false)"
+                             CssClass="gql-panel__op-dropdown-wrap" MenuCssClass="gql-panel__op-dropdown"
+                             Label="GraphQL operation picker">
+                    <TriggerContent>
+                        <button type="button" class="gql-panel__op-btn" @onclick="() => _showOpDropdown = !_showOpDropdown">
+                            @(Request.GraphQlSelectedOperation ?? _operationNames[0])
+                            <span class="gql-panel__op-chevron">▾</span>
+                        </button>
+                    </TriggerContent>
+                    <ChildContent>
+                        @foreach (var name in _operationNames)
+                        {
+                            var n = name;
+                            <button type="button"
+                                    class="ctx-item @(Request.GraphQlSelectedOperation == n ? "ctx-item--active" : "")"
+                                    @onclick="() => SelectOperationAsync(n)">@n</button>
+                        }
+                    </ChildContent>
+                </AppDropdown>
+            </div>
+        }
+
+        @if (_activeTab is "query" or "variables")
+        {
+            <button type="button" class="gql-panel__format-btn" title="@FormatButtonTitle"
+                    disabled="@(!CanPrettifyActiveEditor)" @onclick="PrettifyActiveEditorAsync">
+                Prettify
+            </button>
+        }
+    </div>
+
+    @* ── Tab content ─────────────────────────────────────────────────────────── *@
+    <div class="gql-panel__content">
+
+        @if (_formatError is not null)
+        {
+            <div class="gql-panel__format-error" role="alert">@_formatError</div>
+        }
+
+        @* ── Query editor ── *@
+        @if (_activeTab == "query")
+        {
+            <div class="gql-panel__editor-container">
+                @if (!_monacoLoaded)
+                {
+                    <div class="gql-panel__loading">
+                        <span class="gql-panel__loading-spinner"></span>
+                        Loading editor…
+                    </div>
+                }
+                else
+                {
+                    <StandaloneCodeEditor @ref="_queryEditor" ConstructionOptions="QueryEditorOptions"
+                                          OnDidChangeModelContent="OnQueryChangedAsync" OnDidInit="OnQueryEditorInitAsync" />
+                }
+            </div>
+        }
+        else if (_activeTab == "variables")
+        {
+            <div class="gql-panel__editor-container">
+                @if (!_monacoLoaded)
+                {
+                    <div class="gql-panel__loading">
+                        <span class="gql-panel__loading-spinner"></span>
+                        Loading editor…
+                    </div>
+                }
+                else
+                {
+                    <StandaloneCodeEditor @ref="_varsEditor" ConstructionOptions="VarsEditorOptions"
+                                          OnDidChangeModelContent="OnVarsChangedAsync" OnDidInit="OnVarsEditorInitAsync" />
+                }
+            </div>
+        }
+        else if (_activeTab == "schema")
+        {
+            <div class="gql-panel__schema-pane">
+                <div class="gql-panel__schema-toolbar">
+                    <button type="button"
+                            class="gql-panel__introspect-btn @(_introspecting ? "gql-panel__introspect-btn--busy" : "")"
+                            disabled="@(_introspecting || string.IsNullOrWhiteSpace(EndpointUrl))" @onclick="IntrospectAsync">
+                        @if (_introspecting)
+                        {
+                            <span class="gql-panel__loading-spinner"></span>
+                            <span>Introspecting…</span>
+                        }
+                        else
+                        {
+                            <span>⚡ Introspect Schema</span>
+                        }
+                    </button>
+                    @if (_schemaLoaded)
+                    {
+                        <span class="gql-panel__schema-status--ok">✓ Schema loaded — @_schemaTypeCount types</span>
+                        <button type="button" class="gql-panel__schema-clear-btn" title="Clear cached schema"
+                                @onclick="ClearSchemaAsync">✕</button>
+                    }
+                </div>
+
+                @if (_introspectionError is not null)
+                {
+                    <div class="gql-panel__schema-error" role="alert">
+                        <span>⚠ @_introspectionError</span>
+                        <button type="button" class="gql-panel__schema-dismiss"
+                                @onclick="() => _introspectionError = null">✕</button>
+                    </div>
+                }
+
+                @if (_schemaLoaded && _schemaJson is not null)
+                {
+                    <div class="gql-panel__schema-viewer">
+                        <div class="gql-panel__schema-viewer-header">Raw schema (JSON)</div>
+                        <pre class="gql-panel__schema-raw">@_schemaJson</pre>
+                    </div>
+                }
+                else if (!_introspecting && !_schemaLoaded)
+                {
+                    <div class="gql-panel__schema-empty">
+                        <div class="gql-panel__schema-empty-icon">⚡</div>
+                        <div class="gql-panel__schema-empty-title">No schema loaded</div>
+                        <div class="gql-panel__schema-empty-hint">
+                            Click <strong>Introspect Schema</strong> to fetch type information from the endpoint.
+                            @if (string.IsNullOrWhiteSpace(EndpointUrl))
+                            {
+                                <br /><em>Enter an endpoint URL in the URL bar first.</em>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = default!;
+    [Parameter, EditorRequired] public ApiCollection Collection { get; set; } = default!;
+    [Parameter] public ApiEnvironment? ActiveEnvironment { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    // Derived from parent URL bar — injected as a separate parameter so the panel
+    // can pass it to the introspection service without re-executing the full request.
+    [Parameter] public string EndpointUrl { get; set; } = string.Empty;
+
+    private StandaloneCodeEditor? _queryEditor;
+    private StandaloneCodeEditor? _varsEditor;
+
+    private string _activeTab = "query";
+    private bool _monacoLoaded;
+    private bool _monacoLoading;
+    private bool _showOpDropdown;
+    private bool _introspecting;
+    private string? _introspectionError;
+    private string? _formatError;
+    private bool _schemaLoaded;
+    private string? _schemaJson;
+    private int _schemaTypeCount;
+    private IReadOnlyList<string> _operationNames = [];
+
+    private HttpRequestEntry? _lastRequest;
+
+    private bool CanPrettifyActiveEditor => _activeTab switch
+    {
+        "query" => !string.IsNullOrWhiteSpace(Request.GraphQlQuery),
+        "variables" => !string.IsNullOrWhiteSpace(Request.GraphQlVariables),
+        _ => false,
+    };
+
+    private string FormatButtonTitle => _activeTab == "variables"
+        ? "Prettify GraphQL variables JSON"
+        : "Prettify GraphQL query";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Idempotent — safe to call on every render; guards internally
+        await EnsureMonacoAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_lastRequest, Request)) return;
+        _lastRequest = Request;
+
+        // Reparse operation names from the new request's query
+        _operationNames = string.IsNullOrWhiteSpace(Request.GraphQlQuery)
+            ? []
+            : SchemaService.ParseOperationNames(Request.GraphQlQuery);
+
+        // Ensure selected operation is still valid
+        if (Request.GraphQlSelectedOperation is not null &&
+            !_operationNames.Contains(Request.GraphQlSelectedOperation))
+        {
+            Request.GraphQlSelectedOperation = null;
+        }
+    }
+
+    // ── Monaco lazy load (BL-6) ─────────────────────────────────────────────
+
+    private async Task EnsureMonacoAsync()
+    {
+        if (_monacoLoaded || _monacoLoading) return;
+        _monacoLoading = true;
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKitUi.ensureMonacoLoaded");
+            _monacoLoaded = true;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        catch (JSException)
+        {
+            // Monaco unavailable — editors won't render; user can still use plain textarea fallback if needed
+        }
+        finally
+        {
+            _monacoLoading = false;
+        }
+    }
+
+    // ── Editor init callbacks (BL-6) ─────────────────────────────────────────
+
+    private async Task OnQueryEditorInitAsync()
+    {
+        if (_queryEditor is not null && !string.IsNullOrEmpty(Request.GraphQlQuery))
+        {
+            await _queryEditor.SetValue(Request.GraphQlQuery);
+        }
+    }
+
+    private async Task OnVarsEditorInitAsync()
+    {
+        if (_varsEditor is not null && !string.IsNullOrEmpty(Request.GraphQlVariables))
+        {
+            await _varsEditor.SetValue(Request.GraphQlVariables);
+        }
+    }
+
+    // ── Editor change handlers ────────────────────────────────────────────────
+
+    private async Task OnQueryChangedAsync(ModelContentChangedEvent _)
+    {
+        if (_queryEditor is null) return;
+        var value = await _queryEditor.GetValue();
+        if (Request.GraphQlQuery == value) return;
+
+        _formatError = null;
+        Request.GraphQlQuery = value;
+
+        // Reparse operation names
+        _operationNames = string.IsNullOrWhiteSpace(value)
+            ? []
+            : SchemaService.ParseOperationNames(value);
+
+        // Clear selected operation if it no longer exists in the document
+        if (Request.GraphQlSelectedOperation is not null &&
+            !_operationNames.Contains(Request.GraphQlSelectedOperation))
+        {
+            Request.GraphQlSelectedOperation = null;
+        }
+
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnVarsChangedAsync(ModelContentChangedEvent _)
+    {
+        if (_varsEditor is null) return;
+        var value = await _varsEditor.GetValue();
+        if (Request.GraphQlVariables == value) return;
+
+        _formatError = null;
+        Request.GraphQlVariables = value;
+        await OnChanged.InvokeAsync();
+    }
+
+    // ── Operation selection ────────────────────────────────────────────────────
+
+    private async Task SelectOperationAsync(string name)
+    {
+        _showOpDropdown = false;
+        Request.GraphQlSelectedOperation = name;
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private void SwitchTab(string tab)
+    {
+        _formatError = null;
+        _activeTab = tab;
+    }
+
+    private async Task PrettifyActiveEditorAsync()
+    {
+        if (_activeTab == "variables")
+        {
+            await PrettifyVariablesAsync();
+            return;
+        }
+
+        await PrettifyQueryAsync();
+    }
+
+    private async Task PrettifyQueryAsync()
+    {
+        var value = _queryEditor is not null
+            ? await _queryEditor.GetValue()
+            : Request.GraphQlQuery;
+        var result = BodyFormatter.FormatGraphQlQuery(value);
+        if (!result.IsSuccess)
+        {
+            _formatError = result.ErrorMessage;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _formatError = null;
+        Request.GraphQlQuery = result.FormattedContent;
+        _operationNames = SchemaService.ParseOperationNames(Request.GraphQlQuery ?? string.Empty);
+        if (Request.GraphQlSelectedOperation is not null &&
+            !_operationNames.Contains(Request.GraphQlSelectedOperation))
+        {
+            Request.GraphQlSelectedOperation = null;
+        }
+
+        if (_queryEditor is not null)
+        {
+            await _queryEditor.SetValue(Request.GraphQlQuery ?? string.Empty);
+        }
+
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PrettifyVariablesAsync()
+    {
+        var value = _varsEditor is not null
+            ? await _varsEditor.GetValue()
+            : Request.GraphQlVariables;
+        var result = BodyFormatter.FormatJson(value);
+        if (!result.IsSuccess)
+        {
+            _formatError = result.ErrorMessage;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _formatError = null;
+        Request.GraphQlVariables = result.FormattedContent;
+        if (_varsEditor is not null)
+        {
+            await _varsEditor.SetValue(Request.GraphQlVariables ?? string.Empty);
+        }
+
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ── Introspection ─────────────────────────────────────────────────────────
+
+    private async Task IntrospectAsync()
+    {
+        if (_introspecting || string.IsNullOrWhiteSpace(EndpointUrl)) return;
+
+        _introspectionError = null;
+        _introspecting = true;
+        await InvokeAsync(StateHasChanged); // BL-2
+
+        try
+        {
+            var result = await SchemaService.IntrospectAsync(EndpointUrl, Collection, ActiveEnvironment);
+            if (!result.IsSuccess)
+            {
+                _introspectionError = result.ErrorMessage;
+                _schemaLoaded = false;
+                _schemaJson = null;
+                _schemaTypeCount = 0;
+            }
+            else
+            {
+                _schemaJson = result.SchemaJson;
+                _schemaLoaded = true;
+                _schemaTypeCount = ParseTypeCount(_schemaJson);
+            }
+        }
+        finally
+        {
+            _introspecting = false;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+    }
+
+    private Task ClearSchemaAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(EndpointUrl))
+            SchemaService.ClearCache(EndpointUrl);
+        _schemaLoaded = false;
+        _schemaJson = null;
+        _schemaTypeCount = 0;
+        _introspectionError = null;
+        return Task.CompletedTask;
+    }
+
+    private static int ParseTypeCount(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return 0;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("data", out var data) &&
+                data.TryGetProperty("__schema", out var schema) &&
+                schema.TryGetProperty("types", out var types))
+                return types.GetArrayLength();
+        }
+        catch { }
+        return 0;
+    }
+
+    // ── Construction options ──────────────────────────────────────────────────
+
+    private StandaloneEditorConstructionOptions QueryEditorOptions(StandaloneCodeEditor _) => new()
+    {
+        Language = "graphql",
+        Theme = "vs-dark",
+        Value = Request.GraphQlQuery ?? string.Empty,
+        AutomaticLayout = true,
+        Minimap = new EditorMinimapOptions { Enabled = false },
+        ScrollBeyondLastLine = false,
+        FontSize = 13,
+        LineNumbers = "on",
+        Folding = true,
+        WordWrap = "on",
+        Dimension = new Dimension { Height = 520 },
+    };
+
+    private StandaloneEditorConstructionOptions VarsEditorOptions(StandaloneCodeEditor _) => new()
+    {
+        Language = "json",
+        Theme = "vs-dark",
+        Value = Request.GraphQlVariables ?? "{\n  \n}",
+        AutomaticLayout = true,
+        Minimap = new EditorMinimapOptions { Enabled = false },
+        ScrollBeyondLastLine = false,
+        FontSize = 13,
+        LineNumbers = "on",
+        WordWrap = "on",
+        Dimension = new Dimension { Height = 520 },
+    };
+}

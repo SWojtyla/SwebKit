@@ -11,7 +11,10 @@
     <div class="top-bar__start">
         <button type="button" class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation"
                 aria-label="Toggle sidebar">&#9776;</button>
-        <span class="app-logo-text">SwebKit</span>
+        <span class="app-logo-text @(_logoEasterEggActive ? "app-logo-text--sweb" : "")" @onclick="OnLogoClick"
+              style="cursor:default;user-select:none;">
+            @(_logoEasterEggActive ? "SWEBkit 👋" : "SwebKit")
+        </span>
         <div class="top-bar__context" aria-live="polite">
             <span class="top-bar__context-eyebrow">@CurrentContext.GroupLabel</span>
             <span class="top-bar__context-title">@CurrentContext.Title</span>
@@ -55,7 +58,7 @@
                         {
                             <div class="workspace-hub__resource-card">
                                 <div class="workspace-hub__resource-title">@(CurrentSnapshot.Resource.DisplayPath ??
-                                                                                                                                        CurrentSnapshot.Resource.DisplayName)</div>
+                                                                                                                                                                            CurrentSnapshot.Resource.DisplayName)</div>
                                     <div class="workspace-hub__resource-summary">@BuildResourceSummary(CurrentSnapshot)</div>
                                     <div class="workspace-hub__save-row">
                                         <input class="workspace-hub__input" placeholder="Name favorite as" value="@_favoriteName"
@@ -114,7 +117,7 @@
                                 {
                                     <button class="workspace-hub__list-item" @onclick="() => OpenRecentAsync(recent)">
                                         <span class="workspace-hub__list-title">@(recent.Snapshot.Resource.DisplayPath ??
-                                                                                                                                                                    recent.Snapshot.Resource.DisplayName)</span>
+                                                                                                                                                                                                                recent.Snapshot.Resource.DisplayName)</span>
                                             <span class="workspace-hub__list-summary">@recent.AccessedAt.ToLocalTime().ToString("g")</span>
                                         </button>
                                     }
@@ -414,11 +417,48 @@ ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
             : $"{areaLabel} | {snapshot.Resource.Summary}";
     }
 
+    // ── Easter egg: logo ───────────────────────────────────────────────────────
+    private int _logoClickCount;
+    private DateTime _firstLogoClickAt;
+    private bool _logoEasterEggActive;
+    private System.Timers.Timer? _logoEasterEggTimer;
+
+    private void OnLogoClick()
+    {
+        var now = DateTime.UtcNow;
+        if (_logoClickCount == 0 || (now - _firstLogoClickAt).TotalSeconds > 2)
+        {
+            _logoClickCount = 1;
+            _firstLogoClickAt = now;
+        }
+        else
+        {
+            _logoClickCount++;
+        }
+
+        if (_logoClickCount >= 7)
+        {
+            _logoClickCount = 0;
+            _logoEasterEggActive = true;
+            _logoEasterEggTimer?.Dispose();
+            _logoEasterEggTimer = new System.Timers.Timer(3000) { AutoReset = false };
+            _logoEasterEggTimer.Elapsed += (_, _) =>
+            {
+                _logoEasterEggTimer?.Dispose();
+                _logoEasterEggTimer = null;
+                _logoEasterEggActive = false;
+                InvokeAsync(StateHasChanged);
+            };
+            _logoEasterEggTimer.Start();
+        }
+    }
+
     public void Dispose()
     {
         Notifications.NotificationsChanged -= OnNotificationsChanged;
         AppState.DemoModeChanged -= OnDemoModeChanged;
         ConnectionStateService.StatesChanged -= OnConnectionStateChanged;
         Workspaces.Changed -= OnWorkspaceChanged;
+        _logoEasterEggTimer?.Dispose();
     }
 }

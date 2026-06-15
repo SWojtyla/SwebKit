@@ -28,10 +28,12 @@
                 else
                 {
                     <div class="key-name">@KeyInfo.Key</div>
-                    <button class="copy-btn" title="Copy key name" @onclick="CopyKeyNameAsync">
-                        📋
-                    </button>
-                    <button class="copy-btn" title="Rename key" @onclick="BeginRename">✏️</button>
+                    <AppIconButton CssClass="copy-btn" Title="Copy key name" Label="Copy key name" OnClick="CopyKeyNameAsync">
+                        <Icon>📋</Icon>
+                    </AppIconButton>
+                    <AppIconButton CssClass="copy-btn" Title="Rename key" Label="Rename key" OnClick="BeginRename">
+                        <Icon>✏️</Icon>
+                    </AppIconButton>
                 }
             </div>
             <div class="kv">Type: @KeyInfo.Type</div>
@@ -109,10 +111,10 @@
                     {
                         <div class="value-cell">
                             <span class="hash-value" title="@context.Value">@context.Value</span>
-                            <button type="button" class="copy-btn" title="Copy value"
-                                    @onclick='() => CopyTextAsync(context.Value, "Copied field value")'>
+                            <AppButton Type="button" CssClass="copy-btn" Title="Copy value"
+                                       OnClick='() => CopyTextAsync(context.Value, "Copied field value")'>
                                 Copy
-                            </button>
+                            </AppButton>
                         </div>
                     }
                 </TemplateColumn>
@@ -148,10 +150,10 @@
                 {
                     <li>
                         <pre class="item-value">@item</pre>
-                        <button type="button" class="copy-btn" title="Copy item"
-                                @onclick='() => CopyTextAsync(item, "Copied item")'>
+                        <AppButton Type="button" CssClass="copy-btn" Title="Copy item"
+                                   OnClick='() => CopyTextAsync(item, "Copied item")'>
                             Copy
-                        </button>
+                        </AppButton>
                     </li>
                 }
             </ul>
@@ -166,10 +168,10 @@
                 <TemplateColumn Title="Member" SortBy="@(GridSort<RedisSortedSetEntry>.ByAscending(e => e.Member))">
                     <div class="value-cell">
                         <span class="hash-value" title="@context.Member">@context.Member</span>
-                        <button type="button" class="copy-btn" title="Copy member"
-                                @onclick='() => CopyTextAsync(context.Member, "Copied member")'>
+                        <AppButton Type="button" CssClass="copy-btn" Title="Copy member"
+                                   OnClick='() => CopyTextAsync(context.Member, "Copied member")'>
                             Copy
-                        </button>
+                        </AppButton>
                     </div>
                 </TemplateColumn>
                 <TemplateColumn Title="Score" SortBy="@(GridSort<RedisSortedSetEntry>.ByAscending(e => e.Score))">

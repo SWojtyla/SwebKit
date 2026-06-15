@@ -48,7 +48,7 @@ internal sealed partial class WindowsTrayLifecycleService : ITrayLifecycleServic
     private static readonly Dictionary<nint, WindowsTrayLifecycleService> WindowProcOwners = [];
     private static readonly WindowProcDelegate WindowProcDelegateInstance = StaticWindowProc;
 
-    private readonly IPodHealthMonitorService _monitor;
+    private readonly IAlertMonitorService _monitor;
     private readonly TrayLifecycleState _state;
     private readonly ILogger<WindowsTrayLifecycleService> _logger;
 
@@ -63,7 +63,7 @@ internal sealed partial class WindowsTrayLifecycleService : ITrayLifecycleServic
     private bool _disposed;
 
     public WindowsTrayLifecycleService(
-        IPodHealthMonitorService monitor,
+        IAlertMonitorService monitor,
         TrayLifecycleState state,
         ILogger<WindowsTrayLifecycleService> logger)
     {
@@ -82,7 +82,7 @@ internal sealed partial class WindowsTrayLifecycleService : ITrayLifecycleServic
         _initialized = true;
         _window = window;
         _window.HandlerChanged += OnWindowHandlerChanged;
-        _monitor.PodHealthDetected += OnPodHealthDetected;
+        _monitor.AlertFired += OnAlertFired;
 
         AttachNativeWindow();
         EnsureTrayIcon();
@@ -306,9 +306,9 @@ internal sealed partial class WindowsTrayLifecycleService : ITrayLifecycleServic
         }
     }
 
-    private void OnPodHealthDetected(PodHealthEvent evt)
+    private void OnAlertFired(AlertFiredEvent evt)
     {
-        if (!_state.TryIncrementUnreadForAlert(evt))
+        if (!_state.TryIncrementUnreadForAlertFired(evt))
         {
             return;
         }
@@ -458,7 +458,7 @@ internal sealed partial class WindowsTrayLifecycleService : ITrayLifecycleServic
 
         _disposed = true;
 
-        _monitor.PodHealthDetected -= OnPodHealthDetected;
+        _monitor.AlertFired -= OnAlertFired;
 
         if (_window is not null)
         {

@@ -1,0 +1,83 @@
+@* API key form: header name, placement (Header / Query Param), and key value *@
+@inject ICredentialStore CredentialStore
+
+<div class="apikey-form">
+    <div class="apikey-form__row">
+        <label class="apikey-form__label">Key name</label>
+        <input type="text" class="apikey-form__input" placeholder="e.g. X-API-Key" value="@Auth.ApiKeyParamName"
+               @oninput="OnNameInput" />
+    </div>
+
+    <div class="apikey-form__row">
+        <label class="apikey-form__label">Add to</label>
+        <div class="apikey-form__placement-group">
+            <label class="apikey-form__radio-label">
+                <input type="radio" name="@_radioGroup" value="Header"
+                       checked="@(Auth.ApiKeyLocation == ApiKeyLocation.Header)"
+                       @onchange="() => SetLocation(ApiKeyLocation.Header)" />
+                Header
+            </label>
+            <label class="apikey-form__radio-label">
+                <input type="radio" name="@_radioGroup" value="QueryParam"
+                       checked="@(Auth.ApiKeyLocation == ApiKeyLocation.QueryParam)"
+                       @onchange="() => SetLocation(ApiKeyLocation.QueryParam)" />
+                Query param
+            </label>
+        </div>
+    </div>
+
+    <div class="apikey-form__row">
+        <label class="apikey-form__label">Value</label>
+        <div class="apikey-form__input-row">
+            <input type="@(_showValue ? "text" : "password")" class="apikey-form__input" placeholder="API key value…"
+                   value="@_valueDisplay" @oninput="OnValueInput" />
+            <button type="button" class="apikey-form__toggle" title="@(_showValue ? "Hide" : "Show")"
+                    @onclick="() => _showValue = !_showValue">
+                @(_showValue ? "🙈" : "👁")
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AuthConfig Auth { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _showValue;
+    private string _valueDisplay = string.Empty;
+    private string _radioGroup = Guid.NewGuid().ToString("N");
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrEmpty(Auth.CredentialKey))
+            _valueDisplay = CredentialStore.Get(Auth.CredentialKey) ?? string.Empty;
+    }
+
+    private async Task OnNameInput(ChangeEventArgs e)
+    {
+        Auth.ApiKeyParamName = e.Value?.ToString() ?? string.Empty;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SetLocation(ApiKeyLocation location)
+    {
+        Auth.ApiKeyLocation = location;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task OnValueInput(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? string.Empty;
+        _valueDisplay = value;
+
+        if (string.IsNullOrEmpty(Auth.CredentialKey))
+            Auth.CredentialKey = $"api-client:apikey:{Guid.NewGuid():N}";
+
+        if (string.IsNullOrEmpty(value))
+            CredentialStore.Delete(Auth.CredentialKey);
+        else
+            CredentialStore.Save(Auth.CredentialKey, value);
+
+        await OnChanged.InvokeAsync();
+    }
+}

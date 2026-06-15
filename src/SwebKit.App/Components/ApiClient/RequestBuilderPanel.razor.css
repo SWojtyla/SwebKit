@@ -1,0 +1,444 @@
+/* RequestBuilderPanel.razor.css */
+
+.req-builder {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ── Name row ────────────────────────────────────────────────────────────── */
+
+.req-builder__name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px 4px;
+    flex-shrink: 0;
+}
+
+.req-builder__name-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    cursor: text;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background 0.1s;
+}
+
+.req-builder__name-label:hover { background: var(--color-surface-hover); }
+
+.req-builder__name-input {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-accent);
+    border-radius: 3px;
+    padding: 2px 6px;
+    flex: 1;
+    max-width: 320px;
+}
+
+.req-builder__dirty-dot {
+    font-size: 10px;
+    color: var(--color-warning);
+    margin-left: 2px;
+}
+
+/* ── URL bar ─────────────────────────────────────────────────────────────── */
+
+.req-builder__url-bar {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 4px 12px 6px;
+    flex-shrink: 0;
+}
+
+.req-builder__method-picker {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.req-builder__method-btn {
+    height: 32px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    cursor: pointer;
+    min-width: 58px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+/* Method colour coding */
+.req-builder__method-btn--get    { color: #a8f0bd; background: #1a6b2f; border-color: #2a8a3f; }
+.req-builder__method-btn--post   { color: #a8d0f0; background: #1a4d8f; border-color: #2a6abf; }
+.req-builder__method-btn--put    { color: #f0e0a8; background: #6b5c1a; border-color: #8a7a2a; }
+.req-builder__method-btn--patch  { color: #d8a8f0; background: #4a1a6b; border-color: #6a2a8a; }
+.req-builder__method-btn--delete { color: #f0a8a8; background: #6b1a1a; border-color: #8a2a2a; }
+.req-builder__method-btn--head   { color: #aaa;    background: #2a2a2a; border-color: #444; }
+.req-builder__method-btn--options { color: #aaa;   background: #2a2a2a; border-color: #444; }
+.req-builder__method-btn--graphql { color: #e2a8f0; background: #4a0d6b; border-color: #6a1a8a; }
+.req-builder__method-btn--websocket { color: #a8e8f0; background: #0d4a4a; border-color: #1a6a6a; }
+
+.req-builder__method-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: var(--z-overlay);
+    min-width: 90px;
+    background: var(--color-panel-card, var(--color-surface));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.req-builder__method-option {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: opacity 0.1s;
+}
+
+.req-builder__method-option:hover { opacity: 0.85; }
+
+.req-builder__method-option--get    { color: #a8f0bd; background: #1a6b2f; }
+.req-builder__method-option--post   { color: #a8d0f0; background: #1a4d8f; }
+.req-builder__method-option--put    { color: #f0e0a8; background: #6b5c1a; }
+.req-builder__method-option--patch  { color: #d8a8f0; background: #4a1a6b; }
+.req-builder__method-option--delete { color: #f0a8a8; background: #6b1a1a; }
+.req-builder__method-option--head   { color: #aaa;    background: #2a2a2a; }
+.req-builder__method-option--options { color: #aaa;   background: #2a2a2a; }
+.req-builder__method-option--graphql { color: #e2a8f0; background: #4a0d6b; }
+.req-builder__method-option--websocket { color: #a8e8f0; background: #0d4a4a; }
+
+.req-builder__url-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.req-builder__url-input {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 13px;
+    font-family: var(--font-mono);
+}
+
+.req-builder__url-input:focus {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+}
+
+.req-builder__url-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 2px 2px 0;
+}
+
+/* ── Variable preview tokens ────────────────────────────────────────────── */
+
+.req-builder__url-token {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+    border-radius: 3px;
+    padding: 1px 5px;
+    gap: 2px;
+}
+
+.req-builder__url-token--unresolved {
+    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
+    color: var(--color-warning);
+}
+
+.req-builder__url-token-key { font-weight: 600; }
+
+.req-builder__url-token-arrow { color: var(--color-text-muted); }
+
+.req-builder__url-token-value {
+    color: var(--color-accent);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Send button ─────────────────────────────────────────────────────────── */
+
+.req-builder__send-btn {
+    flex-shrink: 0;
+    height: 32px;
+    padding: 0 18px;
+    background: var(--color-accent);
+    color: var(--color-on-accent, #fff);
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: opacity 0.1s;
+}
+
+.req-builder__send-btn:hover:not(:disabled) { opacity: 0.88; }
+.req-builder__send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.req-builder__send-btn--busy {
+    background: var(--color-warning);
+    color: #000;
+}
+
+.req-builder__send-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── SSL warning badge ────────────────────────────────────────────────────── */
+
+.req-builder__ssl-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 6px;
+    background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+    color: var(--color-danger);
+    border-radius: 4px;
+    align-self: center;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+/* ── Tab strip ───────────────────────────────────────────────────────────── */
+
+.req-builder__tabs {
+    display: flex;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+    padding: 0 12px;
+    gap: 0;
+}
+
+.req-builder__tab {
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: color 0.1s;
+    margin-bottom: -1px;
+}
+
+.req-builder__tab:hover { color: var(--color-text); }
+
+.req-builder__tab--active {
+    color: var(--color-text);
+    border-bottom-color: var(--color-accent);
+}
+
+.req-builder__tab-count {
+    font-size: 9px;
+    background: var(--color-surface-raised);
+    color: var(--color-text-muted);
+    border-radius: 8px;
+    padding: 0 5px;
+    min-width: 16px;
+    text-align: center;
+}
+
+/* ── Tab content ─────────────────────────────────────────────────────────── */
+
+.req-builder__tab-content {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Body mode selector ──────────────────────────────────────────────────── */
+
+.req-builder__body-mode-strip {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px 6px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.req-builder__body-mode-btn {
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}
+
+.req-builder__body-mode-btn:hover { background: var(--color-surface-hover); color: var(--color-text); }
+
+.req-builder__body-mode-btn--active {
+    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+/* ── Body editor ─────────────────────────────────────────────────────────── */
+
+.req-builder__body-area-wrap {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.req-builder__body-preview-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+    font-size: 11px;
+}
+
+.req-builder__body-editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.req-builder__format-btn {
+    padding: 3px 9px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.req-builder__format-btn:hover:not(:disabled) {
+    background: var(--color-surface-3);
+    border-color: var(--color-accent);
+}
+
+.req-builder__format-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.req-builder__format-error {
+    padding: 5px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+    color: var(--color-warning);
+    background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.req-builder__body-area {
+    flex: 1;
+    resize: none;
+    background: var(--color-surface);
+    border: none;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 10px 12px;
+    outline: none;
+    min-height: 0;
+}
+
+/* ── Binary file picker ──────────────────────────────────────────────────── */
+
+.req-builder__binary-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 12px;
+}
+
+.req-builder__binary-path {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+}
+
+.req-builder__binary-pick-btn {
+    padding: 5px 12px;
+    font-size: 12px;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+/* ── Body None / Auth stub ───────────────────────────────────────────────── */
+
+.req-builder__body-none,
+.req-builder__auth-stub {
+    padding: 20px 12px;
+    font-size: 12px;
+    color: var(--color-text-faint);
+}
+
+.req-builder__auth-stub-text { font-style: italic; }

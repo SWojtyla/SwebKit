@@ -57,13 +57,13 @@
 
             <div class="group-editor__picker">
                 @* Project selector *@
-                <select class="form-input" @bind="_pickerProject" @bind:after="OnPickerProjectChanged">
+                <AppSelect CssClass="form-input" Value="@_pickerProject" ValueChanged="OnPickerProjectSelectedAsync">
                     <option value="">— select project —</option>
                     @foreach (var proj in PinnedProjects)
                     {
                         <option value="@proj">@proj</option>
                     }
-                </select>
+                </AppSelect>
 
                 @* Pipeline list for selected project *@
                 @if (!string.IsNullOrEmpty(_pickerProject))
@@ -149,6 +149,12 @@
         if (string.IsNullOrEmpty(_pickerProject)) return;
         _pickerPipelines = await GetPipelinesForProjectAsync(_pickerProject);
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnPickerProjectSelectedAsync(string? value)
+    {
+        _pickerProject = value ?? string.Empty;
+        await OnPickerProjectChanged();
     }
 
     private async Task<List<AdoPipeline>> GetPipelinesForProjectAsync(string project)

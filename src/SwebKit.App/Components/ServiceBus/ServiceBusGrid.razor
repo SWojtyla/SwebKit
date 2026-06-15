@@ -8,10 +8,10 @@
             @if (NamespaceStates.Any())
             {
                 var activeNs = ActiveNamespace;
-                var dotClass = activeNs is null ? "err" : activeNs.IsConnecting ? "connecting" : activeNs.Client is not null ? "ok" : "err";
+                var dotClass = activeNs is null ? "err" : activeNs.IsConnecting ? "connecting" : activeNs.Client is not null
+            ? "ok" : "err";
                 <span class="sbg-ns-dot @dotClass"></span>
-                <select class="sbg-ns-select app-native-control app-native-select"
-                        value="@_activeNsId"
+                <select class="sbg-ns-select app-native-control app-native-select" value="@_activeNsId"
                         @onchange="e => SelectNamespace(Guid.Parse(e.Value?.ToString() ?? string.Empty))">
                     @foreach (var ns in NamespaceStates)
                     {
@@ -112,23 +112,22 @@
                             @foreach (var q in fq)
                             {
                                 var isPinned = IsEntityLinked(active.Namespace.Id, q.EntityPath);
-                                <div @key="q.EntityPath" role="row"
-                                     class="sbg-row @(q.IsDisabled ? "sbg-row-disabled" : "")"
+                                <div @key="q.EntityPath" role="row" class="sbg-row @(q.IsDisabled ? "sbg-row-disabled" : "")"
                                      @onclick="() => OpenEntity(active, q, false)">
-                                    <span class="sbg-col-glyph sbg-glyph-q" title="@(q.IsDisabled ? "Queue (disabled)" : "Queue")">Q</span>
+                                    <span class="sbg-col-glyph sbg-glyph-q"
+                                          title="@(q.IsDisabled ? "Queue (disabled)" : "Queue")">Q</span>
                                     <span class="sbg-col-name sbg-entity-name" title="@q.Name">@q.Name</span>
                                     @RenderCount(q.Stats?.ActiveMessageCount, "sbg-col-count sbg-count-active")
                                     @RenderCount(q.Stats?.DeadLetterMessageCount, "sbg-col-count sbg-count-dlq")
                                     @RenderCount(q.Stats?.ScheduledMessageCount, "sbg-col-count sbg-count-sched")
                                     <div class="sbg-col-actions">
-                                        <button type="button" class="sbg-act sbg-act-open"
-                                                title="Open active messages for '@q.Name'"
+                                        <button type="button" class="sbg-act sbg-act-open" title="Open active messages for '@q.Name'"
                                                 @onclick="() => OpenEntity(active, q, false)">
                                             ▷ Active
                                         </button>
                                         <button type="button"
                                                 class="sbg-act sbg-act-dlq @(q.Stats?.DeadLetterMessageCount > 0 ? "sbg-act-dlq-hot" : "")"
-                                                title="Open dead-letter queue for '@q.Name'"
+                                                title="@(q.Stats?.DeadLetterMessageCount == 0 ? "0 dead letters. Sébastien would be proud. 🥳" : $"Open dead-letter queue for '{q.Name}'")"
                                                 @onclick="() => OpenEntity(active, q, true)">
                                             ⚠ DLQ
                                         </button>
@@ -178,7 +177,9 @@
                                 {
                                     @if (_loadingTopics.Contains(t.Name))
                                     {
-                                        <div class="sbg-sub-loading"><SkeletonRows Count="2" /></div>
+                                        <div class="sbg-sub-loading">
+                                            <SkeletonRows Count="2" />
+                                        </div>
                                     }
                                     else if (_subscriptions.TryGetValue(t.Name, out var subs))
                                     {
@@ -194,15 +195,13 @@
                                                 @RenderCount(s.Stats?.DeadLetterMessageCount, "sbg-col-count sbg-count-dlq")
                                                 <span class="sbg-col-count sbg-count-muted">–</span>
                                                 <div class="sbg-col-actions">
-                                                    <button type="button" class="sbg-act sbg-act-open"
-                                                            title="Open active messages for '@s.Name'"
+                                                    <button type="button" class="sbg-act sbg-act-open" title="Open active messages for '@s.Name'"
                                                             @onclick="() => OpenEntity(active, s, false)">
                                                         ▷ Active
                                                     </button>
                                                     <button type="button"
                                                             class="sbg-act sbg-act-dlq @(s.Stats?.DeadLetterMessageCount > 0 ? "sbg-act-dlq-hot" : "")"
-                                                            title="Open dead-letter queue for '@s.Name'"
-                                                            @onclick="() => OpenEntity(active, s, true)">
+                                                            title="Open dead-letter queue for '@s.Name'" @onclick="() => OpenEntity(active, s, true)">
                                                         ⚠ DLQ
                                                     </button>
                                                     <button type="button" class="sbg-act sbg-act-pin @(sPinned ? "pinned" : "")"

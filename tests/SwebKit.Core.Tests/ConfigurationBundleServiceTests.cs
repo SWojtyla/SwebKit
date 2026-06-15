@@ -19,7 +19,7 @@ public sealed class ConfigurationBundleServiceTests
         var releases = new ReleaseRepository();
         var scheduled = new ScheduledMessageRepository();
         var appState = new AppStateService(profiles, uiState, new AppEventBus(NullLogger<AppEventBus>.Instance));
-        var bundleService = new ConfigurationBundleService(profiles, uiState, userSettings, releases, scheduled, appState);
+        var bundleService = new ConfigurationBundleService(profiles, uiState, userSettings, releases, scheduled, appState, new CollectionRepository(), new EnvironmentRepository());
 
         profiles.ReplaceProfileData(new ProfileData
         {
@@ -111,7 +111,9 @@ public sealed class ConfigurationBundleServiceTests
             importedUserSettings,
             importedReleases,
             importedScheduled,
-            importedAppState);
+            importedAppState,
+            new CollectionRepository(),
+            new EnvironmentRepository());
 
         await importedBundleService.ImportAsync(importedBundleService.Deserialize(json));
 
@@ -142,7 +144,7 @@ public sealed class ConfigurationBundleServiceTests
         var releases = new ReleaseRepository();
         var scheduled = new ScheduledMessageRepository();
         var appState = new AppStateService(profiles, uiState, new AppEventBus(NullLogger<AppEventBus>.Instance));
-        var bundleService = new ConfigurationBundleService(profiles, uiState, userSettings, releases, scheduled, appState);
+        var bundleService = new ConfigurationBundleService(profiles, uiState, userSettings, releases, scheduled, appState, new CollectionRepository(), new EnvironmentRepository());
 
         var ex = Assert.Throws<InvalidOperationException>(() => bundleService.Deserialize("""
             {

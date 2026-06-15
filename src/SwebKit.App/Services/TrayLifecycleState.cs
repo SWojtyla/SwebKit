@@ -84,6 +84,21 @@ internal sealed class TrayLifecycleState
         }
     }
 
+    public bool TryIncrementUnreadForAlertFired(AlertFiredEvent evt)
+    {
+        lock (_sync)
+        {
+            if (!_isHiddenToTray)
+            {
+                return false;
+            }
+
+            _ = evt;
+            _unreadAlerts++;
+            return true;
+        }
+    }
+
     public void ResetUnreadAlerts()
     {
         lock (_sync)

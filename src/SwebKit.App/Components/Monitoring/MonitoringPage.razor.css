@@ -1,0 +1,206 @@
+.monitoring-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.monitoring-page__body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: 0;
+    position: relative;
+}
+
+.monitoring-page__rules {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 12px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.monitoring-page__history {
+    width: 300px;
+    min-width: 240px;
+    max-width: 420px;
+    border-left: 1px solid var(--neutral-stroke-rest);
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+/* ── Toolbar ── */
+.monitoring-page ::deep .monitoring-page__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--neutral-stroke-rest);
+    flex-shrink: 0;
+    background: var(--neutral-fill-rest);
+}
+
+.monitoring-page ::deep .monitoring-page__toolbar .page-toolbar-leading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.monitoring-page ::deep .page-toolbar__spacer {
+    flex: 1;
+}
+
+.page-toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--neutral-stroke-rest);
+    background: var(--neutral-fill-rest);
+    color: var(--neutral-foreground-rest);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.page-toolbar-btn:hover {
+    background: var(--neutral-fill-hover);
+    border-color: var(--neutral-stroke-hover);
+}
+
+.page-toolbar-btn--primary {
+    background: var(--accent-fill-rest);
+    color: var(--foreground-on-accent-rest);
+    border-color: var(--accent-stroke-control-rest);
+}
+
+.page-toolbar-btn--primary:hover {
+    background: var(--accent-fill-hover);
+}
+
+/* ── Monitoring status toggle ── */
+.monitoring-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--neutral-stroke-rest);
+    background: var(--neutral-fill-rest);
+    color: var(--neutral-foreground-rest);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.monitoring-toggle-btn:hover {
+    background: var(--neutral-fill-hover);
+    border-color: var(--neutral-stroke-hover);
+}
+
+.monitoring-toggle-btn--active {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.12);
+    color: #16a34a;
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.2);
+}
+
+.monitoring-toggle-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--neutral-stroke-rest);
+    flex-shrink: 0;
+}
+
+.monitoring-toggle-dot--active {
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+    animation: monitoring-pulse 2s infinite;
+}
+
+@keyframes monitoring-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.6; transform: scale(0.85); }
+}
+
+/* ── Rule summary chips ── */
+.monitoring-rule-summary {
+    font-size: 0.8125rem;
+    color: var(--neutral-foreground-hint);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.monitoring-badge {
+    padding: 3px 10px;
+    border-radius: var(--radius-lg);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.monitoring-badge--firing {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    animation: monitoring-pulse 1.6s infinite;
+}
+
+.monitoring-page__content {
+    padding: 1rem;
+}
+
+.monitoring-toggle-btn--active {
+    border-color: var(--accent-stroke-control-rest);
+    background: var(--accent-fill-rest);
+    color: var(--foreground-on-accent-rest);
+}
+
+.monitoring-toggle-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--neutral-stroke-rest);
+}
+
+.monitoring-toggle-dot--active {
+    background: #22c55e;
+    animation: monitoring-pulse 2s infinite;
+}
+
+@keyframes monitoring-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.monitoring-rule-summary {
+    font-size: 0.8125rem;
+    color: var(--neutral-foreground-hint);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.monitoring-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.monitoring-badge--firing {
+    background: var(--error-background);
+    color: var(--error-foreground, #dc2626);
+}
+
+.monitoring-page__content {
+    padding: 1rem;
+}

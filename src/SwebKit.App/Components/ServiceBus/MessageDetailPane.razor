@@ -18,38 +18,44 @@ else
                 <div class="mdp-actions">
                     @if (OnEdit.HasDelegate)
                     {
-                        <button @onclick="() => OnEdit.InvokeAsync(Message)" class="mdp-btn"
-                                title="Edit message body/properties and re-send (Ctrl+E)">
+                        <AppButton OnClick="@(() => OnEdit.InvokeAsync(Message))" CssClass="mdp-btn"
+                                   Size="Small" Variant="Secondary"
+                                   Title="Edit message body/properties and re-send (Ctrl+E)">
                             Edit &amp; Resubmit
-                        </button>
+                        </AppButton>
                     }
                     @if (OnReplay.HasDelegate)
                     {
-                        <button @onclick="() => OnReplay.InvokeAsync(Message)" class="mdp-btn"
-                                title="Replay this message to another namespace/entity">
+                        <AppButton OnClick="@(() => OnReplay.InvokeAsync(Message))" CssClass="mdp-btn"
+                                   Size="Small" Variant="Secondary"
+                                   Title="Replay this message to another namespace/entity">
                             Replay
-                        </button>
+                        </AppButton>
                     }
                     @if (OnSchedule.HasDelegate)
                     {
-                        <button @onclick="() => OnSchedule.InvokeAsync(Message)" class="mdp-btn"
-                                title="Schedule this message for future delivery (Ctrl+Shift+S)">
+                        <AppButton OnClick="@(() => OnSchedule.InvokeAsync(Message))" CssClass="mdp-btn"
+                                   Size="Small" Variant="Secondary"
+                                   Title="Schedule this message for future delivery (Ctrl+Shift+S)">
                             Schedule
-                        </button>
+                        </AppButton>
                     }
-                    <button @onclick="CopyBody" class="mdp-btn" title="Copy message body to clipboard">
+                    <AppButton OnClick="CopyBody" CssClass="mdp-btn" Size="Small" Variant="Secondary"
+                               Title="Copy message body to clipboard">
                         @(_copyFeedback == "body" ? "Copied!" : "Copy Body")
-                    </button>
-                    <button @onclick="CopyFullMessage" class="mdp-btn"
-                            title="Copy full message (all properties + body) as JSON">
+                    </AppButton>
+                    <AppButton OnClick="CopyFullMessage" CssClass="mdp-btn" Size="Small" Variant="Secondary"
+                               Title="Copy full message (all properties + body) as JSON">
                         @(_copyFeedback == "full" ? "Copied!" : "Copy Full Message")
-                    </button>
-                    <button @onclick="OpenSaveAsTemplate" class="mdp-btn" title="Save this message as a reusable template">
+                    </AppButton>
+                    <AppButton OnClick="OpenSaveAsTemplate" CssClass="mdp-btn" Size="Small" Variant="Secondary"
+                               Title="Save this message as a reusable template">
                         Save as Template
-                    </button>
-                    <button @onclick="Investigate" class="mdp-btn" title="Open in Incident Timeline">
+                    </AppButton>
+                    <AppButton OnClick="Investigate" CssClass="mdp-btn" Size="Small" Variant="Secondary"
+                               Title="Open in Incident Timeline">
                         Investigate
-                    </button>
+                    </AppButton>
                 </div>
             </div>
 
@@ -87,11 +93,12 @@ else
                         @if (!string.IsNullOrWhiteSpace(Message.SessionId) && OnFilterBySession.HasDelegate)
                         {
                             <div class="mdp-session-filter-cta">
-                                <button class="mdp-btn" data-testid="filter-by-session-btn"
-                                        @onclick="() => OnFilterBySession.InvokeAsync(Message.SessionId)"
-                                        title="Filter the message list to only messages with this session ID">
+                                <AppButton CssClass="mdp-btn" data-testid="filter-by-session-btn"
+                                           OnClick="@(() => OnFilterBySession.InvokeAsync(Message.SessionId))"
+                                           Size="Small" Variant="Secondary"
+                                           Title="Filter the message list to only messages with this session ID">
                                     Filter list to this session
-                                </button>
+                                </AppButton>
                             </div>
                         }
                         <PropRow Label="PartitionKey" Value="@(Message.SystemProperties.PartitionKey ?? "-")" />
@@ -137,19 +144,21 @@ else
                                 <span class="mdp-trace-pivot-key">@pivot.Label</span>
                                 <span class="mdp-trace-pivot-value">@pivot.Value</span>
                                 <span class="mdp-trace-pivot-reason">@pivot.Reason</span>
-                                <button class="mdp-btn"
-                                        @onclick="() => InvestigateWithPivot(pivot)"
-                                        title="Open this pivot in Incident Timeline">
+                                <AppButton CssClass="mdp-btn"
+                                           OnClick="@(() => InvestigateWithPivot(pivot))"
+                                           Size="Small" Variant="Secondary"
+                                           Title="Open this pivot in Incident Timeline">
                                     Investigate
-                                </button>
+                                </AppButton>
                                 @if (OnApplyTracePivotFilter.HasDelegate)
                                 {
-                                    <button class="mdp-btn mdp-btn--secondary"
-                                            data-testid="apply-pivot-filter"
-                                            @onclick="() => OnApplyTracePivotFilter.InvokeAsync(pivot.Value)"
-                                            title="Filter the message list to messages matching this identifier value">
+                                    <AppButton CssClass="mdp-btn mdp-btn--secondary"
+                                               data-testid="apply-pivot-filter"
+                                               OnClick="@(() => OnApplyTracePivotFilter.InvokeAsync(pivot.Value))"
+                                               Size="Small" Variant="Subtle"
+                                               Title="Filter the message list to messages matching this identifier value">
                                         Filter list
-                                    </button>
+                                    </AppButton>
                                 }
                             </div>
                         }

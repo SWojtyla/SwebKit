@@ -1,0 +1,25 @@
+/*
+   SwebKit CSS layer: base document styles
+   Generated from app.css during style-system-css-architecture split.
+*/
+
+/* ═══════════════════════════════════════════════════════════
+   Base
+   ═══════════════════════════════════════════════════════════ */
+
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-family-ui);
+    font-size: 14px;
+    overflow: hidden;
+}
+
+#app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}

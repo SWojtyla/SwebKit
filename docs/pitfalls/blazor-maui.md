@@ -221,6 +221,61 @@ Styles that are used across multiple isolated components (status dots, status ba
 
 ---
 
+## BL-12 — JS interop with `ElementReference` crashes when called on `firstRender`
+
+**Symptom:** JS throws `TypeError: splitterEl.addEventListener is not a function` (or similar `is not a function` / `Cannot read properties of null` variants) for code that passes a Blazor `ElementReference` to a JS function. The crash happens on the very first render of the page, before any user interaction.
+
+**Cause:** `OnAfterRenderAsync` fires twice during initial page load:
+
+1. **`firstRender = true`** — triggered immediately after the first synchronous render pass. At this point `OnInitializedAsync` (which does async I/O) has not completed, so conditional UI blocks (e.g. `@if (_selectedRequest is not null)`) have not rendered. Any `@ref` placed inside those conditional blocks points to an **unresolved `ElementReference` struct** — it is non-null but is not yet backed by a real DOM node. Blazor serialises it to JS as a plain object, so calling `.addEventListener` on it fails.
+2. **`firstRender = false`** — triggered after `OnInitializedAsync` completes and Blazor re-renders. The DOM now matches the desired state and `@ref` values are live.
+
+**Fix (C#):** Guard splitter / JS-DOM init with an early return on `firstRender`:
+
+```csharp
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    // ... focus logic (safe on firstRender) ...
+
+    if (firstRender)
+        return; // element refs inside conditional blocks are not yet live
+
+    // safe to call JS with @ref values here
+    if (shouldShowSplitter && _lastSplitterRequestId != _selectedRequestId)
+    {
+        _splitterHandle = await JS.InvokeAsync<IJSObjectReference>(
+            "SwebKitSplitter.init", _splitterEl, _builderPanelEl, options);
+    }
+}
+```
+
+**Fix (JS defensive guard):** Also guard the JS side against receiving a non-DOM value so the function degrades gracefully instead of crashing the WebView:
+
+```js
+window.SwebKitSplitter = {
+  init: function (splitterEl, paneEl, options) {
+    if (
+      !splitterEl ||
+      !splitterEl.addEventListener ||
+      !paneEl ||
+      !paneEl.addEventListener
+    ) {
+      return {
+        dispose: function () {},
+        getWidth: function () {
+          return 0;
+        },
+      };
+    }
+    // ... rest of init
+  },
+};
+```
+
+**Rule:** never call JS interop that targets a DOM element in `OnAfterRenderAsync` when `firstRender` is `true` **and** the element ref is inside a conditional (`@if`) block. The conditional may not have rendered yet. Both guards are recommended: the C# early return is the primary fix; the JS defensive check is the safety net.
+
+---
+
 ## BL-13 â€” E2E `.app-shell` timeout can mean Blazor never mounted, not a slow selector
 
 **Symptom:** Playwright waits for `.app-shell` and times out, while the MAUI window is visibly open and shows only the static `Loading...` text from `wwwroot/index.html`.

@@ -1,0 +1,70 @@
+.auth-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+}
+
+/* ── Type selector ── */
+
+.auth-panel__selector-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.auth-panel__type-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.auth-panel ::deep .auth-panel__type-select {
+    padding: 4px 8px;
+    background: var(--color-input-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 13px;
+    min-width: 180px;
+    min-height: 0;
+    width: auto;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+    .auth-panel ::deep .auth-panel__type-select:focus,
+    .auth-panel ::deep .auth-panel__type-select:focus-visible {
+        outline: none;
+        border-color: var(--color-accent);
+        box-shadow: none;
+    }
+
+/* ── Inherited badge ── */
+
+.auth-panel__inherited-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.auth-panel__inherited-type {
+    color: var(--color-accent);
+    font-size: 11px;
+}
+
+/* ── No-auth note ── */
+
+.auth-panel__no-auth-note {
+    margin: 0;
+    font-size: 12px;
+    font-style: italic;
+    color: var(--color-text-muted);
+}

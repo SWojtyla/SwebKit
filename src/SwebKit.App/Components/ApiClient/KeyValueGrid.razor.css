@@ -1,0 +1,90 @@
+/* KeyValueGrid.razor.css */
+
+.kv-grid {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    font-size: 12px;
+}
+
+.kv-grid__header {
+    display: grid;
+    grid-template-columns: 24px 1fr 1fr 28px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+}
+
+.kv-grid__row {
+    display: grid;
+    grid-template-columns: 24px 1fr 1fr 28px;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border-subtle, color-mix(in srgb, var(--color-border) 40%, transparent));
+    transition: background 0.08s;
+}
+
+.kv-grid__row:hover { background: var(--color-surface-hover); }
+
+.kv-grid__row--disabled { opacity: 0.45; }
+
+.kv-grid__check {
+    justify-self: center;
+    cursor: pointer;
+    accent-color: var(--color-accent);
+}
+
+.kv-grid__input {
+    background: none;
+    border: none;
+    padding: 6px 8px;
+    color: var(--color-text);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    width: 100%;
+    outline: none;
+    transition: background 0.1s;
+}
+
+.kv-grid__input:focus { background: color-mix(in srgb, var(--color-accent) 8%, transparent); }
+
+.kv-grid__input--key { border-right: 1px solid var(--color-border-subtle, var(--color-border)); }
+
+.kv-grid__del-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--color-text-faint);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.1s;
+}
+
+.kv-grid__del-btn:hover { color: var(--color-danger); }
+
+.kv-grid__add-row {
+    padding: 6px 8px;
+    flex-shrink: 0;
+}
+
+.kv-grid__add-btn {
+    font-size: 11px;
+    color: var(--color-accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background 0.1s;
+}
+
+.kv-grid__add-btn:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }

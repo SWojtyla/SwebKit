@@ -21,10 +21,10 @@
         <RoutePageHeader Area="service-bus"
                          Subtitle="Open queues, topics, subscriptions, and dead-letter workflows without leaving the shell.">
             <Actions>
-                <button type="button" class="page-header-action-btn" title="Jump to entity (Ctrl+K)"
-                        @onclick="OpenPalette">
+                <AppButton Type="button" CssClass="page-header-action-btn" Title="Jump to entity (Ctrl+K)"
+                           OnClick="OpenPalette" Size="Small" Variant="Secondary">
                     ⌕ Ctrl+K
-                </button>
+                </AppButton>
             </Actions>
         </RoutePageHeader>
     </div>
@@ -46,13 +46,10 @@
             }
             else
             {
-                <ServiceBusGrid NamespaceStates="_namespaceStates"
-                                LinkedEntities="CurrentLinkedEntities"
+                <ServiceBusGrid NamespaceStates="_namespaceStates" LinkedEntities="CurrentLinkedEntities"
                                 OnEntityOpen="args => OpenEntityTab(args.Ns, args.Entity, args.IsDlq)"
-                                OnScheduledOpen="ns => OpenScheduledTab(ns)"
-                                OnAddNamespace="HandleAddNamespaceAsync"
-                                OnRemoveNamespace="RemoveNamespaceAsync"
-                                OnEntityLinkToggled="ToggleEntityLinkAsync" />
+                                OnScheduledOpen="ns => OpenScheduledTab(ns)" OnAddNamespace="HandleAddNamespaceAsync"
+                                OnRemoveNamespace="RemoveNamespaceAsync" OnEntityLinkToggled="ToggleEntityLinkAsync" />
             }
         </div>
     }
@@ -76,8 +73,7 @@
                         @if (!_activeTab.IsDlq && !_activeTab.IsScheduled)
                         {
                             <button type="button" class="sb-breadcrumb-btn" data-testid="batch-send-open-btn"
-                                    title="Send a batch of messages from JSON"
-                                    @onclick="OpenBatchSendPanel">
+                                    title="Send a batch of messages from JSON" @onclick="OpenBatchSendPanel">
                                 ↑ Batch Send
                             </button>
                         }
@@ -104,8 +100,7 @@
                         <span class="sb-tab-label">
                             <span class="sb-tab-ns">@tab.NamespaceAlias /</span>@tab.Title
                         </span>
-                        <span class="close-btn" @onclick:stopPropagation="true"
-                              @onclick="() => CloseTab(tab)">&#x2715;</span>
+                        <span class="close-btn" @onclick:stopPropagation="true" @onclick="() => CloseTab(tab)">&#x2715;</span>
                     </div>
                 }
                 <button type="button" class="sb-tab-new" title="Open another entity (Ctrl+K)"
@@ -118,14 +113,12 @@
                 {
                     @if (_activeTab.IsScheduled)
                     {
-                        <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client"
-                                           NamespaceId="_activeTab.NamespaceId"
+                        <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client" NamespaceId="_activeTab.NamespaceId"
                                            EntityPath="@_activeTab.EntityPath" />
                     }
                     else if (_activeTab.IsDlq)
                     {
-                        <DlqView @key="_activeTab.Id" Client="_activeTab.Client"
-                                 EntityPath="@_activeTab.EntityPath"
+                        <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
                                  AvailableNamespaces="@AvailableNamespaceOptions" />
                     }
                     else
@@ -134,12 +127,9 @@
                             <div class="sb-message-list-shell">
                                 <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
                                                  NamespaceId="_activeTab.NamespaceId" ShowCompose="true"
-                                                 SelectedMessage="_activeTab.SelectedMessage"
-                                                 IsDetailPaneOpen="IsDetailPaneOpen"
-                                                 PinnedSessionId="@_activeTab.PinnedSessionId"
-                                                 TracePivotFilter="@_activeTab.PivotFilter"
-                                                 OnMessageSelected="OnMessageSelectedAsync"
-                                                 OnCloseDetails="CloseDetailPane" />
+                                                 SelectedMessage="_activeTab.SelectedMessage" IsDetailPaneOpen="IsDetailPaneOpen"
+                                                 PinnedSessionId="@_activeTab.PinnedSessionId" TracePivotFilter="@_activeTab.PivotFilter"
+                                                 OnMessageSelected="OnMessageSelectedAsync" OnCloseDetails="CloseDetailPane" />
                             </div>
                             @if (IsDetailPaneOpen)
                             {
@@ -148,17 +138,15 @@
                                     <div class="sb-detail-drawer overlay">
                                         <div class="sb-detail-drawer-header">
                                             <span>Message details</span>
-                                            <button type="button" class="sb-detail-close-btn"
-                                                    title="Close details" @onclick="CloseDetailPane">×</button>
+                                            <button type="button" class="sb-detail-close-btn" title="Close details"
+                                                    @onclick="CloseDetailPane">×</button>
                                         </div>
                                         <div class="sb-detail-pane-content">
-                                            <MessageDetailPane Message="_activeTab.SelectedMessage"
-                                                               EntityPath="@_activeTab.EntityPath"
+                                            <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
                                                                OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
                                                                OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
                                                                OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
-                                                               OnFilterBySession="PinSessionFilter"
-                                                               OnApplyTracePivotFilter="HandlePivotFilterAsync" />
+                                                               OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
                                         </div>
                                     </div>
                                 }
@@ -168,17 +156,15 @@
                                         <div class="sb-detail-drawer">
                                             <div class="sb-detail-drawer-header">
                                                 <span>Message details</span>
-                                                <button type="button" class="sb-detail-close-btn"
-                                                        title="Close details" @onclick="CloseDetailPane">×</button>
+                                                <button type="button" class="sb-detail-close-btn" title="Close details"
+                                                        @onclick="CloseDetailPane">×</button>
                                             </div>
                                             <div class="sb-detail-pane-content">
-                                                <MessageDetailPane Message="_activeTab.SelectedMessage"
-                                                                   EntityPath="@_activeTab.EntityPath"
+                                                <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
                                                                    OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
                                                                    OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
                                                                    OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
-                                                                   OnFilterBySession="PinSessionFilter"
-                                                                   OnApplyTracePivotFilter="HandlePivotFilterAsync" />
+                                                                   OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
                                             </div>
                                         </div>
                                     </ResizablePanel>

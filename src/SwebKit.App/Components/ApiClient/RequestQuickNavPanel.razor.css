@@ -1,0 +1,159 @@
+/* RequestQuickNavPanel CSS isolation */
+
+.quick-nav-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 80px;
+}
+
+.quick-nav-panel {
+    width: 560px;
+    max-width: 90vw;
+    max-height: 480px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ── Header / filter input ───────────────────────────────── */
+
+.quick-nav-panel__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.quick-nav-panel__filter {
+    flex: 1;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 14px;
+    padding: 6px 10px;
+}
+
+.quick-nav-panel__filter:focus {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+}
+
+.quick-nav-panel__close {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 3px;
+    transition: color 0.1s;
+}
+
+.quick-nav-panel__close:hover { color: var(--color-text); }
+
+/* ── List ────────────────────────────────────────────────── */
+
+.quick-nav-panel__list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.quick-nav-panel__empty {
+    padding: 16px 12px;
+    font-size: 13px;
+    color: var(--color-text-faint);
+    text-align: center;
+}
+
+/* ── Item ────────────────────────────────────────────────── */
+
+.quick-nav-panel__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    color: var(--color-text);
+    font-size: 13px;
+    transition: background 0.08s;
+}
+
+.quick-nav-panel__item:hover {
+    background: var(--color-surface-hover);
+}
+
+.quick-nav-panel__item--active {
+    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+/* ── Method badge (reuse from ApiClientPage) ─────────────── */
+
+.quick-nav-panel__item-method {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 2px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background: var(--color-surface-raised);
+    color: var(--color-text-muted);
+    min-width: 30px;
+    text-align: center;
+}
+
+.quick-nav-panel__item-method--get    { background: #1a6b2f; color: #a8f0bd; }
+.quick-nav-panel__item-method--post   { background: #1a4d8f; color: #a8d0f0; }
+.quick-nav-panel__item-method--put    { background: #6b5c1a; color: #f0e0a8; }
+.quick-nav-panel__item-method--patch  { background: #4a1a6b; color: #d8a8f0; }
+.quick-nav-panel__item-method--delete { background: #6b1a1a; color: #f0a8a8; }
+.quick-nav-panel__item-method--head   { background: #2a2a2a; color: #aaa; }
+.quick-nav-panel__item-method--options { background: #2a2a2a; color: #aaa; }
+.quick-nav-panel__item-method--graphql { background: #4a0d6b; color: #e2a8f0; }
+.quick-nav-panel__item-method--websocket { background: #0d4a4a; color: #a8e8f0; }
+
+/* ── Path display ────────────────────────────────────────── */
+
+.quick-nav-panel__item-path {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.quick-nav-panel__item-collection {
+    color: var(--color-text-muted);
+}
+
+.quick-nav-panel__item-sep {
+    color: var(--color-text-faint);
+    margin: 0 2px;
+}
+
+.quick-nav-panel__item-folder {
+    color: var(--color-text-muted);
+}
+
+.quick-nav-panel__item-name {
+    font-weight: 500;
+}

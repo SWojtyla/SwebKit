@@ -40,6 +40,12 @@ public class AppStateService
     /// <summary>Raised when <see cref="UseDemoData"/> changes so layout components can re-render.</summary>
     public event Action? DemoModeChanged;
 
+    /// <summary>
+    /// Raised after any profile save so subscribers can react to configuration changes
+    /// (e.g., the monitoring connection pool can evict stale connections).
+    /// </summary>
+    public event Action? ConfigChanged;
+
     /// <summary>Returns a task that completes when <see cref="InitializeAsync"/> has finished.</summary>
     public Task WhenInitializedAsync() => _initializedTcs.Task;
 
@@ -101,5 +107,11 @@ public class AppStateService
         DemoModeChanged?.Invoke();
     }
 
-    private Task<bool> TryPersistProfilesAsync() => _profiles.TrySaveAsync();
+    private async Task<bool> TryPersistProfilesAsync()
+    {
+        var saved = await _profiles.TrySaveAsync();
+        if (saved)
+            ConfigChanged?.Invoke();
+        return saved;
+    }
 }

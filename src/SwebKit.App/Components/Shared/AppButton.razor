@@ -1,0 +1,89 @@
+<button @attributes="AdditionalAttributes"
+        type="@Type"
+        class="@ButtonClass"
+        title="@Title"
+        disabled="@IsInteractionDisabled"
+        aria-busy="@AriaBusy"
+        @onclick="HandleClickAsync">
+    @if (Loading)
+    {
+        <span class="app-button__spinner" aria-hidden="true"></span>
+    }
+    @if (IconStart is not null)
+    {
+        <span class="app-button__icon app-button__icon--start" aria-hidden="true">@IconStart</span>
+    }
+    @if (ChildContent is not null)
+    {
+        <span class="app-button__content">@ChildContent</span>
+    }
+    @if (IconEnd is not null)
+    {
+        <span class="app-button__icon app-button__icon--end" aria-hidden="true">@IconEnd</span>
+    }
+</button>
+
+@code {
+    [Parameter] public string Variant { get; set; } = "Primary";
+    [Parameter] public string Size { get; set; } = "Medium";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? IconStart { get; set; }
+    [Parameter] public RenderFragment? IconEnd { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public string Type { get; set; } = "button";
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private bool IsInteractionDisabled => Disabled || Loading;
+
+    private string AriaBusy => Loading ? "true" : "false";
+
+    private string ButtonClass
+    {
+        get
+        {
+            var variant = NormalizeVariant(Variant);
+            var size = NormalizeSize(Size);
+            var stateClasses = string.Join(' ', new[]
+            {
+                IsInteractionDisabled ? "app-button--disabled" : null,
+                Loading ? "app-button--loading" : null,
+                CssClass
+            }.Where(static cssClass => !string.IsNullOrWhiteSpace(cssClass)));
+
+            return string.IsNullOrWhiteSpace(stateClasses)
+                ? $"app-button app-button--{variant} app-button--{size}"
+                : $"app-button app-button--{variant} app-button--{size} {stateClasses}";
+        }
+    }
+
+    private async Task HandleClickAsync(MouseEventArgs args)
+    {
+        if (IsInteractionDisabled)
+        {
+            return;
+        }
+
+        await OnClick.InvokeAsync(args);
+    }
+
+    private static string NormalizeVariant(string? variant)
+        => variant?.Trim().ToLowerInvariant() switch
+        {
+            "secondary" => "secondary",
+            "ghost" => "ghost",
+            "danger" => "danger",
+            "subtle" => "subtle",
+            _ => "primary"
+        };
+
+    private static string NormalizeSize(string? size)
+        => size?.Trim().ToLowerInvariant() switch
+        {
+            "small" => "small",
+            _ => "medium"
+        };
+}

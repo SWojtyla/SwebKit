@@ -1,0 +1,83 @@
+/* ── Group wrapper ── */
+.alert-rule-group {
+    margin-bottom: 6px;
+}
+
+/* ── Group header ── */
+.alert-rule-group__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 9px 14px;
+    background: var(--neutral-fill-rest);
+    border: 1px solid var(--neutral-stroke-rest);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    text-align: left;
+    color: var(--neutral-foreground-rest);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    transition: background 0.12s ease, box-shadow 0.12s ease;
+    box-shadow: var(--shadow-sm);
+}
+
+.alert-rule-group__header:hover {
+    background: var(--neutral-fill-hover);
+    box-shadow: var(--shadow-md);
+}
+
+/* ── Chevron ── */
+.alert-rule-group__toggle {
+    font-size: 0.55rem;
+    color: var(--neutral-foreground-hint);
+    width: 12px;
+    transition: transform 0.15s ease;
+}
+
+/* ── Source icon ── */
+.alert-rule-group__icon {
+    font-size: 1.05rem;
+}
+
+/* ── Label ── */
+.alert-rule-group__label {
+    flex: 1;
+    letter-spacing: 0.01em;
+}
+
+/* ── Count / firing badge ── */
+.alert-rule-group__badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--neutral-foreground-hint);
+    padding: 3px 10px;
+    border-radius: var(--radius-lg);
+    background: var(--neutral-layer-1);
+    border: 1px solid var(--neutral-stroke-rest);
+}
+
+.alert-rule-group__badge--firing {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    animation: badge-pulse 2s infinite;
+}
+
+@keyframes badge-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.65; }
+}
+
+/* ── Rows container ── */
+.alert-rule-group__rows {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 2px 2px;
+}
+
+/* ── Empty slot inside group ── */
+.alert-rule-group__empty {
+    padding: 1rem;
+}

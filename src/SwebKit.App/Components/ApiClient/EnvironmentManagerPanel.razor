@@ -1,0 +1,149 @@
+@* EnvironmentManagerPanel — lists environments, hosts inline EnvironmentEditor *@
+@inject EnvironmentRepository EnvironmentRepo
+@inject ILogger<EnvironmentManagerPanel> Logger
+
+<div class="env-manager">
+    <div class="env-manager__header">
+        <span class="env-manager__title">Environments</span>
+        <button type="button" class="env-manager__add-btn" title="New environment" @onclick="AddEnvironmentAsync">
+            + New
+        </button>
+    </div>
+
+    @if (_environments.Count == 0)
+    {
+        <div class="env-manager__empty">
+            <p class="env-manager__empty-text">No environments yet.</p>
+            <p class="env-manager__empty-hint">
+                Environments let you store variables (like base URLs or API keys) and switch between them per request.
+            </p>
+            <button type="button" class="env-manager__create-btn" @onclick="AddEnvironmentAsync">
+                + Create your first environment
+            </button>
+        </div>
+    }
+    else
+    {
+        <ul class="env-manager__list">
+            @foreach (var env in _environments)
+            {
+                <li class="env-manager__item @(env.Id == _editingId ? "env-manager__item--active" : "")">
+                    <button type="button" class="env-manager__item-name" @onclick="() => EditEnvironment(env.Id)">
+                        @env.Name
+                    </button>
+                    <button type="button" class="env-manager__item-delete" title="Delete environment"
+                            @onclick="() => DeleteEnvironmentAsync(env.Id)">
+                        ×
+                    </button>
+                </li>
+            }
+        </ul>
+    }
+
+    @if (_editingEnv is not null)
+    {
+        <div class="env-manager__editor">
+            <EnvironmentEditor Environment="@_editingEnv" OnSaved="@OnEditorSavedAsync" OnCancelled="@OnEditorCancelled" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<ApiEnvironment> _environments = [];
+    private string? _editingId;
+    private ApiEnvironment? _editingEnv;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await EnvironmentRepo.LoadAsync();
+        _environments = EnvironmentRepo.Environments.ToList();
+    }
+
+    private void EditEnvironment(string id)
+    {
+        _editingId = id;
+        var env = _environments.FirstOrDefault(e => e.Id == id);
+        if (env is null) return;
+        // Clone for editing so cancel works correctly
+        _editingEnv = new ApiEnvironment
+        {
+            Id = env.Id,
+            Name = env.Name,
+            Variables = env.Variables.Select(v => new EnvironmentVariable
+            {
+                Key = v.Key,
+                Value = v.Value,
+                SecretSource = v.SecretSource,
+                CredentialKey = v.CredentialKey,
+                KeyVaultName = v.KeyVaultName,
+                Generator = CloneGenerator(v.Generator),
+                IsEnabled = v.IsEnabled,
+            }).ToList(),
+            CreatedAt = env.CreatedAt,
+            UpdatedAt = env.UpdatedAt,
+        };
+    }
+
+    private async Task AddEnvironmentAsync()
+    {
+        var env = await EnvironmentRepo.AddEnvironmentAsync("New Environment");
+        await LoadAsync();
+        EditEnvironment(env.Id);
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task DeleteEnvironmentAsync(string id)
+    {
+        await EnvironmentRepo.DeleteEnvironmentAsync(id);
+        if (_editingId == id)
+        {
+            _editingEnv = null;
+            _editingId = null;
+        }
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnEditorSavedAsync()
+    {
+        if (_editingEnv is null) return;
+        _editingEnv.UpdatedAt = DateTimeOffset.UtcNow;
+        await EnvironmentRepo.UpdateEnvironmentAsync(_editingEnv);
+        await LoadAsync();
+        _editingEnv = null;
+        _editingId = null;
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private void OnEditorCancelled()
+    {
+        _editingEnv = null;
+        _editingId = null;
+    }
+
+    private static VariableGeneratorDefinition? CloneGenerator(VariableGeneratorDefinition? generator) =>
+        generator is null
+            ? null
+            : new VariableGeneratorDefinition
+            {
+                Kind = generator.Kind,
+                MinInt = generator.MinInt,
+                MaxInt = generator.MaxInt,
+                MinDecimal = generator.MinDecimal,
+                MaxDecimal = generator.MaxDecimal,
+                DecimalPlaces = generator.DecimalPlaces,
+                TrueWeightPercent = generator.TrueWeightPercent,
+                FakerCategory = generator.FakerCategory,
+                Template = generator.Template,
+                Values = generator.Values.ToList(),
+            };
+}

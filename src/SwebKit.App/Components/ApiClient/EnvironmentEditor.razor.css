@@ -1,0 +1,193 @@
+.env-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 10px 12px;
+    overflow-y: auto;
+    height: 100%;
+}
+
+.env-editor__name-row {
+    margin-bottom: 10px;
+}
+
+.env-editor__name-input {
+    width: 100%;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 8px;
+}
+
+.env-editor__vars-header {
+    display: grid;
+    grid-template-columns: 20px 1fr 110px 1fr 24px;
+    gap: 4px;
+    padding: 0 2px 4px 2px;
+}
+
+.env-editor__col-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0 2px;
+}
+
+.env-editor__var-row {
+    display: grid;
+    grid-template-columns: 20px 1fr 110px 1fr 24px;
+    gap: 4px;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.env-editor__var-enabled {
+    justify-self: center;
+    cursor: pointer;
+}
+
+.env-editor__var-key,
+.env-editor__var-value {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 12px;
+    padding: 4px 6px;
+    width: 100%;
+    min-width: 0;
+}
+
+.env-editor__var-value--secret {
+    font-family: var(--font-mono, monospace);
+    color: var(--color-warning, #f59e0b);
+}
+
+.env-editor__type-picker {
+    position: relative;
+    width: 100%;
+}
+
+.env-editor__type-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 12px;
+    padding: 4px 6px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.env-editor__type-chevron {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.env-editor__type-dropdown {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    z-index: var(--z-overlay);
+    min-width: 130px;
+    background: var(--color-panel-card, var(--color-surface));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 4px 0;
+}
+
+.env-editor__var-delete {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.4;
+    transition: opacity 0.1s;
+}
+
+.env-editor__var-row:hover .env-editor__var-delete { opacity: 1; }
+.env-editor__var-delete:hover { color: var(--color-danger, #ef4444); }
+
+.env-editor__add-var-btn {
+    background: none;
+    border: 1px dashed var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    padding: 4px 8px;
+    cursor: pointer;
+    margin-top: 4px;
+    align-self: flex-start;
+}
+
+.env-editor__add-var-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.env-editor__actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.env-editor__btn {
+    padding: 5px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.env-editor__btn:hover { background: var(--color-surface-hover); }
+
+.env-editor__btn--primary {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-on-accent, #fff);
+}
+
+.env-editor__btn--primary:hover { opacity: 0.88; }
+
+/* ── Key Vault variable fields ─────────────────────────────────────────────── */
+
+.env-editor__kv-fields {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    min-width: 0;
+}
+
+.env-editor__kv-vault-picker {
+    position: relative;
+    flex: 0 0 130px;
+    min-width: 0;
+}
+
+.env-editor__kv-no-vaults {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

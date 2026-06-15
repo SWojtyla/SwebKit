@@ -130,7 +130,8 @@
     grid-column: span 2;
 }
 
-.dashboard-shell-control__input {
+.dashboard-shell-control__input,
+.dashboard-page ::deep .dashboard-shell-control__input {
     min-height: 36px;
     background: color-mix(in srgb, var(--color-surface) 96%, white);
 }
@@ -390,8 +391,10 @@
 }
 
 .dashboard-action-button,
+.dashboard-page ::deep .dashboard-action-button,
 .dashboard-reset-button,
 .dashboard-add-button,
+.dashboard-page ::deep .dashboard-add-button,
 .dashboard-layout-row__actions button,
 .dashboard-panel__link,
 .dashboard-size-button,
@@ -415,8 +418,10 @@
 }
 
 .dashboard-action-button:hover,
+.dashboard-page ::deep .dashboard-action-button:hover,
 .dashboard-reset-button:hover,
 .dashboard-add-button:hover:not(:disabled),
+.dashboard-page ::deep .dashboard-add-button:hover:not(:disabled),
 .dashboard-layout-row__actions button:hover:not(:disabled),
 .dashboard-panel__link:hover,
 .dashboard-size-button:hover,
@@ -429,8 +434,10 @@
 }
 
 .dashboard-action-button:focus-visible,
+.dashboard-page ::deep .dashboard-action-button:focus-visible,
 .dashboard-reset-button:focus-visible,
 .dashboard-add-button:focus-visible,
+.dashboard-page ::deep .dashboard-add-button:focus-visible,
 .dashboard-layout-row__actions button:focus-visible,
 .dashboard-panel__link:focus-visible,
 .dashboard-size-button:focus-visible,
@@ -440,24 +447,34 @@
 .pinned-chip:focus-visible,
 .resource-row:focus-visible,
 .open-tab-chip:focus-visible,
-.dashboard-field:focus-visible {
+.dashboard-field:focus-visible,
+.dashboard-page ::deep .dashboard-field:focus-visible {
     outline: 2px solid color-mix(in srgb, var(--color-accent) 58%, transparent);
     outline-offset: 2px;
 }
 
 .dashboard-action-button:disabled,
+.dashboard-page ::deep .dashboard-action-button:disabled,
 .dashboard-add-button:disabled,
+.dashboard-page ::deep .dashboard-add-button:disabled,
 .dashboard-layout-row__actions button:disabled {
     opacity: 0.45;
     cursor: default;
 }
 
 .dashboard-action-button--primary,
+.dashboard-page ::deep .dashboard-action-button--primary,
 .dashboard-add-button,
+.dashboard-page ::deep .dashboard-add-button,
 .dashboard-size-button.is-active {
     border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
     background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
     color: var(--color-accent);
+}
+
+.dashboard-page ::deep .dashboard-action-button .app-button__content,
+.dashboard-page ::deep .dashboard-add-button .app-button__content {
+    gap: var(--spacing-xs);
 }
 
 .dashboard-builder {
@@ -528,7 +545,8 @@
     font-weight: 650;
 }
 
-.dashboard-field {
+.dashboard-field,
+.dashboard-page ::deep .dashboard-field {
     width: 100%;
     min-width: 0;
     min-height: 32px;

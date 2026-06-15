@@ -12,22 +12,36 @@
             <div class="row"><span>Clients</span><strong>@Info.ConnectedClients</strong></div>
             <div class="row"><span>Memory</span><strong>@Info.UsedMemoryHuman (@Info.UsedMemoryBytes bytes)</strong></div>
             <div class="row"><span>Commands</span><strong>@Info.TotalCommandsProcessed</strong></div>
-            <div class="row"><span>Hit ratio</span><strong>@((Info.KeyspaceHitRatio * 100).ToString("0.##"))%</strong></div>
+            <div class="row">
+                <span>Hit ratio</span>
+                <strong>
+                    @((Info.KeyspaceHitRatio * 100).ToString("0.##"))%
+                    @if (Info.KeyspaceHitRatio >= 0.995)
+                    {
+                        <span title="Perfection. Don't touch anything.">🔥</span>
+                    }
+                </strong>
+            </div>
 
             <table class="table">
                 <thead>
-                <tr><th>DB</th><th>Keys</th><th>Expires</th><th>Avg TTL</th></tr>
+                    <tr>
+                        <th>DB</th>
+                        <th>Keys</th>
+                        <th>Expires</th>
+                        <th>Avg TTL</th>
+                    </tr>
                 </thead>
                 <tbody>
-                @foreach (var db in Info.Databases)
-                {
-                    <tr>
-                        <td>@db.Index</td>
-                        <td>@db.Keys</td>
-                        <td>@db.Expires</td>
-                        <td>@db.AvgTtl</td>
-                    </tr>
-                }
+                    @foreach (var db in Info.Databases)
+                    {
+                        <tr>
+                            <td>@db.Index</td>
+                            <td>@db.Keys</td>
+                            <td>@db.Expires</td>
+                            <td>@db.AvgTtl</td>
+                        </tr>
+                    }
                 </tbody>
             </table>
         }

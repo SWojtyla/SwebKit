@@ -245,6 +245,7 @@ public sealed class RedisClient : IRedisClient
             UptimeSeconds = GetLong(metrics, "uptime_in_seconds"),
             ConnectedClients = GetLong(metrics, "connected_clients"),
             UsedMemoryBytes = GetLong(metrics, "used_memory"),
+            MaxMemoryBytes = GetLong(metrics, "maxmemory"),
             UsedMemoryHuman = GetString(metrics, "used_memory_human"),
             TotalCommandsProcessed = GetLong(metrics, "total_commands_processed"),
             KeyspaceHitRatio = ratio,

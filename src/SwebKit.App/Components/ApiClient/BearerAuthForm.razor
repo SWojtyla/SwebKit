@@ -1,0 +1,45 @@
+@* Bearer token form: reads/saves the token via ICredentialStore *@
+@inject ICredentialStore CredentialStore
+
+<div class="bearer-form">
+    <label class="bearer-form__label">Token</label>
+    <div class="bearer-form__input-row">
+        <input type="@(_showToken ? "text" : "password")" class="bearer-form__input"
+               placeholder="Paste your bearer token…" value="@_tokenDisplay" @oninput="OnTokenInput" />
+        <button type="button" class="bearer-form__toggle" title="@(_showToken ? "Hide" : "Show")"
+                @onclick="() => _showToken = !_showToken">
+            @(_showToken ? "🙈" : "👁")
+        </button>
+    </div>
+    <p class="bearer-form__hint">Sent as <code>Authorization: Bearer &lt;token&gt;</code></p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AuthConfig Auth { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _showToken;
+    private string _tokenDisplay = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrEmpty(Auth.CredentialKey))
+            _tokenDisplay = CredentialStore.Get(Auth.CredentialKey) ?? string.Empty;
+    }
+
+    private async Task OnTokenInput(ChangeEventArgs e)
+    {
+        var token = e.Value?.ToString() ?? string.Empty;
+        _tokenDisplay = token;
+
+        if (string.IsNullOrEmpty(Auth.CredentialKey))
+            Auth.CredentialKey = $"api-client:bearer:{Guid.NewGuid():N}";
+
+        if (string.IsNullOrEmpty(token))
+            CredentialStore.Delete(Auth.CredentialKey);
+        else
+            CredentialStore.Save(Auth.CredentialKey, token);
+
+        await OnChanged.InvokeAsync();
+    }
+}

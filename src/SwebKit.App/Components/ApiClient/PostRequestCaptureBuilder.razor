@@ -1,0 +1,125 @@
+@* PostRequestCaptureBuilder — visual block list of CaptureRule definitions for one request *@
+
+<div class="capture-builder">
+    <div class="capture-builder__header">
+        <span class="capture-builder__title">Capture Rules</span>
+        <AppButton CssClass="capture-builder__add-btn" Size="Small" Variant="Secondary" OnClick="AddRule">+ Add Capture</AppButton>
+    </div>
+
+    @if (_rules.Count == 0)
+    {
+        <div class="capture-builder__empty">
+            No capture rules. Add one to extract response values into variables.
+        </div>
+    }
+
+    @foreach (var rule in _rules)
+    {
+        <div class="capture-builder__rule @(rule.IsEnabled ? "" : "capture-builder__rule--disabled")">
+            <input type="checkbox" class="capture-builder__rule-enabled" checked="@rule.IsEnabled"
+                   @onchange="e => { rule.IsEnabled = (bool)(e.Value ?? true); NotifyChanged(); }" />
+
+            <AppSelect CssClass="capture-builder__source-type" Value="@rule.Source.ToString()"
+                       ValueChanged="value => OnSourceChanged(rule, value)">
+                <option value="@nameof(CaptureSource.BodyJsonPath)">Body (JSONPath)</option>
+                <option value="@nameof(CaptureSource.ResponseHeader)">Header</option>
+                <option value="@nameof(CaptureSource.StatusCode)">Status Code</option>
+            </AppSelect>
+
+            @if (rule.Source == CaptureSource.BodyJsonPath)
+            {
+                <input type="text" class="capture-builder__expr" placeholder="$.token" value="@rule.JsonPath"
+                       @oninput="e => { rule.JsonPath = e.Value?.ToString(); NotifyChanged(); }" />
+            }
+            else if (rule.Source == CaptureSource.ResponseHeader)
+            {
+                <input type="text" class="capture-builder__expr" placeholder="X-Auth-Token" value="@rule.HeaderName"
+                       @oninput="e => { rule.HeaderName = e.Value?.ToString(); NotifyChanged(); }" />
+            }
+            else
+            {
+                <span class="capture-builder__expr capture-builder__expr--static">status code</span>
+            }
+
+            <span class="capture-builder__arrow">→</span>
+
+            <input type="text" class="capture-builder__target" placeholder="variable name" value="@rule.TargetVariable"
+                   @oninput="e => { rule.TargetVariable = e.Value?.ToString() ?? string.Empty; NotifyChanged(); }" />
+
+            <AppSelect CssClass="capture-builder__scope" Value="@rule.TargetScope" ValueChanged="value => OnScopeSelected(rule, value)">
+                <option value="collection">Collection</option>
+                @foreach (var env in AvailableEnvironments)
+                {
+                    <option value="@env.Id">@env.Name</option>
+                }
+            </AppSelect>
+
+            <AppIconButton Label="Remove capture rule" Variant="Ghost" Size="Small" CssClass="capture-builder__rule-delete"
+                           OnClick="@(() => RemoveRule(rule))">
+                <Icon>×</Icon>
+            </AppIconButton>
+        </div>
+    }
+
+    @if (CaptureWarnings.Count > 0)
+    {
+        <div class="capture-builder__warnings">
+            @foreach (var w in CaptureWarnings)
+            {
+                <div class="capture-builder__warning-row">⚠ @w</div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = null!;
+    [Parameter] public IReadOnlyList<ApiEnvironment> AvailableEnvironments { get; set; } = [];
+    [Parameter] public IReadOnlyList<string> CaptureWarnings { get; set; } = [];
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<CaptureRule> _rules = [];
+    private HttpRequestEntry? _lastRequest;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_lastRequest, Request)) return; // BL-5
+        _lastRequest = Request; // BL-3
+        _rules = Request.CaptureRules;
+    }
+
+    private void AddRule()
+    {
+        _rules.Add(new CaptureRule
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Source = CaptureSource.BodyJsonPath,
+            TargetScope = "collection",
+            IsEnabled = true,
+        });
+        NotifyChanged();
+    }
+
+    private void RemoveRule(CaptureRule rule)
+    {
+        _rules.Remove(rule);
+        NotifyChanged();
+    }
+
+    private void NotifyChanged() => OnChanged.InvokeAsync();
+
+    private void OnSourceChanged(CaptureRule rule, string? value)
+    {
+        rule.Source = Enum.Parse<CaptureSource>(value ?? nameof(CaptureSource.BodyJsonPath));
+        NotifyChanged();
+    }
+
+    private void OnScopeSelected(CaptureRule rule, string? value) =>
+        OnScopeChanged(rule, new ChangeEventArgs { Value = value });
+
+    private void OnScopeChanged(CaptureRule rule, ChangeEventArgs e)
+    {
+        rule.TargetScope = e.Value?.ToString() ?? "collection";
+        NotifyChanged();
+    }
+}

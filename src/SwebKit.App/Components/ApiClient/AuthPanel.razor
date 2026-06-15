@@ -1,0 +1,120 @@
+@* Auth panel: type selector + sub-form + inherited-from badge *@
+@inject IAuthInheritanceResolver AuthResolver
+
+<div class="auth-panel">
+
+    @* ── Type selector ── *@
+    <div class="auth-panel__selector-row">
+        <label class="auth-panel__type-label">Auth type</label>
+        <AppSelect CssClass="auth-panel__type-select" Value="@_selectedType.ToString()" ValueChanged="OnTypeSelectChanged">
+            <option value="@AuthType.Inherited">Inherit from parent</option>
+            <option value="@AuthType.None">No auth</option>
+            <option value="@AuthType.BearerToken">Bearer token</option>
+            <option value="@AuthType.Basic">Basic</option>
+            <option value="@AuthType.ApiKey">API key</option>
+            <option value="@AuthType.OAuth2">OAuth 2.0</option>
+        </AppSelect>
+    </div>
+
+    @* ── Inherited badge ── *@
+    @if (_inheritedFromName is not null)
+    {
+        <div class="auth-panel__inherited-badge">
+            Inherited from <strong>@_inheritedFromName</strong>
+            @if (_inheritedType != AuthType.None)
+            {
+                <span class="auth-panel__inherited-type">(@_inheritedType.ToString())</span>
+            }
+        </div>
+    }
+
+    @* ── Sub-form ── *@
+    @if (_effectiveConfig is { Type: AuthType.BearerToken })
+    {
+        <BearerAuthForm Auth="@_effectiveConfig" OnChanged="MarkChanged" />
+    }
+    else if (_effectiveConfig is { Type: AuthType.ApiKey })
+    {
+        <ApiKeyAuthForm Auth="@_effectiveConfig" OnChanged="MarkChanged" />
+    }
+    else if (_effectiveConfig is { Type: AuthType.Basic })
+    {
+        <BasicAuthForm Auth="@_effectiveConfig" OnChanged="MarkChanged" />
+    }
+    else if (_effectiveConfig is { Type: AuthType.OAuth2 })
+    {
+        <OAuth2AuthForm Auth="@_effectiveConfig" OnChanged="MarkChanged" />
+    }
+    else if (_inheritedFromName is not null && _effectiveConfig is { Type: AuthType.None })
+    {
+        <p class="auth-panel__no-auth-note">Parent has no auth configured.</p>
+    }
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = default!;
+    [Parameter, EditorRequired] public ApiCollection Collection { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private AuthType _selectedType;
+    private AuthConfig? _effectiveConfig;
+    private string? _inheritedFromName;
+    private AuthType _inheritedType;
+
+    // BL-5 guard: skip the O(n) tree walk when nothing that affects auth has changed
+    private HttpRequestEntry? _lastRequest;
+    private ApiCollection? _lastCollection;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_lastRequest, Request) && ReferenceEquals(_lastCollection, Collection))
+            return;
+
+        _lastRequest = Request;
+        _lastCollection = Collection;
+
+        // Determine what the request currently says
+        _selectedType = Request.Auth?.Type ?? AuthType.Inherited;
+
+        // Resolve effective config for the sub-form
+        var (resolved, inheritedFrom) = AuthResolver.Resolve(Request, Collection);
+        _inheritedFromName = inheritedFrom;
+        _inheritedType = resolved.Type;
+
+        // If request has its own non-inherited auth, show its form using the request's config
+        _effectiveConfig = _selectedType is AuthType.Inherited or AuthType.None
+            ? resolved
+            : (Request.Auth ??= new AuthConfig { Type = _selectedType });
+    }
+
+    private Task OnTypeSelectChanged(string? value) =>
+        OnTypeChanged(new ChangeEventArgs { Value = value });
+
+    private async Task OnTypeChanged(ChangeEventArgs args)
+    {
+        if (!Enum.TryParse<AuthType>(args.Value?.ToString(), out var newType))
+            return;
+
+        _selectedType = newType;
+
+        if (newType == AuthType.Inherited)
+        {
+            Request.Auth = null;
+        }
+        else if (newType == AuthType.None)
+        {
+            Request.Auth = new AuthConfig { Type = AuthType.None };
+        }
+        else
+        {
+            // Keep existing config data when switching types to avoid losing partial input
+            Request.Auth ??= new AuthConfig();
+            Request.Auth.Type = newType;
+        }
+
+        await MarkChanged();
+    }
+
+    private async Task MarkChanged() => await OnChanged.InvokeAsync();
+}

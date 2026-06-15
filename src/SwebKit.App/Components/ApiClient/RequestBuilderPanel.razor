@@ -1,0 +1,590 @@
+@inject IVariablePreviewService VariablePreview
+@inject IVariableSubstitutionService VariableSubstitution
+@inject IRequestBodyFormatter BodyFormatter
+@implements IAsyncDisposable
+
+<div class="req-builder">
+
+    @* ── Name row ────────────────────────────────────────────────────────────── *@
+    <div class="req-builder__name-row">
+        @if (_editingName)
+        {
+            <input class="req-builder__name-input" value="@Request.Name" @oninput="OnNameInputAsync"
+                   @onblur="CommitNameAsync" @onkeydown="OnNameKeyDown" @ref="_nameInputRef" />
+        }
+        else
+        {
+            <span class="req-builder__name-label" @ondblclick="BeginEditName">
+                @Request.Name
+            </span>
+        }
+        @if (IsDirty)
+        {
+            <span class="req-builder__dirty-dot" title="Unsaved changes">●</span>
+        }
+    </div>
+
+    @* ── URL bar / WS header — shared method picker, then mode-specific content ── *@
+    @if (Request.Method == ApiRequestMethod.WebSocket)
+    {
+        @* WebSocket: show only the method picker and a hint; URL is managed inside WebSocketPanel *@
+        <div class="req-builder__url-bar req-builder__url-bar--ws-header">
+            <div class="req-builder__method-picker">
+                <button type="button" class="req-builder__method-btn req-builder__method-btn--websocket"
+                        @onclick="() => _showMethodPicker = !_showMethodPicker">
+                    WS
+                </button>
+                @if (_showMethodPicker)
+                {
+                    <div class="ctx-backdrop" @onclick="() => _showMethodPicker = false"></div>
+                    <div class="req-builder__method-dropdown">
+                        @foreach (var m in Enum.GetValues<ApiRequestMethod>())
+                        {
+                            <button type="button"
+                                    class="req-builder__method-option req-builder__method-option--@m.ToString().ToLowerInvariant()"
+                                    @onclick="() => SelectMethodAsync(m)">
+                                @MethodLabel(m)
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+            <span class="req-builder__ws-hint">WebSocket — configure connection in the panel below</span>
+        </div>
+
+        @* Full WebSocket panel replaces the normal tab strip *@
+        <div class="req-builder__tab-content req-builder__tab-content--ws">
+            <WebSocketPanel Request="@Request" OnChanged="MarkDirtyAsync" />
+        </div>
+    }
+    else
+    {
+        <div class="req-builder__url-bar">
+            <div class="req-builder__method-picker">
+                <button type="button"
+                        class="req-builder__method-btn req-builder__method-btn--@Request.Method.ToString().ToLowerInvariant()"
+                        @onclick="() => _showMethodPicker = !_showMethodPicker">
+                    @MethodLabel(Request.Method)
+                </button>
+                @if (_showMethodPicker)
+                {
+                    <div class="ctx-backdrop" @onclick="() => _showMethodPicker = false"></div>
+                    <div class="req-builder__method-dropdown">
+                        @foreach (var m in Enum.GetValues<ApiRequestMethod>())
+                        {
+                            <button type="button"
+                                    class="req-builder__method-option req-builder__method-option--@m.ToString().ToLowerInvariant()"
+                                    @onclick="() => SelectMethodAsync(m)">
+                                @MethodLabel(m)
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="req-builder__url-wrap">
+                <input class="req-builder__url-input" type="text" value="@Request.Url"
+                       placeholder="https://api.example.com/{{base_path}}/endpoint" @oninput="OnUrlInputAsync"
+                       @ref="_urlInputRef" />
+
+                @if (_urlPreview.Count > 0)
+                {
+                    <div class="req-builder__url-preview">
+                        @foreach (var (key, value) in _urlPreview)
+                        {
+                            <span class="req-builder__url-token @(value is null ? "req-builder__url-token--unresolved" : "")">
+                                <span class="req-builder__url-token-key">{{@key}}</span>
+                                @if (value is not null)
+                                {
+                                    <span class="req-builder__url-token-arrow"> → </span>
+                                    <span class="req-builder__url-token-value">@value</span>
+                                }
+                                else
+                                {
+                                    <span class="req-builder__url-token-arrow"> unresolved</span>
+                                }
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+
+            <button type="button"
+                    class="req-builder__send-btn @((_executing || _subscribing) ? "req-builder__send-btn--busy" : "")"
+                    @onclick="OnSendAsync" disabled="@(string.IsNullOrWhiteSpace(Request.Url) && !_executing && !_subscribing)">
+                @if (_executing)
+                {
+                    <span class="req-builder__send-spinner" />
+                    <span>Cancel</span>
+                }
+                else if (_subscribing)
+                {
+                    <span class="req-builder__send-spinner" />
+                    <span>Stop</span>
+                }
+                else
+                {
+                    <span>Send</span>
+                }
+            </button>
+
+            @if (!UserSettings.Settings.VerifyApiClientSsl)
+            {
+                <span class="req-builder__ssl-badge" title="SSL verification is disabled — do not use in production">
+                    ⚠ SSL off
+                </span>
+            }
+        </div>
+
+        @* ── Tab strip ───────────────────────────────────────────────────────────── *@
+        <div class="req-builder__tabs">
+            @foreach (var tab in ActiveTabs)
+            {
+                var t = tab;
+                <button type="button" class="req-builder__tab @(_activeTab == t ? "req-builder__tab--active" : "")"
+                        @onclick="() => _activeTab = t">
+                    @t
+                    @if (t == "Params" && Request.QueryParams.Any(p => p.IsEnabled))
+                    {
+                        <span class="req-builder__tab-count">@Request.QueryParams.Count(p => p.IsEnabled)</span>
+                    }
+                    else if (t == "Headers" && Request.Headers.Any(h => h.IsEnabled))
+                    {
+                        <span class="req-builder__tab-count">@Request.Headers.Count(h => h.IsEnabled)</span>
+                    }
+                </button>
+            }
+        </div>
+
+        @* ── Tab content ─────────────────────────────────────────────────────────── *@
+        <div class="req-builder__tab-content">
+
+            @if (_activeTab == "GraphQL")
+            {
+                <GraphQlPanel Request="@Request" Collection="@Collection" ActiveEnvironment="@ActiveEnvironment"
+                              EndpointUrl="@Request.Url" OnChanged="MarkDirtyAsync" />
+            }
+            else if (_activeTab == "Params")
+            {
+                <KeyValueGrid Pairs="@Request.QueryParams" OnChanged="MarkDirtyAsync" />
+            }
+            else if (_activeTab == "Headers")
+            {
+                <KeyValueGrid Pairs="@Request.Headers" OnChanged="MarkDirtyAsync" />
+            }
+            else if (_activeTab == "Body")
+            {
+                <div class="req-builder__body-mode-strip">
+                    @foreach (var mode in Enum.GetValues<RequestBodyMode>())
+                    {
+                        var m = mode;
+                        <button type="button"
+                                class="req-builder__body-mode-btn @(Request.Body.Mode == m ? "req-builder__body-mode-btn--active" : "")"
+                                @onclick="() => SetBodyModeAsync(m)">
+                            @mode.ToString()
+                        </button>
+                    }
+                </div>
+
+                @if (Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml or RequestBodyMode.Text)
+                {
+                    <div class="req-builder__body-area-wrap">
+                        @if (_bodyPreview.Count > 0)
+                        {
+                            <div class="req-builder__body-preview-strip">
+                                @foreach (var (key, value) in _bodyPreview)
+                                {
+                                    <span class="req-builder__url-token @(value is null ? "req-builder__url-token--unresolved" : "")">
+                                        {{@key}}@(value is not null ? $" → {value}" : " unresolved")
+                                    </span>
+                                }
+                            </div>
+                        }
+                        <div class="req-builder__body-editor-toolbar">
+                            <button type="button" class="req-builder__format-btn" title="Prettify request body"
+                                    disabled="@(!CanPrettifyBody)" @onclick="PrettifyBodyAsync">
+                                Prettify
+                            </button>
+                        </div>
+                        @if (_bodyFormatError is not null)
+                        {
+                            <div class="req-builder__format-error" role="alert">@_bodyFormatError</div>
+                        }
+                        <textarea class="req-builder__body-area" value="@Request.Body.RawContent"
+                                  placeholder="@BodyPlaceholder(Request.Body.Mode)" @oninput="OnBodyInputAsync"
+                                  spellcheck="false"></textarea>
+                    </div>
+                }
+                else if (Request.Body.Mode == RequestBodyMode.FormData)
+                {
+                    <KeyValueGrid Pairs="@Request.Body.FormData" OnChanged="MarkDirtyAsync" />
+                }
+                else if (Request.Body.Mode == RequestBodyMode.Binary)
+                {
+                    <div class="req-builder__binary-row">
+                        <span class="req-builder__binary-path">@(Request.Body.FilePath ?? "No file selected")</span>
+                        <button type="button" class="req-builder__binary-pick-btn" @onclick="PickFileAsync">
+                            Choose File…
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="req-builder__body-none">No body for this request.</div>
+                }
+            }
+            else if (_activeTab == "Auth")
+            {
+                <AuthPanel Request="@Request" Collection="@Collection" OnChanged="@MarkDirtyAsync" />
+            }
+            else if (_activeTab == "Capture")
+            {
+                <PostRequestCaptureBuilder Request="@Request" AvailableEnvironments="@AllEnvironments"
+                                           CaptureWarnings="@_captureWarnings" OnChanged="@MarkDirtyAsync" />
+            }
+        </div>
+    }
+    @* end else (not WebSocket) *@
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = default!;
+    [Parameter, EditorRequired] public ApiCollection Collection { get; set; } = default!;
+    [Parameter] public ApiEnvironment? ActiveEnvironment { get; set; }
+    [Parameter] public IReadOnlyList<ApiEnvironment> AllEnvironments { get; set; } = [];
+    [Parameter] public int ScopeVersion { get; set; }
+    [Parameter] public bool IsDirty { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<HttpRequestResult> OnResult { get; set; }
+    [Parameter] public EventCallback<GraphQlSubscriptionMessage> OnSubscriptionMessage { get; set; }
+    [Parameter] public EventCallback OnSubscriptionStopped { get; set; }
+
+    [Inject] private IHttpRequestExecutor Executor { get; set; } = default!;
+    [Inject] private IGraphQlSubscriptionService SubscriptionService { get; set; } = default!;
+    [Inject] private UserSettingsRepository UserSettings { get; set; } = default!;
+
+    private static readonly string[] _tabs = ["Body", "Params", "Headers", "Auth", "Capture"];
+    private static readonly string[] _graphQlTabs = ["GraphQL", "Headers", "Auth", "Capture"];
+    private string _activeTab = "Body";
+
+    private string[] ActiveTabs => Request.Method == ApiRequestMethod.GraphQl ? _graphQlTabs : _tabs;
+
+    private IReadOnlyList<string> _captureWarnings = [];
+    private bool _executing;
+    private CancellationTokenSource? _executionCts;
+
+    // Subscription state
+    private bool _subscribing;
+    private CancellationTokenSource? _subscriptionCts;
+
+    private IReadOnlyDictionary<string, string?> _resolvedScope = new Dictionary<string, string?>();
+    private IReadOnlyDictionary<string, string?> _urlPreview = new Dictionary<string, string?>();
+    private IReadOnlyDictionary<string, string?> _bodyPreview = new Dictionary<string, string?>();
+    private string? _bodyFormatError;
+
+    private ElementReference _urlInputRef;
+    private ElementReference _nameInputRef;
+    private bool _editingName;
+
+    private bool CanPrettifyBody =>
+        Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml &&
+        !string.IsNullOrWhiteSpace(Request.Body.RawContent);
+
+    // ── Parameter sync (BL-5 guard) ────────────────────────────────────────────
+
+    private HttpRequestEntry? _lastRequest;
+    private ApiCollection? _lastCollection;
+    private ApiEnvironment? _lastEnvironment;
+    private int _lastScopeVersion = -1;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_lastRequest, Request) &&
+            ReferenceEquals(_lastCollection, Collection) &&
+            ReferenceEquals(_lastEnvironment, ActiveEnvironment) &&
+            _lastScopeVersion == ScopeVersion)
+            return;
+
+        _lastRequest = Request;
+        _lastCollection = Collection;
+        _lastEnvironment = ActiveEnvironment;
+        _lastScopeVersion = ScopeVersion;
+
+        // Ensure active tab is valid for the current method (BL-5 guard for tab state)
+        if (!ActiveTabs.Contains(_activeTab))
+            _activeTab = ActiveTabs[0];
+
+        RefreshScope();
+        _urlPreview = VariablePreview.Preview(Request.Url, _resolvedScope);
+        _bodyPreview = Request.Body.RawContent is not null
+            ? VariablePreview.Preview(Request.Body.RawContent, _resolvedScope)
+            : new Dictionary<string, string?>();
+    }
+
+    private void RefreshScope()
+    {
+        _resolvedScope = VariableSubstitution.BuildScope(Collection.Variables, ActiveEnvironment);
+    }
+
+    // ── URL / name editing ─────────────────────────────────────────────────────
+
+    private async Task OnUrlInputAsync(ChangeEventArgs e)
+    {
+        Request.Url = e.Value?.ToString() ?? string.Empty;
+        _urlPreview = VariablePreview.Preview(Request.Url, _resolvedScope);
+        await MarkDirtyAsync();
+    }
+
+    private bool _showMethodPicker;
+
+    private async Task SelectMethodAsync(ApiRequestMethod method)
+    {
+        _showMethodPicker = false;
+        Request.Method = method;
+
+        // Switch to the appropriate default tab when changing method type
+        if (method == ApiRequestMethod.GraphQl && !_graphQlTabs.Contains(_activeTab))
+            _activeTab = "GraphQL";
+        else if (method != ApiRequestMethod.GraphQl && !_tabs.Contains(_activeTab))
+            _activeTab = "Body";
+
+        await MarkDirtyAsync();
+    }
+
+    private void BeginEditName() => _editingName = true;
+
+    private async Task OnNameInputAsync(ChangeEventArgs e)
+    {
+        Request.Name = e.Value?.ToString() ?? string.Empty;
+        await MarkDirtyAsync();
+    }
+
+    private async Task CommitNameAsync(FocusEventArgs _)
+    {
+        _editingName = false;
+        await MarkDirtyAsync();
+    }
+
+    private async Task OnNameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "Escape")
+        {
+            _editingName = false;
+            await MarkDirtyAsync();
+        }
+    }
+
+    // ── Body editing ───────────────────────────────────────────────────────────
+
+    private async Task OnBodyInputAsync(ChangeEventArgs e)
+    {
+        _bodyFormatError = null;
+        Request.Body.RawContent = e.Value?.ToString();
+        if (Request.Body.RawContent is not null)
+            _bodyPreview = VariablePreview.Preview(Request.Body.RawContent, _resolvedScope);
+        await MarkDirtyAsync();
+    }
+
+    private async Task PrettifyBodyAsync()
+    {
+        var result = BodyFormatter.FormatRestBody(Request.Body.Mode, Request.Body.RawContent);
+        if (!result.IsSuccess)
+        {
+            _bodyFormatError = result.ErrorMessage;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _bodyFormatError = null;
+        if (Request.Body.RawContent == result.FormattedContent)
+        {
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        Request.Body.RawContent = result.FormattedContent;
+        _bodyPreview = VariablePreview.Preview(Request.Body.RawContent ?? string.Empty, _resolvedScope);
+        await MarkDirtyAsync();
+    }
+
+    private async Task SetBodyModeAsync(RequestBodyMode mode)
+    {
+        if (Request.Body.Mode == mode) return;
+        _bodyFormatError = null;
+        Request.Body.Mode = mode;
+        await MarkDirtyAsync();
+    }
+
+    // ── File picker ────────────────────────────────────────────────────────────
+
+    private async Task PickFileAsync()
+    {
+        // MAUI FilePicker
+        try
+        {
+            var result = await FilePicker.Default.PickAsync();
+            if (result is not null)
+            {
+                Request.Body.FilePath = result.FullPath;
+                await MarkDirtyAsync();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    // ── Send / cancel ──────────────────────────────────────────────────────────
+
+    private async Task OnSendAsync()
+    {
+        // Stop an active subscription
+        if (_subscribing)
+        {
+            _subscriptionCts?.Cancel();
+            await SubscriptionService.StopAsync();
+            return;
+        }
+
+        // Cancel an active HTTP request
+        if (_executing)
+        {
+            _executionCts?.Cancel();
+            return;
+        }
+
+        // Detect GraphQL subscription operation
+        if (Request.Method == ApiRequestMethod.GraphQl && IsSubscriptionOperation())
+        {
+            // Fire-and-forget: the subscription loop runs in the background while the component
+            // stays interactive. RunSubscriptionAsync sets _subscribing = true and calls
+            // InvokeAsync(StateHasChanged) so the "Stop" button appears on the next frame.
+            _ = RunSubscriptionAsync();
+            return;
+        }
+
+        _executing = true;
+        _executionCts = new CancellationTokenSource();
+        await InvokeAsync(StateHasChanged); // BL-2
+
+        HttpRequestResult? result = null;
+        try
+        {
+            result = await Executor.ExecuteAsync(
+                Request, Collection, ActiveEnvironment, _executionCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            result = new HttpRequestResult
+            {
+                ResolvedUrl = Request.Url,
+                Method = Request.Method.ToString().ToUpperInvariant(),
+                ErrorMessage = "Request cancelled.",
+            };
+        }
+        catch (Exception ex)
+        {
+            result = new HttpRequestResult
+            {
+                ResolvedUrl = Request.Url,
+                Method = Request.Method.ToString().ToUpperInvariant(),
+                ErrorMessage = ex.Message,
+            };
+        }
+        finally
+        {
+            _executing = false;
+            _executionCts?.Dispose();
+            _executionCts = null;
+        }
+
+        await OnResult.InvokeAsync(result);
+        if (result is not null)
+            _captureWarnings = result.CaptureWarnings;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task RunSubscriptionAsync()
+    {
+        _subscribing = true;
+        _subscriptionCts = new CancellationTokenSource();
+        await InvokeAsync(StateHasChanged); // BL-2
+
+        try
+        {
+            await SubscriptionService.RunAsync(
+                Request.Url,
+                Request,
+                Collection,
+                ActiveEnvironment,
+                async msg =>
+                {
+                    await OnSubscriptionMessage.InvokeAsync(msg);
+                    await InvokeAsync(StateHasChanged); // BL-2
+                },
+                _subscriptionCts.Token);
+        }
+        finally
+        {
+            _subscribing = false;
+            _subscriptionCts?.Dispose();
+            _subscriptionCts = null;
+            await OnSubscriptionStopped.InvokeAsync();
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+    }
+
+    private bool IsSubscriptionOperation()
+    {
+        var query = Request.GraphQlQuery ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(query)) return false;
+
+        // If an operation is selected, check its keyword in the document
+        if (!string.IsNullOrWhiteSpace(Request.GraphQlSelectedOperation))
+        {
+            var pattern = $"subscription\\s+{System.Text.RegularExpressions.Regex.Escape(Request.GraphQlSelectedOperation)}";
+            return System.Text.RegularExpressions.Regex.IsMatch(query, pattern,
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        }
+
+        // Anonymous operation: look for a leading subscription keyword
+        return System.Text.RegularExpressions.Regex.IsMatch(
+            query, @"\bsubscription\b",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    }
+
+    // ── Dirty tracking ─────────────────────────────────────────────────────────
+
+    private async Task MarkDirtyAsync()
+    {
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    private static string MethodLabel(ApiRequestMethod m) => m switch
+    {
+        ApiRequestMethod.GraphQl => "GQL",
+        ApiRequestMethod.WebSocket => "WS",
+        _ => m.ToString().ToUpperInvariant(),
+    };
+
+    private static string BodyPlaceholder(RequestBodyMode mode) => mode switch
+    {
+        RequestBodyMode.Json => "{ \"key\": \"value\" }",
+        RequestBodyMode.Xml => "<root><element>value</element></root>",
+        _ => "Request body…",
+    };
+
+    // ── Dispose (BL-7: cancel any in-flight subscription on navigation away) ───
+
+    public async ValueTask DisposeAsync()
+    {
+        _executionCts?.Cancel();
+        _subscriptionCts?.Cancel();
+        _executionCts?.Dispose();
+        _subscriptionCts?.Dispose();
+        try { await SubscriptionService.StopAsync(CancellationToken.None); } catch { /* ignore */ }
+        await SubscriptionService.DisposeAsync();
+    }
+}

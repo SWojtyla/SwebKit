@@ -23,6 +23,11 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
         IReadOnlyDictionary<Guid, ServiceBusNamespaceBootstrapSnapshot> cachedSnapshots,
         bool useDemoData)
     {
+        if (useDemoData)
+        {
+            return BuildDemoStates();
+        }
+
         var states = configuredNamespaces.Select(ns =>
         {
             if (cachedSnapshots.TryGetValue(ns.Id, out var snapshot))
@@ -43,11 +48,12 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
                 IsDemo: false);
         }).ToList();
 
-        if (!useDemoData || states.Any(state => state.Namespace.Id == DemoNamespaceId1))
-        {
-            return states;
-        }
+        return states;
+    }
 
+    private static IReadOnlyList<ServiceBusNamespaceBootstrapState> BuildDemoStates()
+    {
+        var states = new List<ServiceBusNamespaceBootstrapState>();
         states.Add(new ServiceBusNamespaceBootstrapState(
             Namespace: new ServiceBusNamespace
             {

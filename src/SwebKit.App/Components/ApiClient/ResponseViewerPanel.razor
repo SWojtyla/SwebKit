@@ -1,0 +1,395 @@
+<div class="resp-viewer">
+
+    @* ── History sidebar ──────────────────────────────────────────────────────── *@
+    @if (HistoryEntries.Count > 0)
+    {
+        <div class="resp-viewer__history">
+            <div class="resp-viewer__history-title">History</div>
+            @foreach (var entry in HistoryEntries)
+            {
+                var e = entry;
+                <button type="button"
+                        class="resp-viewer__history-item @(ReferenceEquals(Result, e) ? "resp-viewer__history-item--active" : "") @(StatusClass(e.StatusCode))"
+                    title="@e.Method @e.ResolvedUrl — @FormatElapsed(e.Elapsed)"
+                    @onclick="() => OnResend.InvokeAsync(e)">
+                    <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)">
+                        @(e.ErrorMessage is not null ? "ERR" : e.StatusCode.ToString())
+                    </span>
+                    <span class="resp-viewer__history-method">@e.Method</span>
+                    <span class="resp-viewer__history-elapsed">@FormatElapsed(e.Elapsed)</span>
+                </button>
+            }
+        </div>
+    }
+    @if (ResponseExamples.Count > 0)
+    {
+        <div class="resp-viewer__history resp-viewer__examples">
+            <div class="resp-viewer__history-title">Examples</div>
+            @foreach (var example in ResponseExamples)
+            {
+                <div class="resp-viewer__history-item resp-viewer__example-item"
+                     title="@example.CapturedAt.ToLocalTime().ToString("g")">
+                    <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(example.StatusCode)">
+                        @example.StatusCode
+                    </span>
+                    <span class="resp-viewer__history-method">@example.Name</span>
+                </div>
+            }
+        </div>
+    }
+    @if (SubscriptionMessages.Count > 0)
+    {
+        <div class="resp-viewer__subscription-header">
+            <span class="resp-viewer__subscription-badge">⚡ Subscription</span>
+            <span class="resp-viewer__subscription-count">@SubscriptionMessages.Count message(s)</span>
+        </div>
+        <div class="resp-viewer__subscription-messages">
+            <Virtualize TItem="GraphQlSubscriptionMessage" Items="@SubscriptionMessages" Context="msg">
+                <div class="resp-viewer__sub-msg @(msg.Errors is { Count: > 0 } ? "resp-viewer__sub-msg--error" : "")">
+                    <div class="resp-viewer__sub-msg-header">
+                        <span class="resp-viewer__sub-msg-time">
+                            @msg.ReceivedAt.ToLocalTime().ToString("HH:mm:ss.fff")
+                        </span>
+                        @if (msg.Errors is { Count: > 0 })
+                        {
+                            <span class="resp-viewer__sub-msg-error-badge">Error</span>
+                        }
+                    </div>
+                    <pre class="resp-viewer__sub-msg-body">@PrettyPrintJson(msg.Payload)</pre>
+                    @if (msg.Errors is { Count: > 0 })
+                    {
+                        @foreach (var err in msg.Errors)
+                        {
+                            <div class="resp-viewer__sub-msg-error-text">⚠ @err.Message</div>
+                        }
+                    }
+                </div>
+            </Virtualize>
+        </div>
+    }
+    else if (Result is null)
+    {
+        <div class="resp-viewer__placeholder">
+            Send a request to see the response here.
+        </div>
+    }
+    else if (Result.ErrorMessage is not null)
+    {
+        <div class="resp-viewer__error">
+            <div class="resp-viewer__error-icon">⚠</div>
+            <div class="resp-viewer__error-text">@Result.ErrorMessage</div>
+            @if (!string.IsNullOrEmpty(Result.ResolvedUrl))
+            {
+                <div class="resp-viewer__error-url">@Result.Method @Result.ResolvedUrl</div>
+            }
+        </div>
+    }
+    else
+    {
+        @* ── Status bar ────────────────────────────────────────────────────────── *@
+        <div class="resp-viewer__status-bar">
+            <span class="resp-viewer__status-badge resp-viewer__status-badge--@StatusClass(Result.StatusCode)"
+                  title="@Result.StatusText">
+                @Result.StatusCode
+            </span>
+            <span class="resp-viewer__status-text">@Result.StatusText</span>
+            <span class="resp-viewer__meta">
+                <span class="resp-viewer__meta-item" title="Round-trip time">
+                    🕐 @FormatElapsed(Result.Elapsed)
+                </span>
+                @if (Result.ContentLength > 0)
+                {
+                    <span class="resp-viewer__meta-item" title="Content-Length header">
+                        📦 @FormatSize(Result.ContentLength)
+                    </span>
+                }
+                else if (Result.ResponseBody is not null)
+                {
+                    <span class="resp-viewer__meta-item" title="Response body size">
+                        📦 @FormatSize(System.Text.Encoding.UTF8.GetByteCount(Result.ResponseBody))
+                    </span>
+                }
+                @if (Result.ResponseBodyTruncated)
+                {
+                    <span class="resp-viewer__truncated-badge" title="Response body was truncated at 4 MB">
+                        ⚠ Truncated
+                    </span>
+                }
+            </span>
+        </div>
+
+        @* ── Tab strip ─────────────────────────────────────────────────────────── *@
+        <div class="resp-viewer__tabs">
+            <button type="button" class="resp-viewer__tab @(_activeTab == "Body" ? "resp-viewer__tab--active" : "")"
+                    @onclick='() => _activeTab = "Body"'>Body</button>
+            <button type="button" class="resp-viewer__tab @(_activeTab == "Headers" ? "resp-viewer__tab--active" : "")"
+                    @onclick='() => _activeTab = "Headers"'>
+                Headers
+                @if (Result.ResponseHeaders.Count > 0)
+                {
+                    <span class="resp-viewer__tab-count">@Result.ResponseHeaders.Count</span>
+                }
+            </button>
+            <button type="button" class="resp-viewer__tab @(_activeTab == "Raw" ? "resp-viewer__tab--active" : "")"
+                    @onclick='() => _activeTab = "Raw"'>Raw</button>
+            @if (Result.GraphQlErrors is { Count: > 0 })
+            {
+                <button type="button"
+                        class="resp-viewer__tab resp-viewer__tab--gql-errors @(_activeTab == "GraphQL Errors" ? "resp-viewer__tab--active" : "")"
+                        @onclick='() => _activeTab = "GraphQL Errors"'>
+                    GraphQL Errors
+                    <span class="resp-viewer__tab-count resp-viewer__tab-count--error">@Result.GraphQlErrors.Count</span>
+                </button>
+            }
+        </div>
+
+        @* ── Tab content ───────────────────────────────────────────────────────── *@
+        <div class="resp-viewer__content">
+
+            @if (_activeTab == "GraphQL Errors")
+            {
+                <div class="resp-viewer__gql-errors">
+                    @if (Result.GraphQlErrors is { Count: > 0 })
+                    {
+                        @foreach (var err in Result.GraphQlErrors)
+                        {
+                            <div class="resp-viewer__gql-error-item">
+                                <div class="resp-viewer__gql-error-msg">@err.Message</div>
+                                @if (err.Path is { Count: > 0 })
+                                {
+                                    <div class="resp-viewer__gql-error-path">
+                                        Path: @string.Join(" → ", err.Path)
+                                    </div>
+                                }
+                                @if (err.Locations is { Count: > 0 })
+                                {
+                                    <div class="resp-viewer__gql-error-locations">
+                                        @foreach (var loc in err.Locations)
+                                        {
+                                            <span class="resp-viewer__gql-error-loc">Line @loc.Line, Column @loc.Column</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            }
+            else if (_activeTab == "Body")
+            {
+                @if (Result.ResponseBody is null && Result.ResponseBodyBytes is null)
+                {
+                    <div class="resp-viewer__empty-body">No response body.</div>
+                }
+                else
+                {
+                    <div class="resp-viewer__body-toolbar">
+                        <span class="resp-viewer__content-type">@(Result.ContentType ?? "unknown")</span>
+                        <div class="resp-viewer__body-actions">
+                            <button type="button" class="resp-viewer__copy-btn" @onclick="() => OnSaveExample.InvokeAsync(Result)"
+                                    title="Save response example">
+                                Save example
+                            </button>
+                            <button type="button" class="resp-viewer__copy-btn" @onclick="CopyBodyAsync" title="Copy response body">
+                                @(_copied ? "Copied" : "Copy")
+                            </button>
+                        </div>
+                    </div>
+                    <pre class="resp-viewer__body-pre">@GetDisplayBody()</pre>
+                    @if (IsBodyDisplayTruncated)
+                    {
+                        <div class="resp-viewer__display-truncation">
+                            <span>Showing first 500 KB.</span>
+                            <button type="button" class="resp-viewer__load-full-btn" @onclick="() => _showFullBody = true">
+                                Load full response (@FormatSize(System.Text.Encoding.UTF8.GetByteCount(Result.ResponseBody!)))
+                            </button>
+                        </div>
+                    }
+                }
+            }
+            else if (_activeTab == "Headers")
+            {
+                @if (!Result.ResponseHeaders.Any())
+                {
+                    <div class="resp-viewer__empty-body">No response headers.</div>
+                }
+                else
+                {
+                    <div class="resp-viewer__headers-list">
+                        @foreach (var (name, value) in Result.ResponseHeaders.OrderBy(h => h.Name))
+                        {
+                            <div class="resp-viewer__header-row">
+                                <span class="resp-viewer__header-name">@name</span>
+                                <span class="resp-viewer__header-value">@value</span>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else if (_activeTab == "Raw")
+            {
+                <pre class="resp-viewer__raw-pre">@BuildRaw()</pre>
+            }
+
+        </div>
+    }
+
+</div>
+
+@code {
+    [Parameter] public HttpRequestResult? Result { get; set; }
+    [Parameter] public ICollection<GraphQlSubscriptionMessage> SubscriptionMessages { get; set; } = [];
+    [Parameter] public IReadOnlyList<HttpRequestResult> HistoryEntries { get; set; } = [];
+    [Parameter] public IReadOnlyList<ResponseExample> ResponseExamples { get; set; } = [];
+    [Parameter] public EventCallback<HttpRequestResult> OnResend { get; set; }
+    [Parameter] public EventCallback<HttpRequestResult> OnSaveExample { get; set; }
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private string _activeTab = "Body";
+    private bool _copied;
+    private bool _showFullBody;
+
+    /// <summary>Display limit for the body viewer (500 KB).</summary>
+    private const int DisplayBodyMaxBytes = 500 * 1024;
+
+    private static readonly System.Text.Json.JsonSerializerOptions PrettyJsonOptions = new()
+    {
+        WriteIndented = true,
+    };
+
+    // Reset to Body tab when the result changes
+    private HttpRequestResult? _lastResult;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_lastResult, Result))
+        {
+            _lastResult = Result;
+            // Auto-switch to GraphQL Errors tab when the response contains errors
+            _activeTab = Result?.GraphQlErrors is { Count: > 0 } ? "GraphQL Errors" : "Body";
+            _copied = false;
+            _showFullBody = false;
+        }
+    }
+
+    private bool IsBodyDisplayTruncated =>
+        !_showFullBody &&
+        Result?.ResponseBody is not null &&
+        System.Text.Encoding.UTF8.GetByteCount(Result.ResponseBody) > DisplayBodyMaxBytes;
+
+    private async Task CopyBodyAsync()
+    {
+        var body = GetDisplayBody();
+        if (string.IsNullOrEmpty(body)) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", body);
+            _copied = true;
+            await InvokeAsync(StateHasChanged); // BL-2
+            await Task.Delay(1500);
+            _copied = false;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        catch { /* clipboard access may fail in some WebView contexts */ }
+    }
+
+    private string? GetDisplayBody()
+    {
+        if (Result?.ResponseBody is null) return null;
+
+        var body = Result.ResponseBody;
+
+        // Apply 500 KB display cap unless the user has requested the full body
+        if (!_showFullBody)
+        {
+            var bytes = System.Text.Encoding.UTF8.GetByteCount(body);
+            if (bytes > DisplayBodyMaxBytes)
+            {
+                body = TruncateUtf8Body(body, DisplayBodyMaxBytes);
+            }
+        }
+
+        // Pretty-print JSON if applicable
+        if (Result.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            try
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(body);
+                return System.Text.Json.JsonSerializer.Serialize(doc, PrettyJsonOptions);
+            }
+            catch { /* not valid JSON — return as-is */ }
+        }
+
+        return body;
+    }
+
+    private string BuildRaw()
+    {
+        if (Result is null) return string.Empty;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"{Result.Method} {Result.ResolvedUrl}");
+        sb.AppendLine($"HTTP/1.1 {Result.StatusText}");
+        foreach (var (name, value) in Result.ResponseHeaders)
+            sb.AppendLine($"{name}: {value}");
+        sb.AppendLine();
+        if (Result.ResponseBody is not null)
+            sb.Append(Result.ResponseBody);
+        return sb.ToString();
+    }
+
+    private static string StatusClass(int code) => code switch
+    {
+        >= 200 and < 300 => "ok",
+        >= 300 and < 400 => "redirect",
+        >= 400 and < 500 => "client-error",
+        >= 500 => "server-error",
+        _ => "unknown",
+    };
+
+    private static string FormatElapsed(TimeSpan t)
+    {
+        if (t.TotalSeconds >= 1) return $"{t.TotalSeconds:F2} s";
+        return $"{t.TotalMilliseconds:F0} ms";
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    private static string PrettyPrintJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return json;
+        try
+        {
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            return System.Text.Json.JsonSerializer.Serialize(doc, PrettyJsonOptions);
+        }
+        catch { return json; }
+    }
+
+    private static string TruncateUtf8Body(string value, int maxBytes)
+    {
+        var low = 0;
+        var high = value.Length;
+
+        while (low < high)
+        {
+            var mid = low + ((high - low + 1) / 2);
+            var byteCount = System.Text.Encoding.UTF8.GetByteCount(value.AsSpan(0, mid));
+            if (byteCount <= maxBytes)
+            {
+                low = mid;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        return value[..low];
+    }
+}

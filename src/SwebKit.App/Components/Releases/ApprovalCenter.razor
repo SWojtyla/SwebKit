@@ -5,19 +5,22 @@
 <div class="approval-center">
 
     @* ── Toolbar ── *@
-    <div class="approval-toolbar">
-        <div class="filter-select-wrap">
-            <select class="filter-select" @bind="_filterProject">
-                <option value="">All Projects</option>
-                @foreach (var p in _projects)
-                {
-                    <option value="@p">@p</option>
-                }
-            </select>
-        </div>
-        <FluentButton Appearance="Appearance.Lightweight" @onclick="LoadAsync">Refresh</FluentButton>
-        <AutoRefreshToggle OnRefresh="LoadAsync" />
-    </div>
+    <PageToolbar CssClass="approval-toolbar" Wrap="true">
+        <LeadingContent>
+            <div class="filter-select-wrap">
+                <AppSelect CssClass="filter-select" Value="@_filterProject"
+                           ValueChanged="value => _filterProject = value ?? string.Empty">
+                    <option value="">All Projects</option>
+                    @foreach (var p in _projects)
+                    {
+                        <option value="@p">@p</option>
+                    }
+                </AppSelect>
+            </div>
+            <FluentButton Appearance="Appearance.Lightweight" @onclick="LoadAsync">Refresh</FluentButton>
+            <AutoRefreshToggle OnRefresh="LoadAsync" />
+        </LeadingContent>
+    </PageToolbar>
 
     @* ── Content ── *@
     @if (_isLoading)

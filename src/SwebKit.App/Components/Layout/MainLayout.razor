@@ -77,6 +77,10 @@
     private bool IsNavExpanded = true;
     private bool IsCommandPaletteOpen;
     private bool _isShortcutsPanelOpen;
+    // Tracks whether the nav was expanded before the API client auto-collapsed it, so it can be restored on exit.
+    private bool _navExpandedBeforeApiClient = true;
+    // True when the user explicitly toggled the nav (so auto-restore is suppressed if they collapsed it themselves).
+    private bool _userToggledNavInApiClient;
     private DotNetObjectReference<MainLayout>? _jsRef;
     private string _currentTheme = "dark-studio-ledger";
     private ShellNavEntry _currentRoute = ShellNavigation.Dashboard;
@@ -272,6 +276,9 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
     private Task ToggleNavAsync()
     {
         IsNavExpanded = !IsNavExpanded;
+        // Track manual toggles while in the API client so we don't override the user's intent on exit
+        if (string.Equals(CurrentArea, "api-client", StringComparison.OrdinalIgnoreCase))
+            _userToggledNavInApiClient = true;
         RequestRender();
         return InvokeAsync(StateHasChanged);
     }
@@ -285,10 +292,32 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
+        var previousArea = _currentRoute.Area;
         UpdateCurrentRoute(e.Location);
+        var newArea = _currentRoute.Area;
+
+        // Auto-collapse the global nav when entering the API client (DEC-5)
+        var enteringApiClient = string.Equals(newArea, "api-client", StringComparison.OrdinalIgnoreCase);
+        var leavingApiClient = string.Equals(previousArea, "api-client", StringComparison.OrdinalIgnoreCase);
+
+        if (enteringApiClient && !string.Equals(previousArea, "api-client", StringComparison.OrdinalIgnoreCase))
+        {
+            _navExpandedBeforeApiClient = IsNavExpanded;
+            _userToggledNavInApiClient = false;
+            IsNavExpanded = false;
+        }
+        else if (leavingApiClient && !_userToggledNavInApiClient)
+        {
+            // Restore the expansion state the user had before entering the API client
+            IsNavExpanded = _navExpandedBeforeApiClient;
+        }
+
         _pendingNavigationArea = _currentRoute.Area;
         _pendingNavigationStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        RequestCoalescedRender();
+        // Use eager render for route changes so the TopBar context updates immediately,
+        // bypassing the coalescing gate that would defer the update until any pending render fires.
+        RequestRender();
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void OnCommandPaletteRequested(CommandPaletteRequestedEvent _) =>
@@ -391,6 +420,15 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
             Icon = "⚙",
             Shortcut = "Ctrl+,",
             Execute = () => { NavigateTo("settings"); return Task.CompletedTask; }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "navigate-api-client",
+            Label = "Go to API Client",
+            Category = "Navigation",
+            Icon = "🌐",
+            Execute = () => { NavigateTo("api-client"); return Task.CompletedTask; }
         });
 
         Commands.Register(new AppCommand
@@ -580,6 +618,9 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
             case "SbReplay": Events.Publish(new ServiceBusShortcutEvent("Replay")); break;
             case "SbSchedule": Events.Publish(new ServiceBusShortcutEvent("Schedule")); break;
             case "SbPeek": Events.Publish(new ServiceBusShortcutEvent("Peek")); break;
+            case "ApiNewRequest": Events.Publish(new ApiClientShortcutEvent("NewRequest")); break;
+            case "ApiNewCollection": Events.Publish(new ApiClientShortcutEvent("NewCollection")); break;
+            case "ApiEnvManager": Events.Publish(new ApiClientShortcutEvent("EnvManager")); break;
         }
         RequestRender();
         await InvokeAsync(StateHasChanged);

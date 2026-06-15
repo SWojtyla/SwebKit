@@ -6,6 +6,7 @@ using SwebKit.App.Services;
 using SwebKit.Azure.ServiceBus;
 using SwebKit.Azure.Storage;
 using SwebKit.Azure.ServiceBus.IncidentTimeline;
+using SwebKit.Azure;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
@@ -53,6 +54,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<ScheduledMessageRepository>();
         builder.Services.AddSingleton<AppStateService>();
         builder.Services.AddSingleton<ConfigurationBundleService>();
+        builder.Services.AddSingleton<CollectionRepository>();
+        builder.Services.AddSingleton<EnvironmentRepository>();
+        builder.Services.AddSingleton<LinkedCollectionRootRepository>();
         builder.Services.AddSingleton<IConfigurationHealthService, ConfigurationHealthService>();
         builder.Services.AddSingleton<IConfigurationProbeService, ConfigurationProbeService>();
 
@@ -79,15 +83,30 @@ public static class MauiProgram
         builder.Services.AddSingleton<IOperatorResourceSearchProvider, IncidentTimelineSearchProvider>();
         builder.Services.AddSingleton<TrayLifecycleState>();
 
-        // Pod Health Monitor
 #if WINDOWS
         builder.Services.AddSingleton<IWindowsNotificationService, WindowsToastNotificationService>();
         builder.Services.AddSingleton<ITrayLifecycleService, WindowsTrayLifecycleService>();
+        builder.Services.AddSingleton<IFolderPickerService, WindowsFolderPickerService>();
 #else
         builder.Services.AddSingleton<IWindowsNotificationService, NullWindowsNotificationService>();
         builder.Services.AddSingleton<ITrayLifecycleService, NullTrayLifecycleService>();
 #endif
-        builder.Services.AddSingleton<IPodHealthMonitorService, PodHealthMonitorService>();
+
+        // Alert Monitor (replaces PodHealthMonitorService)
+        builder.Services.AddSingleton<IMonitoringConnectionPool, MonitoringConnectionPool>();
+        builder.Services.AddSingleton<IAlertRuleRepository, AlertRuleRepository>();
+        builder.Services.AddSingleton<IAlertSignalSource, AksPodHealthSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, AksPodRestartRateSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, AksNamespaceHealthScoreSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, ServiceBusDlqSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, ServiceBusActiveDepthSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, ServiceBusDeadSubscriptionSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, RedisMemorySignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, RedisConnectedClientsSignalSource>();
+        builder.Services.AddSingleton<IAlertMonitorService, AlertMonitorService>();
+        builder.Services.AddSingleton<MonitoringMigrationService>();
+        // Null stub retains DashboardPage + legacy AKS sub-component DI compatibility
+        builder.Services.AddSingleton<IPodHealthMonitorService, NullPodHealthMonitorService>();
 
         // Demo clients (singletons; pages select real vs. demo based on AppStateService.UseDemoData)
         builder.Services.AddSingleton<DemoAksClient>();
@@ -128,6 +147,65 @@ public static class MauiProgram
         builder.Services.AddSingleton<PipelineFailureClassifier>();
         builder.Services.AddSingleton<RuntimeDriftService>();
         builder.Services.AddSingleton<DeploymentValidationService>();
+
+        // API Client — variable substitution and HTTP execution
+        builder.Services.AddSingleton<IVariableGeneratorService, VariableGeneratorService>();
+        builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
+        builder.Services.AddSingleton<IVariablePreviewService, VariablePreviewService>();
+        builder.Services.AddSingleton<ApiClientWorkflowService>();
+        builder.Services.AddSingleton<IRequestBodyFormatter, RequestBodyFormatter>();
+        builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
+        builder.Services.AddSingleton<IKeyVaultSecretResolver>(sp =>
+        {
+            var config = sp.GetRequiredService<AppStateService>().Config;
+
+            // Multi-vault takes precedence; fall back to legacy single KeyVaultUrl for existing configs.
+            if (config.KeyVaults.Count > 0)
+                return new MultiVaultKeyVaultSecretResolver(
+                    config.KeyVaults,
+                    sp.GetRequiredService<ILogger<MultiVaultKeyVaultSecretResolver>>());
+
+#pragma warning disable CS0618 // KeyVaultUrl obsolete — backward-compat path
+            if (!string.IsNullOrWhiteSpace(config.KeyVaultUrl))
+                return new AzureKeyVaultSecretResolver(
+                    config.KeyVaultUrl,
+                    sp.GetRequiredService<ILogger<AzureKeyVaultSecretResolver>>());
+#pragma warning restore CS0618
+
+            return new NoopKeyVaultSecretResolver();
+        });
+        builder.Services.AddTransient<IHttpRequestExecutor, HttpRequestExecutor>();
+        builder.Services.AddSingleton<IOAuth2TokenManager, OAuth2TokenManager>();
+        builder.Services.AddSingleton<IAuthHeaderBuilder, AuthHeaderBuilder>();
+        builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();
+        builder.Services.AddSingleton<IGraphQlSchemaService, GraphQlSchemaService>();
+        builder.Services.AddTransient<IGraphQlSubscriptionService, GraphQlSubscriptionService>();
+        builder.Services.AddTransient<IWebSocketClientService, WebSocketClientService>();
+        builder.Services.AddSingleton<LinkedGitService>();
+        builder.Services.AddSingleton<LinkedCollectionFileService>();
+
+        // API Client — export/import
+        builder.Services.AddSingleton<SwebKitCollectionExporter>();
+        builder.Services.AddSingleton<SwebKitCollectionImporter>();
+        builder.Services.AddSingleton<SwebKitEnvironmentImporter>();
+        builder.Services.AddSingleton<PostmanCollectionExporter>();
+        builder.Services.AddSingleton<PostmanCollectionImporter>();
+        builder.Services.AddSingleton<BrunoCollectionExporter>();
+        builder.Services.AddSingleton<BrunoFolderImporter>();
+        builder.Services.AddSingleton<CollectionImportService>();
+        builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+            {
+                var settings = sp.GetRequiredService<UserSettingsRepository>().Settings;
+                return new HttpClientHandler
+                {
+                    AllowAutoRedirect = true,
+                    ServerCertificateCustomValidationCallback =
+                        settings.VerifyApiClientSsl
+                            ? null
+                            : (_, _, _, _) => true,
+                };
+            });
 
         // Connection warmup
         builder.Services.AddSingleton<IAksWarmupCache, AksWarmupCache>();

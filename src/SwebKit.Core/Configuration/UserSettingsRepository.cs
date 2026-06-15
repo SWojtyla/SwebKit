@@ -63,6 +63,14 @@ public sealed class UserSettings
     public string Theme { get; set; } = string.Empty;
     public bool WarmupConnectionsOnStartup { get; set; } = true;
     public Dictionary<string, List<PinnedPortForwardEntry>> PinnedPortForwards { get; set; } = [];
+    /// <summary>When true, request edits are persisted automatically after a 500 ms debounce.</summary>
+    public bool AutoSaveRequests { get; set; } = false;
+
+    /// <summary>
+    /// When <c>false</c>, SSL certificate verification is skipped for the API client HTTP requests.
+    /// Should only be disabled in development environments. Exposed with a visible warning badge in the UI.
+    /// </summary>
+    public bool VerifyApiClientSsl { get; set; } = true;
 }
 
 public sealed record PinnedPortForwardEntry(

@@ -1,21 +1,26 @@
 @implements IDisposable
 
 <div class="auto-refresh-toggle">
-    <button class="auto-refresh-btn @(IsActive ? "active" : "")" @onclick="Toggle"
-            title="@(IsActive ? $"Auto-refresh every {IntervalSeconds}s" : "Auto-refresh off")">
+    <AppButton CssClass="@($"auto-refresh-btn {(IsActive ? "active" : string.Empty)}")"
+               Size="Small"
+               Variant="Secondary"
+               OnClick="Toggle"
+               Title="@(IsActive ? $"Auto-refresh every {IntervalSeconds}s" : "Auto-refresh off")">
         @if (IsActive)
         {
             <span class="auto-refresh-dot"></span>
         }
         <span>Auto</span>
-    </button>
+    </AppButton>
     @if (IsActive)
     {
-        <select class="auto-refresh-select app-native-control app-native-select" value="@IntervalSeconds" @onchange="OnIntervalChanged">
+        <AppSelect CssClass="auto-refresh-select app-native-control app-native-select"
+                   Value="@IntervalSeconds.ToString()"
+                   ValueChanged="OnIntervalValueChanged">
             <option value="10">10s</option>
             <option value="30">30s</option>
             <option value="60">60s</option>
-        </select>
+        </AppSelect>
     }
 </div>
 
@@ -56,12 +61,15 @@
         StateHasChanged();
     }
 
-    private void OnIntervalChanged(ChangeEventArgs e)
+    private Task OnIntervalValueChanged(string? value) =>
+        OnIntervalChanged(new ChangeEventArgs { Value = value });
+
+    private async Task OnIntervalChanged(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out var val))
         {
             IntervalSeconds = val;
-            IntervalChanged.InvokeAsync(val);
+            await IntervalChanged.InvokeAsync(val);
             if (IsActive)
             {
                 StopTimer();

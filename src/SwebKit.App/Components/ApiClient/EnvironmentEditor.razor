@@ -1,0 +1,171 @@
+@* EnvironmentEditor — edits name and variables of one ApiEnvironment *@
+@inject AppStateService AppState
+
+<div class="env-editor">
+    <div class="env-editor__name-row">
+        <input type="text" class="env-editor__name-input" placeholder="Environment name" value="@Environment.Name"
+               @oninput="e => Environment.Name = e.Value?.ToString() ?? string.Empty" />
+    </div>
+
+    <div class="env-editor__vars-header">
+        <span class="env-editor__col-label">KEY</span>
+        <span class="env-editor__col-label">TYPE</span>
+        <span class="env-editor__col-label">VALUE / SECRET KEY</span>
+        <span></span>
+    </div>
+
+    @foreach (var v in Environment.Variables)
+    {
+        <div class="env-editor__var-row">
+            <input type="checkbox" class="env-editor__var-enabled" checked="@v.IsEnabled"
+                   @onchange="e => v.IsEnabled = (bool)(e.Value ?? true)" />
+            <input type="text" class="env-editor__var-key" placeholder="key" value="@v.Key"
+                   @oninput="e => v.Key = e.Value?.ToString() ?? string.Empty" />
+            <div class="env-editor__type-picker">
+                <button type="button" class="env-editor__type-btn" @onclick="() => ToggleTypePicker(v)">
+                    <span>@GetTypeLabel(v.SecretSource)</span>
+                    <span class="env-editor__type-chevron">▾</span>
+                </button>
+                @if (_openTypePickerVar == v)
+                {
+                    <div class="ctx-backdrop" @onclick="() => _openTypePickerVar = null"></div>
+                    <div class="env-editor__type-dropdown">
+                        @foreach (var src in Enum.GetValues<EnvironmentVariableSecretSource>())
+                        {
+                            <button type="button" class="ctx-item @(v.SecretSource == src ? "ctx-item--active" : "")"
+                                    @onclick="() => SelectType(v, src)">
+                                @GetTypeLabel(src)
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+            @if (v.SecretSource == EnvironmentVariableSecretSource.Plain)
+            {
+                <input type="text" class="env-editor__var-value" placeholder="value" value="@v.Value"
+                       @oninput="e => v.Value = e.Value?.ToString()" />
+            }
+            else if (v.SecretSource == EnvironmentVariableSecretSource.AzureKeyVault)
+            {
+                <div class="env-editor__kv-fields">
+                    @{
+                        var vaults = AppState.Config.KeyVaults;
+                    }
+                    @if (vaults.Count == 0)
+                    {
+                        <span class="env-editor__kv-no-vaults">No Key Vaults configured — add one in Settings → API Client</span>
+                    }
+                    else
+                    {
+                        <div class="env-editor__kv-vault-picker">
+                            <button type="button" class="env-editor__type-btn" @onclick="() => ToggleVaultPicker(v)">
+                                <span>@(string.IsNullOrWhiteSpace(v.KeyVaultName) ? "— select vault —" : v.KeyVaultName)</span>
+                                <span class="env-editor__type-chevron">▾</span>
+                            </button>
+                            @if (_openVaultPickerVar == v)
+                            {
+                                <div class="ctx-backdrop" @onclick="() => _openVaultPickerVar = null"></div>
+                                <div class="env-editor__type-dropdown">
+                                    @foreach (var kv in vaults)
+                                    {
+                                        <button type="button" class="ctx-item @(v.KeyVaultName == kv.Name ? "ctx-item--active" : "")"
+                                                @onclick="() => SelectVault(v, kv.Name)">
+                                            @kv.Name
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    <input type="text" class="env-editor__var-value env-editor__var-value--secret" placeholder="secret name"
+                           value="@v.CredentialKey" @oninput="e => v.CredentialKey = e.Value?.ToString()" />
+                </div>
+            }
+            else if (v.SecretSource == EnvironmentVariableSecretSource.Generated)
+            {
+                <VariableGeneratorEditor Definition="@(EnsureGenerator(v))" />
+            }
+            else
+            {
+                <input type="text" class="env-editor__var-value env-editor__var-value--secret" placeholder="Credential key"
+                       value="@v.CredentialKey" @oninput="e => v.CredentialKey = e.Value?.ToString()" />
+            }
+            <button type="button" class="env-editor__var-delete" title="Remove"
+                    @onclick="() => RemoveVariable(v)">×</button>
+        </div>
+    }
+
+    <button type="button" class="env-editor__add-var-btn" @onclick="AddVariable">+ Add Variable</button>
+
+    <div class="env-editor__actions">
+        <button type="button" class="env-editor__btn env-editor__btn--primary" @onclick="SaveAsync">Save</button>
+        <button type="button" class="env-editor__btn" @onclick="() => OnCancelled.InvokeAsync()">Cancel</button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ApiEnvironment Environment { get; set; } = null!;
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnCancelled { get; set; }
+
+    private EnvironmentVariable? _openTypePickerVar;
+    private EnvironmentVariable? _openVaultPickerVar;
+
+    private void ToggleTypePicker(EnvironmentVariable v) =>
+        _openTypePickerVar = _openTypePickerVar == v ? null : v;
+
+    private void SelectType(EnvironmentVariable v, EnvironmentVariableSecretSource src)
+    {
+        v.SecretSource = src;
+        if (src == EnvironmentVariableSecretSource.Generated)
+        {
+            v.Generator ??= new VariableGeneratorDefinition();
+            v.Value = null;
+            v.CredentialKey = null;
+            v.KeyVaultName = null;
+        }
+        else
+        {
+            v.Generator = null;
+        }
+        _openTypePickerVar = null;
+    }
+
+    private void ToggleVaultPicker(EnvironmentVariable v) =>
+        _openVaultPickerVar = _openVaultPickerVar == v ? null : v;
+
+    private void SelectVault(EnvironmentVariable v, string vaultName)
+    {
+        v.KeyVaultName = vaultName;
+        _openVaultPickerVar = null;
+    }
+
+    private static string GetTypeLabel(EnvironmentVariableSecretSource src) => src switch
+    {
+        EnvironmentVariableSecretSource.Plain => "Plain",
+        EnvironmentVariableSecretSource.WindowsCredentialStore => "Secret Store",
+        EnvironmentVariableSecretSource.AzureKeyVault => "Key Vault",
+        EnvironmentVariableSecretSource.Generated => "Generated",
+        _ => src.ToString(),
+    };
+
+    private static VariableGeneratorDefinition EnsureGenerator(EnvironmentVariable variable) =>
+        variable.Generator ??= new VariableGeneratorDefinition();
+
+    private void AddVariable()
+    {
+        Environment.Variables.Add(new EnvironmentVariable { IsEnabled = true });
+    }
+
+    private void RemoveVariable(EnvironmentVariable v)
+    {
+        Environment.Variables.Remove(v);
+    }
+
+    private async Task SaveAsync()
+    {
+        // Remove blank rows before saving
+        Environment.Variables.RemoveAll(v => string.IsNullOrWhiteSpace(v.Key));
+        await OnSaved.InvokeAsync();
+    }
+}

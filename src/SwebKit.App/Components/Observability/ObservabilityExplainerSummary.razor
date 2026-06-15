@@ -34,7 +34,8 @@ else
         }
         @if (OnInvestigate.HasDelegate && Summary.HasAnomalies)
         {
-            <button class="page-header-action-btn" type="button" @onclick="OnInvestigate">Investigate</button>
+            <AppButton CssClass="page-header-action-btn" Type="button" OnClick="@(() => OnInvestigate.InvokeAsync())"
+                       Size="Small" Variant="Secondary">Investigate</AppButton>
         }
     </div>
 }

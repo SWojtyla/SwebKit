@@ -1,0 +1,54 @@
+<span @attributes="AdditionalAttributes" class="@BadgeClass" title="@Title">
+    @if (Dot)
+    {
+        <span class="app-status-badge__dot" aria-hidden="true"></span>
+    }
+    <span class="app-status-badge__content">@ChildContent</span>
+</span>
+
+@code {
+    [Parameter] public string Variant { get; set; } = "Neutral";
+    [Parameter] public string Size { get; set; } = "Medium";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool Dot { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string BadgeClass
+    {
+        get
+        {
+            var variant = NormalizeVariant(Variant);
+            var size = NormalizeSize(Size);
+            var classes = string.Join(' ', new[]
+            {
+                "app-status-badge",
+                $"app-status-badge--{variant}",
+                $"app-status-badge--{size}",
+                Dot ? "app-status-badge--with-dot" : null,
+                CssClass
+            }.Where(static cssClass => !string.IsNullOrWhiteSpace(cssClass)));
+
+            return classes;
+        }
+    }
+
+    private static string NormalizeVariant(string? variant)
+        => variant?.Trim().ToLowerInvariant() switch
+        {
+            "accent" => "accent",
+            "success" => "success",
+            "warning" => "warning",
+            "danger" => "danger",
+            "production" => "production",
+            _ => "neutral"
+        };
+
+    private static string NormalizeSize(string? size)
+        => size?.Trim().ToLowerInvariant() switch
+        {
+            "small" => "small",
+            _ => "medium"
+        };
+}

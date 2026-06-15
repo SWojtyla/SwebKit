@@ -18,6 +18,8 @@ public sealed class ConfigurationBundleService
     private readonly ReleaseRepository _releases;
     private readonly ScheduledMessageRepository _scheduledMessages;
     private readonly AppStateService _appState;
+    private readonly CollectionRepository _collections;
+    private readonly EnvironmentRepository _environments;
 
     public ConfigurationBundleService(
         ProfileRepository profiles,
@@ -25,7 +27,9 @@ public sealed class ConfigurationBundleService
         UserSettingsRepository userSettings,
         ReleaseRepository releases,
         ScheduledMessageRepository scheduledMessages,
-        AppStateService appState)
+        AppStateService appState,
+        CollectionRepository collections,
+        EnvironmentRepository environments)
     {
         _profiles = profiles;
         _uiState = uiState;
@@ -33,6 +37,8 @@ public sealed class ConfigurationBundleService
         _releases = releases;
         _scheduledMessages = scheduledMessages;
         _appState = appState;
+        _collections = collections;
+        _environments = environments;
     }
 
     public ConfigurationBundle Export()
@@ -45,7 +51,18 @@ public sealed class ConfigurationBundleService
             UiState = Clone(_uiState.GetState()) ?? new(),
             UserSettings = Clone(_userSettings.Settings) ?? new(),
             Releases = Clone(_releases.GetStoreData()) ?? new(),
-            ScheduledMessages = Clone(_scheduledMessages.GetEntries().ToList()) ?? []
+            ScheduledMessages = Clone(_scheduledMessages.GetEntries().ToList()) ?? [],
+            CollectionsData = Clone(new SwebKit.Core.Domain.CollectionsStore
+            {
+                SchemaVersion = 1,
+                Collections = _collections.Collections.ToList(),
+            }),
+            EnvironmentsData = Clone(new SwebKit.Core.Domain.EnvironmentsStore
+            {
+                SchemaVersion = 1,
+                Environments = _environments.Environments.ToList(),
+                UiState = _environments.UiState,
+            }),
         };
     }
 
@@ -76,6 +93,13 @@ public sealed class ConfigurationBundleService
         await _userSettings.ImportAsync(bundle.UserSettings ?? new());
         await _releases.ImportAsync(bundle.Releases ?? new());
         await _scheduledMessages.ImportAsync(bundle.ScheduledMessages ?? []);
+
+        // API client data — only restore when present (backward-compatible)
+        if (bundle.CollectionsData is not null)
+            await _collections.ReplaceStoreAsync(bundle.CollectionsData);
+        if (bundle.EnvironmentsData is not null)
+            await _environments.ReplaceStoreAsync(bundle.EnvironmentsData);
+
         _appState.RefreshFromImportedState();
     }
 

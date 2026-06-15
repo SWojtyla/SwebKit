@@ -4,33 +4,42 @@
     gap: var(--spacing-xs);
 }
 
-.auto-refresh-btn {
+.auto-refresh-toggle ::deep .auto-refresh-btn {
     display: flex;
     align-items: center;
     gap: 5px;
     padding: 3px 10px;
+    min-height: 0;
     background: transparent;
     color: var(--color-text-muted);
     border: 1px solid var(--color-border);
     border-radius: 4px;
     font-size: var(--font-size-sm);
+    line-height: normal;
+    box-shadow: none;
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.15s;
 }
 
-.auto-refresh-btn:hover {
+.auto-refresh-toggle ::deep .auto-refresh-btn .app-button__content {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.auto-refresh-toggle ::deep .auto-refresh-btn:hover {
     color: var(--color-text);
     background: var(--color-surface-2);
 }
 
-.auto-refresh-btn.active {
+.auto-refresh-toggle ::deep .auto-refresh-btn.active {
     color: var(--color-success);
     border-color: var(--color-success);
     background: rgba(67, 160, 71, 0.06);
 }
 
-.auto-refresh-dot {
+.auto-refresh-toggle ::deep .auto-refresh-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
@@ -43,17 +52,23 @@
     50% { opacity: 0.3; }
 }
 
-.auto-refresh-select {
+.auto-refresh-toggle ::deep .auto-refresh-select {
     padding: 2px var(--spacing-xs);
     background: var(--color-bg);
     color: var(--color-text);
     border: 1px solid var(--color-border);
     border-radius: 4px;
     font-size: var(--font-size-sm);
+    min-height: 0;
+    width: auto;
+    box-shadow: none;
     outline: none;
     cursor: pointer;
 }
 
-.auto-refresh-select:focus {
+.auto-refresh-toggle ::deep .auto-refresh-select:focus,
+.auto-refresh-toggle ::deep .auto-refresh-select:focus-visible {
+    outline: none;
     border-color: var(--color-accent);
+    box-shadow: none;
 }

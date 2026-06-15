@@ -10,4 +10,5 @@ namespace SwebKit.App.Services;
 internal sealed class NullWindowsNotificationService : IWindowsNotificationService
 {
     public void ShowPodAlert(PodHealthEvent evt) { }
+    public void ShowAlert(AlertFiredEvent evt) { }
 }
