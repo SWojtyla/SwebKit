@@ -3,6 +3,7 @@
 @inject PostmanCollectionExporter PostmanExporter
 @inject BrunoCollectionExporter BrunoExporter
 @inject CollectionImportService ImportService
+@inject IFolderPickerService FolderPicker
 @inject IJSRuntime JS
 @inject ILogger<CollectionExportDialog> Logger
 
@@ -75,24 +76,30 @@
         @* ────────────────── IMPORT ──────────────────────────────────────── *@
         @if (_activeTab == "import")
         {
-            <div class="col-export-dialog__section-title">Collection</div>
+            @* ── Bruno folder ── *@
+            <div class="col-export-dialog__section-title">Bruno</div>
+            <div class="col-export-dialog__file-row">
+                <span class="col-export-dialog__file-name">@(_importBrunoFolderPath ?? "No folder selected")</span>
+                <button type="button" class="col-export-dialog__btn" @onclick="PickBrunoFolderAsync">
+                    Choose Folder…
+                </button>
+            </div>
+            <div class="col-export-dialog__note">
+                Select the root Bruno collection folder (the one containing <code>bruno.json</code>).
+                Requests, sub-folders, and environments are all imported at once.
+            </div>
+
+            @* ── SwebKit / Postman file ── *@
+            <div class="col-export-dialog__section-title col-export-dialog__section-title--gap">
+                SwebKit or Postman
+            </div>
             <div class="col-export-dialog__file-row">
                 <span class="col-export-dialog__file-name">@(_importFileName ?? "No file selected")</span>
                 <button type="button" class="col-export-dialog__btn" @onclick="PickImportFileAsync">
                     Choose File…
                 </button>
             </div>
-            <div class="col-export-dialog__note">Supports: SwebKit JSON, Postman v2.1</div>
-
-            <div class="col-export-dialog__section-title col-export-dialog__section-title--gap">
-                Standalone Environment
-            </div>
-            <div class="col-export-dialog__file-row">
-                <span class="col-export-dialog__file-name">@(_importEnvFileName ?? "No file selected (optional)")</span>
-                <button type="button" class="col-export-dialog__btn" @onclick="PickImportEnvFileAsync">
-                    Choose File…
-                </button>
-            </div>
+            <div class="col-export-dialog__note">Supports: SwebKit JSON (.sweb.json), Postman v2.1</div>
 
             @if (_importing)
             {
@@ -147,7 +154,7 @@
                 else
                 {
                     <button type="button" class="col-export-dialog__btn col-export-dialog__btn--primary"
-                            disabled="@(_importPayload is null && _importEnvPayload is null || _importing)" @onclick="ImportAsync">
+                            disabled="@(_importPayload is null && _importBrunoFolderPath is null || _importing)" @onclick="ImportAsync">
                         Import
                     </button>
                     <button type="button" class="col-export-dialog__btn" @onclick="Close">Cancel</button>
@@ -201,8 +208,7 @@
 
     private byte[]? _importPayload;
     private string? _importFileName;
-    private byte[]? _importEnvPayload;
-    private string? _importEnvFileName;
+    private string? _importBrunoFolderPath;
     private bool _importing;
     private CollectionImportResult? _importSummary;
     private string? _importError;
@@ -244,6 +250,24 @@
 
     // ── Import ────────────────────────────────────────────────────────────────
 
+    private async Task PickBrunoFolderAsync()
+    {
+        try
+        {
+            var path = await FolderPicker.PickFolderAsync("Select Bruno collection folder");
+            if (path is null) return;
+            _importBrunoFolderPath = path;
+            // Clear single-file state to avoid ambiguity
+            _importPayload = null;
+            _importFileName = null;
+            _importSummary = null;
+            _importError = null;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _importError = ex.Message; }
+    }
+
     private async Task PickImportFileAsync()
     {
         try
@@ -258,28 +282,8 @@
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms);
             _importPayload = ms.ToArray();
-            _importSummary = null;
-            _importError = null;
-            await InvokeAsync(StateHasChanged); // BL-2
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { _importError = ex.Message; }
-    }
-
-    private async Task PickImportEnvFileAsync()
-    {
-        try
-        {
-            var result = await FilePicker.Default.PickAsync(new PickOptions
-            {
-                PickerTitle = "Select environment file…",
-            });
-            if (result is null) return;
-            _importEnvFileName = result.FileName;
-            using var stream = await result.OpenReadAsync();
-            using var ms = new MemoryStream();
-            await stream.CopyToAsync(ms);
-            _importEnvPayload = ms.ToArray();
+            // Clear Bruno folder selection to avoid ambiguity
+            _importBrunoFolderPath = null;
             _importSummary = null;
             _importError = null;
             await InvokeAsync(StateHasChanged); // BL-2
@@ -298,18 +302,20 @@
         try
         {
             CollectionImportResult? collResult = null;
-            if (_importPayload is not null)
-                collResult = await ImportService.ImportCollectionAsync(_importPayload);
 
-            if (_importEnvPayload is not null)
-                await ImportService.ImportEnvironmentAsync(_importEnvPayload);
+            if (_importBrunoFolderPath is not null)
+            {
+                collResult = await ImportService.ImportBrunoFolderAsync(_importBrunoFolderPath);
+            }
+            else if (_importPayload is not null)
+            {
+                collResult = await ImportService.ImportCollectionAsync(_importPayload);
+            }
 
             if (collResult is not null && (collResult.Collections.Count > 0 || collResult.Warnings.Count > 0))
                 _importSummary = collResult;
             else if (collResult is not null && collResult.Collections.Count == 0)
-                _importError = string.Join("; ", collResult.Warnings.DefaultIfEmpty("No collections found in file."));
-            else
-                _importSummary = new CollectionImportResult(); // env-only import — show Done button
+                _importError = string.Join("; ", collResult.Warnings.DefaultIfEmpty("No collections found."));
 
             await OnImported.InvokeAsync();
         }

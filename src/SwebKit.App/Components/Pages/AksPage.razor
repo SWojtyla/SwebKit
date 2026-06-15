@@ -65,6 +65,10 @@
                 <div class="aks-section-header">
                     <span class="aks-section-title">@ActiveResourceType</span>
                     <span class="aks-section-count">@ActiveResourceCount</span>
+                    @if (_allPodsGreenBanner)
+                    {
+                        <span class="aks-pods-green-banner">🎉 Everything's fine. Suspiciously fine. — SW</span>
+                    }
                 </div>
                 <ResourceFilter Placeholder="@($"Filter {ActiveResourceType.ToLowerInvariant()}…")" Value="@ActiveFilter"
                                 ValueChanged="OnFilterChanged">
@@ -758,6 +762,30 @@ false)
 
     private bool IsProduction => AppState.Config.IsProduction;
 
+    // ── Easter egg: all pods green ────────────────────────────────────────────
+    private bool _allPodsGreenBanner;
+    private System.Timers.Timer? _allPodsGreenTimer;
+
+    private void CheckAllPodsGreen()
+    {
+        var activePods = Pods.Where(p => !IsCompletedPod(p)).ToList();
+        if (activePods.Count == 0) return;
+        if (activePods.All(p => string.Equals(p.Status, "Running", StringComparison.OrdinalIgnoreCase)))
+        {
+            _allPodsGreenBanner = true;
+            _allPodsGreenTimer?.Dispose();
+            _allPodsGreenTimer = new System.Timers.Timer(5000) { AutoReset = false };
+            _allPodsGreenTimer.Elapsed += (_, _) =>
+            {
+                _allPodsGreenTimer?.Dispose();
+                _allPodsGreenTimer = null;
+                _allPodsGreenBanner = false;
+                InvokeAsync(StateHasChanged);
+            };
+            _allPodsGreenTimer.Start();
+        }
+    }
+
     [Parameter] public IAksClient? ClientOverride { get; set; }
 
     private sealed record AksBootstrapSignature(
@@ -1245,6 +1273,7 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
                 await PublishWorkspaceSnapshotAsync(recordRecent: false);
                 IsLoading = false;
                 await InvokeAsync(StateHasChanged); // BL-2
+                CheckAllPodsGreen();
             }
         }
     }

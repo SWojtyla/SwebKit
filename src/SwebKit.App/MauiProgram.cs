@@ -86,6 +86,7 @@ public static class MauiProgram
 #if WINDOWS
         builder.Services.AddSingleton<IWindowsNotificationService, WindowsToastNotificationService>();
         builder.Services.AddSingleton<ITrayLifecycleService, WindowsTrayLifecycleService>();
+        builder.Services.AddSingleton<IFolderPickerService, WindowsFolderPickerService>();
 #else
         builder.Services.AddSingleton<IWindowsNotificationService, NullWindowsNotificationService>();
         builder.Services.AddSingleton<ITrayLifecycleService, NullTrayLifecycleService>();
@@ -190,6 +191,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<PostmanCollectionExporter>();
         builder.Services.AddSingleton<PostmanCollectionImporter>();
         builder.Services.AddSingleton<BrunoCollectionExporter>();
+        builder.Services.AddSingleton<BrunoFolderImporter>();
         builder.Services.AddSingleton<CollectionImportService>();
         builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
             .ConfigurePrimaryHttpMessageHandler(sp =>

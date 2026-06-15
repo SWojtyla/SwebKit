@@ -14,7 +14,8 @@ public sealed class CollectionImportService(
     EnvironmentRepository environmentRepo,
     SwebKitCollectionImporter swebKitImporter,
     PostmanCollectionImporter postmanImporter,
-    SwebKitEnvironmentImporter environmentImporter)
+    SwebKitEnvironmentImporter environmentImporter,
+    BrunoFolderImporter brunoFolderImporter)
 {
     private readonly IReadOnlyList<ICollectionImporter> _importers = [swebKitImporter, postmanImporter];
 
@@ -31,6 +32,35 @@ public sealed class CollectionImportService(
             return new CollectionImportResult { Warnings = ["Unrecognised file format. Supported: SwebKit JSON, Postman v2.1"] };
 
         var result = await importer.ImportAsync(payload, cancellationToken);
+        if (result.Collections.Count == 0)
+            return result;
+
+        var existingNames = collectionRepo.Collections.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingEnvNames = environmentRepo.Environments.Select(e => e.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var collection in result.Collections)
+        {
+            collection.Name = ResolveNameCollision(collection.Name, existingNames);
+            existingNames.Add(collection.Name);
+            await collectionRepo.AddImportedCollectionAsync(collection);
+        }
+
+        foreach (var env in result.Environments)
+        {
+            env.Name = ResolveNameCollision(env.Name, existingEnvNames);
+            existingEnvNames.Add(env.Name);
+            await environmentRepo.AddImportedEnvironmentAsync(env);
+        }
+
+        return result;
+    }
+
+    /// <summary>Imports a Bruno collection from a folder on disk.</summary>
+    public async Task<CollectionImportResult> ImportBrunoFolderAsync(
+        string folderPath,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await brunoFolderImporter.ImportFromFolderAsync(folderPath, cancellationToken);
         if (result.Collections.Count == 0)
             return result;
 

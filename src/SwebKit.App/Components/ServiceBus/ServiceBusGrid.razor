@@ -128,7 +128,7 @@
                                         </button>
                                         <button type="button"
                                                 class="sbg-act sbg-act-dlq @(q.Stats?.DeadLetterMessageCount > 0 ? "sbg-act-dlq-hot" : "")"
-                                                title="Open dead-letter queue for '@q.Name'"
+                                                title="@(q.Stats?.DeadLetterMessageCount == 0 ? "0 dead letters. Sébastien would be proud. 🥳" : $"Open dead-letter queue for '{q.Name}'")"
                                                 @onclick="() => OpenEntity(active, q, true)">
                                             ⚠ DLQ
                                         </button>

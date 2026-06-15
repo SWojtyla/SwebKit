@@ -50,6 +50,17 @@
     font-size: 12px;
 }
 
+.api-client-dialog__path-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.api-client-dialog__path-row .api-client-dialog__input {
+    flex: 1;
+    min-width: 0;
+}
+
 .api-client-dialog__input {
     width: 100%;
     box-sizing: border-box;

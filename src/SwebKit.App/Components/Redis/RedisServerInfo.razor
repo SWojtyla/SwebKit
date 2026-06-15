@@ -12,7 +12,16 @@
             <div class="row"><span>Clients</span><strong>@Info.ConnectedClients</strong></div>
             <div class="row"><span>Memory</span><strong>@Info.UsedMemoryHuman (@Info.UsedMemoryBytes bytes)</strong></div>
             <div class="row"><span>Commands</span><strong>@Info.TotalCommandsProcessed</strong></div>
-            <div class="row"><span>Hit ratio</span><strong>@((Info.KeyspaceHitRatio * 100).ToString("0.##"))%</strong></div>
+            <div class="row">
+                <span>Hit ratio</span>
+                <strong>
+                    @((Info.KeyspaceHitRatio * 100).ToString("0.##"))%
+                    @if (Info.KeyspaceHitRatio >= 0.995)
+                    {
+                        <span title="Perfection. Don't touch anything.">🔥</span>
+                    }
+                </strong>
+            </div>
 
             <table class="table">
                 <thead>

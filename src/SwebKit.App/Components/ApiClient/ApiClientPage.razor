@@ -1,4 +1,5 @@
 @page "/api-client"
+@inject IFolderPickerService FolderPicker
 @inject CollectionRepository CollectionRepo
 @inject EnvironmentRepository EnvironmentRepo
 @inject LinkedCollectionRootRepository LinkedRootRepo
@@ -202,7 +203,7 @@
                                         OnRequestSelected="OnRequestSelectedAsync" OnCollectionSelected="OnCollectionSelectedAsync"
                                         OnAddFolder="OnAddFolderAsync" OnAddRequest="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
                                         OnDeleteNode="OnDeleteNodeAsync" OnLinkedRootSelected="OnLinkedRootSelectedAsync" OnRenameCollection="OnRenameCollectionAsync"
-                                        OnDeleteCollection="OnDeleteCollectionAsync" />
+                                        OnDeleteCollection="OnDeleteCollectionAsync" OnLinkCollectionToRepo="OnLinkCollectionToRepoAsync" />
                     }
                 </div>
 
@@ -535,9 +536,12 @@
                                         </div>
                                         <input type="text" class="api-client-dialog__input" placeholder="Display name (optional)"
                                                value="@_newLinkedRootName" @oninput="e => _newLinkedRootName = e.Value?.ToString() ?? string.Empty" />
-                                        <input type="text" class="api-client-dialog__input" placeholder="Path to Git repo or .swebkit-api folder"
-                                               value="@_newLinkedRootPath" @oninput="e => _newLinkedRootPath = e.Value?.ToString() ?? string.Empty"
-                                               @ref="_newLinkedRootInput" />
+                                        <div class="api-client-dialog__path-row">
+                                            <input type="text" class="api-client-dialog__input" placeholder="Path to Git repo or .swebkit-api folder"
+                                                   value="@_newLinkedRootPath" @oninput="e => _newLinkedRootPath = e.Value?.ToString() ?? string.Empty"
+                                                   @ref="_newLinkedRootInput" />
+                                            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn" OnClick="PickLinkedRootFolderAsync">…</AppButton>
+                                        </div>
                                         @if (_linkedRootError is not null)
                                         {
                                             <div class="api-client-dialog__error">@_linkedRootError</div>
@@ -892,6 +896,28 @@ result.Environments)).ToList();
     {
         _showRepoMenu = false;
         OpenLinkedRootDialog();
+    }
+
+    private void OnLinkCollectionToRepoAsync(string collectionId)
+    {
+        var collection = _collections.FirstOrDefault(c => c.Id == collectionId);
+        _newLinkedRootName = collection?.Name ?? string.Empty;
+        _newLinkedRootPath = string.Empty;
+        _linkedRootError = null;
+        _showLinkedRootDialog = true;
+        _shouldFocusLinkedRootInput = true;
+    }
+
+    private async Task PickLinkedRootFolderAsync()
+    {
+        try
+        {
+            var path = await FolderPicker.PickFolderAsync("Select Git repository or API folder");
+            if (path is null) return;
+            _newLinkedRootPath = path;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        catch (OperationCanceledException) { }
     }
 
     private void OpenLinkedRootManagementFromMenu()

@@ -1,0 +1,146 @@
+.sb-settings-shell {
+    display: grid;
+    gap: var(--spacing-xl);
+    padding: var(--spacing-sm) 0 var(--spacing-md);
+}
+
+.sb-settings-section {
+    display: grid;
+    gap: var(--spacing-sm);
+}
+
+/* ── Namespace rows ── */
+.sb-settings-ns-row {
+    display: grid;
+    grid-template-columns: 160px 1fr 28px;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.sb-settings-ns-row__alias {
+    font-weight: 500;
+    font-size: var(--font-size-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sb-settings-ns-row__fqns {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sb-settings-ns-row__remove {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.45;
+    transition: opacity 0.1s;
+}
+
+.sb-settings-ns-row__remove:hover {
+    opacity: 1;
+    color: var(--color-danger, var(--color-error));
+}
+
+/* ── Add namespace form ── */
+.sb-settings-add-btn {
+    background: none;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    padding: 4px 10px;
+    cursor: pointer;
+    margin-top: 2px;
+    transition: border-color 0.12s, color 0.12s;
+}
+
+.sb-settings-add-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.sb-settings-add-form {
+    display: grid;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    margin-top: 2px;
+}
+
+.sb-settings-add-form__input {
+    width: 100%;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+}
+
+.sb-settings-add-form__actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+/* ── Pinned entity link rows ── */
+.sb-settings-link-list {
+    display: grid;
+    gap: 4px;
+}
+
+.sb-settings-link-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+}
+
+.sb-settings-link-row__label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sb-settings-link-row__ns {
+    color: var(--color-text-muted);
+}
+
+.sb-settings-link-row__sep {
+    margin: 0 4px;
+    color: var(--color-text-muted);
+}
+
+.sb-settings-link-row__remove {
+    background: transparent;
+    border: none;
+    color: var(--color-error);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.sb-settings-empty {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    padding: 8px;
+    background: var(--color-surface);
+    border-radius: var(--radius-sm);
+}

@@ -205,6 +205,19 @@
     text-align: center;
 }
 
+.aks-pods-green-banner {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-success);
+    animation: aks-banner-fadein 0.4s ease-out;
+}
+
+@keyframes aks-banner-fadein {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Resource panel (main table area) ── */
 .aks-resource-panel {
     display: flex;

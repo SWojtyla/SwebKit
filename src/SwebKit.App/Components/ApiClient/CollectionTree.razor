@@ -36,11 +36,15 @@
 
                     @if (node.Kind == FlatTreeNodeKind.LinkedRoot)
                     {
-                        <span class="collection-tree__icon" aria-hidden="true">repo</span>
+                        <span class="collection-tree__icon" aria-hidden="true">🔗</span>
+                    }
+                    else if (node.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
+                    {
+                        <span class="collection-tree__icon" aria-hidden="true">📂</span>
                     }
                     else if (node.Node.Type == ApiCollectionNodeType.Folder)
                     {
-                        <span class="collection-tree__icon" aria-hidden="true">dir</span>
+                        <span class="collection-tree__icon" aria-hidden="true">@(node.IsExpanded ? "📂" : "📁")</span>
                     }
                     else if (node.Node.Request is not null)
                     {
@@ -107,6 +111,14 @@
                 </button>
                 <div class="ctx-separator"></div>
             }
+            @if (isCollRoot && !IsLinkedCollection(_ctxNode.CollectionId))
+            {
+                <button class="ctx-item" @onclick="LinkToRepoCtxAsync">
+                    <span class="ctx-item-icon" aria-hidden="true">🔗</span>
+                    <span>Link to Git repo…</span>
+                </button>
+                <div class="ctx-separator"></div>
+            }
             <button class="ctx-item" @onclick="BeginRenameCtx">
                 <span class="ctx-item-icon" aria-hidden="true">✎</span>
                 <span>@(isCollRoot ? "Rename collection" : "Rename")</span>
@@ -136,6 +148,7 @@
     [Parameter] public EventCallback<ApiCollectionNode> OnDeleteNode { get; set; }
     [Parameter] public EventCallback<(string CollectionId, string NewName)> OnRenameCollection { get; set; }
     [Parameter] public EventCallback<string> OnDeleteCollection { get; set; }
+    [Parameter] public EventCallback<string> OnLinkCollectionToRepo { get; set; }
 
     private enum FlatTreeNodeKind
     {
@@ -404,6 +417,14 @@
         var node = _ctxNode;
         _ctxNode = null;
         if (node is not null) await OnAddRequest.InvokeAsync((node.CollectionId, node.Node));
+    }
+
+    private async Task LinkToRepoCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        if (node is not null)
+            await OnLinkCollectionToRepo.InvokeAsync(node.CollectionId);
     }
 
     private async Task DeleteNodeCtxAsync()
