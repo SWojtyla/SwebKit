@@ -2,15 +2,15 @@
 
 ## Current State
 
-`Planned`
+`In Progress`
 
 ## Quick Summary
 
-Planning is being refined around the maintainer's current priority: build request flows first. Trace correlation, visual response diff, and no-code assertions are postponed until those areas are more polished or become higher priority.
+Implementation of request flows (Wave A and Wave B) is in progress. Domain models, repository, runner service, and frontend components have been created. Trace correlation, visual response diff, and no-code assertions remain deferred.
 
 **Jira:** not linked
 
-**Current focus:** Clarify and detail the flow library experience before implementation begins.
+**Current focus:** Complete backend services and frontend integration for request flows.
 
 ## Progress Checklist
 
@@ -23,6 +23,23 @@ Planning is being refined around the maintainer's current priority: build reques
 - [x] Test plan drafted
 - [x] Initial decisions captured
 - [x] Priority reordered: request flows first; trace correlation, visual diff, and assertions deferred
+
+### Implementation
+
+- [x] Flow domain models (ApiClientFlowModels.cs)
+- [x] Flow repository (IApiFlowRepository, ApiFlowRepository)
+- [x] Flow runner service (IApiFlowRunnerService, ApiClientFlowRunnerService)
+- [x] DI registration in MauiProgram.cs
+- [x] Flow library panel (FlowLibraryPanel.razor)
+- [x] Flow editor panel (FlowEditorPanel.razor)
+- [x] Flow runner panel (FlowRunnerPanel.razor)
+- [x] JSONPath helper panel (JsonPathHelperPanel.razor)
+- [x] CSS styles for all flow components
+- [x] Unit tests for repository (ApiFlowRepositoryTests.cs)
+- [x] Unit tests for runner service (ApiClientFlowRunnerServiceTests.cs)
+- [ ] Integration with ApiClientPage.razor
+- [ ] Frontend state management and navigation
+- [ ] Manual validation and testing
 
 ### Deferred Later — Original Wave 1: Trace Correlation
 

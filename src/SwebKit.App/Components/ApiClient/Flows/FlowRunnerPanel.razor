@@ -1,0 +1,293 @@
+@using SwebKit.Core.Domain
+@using SwebKit.Core.Abstractions
+
+<div class="flow-runner-panel">
+    @* ── Header ── *@
+    <div class="flow-runner-panel__header">
+        <h3 class="flow-runner-panel__title">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Play())" Width="20px" />
+            <span>Run Flow: @_flow.Name</span>
+        </h3>
+        <div class="flow-runner-panel__actions">
+            @if (_runState == ApiFlowRunState.Running)
+            {
+                <AppButton Variant="Danger" Size="Small" 
+                        Title="Cancel flow execution" 
+                        OnClick="CancelFlowAsync">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
+                    <span>Cancel</span>
+                </AppButton>
+            }
+            else
+            {
+                <AppButton Variant="Primary" Size="Small" 
+                        Title="Run flow" 
+                        Disabled="@(_runState == ApiFlowRunState.Running)" 
+                        OnClick="RunFlowAsync">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Play())" Width="14px" />
+                    <span>Run</span>
+                </AppButton>
+            }
+        </div>
+    </div>
+
+    @* ── Summary ── *@
+    <div class="flow-runner-panel__summary">
+        <div class="flow-runner-panel__summary-item">
+            <span class="flow-runner-panel__summary-label">Status:</span>
+            <span class="flow-runner-panel__summary-value flow-runner-panel__status--@_runState.ToString().ToLower()">
+                @GetStateLabel(_runState)
+            </span>
+        </div>
+        <div class="flow-runner-panel__summary-item">
+            <span class="flow-runner-panel__summary-label">Steps:</span>
+            <span class="flow-runner-panel__summary-value">
+                @_flow.Steps.Count total, 
+                @_runResult?.CompletedStepCount completed, 
+                @_runResult?.FailedStepCount failed, 
+                @_runResult?.SkippedStepCount skipped
+            </span>
+        </div>
+        <div class="flow-runner-panel__summary-item">
+            <span class="flow-runner-panel__summary-label">Time:</span>
+            <span class="flow-runner-panel__summary-value">
+                @if (_runResult?.TotalElapsedMilliseconds > 0)
+                {
+                    @TimeSpan.FromMilliseconds(_runResult.TotalElapsedMilliseconds).TotalSeconds.ToString("F2")s
+                }
+                else
+                {
+                    <text>--</text>
+                }
+            </span>
+        </div>
+        <div class="flow-runner-panel__summary-item">
+            <span class="flow-runner-panel__summary-label">Policy:</span>
+            <span class="flow-runner-panel__summary-value">
+                @GetPolicyLabel(_flow.FailurePolicy)
+            </span>
+        </div>
+    </div>
+
+    @* ── Step Results ── *@
+    <div class="flow-runner-panel__results">
+        <div class="flow-runner-panel__results-header">
+            <span>Step Results</span>
+            <AppButton Variant="Secondary" Size="Small" 
+                    Title="Clear results" 
+                    Disabled="@(_runResult is null)" 
+                    OnClick="ClearResults">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="12px" />
+                Clear
+            </AppButton>
+        </div>
+
+        @if (_runResult is null || _runResult.StepResults.Count == 0)
+        {
+            <div class="flow-runner-panel__results-empty">
+                <FluentIcon Value="@(new Icons.Regular.Size24.Play())" Width="48px" />
+                <p>No results yet</p>
+                <p class="flow-runner-panel__results-empty-hint">Run the flow to see step results</p>
+            </div>
+        }
+        else
+        {
+            <Virtualize Items="@_runResult.StepResults.OrderBy(s => s.StepOrder)" Context="stepResult">
+                <div class="flow-runner-panel__result-item flow-runner-panel__result-item--@stepResult.State.ToString().ToLower()"
+                     @key="stepResult.StepId">
+                    <div class="flow-runner-panel__result-header">
+                        <span class="flow-runner-panel__result-order">@(stepResult.StepOrder + 1)</span>
+                        <span class="flow-runner-panel__result-name">
+                            @GetStepName(stepResult.StepId)
+                        </span>
+                        <span class="flow-runner-panel__result-state">
+                            @GetStateLabel(stepResult.State)
+                        </span>
+                        <span class="flow-runner-panel__result-time">
+                            @stepResult.ElapsedMilliseconds ms
+                        </span>
+                    </div>
+                    <div class="flow-runner-panel__result-details">
+                        @if (stepResult.State == ApiFlowStepState.Completed)
+                        {
+                            <div class="flow-runner-panel__result-row">
+                                <span class="flow-runner-panel__result-row-label">Status:</span>
+                                <span class="flow-runner-panel__result-row-value">
+                                    @stepResult.StatusCode @stepResult.StatusText
+                                </span>
+                            </div>
+                        }
+                        else if (stepResult.State == ApiFlowStepState.Failed)
+                        {
+                            <div class="flow-runner-panel__result-row flow-runner-panel__result-row--error">
+                                <span class="flow-runner-panel__result-row-label">Error:</span>
+                                <span class="flow-runner-panel__result-row-value">
+                                    @stepResult.ErrorMessage
+                                </span>
+                            </div>
+                        }
+                        
+                        @if (stepResult.CapturedValues.Count > 0)
+                        {
+                            <div class="flow-runner-panel__result-captures">
+                                <div class="flow-runner-panel__result-captures-header">
+                                    <FluentIcon Value="@(new Icons.Regular.Size12.Capture())" Width="12px" />
+                                    <span>Captured Values (@stepResult.CapturedValues.Count)</span>
+                                </div>
+                                <div class="flow-runner-panel__result-captures-list">
+                                    @foreach (var kvp in stepResult.CapturedValues)
+                                    {
+                                        <div class="flow-runner-panel__result-capture" @key="kvp.Key">
+                                            <span class="flow-runner-panel__result-capture-key">@kvp.Key:</span>
+                                            <span class="flow-runner-panel__result-capture-value">
+                                                @if (stepResult.HasSecretCaptures && _runner.IsSecretLookingKey(kvp.Key))
+                                                {
+                                                    <text>***MASKED***</text>
+                                                }
+                                                else
+                                                {
+                                                    @kvp.Value
+                                                }
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        @if (stepResult.Warnings.Count > 0)
+                        {
+                            <div class="flow-runner-panel__result-warnings">
+                                <FluentIcon Value="@(new Icons.Regular.Size12.Warning())" Width="12px" />
+                                <span>@string.Join("; ", stepResult.Warnings)</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </Virtualize>
+        }
+    </div>
+
+    @* ── All Captured Values ── *@
+    @if (_runResult?.AllCapturedValues.Count > 0)
+    {
+        <div class="flow-runner-panel__all-captures">
+            <div class="flow-runner-panel__all-captures-header">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Capture())" Width="16px" />
+                <span>All Captured Values (@_runResult.AllCapturedValues.Count)</span>
+            </div>
+            <div class="flow-runner-panel__all-captures-list">
+                @foreach (var kvp in _runResult.AllCapturedValues)
+                {
+                    <div class="flow-runner-panel__all-capture" @key="kvp.Key">
+                        <span class="flow-runner-panel__all-capture-key">@kvp.Key:</span>
+                        <span class="flow-runner-panel__all-capture-value">
+                            @if (_runResult.HasSecretCaptures && _runner.IsSecretLookingKey(kvp.Key))
+                            {
+                                <text>***MASKED***</text>
+                            }
+                            else
+                            {
+                                @kvp.Value
+                            }
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public ApiFlowDefinition Flow { get; set; } = default!;
+    [Parameter] public EventCallback OnBack { get; set; }
+
+    [Inject] private IApiFlowRunnerService Runner { get; set; } = default!;
+    [Inject] private ILogger<FlowRunnerPanel> Logger { get; set; } = default!;
+
+    private ApiFlowDefinition _flow = new();
+    private ApiFlowRunResult? _runResult = null;
+    private ApiFlowRunState _runState = ApiFlowRunState.Running;
+    private CancellationTokenSource? _cancellationTokenSource = null;
+
+    protected override void OnParametersSet()
+    {
+        if (Flow != _flow)
+        {
+            _flow = Flow;
+            _runResult = null;
+            _runState = ApiFlowRunState.Running;
+        }
+    }
+
+    private string GetStateLabel(ApiFlowRunState state)
+    {
+        return state switch
+        {
+            ApiFlowRunState.Running => "Running...",
+            ApiFlowRunState.Completed => "Completed",
+            ApiFlowRunState.CompletedWithFailures => "Completed with failures",
+            ApiFlowRunState.Cancelled => "Cancelled",
+            ApiFlowRunState.Failed => "Failed",
+            _ => "Unknown"
+        };
+    }
+
+    private string GetPolicyLabel(ApiFlowFailurePolicy policy)
+    {
+        return policy switch
+        {
+            ApiFlowFailurePolicy.StopOnFailure => "Stop on error",
+            ApiFlowFailurePolicy.ContinueOnFailure => "Continue on error",
+            _ => "Unknown"
+        };
+    }
+
+    private string GetStepName(string stepId)
+    {
+        var step = _flow.Steps.FirstOrDefault(s => s.Id == stepId);
+        return step?.Name ?? "Unknown Step";
+    }
+
+    private async Task RunFlowAsync()
+    {
+        try
+        {
+            _cancellationTokenSource = new CancellationTokenSource();
+            _runState = ApiFlowRunState.Running;
+            _runResult = null;
+            StateHasChanged();
+
+            _runResult = await Runner.RunFlowAsync(_flow, _cancellationTokenSource.Token);
+            _runState = _runResult.State;
+        }
+        catch (OperationCanceledException)
+        {
+            _runState = ApiFlowRunState.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to run flow");
+            _runState = ApiFlowRunState.Failed;
+        }
+        finally
+        {
+            _cancellationTokenSource = null;
+        }
+    }
+
+    private async Task CancelFlowAsync()
+    {
+        if (_cancellationTokenSource is not null)
+        {
+            _cancellationTokenSource.Cancel();
+            _cancellationTokenSource = null;
+        }
+    }
+
+    private void ClearResults()
+    {
+        _runResult = null;
+        _runState = ApiFlowRunState.Running;
+    }
+}

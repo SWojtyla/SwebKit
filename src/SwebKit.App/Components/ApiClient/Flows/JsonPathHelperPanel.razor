@@ -1,0 +1,314 @@
+@using System.Text.Json
+@using SwebKit.Core.Domain
+
+<div class="json-path-helper-panel">
+    @* ── Header ── *@
+    <div class="json-path-helper-panel__header">
+        <h3 class="json-path-helper-panel__title">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Code())" Width="20px" />
+            <span>JSONPath Helper</span>
+        </h3>
+        <AppButton Variant="Secondary" Size="Small" 
+                Title="Close" 
+                OnClick="OnClose.InvokeAsync">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
+        </AppButton>
+    </div>
+
+    @* ── Input Section ── *@
+    <div class="json-path-helper-panel__section">
+        <h4>Sample JSON</h4>
+        <div class="json-path-helper-panel__input-group">
+            <AppRadioGroup @bind-Value="_sampleSource" 
+                          Orientation="Orientation.Horizontal" 
+                          CssClass="json-path-helper-panel__radio-group">
+                <AppRadio Value="@JsonPathSampleSource.LatestResponse" Label="Latest Response" />
+                <AppRadio Value="@JsonPathSampleSource.SavedExample" Label="Saved Example" />
+                <AppRadio Value="@JsonPathSampleSource.Manual" Label="Manual Input" />
+            </AppRadioGroup>
+        </div>
+
+        @if (_sampleSource == JsonPathSampleSource.Manual)
+        {
+            <AppTextArea @bind-Value="_manualJson" 
+                         Placeholder="Paste your JSON here..." 
+                         CssClass="json-path-helper-panel__json-input" 
+                         Rows="8" 
+                         OnValueChanged="ParseJson" />
+        }
+        else
+        {
+            <div class="json-path-helper-panel__json-preview">
+                <pre>@_sampleJson</pre>
+            </div>
+        }
+
+        @if (_parseError is not null)
+        {
+            <div class="json-path-helper-panel__error">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ErrorCircle())" Width="16px" />
+                <span>@_parseError</span>
+            </div>
+        }
+    </div>
+
+    @* ── Path Section ── *@
+    <div class="json-path-helper-panel__section">
+        <h4>JSONPath Expression</h4>
+        <div class="json-path-helper-panel__path-input-group">
+            <AppTextField @bind-Value="_currentPath" 
+                         Placeholder="e.g., $.users[0].name" 
+                         CssClass="json-path-helper-panel__path-input" 
+                         OnValueChanged="TestPath" />
+            <AppButton Variant="Primary" Size="Small" 
+                    Title="Test path" 
+                    OnClick="TestPath">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Play())" Width="14px" />
+                Test
+            </AppButton>
+        </div>
+
+        @if (_pathResult is not null)
+        {
+            <div class="json-path-helper-panel__path-result @GetResultClass(_pathResult)">
+                <div class="json-path-helper-panel__path-result-header">
+                    <span class="json-path-helper-panel__path-result-label">Result:</span>
+                    <span class="json-path-helper-panel__path-result-type">
+                        @GetResultType(_pathResult)
+                    </span>
+                </div>
+                <div class="json-path-helper-panel__path-result-value">
+                    @if (_pathResult.IsSuccess)
+                    {
+                        @_pathResult.Value
+                    }
+                    else
+                    {
+                        <text>@_pathResult.ErrorMessage</text>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @* ── Suggestions Section ── *@
+    @if (_jsonDocument is not null && _suggestions.Count > 0)
+    {
+        <div class="json-path-helper-panel__section">
+            <h4>Path Suggestions</h4>
+            <div class="json-path-helper-panel__suggestions">
+                @foreach (var suggestion in _suggestions)
+                {
+                    <button type="button" 
+                            class="json-path-helper-panel__suggestion" 
+                            @onclick="() => UseSuggestion(suggestion)"
+                            title="@suggestion">
+                        <FluentIcon Value="@(new Icons.Regular.Size12.Lightbulb())" Width="12px" />
+                        <span>@suggestion</span>
+                    </button>
+                }
+            </div>
+        </div>
+    }
+
+    @* ── Use Path Button ── *@
+    <div class="json-path-helper-panel__footer">
+        <AppButton Variant="Primary" 
+                Disabled="@(_pathResult is null || !_pathResult.IsSuccess)" 
+                OnClick="UsePath">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Checkmark())" Width="14px" />
+            Use This Path
+        </AppButton>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnPathSelected { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public string? InitialJson { get; set; }
+    [Parameter] public string? InitialPath { get; set; }
+
+    [Inject] private ILogger<JsonPathHelperPanel> Logger { get; set; } = default!;
+
+    private enum JsonPathSampleSource
+    {
+        LatestResponse,
+        SavedExample,
+        Manual
+    }
+
+    private JsonPathSampleSource _sampleSource = JsonPathSampleSource.LatestResponse;
+    private string _manualJson = string.Empty;
+    private string _sampleJson = string.Empty;
+    private string _currentPath = string.Empty;
+    private JsonDocument? _jsonDocument = null;
+    private PathTestResult? _pathResult = null;
+    private string? _parseError = null;
+    private List<string> _suggestions = new();
+
+    private class PathTestResult
+    {
+        public bool IsSuccess { get; set; }
+        public string Value { get; set; } = string.Empty;
+        public string ErrorMessage { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (InitialJson is not null)
+        {
+            _sampleJson = InitialJson;
+            ParseJson();
+        }
+        if (InitialPath is not null)
+        {
+            _currentPath = InitialPath;
+        }
+    }
+
+    private void ParseJson()
+    {
+        try
+        {
+            if (_sampleSource == JsonPathSampleSource.Manual)
+            {
+                _jsonDocument = JsonDocument.Parse(_manualJson);
+                _sampleJson = _manualJson;
+            }
+            else
+            {
+                _jsonDocument = JsonDocument.Parse(_sampleJson);
+            }
+            _parseError = null;
+            GenerateSuggestions();
+            TestPath();
+        }
+        catch (JsonException ex)
+        {
+            _jsonDocument = null;
+            _parseError = ex.Message;
+            _pathResult = null;
+            _suggestions.Clear();
+        }
+    }
+
+    private void GenerateSuggestions()
+    {
+        if (_jsonDocument is null) return;
+
+        _suggestions.Clear();
+        AddPathsFromElement(_jsonDocument.RootElement, "$");
+    }
+
+    private void AddPathsFromElement(JsonElement element, string currentPath)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    var propertyPath = $"{currentPath}.{property.Name}";
+                    _suggestions.Add(propertyPath);
+                    AddPathsFromElement(property.Value, propertyPath);
+                }
+                break;
+
+            case JsonValueKind.Array:
+                if (element.GetArrayLength() > 0)
+                {
+                    var arrayPath = $"{currentPath}[0]";
+                    _suggestions.Add(arrayPath);
+                    AddPathsFromElement(element[0], arrayPath);
+                }
+                break;
+
+            case JsonValueKind.String:
+            case JsonValueKind.Number:
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+            case JsonValueKind.Null:
+                // Leaf nodes - path already added by parent
+                break;
+        }
+    }
+
+    private void TestPath()
+    {
+        if (_jsonDocument is null || string.IsNullOrWhiteSpace(_currentPath))
+        {
+            _pathResult = null;
+            return;
+        }
+
+        try
+        {
+            var result = _jsonDocument.RootElement.Select(_currentPath);
+            if (result.Count() == 0)
+            {
+                _pathResult = new PathTestResult
+                {
+                    IsSuccess = false,
+                    ErrorMessage = "No matches found"
+                };
+                return;
+            }
+
+            var first = result.First();
+            var value = first.GetRawText();
+            var type = first.ValueKind.ToString();
+
+            _pathResult = new PathTestResult
+            {
+                IsSuccess = true,
+                Value = value,
+                Type = type
+            };
+        }
+        catch (Exception ex)
+        {
+            _pathResult = new PathTestResult
+            {
+                IsSuccess = false,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+
+    private string GetResultClass(PathTestResult result)
+    {
+        return result.IsSuccess 
+            ? "json-path-helper-panel__path-result--success" 
+            : "json-path-helper-panel__path-result--error";
+    }
+
+    private string GetResultType(PathTestResult result)
+    {
+        if (!result.IsSuccess) return "Error";
+        return result.Type switch
+        {
+            "String" => "string",
+            "Number" => "number",
+            "True" => "boolean",
+            "False" => "boolean",
+            "Null" => "null",
+            "Object" => "object",
+            "Array" => "array",
+            _ => result.Type
+        };
+    }
+
+    private void UseSuggestion(string suggestion)
+    {
+        _currentPath = suggestion;
+        TestPath();
+    }
+
+    private void UsePath()
+    {
+        if (_pathResult?.IsSuccess == true)
+        {
+            OnPathSelected.InvokeAsync(_currentPath);
+        }
+    }
+}

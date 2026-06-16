@@ -1,0 +1,752 @@
+@using SwebKit.Core.Domain
+@using SwebKit.Core.Configuration
+
+<div class="flow-editor-panel">
+    @* ── Header ── *@
+    <div class="flow-editor-panel__header">
+        <div class="flow-editor-panel__header-left">
+            <AppButton Variant="Secondary" Size="Small" 
+                    Title="Back to flow library" 
+                    OnClick="BackToLibrary">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowLeft())" Width="14px" />
+            </AppButton>
+            <AppTextField @bind-Value="_editingFlow.Name" 
+                         CssClass="flow-editor-panel__name-input" 
+                         Placeholder="Flow name..." 
+                         OnValueChanged="FlowNameChanged" />
+            <span class="flow-editor-panel__scope-badge @GetScopeClass(_editingFlow.StorageScope)">
+                @GetScopeLabel(_editingFlow.StorageScope)
+            </span>
+        </div>
+        <div class="flow-editor-panel__header-right">
+            <AppButton Variant="Secondary" Size="Small" 
+                    Title="Save flow" 
+                    Disabled="@!_hasChanges" 
+                    OnClick="SaveFlowAsync">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Save())" Width="14px" />
+                <span>Save</span>
+            </AppButton>
+            <AppDropdown IsOpen="@_showMoreMenu" 
+                         OnClose="() => _showMoreMenu = false" 
+                         CssClass="flow-editor-panel__more-menu">
+                <TriggerContent>
+                    <AppButton Variant="Secondary" Size="Small" 
+                            Title="More actions" 
+                            OnClick="() => _showMoreMenu = !_showMoreMenu">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.MoreVertical())" Width="14px" />
+                    </AppButton>
+                </TriggerContent>
+                <ChildContent>
+                    <button type="button" class="ctx-item" @onclick="OpenRenameDialog">Rename</button>
+                    <button type="button" class="ctx-item ctx-item--destructive" @onclick="() => OpenDeleteDialog(_editingFlow)">Delete</button>
+                </ChildContent>
+            </AppDropdown>
+        </div>
+    </div>
+
+    @* ── Tabs ── *@
+    <AppTabs SelectedIndex="_selectedTabIndex" OnSelectedIndexChanged="TabChanged">
+        <AppTab>Steps</AppTab>
+        <AppTab>Settings</AppTab>
+    </AppTabs>
+
+    @* ── Content ── *@
+    <div class="flow-editor-panel__content">
+        @if (_selectedTabIndex == 0)
+        {
+            @* ── Steps Tab ── *@
+            <div class="flow-editor-panel__steps">
+                @* Step List *@
+                <div class="flow-editor-panel__steps-list">
+                    <div class="flow-editor-panel__steps-header">
+                        <span>Steps (@_editingFlow.Steps.Count)</span>
+                        <AppButton Variant="Primary" Size="Small" 
+                                Title="Add step" 
+                                OnClick="AddStep">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
+                            Add Step
+                        </AppButton>
+                    </div>
+
+                    @if (_editingFlow.Steps.Count == 0)
+                    {
+                        <div class="flow-editor-panel__steps-empty">
+                            <FluentIcon Value="@(new Icons.Regular.Size24.ListOrdered())" Width="48px" />
+                            <p>No steps defined</p>
+                            <p class="flow-editor-panel__steps-empty-hint">Click "Add Step" to add your first request to this flow</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flow-editor-panel__steps-items">
+                            @foreach (var step in _editingFlow.Steps.OrderBy(s => s.Order))
+                            {
+                                <div class="flow-editor-panel__step-item @GetStepItemClass(step)"
+                                     @key="step.Id"
+                                     draggable="true"
+                                     @ondragstart="e => StartDrag(step, e)"
+                                     @ondragover="e => OnDragOver(step, e)"
+                                     @ondrop="e => OnDrop(step, e)"
+                                     @ondragend="e => OnDragEnd(step, e)">
+                                    <div class="flow-editor-panel__step-handle">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.GripperDotsVertical())" Width="12px" />
+                                    </div>
+                                    <div class="flow-editor-panel__step-info" @onclick="() => SelectStep(step)">
+                                        <div class="flow-editor-panel__step-header">
+                                            <span class="flow-editor-panel__step-order">@(step.Order + 1)</span>
+                                            <AppTextField @bind-Value="step.Name" 
+                                                         CssClass="flow-editor-panel__step-name-input" 
+                                                         Placeholder="Step name..." 
+                                                         OnValueChanged="() => FlowChanged()" />
+                                        </div>
+                                        <div class="flow-editor-panel__step-details">
+                                            @if (step.RequestReference.RequestName.NotEmpty())
+                                            {
+                                                <span class="flow-editor-panel__step-request">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size12.Request())" Width="12px" />
+                                                    @step.RequestReference.RequestName
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="flow-editor-panel__step-request flow-editor-panel__step-request--empty">
+                                                    No request selected
+                                                </span>
+                                            }
+                                            @if (step.CaptureMappings.Count > 0)
+                                            {
+                                                <span class="flow-editor-panel__step-captures" title="@step.CaptureMappings.Count capture(s)">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size12.Capture())" Width="12px" />
+                                                    @step.CaptureMappings.Count
+                                                </span>
+                                            }
+                                            @if (step.VariableOverrides.Count > 0)
+                                            {
+                                                <span class="flow-editor-panel__step-vars" title="@step.VariableOverrides.Count variable override(s)">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size12.Variable())" Width="12px" />
+                                                    @step.VariableOverrides.Count
+                                                </span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="flow-editor-panel__step-actions">
+                                        <AppButton Variant="Secondary" Size="Small" 
+                                                Title="Edit step" 
+                                                OnClick="() => SelectStep(step)">
+                                            <FluentIcon Value="@(new Icons.Regular.Size16.Edit())" Width="12px" />
+                                        </AppButton>
+                                        <AppButton Variant="Secondary" Size="Small" 
+                                                Title="Toggle enabled" 
+                                                OnClick="() => ToggleStepEnabled(step)">
+                                            <FluentIcon Value="@(step.IsEnabled ? new Icons.Regular.Size16.Checkmark() : new Icons.Regular.Size16.Dismiss())" Width="12px" />
+                                        </AppButton>
+                                        <AppButton Variant="Secondary" Size="Small" 
+                                                Title="Delete step" 
+                                                OnClick="() => OpenDeleteStepDialog(step)">
+                                            <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="12px" />
+                                        </AppButton>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                @* Step Editor (right panel) *@
+                @if (_selectedStep is not null)
+                {
+                    <div class="flow-editor-panel__step-editor">
+                        <div class="flow-editor-panel__step-editor-header">
+                            <h4>Edit Step</h4>
+                            <AppButton Variant="Secondary" Size="Small" 
+                                    Title="Close" 
+                                    OnClick="() => _selectedStep = null">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
+                            </AppButton>
+                        </div>
+
+                        <div class="flow-editor-panel__step-editor-content">
+                            <AppTextField @bind-Value="_selectedStep.Name" 
+                                         Label="Step Name" 
+                                         Placeholder="e.g., Login Request" 
+                                         CssClass="flow-step-editor__field" 
+                                         OnValueChanged="FlowChanged" />
+
+                            <AppDropdown @bind-Value="_selectedStep.RequestReference.RequestId" 
+                                        Label="Request" 
+                                        CssClass="flow-step-editor__field">
+                                <ChildContent>
+                                    <option value="">-- Select a request --</option>
+                                    @foreach (var req in _availableRequests)
+                                    {
+                                        <option value="@req.Id">@req.Name (@req.SourceName)</option>
+                                    }
+                                </ChildContent>
+                            </AppDropdown>
+
+                            <AppDropdown @bind-Value="_selectedStep.RequestReference.SourceKind" 
+                                        Label="Request Source" 
+                                        CssClass="flow-step-editor__field">
+                                <ChildContent>
+                                    <option value="@ApiRequestReferenceKind.LocalCollection">Local Collection</option>
+                                    <option value="@ApiRequestReferenceKind.LinkedRoot">Linked Repository</option>
+                                </ChildContent>
+                            </AppDropdown>
+
+                            <AppTextField @bind-Value="_selectedStep.TimeoutSeconds" 
+                                         Label="Timeout (seconds)" 
+                                         Type="TextInputType.Number" 
+                                         Placeholder="Use flow default" 
+                                         CssClass="flow-step-editor__field" 
+                                         OnValueChanged="FlowChanged" />
+
+                            <AppCheckbox @bind-Value="_selectedStep.IsEnabled" 
+                                        Label="Enabled" 
+                                        CssClass="flow-step-editor__field" 
+                                        OnValueChanged="FlowChanged" />
+
+                            <div class="flow-step-editor__section">
+                                <h5>Variable Overrides</h5>
+                                <AppButton Variant="Secondary" Size="Small" 
+                                        OnClick="AddVariableOverride">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="12px" />
+                                    Add Override
+                                </AppButton>
+                                @if (_selectedStep.VariableOverrides.Count > 0)
+                                {
+                                    <div class="flow-step-editor__list">
+                                        @foreach (var override in _selectedStep.VariableOverrides)
+                                        {
+                                            <div class="flow-step-editor__list-item" @key="override.Key">
+                                                <AppTextField @bind-Value="override.Key" 
+                                                             Placeholder="Variable name" 
+                                                             CssClass="flow-step-editor__list-input" 
+                                                             OnValueChanged="FlowChanged" />
+                                                <AppTextField @bind-Value="override.Value" 
+                                                             Placeholder="Value" 
+                                                             CssClass="flow-step-editor__list-input" 
+                                                             OnValueChanged="FlowChanged" />
+                                                <AppButton Variant="Secondary" Size="Small" 
+                                                        Title="Delete" 
+                                                        OnClick="() => RemoveVariableOverride(override)">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="12px" />
+                                                </AppButton>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="flow-step-editor__section">
+                                <h5>Capture Mappings</h5>
+                                <AppButton Variant="Secondary" Size="Small" 
+                                        OnClick="AddCaptureMapping">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="12px" />
+                                    Add Capture
+                                </AppButton>
+                                @if (_selectedStep.CaptureMappings.Count > 0)
+                                {
+                                    <div class="flow-step-editor__list">
+                                        @foreach (var mapping in _selectedStep.CaptureMappings)
+                                        {
+                                            <div class="flow-step-editor__list-item flow-step-editor__capture-item" @key="mapping.Id">
+                                                <AppDropdown @bind-Value="mapping.Source" 
+                                                            CssClass="flow-step-editor__list-input">
+                                                    <ChildContent>
+                                                        <option value="@ApiFlowCaptureSource.BodyJsonPath">JSONPath</option>
+                                                        <option value="@ApiFlowCaptureSource.BodyJsonPathArray">JSONPath Array</option>
+                                                        <option value="@ApiFlowCaptureSource.ResponseHeader">Header</option>
+                                                        <option value="@ApiFlowCaptureSource.StatusCode">Status Code</option>
+                                                        <option value="@ApiFlowCaptureSource.ResponseBody">Response Body</option>
+                                                    </ChildContent>
+                                                </AppDropdown>
+                                                @if (mapping.Source == ApiFlowCaptureSource.BodyJsonPath || 
+                                     mapping.Source == ApiFlowCaptureSource.BodyJsonPathArray)
+                                                {
+                                                    <AppTextField @bind-Value="mapping.JsonPath" 
+                                                                 Placeholder="e.g., $.token" 
+                                                                 CssClass="flow-step-editor__list-input" 
+                                                                 OnValueChanged="FlowChanged" />
+                                                }
+                                                else if (mapping.Source == ApiFlowCaptureSource.ResponseHeader)
+                                                {
+                                                    <AppTextField @bind-Value="mapping.HeaderName" 
+                                                                 Placeholder="Header name" 
+                                                                 CssClass="flow-step-editor__list-input" 
+                                                                 OnValueChanged="FlowChanged" />
+                                                }
+                                                <AppTextField @bind-Value="mapping.TargetVariable" 
+                                                             Placeholder="Variable name" 
+                                                             CssClass="flow-step-editor__list-input" 
+                                                             OnValueChanged="FlowChanged" />
+                                                <AppTextField @bind-Value="mapping.DefaultValue" 
+                                                             Placeholder="Default value" 
+                                                             CssClass="flow-step-editor__list-input" 
+                                                             OnValueChanged="FlowChanged" />
+                                                <AppButton Variant="Secondary" Size="Small" 
+                                                        Title="Delete" 
+                                                        OnClick="() => RemoveCaptureMapping(mapping)">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="12px" />
+                                                </AppButton>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else if (_selectedTabIndex == 1)
+        {
+            @* ── Settings Tab ── *@
+            <div class="flow-editor-panel__settings">
+                <div class="flow-settings__section">
+                    <h4>Flow Settings</h4>
+                    
+                    <AppTextArea @bind-Value="_editingFlow.Description" 
+                                Label="Description" 
+                                Placeholder="Describe what this flow does..." 
+                                CssClass="flow-settings__field" 
+                                OnValueChanged="FlowChanged" />
+
+                    <AppDropdown @bind-Value="_editingFlow.FailurePolicy" 
+                                Label="Failure Policy" 
+                                CssClass="flow-settings__field" 
+                                OnValueChanged="FlowChanged">
+                        <ChildContent>
+                            <option value="@ApiFlowFailurePolicy.StopOnFailure">Stop on first failure</option>
+                            <option value="@ApiFlowFailurePolicy.ContinueOnFailure">Continue on failure</option>
+                        </ChildContent>
+                    </AppDropdown>
+
+                    <AppTextField @bind-Value="_editingFlow.DefaultTimeoutSeconds" 
+                                 Label="Default Timeout (seconds)" 
+                                 Type="TextInputType.Number" 
+                                 CssClass="flow-settings__field" 
+                                 OnValueChanged="FlowChanged" />
+
+                    <div class="flow-settings__section">
+                        <h4>Flow-Level Variable Overrides</h4>
+                        <AppButton Variant="Secondary" Size="Small" 
+                                OnClick="AddFlowVariableOverride">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="12px" />
+                            Add Override
+                        </AppButton>
+                        @if (_editingFlow.VariableOverrides.Count > 0)
+                        {
+                            <div class="flow-settings__list">
+                                @foreach (var override in _editingFlow.VariableOverrides)
+                                {
+                                    <div class="flow-settings__list-item" @key="override.Key">
+                                        <AppTextField @bind-Value="override.Key" 
+                                                     Placeholder="Variable name" 
+                                                     CssClass="flow-settings__list-input" 
+                                                     OnValueChanged="FlowChanged" />
+                                        <AppTextField @bind-Value="override.Value" 
+                                                     Placeholder="Value" 
+                                                     CssClass="flow-settings__list-input" 
+                                                     OnValueChanged="FlowChanged" />
+                                        <AppButton Variant="Secondary" Size="Small" 
+                                                        Title="Delete" 
+                                                        OnClick="() => RemoveFlowVariableOverride(override)">
+                                            <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="12px" />
+                                        </AppButton>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @* ── Rename Dialog ── *@
+    <AppDialog @bind-IsOpen="_showRenameDialog" 
+               Title="Rename Flow" 
+               Size="DialogSize.Small">
+        <ChildContent>
+            <AppTextField @bind-Value="_renameNewName" 
+                         Label="New Name" 
+                         Placeholder="Enter new flow name" 
+                         CssClass="flow-rename-dialog__field" />
+        </ChildContent>
+        <FooterContent>
+            <AppButton Variant="Secondary" OnClick="CloseRenameDialog">Cancel</AppButton>
+            <AppButton Variant="Primary" 
+                    Disabled="@string.IsNullOrWhiteSpace(_renameNewName)" 
+                    OnClick="RenameFlowAsync">
+                Rename
+            </AppButton>
+        </FooterContent>
+    </AppDialog>
+
+    @* ── Delete Step Dialog ── *@
+    <AppDialog @bind-IsOpen="_showDeleteStepDialog" 
+               Title="Delete Step" 
+               Size="DialogSize.Small">
+        <ChildContent>
+            <p>Are you sure you want to delete this step?</p>
+        </ChildContent>
+        <FooterContent>
+            <AppButton Variant="Secondary" OnClick="CloseDeleteStepDialog">Cancel</AppButton>
+            <AppButton Variant="Danger" OnClick="DeleteStepConfirmed">
+                Delete Step
+            </AppButton>
+        </FooterContent>
+    </AppDialog>
+</div>
+
+@code {
+    [Parameter] public ApiFlowDefinition Flow { get; set; } = default!;
+    [Parameter] public EventCallback<ApiFlowDefinition> OnFlowSaved { get; set; }
+    [Parameter] public EventCallback OnBackToLibrary { get; set; }
+    [Parameter] public EventCallback<ApiFlowDefinition> OnFlowDeleted { get; set; }
+
+    [Inject] private IApiFlowRepository FlowRepository { get; set; } = default!;
+    [Inject] private CollectionRepository CollectionRepository { get; set; } = default!;
+    [Inject] private LinkedCollectionRootRepository LinkedRootRepository { get; set; } = default!;
+    [Inject] private ILogger<FlowEditorPanel> Logger { get; set; } = default!;
+
+    private ApiFlowDefinition _editingFlow = new();
+    private int _selectedTabIndex = 0;
+    private ApiFlowStep? _selectedStep = null;
+    private ApiFlowStep? _stepToDelete = null;
+    private bool _hasChanges = false;
+
+    // Dialog state
+    private bool _showRenameDialog = false;
+    private string _renameNewName = string.Empty;
+    private bool _showDeleteStepDialog = false;
+
+    // Available requests for selection
+    private List<RequestReferenceInfo> _availableRequests = new();
+
+    // Drag and drop state
+    private ApiFlowStep? _draggedStep = null;
+    private ApiFlowStep? _dragOverStep = null;
+
+    private class RequestReferenceInfo
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string SourceName { get; set; } = string.Empty;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Flow != _editingFlow)
+        {
+            _editingFlow = Flow;
+            _hasChanges = false;
+            await LoadAvailableRequestsAsync();
+        }
+    }
+
+    private async Task LoadAvailableRequestsAsync()
+    {
+        try
+        {
+            await CollectionRepository.LoadAsync();
+            var requests = new List<RequestReferenceInfo>();
+
+            foreach (var collection in CollectionRepository.Collections)
+            {
+                AddRequestsFromNodes(collection.Nodes, collection.Name, requests);
+            }
+
+            // TODO: Add linked root requests
+            _availableRequests = requests;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load available requests");
+        }
+    }
+
+    private void AddRequestsFromNodes(List<ApiCollectionNode> nodes, string collectionName, List<RequestReferenceInfo> requests)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Type == ApiCollectionNodeType.Request && node.Request is not null)
+            {
+                requests.Add(new RequestReferenceInfo
+                {
+                    Id = node.Request.Id,
+                    Name = node.Request.Name,
+                    SourceName = collectionName
+                });
+            }
+            else if (node.Type == ApiCollectionNodeType.Folder)
+            {
+                AddRequestsFromNodes(node.Children, collectionName, requests);
+            }
+        }
+    }
+
+    private void FlowChanged() => _hasChanges = true;
+    private void FlowNameChanged() => _hasChanges = true;
+
+    private void TabChanged(int index) => _selectedTabIndex = index;
+
+    private string GetScopeClass(ApiFlowStorageScope scope)
+    {
+        return scope switch
+        {
+            ApiFlowStorageScope.Local => "flow-scope-badge--local",
+            ApiFlowStorageScope.LinkedRoot => "flow-scope-badge--linked",
+            _ => "flow-scope-badge--unknown"
+        };
+    }
+
+    private string GetScopeLabel(ApiFlowStorageScope scope)
+    {
+        return scope switch
+        {
+            ApiFlowStorageScope.Local => "Local",
+            ApiFlowStorageScope.LinkedRoot => "Repo",
+            _ => "Unknown"
+        };
+    }
+
+    private string GetStepItemClass(ApiFlowStep step)
+    {
+        var classes = new List<string>();
+        if (!_selectedStep?.Id.Equals(step.Id) ?? true)
+        {
+            classes.Add("flow-step-item--unselected");
+        }
+        else
+        {
+            classes.Add("flow-step-item--selected");
+        }
+        if (!step.IsEnabled)
+        {
+            classes.Add("flow-step-item--disabled");
+        }
+        if (_draggedStep?.Id == step.Id)
+        {
+            classes.Add("flow-step-item--dragging");
+        }
+        if (_dragOverStep?.Id == step.Id)
+        {
+            classes.Add("flow-step-item--drag-over");
+        }
+        return string.Join(" ", classes);
+    }
+
+    private void BackToLibrary() => OnBackToLibrary.InvokeAsync();
+
+    private async Task SaveFlowAsync()
+    {
+        try
+        {
+            // Update step orders based on current list
+            for (int i = 0; i < _editingFlow.Steps.Count; i++)
+            {
+                _editingFlow.Steps[i].Order = i;
+            }
+
+            if (_editingFlow.StorageScope == ApiFlowStorageScope.Local)
+            {
+                await FlowRepository.UpdateLocalFlowAsync(_editingFlow);
+            }
+            else if (_editingFlow.LinkedRootId is not null)
+            {
+                await FlowRepository.UpdateLinkedRootFlowAsync(_editingFlow);
+            }
+
+            _hasChanges = false;
+            await OnFlowSaved.InvokeAsync(_editingFlow);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to save flow");
+        }
+    }
+
+    // Step management
+    private void AddStep()
+    {
+        var newStep = new ApiFlowStep
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = "New Step",
+            Order = _editingFlow.Steps.Count,
+            IsEnabled = true,
+            RequestReference = new ApiRequestReference()
+        };
+        _editingFlow.Steps.Add(newStep);
+        SelectStep(newStep);
+        FlowChanged();
+    }
+
+    private void SelectStep(ApiFlowStep step) => _selectedStep = step;
+
+    private void ToggleStepEnabled(ApiFlowStep step)
+    {
+        step.IsEnabled = !step.IsEnabled;
+        FlowChanged();
+    }
+
+    private void OpenDeleteStepDialog(ApiFlowStep step)
+    {
+        _stepToDelete = step;
+        _showDeleteStepDialog = true;
+    }
+
+    private void CloseDeleteStepDialog() => _showDeleteStepDialog = false;
+
+    private void DeleteStepConfirmed()
+    {
+        if (_stepToDelete is not null)
+        {
+            _editingFlow.Steps.Remove(_stepToDelete);
+            if (_selectedStep?.Id == _stepToDelete.Id)
+            {
+                _selectedStep = null;
+            }
+            _stepToDelete = null;
+            _showDeleteStepDialog = false;
+            FlowChanged();
+        }
+    }
+
+    // Variable overrides
+    private void AddVariableOverride()
+    {
+        if (_selectedStep is null) return;
+        _selectedStep.VariableOverrides.Add(new ApiFlowVariableOverride
+        {
+            Key = "newVar",
+            Value = "value",
+            IsSecret = false
+        });
+        FlowChanged();
+    }
+
+    private void RemoveVariableOverride(ApiFlowVariableOverride override)
+    {
+        if (_selectedStep is null) return;
+        _selectedStep.VariableOverrides.Remove(override);
+        FlowChanged();
+    }
+
+    // Capture mappings
+    private void AddCaptureMapping()
+    {
+        if (_selectedStep is null) return;
+        _selectedStep.CaptureMappings.Add(new ApiFlowCaptureMapping
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Source = ApiFlowCaptureSource.BodyJsonPath,
+            TargetVariable = "newCapture",
+            IsEnabled = true
+        });
+        FlowChanged();
+    }
+
+    private void RemoveCaptureMapping(ApiFlowCaptureMapping mapping)
+    {
+        if (_selectedStep is null) return;
+        _selectedStep.CaptureMappings.Remove(mapping);
+        FlowChanged();
+    }
+
+    // Flow-level variable overrides
+    private void AddFlowVariableOverride()
+    {
+        _editingFlow.VariableOverrides.Add(new ApiFlowVariableOverride
+        {
+            Key = "newFlowVar",
+            Value = "value",
+            IsSecret = false
+        });
+        FlowChanged();
+    }
+
+    private void RemoveFlowVariableOverride(ApiFlowVariableOverride override)
+    {
+        _editingFlow.VariableOverrides.Remove(override);
+        FlowChanged();
+    }
+
+    // Rename dialog
+    private void OpenRenameDialog()
+    {
+        _renameNewName = _editingFlow.Name;
+        _showRenameDialog = true;
+    }
+
+    private void CloseRenameDialog() => _showRenameDialog = false;
+
+    private async Task RenameFlowAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_renameNewName)) return;
+
+        try
+        {
+            if (_editingFlow.StorageScope == ApiFlowStorageScope.Local)
+            {
+                await FlowRepository.RenameLocalFlowAsync(_editingFlow.Id, _renameNewName);
+            }
+            else if (_editingFlow.LinkedRootId is not null)
+            {
+                await FlowRepository.RenameLinkedRootFlowAsync(_editingFlow.Id, _editingFlow.LinkedRootId, _renameNewName);
+            }
+
+            _editingFlow.Name = _renameNewName;
+            _showRenameDialog = false;
+            FlowChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to rename flow");
+        }
+    }
+
+    private void OpenDeleteDialog(ApiFlowDefinition flow)
+    {
+        // Handled by parent
+        OnFlowDeleted.InvokeAsync(flow);
+    }
+
+    // Drag and drop
+    private void StartDrag(ApiFlowStep step, DragEventArgs e)
+    {
+        _draggedStep = step;
+        e.DataTransfer?.SetData("text/plain", step.Id);
+    }
+
+    private void OnDragOver(ApiFlowStep step, DragEventArgs e)
+    {
+        e.PreventDefault();
+        _dragOverStep = step;
+    }
+
+    private void OnDrop(ApiFlowStep targetStep, DragEventArgs e)
+    {
+        e.PreventDefault();
+        if (_draggedStep is null || _draggedStep.Id == targetStep.Id) return;
+
+        var draggedIndex = _editingFlow.Steps.FindIndex(s => s.Id == _draggedStep.Id);
+        var targetIndex = _editingFlow.Steps.FindIndex(s => s.Id == targetStep.Id);
+
+        if (draggedIndex >= 0 && targetIndex >= 0)
+        {
+            _editingFlow.Steps.RemoveAt(draggedIndex);
+            _editingFlow.Steps.Insert(targetIndex, _draggedStep);
+            FlowChanged();
+        }
+
+        _dragOverStep = null;
+    }
+
+    private void OnDragEnd(ApiFlowStep step, DragEventArgs e)
+    {
+        _draggedStep = null;
+        _dragOverStep = null;
+    }
+}

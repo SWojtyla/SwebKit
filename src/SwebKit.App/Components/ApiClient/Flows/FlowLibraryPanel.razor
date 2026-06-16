@@ -1,0 +1,413 @@
+@using SwebKit.Core.Domain
+@using SwebKit.Core.Configuration
+
+<div class="flow-library-panel">
+    @* ── Header ── *@
+    <div class="flow-library-panel__header">
+        <h3 class="flow-library-panel__title">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Flow())" Width="20px" />
+            <span>Request Flows</span>
+        </h3>
+        <div class="flow-library-panel__actions">
+            <AppButton Variant="Primary" Size="Small" 
+                    Title="Create a new flow" 
+                    OnClick="OpenCreateFlowDialog">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
+                <span>New Flow</span>
+            </AppButton>
+        </div>
+    </div>
+
+    @* ── Filter Bar ── *@
+    <div class="flow-library-panel__filter">
+        <AppTextField @bind-Value="_filterText" 
+                     Placeholder="Filter flows..." 
+                     CssClass="flow-library-panel__filter-input" 
+                     OnValueChanged="FilterFlows" />
+        <div class="flow-library-panel__filter-scopes">
+            <AppButton Variant="@(_showLocal ? "Primary" : "Secondary")" 
+                    Size="Small" 
+                    OnClick="() => ToggleScope(ApiFlowStorageScope.Local)">
+                Local
+            </AppButton>
+            <AppButton Variant="@(_showLinked ? "Primary" : "Secondary")" 
+                    Size="Small" 
+                    OnClick="() => ToggleScope(ApiFlowStorageScope.LinkedRoot)">
+                Linked
+            </AppButton>
+        </div>
+    </div>
+
+    @* ── Flow List ── *@
+    <div class="flow-library-panel__list">
+        @if (_filteredFlows.Count == 0)
+        {
+            <div class="flow-library-panel__empty">
+                <FluentIcon Value="@(new Icons.Regular.Size24.FolderOpen())" Width="48px" />
+                <p>No flows found</p>
+                @if (_showLocal && _showLinked)
+                {
+                    <p class="flow-library-panel__empty-hint">Create your first flow to get started</p>
+                }
+                else if (_showLocal)
+                {
+                    <p class="flow-library-panel__empty-hint">No local flows. Create one to begin.</p>
+                }
+                else if (_showLinked)
+                {
+                    <p class="flow-library-panel__empty-hint">No linked-root flows. Add an API repo first.</p>
+                }
+            </div>
+        }
+        else
+        {
+            <Virtualize Items="@_filteredFlows" Context="flow">
+                <div class="flow-library-panel__item @GetFlowItemClass(flow)"
+                     @key="flow.Id"
+                     @onclick="() => SelectFlow(flow)">
+                    <div class="flow-library-panel__item-header">
+                        <div class="flow-library-panel__item-info">
+                            <span class="flow-library-panel__item-name">@flow.Name</span>
+                            @if (!string.IsNullOrEmpty(flow.Description))
+                            {
+                                <span class="flow-library-panel__item-description" title="@flow.Description">
+                                    @flow.Description
+                                </span>
+                            }
+                        </div>
+                        <div class="flow-library-panel__item-meta">
+                            <span class="flow-library-panel__item-scope @GetScopeClass(flow.StorageScope)">
+                                @GetScopeLabel(flow.StorageScope)
+                            </span>
+                            @if (flow.StorageScope == ApiFlowStorageScope.LinkedRoot && !string.IsNullOrEmpty(flow.LinkedRootPath))
+                            {
+                                <span class="flow-library-panel__item-root" title="@flow.LinkedRootPath">
+                                    <FluentIcon Value="@(new Icons.Regular.Size12.Git())" Width="12px" />
+                                </span>
+                            }
+                        </div>
+                    </div>
+                    <div class="flow-library-panel__item-footer">
+                        <span class="flow-library-panel__item-step-count">
+                            <FluentIcon Value="@(new Icons.Regular.Size12.ListOrdered())" Width="12px" />
+                            @flow.Steps.Count step@(flow.Steps.Count != 1 ? "s" : "")
+                        </span>
+                        <span class="flow-library-panel__item-policy">
+                            @GetPolicyLabel(flow.FailurePolicy)
+                        </span>
+                        @if (HasUnresolvedReferences(flow))
+                        {
+                            <span class="flow-library-panel__item-warning" title="This flow has unresolved references">
+                                <FluentIcon Value="@(new Icons.Regular.Size12.Warning())" Width="12px" />
+                            </span>
+                        }
+                        <span class="flow-library-panel__item-time">
+                            @flow.UpdatedAt.ToLocalTime().ToString("g")
+                        </span>
+                    </div>
+                </div>
+            </Virtualize>
+        }
+    </div>
+
+    @* ── Create Flow Dialog ── *@
+    <AppDialog @bind-IsOpen="_showCreateDialog" 
+               Title="Create New Flow" 
+               Size="DialogSize.Medium">
+        <ChildContent>
+            <div class="flow-create-dialog">
+                <AppTextField @bind-Value="_newFlowName" 
+                             Label="Flow Name" 
+                             Placeholder="e.g., Login and Get Data" 
+                             CssClass="flow-create-dialog__field" />
+                
+                <AppTextField @bind-Value="_newFlowDescription" 
+                             Label="Description (optional)" 
+                             Placeholder="Describe what this flow does" 
+                             CssClass="flow-create-dialog__field" />
+
+                <AppRadioGroup @bind-Value="_newFlowStorageScope" 
+                              Label="Storage Location" 
+                              CssClass="flow-create-dialog__field">
+                    <AppRadio Value="@ApiFlowStorageScope.Local" Label="Local (app-only)" />
+                    <AppRadio Value="@ApiFlowStorageScope.LinkedRoot" Label="Linked Repository" Disabled="@(_linkedRoots.Count == 0)" />
+                </AppRadioGroup>
+
+                @if (_newFlowStorageScope == ApiFlowStorageScope.LinkedRoot && _linkedRoots.Count > 0)
+                {
+                    <AppDropdown @bind-Value="_selectedLinkedRootId" 
+                                Label="Select Repository" 
+                                CssClass="flow-create-dialog__field">
+                        <ChildContent>
+                            @foreach (var root in _linkedRoots)
+                            {
+                                <option value="@root.Id">@root.Name (@root.GitRemoteUrl)</option>
+                            }
+                        </ChildContent>
+                    </AppDropdown>
+                }
+            </div>
+        </ChildContent>
+        <FooterContent>
+            <AppButton Variant="Secondary" OnClick="CloseCreateDialog">Cancel</AppButton>
+            <AppButton Variant="Primary" 
+                    Disabled="@string.IsNullOrWhiteSpace(_newFlowName)" 
+                    OnClick="CreateFlowAsync">
+                Create Flow
+            </AppButton>
+        </FooterContent>
+    </AppDialog>
+
+    @* ── Delete Confirmation Dialog ── *@
+    <AppDialog @bind-IsOpen="_showDeleteDialog" 
+               Title="Delete Flow" 
+               Size="DialogSize.Small">
+        <ChildContent>
+            <p>Are you sure you want to delete the flow "@_flowToDelete?.Name"?</p>
+            <p class="flow-delete-dialog__warning">This action cannot be undone.</p>
+        </ChildContent>
+        <FooterContent>
+            <AppButton Variant="Secondary" OnClick="CloseDeleteDialog">Cancel</AppButton>
+            <AppButton Variant="Danger" OnClick="DeleteFlowAsync">
+                Delete Flow
+            </AppButton>
+        </FooterContent>
+    </AppDialog>
+</div>
+
+@code {
+    [Parameter] public EventCallback<ApiFlowDefinition> OnFlowSelected { get; set; }
+    [Parameter] public EventCallback OnFlowCreated { get; set; }
+    [Parameter] public EventCallback OnFlowDeleted { get; set; }
+    [Parameter] public EventCallback OnFlowUpdated { get; set; }
+
+    [Inject] private IApiFlowRepository FlowRepository { get; set; } = default!;
+    [Inject] private LinkedCollectionRootRepository LinkedRootRepository { get; set; } = default!;
+    [Inject] private ILogger<FlowLibraryPanel> Logger { get; set; } = default!;
+
+    private List<ApiFlowDefinition> _allFlows = new();
+    private List<ApiFlowDefinition> _filteredFlows = new();
+    private string _filterText = string.Empty;
+    private bool _showLocal = true;
+    private bool _showLinked = true;
+
+    // Create dialog state
+    private bool _showCreateDialog = false;
+    private string _newFlowName = string.Empty;
+    private string _newFlowDescription = string.Empty;
+    private ApiFlowStorageScope _newFlowStorageScope = ApiFlowStorageScope.Local;
+    private string? _selectedLinkedRootId = null;
+    private List<LinkedCollectionRoot> _linkedRoots = new();
+
+    // Delete dialog state
+    private bool _showDeleteDialog = false;
+    private ApiFlowDefinition? _flowToDelete = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFlowsAsync();
+        await LoadLinkedRootsAsync();
+    }
+
+    private async Task LoadFlowsAsync()
+    {
+        try
+        {
+            await FlowRepository.LoadLocalAsync();
+            _allFlows = await FlowRepository.GetAllFlowsAsync();
+            FilterFlows();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load flows");
+        }
+    }
+
+    private async Task LoadLinkedRootsAsync()
+    {
+        try
+        {
+            await LinkedRootRepository.LoadAsync();
+            _linkedRoots = (await LinkedRootRepository.GetAllAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load linked roots");
+        }
+    }
+
+    private void FilterFlows()
+    {
+        var filter = _filterText.ToLowerInvariant();
+        _filteredFlows = _allFlows
+            .Where(f => 
+            {
+                if (_showLocal && _showLinked) return true;
+                if (_showLocal && f.StorageScope == ApiFlowStorageScope.Local) return true;
+                if (_showLinked && f.StorageScope == ApiFlowStorageScope.LinkedRoot) return true;
+                return false;
+            })
+            .Where(f => string.IsNullOrEmpty(filter) || 
+                        f.Name.ToLowerInvariant().Contains(filter) ||
+                        (f.Description?.ToLowerInvariant().Contains(filter) ?? false))
+            .OrderBy(f => f.Name)
+            .ThenBy(f => f.UpdatedAt)
+            .ToList();
+    }
+
+    private void ToggleScope(ApiFlowStorageScope scope)
+    {
+        if (scope == ApiFlowStorageScope.Local)
+        {
+            _showLocal = !_showLocal;
+        }
+        else
+        {
+            _showLinked = !_showLinked;
+        }
+        FilterFlows();
+    }
+
+    private string GetFlowItemClass(ApiFlowDefinition flow)
+    {
+        var classes = new List<string>();
+        if (HasUnresolvedReferences(flow))
+        {
+            classes.Add("flow-library-panel__item--has-warnings");
+        }
+        return string.Join(" ", classes);
+    }
+
+    private string GetScopeClass(ApiFlowStorageScope scope)
+    {
+        return scope switch
+        {
+            ApiFlowStorageScope.Local => "flow-library-panel__scope--local",
+            ApiFlowStorageScope.LinkedRoot => "flow-library-panel__scope--linked",
+            _ => "flow-library-panel__scope--unknown"
+        };
+    }
+
+    private string GetScopeLabel(ApiFlowStorageScope scope)
+    {
+        return scope switch
+        {
+            ApiFlowStorageScope.Local => "Local",
+            ApiFlowStorageScope.LinkedRoot => "Repo",
+            _ => "Unknown"
+        };
+    }
+
+    private string GetPolicyLabel(ApiFlowFailurePolicy policy)
+    {
+        return policy switch
+        {
+            ApiFlowFailurePolicy.StopOnFailure => "Stop on error",
+            ApiFlowFailurePolicy.ContinueOnFailure => "Continue on error",
+            _ => "Unknown"
+        };
+    }
+
+    private bool HasUnresolvedReferences(ApiFlowDefinition flow)
+    {
+        // TODO: Implement reference validation
+        return false;
+    }
+
+    private void OpenCreateFlowDialog()
+    {
+        _newFlowName = string.Empty;
+        _newFlowDescription = string.Empty;
+        _newFlowStorageScope = ApiFlowStorageScope.Local;
+        _selectedLinkedRootId = null;
+        _showCreateDialog = true;
+    }
+
+    private void CloseCreateDialog() => _showCreateDialog = false;
+
+    private async Task CreateFlowAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newFlowName))
+            return;
+
+        try
+        {
+            ApiFlowDefinition flow;
+            if (_newFlowStorageScope == ApiFlowStorageScope.Local)
+            {
+                flow = await FlowRepository.CreateFlowWithUniqueNameAsync(
+                    _newFlowName, ApiFlowStorageScope.Local, null);
+            }
+            else
+            {
+                if (_selectedLinkedRootId is null)
+                {
+                    // TODO: Show error
+                    return;
+                }
+                flow = await FlowRepository.CreateFlowWithUniqueNameAsync(
+                    _newFlowName, ApiFlowStorageScope.LinkedRoot, _selectedLinkedRootId);
+            }
+
+            flow.Description = string.IsNullOrWhiteSpace(_newFlowDescription) 
+                ? null 
+                : _newFlowDescription;
+
+            if (_newFlowStorageScope == ApiFlowStorageScope.Local)
+            {
+                await FlowRepository.UpdateLocalFlowAsync(flow);
+            }
+            else
+            {
+                await FlowRepository.UpdateLinkedRootFlowAsync(flow);
+            }
+
+            _showCreateDialog = false;
+            await LoadFlowsAsync();
+            await OnFlowCreated.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to create flow");
+        }
+    }
+
+    private void SelectFlow(ApiFlowDefinition flow)
+    {
+        OnFlowSelected.InvokeAsync(flow);
+    }
+
+    private void OpenDeleteDialog(ApiFlowDefinition flow)
+    {
+        _flowToDelete = flow;
+        _showDeleteDialog = true;
+    }
+
+    private void CloseDeleteDialog() => _showDeleteDialog = false;
+
+    private async Task DeleteFlowAsync()
+    {
+        if (_flowToDelete is null) return;
+
+        try
+        {
+            if (_flowToDelete.StorageScope == ApiFlowStorageScope.Local)
+            {
+                await FlowRepository.DeleteLocalFlowAsync(_flowToDelete.Id);
+            }
+            else if (_flowToDelete.LinkedRootId is not null)
+            {
+                await FlowRepository.DeleteLinkedRootFlowAsync(_flowToDelete.Id, _flowToDelete.LinkedRootId);
+            }
+
+            _showDeleteDialog = false;
+            _flowToDelete = null;
+            await LoadFlowsAsync();
+            await OnFlowDeleted.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to delete flow");
+        }
+    }
+}

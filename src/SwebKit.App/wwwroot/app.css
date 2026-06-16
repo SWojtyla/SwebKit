@@ -7,3 +7,6 @@
 @import url("./styles/05-primitives-utilities.css");
 @import url("./styles/06-observability.css");
 @import url("./styles/07-pipelines-legacy.css");
+
+/* Feature-specific styles */
+@import url("./components/api-client/flows/flows.css");
