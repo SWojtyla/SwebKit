@@ -156,6 +156,11 @@ public static class MauiProgram
 
         // API Client — Flow services
         builder.Services.AddSingleton<IApiFlowRepository, ApiFlowRepository>();
+        builder.Services.AddSingleton<FlowReferenceResolver>();
+        builder.Services.AddSingleton<FlowVariableScopeBuilder>();
+        builder.Services.AddSingleton<FlowCaptureExtractor>();
+        builder.Services.AddSingleton<FlowSecretsMasker>();
+        builder.Services.AddSingleton<FlowStepExecutor>();
         builder.Services.AddSingleton<IApiFlowRunnerService, ApiClientFlowRunnerService>();
         builder.Services.AddSingleton<IRequestBodyFormatter, RequestBodyFormatter>();
         builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();

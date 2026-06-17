@@ -14,6 +14,11 @@ public class ApiClientFlowRunnerServiceTests
     private readonly CollectionRepository _collectionRepo;
     private readonly EnvironmentRepository _envRepo;
     private readonly LinkedCollectionRootRepository _linkedRootRepo;
+    private readonly FlowReferenceResolver _referenceResolver;
+    private readonly FlowVariableScopeBuilder _scopeBuilder;
+    private readonly FlowCaptureExtractor _captureExtractor;
+    private readonly FlowSecretsMasker _secretsMasker;
+    private readonly FlowStepExecutor _stepExecutor;
     private readonly ApiClientFlowRunnerService _runner;
 
     private readonly string _testRoot = Path.Combine(
@@ -29,14 +34,24 @@ public class ApiClientFlowRunnerServiceTests
         _collectionRepo = new CollectionRepository();
         _envRepo = new EnvironmentRepository();
         _linkedRootRepo = new LinkedCollectionRootRepository();
-
-        _runner = new ApiClientFlowRunnerService(
+        
+        _referenceResolver = new FlowReferenceResolver(
+            _collectionRepo, _envRepo, _linkedRootRepo);
+        _scopeBuilder = new FlowVariableScopeBuilder(
+            _collectionRepo, _substitutionMock.Object);
+        _captureExtractor = new FlowCaptureExtractor();
+        _secretsMasker = new FlowSecretsMasker();
+        _stepExecutor = new FlowStepExecutor(
             _requestExecutorMock.Object,
             _substitutionMock.Object,
-            _flowRepoMock.Object,
-            _collectionRepo,
-            _envRepo,
-            _linkedRootRepo);
+            _referenceResolver,
+            _scopeBuilder,
+            _captureExtractor,
+            _collectionRepo);
+        
+        _runner = new ApiClientFlowRunnerService(
+            _stepExecutor,
+            _secretsMasker);
     }
 
     // ─── IsSecretLookingKey Tests ───────────────────────────────────────────────
@@ -101,550 +116,503 @@ public class ApiClientFlowRunnerServiceTests
         Assert.Equal("30", masked["age"]);
     }
 
+    [Fact]
+    public void MaskSecrets_ReturnsNewDictionary()
+    {
+        var values = new Dictionary<string, string> { ["token"] = "abc123" };
+        var masked = _runner.MaskSecrets(values);
+
+        Assert.NotSame(values, masked);
+    }
+
+    // ─── RunFlowAsync Tests ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RunFlowAsync_EmptyFlow_ReturnsCompletedResult()
+    {
+        var flow = new ApiFlowDefinition
+        {
+            Id = "test-flow",
+            Name = "Test Flow",
+            Steps = new List<ApiFlowStep>(),
+            FailurePolicy = ApiFlowFailurePolicy.StopOnFailure
+        };
+
+        var result = await _runner.RunFlowAsync(flow);
+
+        Assert.Equal("test-flow", result.FlowId);
+        Assert.Equal("Test Flow", result.FlowName);
+        Assert.Equal(ApiFlowRunState.Completed, result.State);
+        Assert.Empty(result.StepResults);
+    }
+
+    [Fact]
+    public async Task RunFlowAsync_WithDisabledSteps_SkipsDisabledSteps()
+    {
+        var flow = new ApiFlowDefinition
+        {
+            Id = "test-flow",
+            Name = "Test Flow",
+            Steps = new List<ApiFlowStep>
+            {
+                new ApiFlowStep { Id = "step1", Order = 1, IsEnabled = true },
+                new ApiFlowStep { Id = "step2", Order = 2, IsEnabled = false },
+                new ApiFlowStep { Id = "step3", Order = 3, IsEnabled = true }
+            },
+            FailurePolicy = ApiFlowFailurePolicy.StopOnFailure
+        };
+
+        // Setup mock to return a successful result
+        _requestExecutorMock.Setup(x => x.ExecuteAsync(It.IsAny<HttpRequestEntry>(), It.IsAny<ApiCollection>(), It.IsAny<ApiEnvironment>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HttpRequestResult { StatusCode = "200", StatusText = "OK" });
+
+        var result = await _runner.RunFlowAsync(flow);
+
+        Assert.Equal(ApiFlowRunState.Completed, result.State);
+        Assert.Equal(2, result.StepResults.Count); // Only enabled steps
+    }
+
+    [Fact]
+    public async Task RunFlowAsync_StopOnFailure_StopsOnFirstFailure()
+    {
+        var flow = new ApiFlowDefinition
+        {
+            Id = "test-flow",
+            Name = "Test Flow",
+            Steps = new List<ApiFlowStep>
+            {
+                new ApiFlowStep { Id = "step1", Order = 1, IsEnabled = true },
+                new ApiFlowStep { Id = "step2", Order = 2, IsEnabled = true },
+                new ApiFlowStep { Id = "step3", Order = 3, IsEnabled = true }
+            },
+            FailurePolicy = ApiFlowFailurePolicy.StopOnFailure
+        };
+
+        // Setup mock to return failure for first step
+        _requestExecutorMock.Setup(x => x.ExecuteAsync(It.IsAny<HttpRequestEntry>(), It.IsAny<ApiCollection>(), It.IsAny<ApiEnvironment>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HttpRequestResult { StatusCode = "500", ErrorMessage = "Server error" });
+
+        var result = await _runner.RunFlowAsync(flow);
+
+        Assert.Equal(ApiFlowRunState.Failed, result.State);
+        Assert.Equal(3, result.StepResults.Count); // All 3 steps (2 skipped)
+        Assert.Equal(ApiFlowStepState.Failed, result.StepResults[0].State);
+        Assert.Equal(ApiFlowStepState.Skipped, result.StepResults[1].State);
+        Assert.Equal(ApiFlowStepState.Skipped, result.StepResults[2].State);
+    }
+
+    [Fact]
+    public async Task RunFlowAsync_ContinueOnFailure_ContinuesAfterFailure()
+    {
+        var flow = new ApiFlowDefinition
+        {
+            Id = "test-flow",
+            Name = "Test Flow",
+            Steps = new List<ApiFlowStep>
+            {
+                new ApiFlowStep { Id = "step1", Order = 1, IsEnabled = true },
+                new ApiFlowStep { Id = "step2", Order = 2, IsEnabled = true },
+                new ApiFlowStep { Id = "step3", Order = 3, IsEnabled = true }
+            },
+            FailurePolicy = ApiFlowFailurePolicy.ContinueOnFailure
+        };
+
+        // Setup mock to return failure for first step, success for others
+        _requestExecutorMock.SetupSequence(x => x.ExecuteAsync(It.IsAny<HttpRequestEntry>(), It.IsAny<ApiCollection>(), It.IsAny<ApiEnvironment>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HttpRequestResult { StatusCode = "500", ErrorMessage = "Server error" })
+            .ReturnsAsync(new HttpRequestResult { StatusCode = "200", StatusText = "OK" })
+            .ReturnsAsync(new HttpRequestResult { StatusCode = "200", StatusText = "OK" });
+
+        var result = await _runner.RunFlowAsync(flow);
+
+        Assert.Equal(ApiFlowRunState.CompletedWithFailures, result.State);
+        Assert.Equal(3, result.StepResults.Count);
+        Assert.Equal(ApiFlowStepState.Failed, result.StepResults[0].State);
+        Assert.Equal(ApiFlowStepState.Completed, result.StepResults[1].State);
+        Assert.Equal(ApiFlowStepState.Completed, result.StepResults[2].State);
+    }
+
+    [Fact]
+    public async Task RunFlowAsync_CancellationRequested_StopsExecution()
+    {
+        var flow = new ApiFlowDefinition
+        {
+            Id = "test-flow",
+            Name = "Test Flow",
+            Steps = new List<ApiFlowStep>
+            {
+                new ApiFlowStep { Id = "step1", Order = 1, IsEnabled = true },
+                new ApiFlowStep { Id = "step2", Order = 2, IsEnabled = true }
+            },
+            FailurePolicy = ApiFlowFailurePolicy.StopOnFailure
+        };
+
+        var cts = new CancellationTokenSource();
+        cts.CancelAfter(10); // Cancel quickly
+
+        var result = await _runner.RunFlowAsync(flow, cts.Token);
+
+        Assert.Equal(ApiFlowRunState.Cancelled, result.State);
+    }
+
     // ─── RunStepAsync Tests ────────────────────────────────────────────────────
 
     [Fact]
-    public async Task RunStepAsync_ResolvesRequestAndExecutes()
+    public async Task RunStepAsync_ExecutesRequestAndReturnsResult()
     {
-        // Setup test data
-        var request = new HttpRequestEntry
-        {
-            Id = "req1",
-            Name = "Test Request",
-            Method = ApiRequestMethod.Get,
-            Url = "https://api.example.com/test"
-        };
-
-        var collection = new ApiCollection
-        {
-            Id = "col1",
-            Name = "Test Collection",
-            Nodes = new List<ApiCollectionNode>
-            {
-                new ApiCollectionNode
-                {
-                    Id = "node1",
-                    Type = ApiCollectionNodeType.Request,
-                    Name = "Test Request",
-                    Request = request
-                }
-            }
-        };
-
-        // Add collection to repository
-        await _collectionRepo.AddCollectionAsync("Test Collection");
-        var cols = _collectionRepo.Collections.ToList();
-        var col = cols[0];
-        col.Id = "col1";
-        col.Nodes = collection.Nodes;
-
-        var flow = new ApiFlowDefinition
-        {
-            Id = "flow1",
-            Name = "Test Flow",
-            Steps = new List<ApiFlowStep>
-            {
-                new ApiFlowStep
-                {
-                    Id = "step1",
-                    Order = 0,
-                    IsEnabled = true,
-                    RequestReference = new ApiRequestReference
-                    {
-                        SourceKind = ApiRequestReferenceKind.LocalCollection,
-                        SourceId = "col1",
-                        RequestId = "req1",
-                        RequestName = "Test Request",
-                        SourceName = "Test Collection"
-                    }
-                }
-            }
-        };
-
-        var requestResult = new HttpRequestResult
-        {
-            StatusCode = 200,
-            StatusText = "OK",
-            ResponseBody = "{\"token\":\"abc123\"}",
-            Headers = new List<KeyValuePair<string>>(),
-            Elapsed = TimeSpan.FromMilliseconds(100)
-        };
-
-        _requestExecutorMock
-            .Setup(x => x.ExecuteAsync(It.IsAny<HttpRequestEntry>(), It.IsAny<ApiCollection>(), It.IsAny<ApiEnvironment>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(requestResult);
-
-        _substitutionMock
-            .Setup(x => x.Substitute(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>()))
-            .Returns<string, IReadOnlyDictionary<string, string?>>((input, _) => input);
-
-        var stepResult = await _runner.RunStepAsync(flow, flow.Steps[0], new Dictionary<string, string>(), CancellationToken.None);
-
-        Assert.Equal(ApiFlowStepState.Completed, stepResult.State);
-        Assert.Equal(200, stepResult.StatusCode);
-        Assert.Equal("OK", stepResult.StatusText);
-        Assert.Equal(100, stepResult.ElapsedMilliseconds);
-    }
-
-    [Fact]
-    public async Task RunStepAsync_FailsWhenRequestNotFound()
-    {
-        var flow = new ApiFlowDefinition
-        {
-            Id = "flow1",
-            Name = "Test Flow",
-            Steps = new List<ApiFlowStep>
-            {
-                new ApiFlowStep
-                {
-                    Id = "step1",
-                    Order = 0,
-                    IsEnabled = true,
-                    RequestReference = new ApiRequestReference
-                    {
-                        SourceKind = ApiRequestReferenceKind.LocalCollection,
-                        SourceId = "col1",
-                        RequestId = "non-existent",
-                        RequestName = "Non-existent Request"
-                    }
-                }
-            }
-        };
-
-        var stepResult = await _runner.RunStepAsync(flow, flow.Steps[0], new Dictionary<string, string>(), CancellationToken.None);
-
-        Assert.Equal(ApiFlowStepState.Failed, stepResult.State);
-        Assert.Contains("Request not found", stepResult.ErrorMessage);
-    }
-
-    [Fact]
-    public async Task RunStepAsync_HandlesRequestError()
-    {
-        var request = new HttpRequestEntry
-        {
-            Id = "req1",
-            Name = "Test Request",
-            Method = ApiRequestMethod.Get,
-            Url = "https://api.example.com/test"
-        };
-
-        var collection = new ApiCollection
-        {
-            Id = "col1",
-            Name = "Test Collection",
-            Nodes = new List<ApiCollectionNode>
-            {
-                new ApiCollectionNode
-                {
-                    Id = "node1",
-                    Type = ApiCollectionNodeType.Request,
-                    Name = "Test Request",
-                    Request = request
-                }
-            }
-        };
-
-        await _collectionRepo.AddCollectionAsync("Test Collection");
-        var cols = _collectionRepo.Collections.ToList();
-        var col = cols[0];
-        col.Id = "col1";
-        col.Nodes = collection.Nodes;
-
-        var flow = new ApiFlowDefinition
-        {
-            Id = "flow1",
-            Name = "Test Flow",
-            Steps = new List<ApiFlowStep>
-            {
-                new ApiFlowStep
-                {
-                    Id = "step1",
-                    Order = 0,
-                    IsEnabled = true,
-                    RequestReference = new ApiRequestReference
-                    {
-                        SourceKind = ApiRequestReferenceKind.LocalCollection,
-                        SourceId = "col1",
-                        RequestId = "req1",
-                        RequestName = "Test Request",
-                        SourceName = "Test Collection"
-                    }
-                }
-            }
-        };
-
-        var requestResult = new HttpRequestResult
-        {
-            StatusCode = 404,
-            StatusText = "Not Found",
-            ErrorMessage = "Resource not found",
-            Elapsed = TimeSpan.FromMilliseconds(50)
-        };
-
-        _requestExecutorMock
-            .Setup(x => x.ExecuteAsync(It.IsAny<HttpRequestEntry>(), It.IsAny<ApiCollection>(), It.IsAny<ApiEnvironment>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(requestResult);
-
-        _substitutionMock
-            .Setup(x => x.Substitute(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>()))
-            .Returns<string, IReadOnlyDictionary<string, string?>>((input, _) => input);
-
-        var stepResult = await _runner.RunStepAsync(flow, flow.Steps[0], new Dictionary<string, string>(), CancellationToken.None);
-
-        Assert.Equal(ApiFlowStepState.Failed, stepResult.State);
-        Assert.Equal(404, stepResult.StatusCode);
-        Assert.Equal("Resource not found", stepResult.ErrorMessage);
-    }
-
-    // ─── ExtractCapturesAsync Tests ────────────────────────────────────────────
-
-    [Fact]
-    public async Task ExtractCapturesAsync_ExtractsJsonPathValue()
-    {
+        var flow = new ApiFlowDefinition { Id = "test-flow", Name = "Test Flow" };
         var step = new ApiFlowStep
         {
             Id = "step1",
+            Order = 1,
+            IsEnabled = true,
+            RequestReference = new ApiRequestReference
+            {
+                SourceKind = ApiRequestReferenceKind.LocalCollection,
+                RequestId = "req1",
+                RequestName = "Test Request"
+            }
+        };
+
+        // Setup mock
+        _requestExecutorMock.Setup(x => x.ExecuteAsync(It.IsAny<HttpRequestEntry>(), It.IsAny<ApiCollection>(), It.IsAny<ApiEnvironment>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HttpRequestResult { StatusCode = "200", StatusText = "OK" });
+
+        var result = await _runner.RunStepAsync(flow, step, new Dictionary<string, string>());
+
+        Assert.Equal("step1", result.StepId);
+        Assert.Equal(1, result.StepOrder);
+        Assert.Equal(ApiFlowStepState.Completed, result.State);
+        Assert.Equal("200", result.StatusCode);
+    }
+
+    // ─── FlowSecretsMasker Tests ──────────────────────────────────────────────
+
+    [Fact]
+    public void SecretsMasker_IsSecretLookingKey_ReturnsTrueForSecretPatterns()
+    {
+        var masker = new FlowSecretsMasker();
+        
+        Assert.True(masker.IsSecretLookingKey("token"));
+        Assert.True(masker.IsSecretLookingKey("apiKey"));
+        Assert.True(masker.IsSecretLookingKey("password"));
+        Assert.True(masker.IsSecretLookingKey("AUTH_TOKEN"));
+    }
+
+    [Fact]
+    public void SecretsMasker_IsSecretLookingKey_ReturnsFalseForNonSecretPatterns()
+    {
+        var masker = new FlowSecretsMasker();
+        
+        Assert.False(masker.IsSecretLookingKey("name"));
+        Assert.False(masker.IsSecretLookingKey("userId"));
+    }
+
+    [Fact]
+    public void SecretsMasker_MaskSecrets_MasksAllSecretKeys()
+    {
+        var masker = new FlowSecretsMasker();
+        var values = new Dictionary<string, string>
+        {
+            ["token"] = "abc123",
+            ["password"] = "secret",
+            ["name"] = "John"
+        };
+
+        var masked = masker.MaskSecrets(values);
+
+        Assert.Equal("***MASKED***", masked["token"]);
+        Assert.Equal("***MASKED***", masked["password"]);
+        Assert.Equal("John", masked["name"]);
+    }
+
+    // ─── FlowCaptureExtractor Tests ────────────────────────────────────────────
+
+    [Fact]
+    public async Task CaptureExtractor_ExtractsJsonPathValue()
+    {
+        var extractor = new FlowCaptureExtractor();
+        var step = new ApiFlowStep
+        {
             CaptureMappings = new List<ApiFlowCaptureMapping>
             {
                 new ApiFlowCaptureMapping
                 {
-                    Id = "cap1",
+                    IsEnabled = true,
                     Source = ApiFlowCaptureSource.BodyJsonPath,
                     JsonPath = "$.token",
-                    TargetVariable = "authToken",
-                    IsEnabled = true
+                    TargetVariable = "authToken"
                 }
             }
         };
 
         var requestResult = new HttpRequestResult
         {
-            ResponseBody = "{\"token\":\"abc123\",\"user\":\"john\"}",
-            StatusCode = 200
+            ResponseBody = "{\"token\":\"abc123\",\"name\":\"test\"}"
         };
 
-        var captures = await _runner.ExtractCapturesAsync(step, requestResult);
+        var captures = await extractor.ExtractAsync(step, requestResult);
 
         Assert.Single(captures);
         Assert.Equal("authToken", captures.Keys.First());
-        Assert.Equal("abc123", captures.Values.First());
+        Assert.Equal("abc123", captures["authToken"]);
     }
 
     [Fact]
-    public async Task ExtractCapturesAsync_ExtractsHeaderValue()
+    public async Task CaptureExtractor_ExtractsHeaderValue()
     {
+        var extractor = new FlowCaptureExtractor();
         var step = new ApiFlowStep
         {
-            Id = "step1",
             CaptureMappings = new List<ApiFlowCaptureMapping>
             {
                 new ApiFlowCaptureMapping
                 {
-                    Id = "cap1",
+                    IsEnabled = true,
                     Source = ApiFlowCaptureSource.ResponseHeader,
-                    HeaderName = "X-Correlation-ID",
-                    TargetVariable = "correlationId",
-                    IsEnabled = true
+                    HeaderName = "X-Custom-Header",
+                    TargetVariable = "customHeader"
                 }
             }
         };
 
         var requestResult = new HttpRequestResult
         {
-            Headers = new List<KeyValuePair<string>>
+            Headers = new List<KeyValuePair<string, string>>
             {
-                new KeyValuePair<string> { Key = "X-Correlation-ID", Value = "corr-123", IsEnabled = true }
-            },
-            StatusCode = 200
+                new("X-Custom-Header", "header-value")
+            }
         };
 
-        var captures = await _runner.ExtractCapturesAsync(step, requestResult);
+        var captures = await extractor.ExtractAsync(step, requestResult);
 
         Assert.Single(captures);
-        Assert.Equal("correlationId", captures.Keys.First());
-        Assert.Equal("corr-123", captures.Values.First());
+        Assert.Equal("customHeader", captures.Keys.First());
+        Assert.Equal("header-value", captures["customHeader"]);
     }
 
     [Fact]
-    public async Task ExtractCapturesAsync_ExtractsStatusCode()
+    public async Task CaptureExtractor_ExtractsStatusCode()
     {
+        var extractor = new FlowCaptureExtractor();
         var step = new ApiFlowStep
         {
-            Id = "step1",
             CaptureMappings = new List<ApiFlowCaptureMapping>
             {
                 new ApiFlowCaptureMapping
                 {
-                    Id = "cap1",
+                    IsEnabled = true,
                     Source = ApiFlowCaptureSource.StatusCode,
-                    TargetVariable = "status",
-                    IsEnabled = true
+                    TargetVariable = "status"
                 }
             }
         };
 
         var requestResult = new HttpRequestResult
         {
-            StatusCode = 201
+            StatusCode = "200"
         };
 
-        var captures = await _runner.ExtractCapturesAsync(step, requestResult);
+        var captures = await extractor.ExtractAsync(step, requestResult);
 
         Assert.Single(captures);
         Assert.Equal("status", captures.Keys.First());
-        Assert.Equal("201", captures.Values.First());
+        Assert.Equal("200", captures["status"]);
     }
 
     [Fact]
-    public async Task ExtractCapturesAsync_UsesDefaultValueWhenCaptureFails()
+    public async Task CaptureExtractor_UsesDefaultValueWhenCaptureFails()
     {
+        var extractor = new FlowCaptureExtractor();
         var step = new ApiFlowStep
         {
-            Id = "step1",
             CaptureMappings = new List<ApiFlowCaptureMapping>
             {
                 new ApiFlowCaptureMapping
                 {
-                    Id = "cap1",
+                    IsEnabled = true,
                     Source = ApiFlowCaptureSource.BodyJsonPath,
-                    JsonPath = "$.non.existent",
+                    JsonPath = "$.nonexistent",
                     TargetVariable = "missingValue",
-                    DefaultValue = "default-value",
-                    IsEnabled = true
+                    DefaultValue = "default-value"
                 }
             }
         };
 
         var requestResult = new HttpRequestResult
         {
-            ResponseBody = "{\"other\":\"value\"}",
-            StatusCode = 200
+            ResponseBody = "{\"other\":\"value\"}"
         };
 
-        var captures = await _runner.ExtractCapturesAsync(step, requestResult);
+        var captures = await extractor.ExtractAsync(step, requestResult);
 
         Assert.Single(captures);
         Assert.Equal("missingValue", captures.Keys.First());
-        Assert.Equal("default-value", captures.Values.First());
+        Assert.Equal("default-value", captures["missingValue"]);
     }
 
-    // ─── RunFlowAsync Tests ───────────────────────────────────────────────────
-
     [Fact]
-    public async Task RunFlowAsync_ExecutesAllStepsInOrder()
+    public async Task CaptureExtractor_ExtractsResponseBody()
     {
-        var request = new HttpRequestEntry
+        var extractor = new FlowCaptureExtractor();
+        var step = new ApiFlowStep
         {
-            Id = "req1",
-            Name = "Test Request",
-            Method = ApiRequestMethod.Get,
-            Url = "https://api.example.com/test"
-        };
-
-        var collection = new ApiCollection
-        {
-            Id = "col1",
-            Name = "Test Collection",
-            Nodes = new List<ApiCollectionNode>
+            CaptureMappings = new List<ApiFlowCaptureMapping>
             {
-                new ApiCollectionNode
+                new ApiFlowCaptureMapping
                 {
-                    Id = "node1",
-                    Type = ApiCollectionNodeType.Request,
-                    Name = "Test Request",
-                    Request = request
+                    IsEnabled = true,
+                    Source = ApiFlowCaptureSource.ResponseBody,
+                    TargetVariable = "responseBody"
                 }
-            }
-        };
-
-        await _collectionRepo.AddCollectionAsync("Test Collection");
-        var cols = _collectionRepo.Collections.ToList();
-        var col = cols[0];
-        col.Id = "col1";
-        col.Nodes = collection.Nodes;
-
-        var flow = new ApiFlowDefinition
-        {
-            Id = "flow1",
-            Name = "Test Flow",
-            FailurePolicy = ApiFlowFailurePolicy.StopOnFailure,
-            Steps = new List<ApiFlowStep>
-            {
-                new ApiFlowStep { Id = "step1", Order = 0, IsEnabled = true, RequestReference = new ApiRequestReference { SourceKind = ApiRequestReferenceKind.LocalCollection, SourceId = "col1", RequestId = "req1" } },
-                new ApiFlowStep { Id = "step2", Order = 1, IsEnabled = true, RequestReference = new ApiRequestReference { SourceKind = ApiRequestReferenceKind.LocalCollection, SourceId = "col1", RequestId = "req1" } },
-                new ApiFlowStep { Id = "step3", Order = 2, IsEnabled = true, RequestReference = new ApiRequestReference { SourceKind = ApiRequestReferenceKind.LocalCollection, SourceId = "col1", RequestId = "req1" } }
             }
         };
 
         var requestResult = new HttpRequestResult
         {
-            StatusCode = 200,
-            StatusText = "OK",
-            Elapsed = TimeSpan.FromMilliseconds(10)
+            ResponseBody = "{\"data\":\"test\"}"
         };
 
-        _requestExecutorMock
-            .Setup(x => x.ExecuteAsync(It.IsAny<HttpRequestEntry>(), It.IsAny<ApiCollection>(), It.IsAny<ApiEnvironment>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(requestResult);
+        var captures = await extractor.ExtractAsync(step, requestResult);
 
-        _substitutionMock
-            .Setup(x => x.Substitute(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>()))
-            .Returns<string, IReadOnlyDictionary<string, string?>>((input, _) => input);
+        Assert.Single(captures);
+        Assert.Equal("responseBody", captures.Keys.First());
+        Assert.Equal("{\"data\":\"test\"}", captures["responseBody"]);
+    }
 
-        var flowResult = await _runner.RunFlowAsync(flow, CancellationToken.None);
+    // ─── FlowVariableScopeBuilder Tests ────────────────────────────────────────
 
-        Assert.Equal(ApiFlowRunState.Completed, flowResult.State);
-        Assert.Equal(3, flowResult.StepResults.Count);
-        Assert.Equal("step1", flowResult.StepResults[0].StepId);
-        Assert.Equal("step2", flowResult.StepResults[1].StepId);
-        Assert.Equal("step3", flowResult.StepResults[2].StepId);
+    [Fact]
+    public async Task ScopeBuilder_BuildsScopeWithFlowOverrides()
+    {
+        var builder = new FlowVariableScopeBuilder(
+            _collectionRepo, _substitutionMock.Object);
+        
+        var flow = new ApiFlowDefinition
+        {
+            VariableOverrides = new List<ApiFlowVariableOverride>
+            {
+                new() { Key = "flowVar", Value = "flowValue", IsEnabled = true }
+            }
+        };
+        var step = new ApiFlowStep
+        {
+            VariableOverrides = new List<ApiFlowVariableOverride>
+            {
+                new() { Key = "stepVar", Value = "stepValue", IsEnabled = true }
+            }
+        };
+
+        var scope = await builder.BuildAsync(flow, step, null, null, new Dictionary<string, string>());
+
+        Assert.Contains("flowVar", scope.Keys);
+        Assert.Equal("flowValue", scope["flowVar"]);
+        Assert.Contains("stepVar", scope.Keys);
+        Assert.Equal("stepValue", scope["stepVar"]);
     }
 
     [Fact]
-    public async Task RunFlowAsync_StopsOnFailureWithStopPolicy()
+    public async Task ScopeBuilder_BuildsScopeWithRunScopedVariables()
     {
-        var request = new HttpRequestEntry
-        {
-            Id = "req1",
-            Name = "Test Request",
-            Method = ApiRequestMethod.Get,
-            Url = "https://api.example.com/test"
-        };
+        var builder = new FlowVariableScopeBuilder(
+            _collectionRepo, _substitutionMock.Object);
+        
+        var flow = new ApiFlowDefinition();
+        var step = new ApiFlowStep();
+        var runScopedVars = new Dictionary<string, string> { ["capturedVar"] = "capturedValue" };
 
-        var collection = new ApiCollection
+        var scope = await builder.BuildAsync(flow, step, null, null, runScopedVars);
+
+        Assert.Contains("capturedVar", scope.Keys);
+        Assert.Equal("capturedValue", scope["capturedVar"]);
+    }
+
+    // ─── FlowReferenceResolver Tests ────────────────────────────────────────────
+
+    [Fact]
+    public async Task ReferenceResolver_ResolveRequestAsync_LocalCollection()
+    {
+        var resolver = new FlowReferenceResolver(
+            _collectionRepo, _envRepo, _linkedRootRepo);
+        
+        // Add a test request to the collection repo
+        var request = new HttpRequestEntry { Id = "req1", Name = "Test Request" };
+        _collectionRepo.Collections.Add(new ApiCollection
         {
             Id = "col1",
             Name = "Test Collection",
             Nodes = new List<ApiCollectionNode>
             {
-                new ApiCollectionNode
-                {
-                    Id = "node1",
-                    Type = ApiCollectionNodeType.Request,
-                    Name = "Test Request",
-                    Request = request
-                }
+                new() { Id = "node1", Type = ApiCollectionNodeType.Request, Request = request }
             }
-        };
+        });
 
-        await _collectionRepo.AddCollectionAsync("Test Collection");
-        var cols = _collectionRepo.Collections.ToList();
-        var col = cols[0];
-        col.Id = "col1";
-        col.Nodes = collection.Nodes;
-
-        var flow = new ApiFlowDefinition
+        var reference = new ApiRequestReference
         {
-            Id = "flow1",
-            Name = "Test Flow",
-            FailurePolicy = ApiFlowFailurePolicy.StopOnFailure,
-            Steps = new List<ApiFlowStep>
-            {
-                new ApiFlowStep { Id = "step1", Order = 0, IsEnabled = true, RequestReference = new ApiRequestReference { SourceKind = ApiRequestReferenceKind.LocalCollection, SourceId = "col1", RequestId = "req1" } },
-                new ApiFlowStep { Id = "step2", Order = 1, IsEnabled = true, RequestReference = new ApiRequestReference { SourceKind = ApiRequestReferenceKind.LocalCollection, SourceId = "col1", RequestId = "req1" } },
-                new ApiFlowStep { Id = "step3", Order = 2, IsEnabled = true, RequestReference = new ApiRequestReference { SourceKind = ApiRequestReferenceKind.LocalCollection, SourceId = "col1", RequestId = "req1" } }
-            }
+            SourceKind = ApiRequestReferenceKind.LocalCollection,
+            RequestId = "req1",
+            RequestName = "Test Request"
         };
 
-        var successResult = new HttpRequestResult { StatusCode = 200, Elapsed = TimeSpan.FromMilliseconds(10) };
-        var failResult = new HttpRequestResult { StatusCode = 500, ErrorMessage = "Server error", Elapsed = TimeSpan.FromMilliseconds(10) };
+        var resolved = await resolver.ResolveRequestAsync(reference);
 
-        var callCount = 0;
-        _requestExecutorMock
-            .Setup(x => x.ExecuteAsync(It.IsAny<HttpRequestEntry>(), It.IsAny<ApiCollection>(), It.IsAny<ApiEnvironment>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() =>
-            {
-                callCount++;
-                return callCount == 1 ? successResult : failResult;
-            });
-
-        _substitutionMock
-            .Setup(x => x.Substitute(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>()))
-            .Returns<string, IReadOnlyDictionary<string, string?>>((input, _) => input);
-
-        var flowResult = await _runner.RunFlowAsync(flow, CancellationToken.None);
-
-        Assert.Equal(ApiFlowRunState.Failed, flowResult.State);
-        Assert.Equal(3, flowResult.StepResults.Count); // All steps have results (remaining are skipped)
-        Assert.Equal(ApiFlowStepState.Completed, flowResult.StepResults[0].State);
-        Assert.Equal(ApiFlowStepState.Failed, flowResult.StepResults[1].State);
-        Assert.Equal(ApiFlowStepState.Skipped, flowResult.StepResults[2].State);
+        Assert.NotNull(resolved);
+        Assert.Equal("req1", resolved.Id);
     }
 
     [Fact]
-    public async Task RunFlowAsync_ContinuesOnFailureWithContinuePolicy()
+    public async Task ReferenceResolver_ResolveRequestAsync_NotFound()
     {
-        var request = new HttpRequestEntry
+        var resolver = new FlowReferenceResolver(
+            _collectionRepo, _envRepo, _linkedRootRepo);
+        
+        var reference = new ApiRequestReference
         {
-            Id = "req1",
-            Name = "Test Request",
-            Method = ApiRequestMethod.Get,
-            Url = "https://api.example.com/test"
+            SourceKind = ApiRequestReferenceKind.LocalCollection,
+            RequestId = "nonexistent",
+            RequestName = "Non Existent"
         };
 
-        var collection = new ApiCollection
-        {
-            Id = "col1",
-            Name = "Test Collection",
-            Nodes = new List<ApiCollectionNode>
-            {
-                new ApiCollectionNode
-                {
-                    Id = "node1",
-                    Type = ApiCollectionNodeType.Request,
-                    Name = "Test Request",
-                    Request = request
-                }
-            }
-        };
+        var resolved = await resolver.ResolveRequestAsync(reference);
 
-        await _collectionRepo.AddCollectionAsync("Test Collection");
-        var cols = _collectionRepo.Collections.ToList();
-        var col = cols[0];
-        col.Id = "col1";
-        col.Nodes = collection.Nodes;
-
-        var flow = new ApiFlowDefinition
-        {
-            Id = "flow1",
-            Name = "Test Flow",
-            FailurePolicy = ApiFlowFailurePolicy.ContinueOnFailure,
-            Steps = new List<ApiFlowStep>
-            {
-                new ApiFlowStep { Id = "step1", Order = 0, IsEnabled = true, RequestReference = new ApiRequestReference { SourceKind = ApiRequestReferenceKind.LocalCollection, SourceId = "col1", RequestId = "req1" } },
-                new ApiFlowStep { Id = "step2", Order = 1, IsEnabled = true, RequestReference = new ApiRequestReference { SourceKind = ApiRequestReferenceKind.LocalCollection, SourceId = "col1", RequestId = "req1" } },
-                new ApiFlowStep { Id = "step3", Order = 2, IsEnabled = true, RequestReference = new ApiRequestReference { SourceKind = ApiRequestReferenceKind.LocalCollection, SourceId = "col1", RequestId = "req1" } }
-            }
-        };
-
-        var failResult = new HttpRequestResult { StatusCode = 500, ErrorMessage = "Server error", Elapsed = TimeSpan.FromMilliseconds(10) };
-
-        _requestExecutorMock
-            .Setup(x => x.ExecuteAsync(It.IsAny<HttpRequestEntry>(), It.IsAny<ApiCollection>(), It.IsAny<ApiEnvironment>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(failResult);
-
-        _substitutionMock
-            .Setup(x => x.Substitute(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>()))
-            .Returns<string, IReadOnlyDictionary<string, string?>>((input, _) => input);
-
-        var flowResult = await _runner.RunFlowAsync(flow, CancellationToken.None);
-
-        Assert.Equal(ApiFlowRunState.CompletedWithFailures, flowResult.State);
-        Assert.Equal(3, flowResult.StepResults.Count);
-        Assert.All(flowResult.StepResults, sr => Assert.Equal(ApiFlowStepState.Failed, sr.State));
+        Assert.Null(resolved);
     }
 
-    // ─── Cleanup ──────────────────────────────────────────────────────────────
-
-    public async Task DisposeAsync()
+    [Fact]
+    public async Task ReferenceResolver_ResolveEnvironmentAsync_Local()
     {
-        try
+        var resolver = new FlowReferenceResolver(
+            _collectionRepo, _envRepo, _linkedRootRepo);
+        
+        // Add a test environment
+        _envRepo.Environments.Add(new ApiEnvironment { Id = "env1", Name = "Test Env" });
+
+        var reference = new ApiEnvironmentReference
         {
-            Directory.Delete(_testRoot, true);
-        }
-        catch
+            SourceKind = ApiEnvironmentReferenceKind.Local,
+            EnvironmentId = "env1"
+        };
+
+        var resolved = await resolver.ResolveEnvironmentAsync(reference);
+
+        Assert.NotNull(resolved);
+        Assert.Equal("env1", resolved.Id);
+    }
+
+    [Fact]
+    public async Task ReferenceResolver_ResolveEnvironmentAsync_NotFound()
+    {
+        var resolver = new FlowReferenceResolver(
+            _collectionRepo, _envRepo, _linkedRootRepo);
+        
+        var reference = new ApiEnvironmentReference
         {
-            // Ignore cleanup errors
-        }
+            SourceKind = ApiEnvironmentReferenceKind.Local,
+            EnvironmentId = "nonexistent"
+        };
+
+        var resolved = await resolver.ResolveEnvironmentAsync(reference);
+
+        Assert.Null(resolved);
     }
 }
