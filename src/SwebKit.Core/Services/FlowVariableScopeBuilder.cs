@@ -1,4 +1,5 @@
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 
 namespace SwebKit.Core.Services;
@@ -59,15 +60,15 @@ public sealed class FlowVariableScopeBuilder
         }
 
         // Add flow-level variable overrides
-        foreach (var override in flow.VariableOverrides.Where(o => o.IsEnabled))
+        foreach (var variableOverride in flow.VariableOverrides.Where(o => o.IsEnabled))
         {
-            scope[override.Key] = override.Value;
+            scope[variableOverride.Key] = variableOverride.Value;
         }
 
         // Add step-level variable overrides
-        foreach (var override in step.VariableOverrides.Where(o => o.IsEnabled))
+        foreach (var variableOverride in step.VariableOverrides.Where(o => o.IsEnabled))
         {
-            scope[override.Key] = override.Value;
+            scope[variableOverride.Key] = variableOverride.Value;
         }
 
         // Add run-scoped variables (from previous captures)

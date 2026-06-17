@@ -13,6 +13,8 @@ public sealed class LinkedCollectionRootConfig
     public string Path { get; set; } = string.Empty;
     public bool IsEnabled { get; set; } = true;
     public DateTimeOffset AddedAt { get; set; }
+
+    public string LocalPath => Path;
 }
 
 public sealed class LinkedCollectionRootLoadResult

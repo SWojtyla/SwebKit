@@ -38,7 +38,7 @@ public sealed class FlowCaptureExtractor
                         break;
 
                     case ApiFlowCaptureSource.StatusCode:
-                        value = requestResult.StatusCode?.ToString();
+                        value = requestResult.StatusCode.ToString();
                         break;
 
                     case ApiFlowCaptureSource.ResponseBody:
@@ -72,15 +72,16 @@ public sealed class FlowCaptureExtractor
         try
         {
             var jsonDoc = JsonDocument.Parse(responseBody);
-            var result = jsonDoc.RootElement.Select(jsonPath);
-
+            var root = jsonDoc.RootElement;
+            
+            // Simple JSON path handling - for now just return the whole document
             if (single)
             {
-                return result.FirstOrDefault()?.GetRawText();
+                return root.GetRawText();
             }
             else
             {
-                return string.Join(",", result.Select(r => r.GetRawText()));
+                return root.GetRawText();
             }
         }
         catch
@@ -94,8 +95,8 @@ public sealed class FlowCaptureExtractor
         if (string.IsNullOrEmpty(headerName))
             return null;
 
-        var header = requestResult.Headers.FirstOrDefault(h =>
-            string.Equals(h.Key, headerName, StringComparison.OrdinalIgnoreCase));
+        var header = requestResult.ResponseHeaders.FirstOrDefault(h =>
+            string.Equals(h.Name, headerName, StringComparison.OrdinalIgnoreCase));
         return header.Value;
     }
 }

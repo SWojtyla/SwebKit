@@ -163,6 +163,8 @@ public sealed class ApiFlowVariableOverride
     /// Auto-detected from key name (e.g., contains "secret", "token", "password", "key", "auth").
     /// </summary>
     public bool IsSecret { get; set; }
+
+    public bool IsEnabled { get; set; } = true;
 }
 
 // ─── Capture Mapping ─────────────────────────────────────────────────────────

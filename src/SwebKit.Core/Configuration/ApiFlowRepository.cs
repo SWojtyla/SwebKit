@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
@@ -379,7 +380,7 @@ public sealed class ApiFlowRepository
         return Path.Combine(".swebkit-api", "flows", $"{flowId}.swebflow.json");
     }
 
-    private static async Task<ApiFlowDefinition?> LoadLinkedFlowAsync(string filePath, Domain.LinkedCollectionRoot root)
+    private static async Task<ApiFlowDefinition?> LoadLinkedFlowAsync(string filePath, LinkedCollectionRootConfig root)
     {
         try
         {

@@ -21,6 +21,8 @@ public sealed class EnvironmentRepository
 
     public ApiClientUiState UiState => _store.UiState;
 
+    public Task<IReadOnlyList<ApiEnvironment>> GetAllAsync() => Task.FromResult(Environments);
+
     public async Task LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();

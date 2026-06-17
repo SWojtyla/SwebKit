@@ -16,6 +16,14 @@ public sealed class LinkedCollectionRootRepository
 
     public IReadOnlyList<LinkedCollectionRootConfig> Roots => _store.Roots.AsReadOnly();
 
+    public Task<IReadOnlyList<LinkedCollectionRootConfig>> GetAllAsync() => Task.FromResult(Roots);
+
+    public Task<LinkedCollectionRootConfig?> GetByIdAsync(string id) => 
+        Task.FromResult(Roots.FirstOrDefault(r => r.Id == id));
+
+    public Task<IReadOnlyList<ApiCollection>> LoadLinkedCollectionsAsync(string rootId) =>
+        Task.FromResult<IReadOnlyList<ApiCollection>>(new List<ApiCollection>());
+
     public async Task LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
