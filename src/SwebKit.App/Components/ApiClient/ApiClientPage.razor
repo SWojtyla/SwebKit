@@ -13,6 +13,8 @@
 @inject IJSRuntime JS
 @inject IAppEventBus Events
 @inject CommandRegistry Commands
+@inject IApiFlowRepository FlowRepository
+@inject IApiFlowRunnerService FlowRunner
 @implements IAsyncDisposable
 
 <div class="api-client-page">
@@ -77,6 +79,13 @@
                     <button type="button" class="ctx-item" disabled="@(_activeCollection is null)" @onclick="OpenCollectionExportDialogFromMenu">Export collection</button>
                 </ChildContent>
             </AppDropdown>
+            <AppButton Variant="Secondary" Size="Small"
+                    CssClass="@(_worksheetMode == WorksheetFlows ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
+                    Title="Manage request flows"
+                    OnClick="@(() => _worksheetMode = _worksheetMode == WorksheetFlows ? null : WorksheetFlows)">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Flow())" Width="14px" />
+                <span>Flows</span>
+            </AppButton>
         </div>
 
         <div class="api-client-toolbar__center">
@@ -264,6 +273,46 @@
                                     }
                                 }
                             </div>
+                        </div>
+                    }
+                    else if (_worksheetMode == WorksheetFlows)
+                    {
+                        <div class="api-client-management-screen">
+                            <div class="api-client-management-screen__header">
+                                <button type="button" class="api-client-management-screen__back"
+                                        @onclick="() => _worksheetMode = null">← Back to requests</button>
+                                <span class="api-client-management-screen__title">Request Flows</span>
+                            </div>
+                            <FlowLibraryPanel OnFlowSelected="OnFlowSelected"
+                                            OnFlowCreated="LoadFlowsAsync"
+                                            OnFlowDeleted="LoadFlowsAsync"
+                                            OnFlowUpdated="LoadFlowsAsync" />
+                        </div>
+                    }
+                    else if (_worksheetMode == WorksheetFlowEditor && _selectedFlow is not null)
+                    {
+                        <div class="api-client-management-screen">
+                            <div class="api-client-management-screen__header">
+                                <button type="button" class="api-client-management-screen__back"
+                                        @onclick="() => _worksheetMode = WorksheetFlows">← Back to flows</button>
+                                <span class="api-client-management-screen__title">Edit Flow — @_selectedFlow.Name</span>
+                            </div>
+                            <FlowEditorPanel Flow="_selectedFlow"
+                                           OnBackToLibrary="() => _worksheetMode = WorksheetFlows"
+                                           OnFlowSaved="OnFlowSavedAsync"
+                                           OnFlowDeleted="OnFlowDeletedAsync" />
+                        </div>
+                    }
+                    else if (_worksheetMode == WorksheetFlowRunner && _selectedFlow is not null)
+                    {
+                        <div class="api-client-management-screen">
+                            <div class="api-client-management-screen__header">
+                                <button type="button" class="api-client-management-screen__back"
+                                        @onclick="() => _worksheetMode = WorksheetFlows">← Back to flows</button>
+                                <span class="api-client-management-screen__title">Run Flow — @_selectedFlow.Name</span>
+                            </div>
+                            <FlowRunnerPanel Flow="_selectedFlow"
+                                           OnBack="() => _worksheetMode = WorksheetFlows" />
                         </div>
                     }
             else if (_worksheetMode == WorksheetLinkedRoots)
@@ -684,11 +733,18 @@
     private const string WorksheetLinkedRoots = "linked-roots";
     private const string WorksheetGit = "git";
     private const string WorksheetVariables = "variables";
+    private const string WorksheetFlows = "flows";
+    private const string WorksheetFlowEditor = "flow-editor";
+    private const string WorksheetFlowRunner = "flow-runner";
 
     // Worksheet mode: null = request, WorksheetVars = collection variable editor, WorksheetEnvs = environment manager
     private string? _worksheetMode;
     // Scope version: incremented when collection variables are saved so RequestBuilderPanel rebuilds its resolved scope
     private int _scopeVersion;
+
+    // Flow state
+    private List<ApiFlowDefinition> _flows = new();
+    private ApiFlowDefinition? _selectedFlow = null;
 
     // New-collection dialog state
     private bool _showNewCollectionDialog;
@@ -865,6 +921,44 @@ result.Environments)).ToList();
             Logger.LogError(ex, "Failed to load environments");
             _environments = [];
         }
+    }
+
+    // ── Flow handlers ─────────────────────────────────────────────────────────
+
+    private async Task LoadFlowsAsync()
+    {
+        try
+        {
+            await FlowRepository.LoadLocalAsync();
+            _flows = await FlowRepository.GetAllFlowsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load flows");
+            _flows = new();
+        }
+    }
+
+    private void OnFlowSelected(ApiFlowDefinition flow)
+    {
+        _selectedFlow = flow;
+        _worksheetMode = WorksheetFlowEditor;
+    }
+
+    private async Task OnFlowSavedAsync(ApiFlowDefinition flow)
+    {
+        _selectedFlow = flow;
+        await LoadFlowsAsync();
+    }
+
+    private async Task OnFlowDeletedAsync(ApiFlowDefinition flow)
+    {
+        if (_selectedFlow?.Id == flow.Id)
+        {
+            _selectedFlow = null;
+        }
+        _worksheetMode = WorksheetFlows;
+        await LoadFlowsAsync();
     }
 
     private void RestoreSelectedRequest(string requestId)

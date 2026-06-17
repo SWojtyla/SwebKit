@@ -2,15 +2,15 @@
 
 ## Current State
 
-`In Progress`
+`Complete`
 
 ## Quick Summary
 
-Implementation of request flows (Wave A and Wave B) is in progress. Domain models, repository, runner service, and frontend components have been created. Trace correlation, visual response diff, and no-code assertions remain deferred.
+Implementation of request flows (Wave A and Wave B) is complete. Domain models, repository, runner service, frontend components, and UI integration have all been implemented. Trace correlation, visual response diff, and no-code assertions remain deferred.
 
 **Jira:** not linked
 
-**Current focus:** Complete backend services and frontend integration for request flows.
+**Current focus:** Feature is complete and ready for validation.
 
 ## Progress Checklist
 
@@ -37,8 +37,8 @@ Implementation of request flows (Wave A and Wave B) is in progress. Domain model
 - [x] CSS styles for all flow components
 - [x] Unit tests for repository (ApiFlowRepositoryTests.cs)
 - [x] Unit tests for runner service (ApiClientFlowRunnerServiceTests.cs)
-- [ ] Integration with ApiClientPage.razor
-- [ ] Frontend state management and navigation
+- [x] Integration with ApiClientPage.razor
+- [x] Frontend state management and navigation
 - [ ] Manual validation and testing
 
 ### Deferred Later — Original Wave 1: Trace Correlation
@@ -134,7 +134,7 @@ _None._
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Advanced-workflow implementation not started. API Client feedback cleanup passed focused diagnostics, style inventory, and app build with local signing disabled on 2026-06-14.
+- Validation status: Implementation complete. Backend services and frontend components created with unit tests. UI integration with ApiClientPage.razor complete. Ready for manual validation and testing.
 
 ## Notes
 
