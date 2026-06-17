@@ -89,22 +89,44 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
 
         try
         {
-            var connectionString = _credentialStore.Get(ns.CredentialKey);
-            if (string.IsNullOrWhiteSpace(connectionString))
+            if (ns.UseAad)
             {
-                return new ServiceBusNamespaceConnectionResult(
-                    Client: null,
-                    ConnectionError: "Connection string not found in credential store.");
+                if (string.IsNullOrWhiteSpace(ns.AccountName))
+                {
+                    return new ServiceBusNamespaceConnectionResult(
+                        Client: null,
+                        ConnectionError: "Account name is required for AAD authentication.");
+                }
+
+                // For AAD authentication, use the AccountName as the namespace
+                string fullyQualifiedNamespace = ns.AccountName.Contains('.') 
+                    ? ns.AccountName 
+                    : $"{ns.AccountName}.servicebus.windows.net";
+                
+                client = _clientFactory.CreateWithAad(fullyQualifiedNamespace);
+            }
+            else
+            {
+                var connectionString = _credentialStore.Get(ns.CredentialKey);
+                if (string.IsNullOrWhiteSpace(connectionString))
+                {
+                    return new ServiceBusNamespaceConnectionResult(
+                        Client: null,
+                        ConnectionError: "Connection string not found in credential store.");
+                }
+
+                client = _clientFactory.Create(connectionString);
             }
 
-            client = _clientFactory.Create(connectionString);
             var ok = await client.TestConnectionAsync(ct);
             if (!ok)
             {
                 if (client is IAsyncDisposable d) await d.DisposeAsync();
                 return new ServiceBusNamespaceConnectionResult(
                     Client: null,
-                    ConnectionError: "Connection test failed. Check the connection string.");
+                    ConnectionError: ns.UseAad 
+                        ? "Connection test failed. Check the namespace name and Azure credentials."
+                        : "Connection test failed. Check the connection string.");
             }
 
             return new ServiceBusNamespaceConnectionResult(client, ConnectionError: null);

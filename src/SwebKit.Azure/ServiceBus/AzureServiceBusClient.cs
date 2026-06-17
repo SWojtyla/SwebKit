@@ -1,3 +1,4 @@
+using Azure.Core;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
@@ -32,6 +33,19 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         _scopedEntityPath = string.IsNullOrWhiteSpace(props.EntityPath) ? null : props.EntityPath;
         _client = new ServiceBusClient(connectionString);
         _adminClient = new ServiceBusAdministrationClient(connectionString);
+    }
+
+    /// <summary>Constructor for AAD authentication: creates a client using Azure credentials.</summary>
+    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential)
+        : this(fullyQualifiedNamespace, credential, NullLogger<AzureServiceBusClient>.Instance) { }
+
+    /// <summary>Constructor for AAD authentication: creates a client using Azure credentials.</summary>
+    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential, ILogger<AzureServiceBusClient> logger)
+    {
+        _logger = logger;
+        _scopedEntityPath = null; // AAD auth doesn't support scoped entity paths in the same way
+        _client = new ServiceBusClient(fullyQualifiedNamespace, credential);
+        _adminClient = new ServiceBusAdministrationClient(fullyQualifiedNamespace, credential);
     }
 
     /// <summary>Legacy constructor retained for backward-compatibility with config-based setup.</summary>

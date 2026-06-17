@@ -40,8 +40,8 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
         = new(StringComparer.Ordinal);
 
     // ── Service Bus ──────────────────────────────────────────────────────────
-    // Key = alias (case-insensitive). Value = (client, credentialKey last used).
-    private readonly Dictionary<string, (IServiceBusClient Client, string CredentialKey)> _sbClients
+    // Key = alias (case-insensitive). Value = (client, credentialKey last used, useAad flag).
+    private readonly Dictionary<string, (IServiceBusClient Client, string CredentialKey, bool UseAad)> _sbClients
         = new(StringComparer.OrdinalIgnoreCase);
 
     // ── Redis ────────────────────────────────────────────────────────────────
@@ -154,22 +154,43 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
 
         lock (_lock)
         {
-            // Return cached if credential key is unchanged.
-            if (_sbClients.TryGetValue(alias, out var entry) && entry.CredentialKey == ns.CredentialKey)
+            // Return cached if the configuration is unchanged.
+            if (_sbClients.TryGetValue(alias, out var entry) && 
+                entry.CredentialKey == ns.CredentialKey && 
+                entry.UseAad == ns.UseAad)
                 return entry.Client;
 
-            // Credential changed or first call — create a fresh client.
+            // Configuration changed or first call — create a fresh client.
             _sbClients.Remove(alias);
         }
 
-        var connStr = _credentials.Get(ns.CredentialKey);
-        if (string.IsNullOrWhiteSpace(connStr))
-            return null;
+        IServiceBusClient client;
+        if (ns.UseAad)
+        {
+            if (string.IsNullOrWhiteSpace(ns.AccountName))
+            {
+                _logger.LogWarning("MonitoringConnectionPool: Account name is missing for AAD Service Bus namespace '{Alias}'", alias);
+                return null;
+            }
+            
+            string fullyQualifiedNamespace = ns.AccountName.Contains('.') 
+                ? ns.AccountName 
+                : $"{ns.AccountName}.servicebus.windows.net";
+            
+            client = _sbFactory.CreateWithAad(fullyQualifiedNamespace);
+        }
+        else
+        {
+            var connStr = _credentials.Get(ns.CredentialKey);
+            if (string.IsNullOrWhiteSpace(connStr))
+                return null;
 
-        var client = _sbFactory.Create(connStr);
+            client = _sbFactory.Create(connStr);
+        }
+
         lock (_lock)
         {
-            _sbClients[alias] = (client, ns.CredentialKey);
+            _sbClients[alias] = (client, ns.CredentialKey, ns.UseAad);
         }
         _logger.LogDebug("MonitoringConnectionPool: Service Bus client (re)created for '{Alias}'", alias);
         return client;

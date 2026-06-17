@@ -2002,9 +2002,24 @@ OnSeverityFilterSelectedAsync(args.Value?.ToString());
         {
             foreach (var ns in AppState.ServiceBusNamespaces)
             {
-                var connStr = CredentialStore.Get(ns.CredentialKey);
-                if (string.IsNullOrWhiteSpace(connStr)) continue;
-                var client = SbClientFactory.Create(connStr);
+                IServiceBusClient client;
+                if (ns.UseAad)
+                {
+                    if (string.IsNullOrWhiteSpace(ns.AccountName)) continue;
+                    
+                    string fullyQualifiedNamespace = ns.AccountName.Contains('.') 
+                        ? ns.AccountName 
+                        : $"{ns.AccountName}.servicebus.windows.net";
+                    
+                    client = SbClientFactory.CreateWithAad(fullyQualifiedNamespace);
+                }
+                else
+                {
+                    var connStr = CredentialStore.Get(ns.CredentialKey);
+                    if (string.IsNullOrWhiteSpace(connStr)) continue;
+                    client = SbClientFactory.Create(connStr);
+                }
+                
                 try
                 {
                     dlq += await SumDlqAsync(client, ct);
@@ -2292,8 +2307,22 @@ OnSeverityFilterSelectedAsync(args.Value?.ToString());
             return null;
         }
 
-        var connectionString = CredentialStore.Get(serviceBusNamespace.CredentialKey);
-        return string.IsNullOrWhiteSpace(connectionString) ? null : SbClientFactory.Create(connectionString);
+        if (serviceBusNamespace.UseAad)
+        {
+            if (string.IsNullOrWhiteSpace(serviceBusNamespace.AccountName))
+                return null;
+            
+            string fullyQualifiedNamespace = serviceBusNamespace.AccountName.Contains('.') 
+                ? serviceBusNamespace.AccountName 
+                : $"{serviceBusNamespace.AccountName}.servicebus.windows.net";
+            
+            return SbClientFactory.CreateWithAad(fullyQualifiedNamespace);
+        }
+        else
+        {
+            var connectionString = CredentialStore.Get(serviceBusNamespace.CredentialKey);
+            return string.IsNullOrWhiteSpace(connectionString) ? null : SbClientFactory.Create(connectionString);
+        }
     }
 
     private void SetServiceBusEntityMetric(string tileId, DashboardServiceBusEntityMetric metric)

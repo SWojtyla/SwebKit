@@ -36,6 +36,10 @@ public interface IServiceBusClientFactory
     /// <summary>Creates a new <see cref="IServiceBusClient"/> from a raw connection string.</summary>
     IServiceBusClient Create(string connectionString);
 
+    /// <summary>Creates a new <see cref="IServiceBusClient"/> using AAD authentication.</summary>
+    /// <param name="fullyQualifiedNamespace">The fully qualified namespace (e.g., my-ns.servicebus.windows.net)</param>
+    IServiceBusClient CreateWithAad(string fullyQualifiedNamespace);
+
     /// <summary>
     /// Parses the fully qualified namespace from a Service Bus connection string without creating a client.
     /// </summary>
