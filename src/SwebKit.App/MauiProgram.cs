@@ -183,7 +183,7 @@ public static class MauiProgram
 
             return new NoopKeyVaultSecretResolver();
         });
-        builder.Services.AddTransient<IHttpRequestExecutor, HttpRequestExecutor>();
+        builder.Services.AddSingleton<IHttpRequestExecutor, HttpRequestExecutor>();
         builder.Services.AddSingleton<IOAuth2TokenManager, OAuth2TokenManager>();
         builder.Services.AddSingleton<IAuthHeaderBuilder, AuthHeaderBuilder>();
         builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();
