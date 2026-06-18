@@ -1,3 +1,6 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.Extensions.Logging
 @using SwebKit.Core.Domain
 @using SwebKit.Core.Configuration
 
@@ -20,7 +23,7 @@
 
     @* ── Filter Bar ── *@
     <div class="flow-library-panel__filter">
-        <AppTextField @bind-Value="_filterText" 
+        <AppTextField @bind.Value="_filterText" 
                      Placeholder="Filter flows..." 
                      CssClass="flow-library-panel__filter-input" 
                      OnValueChanged="FilterFlows" />
@@ -111,22 +114,22 @@
     </div>
 
     @* ── Create Flow Dialog ── *@
-    <AppDialog @bind-IsOpen="_showCreateDialog" 
+    <AppDialog @bind.IsOpen="_showCreateDialog" 
                Title="Create New Flow" 
                Size="DialogSize.Medium">
         <ChildContent>
             <div class="flow-create-dialog">
-                <AppTextField @bind-Value="_newFlowName" 
+                <AppTextField @bind.Value="_newFlowName" 
                              Label="Flow Name" 
                              Placeholder="e.g., Login and Get Data" 
                              CssClass="flow-create-dialog__field" />
                 
-                <AppTextField @bind-Value="_newFlowDescription" 
+                <AppTextField @bind.Value="_newFlowDescription" 
                              Label="Description (optional)" 
                              Placeholder="Describe what this flow does" 
                              CssClass="flow-create-dialog__field" />
 
-                <AppRadioGroup @bind-Value="_newFlowStorageScope" 
+                <AppRadioGroup @bind.Value="_newFlowStorageScope" 
                               Label="Storage Location" 
                               CssClass="flow-create-dialog__field">
                     <AppRadio Value="@ApiFlowStorageScope.Local" Label="Local (app-only)" />
@@ -135,7 +138,7 @@
 
                 @if (_newFlowStorageScope == ApiFlowStorageScope.LinkedRoot && _linkedRoots.Count > 0)
                 {
-                    <AppDropdown @bind-Value="_selectedLinkedRootId" 
+                    <AppDropdown @bind.Value="_selectedLinkedRootId" 
                                 Label="Select Repository" 
                                 CssClass="flow-create-dialog__field">
                         <ChildContent>
@@ -159,7 +162,7 @@
     </AppDialog>
 
     @* ── Delete Confirmation Dialog ── *@
-    <AppDialog @bind-IsOpen="_showDeleteDialog" 
+    <AppDialog @bind.IsOpen="_showDeleteDialog" 
                Title="Delete Flow" 
                Size="DialogSize.Small">
         <ChildContent>

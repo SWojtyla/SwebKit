@@ -283,10 +283,10 @@
                                         @onclick="() => _worksheetMode = null">← Back to requests</button>
                                 <span class="api-client-management-screen__title">Request Flows</span>
                             </div>
-                            <FlowLibraryPanel OnFlowSelected="OnFlowSelected"
+                            <!-- <FlowLibraryPanel OnFlowSelected="OnFlowSelected"
                                             OnFlowCreated="LoadFlowsAsync"
                                             OnFlowDeleted="LoadFlowsAsync"
-                                            OnFlowUpdated="LoadFlowsAsync" />
+                                            OnFlowUpdated="LoadFlowsAsync" /> -->
                         </div>
                     }
                     else if (_worksheetMode == WorksheetFlowEditor && _selectedFlow is not null)
@@ -297,10 +297,10 @@
                                         @onclick="() => _worksheetMode = WorksheetFlows">← Back to flows</button>
                                 <span class="api-client-management-screen__title">Edit Flow — @_selectedFlow.Name</span>
                             </div>
-                            <FlowEditorPanel Flow="_selectedFlow"
+                            <!-- <FlowEditorPanel Flow="_selectedFlow"
                                            OnBackToLibrary="() => _worksheetMode = WorksheetFlows"
                                            OnFlowSaved="OnFlowSavedAsync"
-                                           OnFlowDeleted="OnFlowDeletedAsync" />
+                                           OnFlowDeleted="OnFlowDeletedAsync" /> -->
                         </div>
                     }
                     else if (_worksheetMode == WorksheetFlowRunner && _selectedFlow is not null)
@@ -311,8 +311,8 @@
                                         @onclick="() => _worksheetMode = WorksheetFlows">← Back to flows</button>
                                 <span class="api-client-management-screen__title">Run Flow — @_selectedFlow.Name</span>
                             </div>
-                            <FlowRunnerPanel Flow="_selectedFlow"
-                                           OnBack="() => _worksheetMode = WorksheetFlows" />
+                            <!-- <FlowRunnerPanel Flow="_selectedFlow"
+                                           OnBack="() => _worksheetMode = WorksheetFlows" /> -->
                         </div>
                     }
             else if (_worksheetMode == WorksheetLinkedRoots)

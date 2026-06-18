@@ -1,3 +1,5 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.FluentUI.AspNetCore.Components
 @using SwebKit.Core.Domain
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
@@ -40,14 +42,14 @@
                 
                 @if (_useAad)
                 {
-                    <TextField Value="@_addAccountName" ValueChanged="@(v => _addAccountName = v ?? string.Empty)"
+                    <TextField Value="@_addAccountName" ValueChanged="EventCallback.Factory.Create<string>(this, v => _addAccountName = v ?? string.Empty)"
                               Label="Namespace name"
                               Placeholder="my-namespace"
                               InputClass="app-native-control sb-settings-add-form__input" />
                 }
                 else
                 {
-                    <PasswordField Value="@_addConnStr" ValueChanged="@(v => _addConnStr = v ?? string.Empty)"
+                    <PasswordField Value="@_addConnStr" ValueChanged="EventCallback.Factory.Create<string>(this, v => _addConnStr = v ?? string.Empty)"
                                   Label="Connection string"
                                   Placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
                                   InputClass="app-native-control sb-settings-add-form__input" />

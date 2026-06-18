@@ -1,3 +1,6 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.Extensions.Logging
 @using SwebKit.Core.Domain
 @using SwebKit.Core.Configuration
 
@@ -10,7 +13,7 @@
                     OnClick="BackToLibrary">
                 <FluentIcon Value="@(new Icons.Regular.Size16.ArrowLeft())" Width="14px" />
             </AppButton>
-            <AppTextField @bind-Value="_editingFlow.Name" 
+            <AppTextField @bind.Value="_editingFlow.Name" 
                          CssClass="flow-editor-panel__name-input" 
                          Placeholder="Flow name..." 
                          OnValueChanged="FlowNameChanged" />
@@ -21,7 +24,7 @@
         <div class="flow-editor-panel__header-right">
             <AppButton Variant="Secondary" Size="Small" 
                     Title="Save flow" 
-                    Disabled="@!_hasChanges" 
+                    Disabled="@(!_hasChanges)" 
                     OnClick="SaveFlowAsync">
                 <FluentIcon Value="@(new Icons.Regular.Size16.Save())" Width="14px" />
                 <span>Save</span>
@@ -94,7 +97,7 @@
                                     <div class="flow-editor-panel__step-info" @onclick="() => SelectStep(step)">
                                         <div class="flow-editor-panel__step-header">
                                             <span class="flow-editor-panel__step-order">@(step.Order + 1)</span>
-                                            <AppTextField @bind-Value="step.Name" 
+                                            <AppTextField @bind.Value="step.Name" 
                                                          CssClass="flow-editor-panel__step-name-input" 
                                                          Placeholder="Step name..." 
                                                          OnValueChanged="() => FlowChanged()" />
@@ -166,13 +169,13 @@
                         </div>
 
                         <div class="flow-editor-panel__step-editor-content">
-                            <AppTextField @bind-Value="_selectedStep.Name" 
+                            <AppTextField @bind.Value="_selectedStep.Name" 
                                          Label="Step Name" 
                                          Placeholder="e.g., Login Request" 
                                          CssClass="flow-step-editor__field" 
                                          OnValueChanged="FlowChanged" />
 
-                            <AppDropdown @bind-Value="_selectedStep.RequestReference.RequestId" 
+                            <AppDropdown @bind.Value="_selectedStep.RequestReference.RequestId" 
                                         Label="Request" 
                                         CssClass="flow-step-editor__field">
                                 <ChildContent>
@@ -184,7 +187,7 @@
                                 </ChildContent>
                             </AppDropdown>
 
-                            <AppDropdown @bind-Value="_selectedStep.RequestReference.SourceKind" 
+                            <AppDropdown @bind.Value="_selectedStep.RequestReference.SourceKind" 
                                         Label="Request Source" 
                                         CssClass="flow-step-editor__field">
                                 <ChildContent>
@@ -193,14 +196,14 @@
                                 </ChildContent>
                             </AppDropdown>
 
-                            <AppTextField @bind-Value="_selectedStep.TimeoutSeconds" 
+                            <AppTextField @bind.Value="_selectedStep.TimeoutSeconds" 
                                          Label="Timeout (seconds)" 
                                          Type="TextInputType.Number" 
                                          Placeholder="Use flow default" 
                                          CssClass="flow-step-editor__field" 
                                          OnValueChanged="FlowChanged" />
 
-                            <AppCheckbox @bind-Value="_selectedStep.IsEnabled" 
+                            <AppCheckbox @bind.Value="_selectedStep.IsEnabled" 
                                         Label="Enabled" 
                                         CssClass="flow-step-editor__field" 
                                         OnValueChanged="FlowChanged" />
@@ -218,11 +221,11 @@
                                         @foreach (var override in _selectedStep.VariableOverrides)
                                         {
                                             <div class="flow-step-editor__list-item" @key="override.Key">
-                                                <AppTextField @bind-Value="override.Key" 
+                                                <AppTextField @bind.Value="override.Key" 
                                                              Placeholder="Variable name" 
                                                              CssClass="flow-step-editor__list-input" 
                                                              OnValueChanged="FlowChanged" />
-                                                <AppTextField @bind-Value="override.Value" 
+                                                <AppTextField @bind.Value="override.Value" 
                                                              Placeholder="Value" 
                                                              CssClass="flow-step-editor__list-input" 
                                                              OnValueChanged="FlowChanged" />
@@ -250,7 +253,7 @@
                                         @foreach (var mapping in _selectedStep.CaptureMappings)
                                         {
                                             <div class="flow-step-editor__list-item flow-step-editor__capture-item" @key="mapping.Id">
-                                                <AppDropdown @bind-Value="mapping.Source" 
+                                                <AppDropdown @bind.Value="mapping.Source" 
                                                             CssClass="flow-step-editor__list-input">
                                                     <ChildContent>
                                                         <option value="@ApiFlowCaptureSource.BodyJsonPath">JSONPath</option>
@@ -263,23 +266,23 @@
                                                 @if (mapping.Source == ApiFlowCaptureSource.BodyJsonPath || 
                                      mapping.Source == ApiFlowCaptureSource.BodyJsonPathArray)
                                                 {
-                                                    <AppTextField @bind-Value="mapping.JsonPath" 
+                                                    <AppTextField @bind.Value="mapping.JsonPath" 
                                                                  Placeholder="e.g., $.token" 
                                                                  CssClass="flow-step-editor__list-input" 
                                                                  OnValueChanged="FlowChanged" />
                                                 }
                                                 else if (mapping.Source == ApiFlowCaptureSource.ResponseHeader)
                                                 {
-                                                    <AppTextField @bind-Value="mapping.HeaderName" 
+                                                    <AppTextField @bind.Value="mapping.HeaderName" 
                                                                  Placeholder="Header name" 
                                                                  CssClass="flow-step-editor__list-input" 
                                                                  OnValueChanged="FlowChanged" />
                                                 }
-                                                <AppTextField @bind-Value="mapping.TargetVariable" 
+                                                <AppTextField @bind.Value="mapping.TargetVariable" 
                                                              Placeholder="Variable name" 
                                                              CssClass="flow-step-editor__list-input" 
                                                              OnValueChanged="FlowChanged" />
-                                                <AppTextField @bind-Value="mapping.DefaultValue" 
+                                                <AppTextField @bind.Value="mapping.DefaultValue" 
                                                              Placeholder="Default value" 
                                                              CssClass="flow-step-editor__list-input" 
                                                              OnValueChanged="FlowChanged" />
@@ -305,13 +308,13 @@
                 <div class="flow-settings__section">
                     <h4>Flow Settings</h4>
                     
-                    <AppTextArea @bind-Value="_editingFlow.Description" 
+                    <AppTextArea @bind.Value="_editingFlow.Description" 
                                 Label="Description" 
                                 Placeholder="Describe what this flow does..." 
                                 CssClass="flow-settings__field" 
                                 OnValueChanged="FlowChanged" />
 
-                    <AppDropdown @bind-Value="_editingFlow.FailurePolicy" 
+                    <AppDropdown @bind.Value="_editingFlow.FailurePolicy" 
                                 Label="Failure Policy" 
                                 CssClass="flow-settings__field" 
                                 OnValueChanged="FlowChanged">
@@ -321,7 +324,7 @@
                         </ChildContent>
                     </AppDropdown>
 
-                    <AppTextField @bind-Value="_editingFlow.DefaultTimeoutSeconds" 
+                    <AppTextField @bind.Value="_editingFlow.DefaultTimeoutSeconds" 
                                  Label="Default Timeout (seconds)" 
                                  Type="TextInputType.Number" 
                                  CssClass="flow-settings__field" 
@@ -340,11 +343,11 @@
                                 @foreach (var override in _editingFlow.VariableOverrides)
                                 {
                                     <div class="flow-settings__list-item" @key="override.Key">
-                                        <AppTextField @bind-Value="override.Key" 
+                                        <AppTextField @bind.Value="override.Key" 
                                                      Placeholder="Variable name" 
                                                      CssClass="flow-settings__list-input" 
                                                      OnValueChanged="FlowChanged" />
-                                        <AppTextField @bind-Value="override.Value" 
+                                        <AppTextField @bind.Value="override.Value" 
                                                      Placeholder="Value" 
                                                      CssClass="flow-settings__list-input" 
                                                      OnValueChanged="FlowChanged" />
@@ -364,11 +367,11 @@
     </div>
 
     @* ── Rename Dialog ── *@
-    <AppDialog @bind-IsOpen="_showRenameDialog" 
+    <AppDialog @bind.IsOpen="_showRenameDialog" 
                Title="Rename Flow" 
                Size="DialogSize.Small">
         <ChildContent>
-            <AppTextField @bind-Value="_renameNewName" 
+            <AppTextField @bind.Value="_renameNewName" 
                          Label="New Name" 
                          Placeholder="Enter new flow name" 
                          CssClass="flow-rename-dialog__field" />
@@ -384,7 +387,7 @@
     </AppDialog>
 
     @* ── Delete Step Dialog ── *@
-    <AppDialog @bind-IsOpen="_showDeleteStepDialog" 
+    <AppDialog @bind.IsOpen="_showDeleteStepDialog" 
                Title="Delete Step" 
                Size="DialogSize.Small">
         <ChildContent>
@@ -428,7 +431,7 @@
     private ApiFlowStep? _draggedStep = null;
     private ApiFlowStep? _dragOverStep = null;
 
-    private class RequestReferenceInfo
+    internal class RequestReferenceInfo
     {
         public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;

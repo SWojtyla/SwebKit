@@ -1,9 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <PropertyGroup>
         <!-- <TargetFrameworks>net10.0-android</TargetFrameworks> -->
         <!-- <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks> -->
-        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+        <TargetFrameworks>net10.0-windows10.0.19041.0</TargetFrameworks>
 
         <!-- Note for MacCatalyst:
             The default runtime is maccatalyst-x64, except in Release config, in which case the default is maccatalyst-x64;maccatalyst-arm64.
@@ -20,6 +20,13 @@
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
         <Nullable>enable</Nullable>
         <MauiVersion>10.0.70</MauiVersion>
+        <!-- Unpackaged + self-contained for debug launches (matches the build task flags).
+             Without this, the dotnet-maui debugger builds in packaged mode and the auto-initializer
+             tries to COM-activate DeploymentInitializeOptions before any MSIX identity exists,
+             causing REGDB_E_CLASSNOTREG (0x80040154) at startup. -->
+        <WindowsPackageType Condition="'$(Configuration)' == 'Debug' AND $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">None</WindowsPackageType>
+        <WindowsAppSDKSelfContained Condition="'$(Configuration)' == 'Debug' AND $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">true</WindowsAppSDKSelfContained>
+
         <!-- Certificate not installed in this dev environment; suppress packaging-only warnings -->
         <NoWarn>$(NoWarn);APPX0102;APPX0107</NoWarn>
 

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
@@ -11,7 +12,7 @@ namespace SwebKit.Core.Configuration;
 /// Linked-root flows are stored under the linked repository at <c>.swebkit-api/flows/&lt;flow&gt;.swebflow.json</c>.
 /// Uses the atomic-write + <c>.bak</c> recovery pattern shared by all SwebKit repositories.
 /// </summary>
-public sealed class ApiFlowRepository
+public sealed class ApiFlowRepository : IApiFlowRepository
 {
     private static readonly JsonSerializerOptions Options = new(SwebKitJsonOptions.Indented)
     {
