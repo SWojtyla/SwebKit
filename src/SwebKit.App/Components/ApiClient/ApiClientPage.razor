@@ -1,3 +1,5 @@
+@using SwebKit.Core.Services
+
 @page "/api-client"
 @inject IFolderPickerService FolderPicker
 @inject CollectionRepository CollectionRepo
@@ -13,6 +15,7 @@
 @inject IJSRuntime JS
 @inject IAppEventBus Events
 @inject CommandRegistry Commands
+@inject AppStateService AppState
 @implements IAsyncDisposable
 
 <div class="api-client-page">
@@ -779,6 +782,9 @@
 
         // Subscribe to keyboard shortcut events published by MainLayout
         Events.Subscribe<ApiClientShortcutEvent>(OnApiClientShortcut);
+        
+        // Subscribe to demo mode changes to show/hide demo collections
+        AppState.DemoModeChanged += OnDemoModeChanged;
 
         // Load local collections/environments first, then merge linked roots into the collection list.
         await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
@@ -793,6 +799,7 @@
         {
             await CollectionRepo.LoadAsync();
             _collections = BuildCombinedCollections();
+            
             _activeCollection = _collections.FirstOrDefault();
 
             // Restore last selected request for the active collection
@@ -811,6 +818,14 @@
         }
     }
 
+    private async void OnDemoModeChanged()
+    {
+        await InvokeAsync(async () => {
+            await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
+            await LoadLinkedRootsAsync();
+        });
+    }
+
     private async Task LoadLinkedRootsAsync()
     {
         try
@@ -826,9 +841,8 @@
                 linkedCollections.AddRange(result.Collections);
             }
 
-            _collections = CollectionRepo.Collections.Concat(linkedCollections).ToList();
-            _environments = EnvironmentRepo.Environments.Concat(_linkedRootResults.SelectMany(result =>
-result.Environments)).ToList();
+            _collections = BuildCombinedCollections();
+            _environments = BuildCombinedEnvironments();
             _linkedRootInfos = _linkedRootResults.Select(result => new LinkedCollectionTreeInfo
             {
                 Id = result.Config.Id,
@@ -1443,7 +1457,7 @@ expectedStamp);
         }
 
         await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(r => r.Collections)).ToList();
+        _collections = BuildCombinedCollections();
         _linkedSaveError = null;
         _linkedSaveConflict = null;
         if (_selectedRequestId is not null)
@@ -1636,7 +1650,7 @@ expectedStamp);
             await SaveActiveCollectionAsync();
         else
             await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(r => r.Collections)).ToList();
+        _collections = BuildCombinedCollections();
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -2161,6 +2175,7 @@ StringComparison.OrdinalIgnoreCase));
     public async ValueTask DisposeAsync()
     {
         Events.Unsubscribe<ApiClientShortcutEvent>(OnApiClientShortcut);
+        AppState.DemoModeChanged -= OnDemoModeChanged;
         Commands.Unregister("api-new-request");
         Commands.Unregister("api-new-collection");
         Commands.Unregister("api-env-manager");
@@ -2237,8 +2252,19 @@ FindLinkedRootForEnvironment(string environmentId)
         string? RequestFilePath,
         string Message);
 
-    private List<ApiCollection> BuildCombinedCollections() =>
-        CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(root => root.Collections)).ToList();
+    private List<ApiCollection> BuildCombinedCollections()
+    {
+        var combined = CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(root => root.Collections)).ToList();
+        
+        // Add demo collection if in demo mode
+        if (AppState.UseDemoData)
+        {
+            var demoCollection = DemoApiCollectionFactory.CreateDemoCollection();
+            combined = [demoCollection, .. combined];
+        }
+        
+        return combined;
+    }
 
     private List<ApiEnvironment> BuildCombinedEnvironments() =>
         EnvironmentRepo.Environments.Concat(_linkedRootResults.SelectMany(root => root.Environments)).ToList();
