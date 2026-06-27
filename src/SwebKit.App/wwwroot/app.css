@@ -7,3 +7,8 @@
 @import url("./styles/05-primitives-utilities.css");
 @import url("./styles/06-observability.css");
 @import url("./styles/07-pipelines-legacy.css");
+
+/* API Client design tokens and styles */
+@import url("css/Styles/00-api-tokens.css");
+@import url("css/Styles/01-api-base.css");
+@import url("css/Styles/02-api-components.css");

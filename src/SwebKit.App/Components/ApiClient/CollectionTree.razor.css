@@ -1,4 +1,9 @@
 /* CollectionTree CSS isolation */
+/* Uses API Client design tokens from /wwwroot/css/Styles/00-api-tokens.css which are globally available */
+
+/* ===================================================================
+   COLLECTION TREE CONTAINER
+   =================================================================== */
 
 .collection-tree {
     display: flex;
@@ -6,25 +11,31 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
 }
 
-/* ── Search ─────────────────────────────────────────────── */
+/* ===================================================================
+   SEARCH SECTION
+   =================================================================== */
 
 .collection-tree__search {
     flex-shrink: 0;
-    padding: 6px 8px;
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
     border-bottom: 1px solid var(--color-border);
 }
 
 .collection-tree__search-input {
     width: 100%;
     box-sizing: border-box;
-    background: var(--color-surface-raised);
+    background: var(--api-surface-raised);
     border: 1px solid var(--color-border);
-    border-radius: 4px;
+    border-radius: var(--api-radius-sm);
     color: var(--color-text);
-    font-size: 12px;
-    padding: 4px 8px;
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    transition: all var(--api-transition-fast);
 }
 
 .collection-tree__search-input::placeholder {
@@ -36,47 +47,70 @@
     outline-offset: -1px;
 }
 
-/* ── Row list ───────────────────────────────────────────── */
+/* ===================================================================
+   ROWS CONTAINER
+   =================================================================== */
 
 .collection-tree__rows {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    /* Enable GPU acceleration for smooth scrolling */
+    transform: translateZ(0);
 }
 
-/* ── Individual row ─────────────────────────────────────── */
+/* ===================================================================
+   INDIVIDUAL ROW
+   =================================================================== */
 
 .collection-tree__row {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 4px;
-    height: 30px;
+    gap: var(--api-spacing-xs);
+    min-height: var(--api-tree-row-height);
     cursor: pointer;
-    border-radius: 3px;
-    padding-right: 6px;
+    border-radius: var(--api-radius-sm);
+    padding-right: var(--api-spacing-sm);
     user-select: none;
-    font-size: 12px;
+    font-size: var(--api-font-size-sm);
     color: var(--color-text);
-    transition: background 0.08s;
+    transition: all var(--api-transition-fast);
+    /* Use CSS variable for indentation based on depth */
+    padding-left: calc(var(--api-tree-indent) * (1 + var(--depth, 0)));
 }
 
+/* Indentation with visual guides */
+.collection-tree__row::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: calc(var(--api-tree-indent) * var(--depth, 0));
+    border-left: 1px solid var(--api-border-color-subtle);
+    pointer-events: none;
+}
+
+/* Row hover and selection states */
 .collection-tree__row:hover {
-    background: var(--color-surface-hover);
+    background: var(--api-surface-hover);
 }
 
 .collection-tree__row--selected {
-    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
-    color: var(--color-text);
+    background: var(--api-accent-subtle);
+    font-weight: var(--api-font-weight-semibold);
+    color: var(--color-text-emphasis);
 }
 
 .collection-tree__row--selected:hover {
-    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+    background: var(--api-accent-subtle-hover);
 }
 
 .collection-tree__row--active-collection {
     background: color-mix(in srgb, var(--color-accent) 8%, transparent);
-    font-weight: 600;
+    font-weight: var(--api-font-weight-semibold);
 }
 
 .collection-tree__row--active-collection:hover {
@@ -87,9 +121,9 @@
     height: 24px;
     cursor: default;
     color: var(--color-text-muted);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    font-size: var(--api-font-size-xs);
+    font-weight: var(--api-font-weight-bold);
+    letter-spacing: var(--api-letter-spacing-wide);
     text-transform: uppercase;
 }
 
@@ -99,7 +133,7 @@
 
 .collection-tree__row--linked-root {
     color: var(--color-text);
-    font-weight: 600;
+    font-weight: var(--api-font-weight-semibold);
 }
 
 .collection-tree__row--active-linked-root {
@@ -111,7 +145,9 @@
     background: color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 
-/* ── Chevron ────────────────────────────────────────────── */
+/* ===================================================================
+   CHEVRON (EXPAND/COLLAPSE)
+   =================================================================== */
 
 .collection-tree__chevron {
     flex-shrink: 0;
@@ -124,23 +160,25 @@
     border: none;
     cursor: pointer;
     color: var(--color-text-muted);
-    font-size: 10px;
     padding: 0;
-    border-radius: 2px;
-    transition: color 0.1s;
+    border-radius: var(--api-radius-xs);
+    transition: all var(--api-transition-fast);
 }
 
 .collection-tree__chevron:hover {
     color: var(--color-text);
-    background: var(--color-surface-hover);
+    background: var(--api-surface-hover);
 }
 
 .collection-tree__chevron--spacer {
     cursor: default;
     pointer-events: none;
+    visibility: hidden;
 }
 
-/* ── Icon ───────────────────────────────────────────────── */
+/* ===================================================================
+   ICONS
+   =================================================================== */
 
 .collection-tree__icon {
     flex-shrink: 0;
@@ -149,33 +187,88 @@
     text-align: center;
 }
 
-/* ── Method badge (tiny, inside tree) ───────────────────── */
+/* Fluent UI icon wrapper - replaces emoji icons */
+.collection-tree__fluent-icon {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+}
+
+.collection-tree__fluent-icon :deep(svg) {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+/* ===================================================================
+   METHOD BADGE
+   =================================================================== */
 
 .collection-tree__method-badge {
     flex-shrink: 0;
-    font-size: 9px;
-    font-weight: 700;
+    font-size: var(--api-font-size-xs);
+    font-weight: var(--api-font-weight-bold);
     padding: 1px 4px;
-    border-radius: 2px;
-    letter-spacing: 0.03em;
+    border-radius: var(--api-radius-xs);
+    letter-spacing: var(--api-letter-spacing-wide);
     text-transform: uppercase;
-    background: var(--color-surface-raised);
-    color: var(--color-text-muted);
     min-width: 30px;
     text-align: center;
 }
 
-.collection-tree__method-badge--get    { background: #1a6b2f; color: #a8f0bd; }
-.collection-tree__method-badge--post   { background: #1a4d8f; color: #a8d0f0; }
-.collection-tree__method-badge--put    { background: #6b5c1a; color: #f0e0a8; }
-.collection-tree__method-badge--patch  { background: #4a1a6b; color: #d8a8f0; }
-.collection-tree__method-badge--delete { background: #6b1a1a; color: #f0a8a8; }
-.collection-tree__method-badge--head   { background: #2a2a2a; color: #aaa; }
-.collection-tree__method-badge--options { background: #2a2a2a; color: #aaa; }
-.collection-tree__method-badge--graphql { background: #4a0d6b; color: #e2a8f0; }
-.collection-tree__method-badge--websocket { background: #0d4a4a; color: #a8e8f0; }
+/* Method badge colors using API tokens */
+.collection-tree__method-badge--get {
+    background: color-mix(in srgb, var(--api-method-get) 15%, transparent);
+    color: var(--api-method-get);
+}
 
-/* ── Label ──────────────────────────────────────────────── */
+.collection-tree__method-badge--post {
+    background: color-mix(in srgb, var(--api-method-post) 15%, transparent);
+    color: var(--api-method-post);
+}
+
+.collection-tree__method-badge--put {
+    background: color-mix(in srgb, var(--api-method-put) 15%, transparent);
+    color: var(--api-method-put);
+}
+
+.collection-tree__method-badge--patch {
+    background: color-mix(in srgb, var(--api-method-patch) 15%, transparent);
+    color: var(--api-method-patch);
+}
+
+.collection-tree__method-badge--delete {
+    background: color-mix(in srgb, var(--api-method-delete) 15%, transparent);
+    color: var(--api-method-delete);
+}
+
+.collection-tree__method-badge--head {
+    background: color-mix(in srgb, var(--api-method-head) 15%, transparent);
+    color: var(--api-method-head);
+}
+
+.collection-tree__method-badge--options {
+    background: color-mix(in srgb, var(--api-method-options) 15%, transparent);
+    color: var(--api-method-options);
+}
+
+.collection-tree__method-badge--graphql {
+    background: color-mix(in srgb, var(--api-method-graphql) 15%, transparent);
+    color: var(--api-method-graphql);
+}
+
+.collection-tree__method-badge--websocket {
+    background: color-mix(in srgb, var(--api-method-websocket) 15%, transparent);
+    color: var(--api-method-websocket);
+}
+
+/* ===================================================================
+   LABEL
+   =================================================================== */
 
 .collection-tree__label {
     flex: 1;
@@ -186,8 +279,12 @@
 }
 
 .collection-tree__group-label {
-    padding-left: 4px;
+    padding-left: var(--api-spacing-xs);
 }
+
+/* ===================================================================
+   GIT BADGE
+   =================================================================== */
 
 .collection-tree__git-badge {
     flex-shrink: 0;
@@ -196,15 +293,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     padding: 1px 5px;
-    border-radius: 8px;
-    background: var(--color-surface-raised);
-    font-size: 10px;
+    border-radius: var(--api-radius-sm);
+    background: var(--api-surface-raised);
+    font-size: var(--api-font-size-xs);
     color: var(--color-text-muted);
     border: 1px solid var(--color-border);
-}
-    color: var(--color-text-muted);
-    font-size: 10px;
-    font-weight: 500;
 }
 
 .collection-tree__git-badge--dirty {
@@ -212,28 +305,184 @@
     color: var(--color-warning);
 }
 
-/* ── Count badge ────────────────────────────────────────── */
+/* ===================================================================
+   COUNT BADGE
+   =================================================================== */
 
 .collection-tree__count-badge {
     flex-shrink: 0;
-    font-size: 10px;
-    background: var(--color-surface-raised);
+    font-size: var(--api-font-size-xs);
+    background: var(--api-surface-raised);
     color: var(--color-text-faint);
-    border-radius: 8px;
+    border-radius: var(--api-radius-sm);
     padding: 1px 5px;
 }
 
-/* ── Inline rename input ────────────────────────────────── */
+/* ===================================================================
+   RENAME INPUT
+   =================================================================== */
 
 .collection-tree__rename-input {
     flex: 1;
     min-width: 0;
-    background: var(--color-surface-raised);
+    background: var(--api-surface-raised);
     border: 1px solid var(--color-accent);
-    border-radius: 3px;
+    border-radius: var(--api-radius-xs);
     color: var(--color-text);
-    font-size: 12px;
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
     padding: 1px 4px;
     outline: none;
-    font-family: inherit;
+}
+
+/* ===================================================================
+   CONTEXT MENU
+   =================================================================== */
+
+.ctx-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999;
+}
+
+.ctx-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 180px;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--api-radius-sm);
+    padding: 4px;
+    box-shadow: var(--api-shadow-md);
+}
+
+.ctx-item {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-xs);
+    width: 100%;
+    padding: 6px 8px;
+    background: none;
+    border: none;
+    color: var(--color-text);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    cursor: pointer;
+    border-radius: var(--api-radius-xs);
+    transition: all var(--api-transition-fast);
+    white-space: nowrap;
+}
+
+.ctx-item:hover {
+    background: var(--api-surface-hover);
+}
+
+.ctx-item.destructive:hover {
+    background: color-mix(in srgb, var(--api-status-5xx) 10%, transparent);
+    color: var(--api-status-5xx);
+}
+
+.ctx-item-icon {
+    font-size: 12px;
+}
+
+/* Fluent UI icons in context menu */
+.ctx-item-icon :deep(svg) {
+    width: 12px;
+    height: 12px;
+    fill: currentColor;
+}
+
+.ctx-separator {
+    height: 1px;
+    background: var(--color-border);
+    margin: 4px 0;
+}
+
+/* ===================================================================
+   PERFORMANCE OPTIMIZATIONS
+   =================================================================== */
+
+/* Smooth scrolling behavior */
+.collection-tree__rows::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.collection-tree__rows::-webkit-scrollbar-track {
+    background: var(--color-surface);
+}
+
+.collection-tree__rows::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
+}
+
+.collection-tree__rows::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+}
+
+/* ===================================================================
+   RESPONSIVE ADJUSTMENTS
+   =================================================================== */
+
+@media (max-width: 768px) {
+    .collection-tree {
+        border-right: none;
+        border-bottom: 1px solid var(--color-border);
+    }
+    
+    .collection-tree__rows {
+        max-height: 200px;
+    }
+    
+    .collection-tree__row {
+        min-height: 32px;
+    }
+    
+    .collection-tree__method-badge {
+        min-width: 24px;
+        font-size: var(--api-font-size-xs);
+        padding: 0 2px;
+    }
+}
+
+/* ===================================================================
+   HIGH CONTRAST MODE SUPPORT
+   =================================================================== */
+
+@media (forced-colors: active) {
+    .collection-tree__row--selected {
+        forced-color-adjust: none;
+        background: Highlight !important;
+        color: HighlightText !important;
+    }
+    
+    .collection-tree__method-badge {
+        forced-color-adjust: none;
+        border: 1px solid ButtonText;
+    }
+    
+    .collection-tree__fluent-icon :deep(svg) {
+        forced-color-adjust: none;
+        fill: ButtonText;
+    }
+}
+
+/* ===================================================================
+   REDUCED MOTION SUPPORT
+   =================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    .collection-tree__row {
+        transition: none;
+    }
+    
+    .collection-tree__chevron:hover,
+    .ctx-item:hover {
+        transition: none;
+    }
 }

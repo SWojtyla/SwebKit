@@ -1,0 +1,492 @@
+/* ===================================================================
+   API Client Base Styles
+   
+   This file contains base CSS styles that form the foundation for all
+   API Client components. It includes resets, base element styling, and
+   utility classes.
+   =================================================================== */
+
+/* ===================================================================
+   IMPORT TOKENS
+   =================================================================== */
+@import url('00-api-tokens.css');
+
+/* ===================================================================
+   BASE RESETS
+   =================================================================== */
+
+.collection-tree,
+.req-builder,
+.resp-viewer {
+    /* Reset margin and padding for container elements */
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* ===================================================================
+   TYPOGRAPHY BASE
+   =================================================================== */
+
+.api-client-text {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-base);
+    line-height: var(--api-line-height-normal);
+    color: var(--color-text);
+}
+
+.api-client-text--muted {
+    color: var(--color-text-muted);
+}
+
+.api-client-text--success {
+    color: var(--api-status-2xx);
+}
+
+.api-client-text--warning {
+    color: var(--api-status-4xx);
+}
+
+.api-client-text--danger {
+    color: var(--api-status-5xx);
+}
+
+/* ===================================================================
+   UTILITY CLASSES
+   =================================================================== */
+
+/* Flex utilities */
+.api-client-flex {
+    display: flex;
+}
+
+.api-client-flex-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.api-client-flex-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.api-client-flex-between {
+    display: flex;
+    justify-content: space-between;
+}
+
+/* Spacing utilities */
+.api-client-gap-xs { gap: var(--api-spacing-xs); }
+.api-client-gap-sm { gap: var(--api-spacing-sm); }
+.api-client-gap-md { gap: var(--api-spacing-md); }
+.api-client-gap-lg { gap: var(--api-spacing-lg); }
+
+/* Truncation */
+.api-client-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Scroll */
+.api-client-scroll-auto {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* ===================================================================
+   SURFACE STYLES
+   =================================================================== */
+
+.api-client-surface {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+}
+
+.api-client-surface-raised {
+    background: var(--api-surface-raised);
+    border-radius: var(--api-radius-sm);
+}
+
+.api-client-surface-hover:hover {
+    background: var(--api-surface-hover);
+}
+
+/* ===================================================================
+   BORDER STYLES
+   =================================================================== */
+
+.api-client-border {
+    border: var(--api-border-width-thin) solid var(--api-border-color);
+}
+
+.api-client-border-subtle {
+    border: var(--api-border-width-thin) solid var(--api-border-color-subtle);
+}
+
+.api-client-border-radius-sm {
+    border-radius: var(--api-border-radius-sm);
+}
+
+.api-client-border-radius-md {
+    border-radius: var(--api-border-radius-md);
+}
+
+/* ===================================================================
+   TRANSITIONS
+   =================================================================== */
+
+.api-client-transition-fast {
+    transition: all var(--api-transition-fast);
+}
+
+.api-client-transition-normal {
+    transition: all var(--api-transition-normal);
+}
+
+/* ===================================================================
+   FOCUS STATES
+   =================================================================== */
+
+.api-client-focus-ring:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+/* ===================================================================
+   SCREEN READER ONLY
+   =================================================================== */
+
+.api-client-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ===================================================================
+   ANIMATIONS
+   =================================================================== */
+
+@keyframes api-client-fade-in {
+    from { 
+        opacity: 0; 
+        transform: translateY(-4px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0); 
+    }
+}
+
+@keyframes api-client-slide-in-left {
+    from { 
+        opacity: 0; 
+        transform: translateX(-8px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateX(0); 
+    }
+}
+
+@keyframes api-client-pulse {
+    0%, 100% { 
+        opacity: 1; 
+    }
+    50% { 
+        opacity: 0.5; 
+    }
+}
+
+.api-client-animate-fade-in {
+    animation: api-client-fade-in var(--api-transition-normal) ease forwards;
+}
+
+.api-client-animate-slide-left {
+    animation: api-client-slide-in-left var(--api-transition-normal) ease forwards;
+}
+
+.api-client-animate-pulse {
+    animation: api-client-pulse 1s ease-in-out infinite;
+}
+
+/* ===================================================================
+   LOADING STATES
+   =================================================================== */
+
+.api-client-loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.api-client-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    border: 2px solid transparent;
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: api-client-loading-spin 0.75s linear infinite;
+}
+
+@keyframes api-client-loading-spin {
+    to { 
+        transform: translate(-50%, -50%) rotate(360deg); 
+    }
+}
+
+/* ===================================================================
+   BUTTON BASE STYLES
+   =================================================================== */
+
+.api-client-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--api-spacing-xs);
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--api-radius-sm);
+    color: var(--color-text);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    font-weight: var(--api-font-weight-medium);
+    cursor: pointer;
+    transition: all var(--api-transition-fast);
+    user-select: none;
+    white-space: nowrap;
+}
+
+.api-client-btn:hover:not([disabled]) {
+    background: var(--api-surface-hover);
+    border-color: var(--color-accent);
+}
+
+.api-client-btn:active:not([disabled]) {
+    background: var(--api-accent-subtle-active);
+}
+
+.api-client-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.api-client-btn--primary {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    border-color: var(--color-accent);
+}
+
+.api-client-btn--primary:hover:not([disabled]) {
+    background: var(--color-accent-light);
+    border-color: var(--color-accent-light);
+}
+
+.api-client-btn--secondary {
+    background: var(--api-surface-raised);
+    border-color: var(--color-border);
+    color: var(--color-text);
+}
+
+.api-client-btn--secondary:hover:not([disabled]) {
+    background: var(--api-surface-hover);
+    border-color: var(--color-accent);
+}
+
+.api-client-btn--ghost {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+}
+
+.api-client-btn--ghost:hover:not([disabled]) {
+    background: var(--api-surface-hover);
+    color: var(--color-text);
+}
+
+.api-client-btn--danger {
+    background: var(--api-status-5xx);
+    color: white;
+    border-color: var(--api-status-5xx);
+}
+
+.api-client-btn--danger:hover:not([disabled]) {
+    background: color-mix(in srgb, var(--api-status-5xx) 80%, black);
+}
+
+.api-client-btn--small {
+    padding: 2px 6px;
+    font-size: 11px;
+}
+
+.api-client-btn--large {
+    padding: var(--api-spacing-sm) var(--api-spacing-md);
+    font-size: var(--api-font-size-base);
+}
+
+/* ===================================================================
+   FORM CONTROLS
+   =================================================================== */
+
+.api-client-input {
+    width: 100%;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--api-radius-sm);
+    color: var(--color-text);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    transition: all var(--api-transition-fast);
+}
+
+.api-client-input::placeholder {
+    color: var(--color-text-faint);
+}
+
+.api-client-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+.api-client-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.api-client-input--error {
+    border-color: var(--api-status-5xx);
+}
+
+/* ===================================================================
+   BADGE STYLES
+   =================================================================== */
+
+.api-client-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 6px;
+    border-radius: var(--api-radius-sm);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-xs);
+    font-weight: var(--api-font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.api-client-badge--method-get {
+    background: color-mix(in srgb, var(--api-method-get) 15%, transparent);
+    color: var(--api-method-get);
+}
+
+.api-client-badge--method-post {
+    background: color-mix(in srgb, var(--api-method-post) 15%, transparent);
+    color: var(--api-method-post);
+}
+
+.api-client-badge--method-put {
+    background: color-mix(in srgb, var(--api-method-put) 15%, transparent);
+    color: var(--api-method-put);
+}
+
+.api-client-badge--method-delete {
+    background: color-mix(in srgb, var(--api-method-delete) 15%, transparent);
+    color: var(--api-method-delete);
+}
+
+.api-client-badge--method-patch {
+    background: color-mix(in srgb, var(--api-method-patch) 15%, transparent);
+    color: var(--api-method-patch);
+}
+
+.api-client-badge--method-head {
+    background: color-mix(in srgb, var(--api-method-head) 15%, transparent);
+    color: var(--api-method-head);
+}
+
+.api-client-badge--method-options {
+    background: color-mix(in srgb, var(--api-method-options) 15%, transparent);
+    color: var(--api-method-options);
+}
+
+.api-client-badge--method-graphql {
+    background: color-mix(in srgb, var(--api-method-graphql) 15%, transparent);
+    color: var(--api-method-graphql);
+}
+
+.api-client-badge--method-websocket {
+    background: color-mix(in srgb, var(--api-method-websocket) 15%, transparent);
+    color: var(--api-method-websocket);
+}
+
+/* ===================================================================
+   RESPONSIVE UTILITIES
+   =================================================================== */
+
+@media (max-width: 768px) {
+    .api-client-responsive-hide {
+        display: none !important;
+    }
+    
+    .api-client-responsive-stack {
+        flex-direction: column;
+    }
+    
+    .api-client-responsive-full {
+        width: 100%;
+    }
+}
+
+/* ===================================================================
+   REDUCED MOTION
+   =================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    .api-client-animate-fade-in,
+    .api-client-animate-slide-left,
+    .api-client-animate-pulse {
+        animation: none;
+    }
+    
+    .api-client-transition-fast,
+    .api-client-transition-normal {
+        transition: none;
+    }
+}
+
+/* ===================================================================
+   HIGH CONTRAST MODE
+   =================================================================== */
+
+@media (forced-colors: active) {
+    .api-client-btn--primary {
+        forced-color-adjust: none;
+        border: 2px solid ButtonText;
+    }
+    
+    .api-client-input:focus {
+        forced-color-adjust: none;
+        outline: 2px solid Highlight;
+    }
+    
+    .api-client-badge {
+        forced-color-adjust: none;
+        border: 1px solid ButtonText;
+    }
+}

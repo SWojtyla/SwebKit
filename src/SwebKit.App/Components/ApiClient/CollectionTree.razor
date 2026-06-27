@@ -1,7 +1,8 @@
 @* Flattened + virtualized collection tree (BL-5 guard on ShouldRender) *@
+@using Microsoft.FluentUI.AspNetCore.Components
 @inject IJSRuntime JS
 
-<div class="collection-tree">
+<div class="api-client collection-tree">
 
     <div class="collection-tree__search">
         <input type="text" placeholder="Filter..." class="collection-tree__search-input" value="@_filter"
@@ -11,7 +12,7 @@
     <div class="collection-tree__rows" role="tree">
         <Virtualize Items="@_visibleNodes" Context="node" ItemSize="28" OverscanCount="8">
             <div @key="node.Id" class="collection-tree__row @GetRowClass(node)"
-                 style="padding-left: @(8 + node.Depth * 16)px" role="treeitem"
+                 style="--depth: @node.Depth" role="treeitem"
                  aria-selected="@(node.Node.Request?.Id == SelectedRequestId)" @onclick="() => OnRowClickAsync(node)"
                  @oncontextmenu="e => ShowContextMenu(e, node)" @oncontextmenu:preventDefault="true">
 
@@ -26,25 +27,33 @@
                         <button type="button" class="collection-tree__chevron"
                                 aria-label="@(node.IsExpanded ? "Collapse" : "Expand")" @onclick:stopPropagation="true"
                                 @onclick="() => ToggleExpand(node)">
-                            @(node.IsExpanded ? "v" : ">")
+                            <FluentIcon Value="@(node.IsExpanded ? _iconChevronDown : _iconChevronRight)" Width="12px" />
                         </button>
                     }
                     else
                     {
-                        <span class="collection-tree__chevron collection-tree__chevron--spacer" aria-hidden="true"></span>
+                        <span class="collection-tree__chevron collection-tree__chevron--spacer" aria-hidden="true">
+                            <FluentIcon Value="@_iconChevronRight" Width="12px" />
+                        </span>
                     }
 
                     @if (node.Kind == FlatTreeNodeKind.LinkedRoot)
                     {
-                        <span class="collection-tree__icon" aria-hidden="true">🔗</span>
+                        <span class="collection-tree__fluent-icon" aria-hidden="true">
+                            <FluentIcon Value="@_iconLinked" Width="14px" />
+                        </span>
                     }
                     else if (node.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
                     {
-                        <span class="collection-tree__icon" aria-hidden="true">📂</span>
+                        <span class="collection-tree__fluent-icon" aria-hidden="true">
+                            <FluentIcon Value="@_iconCollection" Width="14px" />
+                        </span>
                     }
                     else if (node.Node.Type == ApiCollectionNodeType.Folder)
                     {
-                        <span class="collection-tree__icon" aria-hidden="true">@(node.IsExpanded ? "📂" : "📁")</span>
+                        <span class="collection-tree__fluent-icon" aria-hidden="true">
+                            <FluentIcon Value="@(node.IsExpanded ? _iconFolderOpen : _iconFolder)" Width="14px" />
+                        </span>
                     }
                     else if (node.Node.Request is not null)
                     {
@@ -102,11 +111,11 @@
             @if (isFolder)
             {
                 <button class="ctx-item" @onclick="AddSubFolderCtxAsync">
-                    <span class="ctx-item-icon" aria-hidden="true">▸</span>
+                    <span class="ctx-item-icon" aria-hidden="true"><FluentIcon Value="@_iconAddFolder" Width="12px" /></span>
                     <span>New sub-folder</span>
                 </button>
                 <button class="ctx-item" @onclick="AddRequestCtxAsync">
-                    <span class="ctx-item-icon" aria-hidden="true">+</span>
+                    <span class="ctx-item-icon" aria-hidden="true"><FluentIcon Value="@_iconAddRequest" Width="12px" /></span>
                     <span>New request here</span>
                 </button>
                 <div class="ctx-separator"></div>
@@ -114,18 +123,18 @@
             @if (isCollRoot && !IsLinkedCollection(_ctxNode.CollectionId))
             {
                 <button class="ctx-item" @onclick="LinkToRepoCtxAsync">
-                    <span class="ctx-item-icon" aria-hidden="true">🔗</span>
+                    <span class="ctx-item-icon" aria-hidden="true"><FluentIcon Value="@_iconLinked" Width="12px" /></span>
                     <span>Link to Git repo…</span>
                 </button>
                 <div class="ctx-separator"></div>
             }
             <button class="ctx-item" @onclick="BeginRenameCtx">
-                <span class="ctx-item-icon" aria-hidden="true">✎</span>
+                <span class="ctx-item-icon" aria-hidden="true"><FluentIcon Value="@_iconRename" Width="12px" /></span>
                 <span>@(isCollRoot ? "Rename collection" : "Rename")</span>
             </button>
             <div class="ctx-separator"></div>
             <button class="ctx-item destructive" @onclick="DeleteNodeCtxAsync">
-                <span class="ctx-item-icon" aria-hidden="true">×</span>
+                <span class="ctx-item-icon" aria-hidden="true"><FluentIcon Value="@_iconDelete" Width="12px" /></span>
                 <span>@(isCollRoot ? "Delete collection" : "Delete")</span>
             </button>
         </div>
@@ -149,6 +158,18 @@
     [Parameter] public EventCallback<(string CollectionId, string NewName)> OnRenameCollection { get; set; }
     [Parameter] public EventCallback<string> OnDeleteCollection { get; set; }
     [Parameter] public EventCallback<string> OnLinkCollectionToRepo { get; set; }
+
+    // Icon cache for performance - prevents re-renders on every parent render
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconChevronRight = new Icons.Regular.Size16.ChevronRight();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconChevronDown = new Icons.Regular.Size16.ChevronDown();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconFolder = new Icons.Regular.Size16.Folder();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconFolderOpen = new Icons.Regular.Size16.FolderOpen();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconCollection = new Icons.Regular.Size16.Folder();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconLinked = new Icons.Regular.Size16.Globe();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconAddFolder = new Icons.Regular.Size16.AddSquare();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconAddRequest = new Icons.Regular.Size16.Add();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconRename = new Icons.Regular.Size16.Edit();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconDelete = new Icons.Regular.Size16.Delete();
 
     private enum FlatTreeNodeKind
     {
