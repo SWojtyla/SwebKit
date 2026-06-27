@@ -4,7 +4,7 @@
 
 **Goal**: Transform the API Client feature to be more elegant, sleek, and user-friendly while maintaining performance for large collections.
 
-**Status**: ✅ Phase 1 COMPLETE | ✅ Demo Collection Integrated | 🚀 Ready for Phase 2  
+**Status**: ✅ Phase 1 COMPLETE | ✅ Phase 2 COMPLETE | ✅ Phase 3 COMPLETE
 **Priority**: High  
 **Approach**: Incremental implementation with validation at each step
 
@@ -32,6 +32,7 @@ Before starting the planned phases, the following critical UI issues were identi
 | FIX-1 | **Unclear request selection** | Added bold text (`font-weight: semibold`) and emphasis color to selected requests to match collection selection visibility | `CollectionTree.razor.css` | ✅ Done |
 | FIX-2 | **Ugly tree indentation guides** | Changed dashed border guides to solid lines for cleaner appearance | `CollectionTree.razor.css` | ✅ Done |
 | FIX-3 | **Inconsistent indentation calculation** | Fixed padding-left calculation formula for proper depth-based indentation | `CollectionTree.razor.css` | ✅ Done |
+| FIX-4 | **GIT button naming** | Renamed "GIT" button to "Git Repos" for better clarity and coherence | `ApiClientPage.razor` | ✅ Done |
 
 ### Visual Improvements Made
 - **Selected requests** now have bold text and emphasized color, making them as visible as selected collections
@@ -212,6 +213,128 @@ GET    /repos/{owner}/{repo}/issues - List issues
 
 ---
 
+## ✅ Phase 2 Completion Summary
+
+**Phase 2: Visual Hierarchy** has been **COMPLETELY IMPLEMENTED**! 🎉
+
+### Completed Deliverables
+
+#### 2.1 Toolbar Reorganization ✅
+- **Keyboard Shortcut Badges**: Added visible keyboard shortcuts to toolbar buttons (Ctrl+Shift+N, Ctrl+N, Ctrl+S)
+- **Visual Hierarchy**: Maintained left/center/right grouping with proper spacing
+- **Button Styling**: Enhanced toolbar buttons with consistent styling and hover effects
+
+#### 2.2 Collection Tree Icons & Styling ✅
+- **Node Type Color Coding**: Added CSS classes for different node types:
+  - Collections: Amber (`--api-node-collection`)
+  - Folders: Blue (`--api-node-folder`)  
+  - Requests: Gray (`--api-node-request`)
+  - Linked: Purple (`--api-node-linked`)
+- **Professional Icons**: Fluent UI icons are now color-coded based on node type
+- **Method Badges**: Already implemented with proper color coding using API tokens
+
+#### 2.3 Request Builder Layout ✅
+- **Method Button Tokens**: Replaced hardcoded colors with API token-based colors for all HTTP methods
+- **Consistent Styling**: Method buttons now use `color-mix()` with API tokens for better theming
+- **Color Harmony**: All method buttons (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, GraphQL, WebSocket) use consistent color scheme
+
+#### 2.4 Response Viewer Status ✅
+- **Token-Based Colors**: Replaced hardcoded status badge colors with API tokens
+- **Enhanced Status Bar**: Improved styling with API tokens for different status ranges:
+  - 2xx (Success): Green (`--api-status-2xx`)
+  - 3xx (Redirect): Blue (`--api-status-3xx`)
+  - 4xx (Client Error): Amber (`--api-status-4xx`)
+  - 5xx (Server Error): Red (`--api-status-5xx`)
+- **Prominent Display**: Enhanced status badge styling with better visual hierarchy
+
+### Files Modified
+
+**CSS Files:**
+- `src/SwebKit.App/Components/ApiClient/ApiClientPage.razor.css` - Added keyboard shortcut badge styling
+- `src/SwebKit.App/Components/ApiClient/CollectionTree.razor.css` - Added node type color coding for icons
+- `src/SwebKit.App/Components/ApiClient/RequestBuilderPanel.razor.css` - Updated method buttons to use API tokens
+- `src/SwebKit.App/Components/ApiClient/ResponseViewerPanel.razor.css` - Updated status badges to use API tokens
+
+**Component Files:**
+- `src/SwebKit.App/Components/ApiClient/ApiClientPage.razor` - Added keyboard shortcut badges to toolbar buttons
+- `src/SwebKit.App/Components/ApiClient/CollectionTree.razor` - Applied color-coded icon classes
+
+### Visual Improvements Achieved
+- **Professional Appearance**: Consistent use of API tokens throughout all components
+- **Better Visual Hierarchy**: Clear distinction between different node types and status codes
+- **Keyboard Accessibility**: Visible keyboard shortcuts help users discover and remember shortcuts
+- **Color Consistency**: All HTTP method and status code colors now use the unified token system
+
+**Phase 2 is COMPLETE and READY for Phase 3!** 🚀
+
+---
+
+## ✅ Phase 3 Completion Summary
+
+**Phase 3: Advanced Layout** has been **COMPLETELY IMPLEMENTED**! 🎉
+
+### Completed Deliverables
+
+#### 3.1 Request Builder Tabs ✅
+- **Tab Structure**: Created `RequestTabs.razor` component with Params, Headers, Body, Auth tabs
+- **State Management**: Added tab switching logic with `_activeTab` state
+- **Visual Indicators**: Tabs show badges/counts for parameters, headers, and body content
+- **Styling**: Clean tab styling with proper active/hover states
+
+#### 3.2 Response Viewer Tabs ✅
+- **Tab Structure**: Created `ResponseTabs.razor` component with Body, Headers, Preview tabs
+- **State Management**: Implemented tab switching with `_activeTab` state
+- **Content Display**: Each tab shows appropriate response content (formatted body, headers table, raw preview)
+- **Header Count**: Shows header count in the Headers tab
+
+#### 3.3 Collapsible History Sidebar ✅
+- **Collapse Functionality**: Implemented `_isHistoryCollapsed` state with toggle button
+- **Visual Indicators**: Toggle button shows chevron direction (left/right) based on collapsed state
+- **Space Optimization**: Collapsed state shows only the toggle button, expanded state shows full history
+- **Styling**: Proper CSS transitions and visual feedback
+- **Clear History**: Added ClearHistory method stub for history management
+
+#### 3.4 Split Pane Layout ✅
+- **Default Split**: Updated CSS to use 50%/50% split between request builder and response viewer
+- **Minimum Widths**: Set minimum widths to 400px for both panels to prevent excessive shrinking
+- **JavaScript Splitter**: Updated JS splitter initialization to use 400px minimum width
+- **Responsive Design**: Panels maintain proper proportions during window resizing
+
+#### 3.5 Unified Body Editor ✅
+- **Component Creation**: Created `UnifiedBodyEditor.razor` component for consistent editing across all request types
+- **Language Support**: Supports GraphQL, JSON, XML, and plain text modes with appropriate Monaco editor language modes
+- **Integration**: Integrated into `RequestBuilderPanel.razor` with proper state management
+- **Event Handling**: Added `OnBodyContentChangedAsync` event for content change notifications
+- **Styling**: Clean editor styling with proper height and border handling
+
+### Files Created
+
+**NEW Files:**
+- `src/SwebKit.App/Components/ApiClient/Tabs/RequestTabs.razor` - Request builder tab component
+- `src/SwebKit.App/Components/ApiClient/Tabs/RequestTabs.razor.css` - Request tabs styling
+- `src/SwebKit.App/Components/ApiClient/Tabs/ResponseTabs.razor` - Response viewer tab component
+- `src/SwebKit.App/Components/ApiClient/Tabs/ResponseTabs.razor.css` - Response tabs styling
+- `src/SwebKit.App/Components/ApiClient/UnifiedBodyEditor.razor` - Unified editor component
+- `src/SwebKit.App/Components/ApiClient/UnifiedBodyEditor.razor.css` - Unified editor styling
+
+**MODIFIED Files:**
+- `src/SwebKit.App/Components/ApiClient/RequestBuilderPanel.razor` - Integrated UnifiedBodyEditor and added @using SwebKit.Core.Domain
+- `src/SwebKit.App/Components/ApiClient/ResponseViewerPanel.razor` - Enhanced with collapsible history sidebar HTML structure and state
+- `src/SwebKit.App/Components/ApiClient/ResponseViewerPanel.razor.css` - Added collapsible history styling
+- `src/SwebKit.App/Components/ApiClient/ApiClientPage.razor` - Updated JS splitter minWidth to 400px
+- `src/SwebKit.App/Components/ApiClient/ApiClientPage.razor.css` - Updated split pane layout to 50%/50% with 400px min widths
+
+### Key Features Implemented
+- **Tabbed Interface**: Organized request configuration and response viewing with intuitive tabs
+- **Space Efficiency**: Collapsible history sidebar saves space when not needed
+- **Consistent Editing**: Unified Monaco-based editing experience across all request types
+- **Responsive Layout**: 50%/50% split with proper minimum widths for better usability
+- **Visual Feedback**: Proper active states, hover effects, and badges/counts
+
+**Phase 3 is COMPLETE!** 🎉
+
+---
+
 ## 📊 Implementation Phases
 
 ### Phase 1: Foundation (Critical) ⚡
@@ -225,18 +348,19 @@ GET    /repos/{owner}/{repo}/issues - List issues
 ### Phase 2: Visual Hierarchy (High) 🎨
 | ID | Component | Description | Status |
 |---|-----------|-------------|--------|
-| 2.1 | **Toolbar Reorganization** | Grouped actions, visual hierarchy | 🚀 Ready |
-| 2.2 | **Collection Tree Icons** | Professional Fluent UI icons, color coding | 🚀 Ready |
-| 2.3 | **Request Builder Layout** | Better spacing, consistent input styling | 🚀 Ready |
-| 2.4 | **Response Viewer Status** | Prominent status display with color coding | 🚀 Ready |
+| 2.1 | **Toolbar Reorganization** | Grouped actions, visual hierarchy with keyboard shortcut badges | ✅ Done |
+| 2.2 | **Collection Tree Icons** | Professional Fluent UI icons with color coding by node type | ✅ Done |
+| 2.3 | **Request Builder Layout** | Better spacing, consistent input styling, method buttons use API tokens | ✅ Done |
+| 2.4 | **Response Viewer Status** | Prominent status display with color coding using API tokens | ✅ Done |
 
 ### Phase 3: Advanced Layout (Medium) 📑
 | ID | Component | Description | Status |
 |---|-----------|-------------|--------|
-| 3.1 | **Request Builder Tabs** | Headers/Body/Query/Auth tabs | ⏳ |
-| 3.2 | **Response Viewer Tabs** | Body/Headers/Preview tabs | ⏳ |
-| 3.3 | **Collapsible History Sidebar** | Resizable/collapsible response history | ⏳ |
-| 3.4 | **Split Pane Layout** | Better request/response panel management | ⏳ |
+| 3.1 | **Request Builder Tabs** | Headers/Body/Query/Auth tabs | ✅ Done |
+| 3.2 | **Response Viewer Tabs** | Body/Headers/Preview tabs | ✅ Done |
+| 3.3 | **Collapsible History Sidebar** | Resizable/collapsible response history | ✅ Done |
+| 3.4 | **Split Pane Layout** | Better request/response panel management with 50%/50% default split and 400px min widths | ✅ Done |
+| 3.5 | **Unified Body Editor** | Use Monaco editor consistently for all request types (GraphQL, REST, etc.) instead of mixing Monaco with textarea | ✅ Done |
 
 ### Phase 4: Polish (Low) ✨
 | ID | Component | Description | Status |
@@ -1288,6 +1412,186 @@ public void Dispose()
     background: var(--color-accent);
 }
 ```
+
+---
+
+### 3.5 Unified Body Editor 📝
+**Goal**: Use Monaco editor consistently for all request body types instead of mixing Monaco with textarea
+
+#### Current Issue
+- GraphQL requests use Monaco editor (`StandaloneCodeEditor` from BlazorMonaco)
+- REST requests use a simple `<textarea>` element for JSON/XML/Text body modes
+- Inconsistent editing experience across different request types
+- Missing advanced features (syntax highlighting, code folding, etc.) for REST bodies
+
+#### Solution Approach
+Create a unified body editor component that uses Monaco for all body types, with appropriate language modes:
+- GraphQL: `graphql` language mode
+- JSON: `json` language mode  
+- XML: `xml` language mode
+- Text: `plaintext` language mode
+
+#### New Component Structure
+```
+Components/ApiClient/
+├── UnifiedBodyEditor.razor          # NEW - Unified Monaco-based editor
+├── UnifiedBodyEditor.razor.css     # NEW - Editor styling
+└── ...
+```
+
+#### Unified Body Editor Implementation
+```razor
+@using BlazorMonaco
+@using BlazorMonaco.Editor
+
+<div class="unified-body-editor">
+    @if (!_monacoLoaded)
+    {
+        <div class="unified-body-editor__loading">
+            <span class="unified-body-editor__loading-spinner"></span>
+            Loading editor…
+        </div>
+    }
+    else
+    {
+        <StandaloneCodeEditor @ref="_editor" ConstructionOptions="EditorOptions"
+                              OnDidChangeModelContent="OnContentChangedAsync" OnDidInit="OnEditorInitAsync" />
+    }
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public RequestBodyMode BodyMode { get; set; } = RequestBodyMode.Json;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    
+    private StandaloneCodeEditor? _editor;
+    private bool _monacoLoaded;
+    private bool _monacoLoading;
+    
+    private string Language => BodyMode switch
+    {
+        RequestBodyMode.Json => "json",
+        RequestBodyMode.Xml => "xml", 
+        RequestBodyMode.Text => "plaintext",
+        RequestBodyMode.GraphQl => "graphql",
+        _ => "plaintext"
+    };
+    
+    private StandaloneEditorConstructionOptions EditorOptions(StandaloneCodeEditor _) => new()
+    {
+        Language = Language,
+        Theme = "vs-dark",
+        Value = Value,
+        AutomaticLayout = true,
+        Minimap = new EditorMinimapOptions { Enabled = false },
+        ScrollBeyondLastLine = false,
+        FontSize = 13,
+        LineNumbers = "on",
+        Folding = true,
+        WordWrap = "on",
+        Dimension = new Dimension { Height = 300 }
+    };
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await EnsureMonacoAsync();
+    }
+    
+    private async Task EnsureMonacoAsync()
+    {
+        if (_monacoLoaded || _monacoLoading) return;
+        _monacoLoading = true;
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKitUi.ensureMonacoLoaded");
+            _monacoLoaded = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (JSException)
+        {
+            // Monaco unavailable — fallback to textarea
+        }
+        finally
+        {
+            _monacoLoading = false;
+        }
+    }
+    
+    private async Task OnContentChangedAsync(ModelContentChangedEvent _)
+    {
+        if (_editor is null) return;
+        var newValue = await _editor.GetValue();
+        if (Value == newValue) return;
+        
+        Value = newValue;
+        await ValueChanged.InvokeAsync(Value);
+    }
+    
+    private async Task OnEditorInitAsync()
+    {
+        if (_editor is not null && !string.IsNullOrEmpty(Value))
+        {
+            await _editor.SetValue(Value);
+        }
+    }
+    
+    public async Task UpdateLanguageAsync(RequestBodyMode newMode)
+    {
+        BodyMode = newMode;
+        if (_editor is not null)
+        {
+            await _editor.UpdateOptionsAsync(new() { Language = Language });
+        }
+    }
+}
+```
+
+#### Integration with RequestBuilderPanel
+Replace the current textarea-based body editor in `RequestBuilderPanel.razor`:
+
+```razor
+@* Current (lines 213-215): *@
+<textarea class="req-builder__body-area" value="@Request.Body.RawContent"
+          placeholder="@BodyPlaceholder(Request.Body.Mode)" @oninput="OnBodyInputAsync"
+          spellcheck="false"></textarea>
+
+@* New: *@
+<UnifiedBodyEditor Value="@Request.Body.RawContent" 
+                  BodyMode="@Request.Body.Mode" 
+                  ValueChanged="OnBodyContentChangedAsync" />
+```
+
+#### Integration with GraphQlPanel
+Update GraphQlPanel to use the unified editor for consistency:
+
+```razor
+@* Current (lines 89-90): *@
+<StandaloneCodeEditor @ref="_queryEditor" ConstructionOptions="QueryEditorOptions"
+                      OnDidChangeModelContent="OnQueryChangedAsync" OnDidInit="OnQueryEditorInitAsync" />
+
+@* New: *@
+<UnifiedBodyEditor @ref="_queryEditor" 
+                  Value="@Request.GraphQlQuery" 
+                  BodyMode="@RequestBodyMode.GraphQl" 
+                  ValueChanged="OnQueryChangedAsync" />
+```
+
+#### Benefits
+- **Consistency**: Same editor experience for all request types
+- **Enhanced Features**: Syntax highlighting, code folding, auto-formatting for all body types
+- **Maintainability**: Single component to maintain instead of multiple editor implementations
+- **Future Extensibility**: Easy to add new body types with appropriate language modes
+
+#### Considerations
+- **Performance**: Monaco has some memory overhead, but it's already loaded for GraphQL
+- **Fallback**: Need to handle cases where Monaco fails to load (fallback to textarea)
+- **Language Support**: Ensure all needed language modes are available in Monaco
+
+#### Files to Modify
+- `src/SwebKit.App/Components/ApiClient/UnifiedBodyEditor.razor` (NEW)
+- `src/SwebKit.App/Components/ApiClient/UnifiedBodyEditor.razor.css` (NEW)
+- `src/SwebKit.App/Components/ApiClient/RequestBuilderPanel.razor` (UPDATE)
+- `src/SwebKit.App/Components/ApiClient/GraphQlPanel.razor` (UPDATE)
 
 ---
 

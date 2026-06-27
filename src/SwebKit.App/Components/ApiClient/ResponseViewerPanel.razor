@@ -3,21 +3,44 @@
     @* ── History sidebar ──────────────────────────────────────────────────────── *@
     @if (HistoryEntries.Count > 0)
     {
-        <div class="resp-viewer__history">
-            <div class="resp-viewer__history-title">History</div>
-            @foreach (var entry in HistoryEntries)
-            {
-                var e = entry;
-                <button type="button"
-                        class="resp-viewer__history-item @(ReferenceEquals(Result, e) ? "resp-viewer__history-item--active" : "") @(StatusClass(e.StatusCode))"
-                    title="@e.Method @e.ResolvedUrl — @FormatElapsed(e.Elapsed)"
-                    @onclick="() => OnResend.InvokeAsync(e)">
-                    <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)">
-                        @(e.ErrorMessage is not null ? "ERR" : e.StatusCode.ToString())
-                    </span>
-                    <span class="resp-viewer__history-method">@e.Method</span>
-                    <span class="resp-viewer__history-elapsed">@FormatElapsed(e.Elapsed)</span>
+        <div class="@(_isHistoryCollapsed ? "resp-viewer__history resp-viewer__history--collapsed" : "resp-viewer__history")">
+            <div class="resp-viewer__history-header">
+                <button type="button" class="resp-viewer__history-toggle" 
+                        @onclick="() => _isHistoryCollapsed = !_isHistoryCollapsed"
+                        title="@(_isHistoryCollapsed ? "Expand history" : "Collapse history")">
+                    @if (_isHistoryCollapsed)
+                    {
+                        <span>▶</span>
+                    }
+                    else
+                    {
+                        <span>▼</span>
+                    }
                 </button>
+                <span class="resp-viewer__history-title">History</span>
+                <button type="button" class="resp-viewer__history-clear" 
+                        @onclick="ClearHistory" title="Clear history">
+                    ✕
+                </button>
+            </div>
+            @if (!_isHistoryCollapsed)
+            {
+                <div class="resp-viewer__history-entries">
+                    @foreach (var entry in HistoryEntries)
+                    {
+                        var e = entry;
+                        <button type="button"
+                                class="resp-viewer__history-item @(ReferenceEquals(Result, e) ? "resp-viewer__history-item--active" : "") @(StatusClass(e.StatusCode))"
+                            title="@e.Method @e.ResolvedUrl — @FormatElapsed(e.Elapsed)"
+                            @onclick="() => OnResend.InvokeAsync(e)">
+                            <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)">
+                                @(e.ErrorMessage is not null ? "ERR" : e.StatusCode.ToString())
+                            </span>
+                            <span class="resp-viewer__history-method">@e.Method</span>
+                            <span class="resp-viewer__history-elapsed">@FormatElapsed(e.Elapsed)</span>
+                        </button>
+                    }
+                </div>
             }
         </div>
     }
@@ -248,6 +271,7 @@
     private string _activeTab = "Body";
     private bool _copied;
     private bool _showFullBody;
+    private bool _isHistoryCollapsed; // Collapsible history sidebar state
 
     /// <summary>Display limit for the body viewer (500 KB).</summary>
     private const int DisplayBodyMaxBytes = 500 * 1024;
@@ -391,5 +415,14 @@
         }
 
         return value[..low];
+    }
+
+    // ── Collapsible history sidebar ───────────────────────────────────────────
+
+    private void ClearHistory()
+    {
+        // This method would clear the history - implementation depends on how
+        // HistoryEntries is managed. For now, this provides the UI hook.
+        // In practice, this would call a service method or parent component callback.
     }
 }

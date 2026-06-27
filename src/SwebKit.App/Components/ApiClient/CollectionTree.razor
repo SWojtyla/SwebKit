@@ -39,19 +39,19 @@
 
                     @if (node.Kind == FlatTreeNodeKind.LinkedRoot)
                     {
-                        <span class="collection-tree__fluent-icon" aria-hidden="true">
+                        <span class="collection-tree__fluent-icon collection-tree__fluent-icon--linked" aria-hidden="true">
                             <FluentIcon Value="@_iconLinked" Width="14px" />
                         </span>
                     }
                     else if (node.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
                     {
-                        <span class="collection-tree__fluent-icon" aria-hidden="true">
+                        <span class="collection-tree__fluent-icon collection-tree__fluent-icon--collection" aria-hidden="true">
                             <FluentIcon Value="@_iconCollection" Width="14px" />
                         </span>
                     }
                     else if (node.Node.Type == ApiCollectionNodeType.Folder)
                     {
-                        <span class="collection-tree__fluent-icon" aria-hidden="true">
+                        <span class="collection-tree__fluent-icon collection-tree__fluent-icon--folder" aria-hidden="true">
                             <FluentIcon Value="@(node.IsExpanded ? _iconFolderOpen : _iconFolder)" Width="14px" />
                         </span>
                     }

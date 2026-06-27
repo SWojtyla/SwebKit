@@ -27,11 +27,13 @@
                     Title="New collection (Ctrl+Shift+N)" OnClick="OpenNewCollectionDialog">
                 <FluentIcon Value="@(new Icons.Regular.Size16.AddSquare())" Width="14px" />
                 <span>New Collection</span>
+                <kbd class="api-client-toolbar-btn__kbd">Ctrl+Shift+N</kbd>
             </AppButton>
             <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
                     Title="New request (Ctrl+N)" Disabled="@(!CanCreateRequest)" OnClick="AddRequestAsync">
                 <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
                 <span>New Request</span>
+                <kbd class="api-client-toolbar-btn__kbd">Ctrl+N</kbd>
             </AppButton>
             @if (_isDirty && !_autoSave)
             {
@@ -39,26 +41,27 @@
                         Title="Save request (Ctrl+S)" OnClick="SaveRequestAsync">
                     <FluentIcon Value="@(new Icons.Regular.Size16.Save())" Width="14px" />
                     <span>Save</span>
+                    <kbd class="api-client-toolbar-btn__kbd">Ctrl+S</kbd>
                 </AppButton>
             }
             <AppDropdown IsOpen="@_showRepoMenu"
                          OnClose="@(() => _showRepoMenu = false)"
                          CssClass="api-client-toolbar-menu"
                          MenuCssClass="api-client-toolbar-menu__dropdown"
-                         Label="API repositories">
+                         Label="Git Repos">
                 <TriggerContent>
                     <AppButton Variant="Secondary" Size="Small"
                             CssClass="@(IsRepoMenuActive ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
                             Title="Add or manage Git-backed API repositories"
                             OnClick="@(() => _showRepoMenu = !_showRepoMenu)">
-                        <span>API Repos</span>
+                        <span>Git Repos</span>
                         <span class="api-client-toolbar-menu__chevron">v</span>
                     </AppButton>
                 </TriggerContent>
                 <ChildContent>
-                    <button type="button" class="ctx-item" @onclick="OpenLinkedRootDialogFromMenu">Add API repo</button>
+                    <button type="button" class="ctx-item" @onclick="OpenLinkedRootDialogFromMenu">Add Git repo</button>
                     <button type="button" class="ctx-item" disabled="@(CurrentTargetLinkedRoot is null)" @onclick="OpenCurrentTargetGitFromMenu">Git for selected repo</button>
-                    <button type="button" class="ctx-item" disabled="@(_linkedRootInfos.Count == 0)" @onclick="OpenLinkedRootManagementFromMenu">Manage API repos</button>
+                    <button type="button" class="ctx-item" disabled="@(_linkedRootInfos.Count == 0)" @onclick="OpenLinkedRootManagementFromMenu">Manage Git repos</button>
                 </ChildContent>
             </AppDropdown>
             <AppDropdown IsOpen="@_showTransferMenu"
@@ -1917,6 +1920,10 @@ StringComparison.OrdinalIgnoreCase));
         }
     }
 
+    // ── Request send ───────────────────────────────────────────────────────────
+
+
+
     // ── Request result ─────────────────────────────────────────────────────────
 
     private async Task OnRequestResultAsync(HttpRequestResult result)
@@ -2073,7 +2080,7 @@ StringComparison.OrdinalIgnoreCase));
                 "SwebKitSplitter.init",
                 _splitterEl,
                 _builderPanelEl,
-                new { leftPane = true, minWidth = 250, maxWidth = 1600 });
+                new { leftPane = true, minWidth = 400, maxWidth = 1600 });
         }
             else if (!shouldShowSplitter)
         {

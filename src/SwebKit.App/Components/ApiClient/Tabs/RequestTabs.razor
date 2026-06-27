@@ -1,0 +1,105 @@
+@using Microsoft.AspNetCore.Components
+@using SwebKit.Core.Domain
+
+<div class="req-tabs">
+    <button type="button" 
+            class="req-tab @(_activeTab == RequestTab.Params ? "req-tab--active" : "")" 
+            @onclick="() => OnTabChange.InvokeAsync(RequestTab.Params)">
+        <span>Params</span>
+        @if (_paramCount > 0)
+        {
+            <span class="req-tab__badge">@_paramCount</span>
+        }
+    </button>
+    <button type="button" 
+            class="req-tab @(_activeTab == RequestTab.Headers ? "req-tab--active" : "")" 
+            @onclick="() => OnTabChange.InvokeAsync(RequestTab.Headers)">
+        <span>Headers</span>
+        @if (_headerCount > 0)
+        {
+            <span class="req-tab__badge">@_headerCount</span>
+        }
+    </button>
+    @if (_showBodyTab)
+    {
+        <button type="button" 
+                class="req-tab @(_activeTab == RequestTab.Body ? "req-tab--active" : "")" 
+                @onclick="() => OnTabChange.InvokeAsync(RequestTab.Body)">
+            <span>Body</span>
+            @if (!string.IsNullOrEmpty(_bodyContent))
+            {
+                <span class="req-tab__badge">●</span>
+            }
+        </button>
+    }
+    @if (_showGraphQLTab)
+    {
+        <button type="button" 
+                class="req-tab @(_activeTab == RequestTab.GraphQL ? "req-tab--active" : "")" 
+                @onclick="() => OnTabChange.InvokeAsync(RequestTab.GraphQL)">
+            <span>GraphQL</span>
+            @if (!string.IsNullOrEmpty(_graphQLContent))
+            {
+                <span class="req-tab__badge">●</span>
+            }
+        </button>
+    }
+    <button type="button" 
+            class="req-tab @(_activeTab == RequestTab.Auth ? "req-tab--active" : "")" 
+            @onclick="() => OnTabChange.InvokeAsync(RequestTab.Auth)">
+        <span>Auth</span>
+        @if (_authType != AuthType.None)
+        {
+            <span class="req-tab__badge">@GetAuthTypeShortName(_authType)</span>
+        }
+    </button>
+    <button type="button" 
+            class="req-tab @(_activeTab == RequestTab.Capture ? "req-tab--active" : "")" 
+            @onclick="() => OnTabChange.InvokeAsync(RequestTab.Capture)">
+        <span>Capture</span>
+    </button>
+</div>
+
+@code {
+    public enum RequestTab
+    {
+        Params,
+        Headers,
+        Body,
+        GraphQL,
+        Auth,
+        Capture
+    }
+
+    [Parameter] public RequestTab ActiveTab { get; set; } = RequestTab.Params;
+    [Parameter] public EventCallback<RequestTab> OnTabChange { get; set; }
+    
+    // Content counts for badges
+    [Parameter] public int ParamCount { get; set; } = 0;
+    [Parameter] public int HeaderCount { get; set; } = 0;
+    [Parameter] public string BodyContent { get; set; } = string.Empty;
+    [Parameter] public string GraphQLContent { get; set; } = string.Empty;
+    [Parameter] public AuthType AuthType { get; set; } = AuthType.None;
+    
+    // Tab visibility controls
+    [Parameter] public bool ShowBodyTab { get; set; } = true;
+    [Parameter] public bool ShowGraphQLTab { get; set; } = false;
+
+    private int _paramCount => ParamCount;
+    private int _headerCount => HeaderCount;
+    private string _bodyContent => BodyContent;
+    private string _graphQLContent => GraphQLContent;
+    private AuthType _authType => AuthType;
+    private bool _showBodyTab => ShowBodyTab;
+    private bool _showGraphQLTab => ShowGraphQLTab;
+    private RequestTab _activeTab => ActiveTab;
+
+    private string GetAuthTypeShortName(AuthType authType) => authType switch
+    {
+        AuthType.BearerToken => "Bearer",
+        AuthType.Basic => "Basic",
+        AuthType.ApiKey => "API Key",
+        AuthType.OAuth2 => "OAuth2",
+        _ => ""
+    };
+}

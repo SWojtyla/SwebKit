@@ -198,6 +198,23 @@
     color: var(--color-text-muted);
 }
 
+/* Node type icon color coding */
+.collection-tree__fluent-icon--collection {
+    color: var(--api-node-collection);
+}
+
+.collection-tree__fluent-icon--folder {
+    color: var(--api-node-folder);
+}
+
+.collection-tree__fluent-icon--request {
+    color: var(--api-node-request);
+}
+
+.collection-tree__fluent-icon--linked {
+    color: var(--api-node-linked);
+}
+
 .collection-tree__fluent-icon :deep(svg) {
     width: 14px;
     height: 14px;
