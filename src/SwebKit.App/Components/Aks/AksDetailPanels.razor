@@ -631,6 +631,8 @@
     // Container / detail panels
     public void ShowContainerDetails(string podName, string? targetNamespace = null)
     {
+        _yamlViewer?.Close();
+        CloseLogs();
         _containerDetailPodName = podName;
         _containerDetailNamespace = targetNamespace
             ?? Pods.FirstOrDefault(p => string.Equals(p.Name, podName, StringComparison.Ordinal))?.Namespace
