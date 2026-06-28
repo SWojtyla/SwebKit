@@ -6,17 +6,6 @@
 
 <div class="req-builder" role="region" aria-label="Request builder">
 
-    @* Loading overlay *@
-    @if (_isSending)
-    {
-        <div class="req-builder__loading-overlay api-client-loading-overlay">
-            <div class="api-client-loading">
-                <span class="api-client-loading-spinner"></span>
-                <span>Sending request...</span>
-            </div>
-        </div>
-    }
-
     @* ── Name row ────────────────────────────────────────────────────────────── *@
     <div class="req-builder__name-row">
         @if (_editingName)
@@ -122,17 +111,17 @@
             </div>
 
             <button type="button"
-                    class="req-builder__send-btn @((_executing || _subscribing) ? "req-builder__send-btn--busy api-client-btn--loading" : "")"
+                    class="req-builder__send-btn @((_executing || _subscribing) ? "req-builder__send-btn--busy" : "")"
                     @onclick="OnSendAsync" disabled="@(string.IsNullOrWhiteSpace(Request.Url) && !_executing && !_subscribing)"
-                    aria-label="@GetSendButtonAriaLabel()" aria-busy="@_isSending">
+                    aria-label="@GetSendButtonAriaLabel()">
                 @if (_executing)
                 {
-                    <span class="req-builder__send-spinner api-client-loading-spinner" aria-hidden="true" />
+                    <span class="req-builder__send-spinner" aria-hidden="true" />
                     <span>Cancel</span>
                 }
                 else if (_subscribing)
                 {
-                    <span class="req-builder__send-spinner api-client-loading-spinner" aria-hidden="true" />
+                    <span class="req-builder__send-spinner" aria-hidden="true" />
                     <span>Stop</span>
                 }
                 else
@@ -290,7 +279,6 @@
 
     private IReadOnlyList<string> _captureWarnings = [];
     private bool _executing;
-    private bool _isSending => _executing || _subscribing;
     private CancellationTokenSource? _executionCts;
 
     // Subscription state
