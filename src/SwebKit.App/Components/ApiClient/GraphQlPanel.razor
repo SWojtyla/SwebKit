@@ -262,6 +262,7 @@
         {
             await _queryEditor.SetValue(Request.GraphQlQuery);
         }
+        await JS.InvokeVoidAsync("SwebKitUi.applyMonacoTheme");
     }
 
     private async Task OnVarsEditorInitAsync()
@@ -270,6 +271,7 @@
         {
             await _varsEditor.SetValue(Request.GraphQlVariables);
         }
+        await JS.InvokeVoidAsync("SwebKitUi.applyMonacoTheme");
     }
 
     // ── Editor change handlers ────────────────────────────────────────────────
@@ -457,7 +459,7 @@
     private StandaloneEditorConstructionOptions QueryEditorOptions(StandaloneCodeEditor _) => new()
     {
         Language = "graphql",
-        Theme = "vs-dark",
+        Theme = "swebkit-dark",
         Value = Request.GraphQlQuery ?? string.Empty,
         AutomaticLayout = true,
         Minimap = new EditorMinimapOptions { Enabled = false },
@@ -472,7 +474,7 @@
     private StandaloneEditorConstructionOptions VarsEditorOptions(StandaloneCodeEditor _) => new()
     {
         Language = "json",
-        Theme = "vs-dark",
+        Theme = "swebkit-dark",
         Value = Request.GraphQlVariables ?? "{\n  \n}",
         AutomaticLayout = true,
         Minimap = new EditorMinimapOptions { Enabled = false },

@@ -22,7 +22,21 @@
     else
     {
         <StandaloneCodeEditor @ref="_editor" ConstructionOptions="EditorOptions"
-                              OnDidChangeModelContent="OnContentChangedAsync" OnDidInit="OnEditorInitAsync" />
+                              OnDidChangeModelContent="OnContentChangedAsync"
+                              OnDidInit="OnEditorInitAsync"
+                              OnDidChangeCursorPosition="OnCursorChangedAsync" />
+        <div class="unified-body-editor__status-bar" aria-hidden="true">
+            <span class="unified-body-editor__status-cursor">Ln @_cursorLine, Col @_cursorCol</span>
+            <span class="unified-body-editor__status-sep">│</span>
+            <span class="unified-body-editor__status-lang">@LanguageLabel</span>
+            @if (BodyMode == RequestBodyMode.Json && !string.IsNullOrWhiteSpace(Value))
+            {
+                <span class="unified-body-editor__status-sep">│</span>
+                <span class="unified-body-editor__status-valid @(_isValidJson ? "unified-body-editor__status-valid--ok" : "unified-body-editor__status-valid--err")">
+                    @(_isValidJson ? "✓ Valid JSON" : "⚠ Invalid JSON")
+                </span>
+            }
+        </div>
     }
 </div>
 
@@ -37,6 +51,9 @@
     private bool _monacoLoaded;
     private bool _monacoLoading;
     private bool _monacoFailed;
+    private long _cursorLine = 1;
+    private long _cursorCol = 1;
+    private bool _isValidJson = true;
 
     private string Language => BodyMode switch
     {
@@ -46,10 +63,18 @@
         _ => "plaintext"
     };
 
+    private string LanguageLabel => BodyMode switch
+    {
+        RequestBodyMode.Json => "JSON",
+        RequestBodyMode.Xml => "XML",
+        RequestBodyMode.Text => "Text",
+        _ => "Plain"
+    };
+
     private StandaloneEditorConstructionOptions EditorOptions(StandaloneCodeEditor _) => new()
     {
         Language = Language,
-        Theme = "vs-dark",
+        Theme = "swebkit-dark",
         Value = Value,
         AutomaticLayout = true,
         Minimap = new EditorMinimapOptions { Enabled = false },
@@ -99,6 +124,7 @@
         if (Value == newValue) return;
         
         Value = newValue;
+        ValidateJson();
         await ValueChanged.InvokeAsync(Value);
     }
 
@@ -108,9 +134,36 @@
         {
             await _editor.SetValue(Value);
         }
+        // Correct the Monaco theme in case construction options set the wrong one
+        await JS.InvokeVoidAsync("SwebKitUi.applyMonacoTheme");
+        ValidateJson();
     }
 
+    private Task OnCursorChangedAsync(CursorPositionChangedEvent e)
+    {
+        _cursorLine = e.Position.LineNumber;
+        _cursorCol = e.Position.Column;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
 
+    private void ValidateJson()
+    {
+        if (BodyMode != RequestBodyMode.Json || string.IsNullOrWhiteSpace(Value))
+        {
+            _isValidJson = true;
+            return;
+        }
+        try
+        {
+            System.Text.Json.JsonDocument.Parse(Value);
+            _isValidJson = true;
+        }
+        catch
+        {
+            _isValidJson = false;
+        }
+    }
 
     private async Task OnFallbackInputAsync(ChangeEventArgs e)
     {

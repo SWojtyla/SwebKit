@@ -68,8 +68,43 @@
 }
 
 /* StandaloneCodeEditor host element should fill the flex container */
-.unified-body-editor ::deep > * {
+.unified-body-editor ::deep > *:not(.unified-body-editor__status-bar) {
     flex: 1;
     min-height: 0;
     width: 100%;
+}
+
+/* ── Status bar ─────────────────────────────────────────────────────────── */
+
+.unified-body-editor__status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 24px;
+    flex-shrink: 0;
+    background: var(--color-surface-2);
+    border-top: 1px solid var(--color-border);
+    font-size: 11px;
+    font-family: var(--font-family-mono);
+    color: var(--color-text-muted);
+    user-select: none;
+}
+
+.unified-body-editor__status-sep {
+    opacity: 0.3;
+    font-size: 10px;
+}
+
+.unified-body-editor__status-lang {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.unified-body-editor__status-valid--ok {
+    color: var(--color-success);
+}
+
+.unified-body-editor__status-valid--err {
+    color: var(--color-error);
 }
