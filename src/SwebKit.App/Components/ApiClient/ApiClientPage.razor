@@ -18,11 +18,14 @@
 @inject AppStateService AppState
 @implements IAsyncDisposable
 
-<div class="api-client-page">
+<div class="api-client-page" role="application" aria-label="API Client">
+
+    @* Skip link for keyboard users *@
+    <a href="#main-workspace" class="api-client-skip-link">Skip to workspace</a>
 
     @* ── Toolbar ── *@
-    <div class="api-client-toolbar">
-        <div class="api-client-toolbar__left">
+    <div class="api-client-toolbar" role="toolbar" aria-label="API Client toolbar">
+        <div class="api-client-toolbar__left" role="group" aria-label="Create actions">
             <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
                     Title="New collection (Ctrl+Shift+N)" OnClick="OpenNewCollectionDialog">
                 <FluentIcon Value="@(new Icons.Regular.Size16.AddSquare())" Width="14px" />
@@ -85,7 +88,7 @@
             </AppDropdown>
         </div>
 
-        <div class="api-client-toolbar__center">
+        <div class="api-client-toolbar__center" role="group" aria-label="Current request status">
             <span class="api-client-target-chip" title="@CurrentTargetHint">
                 <span class="api-client-target-chip__label">Target</span>
                 <strong>@CurrentTargetLabel</strong>
@@ -119,7 +122,7 @@
             }
         </div>
 
-        <div class="api-client-toolbar__right">
+        <div class="api-client-toolbar__right" role="group" aria-label="Request actions">
             @if (_selectedRequest is not null)
             {
                     <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Title="Copy request as cURL"
@@ -179,7 +182,7 @@
             <div class="api-client-body">
 
                 @* Left: collection tree *@
-                <div class="api-client-tree-panel" @ref="_treePanelEl">
+                <div class="api-client-tree-panel" @ref="_treePanelEl" role="navigation" aria-label="API request collections">
                     @if (_loadingCollections)
                     {
                         <div class="api-client-tree-panel__loading">
@@ -216,7 +219,7 @@
                 <div class="api-client-tree-splitter" @ref="_treeSplitterEl"></div>
 
                 @* Right: request builder + response viewer OR management screens *@
-                <div class="api-client-workspace">
+                <div class="api-client-workspace" id="main-workspace" role="main">
                     @if (_worksheetMode == WorksheetEnvs)
                     {
                         <div class="api-client-management-screen">

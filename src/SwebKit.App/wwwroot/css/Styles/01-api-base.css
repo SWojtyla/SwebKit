@@ -52,6 +52,181 @@
 }
 
 /* ===================================================================
+   TYPOGRAPHY SCALE
+   =================================================================== */
+
+/* Heading styles */
+.api-client-text-h1 {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-4xl);
+    font-weight: var(--api-font-weight-bold);
+    line-height: var(--api-line-height-tight);
+    letter-spacing: var(--api-letter-spacing-tight);
+}
+
+.api-client-text-h2 {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-3xl);
+    font-weight: var(--api-font-weight-bold);
+    line-height: var(--api-line-height-tight);
+    letter-spacing: var(--api-letter-spacing-tight);
+}
+
+.api-client-text-h3 {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-2xl);
+    font-weight: var(--api-font-weight-semibold);
+    line-height: var(--api-line-height-normal);
+    letter-spacing: var(--api-letter-spacing-tight);
+}
+
+.api-client-text-h4 {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-xl);
+    font-weight: var(--api-font-weight-semibold);
+    line-height: var(--api-line-height-normal);
+    letter-spacing: var(--api-letter-spacing-tight);
+}
+
+.api-client-text-h5 {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-lg);
+    font-weight: var(--api-font-weight-semibold);
+    line-height: var(--api-line-height-normal);
+}
+
+.api-client-text-h6 {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-base);
+    font-weight: var(--api-font-weight-semibold);
+    line-height: var(--api-line-height-normal);
+}
+
+/* Body text styles */
+.api-client-text-body {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-base);
+    line-height: var(--api-line-height-normal);
+    color: var(--color-text);
+}
+
+.api-client-text-body-sm {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    line-height: var(--api-line-height-normal);
+    color: var(--color-text);
+}
+
+.api-client-text-body-lg {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-lg);
+    line-height: var(--api-line-height-normal);
+    color: var(--color-text);
+}
+
+/* Caption and small text */
+.api-client-text-caption {
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-xs);
+    line-height: var(--api-line-height-normal);
+    color: var(--color-text-muted);
+}
+
+.api-client-text-caption-sm {
+    font-family: var(--api-font-family);
+    font-size: 10px;
+    line-height: var(--api-line-height-tight);
+    color: var(--color-text-muted);
+}
+
+/* Monospace text */
+.api-client-text-mono {
+    font-family: var(--api-font-family-mono);
+    font-size: var(--api-font-size-sm);
+    line-height: var(--api-line-height-normal);
+    color: var(--color-text);
+}
+
+.api-client-text-mono-sm {
+    font-family: var(--api-font-family-mono);
+    font-size: var(--api-font-size-xs);
+    line-height: var(--api-line-height-tight);
+    color: var(--color-text-muted);
+}
+
+/* Text utilities */
+.api-client-text-uppercase {
+    text-transform: uppercase;
+    letter-spacing: var(--api-letter-spacing-wide);
+    font-size: var(--api-font-size-xs);
+}
+
+.api-client-text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.api-client-text-nowrap {
+    white-space: nowrap;
+}
+
+.api-client-text-pre {
+    white-space: pre;
+}
+
+.api-client-text-pre-wrap {
+    white-space: pre-wrap;
+}
+
+.api-client-text-pre-line {
+    white-space: pre-line;
+}
+
+/* Text alignment */
+.api-client-text-left { text-align: left; }
+.api-client-text-center { text-align: center; }
+.api-client-text-right { text-align: right; }
+
+/* Text decoration */
+.api-client-text-underline { text-decoration: underline; }
+.api-client-text-line-through { text-decoration: line-through; }
+.api-client-text-no-decoration { text-decoration: none; }
+
+/* Text transform */
+.api-client-text-lowercase { text-transform: lowercase; }
+.api-client-text-capitalize { text-transform: capitalize; }
+
+/* Text weight */
+.api-client-text-light { font-weight: var(--api-font-weight-normal); }
+.api-client-text-normal { font-weight: var(--api-font-weight-normal); }
+.api-client-text-medium { font-weight: var(--api-font-weight-medium); }
+.api-client-text-semibold { font-weight: var(--api-font-weight-semibold); }
+.api-client-text-bold { font-weight: var(--api-font-weight-bold); }
+
+/* Text colors with semantic meaning */
+.api-client-text-primary { color: var(--color-accent); }
+.api-client-text-secondary { color: var(--color-text-muted); }
+.api-client-text-disabled { color: var(--color-text-disabled); }
+
+/* Status-specific text colors */
+.api-client-text-status-success { color: var(--api-status-2xx); }
+.api-client-text-status-warning { color: var(--api-status-4xx); }
+.api-client-text-status-error { color: var(--api-status-5xx); }
+.api-client-text-status-info { color: var(--api-status-1xx); }
+
+/* Method-specific text colors */
+.api-client-text-method-get { color: var(--api-method-get); }
+.api-client-text-method-post { color: var(--api-method-post); }
+.api-client-text-method-put { color: var(--api-method-put); }
+.api-client-text-method-delete { color: var(--api-method-delete); }
+.api-client-text-method-patch { color: var(--api-method-patch); }
+.api-client-text-method-head { color: var(--api-method-head); }
+.api-client-text-method-options { color: var(--api-method-options); }
+.api-client-text-method-graphql { color: var(--api-method-graphql); }
+.api-client-text-method-websocket { color: var(--api-method-websocket); }
+
+/* ===================================================================
    UTILITY CLASSES
    =================================================================== */
 

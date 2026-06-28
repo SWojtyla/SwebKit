@@ -443,6 +443,70 @@
 }
 
 /* ===================================================================
+   ACCESSIBILITY
+   =================================================================== */
+
+/* Screen reader only - visually hidden but accessible to assistive technology */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Skip link for keyboard users */
+.api-client-skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    padding: 8px 16px;
+    z-index: 9999;
+    border-radius: 0 0 4px 4px;
+}
+
+.api-client-skip-link:focus {
+    top: 0;
+}
+
+/* Focus states for better accessibility */
+.collection-tree__row:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+}
+
+.collection-tree__chevron:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.collection-tree__search-input:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+}
+
+/* High contrast mode support */
+@media (forced-colors: active) {
+    .collection-tree__row:focus-visible {
+        forced-color-adjust: none;
+        outline: 2px solid Highlight !important;
+        outline-offset: -2px;
+    }
+
+    .collection-tree__chevron:focus-visible {
+        forced-color-adjust: none;
+        outline: 2px solid Highlight !important;
+        outline-offset: 2px;
+    }
+}
+
+/* ===================================================================
    RESPONSIVE ADJUSTMENTS
    =================================================================== */
 
@@ -490,6 +554,39 @@
 }
 
 /* ===================================================================
+   ANIMATIONS & TRANSITIONS
+   =================================================================== */
+
+/* Smooth transitions for tree rows */
+.collection-tree__row {
+    transition: all var(--api-transition-fast);
+}
+
+/* Chevron rotation animation */
+.collection-tree__chevron {
+    transition: all var(--api-transition-fast);
+}
+
+.collection-tree__chevron--rotated {
+    transform: rotate(90deg);
+}
+
+/* Expand/collapse animation for tree content */
+.collection-tree__rows {
+    transition: opacity var(--api-transition-fast);
+}
+
+/* Fade in for newly added nodes */
+.collection-tree__row--new {
+    animation: api-client-fade-in var(--api-animation-duration-normal) var(--api-animation-function-fade-in);
+}
+
+/* Highlight animation for search matches */
+.collection-tree__row--search-match {
+    animation: api-client-scale-in var(--api-animation-duration-fast) var(--api-animation-function-scale-in);
+}
+
+/* ===================================================================
    REDUCED MOTION SUPPORT
    =================================================================== */
 
@@ -501,5 +598,10 @@
     .collection-tree__chevron:hover,
     .ctx-item:hover {
         transition: none;
+    }
+    
+    .collection-tree__row--new,
+    .collection-tree__row--search-match {
+        animation: none;
     }
 }

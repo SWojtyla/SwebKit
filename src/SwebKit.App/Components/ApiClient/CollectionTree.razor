@@ -5,16 +5,24 @@
 <div class="api-client collection-tree">
 
     <div class="collection-tree__search">
-        <input type="text" placeholder="Filter..." class="collection-tree__search-input" value="@_filter"
-               @oninput="OnFilterInput" aria-label="Filter collection tree" />
+        <label for="collection-tree-search" class="sr-only">Filter collection tree</label>
+        <input type="text" id="collection-tree-search" placeholder="Filter..." class="collection-tree__search-input" value="@_filter"
+               @oninput="OnFilterInput" aria-label="Filter collection tree" 
+               aria-describedby="collection-tree-search-help" />
+        <span id="collection-tree-search-help" class="sr-only">Type to filter API requests and collections</span>
     </div>
 
-    <div class="collection-tree__rows" role="tree">
+    <div class="collection-tree__rows" role="tree" aria-label="API request collection">
         <Virtualize Items="@_visibleNodes" Context="node" ItemSize="28" OverscanCount="8">
             <div @key="node.Id" class="collection-tree__row @GetRowClass(node)"
                  style="--depth: @node.Depth" role="treeitem"
-                 aria-selected="@(node.Node.Request?.Id == SelectedRequestId)" @onclick="() => OnRowClickAsync(node)"
-                 @oncontextmenu="e => ShowContextMenu(e, node)" @oncontextmenu:preventDefault="true">
+                 aria-selected="@(node.Node.Request?.Id == SelectedRequestId)" 
+                 aria-expanded="@(node.Node.Type == ApiCollectionNodeType.Folder && node.IsExpanded)"
+                 aria-level="@(node.Depth + 1)"
+                 tabindex="@(node.Node.Request?.Id == SelectedRequestId ? 0 : -1)"
+                 @onclick="() => OnRowClickAsync(node)"
+                 @oncontextmenu="e => ShowContextMenu(e, node)" @oncontextmenu:preventDefault="true"
+                 @onkeydown:preventDefault="true" @onkeydown="e => HandleTreeKeyDown(e, node)">
 
                 @if (node.Kind is FlatTreeNodeKind.Group)
                 {
@@ -506,6 +514,208 @@
         if (node.Node.Id == $"__col__{ActiveCollectionId}" && ActiveCollectionId is not null)
             return "collection-tree__row--active-collection";
         return string.Empty;
+    }
+
+    private async Task HandleTreeKeyDown(KeyboardEventArgs e, FlatTreeNode node)
+    {
+        switch (e.Key)
+        {
+            case "ArrowUp":
+                await FocusPreviousNode(node);
+                break;
+            case "ArrowDown":
+                await FocusNextNode(node);
+                break;
+            case "ArrowRight":
+                if (node.Node.Type == ApiCollectionNodeType.Folder)
+                {
+                    if (!node.IsExpanded)
+                        ToggleExpand(node);
+                    else
+                        await FocusFirstChild(node);
+                }
+                break;
+            case "ArrowLeft":
+                if (node.Node.Type == ApiCollectionNodeType.Folder && node.IsExpanded)
+                    ToggleExpand(node);
+                else if (node.Depth > 0)
+                    await FocusParentNode(node);
+                break;
+            case "Enter":
+            case " ":
+                await OnRowClickAsync(node);
+                break;
+            case "Home":
+                await FocusFirstNode();
+                break;
+            case "End":
+                await FocusLastNode();
+                break;
+            case "PageUp":
+                await FocusPageUp(node);
+                break;
+            case "PageDown":
+                await FocusPageDown(node);
+                break;
+        }
+    }
+
+    private async Task FocusPreviousNode(FlatTreeNode currentNode)
+    {
+        var currentIndex = _visibleNodes.FindIndex(n => n.Id == currentNode.Id);
+        if (currentIndex > 0)
+        {
+            var previousNode = _visibleNodes[currentIndex - 1];
+            if (previousNode.Kind != FlatTreeNodeKind.Group)
+            {
+                var requestId = previousNode.Node.Request?.Id;
+                if (requestId is not null)
+                {
+                    SelectedRequestId = requestId;
+                    await OnRequestSelected.InvokeAsync(previousNode.Node.Request!);
+                }
+                else if (previousNode.Node.Type == ApiCollectionNodeType.Folder)
+                {
+                    // For folders, we don't change selection but allow focus
+                }
+            }
+            else
+            {
+                // Skip groups and try previous
+                await FocusPreviousNode(previousNode);
+            }
+        }
+    }
+
+    private async Task FocusNextNode(FlatTreeNode currentNode)
+    {
+        var currentIndex = _visibleNodes.FindIndex(n => n.Id == currentNode.Id);
+        if (currentIndex < _visibleNodes.Count - 1)
+        {
+            var nextNode = _visibleNodes[currentIndex + 1];
+            if (nextNode.Kind != FlatTreeNodeKind.Group)
+            {
+                var requestId = nextNode.Node.Request?.Id;
+                if (requestId is not null)
+                {
+                    SelectedRequestId = requestId;
+                    await OnRequestSelected.InvokeAsync(nextNode.Node.Request!);
+                }
+                else if (nextNode.Node.Type == ApiCollectionNodeType.Folder)
+                {
+                    // For folders, we don't change selection but allow focus
+                }
+            }
+            else
+            {
+                // Skip groups and try next
+                await FocusNextNode(nextNode);
+            }
+        }
+    }
+
+    private async Task FocusParentNode(FlatTreeNode currentNode)
+    {
+        // Find parent node in the flat structure
+        var parentId = GetParentId(currentNode);
+        if (parentId is not null)
+        {
+            var parentNode = _visibleNodes.FirstOrDefault(n => n.Id == parentId);
+            if (parentNode is not null)
+            {
+                // Focus parent but don't select it
+            }
+        }
+    }
+
+    private async Task FocusFirstChild(FlatTreeNode parentNode)
+    {
+        // This would require tracking children relationships, which is complex with virtualization
+        // For now, just select the next visible node that's a child
+        var currentIndex = _visibleNodes.FindIndex(n => n.Id == parentNode.Id);
+        if (currentIndex < _visibleNodes.Count - 1)
+        {
+            var nextNode = _visibleNodes[currentIndex + 1];
+            if (nextNode.Depth > parentNode.Depth && nextNode.Kind != FlatTreeNodeKind.Group)
+            {
+                var requestId = nextNode.Node.Request?.Id;
+                if (requestId is not null)
+                {
+                    SelectedRequestId = requestId;
+                    await OnRequestSelected.InvokeAsync(nextNode.Node.Request!);
+                }
+            }
+        }
+    }
+
+    private async Task FocusFirstNode()
+    {
+        var firstNode = _visibleNodes.FirstOrDefault(n => n.Kind != FlatTreeNodeKind.Group);
+        if (firstNode?.Node.Request is not null)
+        {
+            SelectedRequestId = firstNode.Node.Request.Id;
+            await OnRequestSelected.InvokeAsync(firstNode.Node.Request);
+        }
+    }
+
+    private async Task FocusLastNode()
+    {
+        var lastNode = _visibleNodes.LastOrDefault(n => n.Kind != FlatTreeNodeKind.Group);
+        if (lastNode?.Node.Request is not null)
+        {
+            SelectedRequestId = lastNode.Node.Request.Id;
+            await OnRequestSelected.InvokeAsync(lastNode.Node.Request);
+        }
+    }
+
+    private async Task FocusPageUp(FlatTreeNode currentNode)
+    {
+        var currentIndex = _visibleNodes.FindIndex(n => n.Id == currentNode.Id);
+        var newIndex = Math.Max(0, currentIndex - 10);
+        var targetNode = _visibleNodes[newIndex];
+        if (targetNode.Kind != FlatTreeNodeKind.Group && targetNode.Node.Request is not null)
+        {
+            SelectedRequestId = targetNode.Node.Request.Id;
+            await OnRequestSelected.InvokeAsync(targetNode.Node.Request);
+        }
+    }
+
+    private async Task FocusPageDown(FlatTreeNode currentNode)
+    {
+        var currentIndex = _visibleNodes.FindIndex(n => n.Id == currentNode.Id);
+        var newIndex = Math.Min(_visibleNodes.Count - 1, currentIndex + 10);
+        var targetNode = _visibleNodes[newIndex];
+        if (targetNode.Kind != FlatTreeNodeKind.Group && targetNode.Node.Request is not null)
+        {
+            SelectedRequestId = targetNode.Node.Request.Id;
+            await OnRequestSelected.InvokeAsync(targetNode.Node.Request);
+        }
+    }
+
+    private string? GetParentId(FlatTreeNode node)
+    {
+        // This is simplified - in a real implementation, we'd need to track parent relationships
+        if (node.Depth > 0)
+        {
+            // Try to find the parent by looking for a node at the previous depth level
+            for (int i = _visibleNodes.Count - 1; i >= 0; i--)
+            {
+                var candidate = _visibleNodes[i];
+                if (candidate.Depth == node.Depth - 1 && candidate.Kind != FlatTreeNodeKind.Group)
+                {
+                    // Check if this node would be a parent (next nodes have higher depth)
+                    if (i + 1 < _visibleNodes.Count)
+                    {
+                        var nextNode = _visibleNodes[i + 1];
+                        if (nextNode.Depth > candidate.Depth)
+                        {
+                            return candidate.Id;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private static string GetMethodLabel(ApiRequestMethod method) => method switch

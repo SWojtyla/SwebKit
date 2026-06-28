@@ -167,10 +167,22 @@
     --api-animation-duration-fast: 150ms;
     --api-animation-duration-normal: 200ms;
     --api-animation-duration-slow: 300ms;
+    --api-animation-duration-slower: 400ms;
     --api-animation-easing: ease;
     --api-animation-easing-in: ease-in;
     --api-animation-easing-out: ease-out;
     --api-animation-easing-in-out: ease-in-out;
+    
+    /* Animation functions */
+    --api-animation-function-fade-in: cubic-bezier(0.4, 0, 1, 1);
+    --api-animation-function-slide-in: cubic-bezier(0.34, 0.69, 0.1, 1);
+    --api-animation-function-scale-in: cubic-bezier(0.33, 1, 0.68, 1);
+    
+    /* Animation timing */
+    --api-transition-fast: 0.15s var(--api-animation-easing);
+    --api-transition-normal: 0.2s var(--api-animation-easing);
+    --api-transition-slow: 0.3s var(--api-animation-easing);
+    --api-transition-slower: 0.4s var(--api-animation-easing);
 }
 
 /* ===================================================================

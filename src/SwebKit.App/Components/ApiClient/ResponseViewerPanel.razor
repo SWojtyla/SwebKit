@@ -1,26 +1,28 @@
-<div class="resp-viewer">
+<div class="resp-viewer" role="region" aria-label="Response viewer">
 
     @* ── History sidebar ──────────────────────────────────────────────────────── *@
     @if (HistoryEntries.Count > 0)
     {
-        <div class="@(_isHistoryCollapsed ? "resp-viewer__history resp-viewer__history--collapsed" : "resp-viewer__history")">
+        <div class="@(_isHistoryCollapsed ? "resp-viewer__history resp-viewer__history--collapsed" : "resp-viewer__history")" 
+             aria-label="Response history">
             <div class="resp-viewer__history-header">
                 <button type="button" class="resp-viewer__history-toggle" 
                         @onclick="() => _isHistoryCollapsed = !_isHistoryCollapsed"
-                        title="@(_isHistoryCollapsed ? "Expand history" : "Collapse history")">
+                        aria-label="@(_isHistoryCollapsed ? "Expand history sidebar" : "Collapse history sidebar")"
+                        aria-expanded="@(!_isHistoryCollapsed)">
                     @if (_isHistoryCollapsed)
                     {
-                        <span>▶</span>
+                        <span aria-hidden="true">▶</span>
                     }
                     else
                     {
-                        <span>▼</span>
+                        <span aria-hidden="true">▼</span>
                     }
                 </button>
                 <span class="resp-viewer__history-title">History</span>
                 <button type="button" class="resp-viewer__history-clear" 
-                        @onclick="ClearHistory" title="Clear history">
-                    ✕
+                        @onclick="ClearHistory" aria-label="Clear response history">
+                    <span aria-hidden="true">✕</span>
                 </button>
             </div>
             @if (!_isHistoryCollapsed)
@@ -31,9 +33,10 @@
                         var e = entry;
                         <button type="button"
                                 class="resp-viewer__history-item @(ReferenceEquals(Result, e) ? "resp-viewer__history-item--active" : "") @(StatusClass(e.StatusCode))"
-                            title="@e.Method @e.ResolvedUrl — @FormatElapsed(e.Elapsed)"
+                            aria-label="@GetHistoryItemAriaLabel(e)"
+                            aria-current="@(ReferenceEquals(Result, e) ? "true" : "false")"
                             @onclick="() => OnResend.InvokeAsync(e)">
-                            <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)">
+                            <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)" aria-hidden="true">
                                 @(e.ErrorMessage is not null ? "ERR" : e.StatusCode.ToString())
                             </span>
                             <span class="resp-viewer__history-method">@e.Method</span>
@@ -424,5 +427,12 @@
         // This method would clear the history - implementation depends on how
         // HistoryEntries is managed. For now, this provides the UI hook.
         // In practice, this would call a service method or parent component callback.
+    }
+
+    private string GetHistoryItemAriaLabel(HttpRequestResult entry)
+    {
+        if (entry.ErrorMessage is not null)
+            return $"Error response for {entry.Method} {entry.ResolvedUrl}: {entry.ErrorMessage}";
+        return $"{entry.Method} request to {entry.ResolvedUrl} returned HTTP {entry.StatusCode} in {FormatElapsed(entry.Elapsed)}";
     }
 }

@@ -4,7 +4,18 @@
 @inject IRequestBodyFormatter BodyFormatter
 @implements IAsyncDisposable
 
-<div class="req-builder">
+<div class="req-builder" role="region" aria-label="Request builder">
+
+    @* Loading overlay *@
+    @if (_isSending)
+    {
+        <div class="req-builder__loading-overlay api-client-loading-overlay">
+            <div class="api-client-loading">
+                <span class="api-client-loading-spinner"></span>
+                <span>Sending request...</span>
+            </div>
+        </div>
+    }
 
     @* ── Name row ────────────────────────────────────────────────────────────── *@
     <div class="req-builder__name-row">
@@ -111,16 +122,17 @@
             </div>
 
             <button type="button"
-                    class="req-builder__send-btn @((_executing || _subscribing) ? "req-builder__send-btn--busy" : "")"
-                    @onclick="OnSendAsync" disabled="@(string.IsNullOrWhiteSpace(Request.Url) && !_executing && !_subscribing)">
+                    class="req-builder__send-btn @((_executing || _subscribing) ? "req-builder__send-btn--busy api-client-btn--loading" : "")"
+                    @onclick="OnSendAsync" disabled="@(string.IsNullOrWhiteSpace(Request.Url) && !_executing && !_subscribing)"
+                    aria-label="@GetSendButtonAriaLabel()" aria-busy="@_isSending">
                 @if (_executing)
                 {
-                    <span class="req-builder__send-spinner" />
+                    <span class="req-builder__send-spinner api-client-loading-spinner" aria-hidden="true" />
                     <span>Cancel</span>
                 }
                 else if (_subscribing)
                 {
-                    <span class="req-builder__send-spinner" />
+                    <span class="req-builder__send-spinner api-client-loading-spinner" aria-hidden="true" />
                     <span>Stop</span>
                 }
                 else
@@ -278,6 +290,7 @@
 
     private IReadOnlyList<string> _captureWarnings = [];
     private bool _executing;
+    private bool _isSending => _executing || _subscribing;
     private CancellationTokenSource? _executionCts;
 
     // Subscription state
@@ -296,6 +309,17 @@
     private bool CanPrettifyBody =>
         Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml &&
         !string.IsNullOrWhiteSpace(Request.Body.RawContent);
+
+    private string GetSendButtonAriaLabel()
+    {
+        if (_executing)
+            return "Cancel sending request";
+        if (_subscribing)
+            return "Stop subscription";
+        if (string.IsNullOrWhiteSpace(Request.Url))
+            return "Send request (disabled - no URL)";
+        return $"Send {Request.Method} request to {Request.Url}";
+    }
 
     // ── Parameter sync (BL-5 guard) ────────────────────────────────────────────
 
