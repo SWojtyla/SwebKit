@@ -175,14 +175,23 @@
             }
             else if (_activeTab == "Body")
             {
-                <div class="req-builder__body-mode-strip">
-                    @foreach (var mode in Enum.GetValues<RequestBodyMode>())
+                <div class="req-builder__body-chrome">
+                    <div class="req-builder__body-mode-strip">
+                        @foreach (var mode in Enum.GetValues<RequestBodyMode>())
+                        {
+                            var m = mode;
+                            <button type="button"
+                                    class="req-builder__body-mode-btn @(Request.Body.Mode == m ? "req-builder__body-mode-btn--active" : "")"
+                                    @onclick="() => SetBodyModeAsync(m)">
+                                @mode.ToString()
+                            </button>
+                        }
+                    </div>
+                    @if (Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml or RequestBodyMode.Text)
                     {
-                        var m = mode;
-                        <button type="button"
-                                class="req-builder__body-mode-btn @(Request.Body.Mode == m ? "req-builder__body-mode-btn--active" : "")"
-                                @onclick="() => SetBodyModeAsync(m)">
-                            @mode.ToString()
+                        <button type="button" class="req-builder__format-btn" title="Prettify request body"
+                                disabled="@(!CanPrettifyBody)" @onclick="PrettifyBodyAsync">
+                            Prettify
                         </button>
                     }
                 </div>
@@ -201,12 +210,6 @@
                                 }
                             </div>
                         }
-                        <div class="req-builder__body-editor-toolbar">
-                            <button type="button" class="req-builder__format-btn" title="Prettify request body"
-                                    disabled="@(!CanPrettifyBody)" @onclick="PrettifyBodyAsync">
-                                Prettify
-                            </button>
-                        </div>
                         @if (_bodyFormatError is not null)
                         {
                             <div class="req-builder__format-error" role="alert">@_bodyFormatError</div>
