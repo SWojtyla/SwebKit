@@ -291,8 +291,8 @@
     transform: translate(-50%, -50%);
     width: 16px;
     height: 16px;
-    border: 2px solid currentColor;
-    border-right-color: transparent;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
     border-radius: 50%;
     animation: api-client-spin 0.75s linear infinite;
 }

@@ -448,8 +448,8 @@
 .app-icon-button__spinner {
     width: 12px;
     height: 12px;
-    border: 2px solid currentColor;
-    border-right-color: transparent;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
     border-radius: 999px;
     animation: app-control-spin 0.72s linear infinite;
 }
