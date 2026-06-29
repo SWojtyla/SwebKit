@@ -20,7 +20,7 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
         var resolved = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken);
         var scope = BuildSafeScope(collection.Variables, activeEnvironment, resolved);
         var method = request.Method == ApiRequestMethod.GraphQl ? ApiRequestMethod.Post : request.Method;
-        var url = BuildResolvedUrl(request, scope);
+        var url = UrlBuilder.Build(request, scope, substitution);
         var lines = new List<string> { $"curl {Quote(url)}" };
 
         if (method != ApiRequestMethod.Get)
@@ -211,7 +211,7 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
         ApiEnvironment? activeEnvironment,
         IReadOnlyDictionary<string, string?> resolved)
     {
-        var environmentVariable = activeEnvironment?.Variables.FirstOrDefault(variable => variable.IsEnabled && variable.Key.Equals(token, StringComparison.OrdinalIgnoreCase));
+        var environmentVariable = activeEnvironment?.Variables.FirstOrDefault(variable => variable.IsEnabled && variable.Key.Equals(token, StringComparison.Ordinal));
         if (environmentVariable is not null)
         {
             var isSecret = IsSecretVariable(environmentVariable) || IsLikelySecret(token);
@@ -230,7 +230,7 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
             };
         }
 
-        var collectionVariable = collection.Variables.FirstOrDefault(variable => variable.IsEnabled && variable.Key.Equals(token, StringComparison.OrdinalIgnoreCase));
+        var collectionVariable = collection.Variables.FirstOrDefault(variable => variable.IsEnabled && variable.Key.Equals(token, StringComparison.Ordinal));
         if (collectionVariable is not null)
         {
             var isSecret = IsLikelySecret(token);
@@ -250,35 +250,6 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
             DisplayValue = null,
             IsSecret = IsLikelySecret(token),
         };
-    }
-
-    private string BuildResolvedUrl(HttpRequestEntry request, IReadOnlyDictionary<string, string?> scope)
-    {
-        var baseUrl = substitution.Substitute(request.Url, scope);
-        var enabledParams = request.QueryParams.Where(static param => param.IsEnabled && !string.IsNullOrWhiteSpace(param.Key)).ToList();
-        if (enabledParams.Count == 0)
-        {
-            return baseUrl;
-        }
-
-        var builder = new StringBuilder(baseUrl);
-        builder.Append(baseUrl.Contains("?", StringComparison.Ordinal) ? '&' : '?');
-        for (var index = 0; index < enabledParams.Count; index++)
-        {
-            if (index > 0)
-            {
-                builder.Append('&');
-            }
-
-            builder.Append(Uri.EscapeDataString(enabledParams[index].Key));
-            if (enabledParams[index].Value is not null)
-            {
-                builder.Append('=');
-                builder.Append(Uri.EscapeDataString(substitution.Substitute(enabledParams[index].Value ?? string.Empty, scope)));
-            }
-        }
-
-        return builder.ToString();
     }
 
     private string? BuildRequestBody(RequestBody body, IReadOnlyDictionary<string, string?> scope)
@@ -332,8 +303,8 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .SelectMany(static value => TokenPattern().Matches(value!).Select(match => match.Groups[1].Value.Trim()))
             .Where(static token => !string.IsNullOrWhiteSpace(token))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static token => token, StringComparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static token => token, StringComparer.Ordinal)
             .ToList();
     }
 

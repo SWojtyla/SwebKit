@@ -34,7 +34,7 @@ public sealed class HttpRequestExecutor(
         var scope = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken);
 
         // Build the URL (with query params merged in)
-        var url = BuildUrl(request, scope);
+        var url = UrlBuilder.Build(request, scope, substitution);
 
         var sw = Stopwatch.StartNew();
         try
@@ -81,34 +81,6 @@ public sealed class HttpRequestExecutor(
     }
 
     // ── Request building ───────────────────────────────────────────────────────
-
-    private string BuildUrl(HttpRequestEntry request, IReadOnlyDictionary<string, string?> scope)
-    {
-        var baseUrl = substitution.Substitute(request.Url, scope);
-
-        var enabledParams = request.QueryParams
-            .Where(p => p.IsEnabled && !string.IsNullOrWhiteSpace(p.Key))
-            .ToList();
-
-        if (enabledParams.Count == 0) return baseUrl;
-
-        var sb = new StringBuilder(baseUrl);
-        sb.Append(baseUrl.Contains('?') ? '&' : '?');
-
-        for (var i = 0; i < enabledParams.Count; i++)
-        {
-            if (i > 0) sb.Append('&');
-            sb.Append(Uri.EscapeDataString(enabledParams[i].Key));
-            if (enabledParams[i].Value is not null)
-            {
-                sb.Append('=');
-                sb.Append(Uri.EscapeDataString(
-                    substitution.Substitute(enabledParams[i].Value ?? string.Empty, scope)));
-            }
-        }
-
-        return sb.ToString();
-    }
 
     private HttpRequestMessage BuildHttpRequest(
         HttpRequestEntry request,

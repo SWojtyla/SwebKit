@@ -1,0 +1,73 @@
+@using Microsoft.AspNetCore.Components
+
+<div class="resp-tabs">
+    <button type="button" 
+            class="resp-tab @(_activeTab == ResponseTab.Body ? "resp-tab--active" : "")" 
+            @onclick="() => OnTabChange.InvokeAsync(ResponseTab.Body)">
+        <span>Body</span>
+    </button>
+    <button type="button" 
+            class="resp-tab @(_activeTab == ResponseTab.Headers ? "resp-tab--active" : "")" 
+            @onclick="() => OnTabChange.InvokeAsync(ResponseTab.Headers)">
+        <span>Headers</span>
+        @if (_headerCount > 0)
+        {
+            <span class="resp-tab__count">@_headerCount</span>
+        }
+    </button>
+    @if (_showPreviewTab)
+    {
+        <button type="button" 
+                class="resp-tab @(_activeTab == ResponseTab.Preview ? "resp-tab--active" : "")" 
+                @onclick="() => OnTabChange.InvokeAsync(ResponseTab.Preview)">
+            <span>Preview</span>
+        </button>
+    }
+    @if (_showRawTab)
+    {
+        <button type="button" 
+                class="resp-tab @(_activeTab == ResponseTab.Raw ? "resp-tab--active" : "")" 
+                @onclick="() => OnTabChange.InvokeAsync(ResponseTab.Raw)">
+            <span>Raw</span>
+        </button>
+    }
+    @if (_showGraphQLErrorsTab && _graphQLErrorCount > 0)
+    {
+        <button type="button" 
+                class="resp-tab resp-tab--gql-errors @(_activeTab == ResponseTab.GraphQLErrors ? "resp-tab--active" : "")" 
+                @onclick="() => OnTabChange.InvokeAsync(ResponseTab.GraphQLErrors)">
+            <span>GraphQL Errors</span>
+            <span class="resp-tab__count resp-tab__count--error">@_graphQLErrorCount</span>
+        </button>
+    }
+</div>
+
+@code {
+    public enum ResponseTab
+    {
+        Body,
+        Headers,
+        Preview,
+        Raw,
+        GraphQLErrors
+    }
+
+    [Parameter] public ResponseTab ActiveTab { get; set; } = ResponseTab.Body;
+    [Parameter] public EventCallback<ResponseTab> OnTabChange { get; set; }
+    
+    // Content counts for badges
+    [Parameter] public int HeaderCount { get; set; } = 0;
+    [Parameter] public int GraphQLErrorCount { get; set; } = 0;
+    
+    // Tab visibility controls
+    [Parameter] public bool ShowPreviewTab { get; set; } = true;
+    [Parameter] public bool ShowRawTab { get; set; } = true;
+    [Parameter] public bool ShowGraphQLErrorsTab { get; set; } = true;
+
+    private int _headerCount => HeaderCount;
+    private int _graphQLErrorCount => GraphQLErrorCount;
+    private bool _showPreviewTab => ShowPreviewTab;
+    private bool _showRawTab => ShowRawTab;
+    private bool _showGraphQLErrorsTab => ShowGraphQLErrorsTab;
+    private ResponseTab _activeTab => ActiveTab;
+}

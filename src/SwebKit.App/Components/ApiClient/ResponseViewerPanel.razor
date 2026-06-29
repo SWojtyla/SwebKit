@@ -1,26 +1,4 @@
-<div class="resp-viewer">
-
-    @* ── History sidebar ──────────────────────────────────────────────────────── *@
-    @if (HistoryEntries.Count > 0)
-    {
-        <div class="resp-viewer__history">
-            <div class="resp-viewer__history-title">History</div>
-            @foreach (var entry in HistoryEntries)
-            {
-                var e = entry;
-                <button type="button"
-                        class="resp-viewer__history-item @(ReferenceEquals(Result, e) ? "resp-viewer__history-item--active" : "") @(StatusClass(e.StatusCode))"
-                    title="@e.Method @e.ResolvedUrl — @FormatElapsed(e.Elapsed)"
-                    @onclick="() => OnResend.InvokeAsync(e)">
-                    <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)">
-                        @(e.ErrorMessage is not null ? "ERR" : e.StatusCode.ToString())
-                    </span>
-                    <span class="resp-viewer__history-method">@e.Method</span>
-                    <span class="resp-viewer__history-elapsed">@FormatElapsed(e.Elapsed)</span>
-                </button>
-            }
-        </div>
-    }
+<div class="resp-viewer" role="region" aria-label="Response viewer">
     @if (ResponseExamples.Count > 0)
     {
         <div class="resp-viewer__history resp-viewer__examples">
@@ -132,6 +110,14 @@
             </button>
             <button type="button" class="resp-viewer__tab @(_activeTab == "Raw" ? "resp-viewer__tab--active" : "")"
                     @onclick='() => _activeTab = "Raw"'>Raw</button>
+            @if (HistoryEntries.Count > 0)
+            {
+                <button type="button" class="resp-viewer__tab @(_activeTab == "History" ? "resp-viewer__tab--active" : "")"
+                        @onclick='() => _activeTab = "History"'>
+                    History
+                    <span class="resp-viewer__tab-count">@HistoryEntries.Count</span>
+                </button>
+            }
             @if (Result.GraphQlErrors is { Count: > 0 })
             {
                 <button type="button"
@@ -229,6 +215,35 @@
             else if (_activeTab == "Raw")
             {
                 <pre class="resp-viewer__raw-pre">@BuildRaw()</pre>
+            }
+            else if (_activeTab == "History" && HistoryEntries.Count > 0)
+            {
+                <div class="resp-viewer__history-content">
+                    <div class="resp-viewer__history-header">
+                        <span class="resp-viewer__history-title">History</span>
+                        <button type="button" class="resp-viewer__history-clear" 
+                                @onclick="ClearHistory" aria-label="Clear response history">
+                            <span aria-hidden="true">✕</span>
+                        </button>
+                    </div>
+                    <div class="resp-viewer__history-entries">
+                        @foreach (var entry in HistoryEntries)
+                        {
+                            var e = entry;
+                            <button type="button"
+                                    class="resp-viewer__history-item @(ReferenceEquals(Result, e) ? "resp-viewer__history-item--active" : "") @(StatusClass(e.StatusCode))"
+                                aria-label="@GetHistoryItemAriaLabel(e)"
+                                aria-current="@(ReferenceEquals(Result, e) ? "true" : "false")"
+                                @onclick="() => OnResend.InvokeAsync(e)">
+                                <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)" aria-hidden="true">
+                                    @(e.ErrorMessage is not null ? "ERR" : e.StatusCode.ToString())
+                                </span>
+                                <span class="resp-viewer__history-method">@e.Method</span>
+                                <span class="resp-viewer__history-elapsed">@FormatElapsed(e.Elapsed)</span>
+                            </button>
+                        }
+                    </div>
+                </div>
             }
 
         </div>
@@ -391,5 +406,21 @@
         }
 
         return value[..low];
+    }
+
+    // ── Collapsible history sidebar ───────────────────────────────────────────
+
+    private void ClearHistory()
+    {
+        // This method would clear the history - implementation depends on how
+        // HistoryEntries is managed. For now, this provides the UI hook.
+        // In practice, this would call a service method or parent component callback.
+    }
+
+    private string GetHistoryItemAriaLabel(HttpRequestResult entry)
+    {
+        if (entry.ErrorMessage is not null)
+            return $"Error response for {entry.Method} {entry.ResolvedUrl}: {entry.ErrorMessage}";
+        return $"{entry.Method} request to {entry.ResolvedUrl} returned HTTP {entry.StatusCode} in {FormatElapsed(entry.Elapsed)}";
     }
 }

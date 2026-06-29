@@ -1,0 +1,899 @@
+/* ===================================================================
+   API Client Component Styles
+   
+   This file contains component-specific CSS styles for the API Client feature.
+   It builds upon the base styles and design tokens to provide consistent,
+   reusable component styling.
+   =================================================================== */
+
+/* ===================================================================
+   IMPORT TOKENS, BASE, AND ANIMATIONS
+   =================================================================== */
+@import url('00-api-tokens.css');
+@import url('01-api-base.css');
+@import url('03-api-animations.css');
+
+/* ===================================================================
+   COLLECTION TREE SPECIFIC STYLES
+   =================================================================== */
+
+/* Tree container */
+.api-client .collection-tree {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+}
+
+/* Search section */
+.api-client .collection-tree__search {
+    flex-shrink: 0;
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.api-client .collection-tree__search-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--api-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--api-radius-sm);
+    color: var(--color-text);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    transition: all var(--api-transition-fast);
+}
+
+.api-client .collection-tree__search-input::placeholder {
+    color: var(--color-text-faint);
+}
+
+.api-client .collection-tree__search-input:focus {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+}
+
+/* Rows container */
+.api-client .collection-tree__rows {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Individual row */
+.api-client .collection-tree__row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-xs);
+    min-height: var(--api-tree-row-height);
+    cursor: pointer;
+    border-radius: var(--api-radius-sm);
+    padding-right: var(--api-spacing-sm);
+    user-select: none;
+    font-size: var(--api-font-size-sm);
+    color: var(--color-text);
+    transition: all var(--api-transition-fast);
+    /* Use CSS variable for indentation */
+    padding-left: calc(var(--api-tree-indent) + var(--api-tree-indent) * var(--depth, 0));
+}
+
+/* Indentation with visual guides */
+.api-client .collection-tree__row::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: calc(var(--api-tree-indent) * var(--depth, 0));
+    border-left: 1px dashed var(--api-border-color-subtle);
+    pointer-events: none;
+}
+
+/* Row hover and selection states */
+.api-client .collection-tree__row:hover {
+    background: var(--api-surface-hover);
+}
+
+.api-client .collection-tree__row--selected {
+    background: var(--api-accent-subtle);
+}
+
+.api-client .collection-tree__row--selected:hover {
+    background: var(--api-accent-subtle-hover);
+}
+
+.api-client .collection-tree__row--active-collection {
+    background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+    font-weight: var(--api-font-weight-semibold);
+}
+
+.api-client .collection-tree__row--active-collection:hover {
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+
+.api-client .collection-tree__row--group {
+    height: 24px;
+    cursor: default;
+    color: var(--color-text-muted);
+    font-size: var(--api-font-size-xs);
+    font-weight: var(--api-font-weight-bold);
+    letter-spacing: var(--api-letter-spacing-wide);
+    text-transform: uppercase;
+}
+
+.api-client .collection-tree__row--group:hover {
+    background: transparent;
+}
+
+.api-client .collection-tree__row--linked-root {
+    color: var(--color-text);
+    font-weight: var(--api-font-weight-semibold);
+}
+
+.api-client .collection-tree__row--active-linked-root {
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    color: var(--color-text);
+}
+
+.api-client .collection-tree__row--active-linked-root:hover {
+    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+/* Chevron for expand/collapse */
+.api-client .collection-tree__chevron {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 10px;
+    padding: 0;
+    border-radius: var(--api-radius-xs);
+    transition: all var(--api-transition-fast);
+}
+
+.api-client .collection-tree__chevron:hover {
+    color: var(--color-text);
+    background: var(--api-surface-hover);
+}
+
+.api-client .collection-tree__chevron--spacer {
+    cursor: default;
+    pointer-events: none;
+    visibility: hidden;
+}
+
+/* Icon styles */
+.api-client .collection-tree__icon {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+/* Fluent UI icon wrapper */
+.api-client .collection-tree__fluent-icon {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Method badge */
+.api-client .collection-tree__method-badge {
+    flex-shrink: 0;
+    font-size: var(--api-font-size-xs);
+    font-weight: var(--api-font-weight-bold);
+    padding: 1px 4px;
+    border-radius: var(--api-radius-xs);
+    letter-spacing: var(--api-letter-spacing-wide);
+    text-transform: uppercase;
+    min-width: 30px;
+    text-align: center;
+}
+
+/* Method badge colors using API tokens */
+.api-client .collection-tree__method-badge--get {
+    background: color-mix(in srgb, var(--api-method-get) 15%, transparent);
+    color: var(--api-method-get);
+}
+
+.api-client .collection-tree__method-badge--post {
+    background: color-mix(in srgb, var(--api-method-post) 15%, transparent);
+    color: var(--api-method-post);
+}
+
+.api-client .collection-tree__method-badge--put {
+    background: color-mix(in srgb, var(--api-method-put) 15%, transparent);
+    color: var(--api-method-put);
+}
+
+.api-client .collection-tree__method-badge--patch {
+    background: color-mix(in srgb, var(--api-method-patch) 15%, transparent);
+    color: var(--api-method-patch);
+}
+
+.api-client .collection-tree__method-badge--delete {
+    background: color-mix(in srgb, var(--api-method-delete) 15%, transparent);
+    color: var(--api-method-delete);
+}
+
+.api-client .collection-tree__method-badge--head {
+    background: color-mix(in srgb, var(--api-method-head) 15%, transparent);
+    color: var(--api-method-head);
+}
+
+.api-client .collection-tree__method-badge--options {
+    background: color-mix(in srgb, var(--api-method-options) 15%, transparent);
+    color: var(--api-method-options);
+}
+
+.api-client .collection-tree__method-badge--graphql {
+    background: color-mix(in srgb, var(--api-method-graphql) 15%, transparent);
+    color: var(--api-method-graphql);
+}
+
+.api-client .collection-tree__method-badge--websocket {
+    background: color-mix(in srgb, var(--api-method-websocket) 15%, transparent);
+    color: var(--api-method-websocket);
+}
+
+/* Label */
+.api-client .collection-tree__label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--api-font-size-sm);
+}
+
+.api-client .collection-tree__group-label {
+    padding-left: var(--api-spacing-xs);
+}
+
+/* Git badge */
+.api-client .collection-tree__git-badge {
+    flex-shrink: 0;
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 1px 5px;
+    border-radius: var(--api-radius-sm);
+    background: var(--api-surface-raised);
+    font-size: var(--api-font-size-xs);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+}
+
+.api-client .collection-tree__git-badge--dirty {
+    background: color-mix(in srgb, var(--color-warning) 18%, var(--color-surface));
+    color: var(--color-warning);
+}
+
+/* Count badge */
+.api-client .collection-tree__count-badge {
+    flex-shrink: 0;
+    font-size: var(--api-font-size-xs);
+    background: var(--api-surface-raised);
+    color: var(--color-text-faint);
+    border-radius: var(--api-radius-sm);
+    padding: 1px 5px;
+}
+
+/* Rename input */
+.api-client .collection-tree__rename-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--api-surface-raised);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--api-radius-xs);
+    color: var(--color-text);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    padding: 1px 4px;
+    outline: none;
+}
+
+/* Context menu */
+.api-client .ctx-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999;
+}
+
+.api-client .ctx-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 180px;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--api-radius-sm);
+    padding: 4px;
+    box-shadow: var(--api-shadow-md);
+}
+
+.api-client .ctx-item {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-xs);
+    width: 100%;
+    padding: 6px 8px;
+    background: none;
+    border: none;
+    color: var(--color-text);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    cursor: pointer;
+    border-radius: var(--api-radius-xs);
+    transition: all var(--api-transition-fast);
+    white-space: nowrap;
+}
+
+.api-client .ctx-item:hover {
+    background: var(--api-surface-hover);
+}
+
+.api-client .ctx-item.destructive:hover {
+    background: color-mix(in srgb, var(--api-status-5xx) 10%, transparent);
+    color: var(--api-status-5xx);
+}
+
+.api-client .ctx-item-icon {
+    font-size: 12px;
+}
+
+.api-client .ctx-separator {
+    height: 1px;
+    background: var(--color-border);
+    margin: 4px 0;
+}
+
+/* ===================================================================
+   REQUEST BUILDER STYLES
+   =================================================================== */
+
+.api-client .req-builder {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--color-surface);
+}
+
+.api-client .req-builder__header {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-sm);
+    padding: var(--api-spacing-sm) var(--api-spacing-md);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.api-client .req-builder__method-picker {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-xs);
+}
+
+.api-client .req-builder__method-select {
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    background: var(--api-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--api-radius-sm);
+    color: var(--color-text);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    font-weight: var(--api-font-weight-semibold);
+    cursor: pointer;
+    min-width: 80px;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: var(--api-letter-spacing-wide);
+}
+
+.api-client .req-builder__url-input {
+    flex: 1;
+    background: var(--api-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--api-radius-sm);
+    color: var(--color-text);
+    font-family: var(--api-font-family-mono);
+    font-size: var(--api-font-size-sm);
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    transition: all var(--api-transition-fast);
+}
+
+.api-client .req-builder__url-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+.api-client .req-builder__send-btn {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    border: none;
+    border-radius: var(--api-radius-sm);
+    padding: var(--api-spacing-xs) var(--api-spacing-md);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    font-weight: var(--api-font-weight-semibold);
+    cursor: pointer;
+    transition: all var(--api-transition-fast);
+    white-space: nowrap;
+}
+
+.api-client .req-builder__send-btn:hover:not([disabled]) {
+    background: var(--color-accent-light);
+}
+
+.api-client .req-builder__send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.api-client .req-builder__content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--api-spacing-md);
+}
+
+/* ===================================================================
+   RESPONSE VIEWER STYLES
+   =================================================================== */
+
+.api-client .resp-viewer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--color-surface);
+}
+
+.api-client .resp-viewer__status-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-md);
+    padding: var(--api-spacing-sm) var(--api-spacing-md);
+    background: var(--api-surface-2);
+    border-bottom: 1px solid var(--color-border);
+    flex-wrap: wrap;
+}
+
+.api-client .resp-viewer__status {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-xs);
+}
+
+.api-client .resp-viewer__status-code {
+    font-size: var(--api-font-size-2xl);
+    font-weight: var(--api-font-weight-bold);
+    font-variant-numeric: tabular-nums;
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    border-radius: var(--api-radius-sm);
+    background: var(--api-surface-raised);
+}
+
+.api-client .resp-viewer__status-code--2xx { color: var(--api-status-2xx); }
+.api-client .resp-viewer__status-code--3xx { color: var(--api-status-3xx); }
+.api-client .resp-viewer__status-code--4xx { color: var(--api-status-4xx); }
+.api-client .resp-viewer__status-code--5xx { color: var(--api-status-5xx); }
+
+.api-client .resp-viewer__status-text {
+    font-size: var(--api-font-size-sm);
+    font-weight: var(--api-font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: var(--api-letter-spacing-wide);
+}
+
+.api-client .resp-viewer__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-md);
+    flex: 1;
+    min-width: 0;
+}
+
+.api-client .resp-viewer__meta-item {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-xs);
+    font-size: var(--api-font-size-sm);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.api-client .resp-viewer__actions {
+    display: flex;
+    gap: var(--api-spacing-xs);
+}
+
+.api-client .resp-viewer__content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--api-spacing-md);
+}
+
+.api-client .resp-viewer__body {
+    font-family: var(--api-font-family-mono);
+    font-size: var(--api-font-size-sm);
+    line-height: var(--api-line-height-relaxed);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* ===================================================================
+   TABS STYLES
+   =================================================================== */
+
+.api-client .api-client-tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--api-surface-2);
+    border-bottom: 1px solid var(--color-border);
+    padding: 0 var(--api-spacing-sm);
+}
+
+.api-client .api-client-tab {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-xs);
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    background: transparent;
+    border: none;
+    border-radius: var(--api-radius-sm) var(--api-radius-sm) 0 0;
+    color: var(--color-text-muted);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    cursor: pointer;
+    transition: all var(--api-transition-fast);
+}
+
+.api-client .api-client-tab:hover {
+    background: var(--api-surface-hover);
+    color: var(--color-text);
+}
+
+.api-client .api-client-tab--active {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-bottom: 2px solid var(--color-accent);
+    margin-bottom: -1px;
+}
+
+.api-client .api-client-tab__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--api-radius-xs);
+    background: var(--api-accent-subtle);
+    color: var(--color-accent);
+    font-size: 11px;
+    font-weight: var(--api-font-weight-bold);
+    margin-left: var(--api-spacing-xs);
+}
+
+/* ===================================================================
+   SPLIT PANE STYLES
+   =================================================================== */
+
+.api-client .api-client-split-pane {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.api-client .api-client-pane {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--color-surface);
+}
+
+.api-client .api-client-pane--left {
+    border-right: 1px solid var(--color-border);
+}
+
+.api-client .api-client-pane--right {
+    border-left: 1px solid var(--color-border);
+}
+
+.api-client .resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    transition: background var(--api-transition-fast);
+    z-index: 10;
+}
+
+.api-client .resize-handle:hover,
+.api-client .resize-handle:active {
+    background: var(--color-accent);
+}
+
+/* ===================================================================
+   HISTORY SIDEBAR STYLES
+   =================================================================== */
+
+.api-client .resp-history {
+    width: 280px;
+    min-width: 280px;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    transition: all var(--api-transition-normal);
+}
+
+.api-client .resp-history--collapsed {
+    width: 32px;
+    min-width: 32px;
+    overflow: hidden;
+}
+
+.api-client .resp-history__header {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-xs);
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.api-client .resp-history__toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    padding: var(--api-spacing-xs);
+    border-radius: var(--api-radius-xs);
+    transition: all var(--api-transition-fast);
+}
+
+.api-client .resp-history__toggle:hover {
+    background: var(--api-surface-hover);
+    color: var(--color-text);
+}
+
+.api-client .resp-history__title {
+    font-size: var(--api-font-size-sm);
+    font-weight: var(--api-font-weight-semibold);
+    color: var(--color-text);
+}
+
+.api-client .resp-history__clear {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    padding: var(--api-spacing-xs);
+    border-radius: var(--api-radius-xs);
+    transition: all var(--api-transition-fast);
+}
+
+.api-client .resp-history__clear:hover {
+    background: var(--api-surface-hover);
+    color: var(--api-status-5xx);
+}
+
+.api-client .resp-history__entries {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.api-client .resp-history__entry {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-xs);
+    width: 100%;
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background var(--api-transition-fast);
+    font-size: var(--api-font-size-sm);
+    text-align: left;
+}
+
+.api-client .resp-history__entry:hover {
+    background: var(--api-surface-hover);
+}
+
+.api-client .resp-history__entry--active {
+    background: var(--api-accent-subtle);
+}
+
+.api-client .resp-history__entry-status {
+    width: 24px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--api-radius-xs);
+    font-size: var(--api-font-size-xs);
+    font-weight: var(--api-font-weight-bold);
+}
+
+.api-client .resp-history__entry-status--2xx {
+    background: color-mix(in srgb, var(--api-status-2xx) 15%, transparent);
+    color: var(--api-status-2xx);
+}
+
+.api-client .resp-history__entry-status--3xx {
+    background: color-mix(in srgb, var(--api-status-3xx) 15%, transparent);
+    color: var(--api-status-3xx);
+}
+
+.api-client .resp-history__entry-status--4xx {
+    background: color-mix(in srgb, var(--api-status-4xx) 15%, transparent);
+    color: var(--api-status-4xx);
+}
+
+.api-client .resp-history__entry-status--5xx {
+    background: color-mix(in srgb, var(--api-status-5xx) 15%, transparent);
+    color: var(--api-status-5xx);
+}
+
+.api-client .resp-history__entry-method {
+    font-size: var(--api-font-size-xs);
+    font-weight: var(--api-font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    min-width: 40px;
+}
+
+.api-client .resp-history__entry-url {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--api-font-size-sm);
+}
+
+.api-client .resp-history__entry-time {
+    font-size: var(--api-font-size-xs);
+    color: var(--color-text-muted);
+}
+
+/* ===================================================================
+   TOOLBAR STYLES
+   =================================================================== */
+
+.api-client .api-client-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-md);
+    padding: var(--api-spacing-sm) var(--api-spacing-md);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    min-height: 40px;
+}
+
+.api-client .api-client-toolbar__left,
+.api-client .api-client-toolbar__right {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-sm);
+}
+
+.api-client .api-client-toolbar__center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+}
+
+.api-client .api-client-toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-xs);
+    padding: var(--api-spacing-xs) var(--api-spacing-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--api-radius-sm);
+    background: var(--api-surface-raised);
+    color: var(--color-text);
+    font-family: var(--api-font-family);
+    font-size: var(--api-font-size-sm);
+    cursor: pointer;
+    transition: all var(--api-transition-fast);
+}
+
+.api-client .api-client-toolbar-btn:hover:not([disabled]) {
+    background: var(--api-surface-hover);
+    border-color: var(--color-accent);
+}
+
+.api-client .api-client-toolbar-btn--primary {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    border-color: var(--color-accent);
+}
+
+.api-client .api-client-toolbar-btn kbd {
+    font-family: var(--api-font-family-mono);
+    font-size: 11px;
+    padding: 1px 4px;
+    background: rgba(0, 0, 0, 0.08);
+    border-radius: 3px;
+    color: var(--color-text-muted);
+    margin-left: var(--api-spacing-xs);
+}
+
+/* ===================================================================
+   COMPACT VIEW SUPPORT
+   =================================================================== */
+
+@media (max-width: 768px) {
+    .api-client .collection-tree {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--color-border);
+    }
+    
+    .api-client .collection-tree__rows {
+        max-height: 200px;
+    }
+    
+    .api-client .api-client-split-pane {
+        flex-direction: column;
+    }
+    
+    .api-client .api-client-pane--left {
+        border-right: none;
+        border-bottom: 1px solid var(--color-border);
+        max-height: 300px;
+    }
+    
+    .api-client .api-client-pane--right {
+        border-left: none;
+    }
+    
+    .api-client .resp-history {
+        width: 100%;
+        min-width: 100%;
+        border-right: none;
+        border-top: 1px solid var(--color-border);
+    }
+    
+    .api-client .resp-history--collapsed {
+        width: 100%;
+    }
+    
+    .api-client .api-client-toolbar {
+        flex-wrap: wrap;
+        gap: var(--api-spacing-sm);
+    }
+}

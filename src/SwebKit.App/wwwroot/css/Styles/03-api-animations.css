@@ -1,0 +1,424 @@
+/* ===================================================================
+   API Client Animations
+   
+   This file contains all CSS animations used throughout the API Client feature.
+   These animations provide smooth transitions and polished user experience.
+   =================================================================== */
+
+/* ===================================================================
+   KEYFRAME ANIMATIONS
+   =================================================================== */
+
+/* Fade in animation for panel content */
+@keyframes api-client-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Fade in animation for slide from left */
+@keyframes api-client-slide-in-left {
+    from {
+        opacity: 0;
+        transform: translateX(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Fade in animation for slide from right */
+@keyframes api-client-slide-in-right {
+    from {
+        opacity: 0;
+        transform: translateX(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Scale in animation for elements */
+@keyframes api-client-scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Pulse animation for loading states */
+@keyframes api-client-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Shimmer animation for skeleton loading */
+@keyframes api-client-shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Spin animation for loading spinners */
+@keyframes api-client-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Bounce animation for inline loading dots */
+@keyframes api-client-inline-loading-bounce {
+    0%, 80%, 100% {
+        transform: scale(0);
+    }
+    40% {
+        transform: scale(1);
+    }
+}
+
+/* Slide down animation for dropdown menus */
+@keyframes api-client-slide-down {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Fade in from bottom for tooltips */
+@keyframes api-client-tooltip-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===================================================================
+   ANIMATION UTILITY CLASSES
+   =================================================================== */
+
+/* Fade in animation */
+.api-client-animate-fade-in {
+    animation: api-client-fade-in var(--api-animation-duration-normal) var(--api-animation-function-fade-in) forwards;
+}
+
+/* Slide in from left */
+.api-client-animate-slide-left {
+    animation: api-client-slide-in-left var(--api-animation-duration-normal) var(--api-animation-function-slide-in) forwards;
+}
+
+/* Slide in from right */
+.api-client-animate-slide-right {
+    animation: api-client-slide-in-right var(--api-animation-duration-normal) var(--api-animation-function-slide-in) forwards;
+}
+
+/* Scale in animation */
+.api-client-animate-scale-in {
+    animation: api-client-scale-in var(--api-animation-duration-normal) var(--api-animation-function-scale-in) forwards;
+}
+
+/* Pulse animation */
+.api-client-animate-pulse {
+    animation: api-client-pulse 2s ease-in-out infinite;
+}
+
+/* Skeleton shimmer */
+.api-client-skeleton-shimmer {
+    background: linear-gradient(
+        90deg,
+        var(--color-surface-3) 25%,
+        var(--color-surface-2) 50%,
+        var(--color-surface-3) 75%
+    );
+    background-size: 200% 100%;
+    animation: api-client-shimmer 1.5s infinite;
+    border-radius: var(--api-radius-sm);
+}
+
+/* Spin animation */
+.api-client-animate-spin {
+    animation: api-client-spin 0.75s linear infinite;
+}
+
+/* Inline loading dots */
+.api-client-inline-loading__dot {
+    width: 4px;
+    height: 4px;
+    background: var(--color-text-muted);
+    border-radius: 50%;
+    animation: api-client-inline-loading-bounce 1.4s infinite ease-in-out both;
+}
+
+.api-client-inline-loading__dot:nth-child(1) { animation-delay: -0.32s; }
+.api-client-inline-loading__dot:nth-child(2) { animation-delay: -0.16s; }
+.api-client-inline-loading__dot:nth-child(3) { animation-delay: 0s; }
+
+/* Slide down animation for dropdowns */
+.api-client-animate-slide-down {
+    animation: api-client-slide-down var(--api-animation-duration-fast) var(--api-animation-function-slide-in) forwards;
+}
+
+/* Tooltip fade in */
+.api-client-animate-tooltip {
+    animation: api-client-tooltip-fade-in var(--api-animation-duration-fast) var(--api-animation-easing-out) forwards;
+}
+
+/* ===================================================================
+   TRANSITION UTILITY CLASSES
+   =================================================================== */
+
+/* Base transition class */
+.api-client-transition {
+    transition: all var(--api-transition-fast);
+}
+
+.api-client-transition-slow {
+    transition: all var(--api-transition-slow);
+}
+
+.api-client-transition-slower {
+    transition: all var(--api-transition-slower);
+}
+
+/* Hover scale effect */
+.api-client-hover-scale {
+    transform: scale(1);
+    transition: transform var(--api-transition-fast);
+}
+
+.api-client-hover-scale:hover {
+    transform: scale(1.02);
+}
+
+.api-client-hover-scale-sm:hover {
+    transform: scale(1.01);
+}
+
+.api-client-hover-scale-lg:hover {
+    transform: scale(1.03);
+}
+
+/* Smooth background transition */
+.api-client-transition-bg {
+    transition: background-color var(--api-transition-fast);
+}
+
+/* Smooth border transition */
+.api-client-transition-border {
+    transition: border-color var(--api-transition-fast);
+}
+
+/* Smooth shadow transition */
+.api-client-transition-shadow {
+    transition: box-shadow var(--api-transition-fast);
+}
+
+/* Smooth opacity transition */
+.api-client-transition-opacity {
+    transition: opacity var(--api-transition-fast);
+}
+
+/* Smooth transform transition */
+.api-client-transition-transform {
+    transition: transform var(--api-transition-fast);
+}
+
+/* Combined transitions */
+.api-client-transition-all {
+    transition: all var(--api-transition-normal);
+}
+
+/* ===================================================================
+   LOADING STATES
+   =================================================================== */
+
+/* Loading spinner */
+.api-client-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--api-spacing-sm);
+    padding: var(--api-spacing-lg);
+    color: var(--color-text-muted);
+}
+
+.api-client-loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: api-client-spin 0.8s linear infinite;
+}
+
+/* Button loading state */
+.api-client-btn--loading {
+    position: relative;
+    color: transparent;
+    pointer-events: none;
+}
+
+.api-client-btn--loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 16px;
+    height: 16px;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
+    border-radius: 50%;
+    animation: api-client-spin 0.75s linear infinite;
+}
+
+/* Loading overlay for panels */
+.api-client-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.05);
+    z-index: 10;
+}
+
+/* Progress bar animation */
+.api-client-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--api-spacing-sm);
+    height: 24px;
+    background: var(--api-surface-2);
+    border-radius: var(--api-radius-sm);
+    overflow: hidden;
+}
+
+.api-client-progress__bar {
+    height: 100%;
+    background: var(--color-accent);
+    transition: width var(--api-transition-slow);
+}
+
+.api-client-progress__bar--indeterminate {
+    animation: api-client-progress-indeterminate 1.5s linear infinite;
+}
+
+@keyframes api-client-progress-indeterminate {
+    0% { 
+        transform: translateX(-100%); 
+        width: 100%;
+    }
+    100% { 
+        transform: translateX(350%); 
+        width: 100%;
+    }
+}
+
+/* ===================================================================
+   DROPDOWN/TOOLTIP ANIMATIONS
+   =================================================================== */
+
+/* Dropdown menu animation */
+.api-client-dropdown {
+    animation: api-client-slide-down var(--api-animation-duration-fast) var(--api-animation-easing-out);
+}
+
+/* Context menu animation */
+.ctx-menu {
+    animation: api-client-scale-in var(--api-animation-duration-fast) var(--api-animation-easing-out);
+    transform-origin: top left;
+}
+
+/* Tooltip animation */
+.api-client-tooltip {
+    animation: api-client-tooltip-fade-in var(--api-animation-duration-fast) var(--api-animation-easing-out);
+}
+
+/* ===================================================================
+   PANEL ANIMATIONS
+   =================================================================== */
+
+/* Split panel animation */
+.api-client-panel-animate {
+    transition: width var(--api-transition-slow), flex var(--api-transition-slow);
+}
+
+/* Collapsible sidebar animation */
+.api-client-sidebar-animate {
+    transition: width var(--api-transition-normal), min-width var(--api-transition-normal), 
+                opacity var(--api-transition-normal), transform var(--api-transition-normal);
+}
+
+/* Tab content fade animation */
+.api-client-tab-content {
+    animation: api-client-fade-in var(--api-animation-duration-fast) var(--api-animation-easing-out);
+}
+
+/* ===================================================================
+   RESPONSIVE ADJUSTMENTS
+   =================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    
+    /* Ensure animations are effectively disabled */
+    .api-client-animate-fade-in,
+    .api-client-animate-slide-left,
+    .api-client-animate-slide-right,
+    .api-client-animate-scale-in,
+    .api-client-animate-pulse,
+    .api-client-animate-spin,
+    .api-client-inline-loading__dot {
+        animation: none;
+    }
+    
+    /* Ensure transitions are effectively disabled */
+    .api-client-transition,
+    .api-client-transition-slow,
+    .api-client-transition-slower,
+    .api-client-hover-scale,
+    .api-client-transition-bg,
+    .api-client-transition-border,
+    .api-client-transition-shadow,
+    .api-client-transition-opacity,
+    .api-client-transition-transform,
+    .api-client-transition-all {
+        transition: none;
+    }
+}

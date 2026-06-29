@@ -11,12 +11,13 @@ namespace SwebKit.Core.Services;
 /// Reference: https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md
 /// </summary>
 public sealed class GraphQlSubscriptionService(
-    IVariableSubstitutionService substitution) : IGraphQlSubscriptionService
+    IVariableSubstitutionService substitution,
+    Func<IWebSocketClientService> webSocketFactory) : IGraphQlSubscriptionService
 {
     private const string SubProtocol = "graphql-ws";
     private const string SubscriptionId = "sub-1";
 
-    private WebSocketClientService? _ws;
+    private IWebSocketClientService? _ws;
     private bool _active;
 
     public bool IsActive => _active;
@@ -40,7 +41,7 @@ public sealed class GraphQlSubscriptionService(
         // Dispose any previous WebSocket from a prior run before creating a new one
         if (_ws is not null)
             await _ws.DisposeAsync();
-        _ws = new WebSocketClientService();
+        _ws = webSocketFactory();
         _active = true;
 
         try

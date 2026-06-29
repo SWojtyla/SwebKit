@@ -1,3 +1,5 @@
+@using SwebKit.Core.Services
+
 @page "/api-client"
 @inject IFolderPickerService FolderPicker
 @inject CollectionRepository CollectionRepo
@@ -13,22 +15,28 @@
 @inject IJSRuntime JS
 @inject IAppEventBus Events
 @inject CommandRegistry Commands
+@inject AppStateService AppState
 @implements IAsyncDisposable
 
-<div class="api-client-page">
+<div class="api-client-page" role="application" aria-label="API Client">
+
+    @* Skip link for keyboard users *@
+    <a href="#main-workspace" class="api-client-skip-link">Skip to workspace</a>
 
     @* ── Toolbar ── *@
-    <div class="api-client-toolbar">
-        <div class="api-client-toolbar__left">
+    <div class="api-client-toolbar" role="toolbar" aria-label="API Client toolbar">
+        <div class="api-client-toolbar__left" role="group" aria-label="Create actions">
             <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
                     Title="New collection (Ctrl+Shift+N)" OnClick="OpenNewCollectionDialog">
                 <FluentIcon Value="@(new Icons.Regular.Size16.AddSquare())" Width="14px" />
                 <span>New Collection</span>
+                <kbd class="api-client-toolbar-btn__kbd">Ctrl+Shift+N</kbd>
             </AppButton>
             <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
                     Title="New request (Ctrl+N)" Disabled="@(!CanCreateRequest)" OnClick="AddRequestAsync">
                 <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
                 <span>New Request</span>
+                <kbd class="api-client-toolbar-btn__kbd">Ctrl+N</kbd>
             </AppButton>
             @if (_isDirty && !_autoSave)
             {
@@ -36,26 +44,27 @@
                         Title="Save request (Ctrl+S)" OnClick="SaveRequestAsync">
                     <FluentIcon Value="@(new Icons.Regular.Size16.Save())" Width="14px" />
                     <span>Save</span>
+                    <kbd class="api-client-toolbar-btn__kbd">Ctrl+S</kbd>
                 </AppButton>
             }
             <AppDropdown IsOpen="@_showRepoMenu"
                          OnClose="@(() => _showRepoMenu = false)"
                          CssClass="api-client-toolbar-menu"
                          MenuCssClass="api-client-toolbar-menu__dropdown"
-                         Label="API repositories">
+                         Label="Git Repos">
                 <TriggerContent>
                     <AppButton Variant="Secondary" Size="Small"
                             CssClass="@(IsRepoMenuActive ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
                             Title="Add or manage Git-backed API repositories"
                             OnClick="@(() => _showRepoMenu = !_showRepoMenu)">
-                        <span>API Repos</span>
+                        <span>Git Repos</span>
                         <span class="api-client-toolbar-menu__chevron">v</span>
                     </AppButton>
                 </TriggerContent>
                 <ChildContent>
-                    <button type="button" class="ctx-item" @onclick="OpenLinkedRootDialogFromMenu">Add API repo</button>
+                    <button type="button" class="ctx-item" @onclick="OpenLinkedRootDialogFromMenu">Add Git repo</button>
                     <button type="button" class="ctx-item" disabled="@(CurrentTargetLinkedRoot is null)" @onclick="OpenCurrentTargetGitFromMenu">Git for selected repo</button>
-                    <button type="button" class="ctx-item" disabled="@(_linkedRootInfos.Count == 0)" @onclick="OpenLinkedRootManagementFromMenu">Manage API repos</button>
+                    <button type="button" class="ctx-item" disabled="@(_linkedRootInfos.Count == 0)" @onclick="OpenLinkedRootManagementFromMenu">Manage Git repos</button>
                 </ChildContent>
             </AppDropdown>
             <AppDropdown IsOpen="@_showTransferMenu"
@@ -79,7 +88,7 @@
             </AppDropdown>
         </div>
 
-        <div class="api-client-toolbar__center">
+        <div class="api-client-toolbar__center" role="group" aria-label="Current request status">
             <span class="api-client-target-chip" title="@CurrentTargetHint">
                 <span class="api-client-target-chip__label">Target</span>
                 <strong>@CurrentTargetLabel</strong>
@@ -113,7 +122,7 @@
             }
         </div>
 
-        <div class="api-client-toolbar__right">
+        <div class="api-client-toolbar__right" role="group" aria-label="Request actions">
             @if (_selectedRequest is not null)
             {
                     <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Title="Copy request as cURL"
@@ -173,7 +182,7 @@
             <div class="api-client-body">
 
                 @* Left: collection tree *@
-                <div class="api-client-tree-panel" @ref="_treePanelEl">
+                <div class="api-client-tree-panel" @ref="_treePanelEl" role="navigation" aria-label="API request collections">
                     @if (_loadingCollections)
                     {
                         <div class="api-client-tree-panel__loading">
@@ -210,7 +219,7 @@
                 <div class="api-client-tree-splitter" @ref="_treeSplitterEl"></div>
 
                 @* Right: request builder + response viewer OR management screens *@
-                <div class="api-client-workspace">
+                <div class="api-client-workspace" id="main-workspace" role="main">
                     @if (_worksheetMode == WorksheetEnvs)
                     {
                         <div class="api-client-management-screen">
@@ -779,6 +788,9 @@
 
         // Subscribe to keyboard shortcut events published by MainLayout
         Events.Subscribe<ApiClientShortcutEvent>(OnApiClientShortcut);
+        
+        // Subscribe to demo mode changes to show/hide demo collections
+        AppState.DemoModeChanged += OnDemoModeChanged;
 
         // Load local collections/environments first, then merge linked roots into the collection list.
         await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
@@ -793,6 +805,7 @@
         {
             await CollectionRepo.LoadAsync();
             _collections = BuildCombinedCollections();
+            
             _activeCollection = _collections.FirstOrDefault();
 
             // Restore last selected request for the active collection
@@ -811,6 +824,14 @@
         }
     }
 
+    private async void OnDemoModeChanged()
+    {
+        await InvokeAsync(async () => {
+            await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
+            await LoadLinkedRootsAsync();
+        });
+    }
+
     private async Task LoadLinkedRootsAsync()
     {
         try
@@ -826,9 +847,8 @@
                 linkedCollections.AddRange(result.Collections);
             }
 
-            _collections = CollectionRepo.Collections.Concat(linkedCollections).ToList();
-            _environments = EnvironmentRepo.Environments.Concat(_linkedRootResults.SelectMany(result =>
-result.Environments)).ToList();
+            _collections = BuildCombinedCollections();
+            _environments = BuildCombinedEnvironments();
             _linkedRootInfos = _linkedRootResults.Select(result => new LinkedCollectionTreeInfo
             {
                 Id = result.Config.Id,
@@ -1443,7 +1463,7 @@ expectedStamp);
         }
 
         await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(r => r.Collections)).ToList();
+        _collections = BuildCombinedCollections();
         _linkedSaveError = null;
         _linkedSaveConflict = null;
         if (_selectedRequestId is not null)
@@ -1636,7 +1656,7 @@ expectedStamp);
             await SaveActiveCollectionAsync();
         else
             await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(r => r.Collections)).ToList();
+        _collections = BuildCombinedCollections();
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -1903,6 +1923,10 @@ StringComparison.OrdinalIgnoreCase));
         }
     }
 
+    // ── Request send ───────────────────────────────────────────────────────────
+
+
+
     // ── Request result ─────────────────────────────────────────────────────────
 
     private async Task OnRequestResultAsync(HttpRequestResult result)
@@ -2059,7 +2083,7 @@ StringComparison.OrdinalIgnoreCase));
                 "SwebKitSplitter.init",
                 _splitterEl,
                 _builderPanelEl,
-                new { leftPane = true, minWidth = 250, maxWidth = 1600 });
+                new { leftPane = true, minWidth = 400, maxWidth = 1600 });
         }
             else if (!shouldShowSplitter)
         {
@@ -2161,6 +2185,7 @@ StringComparison.OrdinalIgnoreCase));
     public async ValueTask DisposeAsync()
     {
         Events.Unsubscribe<ApiClientShortcutEvent>(OnApiClientShortcut);
+        AppState.DemoModeChanged -= OnDemoModeChanged;
         Commands.Unregister("api-new-request");
         Commands.Unregister("api-new-collection");
         Commands.Unregister("api-env-manager");
@@ -2237,8 +2262,19 @@ FindLinkedRootForEnvironment(string environmentId)
         string? RequestFilePath,
         string Message);
 
-    private List<ApiCollection> BuildCombinedCollections() =>
-        CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(root => root.Collections)).ToList();
+    private List<ApiCollection> BuildCombinedCollections()
+    {
+        var combined = CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(root => root.Collections)).ToList();
+        
+        // Add demo collection if in demo mode
+        if (AppState.UseDemoData)
+        {
+            var demoCollection = DemoApiCollectionFactory.CreateDemoCollection();
+            combined = [demoCollection, .. combined];
+        }
+        
+        return combined;
+    }
 
     private List<ApiEnvironment> BuildCombinedEnvironments() =>
         EnvironmentRepo.Environments.Concat(_linkedRootResults.SelectMany(root => root.Environments)).ToList();

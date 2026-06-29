@@ -1,0 +1,201 @@
+/* ===================================================================
+   API Client Design Tokens
+   
+   This file contains all CSS custom properties (variables) used throughout
+   the API Client feature. These tokens provide a consistent, themeable
+   foundation for all styling.
+   =================================================================== */
+
+/* ===================================================================
+   SPACING TOKENS
+   =================================================================== */
+
+:root {
+    /* API Client specific spacing scale */
+    --api-spacing-xs: 4px;
+    --api-spacing-sm: 8px;
+    --api-spacing-md: 12px;
+    --api-spacing-lg: 16px;
+    --api-spacing-xl: 20px;
+    --api-spacing-2xl: 24px;
+    
+    /* Tree-specific spacing */
+    --api-tree-indent: 16px;
+    --api-tree-row-height: 28px;
+    
+    /* Border radius */
+    --api-radius-xs: 2px;
+    --api-radius-sm: 4px;
+    --api-radius-md: 6px;
+    --api-radius-lg: 8px;
+    
+    /* Transitions */
+    --api-transition-fast: 0.15s ease;
+    --api-transition-normal: 0.2s ease;
+    --api-transition-slow: 0.3s ease;
+}
+
+/* ===================================================================
+   HTTP METHOD COLORS
+   =================================================================== */
+
+:root {
+    /* Method colors - these represent the HTTP method types */
+    --api-method-get: #3b82f6;      /* Blue-500 */
+    --api-method-post: #22c55e;     /* Green-500 */
+    --api-method-put: #f59e0b;     /* Amber-500 */
+    --api-method-delete: #ef4444;   /* Red-500 */
+    --api-method-patch: #8b5cf6;    /* Purple-500 */
+    --api-method-head: #6b7280;     /* Gray-600 */
+    --api-method-options: #9ca3af;  /* Gray-400 */
+    --api-method-graphql: #8b5cf6;  /* Purple-500 */
+    --api-method-websocket: #06b6d4; /* Cyan-500 */
+}
+
+/* ===================================================================
+   STATUS CODE COLORS
+   =================================================================== */
+
+:root {
+    /* Status ranges for response codes */
+    --api-status-1xx: #9ca3af;      /* Informational - Gray-400 */
+    --api-status-2xx: #10b981;      /* Success - Green-500 */
+    --api-status-3xx: #3b82f6;      /* Redirection - Blue-500 */
+    --api-status-4xx: #f59e0b;      /* Client Error - Amber-500 */
+    --api-status-5xx: #ef4444;      /* Server Error - Red-500 */
+}
+
+/* ===================================================================
+   NODE TYPE COLORS
+   =================================================================== */
+
+:root {
+    /* Colors for different node types in the collection tree */
+    --api-node-collection: #f59e0b;  /* Amber-500 - Root collections */
+    --api-node-folder: #3b82f6;      /* Blue-500 - Folders */
+    --api-node-request: #6b7280;     /* Gray-600 - API requests */
+    --api-node-linked: #8b5cf6;      /* Purple-500 - Git-linked */
+}
+
+/* ===================================================================
+   SURFACE COLORS
+   =================================================================== */
+
+:root {
+    /* Background surfaces for different UI layers */
+    --api-surface-raised: var(--color-surface-raised, rgba(255, 255, 255, 0.03));
+    --api-surface-hover: var(--color-surface-hover, rgba(255, 255, 255, 0.05));
+    --api-surface-2: var(--color-surface-2, rgba(255, 255, 255, 0.02));
+    --api-surface-3: var(--color-surface-3, rgba(255, 255, 255, 0.01));
+}
+
+/* ===================================================================
+   ACCENT COLORS
+   =================================================================== */
+
+:root {
+    /* Accent variations for different states */
+    --api-accent-subtle: color-mix(in srgb, var(--color-accent) 16%, transparent);
+    --api-accent-subtle-hover: color-mix(in srgb, var(--color-accent) 22%, transparent);
+    --api-accent-subtle-active: color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+/* ===================================================================
+   SHADOWS
+   =================================================================== */
+
+:root {
+    --api-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --api-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --api-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* ===================================================================
+   TYPOGRAPHY TOKENS
+   =================================================================== */
+
+:root {
+    /* Font families */
+    --api-font-family: var(--font-family);
+    --api-font-family-mono: var(--font-family-mono);
+    
+    /* Font sizes */
+    --api-font-size-xs: 10px;
+    --api-font-size-sm: 12px;
+    --api-font-size-base: 13px;
+    --api-font-size-lg: 14px;
+    --api-font-size-xl: 16px;
+    --api-font-size-2xl: 18px;
+    --api-font-size-3xl: 20px;
+    --api-font-size-4xl: 24px;
+    
+    /* Font weights */
+    --api-font-weight-normal: 400;
+    --api-font-weight-medium: 500;
+    --api-font-weight-semibold: 600;
+    --api-font-weight-bold: 700;
+    
+    /* Line heights */
+    --api-line-height-tight: 1.2;
+    --api-line-height-normal: 1.4;
+    --api-line-height-relaxed: 1.6;
+    
+    /* Letter spacing */
+    --api-letter-spacing-tight: -0.025em;
+    --api-letter-spacing-normal: 0;
+    --api-letter-spacing-wide: 0.025em;
+}
+
+/* ===================================================================
+   BORDER TOKENS
+   =================================================================== */
+
+:root {
+    --api-border-width-thin: 1px;
+    --api-border-width-thick: 2px;
+    --api-border-radius-sm: var(--api-radius-sm);
+    --api-border-radius-md: var(--api-radius-md);
+    --api-border-color: var(--color-border);
+    --api-border-color-subtle: rgba(0, 0, 0, 0.08);
+}
+
+/* ===================================================================
+   ANIMATION TOKENS
+   =================================================================== */
+
+:root {
+    --api-animation-duration-fast: 150ms;
+    --api-animation-duration-normal: 200ms;
+    --api-animation-duration-slow: 300ms;
+    --api-animation-duration-slower: 400ms;
+    --api-animation-easing: ease;
+    --api-animation-easing-in: ease-in;
+    --api-animation-easing-out: ease-out;
+    --api-animation-easing-in-out: ease-in-out;
+    
+    /* Animation functions */
+    --api-animation-function-fade-in: cubic-bezier(0.4, 0, 1, 1);
+    --api-animation-function-slide-in: cubic-bezier(0.34, 0.69, 0.1, 1);
+    --api-animation-function-scale-in: cubic-bezier(0.33, 1, 0.68, 1);
+    
+    /* Animation timing */
+    --api-transition-fast: 0.15s var(--api-animation-easing);
+    --api-transition-normal: 0.2s var(--api-animation-easing);
+    --api-transition-slow: 0.3s var(--api-animation-easing);
+    --api-transition-slower: 0.4s var(--api-animation-easing);
+}
+
+/* ===================================================================
+   DARK THEME OVERIDES
+   =================================================================== */
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        /* Adjust colors for dark mode if needed */
+        --api-method-get: #4f9cf9;
+        --api-method-post: #34d399;
+        --api-method-put: #fbbf24;
+        --api-method-delete: #f87171;
+        --api-method-patch: #a855f7;
+    }
+}

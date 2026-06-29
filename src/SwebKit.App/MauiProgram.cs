@@ -179,8 +179,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAuthHeaderBuilder, AuthHeaderBuilder>();
         builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();
         builder.Services.AddSingleton<IGraphQlSchemaService, GraphQlSchemaService>();
-        builder.Services.AddTransient<IGraphQlSubscriptionService, GraphQlSubscriptionService>();
         builder.Services.AddTransient<IWebSocketClientService, WebSocketClientService>();
+        builder.Services.AddTransient<Func<IWebSocketClientService>>(sp =>
+            () => sp.GetRequiredService<IWebSocketClientService>());
+        builder.Services.AddTransient<IGraphQlSubscriptionService, GraphQlSubscriptionService>();
         builder.Services.AddSingleton<LinkedGitService>();
         builder.Services.AddSingleton<LinkedCollectionFileService>();
 

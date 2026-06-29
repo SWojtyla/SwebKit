@@ -62,29 +62,11 @@ public sealed class OAuth2TokenManager(
             var (codeVerifier, codeChallenge) = GeneratePkce();
             var state = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
 
-            var authUri = BuildAuthorizationUri(auth, codeChallenge, state);
-            var callbackUri = new Uri(OAuthRedirectUri);
-
-            var result = await WebAuthenticator.AuthenticateAsync(new WebAuthenticatorOptions
-            {
-                Url = new Uri(authUri),
-                CallbackUrl = callbackUri,
-            });
-
-            if (result is null)
-                return false;
-
-            // Exchange the authorization code for tokens
-            var code = result.Properties.GetValueOrDefault("code");
-            if (string.IsNullOrEmpty(code))
-                return false;
-
-            var tokenResponse = await ExchangeCodeAsync(auth, code, codeVerifier, cancellationToken);
-            if (tokenResponse is null)
-                return false;
-
-            StoreTokens(credentialKey, tokenResponse);
-            return true;
+#if WINDOWS
+            return await AuthorizeWindowsAsync(auth, credentialKey, codeVerifier, codeChallenge, state, cancellationToken);
+#else
+            return await AuthorizeMauiAsync(auth, credentialKey, codeVerifier, codeChallenge, state, cancellationToken);
+#endif
         }
         catch (TaskCanceledException) { throw; }
         catch (Exception ex)
@@ -93,6 +75,107 @@ public sealed class OAuth2TokenManager(
             return false;
         }
     }
+
+#if WINDOWS
+    private async Task<bool> AuthorizeWindowsAsync(
+        AuthConfig auth,
+        string credentialKey,
+        string codeVerifier,
+        string codeChallenge,
+        string state,
+        CancellationToken cancellationToken)
+    {
+        var port = GetRandomAvailablePort();
+        var redirectUri = $"http://localhost:{port}/oauth/callback/";
+        var authUri = BuildAuthorizationUri(auth, codeChallenge, state, redirectUri);
+
+        using var listener = new System.Net.HttpListener();
+        listener.Prefixes.Add(redirectUri);
+        listener.Start();
+        try
+        {
+            await Launcher.OpenAsync(new Uri(authUri));
+
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+            var context = await listener.GetContextAsync().WaitAsync(linkedCts.Token);
+
+            var responseHtml = "<html><body><h1>Authorization complete. You may close this tab.</h1></body></html>"u8.ToArray();
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.ContentLength64 = responseHtml.Length;
+            await context.Response.OutputStream.WriteAsync(responseHtml, CancellationToken.None);
+            context.Response.Close();
+
+            var rawQuery = context.Request.Url?.Query?.TrimStart('?') ?? string.Empty;
+            var queryParams = rawQuery
+                .Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Split('=', 2))
+                .Where(p => p.Length == 2)
+                .ToDictionary(p => Uri.UnescapeDataString(p[0]), p => Uri.UnescapeDataString(p[1]), StringComparer.Ordinal);
+
+            if (!queryParams.TryGetValue("code", out var code) || string.IsNullOrEmpty(code))
+                return false;
+
+            if (!queryParams.TryGetValue("state", out var returnedState) || returnedState != state)
+            {
+                logger.LogWarning("OAuth2 state mismatch; possible CSRF");
+                return false;
+            }
+
+            var tokenResponse = await ExchangeCodeAsync(auth, code, codeVerifier, redirectUri, cancellationToken);
+            if (tokenResponse is null)
+                return false;
+
+            StoreTokens(credentialKey, tokenResponse);
+            return true;
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    private static int GetRandomAvailablePort()
+    {
+        using var tcpListener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        tcpListener.Start();
+        var port = ((System.Net.IPEndPoint)tcpListener.LocalEndpoint).Port;
+        tcpListener.Stop();
+        return port;
+    }
+#else
+    private async Task<bool> AuthorizeMauiAsync(
+        AuthConfig auth,
+        string credentialKey,
+        string codeVerifier,
+        string codeChallenge,
+        string state,
+        CancellationToken cancellationToken)
+    {
+        var authUri = BuildAuthorizationUri(auth, codeChallenge, state, OAuthRedirectUri);
+
+        var result = await WebAuthenticator.AuthenticateAsync(new WebAuthenticatorOptions
+        {
+            Url = new Uri(authUri),
+            CallbackUrl = new Uri(OAuthRedirectUri),
+        });
+
+        if (result is null)
+            return false;
+
+        var code = result.Properties.GetValueOrDefault("code");
+        if (string.IsNullOrEmpty(code))
+            return false;
+
+        var tokenResponse = await ExchangeCodeAsync(auth, code, codeVerifier, OAuthRedirectUri, cancellationToken);
+        if (tokenResponse is null)
+            return false;
+
+        StoreTokens(credentialKey, tokenResponse);
+        return true;
+    }
+#endif
 
     public void Invalidate(string credentialKey)
     {
@@ -199,6 +282,7 @@ public sealed class OAuth2TokenManager(
         AuthConfig auth,
         string code,
         string codeVerifier,
+        string redirectUri,
         CancellationToken cancellationToken)
     {
         using var client = httpClientFactory.CreateClient();
@@ -206,7 +290,7 @@ public sealed class OAuth2TokenManager(
         {
             ["grant_type"] = "authorization_code",
             ["code"] = code,
-            ["redirect_uri"] = OAuthRedirectUri,
+            ["redirect_uri"] = redirectUri,
             ["client_id"] = auth.OAuth2ClientId ?? string.Empty,
             ["code_verifier"] = codeVerifier,
         };
@@ -231,13 +315,13 @@ public sealed class OAuth2TokenManager(
             credentialStore.Save($"{credentialKey}:refresh", tokenResponse.RefreshToken);
     }
 
-    private static string BuildAuthorizationUri(AuthConfig auth, string codeChallenge, string state)
+    private static string BuildAuthorizationUri(AuthConfig auth, string codeChallenge, string state, string redirectUri)
     {
         var sb = new StringBuilder(auth.OAuth2AuthUrl);
         sb.Append('?');
         sb.Append("response_type=code");
         sb.Append("&client_id=").Append(Uri.EscapeDataString(auth.OAuth2ClientId ?? string.Empty));
-        sb.Append("&redirect_uri=").Append(Uri.EscapeDataString(OAuthRedirectUri));
+        sb.Append("&redirect_uri=").Append(Uri.EscapeDataString(redirectUri));
         sb.Append("&code_challenge=").Append(codeChallenge);
         sb.Append("&code_challenge_method=S256");
         sb.Append("&state=").Append(Uri.EscapeDataString(state));

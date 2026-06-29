@@ -77,16 +77,16 @@
     text-transform: uppercase;
 }
 
-/* Method colour coding */
-.req-builder__method-btn--get    { color: #a8f0bd; background: #1a6b2f; border-color: #2a8a3f; }
-.req-builder__method-btn--post   { color: #a8d0f0; background: #1a4d8f; border-color: #2a6abf; }
-.req-builder__method-btn--put    { color: #f0e0a8; background: #6b5c1a; border-color: #8a7a2a; }
-.req-builder__method-btn--patch  { color: #d8a8f0; background: #4a1a6b; border-color: #6a2a8a; }
-.req-builder__method-btn--delete { color: #f0a8a8; background: #6b1a1a; border-color: #8a2a2a; }
-.req-builder__method-btn--head   { color: #aaa;    background: #2a2a2a; border-color: #444; }
-.req-builder__method-btn--options { color: #aaa;   background: #2a2a2a; border-color: #444; }
-.req-builder__method-btn--graphql { color: #e2a8f0; background: #4a0d6b; border-color: #6a1a8a; }
-.req-builder__method-btn--websocket { color: #a8e8f0; background: #0d4a4a; border-color: #1a6a6a; }
+/* Method colour coding using API tokens */
+.req-builder__method-btn--get    { color: var(--api-method-get); background: color-mix(in srgb, var(--api-method-get) 20%, transparent); border-color: color-mix(in srgb, var(--api-method-get) 30%, transparent); }
+.req-builder__method-btn--post   { color: var(--api-method-post); background: color-mix(in srgb, var(--api-method-post) 20%, transparent); border-color: color-mix(in srgb, var(--api-method-post) 30%, transparent); }
+.req-builder__method-btn--put    { color: var(--api-method-put); background: color-mix(in srgb, var(--api-method-put) 20%, transparent); border-color: color-mix(in srgb, var(--api-method-put) 30%, transparent); }
+.req-builder__method-btn--patch  { color: var(--api-method-patch); background: color-mix(in srgb, var(--api-method-patch) 20%, transparent); border-color: color-mix(in srgb, var(--api-method-patch) 30%, transparent); }
+.req-builder__method-btn--delete { color: var(--api-method-delete); background: color-mix(in srgb, var(--api-method-delete) 20%, transparent); border-color: color-mix(in srgb, var(--api-method-delete) 30%, transparent); }
+.req-builder__method-btn--head   { color: var(--api-method-head); background: color-mix(in srgb, var(--api-method-head) 20%, transparent); border-color: color-mix(in srgb, var(--api-method-head) 30%, transparent); }
+.req-builder__method-btn--options { color: var(--api-method-options); background: color-mix(in srgb, var(--api-method-options) 20%, transparent); border-color: color-mix(in srgb, var(--api-method-options) 30%, transparent); }
+.req-builder__method-btn--graphql { color: var(--api-method-graphql); background: color-mix(in srgb, var(--api-method-graphql) 20%, transparent); border-color: color-mix(in srgb, var(--api-method-graphql) 30%, transparent); }
+.req-builder__method-btn--websocket { color: var(--api-method-websocket); background: color-mix(in srgb, var(--api-method-websocket) 20%, transparent); border-color: color-mix(in srgb, var(--api-method-websocket) 30%, transparent); }
 
 .req-builder__method-dropdown {
     position: absolute;
@@ -224,8 +224,8 @@
 .req-builder__send-spinner {
     width: 12px;
     height: 12px;
-    border: 2px solid rgba(255,255,255,0.35);
-    border-top-color: #fff;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
     flex-shrink: 0;
@@ -301,34 +301,47 @@
     flex-direction: column;
 }
 
-/* ── Body mode selector ──────────────────────────────────────────────────── */
+/* ── Body chrome bar (mode selector + prettify) ──────────────────────────── */
+
+.req-builder__body-chrome {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+    min-height: 36px;
+    gap: 4px;
+    background: var(--color-surface);
+}
 
 .req-builder__body-mode-strip {
     display: flex;
-    gap: 4px;
-    padding: 8px 12px 6px;
-    border-bottom: 1px solid var(--color-border);
-    flex-shrink: 0;
+    align-items: center;
+    gap: 0;
+    flex: 1;
 }
 
 .req-builder__body-mode-btn {
-    padding: 3px 10px;
-    font-size: 11px;
+    padding: 6px 12px;
+    font-size: 12px;
     font-weight: 500;
     background: none;
-    border: 1px solid var(--color-border);
-    border-radius: 3px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: background 0.1s, color 0.1s;
+    transition: color 0.15s;
+    margin-bottom: -1px;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
 }
 
-.req-builder__body-mode-btn:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.req-builder__body-mode-btn:hover { color: var(--color-text); }
 
 .req-builder__body-mode-btn--active {
-    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-    border-color: var(--color-accent);
-    color: var(--color-accent);
+    color: var(--color-text);
+    border-bottom-color: var(--color-accent);
 }
 
 /* ── Body editor ─────────────────────────────────────────────────────────── */
@@ -350,17 +363,8 @@
     font-size: 11px;
 }
 
-.req-builder__body-editor-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 6px;
-    padding: 5px 12px;
-    border-bottom: 1px solid var(--color-border);
-    flex-shrink: 0;
-}
-
 .req-builder__format-btn {
+    flex-shrink: 0;
     padding: 3px 9px;
     background: var(--color-surface-2);
     border: 1px solid var(--color-border);

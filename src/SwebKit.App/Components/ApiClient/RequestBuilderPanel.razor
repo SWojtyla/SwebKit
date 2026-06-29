@@ -1,9 +1,10 @@
+@using SwebKit.Core.Domain
 @inject IVariablePreviewService VariablePreview
 @inject IVariableSubstitutionService VariableSubstitution
 @inject IRequestBodyFormatter BodyFormatter
 @implements IAsyncDisposable
 
-<div class="req-builder">
+<div class="req-builder" role="region" aria-label="Request builder">
 
     @* ── Name row ────────────────────────────────────────────────────────────── *@
     <div class="req-builder__name-row">
@@ -111,15 +112,16 @@
 
             <button type="button"
                     class="req-builder__send-btn @((_executing || _subscribing) ? "req-builder__send-btn--busy" : "")"
-                    @onclick="OnSendAsync" disabled="@(string.IsNullOrWhiteSpace(Request.Url) && !_executing && !_subscribing)">
+                    @onclick="OnSendAsync" disabled="@(string.IsNullOrWhiteSpace(Request.Url) && !_executing && !_subscribing)"
+                    aria-label="@GetSendButtonAriaLabel()">
                 @if (_executing)
                 {
-                    <span class="req-builder__send-spinner" />
+                    <span class="req-builder__send-spinner" aria-hidden="true" />
                     <span>Cancel</span>
                 }
                 else if (_subscribing)
                 {
-                    <span class="req-builder__send-spinner" />
+                    <span class="req-builder__send-spinner" aria-hidden="true" />
                     <span>Stop</span>
                 }
                 else
@@ -174,14 +176,23 @@
             }
             else if (_activeTab == "Body")
             {
-                <div class="req-builder__body-mode-strip">
-                    @foreach (var mode in Enum.GetValues<RequestBodyMode>())
+                <div class="req-builder__body-chrome">
+                    <div class="req-builder__body-mode-strip">
+                        @foreach (var mode in Enum.GetValues<RequestBodyMode>())
+                        {
+                            var m = mode;
+                            <button type="button"
+                                    class="req-builder__body-mode-btn @(Request.Body.Mode == m ? "req-builder__body-mode-btn--active" : "")"
+                                    @onclick="() => SetBodyModeAsync(m)">
+                                @mode.ToString()
+                            </button>
+                        }
+                    </div>
+                    @if (Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml or RequestBodyMode.Text)
                     {
-                        var m = mode;
-                        <button type="button"
-                                class="req-builder__body-mode-btn @(Request.Body.Mode == m ? "req-builder__body-mode-btn--active" : "")"
-                                @onclick="() => SetBodyModeAsync(m)">
-                            @mode.ToString()
+                        <button type="button" class="req-builder__format-btn" title="Prettify request body"
+                                disabled="@(!CanPrettifyBody)" @onclick="PrettifyBodyAsync">
+                            Prettify
                         </button>
                     }
                 </div>
@@ -200,19 +211,15 @@
                                 }
                             </div>
                         }
-                        <div class="req-builder__body-editor-toolbar">
-                            <button type="button" class="req-builder__format-btn" title="Prettify request body"
-                                    disabled="@(!CanPrettifyBody)" @onclick="PrettifyBodyAsync">
-                                Prettify
-                            </button>
-                        </div>
                         @if (_bodyFormatError is not null)
                         {
                             <div class="req-builder__format-error" role="alert">@_bodyFormatError</div>
                         }
-                        <textarea class="req-builder__body-area" value="@Request.Body.RawContent"
-                                  placeholder="@BodyPlaceholder(Request.Body.Mode)" @oninput="OnBodyInputAsync"
-                                  spellcheck="false"></textarea>
+                        <UnifiedBodyEditor Value="@Request.Body.RawContent"
+                                          BodyMode="@Request.Body.Mode"
+                                          Placeholder="@BodyPlaceholder(Request.Body.Mode)"
+                                          Height="400"
+                                          ValueChanged="OnBodyContentChangedAsync" />
                     </div>
                 }
                 else if (Request.Body.Mode == RequestBodyMode.FormData)
@@ -290,6 +297,17 @@
     private bool CanPrettifyBody =>
         Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml &&
         !string.IsNullOrWhiteSpace(Request.Body.RawContent);
+
+    private string GetSendButtonAriaLabel()
+    {
+        if (_executing)
+            return "Cancel sending request";
+        if (_subscribing)
+            return "Stop subscription";
+        if (string.IsNullOrWhiteSpace(Request.Url))
+            return "Send request (disabled - no URL)";
+        return $"Send {Request.Method} request to {Request.Url}";
+    }
 
     // ── Parameter sync (BL-5 guard) ────────────────────────────────────────────
 
@@ -381,6 +399,15 @@
     {
         _bodyFormatError = null;
         Request.Body.RawContent = e.Value?.ToString();
+        if (Request.Body.RawContent is not null)
+            _bodyPreview = VariablePreview.Preview(Request.Body.RawContent, _resolvedScope);
+        await MarkDirtyAsync();
+    }
+
+    private async Task OnBodyContentChangedAsync(string newValue)
+    {
+        _bodyFormatError = null;
+        Request.Body.RawContent = newValue;
         if (Request.Body.RawContent is not null)
             _bodyPreview = VariablePreview.Preview(Request.Body.RawContent, _resolvedScope);
         await MarkDirtyAsync();

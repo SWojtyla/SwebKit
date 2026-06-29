@@ -4,6 +4,31 @@
 {
     <ResizablePanel DefaultWidth="620" MinWidth="320" MaxWidth="1600">
         <div class="aks-panels-col">
+            
+            @* ── Tab Bar (when multiple panels are open) ── *@
+            @if (ShouldShowTabs)
+            {
+                <div class="aks-tab-bar">
+                    @if (_logPodName != null || _logDeploymentName != null)
+                    {
+                        <div class="aks-tab @(_activeTab == "logs" ? "active" : string.Empty)" @onclick="ActivateLogsTab">
+                            <span class="aks-tab-title">@GetLogsTabTitle()</span>
+                            <button class="aks-tab-close" @onclick="CloseLogsFromTab" title="Close">
+                                <FluentIcon Value="@_iconClose" Width="14px" />
+                            </button>
+                        </div>
+                    }
+                    @if (_containerDetailPodName != null)
+                    {
+                        <div class="aks-tab @(_activeTab == "containers" ? "active" : string.Empty)" @onclick="ActivateContainersTab">
+                            <span class="aks-tab-title">@GetContainerTabTitle()</span>
+                            <button class="aks-tab-close" @onclick="CloseContainerDetailFromTab" title="Close">
+                                <FluentIcon Value="@_iconClose" Width="14px" />
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
 
             @* ── YAML viewer / editor ── *@
             <AksYamlViewer @ref="_yamlViewer" Client="Client" Namespace="@Namespace" IsProduction="@IsProduction"
@@ -47,7 +72,7 @@
                 }
 
                 @* ── Pod logs ── *@
-                @if (_logPodName is not null && _yamlViewer?.IsOpen != true)
+                @if (_logPodName is not null && _yamlViewer?.IsOpen != true && (_activeTab == "logs" || !ShouldShowTabs))
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header aks-log-header">
@@ -62,7 +87,7 @@
                 }
 
                 @* ── Multi-pod logs ── *@
-                @if (_logDeploymentName is not null && _logPodName is null && _yamlViewer?.IsOpen != true)
+                @if (_logDeploymentName is not null && _logPodName is null && _yamlViewer?.IsOpen != true && (_activeTab == "logs" || !ShouldShowTabs))
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header aks-log-header">
@@ -77,8 +102,7 @@
                 }
 
                 @* ── Container details ── *@
-                @if (_containerDetailPodName is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                                                                                        _logDeploymentName is null)
+                @if (_containerDetailPodName is not null && _yamlViewer?.IsOpen != true && (_activeTab == "containers" || !ShouldShowTabs))
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -406,6 +430,11 @@
     private static readonly Icon _iconDismissEvt = new Icons.Regular.Size16.Dismiss();
     private static readonly Icon _iconWarning = new Icons.Regular.Size16.Warning();
     private static readonly Icon _iconCircle = new Icons.Filled.Size12.Circle();
+    private static readonly Icon _iconClose = new Icons.Regular.Size16.Dismiss();
+
+    // ── Tab state for multiple panels ──
+    private string _activeTab = "logs";
+    private List<string> _openTabs = new();
 
     // ── Event filter ──
     private enum EventTypeFilter { All, Warning, Normal }
@@ -552,6 +581,8 @@
         _placementTarget = null;
         _helmDiffPreviewTarget = null;
         _helmRollbackPreviewTarget = null;
+        _activeTab = "logs";
+        _openTabs.Clear();
         NotifyPanelStateChanged();
     }
 
@@ -605,6 +636,14 @@
         _logPodContainers = containers?.Count > 0
             ? [.. containers]
             : [.. Pods.FirstOrDefault(p => string.Equals(p.Name, podName, StringComparison.Ordinal))?.Containers ?? []];
+        
+        // Set active tab to logs if both logs and containers are open
+        if (_containerDetailPodName is not null)
+        {
+            _activeTab = "logs";
+        }
+        
+        UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
 
@@ -615,6 +654,14 @@
         _logDeploymentName = deploymentName;
         _logDeploymentNamespace = targetNamespace ?? Namespace;
         _logPodContainers = [];
+        
+        // Set active tab to logs if both logs and containers are open
+        if (_containerDetailPodName is not null)
+        {
+            _activeTab = "logs";
+        }
+        
+        UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
 
@@ -625,16 +672,32 @@
         _logDeploymentName = null;
         _logDeploymentNamespace = null;
         _logPodContainers = [];
+        
+        // Switch to containers tab if it was active
+        if (_activeTab == "logs" && _containerDetailPodName is not null)
+        {
+            _activeTab = "containers";
+        }
+        
+        UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
 
     // Container / detail panels
     public void ShowContainerDetails(string podName, string? targetNamespace = null)
     {
+        _yamlViewer?.Close();
         _containerDetailPodName = podName;
         _containerDetailNamespace = targetNamespace
             ?? Pods.FirstOrDefault(p => string.Equals(p.Name, podName, StringComparison.Ordinal))?.Namespace
             ?? Namespace;
+        
+        if ((_logPodName is not null || _logDeploymentName is not null) && _containerDetailPodName is not null)
+        {
+            _activeTab = "containers";
+        }
+        
+        UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
 
@@ -791,6 +854,14 @@
     {
         _containerDetailPodName = null;
         _containerDetailNamespace = null;
+        
+        // Switch to logs tab if it was active
+        if (_activeTab == "containers" && (_logPodName is not null || _logDeploymentName is not null))
+        {
+            _activeTab = "logs";
+        }
+        
+        UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
 
@@ -903,4 +974,41 @@
 
     private static string TruncatePodName(string name)
         => name.Length > 36 ? name[..18] + "…" + name[^14..] : name;
+
+    // ── Tab management methods ──
+    private bool ShouldShowTabs => _openTabs.Count > 1;
+    
+    private string GetLogsTabTitle()
+    {
+        if (_logPodName is not null) return "Logs: " + TruncatePodName(_logPodName);
+        if (_logDeploymentName is not null) return "All-pod logs: " + _logDeploymentName;
+        return "Logs";
+    }
+    
+    private string GetContainerTabTitle()
+    {
+        if (_containerDetailPodName is not null) return "Containers: " + TruncatePodName(_containerDetailPodName);
+        return "Containers";
+    }
+    
+    private void SetActiveTab(string tab)
+    {
+        _activeTab = tab;
+        StateHasChanged();
+    }
+    
+    private void ActivateLogsTab() => SetActiveTab("logs");
+    private void ActivateContainersTab() => SetActiveTab("containers");
+    private void CloseLogsFromTab() { CloseLogs(); }
+    private void CloseContainerDetailFromTab() { CloseContainerDetail(); }
+    
+    private void UpdateOpenTabs()
+    {
+        var tabs = new List<string>();
+        if (_logPodName is not null || _logDeploymentName is not null)
+            tabs.Add("logs");
+        if (_containerDetailPodName is not null)
+            tabs.Add("containers");
+        _openTabs = tabs;
+    }
 }

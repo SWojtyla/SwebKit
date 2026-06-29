@@ -516,7 +516,7 @@ Enum.GetValues<GuidedKqlFilterOperator>();
     private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor) => new()
     {
         Language = "sql",
-        Theme = "vs-dark",
+        Theme = "swebkit-dark",
         Value = _query,
         AutomaticLayout = true,
         Minimap = new EditorMinimapOptions { Enabled = false },
@@ -533,6 +533,8 @@ Enum.GetValues<GuidedKqlFilterOperator>();
     private async Task OnEditorInitAsync()
     {
         if (_editor is null) return;
+
+        await JS.InvokeVoidAsync("SwebKitUi.applyMonacoTheme");
 
         // Ctrl+Enter → Run query
 #pragma warning disable CS0618
