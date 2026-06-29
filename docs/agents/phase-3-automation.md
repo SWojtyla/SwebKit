@@ -603,10 +603,19 @@ While Phase 1 was "Can we make it work?" and Phase 2 was "Can we make it intelli
 
 ## 🔗 Related Documents
 
+### Phase Documents
 - [README - Overview](../README.md)
 - [Phase 0: Proof of Concept - Previous phase](phase-0-poc.md)
 - [Phase 1: Foundation - Previous phase](phase-1-foundation.md)
 - [Phase 2: Intelligence - Previous phase](phase-2-intelligence.md)
+
+### Supporting Documents
+- [Architecture](../architecture.md) - Workflow engine and automation architecture
+- [Security Considerations](../security-considerations.md) - Safe automation and governance
+- [Testing Strategy](../testing-strategy.md) - Load and safety testing for Phase 3
+- [Performance Optimization](../performance-optimization.md) - Scalability and reliability optimization
+- [Rollout Plan](../rollout-plan.md) - Production deployment strategy
+- [Metrics and Monitoring](../metrics-and-monitoring.md) - Enterprise monitoring and alerting
 
 ---
 

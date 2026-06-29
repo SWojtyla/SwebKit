@@ -320,10 +320,17 @@ The prototype should be disposable - designed to be thrown away after Phase 0 is
 
 ## 🔗 Related Documents
 
+### Phase Documents
 - [README - Overview](../README.md)
 - [Phase 1: Foundation - Next phase if Phase 0 succeeds](phase-1-foundation.md)
 - [Phase 2: Intelligence](phase-2-intelligence.md)
 - [Phase 3: Automation](phase-3-automation.md)
+
+### Supporting Documents
+- [Architecture](../architecture.md) - Technical design reference
+- [Security Considerations](../security-considerations.md) - Critical for API key handling
+- [Testing Strategy](../testing-strategy.md) - Validation testing approach
+- [Metrics and Monitoring](../metrics-and-monitoring.md) - Performance measurement framework
 
 ---
 

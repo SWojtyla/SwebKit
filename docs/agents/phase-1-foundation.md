@@ -410,10 +410,18 @@ Based on Phase 1 learnings, Phase 2 should:
 
 ## 🔗 Related Documents
 
+### Phase Documents
 - [README - Overview](../README.md)
 - [Phase 0: Proof of Concept - Previous phase](phase-0-poc.md)
 - [Phase 2: Intelligence - Next phase](phase-2-intelligence.md)
 - [Phase 3: Automation](phase-3-automation.md)
+
+### Supporting Documents
+- [Architecture](../architecture.md) - Detailed technical architecture
+- [Security Considerations](../security-considerations.md) - Implementation security requirements
+- [Testing Strategy](../testing-strategy.md) - Comprehensive testing approach
+- [Performance Optimization](../performance-optimization.md) - Optimization strategies for Phase 1
+- [Metrics and Monitoring](../metrics-and-monitoring.md) - Monitoring setup for Phase 1
 
 ---
 

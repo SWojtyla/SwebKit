@@ -495,10 +495,18 @@ Based on Phase 2 learnings, Phase 3 should:
 
 ## 🔗 Related Documents
 
+### Phase Documents
 - [README - Overview](../README.md)
 - [Phase 0: Proof of Concept - Previous phase](phase-0-poc.md)
 - [Phase 1: Foundation - Previous phase](phase-1-foundation.md)
 - [Phase 3: Automation - Next phase](phase-3-automation.md)
+
+### Supporting Documents
+- [Architecture](../architecture.md) - Context system and tool architecture
+- [Security Considerations](../security-considerations.md) - Context filtering and permission model
+- [Testing Strategy](../testing-strategy.md) - Advanced testing for Phase 2
+- [Performance Optimization](../performance-optimization.md) - Token optimization and caching strategies
+- [Metrics and Monitoring](../metrics-and-monitoring.md) - Quality and usage metrics for Phase 2
 
 ---
 

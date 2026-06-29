@@ -91,10 +91,19 @@ Each tool is a thin wrapper around existing SwebKit services, exposing functiona
 
 ## 🔗 Quick Links
 
+### Phase Documents
 - [Phase 0: Proof of Concept →](phase-0-poc.md)
 - [Phase 1: Foundation →](phase-1-foundation.md)
 - [Phase 2: Intelligence →](phase-2-intelligence.md)
 - [Phase 3: Automation →](phase-3-automation.md)
+
+### Supporting Documents
+- [Architecture →](architecture.md) - Technical design and components
+- [Security Considerations →](security-considerations.md) - Security, privacy, and safety
+- [Testing Strategy →](testing-strategy.md) - Testing approach across all phases
+- [Performance Optimization →](performance-optimization.md) - Performance tuning strategies
+- [Rollout Plan →](rollout-plan.md) - Deployment and adoption strategy
+- [Metrics and Monitoring →](metrics-and-monitoring.md) - Observability and analytics
 
 ---
 
