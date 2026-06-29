@@ -23,21 +23,27 @@ public sealed class GetPodStatusTool : IAgentTool
     public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
     {
         var podName = arguments.GetProperty("pod_name").GetString()!;
-        var ns = arguments.GetProperty("namespace").GetString() ?? "default";
 
+        // namespace is optional; default to "default" if not supplied
+        var ns = arguments.TryGetProperty("namespace", out var nsEl)
+            ? nsEl.GetString() ?? "default"
+            : "default";
+
+        // Fall back to the default kubeconfig context when AKS config is not loaded
+        // (e.g. when running outside the full app, such as the PoC console).
         var config = _appState.Config.AksConfig;
-        if (config == null)
-        {
-            throw new InvalidOperationException("AKS configuration not found. Please configure AKS connection first.");
-        }
-
-        var client = _aksFactory.Create(config.KubeconfigContext, config.KubeconfigPath);
+        var client = _aksFactory.Create(config?.KubeconfigContext, config?.KubeconfigPath);
         var pods = await client.GetPodsAsync(ns, null, ct);
         var targetPod = pods.FirstOrDefault(p => p.Name.Equals(podName, StringComparison.OrdinalIgnoreCase));
 
         if (targetPod == null)
         {
-            throw new KeyNotFoundException("Pod '" + podName + "' not found in namespace '" + ns + "'.");
+            var allPods = pods.Select(p => p.Name).ToArray();
+            return JsonSerializer.Serialize(new
+            {
+                error = $"Pod '{podName}' not found in namespace '{ns}'.",
+                available_pods = allPods
+            });
         }
 
         var podEvents = await client.GetEventsAsync(ns, targetPod.Name, ct);

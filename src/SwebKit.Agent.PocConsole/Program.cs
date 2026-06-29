@@ -1,96 +1,198 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
 
-// Phase 0 POC Console Application
-// Simple console app to test Mistral AI integration with SwebKit
-
+// ─────────────────────────────────────────────
+//  SwebKit AI Agent — Phase 0 PoC Console
+// ─────────────────────────────────────────────
 var serviceProvider = BuildServiceProvider();
+var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
 try
 {
-    Console.WriteLine("=== SwebKit AI Agent - Phase 0 POC ===");
-    Console.WriteLine("Testing Mistral AI integration with Kubernetes pod analysis");
-    Console.WriteLine("Type 'exit' or 'quit' to end the session.");
-    Console.WriteLine();
+    PrintBanner();
 
     var mistralClient = serviceProvider.GetRequiredService<IMistralClient>();
-    var tool = serviceProvider.GetRequiredService<GetPodStatusTool>();
+    var podStatusTool = serviceProvider.GetRequiredService<GetPodStatusTool>();
+    var listNsTool = serviceProvider.GetRequiredService<ListNamespacesTool>();
 
-    var systemPrompt = "You are a Kubernetes expert assistant for SwebKit. Your role is to help users analyze and understand the health and status of their Kubernetes pods. You have access to tools that can retrieve real-time pod information. When asked about a specific pod, use the available tools to get the current status. Always provide clear, actionable insights and explanations.";
-
-    var toolParameters = BuildToolParametersSchema();
-    var tools = new List<ToolDefinition>
+    // ── Tool executor — dispatches Mistral tool calls to local implementations ──
+    var toolExecutor = async (string toolName, JsonElement args, CancellationToken ct) =>
     {
-        new ToolDefinition
+        Console.ForegroundColor = ConsoleColor.DarkCyan;
+        Console.Write($"  ⚙  {toolName}");
+        if (args.ValueKind == JsonValueKind.Object)
         {
-            Name = tool.Name,
-            Description = tool.Description,
-            ParametersSchema = toolParameters
+            var argPairs = args.EnumerateObject()
+                              .Select(p => $"{p.Name}={p.Value}")
+                              .ToArray();
+            if (argPairs.Length > 0)
+                Console.Write($"({string.Join(", ", argPairs)})");
         }
+        Console.WriteLine(" ...");
+        Console.ResetColor();
+
+        var result = toolName switch
+        {
+            "get_pod_status" => await podStatusTool.ExecuteAsync(args, ct),
+            "list_namespaces" => await listNsTool.ExecuteAsync(args, ct),
+            _ => JsonSerializer.Serialize(new { error = $"Unknown tool: {toolName}" })
+        };
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine($"  ✓ {result.Length} bytes");
+        Console.ResetColor();
+        return result;
     };
 
-    Console.WriteLine("System ready. Available tools: " + string.Join(", ", tools.Select(t => t.Name)));
+    var systemPrompt =
+        "You are a Kubernetes expert assistant embedded in SwebKit, a desktop operations tool. " +
+        "You have access to tools that query live cluster data. " +
+        "When the user asks about pods or namespaces, call the appropriate tool instead of guessing. " +
+        "Always be concise and actionable.";
+
+    var tools = BuildToolDefinitions(podStatusTool, listNsTool);
+
+    Console.WriteLine($"Tools available: {string.Join(", ", tools.Select(t => t.Name))}");
     Console.WriteLine();
 
-    while (true)
+    while (!cts.Token.IsCancellationRequested)
     {
+        Console.ForegroundColor = ConsoleColor.White;
         Console.Write("> ");
-        var userInput = Console.ReadLine();
+        Console.ResetColor();
+
+        string? userInput;
+        try
+        {
+            userInput = Console.ReadLine();
+        }
+        catch (OperationCanceledException)
+        {
+            break;
+        }
+
+        if (userInput is null || cts.Token.IsCancellationRequested)
+            break;
 
         if (string.IsNullOrWhiteSpace(userInput))
             continue;
 
-        if (userInput.Equals("exit", StringComparison.OrdinalIgnoreCase) || 
+        if (userInput.Equals("exit", StringComparison.OrdinalIgnoreCase) ||
             userInput.Equals("quit", StringComparison.OrdinalIgnoreCase))
             break;
 
+        if (userInput.Equals("help", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintHelp();
+            continue;
+        }
+
         try
         {
-            Console.WriteLine("Sending request to Mistral AI...");
-            var startTime = DateTime.UtcNow;
-            
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine("  Thinking...");
+            Console.ResetColor();
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
             var response = await mistralClient.ChatAsync(
                 systemPrompt,
                 userInput,
                 tools,
-                CancellationToken.None);
+                toolExecutor,
+                cts.Token);
 
-            var endTime = DateTime.UtcNow;
-            var latency = endTime - startTime;
+            sw.Stop();
 
             Console.WriteLine();
-            Console.WriteLine("=== AI Response ===");
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("─── Response " + new string('─', 60));
+            Console.ResetColor();
             Console.WriteLine(response);
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine($"─── {sw.Elapsed.TotalSeconds:F1}s " + new string('─', 60));
+            Console.ResetColor();
             Console.WriteLine();
-            Console.WriteLine("=== Performance ===");
-            Console.WriteLine("Latency: " + latency.TotalSeconds.ToString("F2") + " seconds");
+        }
+        catch (OperationCanceledException)
+        {
             Console.WriteLine();
+            Console.WriteLine("Cancelled.");
+            break;
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Error: " + ex.Message);
-            if (!string.IsNullOrEmpty(ex.InnerException?.Message))
-            {
-                Console.WriteLine("Details: " + ex.InnerException.Message);
-            }
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"  Error: {ex.Message}");
+            if (ex.InnerException is not null)
+                Console.WriteLine($"  Detail: {ex.InnerException.Message}");
+            Console.ResetColor();
             Console.WriteLine();
         }
     }
 }
 catch (Exception ex)
 {
-    Console.WriteLine("Fatal error: " + ex.Message);
-    Environment.Exit(1);
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine($"Fatal: {ex.Message}");
+    Console.ResetColor();
+    return 1;
 }
 
-static JsonElement BuildToolParametersSchema()
+Console.WriteLine("Bye.");
+return 0;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+static void PrintBanner()
 {
-    var parameters = new
+    Console.ForegroundColor = ConsoleColor.Cyan;
+    Console.WriteLine(@"
+ ╔══════════════════════════════════════════╗
+ ║   SwebKit AI Agent  ·  Phase 0 PoC      ║
+ ║   Mistral  +  Kubernetes  tool calling  ║
+ ╚══════════════════════════════════════════╝");
+    Console.ResetColor();
+    Console.WriteLine();
+    Console.WriteLine("Set MISTRAL_API_KEY or SWEBOOK-Agent:Mistral-ApiKey env var before starting.");
+    Console.WriteLine("Type  help  for example queries, or  exit  to quit.");
+    Console.WriteLine();
+}
+
+static void PrintHelp()
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine(@"
+Example queries:
+  list my namespaces
+  list all namespaces
+  what pods are in the default namespace?
+  check the status of pod <name>
+  is pod <name> in namespace kube-system healthy?
+  why does pod <name> keep restarting?
+  what's wrong with pod <name>?
+
+Commands:
+  help   — show this message
+  exit   — quit
+");
+    Console.ResetColor();
+}
+
+static List<ToolDefinition> BuildToolDefinitions(
+    GetPodStatusTool podStatusTool,
+    ListNamespacesTool listNsTool)
+{
+    var podStatusSchema = JsonSerializer.SerializeToDocument(new
     {
         type = "object",
         properties = new
@@ -98,84 +200,95 @@ static JsonElement BuildToolParametersSchema()
             pod_name = new
             {
                 type = "string",
-                description = "The name of the Kubernetes pod to analyze"
+                description = "The name of the Kubernetes pod to inspect."
             },
-            namespace_param = new
+            @namespace = new
             {
                 type = "string",
-                description = "The Kubernetes namespace where the pod is located"
+                description = "The Kubernetes namespace. Defaults to 'default' if omitted."
             }
         },
         required = new[] { "pod_name" }
-    };
+    }).RootElement;
 
-    return JsonSerializer.SerializeToDocument(parameters).RootElement;
+    var listNsSchema = JsonSerializer.SerializeToDocument(new
+    {
+        type = "object",
+        properties = new { },
+        required = Array.Empty<string>()
+    }).RootElement;
+
+    return
+    [
+        new ToolDefinition
+        {
+            Name             = podStatusTool.Name,
+            Description      = podStatusTool.Description,
+            ParametersSchema = podStatusSchema
+        },
+        new ToolDefinition
+        {
+            Name             = listNsTool.Name,
+            Description      = listNsTool.Description,
+            ParametersSchema = listNsSchema
+        }
+    ];
 }
 
 static IServiceProvider BuildServiceProvider()
 {
     var services = new ServiceCollection();
 
-    // Configuration
     services.AddSingleton<MistralConfig>(new MistralConfig());
-    
-    // HTTP Client
+    services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
     services.AddHttpClient();
-    
-    // Credential Store - for POC, use a simple implementation
     services.AddSingleton<ICredentialStore>(new SimpleConsoleCredentialStore());
-    
-    // SwebKit Core Services
-    services.AddSingleton<AppStateService>();
-    
-    // AKS Client Factory
+    services.AddSingleton<IAppEventBus, AppEventBus>();
+    services.AddSingleton<AppStateService>(sp => new AppStateService(
+        new ProfileRepository(),
+        new UiStateRepository(),
+        sp.GetRequiredService<IAppEventBus>()));
     services.AddSingleton<IAksClientFactory, AksClientFactory>();
-    
-    // Agent Services
     services.AddSingleton<IMistralClient, MistralHttpClient>();
     services.AddSingleton<GetPodStatusTool>();
+    services.AddSingleton<ListNamespacesTool>();
 
     return services.BuildServiceProvider();
 }
 
-// Simple credential store for POC that reads from environment variables
-public class SimpleConsoleCredentialStore : ICredentialStore
+// ─── Credential Store ─────────────────────────────────────────────────────────
+
+public sealed class SimpleConsoleCredentialStore : ICredentialStore
 {
-    public void Save(string key, string secret)
-    {
-        // For POC, just store in memory
-        Environment.SetEnvironmentVariable(key, secret);
-    }
+    private const string EnvVar = "MISTRAL_API_KEY";
+    private const string StoreKey = "SwebKit-Agent:Mistral-ApiKey";
 
     public string? Get(string key)
     {
-        // Check environment variable first
-        var value = Environment.GetEnvironmentVariable(key);
-        if (!string.IsNullOrEmpty(value))
-            return value;
-        
-        // For POC: If API key not found, prompt user
-        if (key == "SwebKit-Agent:Mistral-ApiKey" || key.EndsWith("Mistral-ApiKey"))
+        // Canonical env var first
+        var value = Environment.GetEnvironmentVariable(EnvVar);
+        if (!string.IsNullOrEmpty(value)) return value;
+
+        // Fallback: exact env var name used as key
+        value = Environment.GetEnvironmentVariable(key);
+        if (!string.IsNullOrEmpty(value)) return value;
+
+        // Interactive fallback for API key only
+        if (key == StoreKey || key.Contains("Mistral-ApiKey"))
         {
-            Console.Write("Mistral API key not found. Please enter your Mistral API key: ");
-            var apiKey = Console.ReadLine();
-            if (!string.IsNullOrEmpty(apiKey))
+            Console.Write("Enter Mistral API key: ");
+            var entered = Console.ReadLine();
+            if (!string.IsNullOrEmpty(entered))
             {
-                Save(key, apiKey);
-                return apiKey;
+                Environment.SetEnvironmentVariable(EnvVar, entered);
+                return entered;
             }
         }
-        
+
         return null;
     }
 
-    public void Delete(string key)
-    {
-        Environment.SetEnvironmentVariable(key, null);
-    }
-
-    public IReadOnlyList<string> ListKeys(string prefix = "")
-    {
-        return Array.Empty<string>();
-    }
+    public void Save(string key, string secret) => Environment.SetEnvironmentVariable(key, secret);
+    public void Delete(string key) => Environment.SetEnvironmentVariable(key, null);
+    public IReadOnlyList<string> ListKeys(string prefix = "") => [];
 }
