@@ -2,6 +2,10 @@
 
 ## 🚨 CRITICAL RULES
 
+### Always Consult Documentation
+- **FEATURE DOCS**: Always consult the documentation corresponding to the feature you are implementing
+- **GLOBAL DOCS**: Global documentation is available at `C:\Projects\Personal\SwebKit\docs`
+
 ### Always Validate Before Committing
 - **BUILD FIRST**: Always run `dotnet build` to ensure the project compiles without errors
 - **TEST ALWAYS**: Run `dotnet test` to validate no regressions

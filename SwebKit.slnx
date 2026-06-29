@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/SwebKit.Agent.PocConsole/SwebKit.Agent.PocConsole.csproj" />
+    <Project Path="src/SwebKit.Agents/SwebKit.Agents.csproj" />
     <Project Path="src/SwebKit.App/SwebKit.App.csproj">
       <Deploy Solution="Debug|*" />
     </Project>

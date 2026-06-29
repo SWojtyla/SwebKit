@@ -14,6 +14,8 @@ using SwebKit.DevOps;
 using SwebKit.DevOps.IncidentTimeline;
 using SwebKit.Kubernetes.AksClient;
 using SwebKit.Kubernetes.IncidentTimeline;
+using SwebKit.Agents;
+using SwebKit.Agents.Tools;
 using SwebKit.Observability;
 using SwebKit.Observability.IncidentTimeline;
 using SwebKit.Redis;
@@ -215,6 +217,18 @@ public static class MauiProgram
         builder.Services.AddSingleton<IServiceBusWarmupCache, ServiceBusWarmupCache>();
         builder.Services.AddSingleton<IConnectionWarmupService, ConnectionWarmupService>();
         builder.Services.AddSingleton<RedisOpsInsightsAggregator>();
+
+        // AI Agent - Phase 0 POC
+        builder.Services.AddSingleton<MistralConfig>(sp =>
+        {
+            var store = sp.GetRequiredService<ICredentialStore>();
+            return new MistralConfig
+            {
+                ApiKey = store.Get("SwebKit-Agent:Mistral-ApiKey") ?? string.Empty
+            };
+        });
+        builder.Services.AddSingleton<IMistralClient, MistralHttpClient>();
+        builder.Services.AddSingleton<GetPodStatusTool>();
 
         var app = builder.Build();
         PerformanceBaselineRecorder.Record(nameof(MauiProgram), "Perf startup CreateMauiApp completed");
