@@ -16,30 +16,33 @@ This is a **go/no-go decision gate** - a minimal, low-risk experiment to de-risk
 
 ### Assumptions That Must Be Tested
 
-| Assumption | Validation Method | Risk if False |
-|------------|------------------|---------------|
-| Mistral understands Kubernetes concepts | Test with real pod data | Medium - AI won't be useful |
-| Mistral understands Service Bus concepts | Test with real queue data | Medium - Limited value |
-| Mistral can analyze structured data | Format SwebKit data for AI | High - Architecture won't work |
-| Response quality is sufficient | Evaluate AI outputs | High - User rejection |
-| API latency is acceptable | Measure response times | Medium - Poor UX |
-| Cost per query is reasonable | Calculate pricing | High - Budget concerns |
-| Integration is technically feasible | Build simple prototype | Medium - Implementation blockers |
+| Assumption                               | Validation Method          | Risk if False                    |
+| ---------------------------------------- | -------------------------- | -------------------------------- |
+| Mistral understands Kubernetes concepts  | Test with real pod data    | Medium - AI won't be useful      |
+| Mistral understands Service Bus concepts | Test with real queue data  | Medium - Limited value           |
+| Mistral can analyze structured data      | Format SwebKit data for AI | High - Architecture won't work   |
+| Response quality is sufficient           | Evaluate AI outputs        | High - User rejection            |
+| API latency is acceptable                | Measure response times     | Medium - Poor UX                 |
+| Cost per query is reasonable             | Calculate pricing          | High - Budget concerns           |
+| Integration is technically feasible      | Build simple prototype     | Medium - Implementation blockers |
 
 ### Global Success Criteria
 
 **Business Validation**
+
 - [ ] Stakeholders see clear value in AI-powered insights
 - [ ] AI provides insights beyond what's immediately visible in the UI
 - [ ] Response quality meets minimum acceptable standards for operational use
 
 **Technical Validation**
+
 - [ ] Mistral can correctly interpret SwebKit's structured data
 - [ ] Mistral can provide actionable recommendations
 - [ ] No fundamental technical blockers identified
 - [ ] Performance characteristics are acceptable
 
 **Economic Validation**
+
 - [ ] Cost per interaction is within acceptable bounds
 - [ ] Value delivered exceeds cost
 - [ ] Scaling costs are predictable and manageable
@@ -49,6 +52,7 @@ This is a **go/no-go decision gate** - a minimal, low-risk experiment to de-risk
 ## 🎯 What Phase 0 Is
 
 ### ✅ In Scope
+
 - **Single Use Case**: One representative scenario (e.g., "Analyze pod health")
 - **One Tool**: Single end-to-end tool implementation (`GetPodStatusTool`)
 - **Simple Interface**: Console or minimal UI
@@ -57,6 +61,7 @@ This is a **go/no-go decision gate** - a minimal, low-risk experiment to de-risk
 - **Stakeholder Demo**: Present findings to decision makers
 
 ### ❌ Out of Scope
+
 - Production code or architecture
 - Multiple tools or use cases
 - Full SwebKit integration
@@ -72,6 +77,7 @@ This is a **go/no-go decision gate** - a minimal, low-risk experiment to de-risk
 ## 🔍 Validation Questions
 
 ### Business Value Questions
+
 1. **Does this solve a real problem?**
    - Can users already get this information easily through existing means?
    - Does the AI provide insights that would be difficult to obtain otherwise?
@@ -83,6 +89,7 @@ This is a **go/no-go decision gate** - a minimal, low-risk experiment to de-risk
    - Does this enable non-experts to perform expert-level analysis?
 
 ### Technical Feasibility Questions
+
 1. **Domain Understanding**
    - Can Mistral correctly interpret Kubernetes pod status data?
    - Can it identify common issues (CrashLoopBackOff, OOM kills, pending pods)?
@@ -99,6 +106,7 @@ This is a **go/no-go decision gate** - a minimal, low-risk experiment to de-risk
    - Does it hallucinate or make up information?
 
 ### Operational Questions
+
 1. **Performance**
    - What's the end-to-end latency for a typical query?
    - Is the latency acceptable for interactive use?
@@ -119,6 +127,7 @@ This is a **go/no-go decision gate** - a minimal, low-risk experiment to de-risk
 ## 📋 Deliverables
 
 ### 1. Technical Validation Report
+
 A comprehensive document answering:
 
 - **Domain Understanding Assessment**
@@ -146,14 +155,18 @@ A comprehensive document answering:
   - Actionability score (% of responses that suggest useful actions)
 
 ### 2. Working Prototype
+
 A simple application demonstrating:
+
 - Mistral API connectivity
 - One working tool (`GetPodStatusTool`)
 - End-to-end data flow (SwebKit → Tool → Mistral → Response)
 - Basic conversation interface
 
 ### 3. Stakeholder Presentation
+
 A demo showing:
+
 - The prototype in action
 - Sample conversations
 - Key findings from validation
@@ -164,6 +177,7 @@ A demo showing:
 ## ✅ Success Criteria
 
 ### Minimum Viable Success (Must Have)
+
 - [ ] Mistral can understand at least 80% of SwebKit-specific queries correctly
 - [ ] Tool execution works end-to-end with real data
 - [ ] End-to-end latency < 5 seconds for typical queries
@@ -171,6 +185,7 @@ A demo showing:
 - [ ] Stakeholders approve proceeding to Phase 1
 
 ### Ideal Success (Nice to Have)
+
 - [ ] Mistral accuracy > 90% on domain-specific queries
 - [ ] Responses provide actionable insights beyond basic information
 - [ ] Cost per query is within budget expectations
@@ -178,6 +193,7 @@ A demo showing:
 - [ ] Strong stakeholder enthusiasm
 
 ### Failure Criteria (No-Go)
+
 - [ ] Mistral cannot reliably understand domain concepts
 - [ ] Technical blockers cannot be resolved within reasonable time
 - [ ] Cost is prohibitive for intended usage
@@ -191,32 +207,40 @@ A demo showing:
 Based on Phase 0 results, make one of three decisions:
 
 ### ✅ GO - Proceed to Phase 1
+
 **Criteria:**
+
 - All minimum success criteria met
 - No major technical blockers identified
 - Business value is clear and compelling
 - Cost and performance are acceptable
 
 **Next Steps:**
+
 1. Incorporate Phase 0 learnings into Phase 1 plan
 2. Adjust architecture based on validation results
 3. Begin Phase 1 implementation
 
 ### ⚠️ ITERATE - Address Issues and Retest
+
 **Criteria:**
+
 - Some success criteria not met
 - Technical issues identified but seem solvable
 - Business value is promising but needs refinement
 - Cost or performance needs optimization
 
 **Next Steps:**
+
 1. Create targeted experiments to address specific concerns
 2. Develop mitigation strategies for identified issues
 3. Retest with improved approach
 4. Re-evaluate go/no-go decision
 
 ### ❌ NO-GO - Abandon or Significantly Rethink
+
 **Criteria:**
+
 - Fundamental technical blockers identified
 - Business value is unclear or insufficient
 - Cost is prohibitive
@@ -224,6 +248,7 @@ Based on Phase 0 results, make one of three decisions:
 - Stakeholders reject the concept
 
 **Next Steps:**
+
 1. Document lessons learned
 2. Explore alternative approaches (different AI provider, different architecture)
 3. Re-evaluate the business case
@@ -235,29 +260,32 @@ Based on Phase 0 results, make one of three decisions:
 
 ### High-Risk Areas to Validate
 
-| Risk | Probability | Impact | Mitigation Test |
-|------|-------------|--------|-----------------|
-| Mistral doesn't understand domain | Medium | Critical | Test with domain-specific queries |
-| API costs are too high | Medium | High | Calculate actual token usage |
-| Latency is unacceptable | Medium | High | Measure end-to-end response time |
-| Data formatting issues | Low | High | Test various data formats |
-| Rate limiting problems | Medium | Medium | Test with burst queries |
-| Hallucination rate too high | Medium | Medium | Evaluate response accuracy |
+| Risk                              | Probability | Impact   | Mitigation Test                   |
+| --------------------------------- | ----------- | -------- | --------------------------------- |
+| Mistral doesn't understand domain | Medium      | Critical | Test with domain-specific queries |
+| API costs are too high            | Medium      | High     | Calculate actual token usage      |
+| Latency is unacceptable           | Medium      | High     | Measure end-to-end response time  |
+| Data formatting issues            | Low         | High     | Test various data formats         |
+| Rate limiting problems            | Medium      | Medium   | Test with burst queries           |
+| Hallucination rate too high       | Medium      | Medium   | Evaluate response accuracy        |
 
 ### Contingency Plans
 
 **If Mistral understanding is poor:**
+
 - Try different prompt engineering approaches
 - Consider fine-tuning or custom models
 - Evaluate alternative AI providers
 
 **If costs are too high:**
+
 - Implement aggressive caching
 - Use smaller models where possible
 - Optimize prompt construction
 - Consider usage limits or tiered access
 
 **If latency is too high:**
+
 - Implement streaming responses
 - Add loading indicators
 - Consider async processing for complex queries
@@ -268,16 +296,134 @@ Based on Phase 0 results, make one of three decisions:
 
 While Phase 0 is about validation, not implementation, a minimal prototype is necessary. This should be **as simple as possible** to achieve the validation goals.
 
-### Minimum Viable Prototype
-1. **API Client**: Basic HTTP client for Mistral API
-2. **One Tool**: `GetPodStatusTool` using existing `IAksClientFactory`
-3. **Simple Interface**: Console app with basic conversation loop
-4. **Data Collection**: Logging for performance and cost metrics
-
 ### Key Principle
+
 > "Build the absolute minimum needed to validate the hypothesis, nothing more."
 
-The prototype should be disposable - designed to be thrown away after Phase 0 is complete. Its only purpose is to answer the validation questions.
+The prototype is **disposable** — designed to be thrown away after Phase 0. Its only purpose is to answer the validation questions.
+
+---
+
+### Step 1 — Create the `SwebKit.Agents` project
+
+Add a new class library to the solution:
+
+```
+src/SwebKit.Agents/
+    SwebKit.Agents.csproj    ← references SwebKit.Core, SwebKit.Kubernetes
+    MistralConfig.cs
+    IMistralClient.cs
+    MistralHttpClient.cs
+    Tools/
+        IAgentTool.cs
+        GetPodStatusTool.cs
+```
+
+Add the project to `SwebKit.slnx` and add a `<ProjectReference>` to `SwebKit.App.csproj`.
+
+**`MistralConfig`** (the only configuration needed for Phase 0):
+
+```csharp
+public sealed class MistralConfig
+{
+    public string ApiKey { get; set; } = string.Empty;  // loaded from ICredentialStore
+    public string ApiEndpoint { get; set; } = "https://api.mistral.ai/v1";
+    public string Model { get; set; } = "mistral-medium-latest";
+    public int MaxTokens { get; set; } = 2048;
+}
+```
+
+---
+
+### Step 2 — Minimal Mistral client
+
+`IMistralClient` exposes a single method for Phase 0:
+
+```csharp
+public interface IMistralClient
+{
+    Task<string> ChatAsync(
+        string systemPrompt,
+        string userMessage,
+        IReadOnlyList<ToolDefinition> tools,
+        CancellationToken ct);
+}
+```
+
+`MistralHttpClient` is a thin wrapper over `HttpClient` calling `POST /chat/completions`.
+Load the API key from `ICredentialStore` using key `SwebKit-Agent:Mistral-ApiKey`.
+No retry logic, no streaming — keep it throwaway.
+
+---
+
+### Step 3 — `GetPodStatusTool`
+
+Wire directly to the existing `IAksClientFactory` (registered in `MauiProgram.cs`):
+
+```csharp
+public sealed class GetPodStatusTool : IAgentTool
+{
+    private readonly IAksClientFactory _aksFactory;
+    private readonly AppStateService _appState;
+
+    // Name and Description are sent to Mistral as the tool schema
+    public string Name => "get_pod_status";
+    public string Description => "Returns the current status of a Kubernetes pod including phase, restart count, container states, and recent events.";
+
+    public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
+    {
+        var podName = arguments.GetProperty("pod_name").GetString()!;
+        var ns = arguments.GetProperty("namespace").GetString() ?? "default";
+
+        var config = _appState.Config.Aks; // use the configured kubeconfig context
+        var client = _aksFactory.Create(config.Context, config.KubeconfigPath);
+
+        var pod = await client.GetPodAsync(ns, podName, ct);
+        return JsonSerializer.Serialize(pod); // serialized pod data goes back to Mistral
+    }
+}
+```
+
+---
+
+### Step 4 — Single-turn conversation loop (console prototype)
+
+The PoC does **not** need a full conversation manager. A simple loop is enough:
+
+```
+1. Print prompt to console
+2. Read user input
+3. Build system prompt (describe SwebKit context + available tools)
+4. Call IMistralClient.ChatAsync with the user message and tool definitions
+5. If Mistral returns a tool_call:
+   a. Identify the tool by name
+   b. Execute it → get JSON result
+   c. Send the result back to Mistral as a tool message
+   d. Get the final text response
+6. Print the response
+7. Repeat
+```
+
+This can live in a `ConsolePocRunner` class inside `SwebKit.Agents` or directly in a small test project/console entry point.
+
+---
+
+### Step 5 — Register and wire up
+
+In `MauiProgram.cs` (or a dedicated PoC entry point):
+
+```csharp
+builder.Services.AddSingleton<MistralConfig>(sp =>
+{
+    var store = sp.GetRequiredService<ICredentialStore>();
+    return new MistralConfig
+    {
+        ApiKey = store.GetPasswordAsync("SwebKit-Agent", "Mistral-ApiKey").GetAwaiter().GetResult() ?? ""
+    };
+});
+builder.Services.AddSingleton<IMistralClient, MistralHttpClient>();
+builder.Services.AddSingleton<GetPodStatusTool>();
+```
 
 ---
 
@@ -321,12 +467,14 @@ The prototype should be disposable - designed to be thrown away after Phase 0 is
 ## 🔗 Related Documents
 
 ### Phase Documents
+
 - [README - Overview](../README.md)
 - [Phase 1: Foundation - Next phase if Phase 0 succeeds](phase-1-foundation.md)
 - [Phase 2: Intelligence](phase-2-intelligence.md)
 - [Phase 3: Automation](phase-3-automation.md)
 
 ### Supporting Documents
+
 - [Architecture](../architecture.md) - Technical design reference
 - [Security Considerations](../security-considerations.md) - Critical for API key handling
 - [Testing Strategy](../testing-strategy.md) - Validation testing approach
@@ -334,5 +482,5 @@ The prototype should be disposable - designed to be thrown away after Phase 0 is
 
 ---
 
-*Document created: 2026-06-29*
-*Last updated: 2026-06-29*
+_Document created: 2026-06-29_
+_Last updated: 2026-06-29_
