@@ -289,6 +289,7 @@ public class ComponentTests : TestContext
     {
         var env = new AppConfig();
 
+        Services.AddSingleton<ICredentialStore>(new InMemoryCredentialStore());
         Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance)));
 
         var cut = RenderComponent<ServiceBusConfigForm>(ps => ps

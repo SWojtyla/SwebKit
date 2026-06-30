@@ -131,8 +131,7 @@
 .log-output {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
-    font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
+    overflow-y: auto;    overflow-anchor: none;    font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
     font-size: 12.5px;
     line-height: 1.55;
     padding: 4px 10px 8px;

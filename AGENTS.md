@@ -2,10 +2,21 @@
 
 ## 🚨 CRITICAL RULES
 
+### Always Consult Documentation
+- **FEATURE DOCS**: Always consult the documentation corresponding to the feature you are implementing
+- **GLOBAL DOCS**: Global documentation is available at `C:\Projects\Personal\SwebKit\docs`
+- **AIKIDO INSTRUCTIONS**: Always check Aikido security rules at `C:\Projects\Personal\SwebKit\.github\instructions\aikido_rules.instructions.md`
+
 ### Always Validate Before Committing
 - **BUILD FIRST**: Always run `dotnet build` to ensure the project compiles without errors
 - **TEST ALWAYS**: Run `dotnet test` to validate no regressions
 - **SMOKE TEST**: Manually test the affected functionality in the UI
+
+### Always Update Documentation
+- **DOCS FIRST**: Whenever implementing a feature, always update the corresponding documentation (phase docs, architecture docs, etc.)
+- **MARK COMPLETE**: Update checkboxes in documentation to reflect actual implementation status
+- **NOTHING IS DONE**: Until documentation is updated, nothing is considered complete
+- **STANDALONE CHAT PAGE**: AgentChatPage.razor is NOT NEEDED - the AgentChatPanel.razor is sufficient
 
 ### Workflow
 1. Make changes

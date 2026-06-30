@@ -175,6 +175,7 @@
     --color-nav-observability: #5b8cff;
     --color-nav-incident:   #d4a017;
     --color-nav-settings:   #8a8aaa;
+    --color-nav-agent:      #9e68d4;
     /* code / YAML syntax colors */
     --color-code-key:      #9cdcfe;
     --color-code-string:   #ce9178;
@@ -218,6 +219,7 @@
     --color-nav-observability: #88b0ff;
     --color-nav-incident: #ebc862;
     --color-nav-settings: #aab5c6;
+    --color-nav-agent: #bf90ff;
     --color-code-key: #9bd9ff;
     --color-code-string: #ffbc8d;
     --color-code-keyword: #5cbcff;
@@ -346,6 +348,7 @@
     --color-nav-observability: #b3d1e0;
     --color-nav-incident: #dec28f;
     --color-nav-settings: #bdc7cf;
+    --color-nav-agent: #b3b9e2;
     --color-code-key: #add7e1;
     --color-code-string: #e0ab80;
     --color-code-keyword: #8ec2d2;
@@ -472,6 +475,7 @@
     --color-nav-observability: #1565c0;
     --color-nav-incident:   #a15c00;
     --color-nav-settings:   #455a64;
+    --color-nav-agent:      #6a1b9a;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.22);
@@ -513,6 +517,7 @@
     --color-nav-observability: #005b9a;
     --color-nav-incident:   #8b5a00;
     --color-nav-settings:   #505050;
+    --color-nav-agent:      #6020a0;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.22);
@@ -553,6 +558,7 @@
     --color-nav-observability: #0a5c7d;
     --color-nav-incident:   #8a5a14;
     --color-nav-settings:   #446058;
+    --color-nav-agent:      #581888;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.22);
@@ -593,6 +599,7 @@
     --color-nav-observability: #355fba;
     --color-nav-incident:   #8a5a14;
     --color-nav-settings:   #506070;
+    --color-nav-agent:      #4820a8;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.22);
@@ -637,6 +644,7 @@
     --color-nav-observability: #8098c8;
     --color-nav-incident:   #c8a050;
     --color-nav-settings:   #7878a0;
+    --color-nav-agent:      #9880c8;
     --color-code-key:       #a8c8e0;
     --color-code-string:    #d09870;
     --color-code-keyword:   #80a8d0;
@@ -762,6 +770,7 @@
     --color-nav-observability: #1560c8;
     --color-nav-incident:   #9a5800;
     --color-nav-settings:   #455060;
+    --color-nav-agent:      #6820a8;
     --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.08);
     --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.11);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.16);
@@ -880,6 +889,7 @@
     --color-nav-observability: #285ca0;
     --color-nav-incident:   #9a5800;
     --color-nav-settings:   #56504a;
+    --color-nav-agent:      #6020a0;
     --shadow-sm: 0 1px 4px rgba(60, 30, 0, 0.10);
     --shadow-md: 0 4px 14px rgba(60, 30, 0, 0.14);
     --shadow-lg: 0 8px 32px rgba(60, 30, 0, 0.18);
@@ -1000,6 +1010,7 @@
     --color-nav-observability: #205898;
     --color-nav-incident:   #9a6800;
     --color-nav-settings:   #445a4e;
+    --color-nav-agent:      #502898;
     --shadow-sm: 0 1px 4px rgba(10, 34, 18, 0.09);
     --shadow-md: 0 4px 14px rgba(10, 34, 18, 0.13);
     --shadow-lg: 0 8px 32px rgba(10, 34, 18, 0.18);

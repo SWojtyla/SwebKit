@@ -112,7 +112,7 @@
     private readonly record struct LogEntry(string Line, string CssClass);
     private enum LogRange { Last5m, Last10m, Last1h, All, PreviousContainer }
 
-    private List<string> Lines = [];
+    private Queue<string> Lines = new();
     private bool IsLive = true;
     private bool IsLoading;
     private string TextFilter = "";
@@ -136,7 +136,11 @@
 
     // PERF2-3: Cached filtered lines — recomputed only when dirty
     private List<LogEntry> _filteredLinesCache = [];
+    private List<LogEntry> _visibleLineCache = [];
     private bool _filterDirty = true;
+    private bool _visibleLineDirty = true;
+    private volatile bool _forceScrollToBottom;
+    private volatile bool _hasScrolledToBottom;
     private int _lastFilteredLineCount;
     private string _lastFilterText = "";
     private readonly Lock _linesLock = new();
@@ -175,12 +179,21 @@
     {
         get
         {
+            if (!_visibleLineDirty)
+                return _visibleLineCache;
+
             var filtered = FilteredLines;
             if (filtered.Count == 0)
-                return [];
+            {
+                _visibleLineCache = [];
+                _visibleLineDirty = false;
+                return _visibleLineCache;
+            }
 
             var (start, endExclusive) = GetVisibleBounds(filtered.Count);
-            return filtered.GetRange(start, endExclusive - start);
+            _visibleLineCache = filtered.GetRange(start, endExclusive - start);
+            _visibleLineDirty = false;
+            return _visibleLineCache;
         }
     }
 
@@ -240,6 +253,7 @@
     private void InvalidateFilter()
     {
         _filterDirty = true;
+        _visibleLineDirty = true;
         RequestFrozenAnchorRefresh();
     }
 
@@ -319,9 +333,11 @@
         else if (_pageIndexFromNewest == 0)
         {
             _pendingNewLineCount = 0;
+            _forceScrollToBottom = true;
             ReleaseVisibleWindowAnchor();
         }
 
+        _visibleLineDirty = true;
         _ = InvokeAsync(StateHasChanged);
     }
 
@@ -359,6 +375,8 @@
 
         IsLoading = true;
         _paused = false;
+        _forceScrollToBottom = true;
+        _hasScrolledToBottom = false;
         ReleaseVisibleWindowAnchor();
         if (!preserveView)
         {
@@ -368,6 +386,7 @@
         ClearLineBuffer();
         _linesDirty = false;
         _filterDirty = true;
+        _visibleLineDirty = true;
         await InvokeAsync(StateHasChanged);
 
         StopRenderTimer();
@@ -397,10 +416,22 @@
                 {
                     if (!_linesDirty) continue;
                     _linesDirty = false;
-                    _filterDirty = true;
-                    await InvokeAsync(StateHasChanged);
+                    await InvokeAsync(() => { _filterDirty = true; _visibleLineDirty = true; StateHasChanged(); });
                     if (IsLive && !_paused && _pageIndexFromNewest == 0)
-                        await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
+                    {
+                        if (_forceScrollToBottom)
+                        {
+                            _forceScrollToBottom = false;
+                            _hasScrolledToBottom = true;
+                            await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
+                        }
+                        else if (_hasScrolledToBottom)
+                        {
+                            var atBottom = await JS.InvokeAsync<bool>("SwebKit.scrollToBottomIfNearBottom", _logContainer, 80);
+                            if (!atBottom)
+                                await InvokeAsync(() => { CaptureVisibleWindowAnchor(); _paused = true; _visibleLineDirty = true; StateHasChanged(); });
+                        }
+                    }
                 }
             }
             catch (OperationCanceledException) { }
@@ -436,7 +467,7 @@
                 _linesDirty = false;
                 _filterDirty = true;
                 StopRenderTimer();
-                await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
+                await InvokeAsync(() => { IsLoading = false; _paused = false; _visibleLineDirty = true; StateHasChanged(); });
             }
         }
     }
@@ -445,11 +476,9 @@
     {
         lock (_linesLock)
         {
-            Lines.Add(line);
+            Lines.Enqueue(line);
             while (Lines.Count > EffectiveBufferSize)
-            {
-                Lines.RemoveAt(0);
-            }
+                Lines.Dequeue();
         }
 
         if (IsWindowFrozen)
@@ -515,8 +544,10 @@
     {
         ClearLineBuffer();
         _filterDirty = true;
+        _visibleLineDirty = true;
         _pageIndexFromNewest = 0;
         _pendingNewLineCount = 0;
+        _forceScrollToBottom = true;
         ReleaseVisibleWindowAnchor();
         StateHasChanged();
     }
@@ -529,6 +560,7 @@
             return;
 
         _pageIndexFromNewest++;
+        _visibleLineDirty = true;
         StateHasChanged();
     }
 
@@ -541,9 +573,11 @@
         if (_pageIndexFromNewest == 0 && !_paused)
         {
             _pendingNewLineCount = 0;
+            _forceScrollToBottom = true;
             ReleaseVisibleWindowAnchor();
         }
 
+        _visibleLineDirty = true;
         StateHasChanged();
     }
 
@@ -551,10 +585,12 @@
     {
         _pageIndexFromNewest = 0;
         _pendingNewLineCount = 0;
+        _forceScrollToBottom = true;
         if (_paused)
             CaptureVisibleWindowAnchor();
         else
             ReleaseVisibleWindowAnchor();
+        _visibleLineDirty = true;
         StateHasChanged();
     }
 

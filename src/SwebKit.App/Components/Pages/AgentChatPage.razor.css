@@ -1,0 +1,140 @@
+/* AgentChatPage.razor.css */
+
+.agent-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ── Message thread ── */
+.agent-thread {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.agent-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 8px;
+    color: var(--neutral-foreground-hint);
+    text-align: center;
+    padding: 48px 24px;
+}
+
+.agent-empty-hint {
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
+/* ── Chat bubbles ── */
+.agent-bubble {
+    max-width: 80%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.agent-bubble--user {
+    align-self: flex-end;
+}
+
+.agent-bubble--assistant {
+    align-self: flex-start;
+}
+
+.agent-bubble__text {
+    padding: 10px 14px;
+    border-radius: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-family: inherit;
+    margin: 0;
+}
+
+.agent-bubble--user .agent-bubble__text {
+    background-color: var(--accent-fill-rest);
+    color: var(--foreground-on-accent-rest);
+    border-bottom-right-radius: 4px;
+}
+
+.agent-bubble--assistant .agent-bubble__text {
+    background-color: var(--neutral-fill-layer-rest);
+    color: var(--neutral-foreground-rest);
+    border-bottom-left-radius: 4px;
+}
+
+.agent-bubble--loading {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    color: var(--neutral-foreground-hint);
+    font-size: 0.85rem;
+    padding: 6px 0;
+}
+
+/* ── Tool badges ── */
+.agent-tools-used {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 4px;
+    align-items: center;
+}
+
+.agent-tool-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background-color: var(--neutral-fill-secondary-rest);
+    color: var(--neutral-foreground-hint);
+    font-size: 0.72rem;
+    font-family: var(--font-family-monospace, monospace);
+}
+
+.agent-elapsed {
+    color: var(--neutral-foreground-hint);
+    font-size: 0.72rem;
+    margin-left: 4px;
+}
+
+/* ── Input bar ── */
+.agent-input-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 12px 24px 16px;
+    border-top: 1px solid var(--neutral-stroke-rest);
+    background-color: var(--neutral-layer-1);
+}
+
+.agent-input {
+    flex: 1;
+    resize: none;
+}
+
+.agent-send-btn {
+    flex-shrink: 0;
+    align-self: flex-end;
+}
+
+/* ── Clear confirm inline buttons ── */
+.agent-clear-confirm {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--neutral-foreground-rest);
+}

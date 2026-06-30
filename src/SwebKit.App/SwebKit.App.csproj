@@ -92,6 +92,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\SwebKit.Agents\SwebKit.Agents.csproj" />
         <ProjectReference Include="..\SwebKit.Core\SwebKit.Core.csproj" />
         <ProjectReference Include="..\SwebKit.Azure\SwebKit.Azure.csproj" />
         <ProjectReference Include="..\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />

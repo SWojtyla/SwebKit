@@ -14,6 +14,8 @@ using SwebKit.DevOps;
 using SwebKit.DevOps.IncidentTimeline;
 using SwebKit.Kubernetes.AksClient;
 using SwebKit.Kubernetes.IncidentTimeline;
+using SwebKit.Agents;
+using SwebKit.Agents.Tools;
 using SwebKit.Observability;
 using SwebKit.Observability.IncidentTimeline;
 using SwebKit.Redis;
@@ -215,6 +217,39 @@ public static class MauiProgram
         builder.Services.AddSingleton<IServiceBusWarmupCache, ServiceBusWarmupCache>();
         builder.Services.AddSingleton<IConnectionWarmupService, ConnectionWarmupService>();
         builder.Services.AddSingleton<RedisOpsInsightsAggregator>();
+
+        // AI Agent - Phase 1
+        builder.Services.AddSingleton<MistralConfig>(sp =>
+        {
+            var store = sp.GetRequiredService<ICredentialStore>();
+            return new MistralConfig
+            {
+                ApiKey = store.Get("SwebKit-Agent:Mistral-ApiKey") ?? string.Empty
+            };
+        });
+        builder.Services.AddSingleton<IMistralClient, MistralHttpClient>();
+
+        // Agent infrastructure
+        builder.Services.AddSingleton<IAgentContextBuilder, AgentContextBuilder>();
+
+        // Tools — registered as IAgentTool so AgentToolRegistry receives them all via IEnumerable<IAgentTool>
+        // Kubernetes Tools
+        builder.Services.AddSingleton<IAgentTool, GetPodStatusTool>();
+        builder.Services.AddSingleton<IAgentTool, ListNamespacesTool>();
+        builder.Services.AddSingleton<IAgentTool, ListPodsTool>();
+        builder.Services.AddSingleton<IAgentTool, GetPodLogsTool>();
+        builder.Services.AddSingleton<IAgentTool, GetPodEventsTool>();
+
+        // Service Bus Tools
+        builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
+        builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
+
+        // Observability Tools
+        builder.Services.AddSingleton<IAgentTool, QueryLogsTool>();
+        builder.Services.AddSingleton<IAgentTool, GetMetricsTool>();
+
+        builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
+        builder.Services.AddSingleton<IAgentChatService, AgentChatService>();
 
         var app = builder.Build();
         PerformanceBaselineRecorder.Record(nameof(MauiProgram), "Perf startup CreateMauiApp completed");

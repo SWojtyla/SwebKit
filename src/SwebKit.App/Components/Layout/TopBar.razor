@@ -5,6 +5,7 @@
 @inject INotificationService Notifications
 @inject IConnectionStateService ConnectionStateService
 @inject OperatorWorkspaceService Workspaces
+@inject UserSettingsRepository UserSettings
 @implements IDisposable
 
 <div class="top-bar">
@@ -58,7 +59,7 @@
                         {
                             <div class="workspace-hub__resource-card">
                                 <div class="workspace-hub__resource-title">@(CurrentSnapshot.Resource.DisplayPath ??
-                                                                                                                                                                            CurrentSnapshot.Resource.DisplayName)</div>
+                                                                                                                                                                                                                CurrentSnapshot.Resource.DisplayName)</div>
                                     <div class="workspace-hub__resource-summary">@BuildResourceSummary(CurrentSnapshot)</div>
                                     <div class="workspace-hub__save-row">
                                         <input class="workspace-hub__input" placeholder="Name favorite as" value="@_favoriteName"
@@ -117,7 +118,7 @@
                                 {
                                     <button class="workspace-hub__list-item" @onclick="() => OpenRecentAsync(recent)">
                                         <span class="workspace-hub__list-title">@(recent.Snapshot.Resource.DisplayPath ??
-                                                                                                                                                                                                                recent.Snapshot.Resource.DisplayName)</span>
+                                                                                                                                                                                                                                                            recent.Snapshot.Resource.DisplayName)</span>
                                             <span class="workspace-hub__list-summary">@recent.AccessedAt.ToLocalTime().ToString("g")</span>
                                         </button>
                                     }
@@ -169,13 +170,29 @@
             <button class="cmd-palette-btn" @onclick="OpenCommandPalette" aria-label="Open command palette">
                 &gt;_ Command Palette <kbd>Ctrl+P</kbd>
             </button>
+
+            @if (UserSettings.Settings?.Agent?.IsEnabled == true)
+            {
+                <button class="top-bar-icon-btn @(IsAgentPanelOpen ? "top-bar-icon-btn--active" : "")" @onclick="OnAgentPanelToggle"
+                        title="@(IsAgentPanelOpen ? "Close AI Agent panel" : "Open AI Agent panel")"
+                        aria-label="@(IsAgentPanelOpen ? "Close AI Agent panel" : "Open AI Agent panel")"
+                        aria-pressed="@IsAgentPanelOpen">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Bot())" Width="16px" />
+                </button>
+            }
         </div>
 
 @code {
     [Parameter] public EventCallback OnNavToggle { get; set; }
+    [Parameter] public bool IsAgentPanelOpen { get; set; }
+    [Parameter] public EventCallback OnAgentPanelToggle { get; set; }
     [Parameter]
     public ShellRouteContext CurrentContext { get; set; } =
 ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
+
+
+
+
 
     private bool _isHistoryOpen;
     private bool _isWorkspaceHubOpen;
@@ -234,6 +251,7 @@ ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
         AppState.DemoModeChanged += OnDemoModeChanged;
         ConnectionStateService.StatesChanged += OnConnectionStateChanged;
         Workspaces.Changed += OnWorkspaceChanged;
+        UserSettings.Changed += OnUserSettingsChanged;
     }
 
     private void OnNotificationsChanged()
@@ -265,6 +283,8 @@ ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
 
         RequestCoalescedRender();
     }
+
+    private void OnUserSettingsChanged() => RequestCoalescedRender();
 
     private void ToggleHistory()
     {
@@ -459,6 +479,7 @@ ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
         AppState.DemoModeChanged -= OnDemoModeChanged;
         ConnectionStateService.StatesChanged -= OnConnectionStateChanged;
         Workspaces.Changed -= OnWorkspaceChanged;
+        UserSettings.Changed -= OnUserSettingsChanged;
         _logoEasterEggTimer?.Dispose();
     }
 }
