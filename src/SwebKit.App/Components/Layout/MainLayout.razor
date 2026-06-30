@@ -18,9 +18,10 @@
     <CascadingValue Value="this" Name="Layout">
         <a href="#main-content" class="skip-link">Skip to main content</a>
 
-        <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed") @(AppState.Config.IsProduction ? "app-shell--production" : string.Empty)"
+        <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed") @(AppState.Config.IsProduction ? "app-shell--production" : string.Empty) @(_isAgentPanelOpen ? "app-shell--agent-open" : "")"
              data-theme="@_currentTheme">
-            <TopBar OnNavToggle="ToggleNavAsync" CurrentContext="@CurrentShellContext" />
+            <TopBar OnNavToggle="ToggleNavAsync" CurrentContext="@CurrentShellContext"
+                    IsAgentPanelOpen="@_isAgentPanelOpen" OnAgentPanelToggle="ToggleAgentPanel" />
             @if (AppState.HasProfileLoadFailure)
             {
                 <div class="demo-banner">
@@ -54,6 +55,8 @@
                     <LoadingSpinner Message="Starting SwebKit\u2026" />
                 }
             </main>
+            <AgentChatPanel IsOpen="@_isAgentPanelOpen" OnClose="ToggleAgentPanel" />
+
             <StatusBar CurrentRoute="@CurrentRoute" />
 
             @* Overlays must live inside the themed container so CSS variables resolve correctly *@
@@ -77,6 +80,7 @@
     private bool IsNavExpanded = true;
     private bool IsCommandPaletteOpen;
     private bool _isShortcutsPanelOpen;
+    private bool _isAgentPanelOpen;
     // Tracks whether the nav was expanded before the API client auto-collapsed it, so it can be restored on exit.
     private bool _navExpandedBeforeApiClient = true;
     // True when the user explicitly toggled the nav (so auto-restore is suppressed if they collapsed it themselves).
@@ -245,6 +249,12 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
     {
         // Invalidate warm clients on re-init — credentials may have changed
         ConnectionWarmup.InvalidateCaches();
+        RequestCoalescedRender();
+    }
+
+    private void ToggleAgentPanel()
+    {
+        _isAgentPanelOpen = !_isAgentPanelOpen;
         RequestCoalescedRender();
     }
 

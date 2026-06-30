@@ -7,18 +7,30 @@
    App shell layout
    ═══════════════════════════════════════════════════════════ */
 
+/* Registered custom property enables CSS transitions on --agent-panel-width */
+@property --agent-panel-width {
+    syntax: '<length>';
+    inherits: false;
+    initial-value: 0px;
+}
+
 .app-shell {
     --nav-current-width: var(--nav-width);
+    --agent-panel-width: 0px;
     display: grid;
     grid-template-rows: var(--top-bar-height) auto 1fr var(--status-bar-height);
-    grid-template-columns: var(--nav-current-width) 1fr;
+    grid-template-columns: var(--nav-current-width) 1fr var(--agent-panel-width);
     height: 100vh;
     overflow: hidden;
-    transition: --nav-current-width 0.2s ease;
+    transition: --nav-current-width 0.2s ease, --agent-panel-width 0.2s ease;
 }
 
 .app-shell.nav-collapsed {
     --nav-current-width: var(--nav-collapsed-width);
+}
+
+.app-shell--agent-open {
+    --agent-panel-width: 340px;
 }
 
 .top-bar {
@@ -419,6 +431,44 @@ kbd {
     overflow-y: auto;
     overflow-x: hidden;
     contain: layout;
+}
+
+/* ── Agent panel (right docked, 3rd grid column) ── */
+.agent-panel {
+    grid-row: 3;
+    grid-column: 3;
+    overflow: hidden;
+    position: relative;
+    /* Visibility controlled by grid column width (--agent-panel-width: 0 = invisible) */
+}
+
+.agent-panel--closed {
+    pointer-events: none;
+    visibility: hidden;
+}
+
+.agent-panel-resizer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    cursor: col-resize;
+    z-index: 10;
+    transition: background 0.15s;
+    border-left: 1px solid var(--color-border);
+}
+
+.agent-panel-resizer:hover,
+.agent-panel-resizer.active {
+    background: var(--color-accent, #0078d4);
+    border-left-color: var(--color-accent, #0078d4);
+}
+
+.top-bar-icon-btn--active {
+    background: color-mix(in srgb, var(--color-accent, #0078d4) 15%, var(--color-shell-control-bg, rgba(127,127,127,0.15)));
+    border-color: color-mix(in srgb, var(--color-accent, #0078d4) 40%, var(--color-shell-control-border, rgba(127,127,127,0.3)));
+    color: var(--color-accent, #0078d4);
 }
 
 .main-content {

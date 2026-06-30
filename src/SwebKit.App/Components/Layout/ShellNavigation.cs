@@ -112,6 +112,14 @@ public static class ShellNavigation
         "Tools",
         new Icons.Regular.Size24.Globe());
 
+    public static readonly ShellNavEntry AgentChat = new(
+        "agent",
+        "/agent",
+        "AI Agent",
+        "Ask questions about your cluster, queues, pipelines, and observability data.",
+        "Tools",
+        new Icons.Regular.Size24.Bot());
+
     public static readonly ShellNavEntry Settings = new(
         "settings",
         "/settings",

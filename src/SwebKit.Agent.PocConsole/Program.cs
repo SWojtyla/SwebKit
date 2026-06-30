@@ -61,6 +61,10 @@ try
 
     var tools = BuildToolDefinitions(podStatusTool, listNsTool);
 
+    // Conversation history: user/assistant/tool messages accumulate here.
+    // The system prompt is never stored in history; ChatAsync prepends it each time.
+    var history = new List<object>();
+
     Console.WriteLine($"Tools available: {string.Join(", ", tools.Select(t => t.Name))}");
     Console.WriteLine();
 
@@ -90,6 +94,15 @@ try
             userInput.Equals("quit", StringComparison.OrdinalIgnoreCase))
             break;
 
+        if (userInput.Equals("clear", StringComparison.OrdinalIgnoreCase))
+        {
+            history.Clear();
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine("  Conversation history cleared.");
+            Console.ResetColor();
+            continue;
+        }
+
         if (userInput.Equals("help", StringComparison.OrdinalIgnoreCase))
         {
             PrintHelp();
@@ -108,6 +121,7 @@ try
                 systemPrompt,
                 userInput,
                 tools,
+                history,
                 toolExecutor,
                 cts.Token);
 

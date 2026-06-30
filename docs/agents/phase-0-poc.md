@@ -482,5 +482,57 @@ builder.Services.AddSingleton<GetPodStatusTool>();
 
 ---
 
+## ✅ Phase 0 Outcome — 2026-06-30
+
+**Decision: GO** — all minimum success criteria met. Proceeding to Phase 1.
+
+### What Was Built
+
+- `SwebKit.Agents` class library with `IMistralClient` / `MistralHttpClient` and tool infrastructure (`IAgentTool`)
+- `SwebKit.Agent.PocConsole` standalone console entry point with a single-turn conversation loop
+- Two tools: `get_pod_status` and `list_namespaces` (the latter added beyond the original plan — trivially valuable)
+- API key loaded interactively at startup (fallback when `MISTRAL_API_KEY` env var is absent)
+
+### Validation Results
+
+| Assumption                              | Result     | Evidence                                                                                                     |
+| --------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
+| Mistral understands Kubernetes concepts | ✅ PASS    | Correctly grouped 200+ namespaces by system / prd / stg; matched `briocomp` without explicit filtering       |
+| Mistral can analyse structured data     | ✅ PASS    | Serialised `V1NamespaceList` consumed correctly                                                              |
+| Response quality is sufficient          | ✅ PASS    | Responses were accurate, well-structured markdown                                                            |
+| API latency is acceptable               | ⚠️ PARTIAL | First query: ~38 s (includes cold path + interactive API key prompt). Subsequent: ~3.3 s                     |
+| Tool calling works end-to-end           | ✅ PASS    | `list_namespaces` invoked autonomously twice in sequence with no guidance                                    |
+| No hallucination on unknown data        | ✅ PASS    | When asked which AKS context is active, model honestly reported it had no tool for that rather than guessing |
+
+### Latency Breakdown
+
+The 38 s first-query time was dominated by:
+
+1. Interactive `Console.ReadLine()` waiting for the API key (user-dependent delay)
+2. Cold-start TLS + DNS resolution for `api.mistral.ai`
+3. Mistral inference time (~3–4 s net)
+
+Subsequent queries ran at **~3.3 s**, which is within the "nice to have" (<5 s) threshold defined in the success criteria.
+
+### Lessons Learned
+
+1. **`list_namespaces` is as valuable as `get_pod_status`** — the model reached for it autonomously without any prompt engineering. Add more lightweight listing tools early in Phase 1.
+2. **The agent has no awareness of the active kubeconfig context.** When asked "which AKS context are you in?" it correctly said it didn't know. A `get_current_context` tool is a Phase 1 priority.
+3. **API key handling must be integrated with `ICredentialStore` from day one in Phase 1.** The interactive readline fallback works for a PoC but is not acceptable in the MAUI UI.
+4. **First-response latency needs a loading indicator or streaming.** 38 s of silence is unacceptable in a desktop UI. Implement streaming (`stream: true`) or at minimum an animated spinner tied to tool-call events.
+5. **Tool calling is reliable without prompt engineering.** Mistral selected the right tool and passed the correct arguments on its own — no special system-prompt tricks were needed.
+6. **Serialising raw Kubernetes SDK objects works, but is verbose.** Consider projecting a subset of fields before sending to the model to reduce token usage and latency.
+7. **The console prototype is throwaway.** Do not migrate any code from `SwebKit.Agent.PocConsole` into the MAUI app — rebuild cleanly in Phase 1 using DI and the `MauiProgram` registration pattern described in the implementation guidance above.
+
+### Phase 1 Priorities Derived from Phase 0
+
+- Add `get_current_context` tool
+- Implement streaming responses in `MistralHttpClient`
+- Integrate API key with `ICredentialStore` (key: `SwebKit-Agent:Mistral-ApiKey`)
+- Add `list_pods` tool (natural next ask after listing namespaces)
+- Project Kubernetes object fields before serialisation to reduce payload size
+
+---
+
 _Document created: 2026-06-29_
-_Last updated: 2026-06-29_
+_Last updated: 2026-06-30_

@@ -218,7 +218,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IConnectionWarmupService, ConnectionWarmupService>();
         builder.Services.AddSingleton<RedisOpsInsightsAggregator>();
 
-        // AI Agent - Phase 0 POC
+        // AI Agent - Phase 1
         builder.Services.AddSingleton<MistralConfig>(sp =>
         {
             var store = sp.GetRequiredService<ICredentialStore>();
@@ -228,7 +228,16 @@ public static class MauiProgram
             };
         });
         builder.Services.AddSingleton<IMistralClient, MistralHttpClient>();
-        builder.Services.AddSingleton<GetPodStatusTool>();
+
+        // Tools — registered as IAgentTool so AgentToolRegistry receives them all via IEnumerable<IAgentTool>
+        builder.Services.AddSingleton<IAgentTool, GetPodStatusTool>();
+        builder.Services.AddSingleton<IAgentTool, ListNamespacesTool>();
+        builder.Services.AddSingleton<IAgentTool, ListPodsTool>();
+        builder.Services.AddSingleton<IAgentTool, GetPodLogsTool>();
+        builder.Services.AddSingleton<IAgentTool, GetPodEventsTool>();
+
+        builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
+        builder.Services.AddSingleton<IAgentChatService, AgentChatService>();
 
         var app = builder.Build();
         PerformanceBaselineRecorder.Record(nameof(MauiProgram), "Perf startup CreateMauiApp completed");

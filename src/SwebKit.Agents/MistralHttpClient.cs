@@ -25,6 +25,7 @@ public sealed class MistralHttpClient : IMistralClient
         string systemPrompt,
         string userMessage,
         IReadOnlyList<ToolDefinition> tools,
+        List<object>? history,
         Func<string, JsonElement, CancellationToken, Task<string>>? toolExecutor,
         CancellationToken ct)
     {
@@ -47,11 +48,18 @@ public sealed class MistralHttpClient : IMistralClient
             }
         }).ToArray();
 
-        var messages = new List<object>
+        // Seed from history so prior turns are included in this request.
+        // History contains only user/assistant/tool messages — never the system prompt.
+        var messages = new List<object>(capacity: (history?.Count ?? 0) + 2)
         {
-            new { role = "system", content = systemPrompt },
-            new { role = "user",   content = userMessage }
+            new { role = "system", content = systemPrompt }
         };
+        if (history is not null)
+            messages.AddRange(history);
+
+        var userEntry = new { role = "user", content = userMessage };
+        messages.Add(userEntry);
+        history?.Add(userEntry);
 
         // Agentic loop: Mistral may ask us to call tools, and we send results back
         // until it produces a final text response (or we hit the round cap).
@@ -93,8 +101,8 @@ public sealed class MistralHttpClient : IMistralClient
                         pendingCalls.Add((callId, name, argsStr));
                     }
 
-                    // Preserve assistant message (with tool_calls) in history
-                    messages.Add(new
+                    // Preserve assistant message (with tool_calls) in both local messages and history
+                    var assistantEntry = new
                     {
                         role = "assistant",
                         content = textContent ?? string.Empty,
@@ -104,13 +112,19 @@ public sealed class MistralHttpClient : IMistralClient
                             type = "function",
                             function = new { name = c.ToolName, arguments = c.ArgsJson }
                         }).ToArray()
-                    });
+                    };
+                    messages.Add(assistantEntry);
+                    history?.Add(assistantEntry);
                 }
             }
 
-            // Normal final response — return text
+            // Normal final response — record in history and return
             if (finishReason != "tool_calls" || toolExecutor is null || pendingCalls.Count == 0)
-                return textContent ?? string.Empty;
+            {
+                var finalText = textContent ?? string.Empty;
+                history?.Add(new { role = "assistant", content = finalText });
+                return finalText;
+            }
 
             // Execute tools and feed results back to Mistral
             foreach (var (callId, toolName, argsJson) in pendingCalls)
@@ -131,7 +145,9 @@ public sealed class MistralHttpClient : IMistralClient
                     toolResult = JsonSerializer.Serialize(new { error = ex.Message });
                 }
 
-                messages.Add(new { role = "tool", tool_call_id = callId, content = toolResult });
+                var toolEntry = new { role = "tool", tool_call_id = callId, content = toolResult };
+                messages.Add(toolEntry);
+                history?.Add(toolEntry);
             }
         }
 

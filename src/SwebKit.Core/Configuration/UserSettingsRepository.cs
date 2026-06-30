@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
 namespace SwebKit.Core.Configuration;
@@ -54,6 +55,7 @@ public sealed class UserSettingsRepository
     private static UserSettings NormalizeSettings(UserSettings settings)
     {
         settings.Theme ??= string.Empty;
+        settings.Agent ??= new AgentConfig();
         return settings;
     }
 }
@@ -71,6 +73,9 @@ public sealed class UserSettings
     /// Should only be disabled in development environments. Exposed with a visible warning badge in the UI.
     /// </summary>
     public bool VerifyApiClientSsl { get; set; } = true;
+
+    /// <summary>AI agent feature configuration (user-scoped).</summary>
+    public AgentConfig Agent { get; set; } = new();
 }
 
 public sealed record PinnedPortForwardEntry(

@@ -20,6 +20,17 @@ public sealed class GetPodStatusTool : IAgentTool
 
     public string Description => "Returns the current status of a Kubernetes pod including phase, restart count, container states, and recent events.";
 
+    public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
+        {
+          "type": "object",
+          "properties": {
+            "pod_name": { "type": "string", "description": "Name of the pod" },
+            "namespace": { "type": "string", "description": "Kubernetes namespace (default: \"default\")" }
+          },
+          "required": ["pod_name"]
+        }
+        """);
+
     public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
     {
         var podName = arguments.GetProperty("pod_name").GetString()!;

@@ -1,0 +1,239 @@
+@using SwebKit.Agents
+@inject IAgentChatService Agent
+@inject UserSettingsRepository UserSettings
+@inject IJSRuntime JS
+@implements IDisposable
+
+<aside class="agent-panel @(IsOpen ? "" : "agent-panel--closed")" aria-label="AI Agent chat panel"
+       aria-hidden="@(!IsOpen)">
+
+    <div class="agent-panel-resizer" id="agent-panel-resizer" role="separator" aria-orientation="vertical"
+         aria-label="Resize AI Agent panel"></div>
+
+    <div class="agent-panel-inner">
+
+        <header class="agent-panel-header">
+            <span class="agent-panel-title">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Bot())" Width="15px" />
+                AI Agent
+            </span>
+            <span class="agent-panel-pills">
+                <span class="shell-pill @(_historyWarning ? "shell-pill--warning" : "shell-pill--muted")">
+                    @Agent.HistoryMessageCount / @UserSettings.Settings.Agent.MaxHistoryMessages
+                </span>
+                @if (_historyWarning)
+                {
+                    <span class="shell-pill shell-pill--warning">Almost full</span>
+                }
+            </span>
+            <div class="agent-panel-header-actions">
+                @if (_showClearConfirm)
+                {
+                    <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="ConfirmClearHistory"
+                            title="Confirm clear history" style="font-size: 11px;">
+                        Yes, clear
+                    </button>
+                    <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="@(() => _showClearConfirm = false)"
+                            title="Cancel">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
+                    </button>
+                }
+                else
+                {
+                    <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="@(() => _showClearConfirm = true)"
+                            disabled="@(Agent.HistoryMessageCount == 0)" title="Clear conversation history">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="14px" />
+                    </button>
+                }
+                <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="OnClose" title="Close AI Agent panel"
+                        aria-label="Close AI Agent panel">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.ChevronDoubleRight())" Width="14px" />
+                </button>
+            </div>
+        </header>
+
+        <div class="agent-panel-thread" id="agent-panel-thread" tabindex="-1">
+            @if (_messages.Count == 0 && !_isLoading)
+            {
+                <div class="agent-empty-state">
+                    <FluentIcon Value="@(new Icons.Regular.Size48.Bot())" />
+                    <p>Ask me anything about your workspace.</p>
+                    <p class="agent-empty-hint">Try: "List pods in default" or "Any warnings in kube-system?"</p>
+                </div>
+            }
+
+            @foreach (var msg in _messages)
+            {
+                @if (msg.IsUser)
+                {
+                    <div class="agent-bubble agent-bubble--user">
+                        <span class="agent-bubble__text">@msg.Content</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="agent-bubble agent-bubble--assistant">
+                        @if (msg.ToolsUsed.Count > 0)
+                        {
+                            <div class="agent-tools-used">
+                                @foreach (var tool in msg.ToolsUsed)
+                                {
+                                    <span class="agent-tool-badge">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Wrench())" Width="10px" />
+                                        @tool
+                                    </span>
+                                }
+                                <span class="agent-elapsed">@msg.Elapsed.TotalSeconds.ToString("F1")s</span>
+                            </div>
+                        }
+                        <pre class="agent-bubble__text">@msg.Content</pre>
+                    </div>
+                }
+            }
+
+            @if (_isLoading)
+            {
+                <div class="agent-bubble agent-bubble--assistant agent-bubble--loading">
+                    <FluentProgressRing Width="18px" />
+                    <span>@(_currentToolName is not null ? $"Running {_currentToolName}\u2026" : "Thinking\u2026")</span>
+                </div>
+            }
+        </div>
+
+        <div class="agent-panel-input-bar">
+            <FluentTextArea class="agent-input" @bind-Value="_inputText" Placeholder="Ask a question…"
+                            Disabled="@_isLoading" Rows="2" @onkeydown="HandleKeyDown" />
+            <AppButton CssClass="agent-send-btn" Disabled="@(string.IsNullOrWhiteSpace(_inputText) || _isLoading)"
+                       OnClick="SendMessage" Variant="Primary">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Send())" Width="16px" />
+            </AppButton>
+        </div>
+
+    </div>
+
+</aside>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private sealed record ChatMessage(
+        bool IsUser,
+        string Content,
+        IReadOnlyList<string> ToolsUsed,
+        TimeSpan Elapsed);
+
+    private readonly List<ChatMessage> _messages = [];
+    private string _inputText = string.Empty;
+    private bool _isLoading;
+    private bool _showClearConfirm;
+    private string? _currentToolName;
+    private CancellationTokenSource? _cts;
+
+    private bool _prevIsOpen;
+    private bool _resizerNeedsInit;
+
+    private bool _historyWarning => Agent.IsNearHistoryLimit;
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && !_prevIsOpen)
+            _resizerNeedsInit = true;
+        else if (!IsOpen && _prevIsOpen)
+            _ = DisposeResizerAsync();
+
+        _prevIsOpen = IsOpen;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_resizerNeedsInit)
+        {
+            _resizerNeedsInit = false;
+            await InitResizerAsync();
+        }
+    }
+
+    private async Task InitResizerAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "SwebKitAgentPanel.initResizer",
+                "agent-panel-resizer",
+                ".app-shell",
+                new { minWidth = 260, maxWidth = 800, initialWidth = 340 });
+        }
+        catch (JSException) { /* Non-critical — panel works without resize */ }
+        catch (OperationCanceledException) { /* Component disposing */ }
+    }
+
+    private async Task DisposeResizerAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKitAgentPanel.disposeResizer", ".app-shell");
+        }
+        catch { /* Non-critical */ }
+    }
+
+    private async Task SendMessage()
+    {
+        var text = _inputText.Trim();
+        if (string.IsNullOrWhiteSpace(text) || _isLoading)
+            return;
+
+        _inputText = string.Empty;
+        _messages.Add(new ChatMessage(true, text, [], TimeSpan.Zero));
+        _isLoading = true;
+        _currentToolName = null;
+        StateHasChanged();
+
+        _cts = new CancellationTokenSource();
+        try
+        {
+            var reply = await Agent.SendAsync(text, _cts.Token);
+            _messages.Add(new ChatMessage(false, reply.Text, reply.ToolsUsed, reply.Elapsed));
+        }
+        catch (OperationCanceledException)
+        {
+            _messages.Add(new ChatMessage(false, "(Request cancelled.)", [], TimeSpan.Zero));
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatMessage(false, $"Error: {ex.Message}", [], TimeSpan.Zero));
+        }
+        finally
+        {
+            _isLoading = false;
+            _currentToolName = null;
+            StateHasChanged();
+            await ScrollToBottomAsync();
+        }
+    }
+
+    private void ConfirmClearHistory()
+    {
+        Agent.ClearHistory();
+        _messages.Clear();
+        _showClearConfirm = false;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey && !e.CtrlKey)
+            await SendMessage();
+    }
+
+    private async Task ScrollToBottomAsync()
+    {
+        try { await JS.InvokeVoidAsync("scrollElementToBottom", "agent-panel-thread"); }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}
