@@ -10,11 +10,13 @@ namespace SwebKit.Agents.Tools;
 public sealed class ListPodsTool : IAgentTool
 {
     private readonly IAksClientFactory _aksFactory;
+    private readonly DemoAksClient _demoAksClient;
     private readonly AppStateService _appState;
 
-    public ListPodsTool(IAksClientFactory aksFactory, AppStateService appState)
+    public ListPodsTool(IAksClientFactory aksFactory, DemoAksClient demoAksClient, AppStateService appState)
     {
         _aksFactory = aksFactory;
+        _demoAksClient = demoAksClient;
         _appState = appState;
     }
 
@@ -52,8 +54,8 @@ public sealed class ListPodsTool : IAgentTool
             ? lsEl.GetString()
             : null;
 
-        var config = _appState.Config.AksConfig;
-        var client = _aksFactory.Create(config?.KubeconfigContext, config?.KubeconfigPath);
+        // Use DemoAksClient in demo mode
+        IAksClient client = _appState.UseDemoData ? _demoAksClient : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
 
         var pods = await client.GetPodsAsync(ns, labelSelector, ct);
 

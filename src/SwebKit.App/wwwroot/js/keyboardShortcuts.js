@@ -286,3 +286,22 @@ window.SwebKit.restoreFocus = function (element) {
 window.SwebKit.scrollToBottom = function (element) {
   if (element) element.scrollTop = element.scrollHeight;
 };
+
+/**
+ * Scrolls an element to the bottom only when the user is already near the bottom.
+ * Returns true when near the bottom (auto-scroll was applied or not needed),
+ * false when the user has manually scrolled up beyond the threshold — meaning the
+ * caller should freeze the live window instead of pushing the user back down.
+ * @param {HTMLElement} element
+ * @param {number} threshold - max pixels from bottom that still counts as "near bottom"
+ * @returns {boolean}
+ */
+window.SwebKit.scrollToBottomIfNearBottom = function (element, threshold) {
+  if (!element) return true;
+  const dist = element.scrollHeight - element.scrollTop - element.clientHeight;
+  if (dist <= threshold) {
+    element.scrollTop = element.scrollHeight;
+    return true;
+  }
+  return false;
+};

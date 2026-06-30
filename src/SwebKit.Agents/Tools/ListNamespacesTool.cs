@@ -7,11 +7,13 @@ namespace SwebKit.Agents.Tools;
 public sealed class ListNamespacesTool : IAgentTool
 {
     private readonly IAksClientFactory _aksFactory;
+    private readonly DemoAksClient _demoAksClient;
     private readonly AppStateService _appState;
 
-    public ListNamespacesTool(IAksClientFactory aksFactory, AppStateService appState)
+    public ListNamespacesTool(IAksClientFactory aksFactory, DemoAksClient demoAksClient, AppStateService appState)
     {
         _aksFactory = aksFactory;
+        _demoAksClient = demoAksClient;
         _appState = appState;
     }
 
@@ -23,8 +25,8 @@ public sealed class ListNamespacesTool : IAgentTool
 
     public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
     {
-        var config = _appState.Config.AksConfig;
-        var client = _aksFactory.Create(config?.KubeconfigContext, config?.KubeconfigPath);
+        // Use DemoAksClient in demo mode
+        IAksClient client = _appState.UseDemoData ? _demoAksClient : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
         var namespaces = await client.GetNamespacesAsync(ct);
         return JsonSerializer.Serialize(new { namespaces });
     }

@@ -11,11 +11,13 @@ namespace SwebKit.Agents.Tools;
 public sealed class GetPodEventsTool : IAgentTool
 {
     private readonly IAksClientFactory _aksFactory;
+    private readonly DemoAksClient _demoAksClient;
     private readonly AppStateService _appState;
 
-    public GetPodEventsTool(IAksClientFactory aksFactory, AppStateService appState)
+    public GetPodEventsTool(IAksClientFactory aksFactory, DemoAksClient demoAksClient, AppStateService appState)
     {
         _aksFactory = aksFactory;
+        _demoAksClient = demoAksClient;
         _appState = appState;
     }
 
@@ -52,8 +54,8 @@ public sealed class GetPodEventsTool : IAgentTool
             ? pnEl.GetString()
             : null;
 
-        var config = _appState.Config.AksConfig;
-        var client = _aksFactory.Create(config?.KubeconfigContext, config?.KubeconfigPath);
+        // Use DemoAksClient in demo mode
+        IAksClient client = _appState.UseDemoData ? _demoAksClient : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
 
         var events = await client.GetEventsAsync(ns, podName, ct);
 

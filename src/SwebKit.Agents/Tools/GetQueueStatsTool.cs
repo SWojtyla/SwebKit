@@ -45,6 +45,13 @@ public sealed class GetQueueStatsTool : IAgentTool
 
     public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
     {
+        // Use DemoServiceBusClient in demo mode
+        if (_appState.UseDemoData)
+        {
+            var demoClient = DemoServiceBusClient.OrdersDev();
+            return await GetStatsFromDemoClientAsync(arguments, demoClient, ct);
+        }
+
         // Use the first configured Service Bus namespace
         var namespaces = _appState.ServiceBusNamespaces;
         if (namespaces.Count == 0)
@@ -112,7 +119,7 @@ public sealed class GetQueueStatsTool : IAgentTool
                 {
                     return JsonSerializer.Serialize(new
                     {
-                        error = $"Queue '{queueName}' not found",
+                        error = "Queue not found: " + queueName,
                         queue_name = queueName
                     });
                 }
@@ -143,6 +150,79 @@ public sealed class GetQueueStatsTool : IAgentTool
             {
                 await asyncDisp.DisposeAsync();
             }
+        }
+    }
+
+    private async Task<string> GetStatsFromDemoClientAsync(JsonElement arguments, IServiceBusClient demoClient, CancellationToken ct)
+    {
+        var queueName = arguments.TryGetProperty("queue_name", out var qnEl)
+            ? qnEl.GetString()
+            : null;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(queueName))
+            {
+                // Get stats for all queues
+                var queues = await demoClient.ListQueuesAsync(ct);
+                var queueStats = new List<object>();
+
+                foreach (var queue in queues)
+                {
+                    var stats = await demoClient.GetEntityStatsAsync(queue.EntityPath, ct);
+                    queueStats.Add(new
+                    {
+                        queue_name = queue.Name,
+                        entity_path = queue.EntityPath,
+                        active_message_count = stats?.ActiveMessageCount ?? 0,
+                        dead_letter_message_count = stats?.DeadLetterMessageCount ?? 0,
+                        scheduled_message_count = stats?.ScheduledMessageCount ?? 0,
+                        transfer_count = stats?.TransferCount ?? 0,
+                        is_disabled = queue.IsDisabled,
+                        updated_at = stats?.UpdatedAt?.ToString("o")
+                    });
+                }
+
+                return JsonSerializer.Serialize(new
+                {
+                    namespace_name = "demo-servicebus",
+                    namespace_alias = "demo",
+                    queue_count = queueStats.Count,
+                    queues = queueStats
+                });
+            }
+            else
+            {
+                // Get stats for specific queue
+                var entityPath = "queues/" + queueName;
+                var stats = await demoClient.GetEntityStatsAsync(entityPath, ct);
+
+                if (stats == null)
+                {
+                    return JsonSerializer.Serialize(new
+                    {
+                        error = "Queue not found",
+                        queue_name = queueName
+                    });
+                }
+
+                return JsonSerializer.Serialize(new
+                {
+                    namespace_name = "demo-servicebus",
+                    namespace_alias = "demo",
+                    queue_name = queueName,
+                    entity_path = entityPath,
+                    active_message_count = stats.ActiveMessageCount,
+                    dead_letter_message_count = stats.DeadLetterMessageCount,
+                    scheduled_message_count = stats.ScheduledMessageCount,
+                    transfer_count = stats.TransferCount,
+                    updated_at = stats.UpdatedAt?.ToString("o")
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { error = ex.Message, queue_name = queueName });
         }
     }
 }

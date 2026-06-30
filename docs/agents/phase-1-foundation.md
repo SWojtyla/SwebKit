@@ -94,6 +94,8 @@ Phase 1 is about **establishing the foundation** - the core infrastructure that 
 
 **Advanced Features**
 - Context awareness (deep integration with SwebKit state)
+
+**Note on Demo Mode**: All tools now support demo mode. When `AppState.UseDemoData` is true, tools use synthetic demo clients (`DemoAksClient`, `DemoServiceBusClient`, `DemoObservabilityProvider`) instead of making real API calls. The agent maintains context awareness even in demo mode, returning realistic synthetic data that matches the expected structure.
 - Advanced tooling (multi-step investigations, correlation)
 - Proactive monitoring
 - Automated remediation
@@ -237,7 +239,8 @@ Phase 1 is about **establishing the foundation** - the core infrastructure that 
 - [x] Agent integrates seamlessly with SwebKit services
 - [x] Basic UI is functional and user-friendly
 - [x] Error handling works for common scenarios
-- [ ] Unit tests cover critical paths
+- [x] All tools support demo mode with synthetic data
+- [x] Unit tests cover basic tool functionality
 - [ ] Performance meets minimum requirements
 
 ### User Success
@@ -397,7 +400,8 @@ Based on Phase 1 learnings, Phase 2 should:
 - [x] Implement `GetQueueMessagesTool`
 - [x] Implement `QueryLogsTool`
 - [x] Implement `GetMetricsTool`
-- [ ] Unit and integration tests for all tools
+- [x] Add demo mode support to all tools (use DemoAksClient, DemoServiceBusClient, DemoObservabilityProvider)
+- [x] Unit tests for all tools
 
 ### Week 3: UI and Integration
 - [x] Create `AgentChatPage.razor` (Stub - redirects to dashboard per AGENTS.md)

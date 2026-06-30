@@ -8,11 +8,13 @@ namespace SwebKit.Agents.Tools;
 public sealed class GetPodStatusTool : IAgentTool
 {
     private readonly IAksClientFactory _aksFactory;
+    private readonly DemoAksClient _demoAksClient;
     private readonly AppStateService _appState;
 
-    public GetPodStatusTool(IAksClientFactory aksFactory, AppStateService appState)
+    public GetPodStatusTool(IAksClientFactory aksFactory, DemoAksClient demoAksClient, AppStateService appState)
     {
         _aksFactory = aksFactory;
+        _demoAksClient = demoAksClient;
         _appState = appState;
     }
 
@@ -40,10 +42,8 @@ public sealed class GetPodStatusTool : IAgentTool
             ? nsEl.GetString() ?? "default"
             : "default";
 
-        // Fall back to the default kubeconfig context when AKS config is not loaded
-        // (e.g. when running outside the full app, such as the PoC console).
-        var config = _appState.Config.AksConfig;
-        var client = _aksFactory.Create(config?.KubeconfigContext, config?.KubeconfigPath);
+        // Use DemoAksClient in demo mode
+        IAksClient client = _appState.UseDemoData ? _demoAksClient : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
         var pods = await client.GetPodsAsync(ns, null, ct);
         var targetPod = pods.FirstOrDefault(p => p.Name.Equals(podName, StringComparison.OrdinalIgnoreCase));
 

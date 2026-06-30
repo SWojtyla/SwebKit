@@ -16,6 +16,7 @@
     <PackageReference Include="coverlet.collector" Version="3.2.0">
       <IncludeBuildOutput>false</IncludeBuildOutput>
     </PackageReference>
+    <PackageReference Include="Moq" Version="4.20.71" />
   </ItemGroup>
 
   <ItemGroup>

@@ -12,11 +12,13 @@ namespace SwebKit.Agents.Tools;
 public sealed class GetPodLogsTool : IAgentTool
 {
     private readonly IAksClientFactory _aksFactory;
+    private readonly DemoAksClient _demoAksClient;
     private readonly AppStateService _appState;
 
-    public GetPodLogsTool(IAksClientFactory aksFactory, AppStateService appState)
+    public GetPodLogsTool(IAksClientFactory aksFactory, DemoAksClient demoAksClient, AppStateService appState)
     {
         _aksFactory = aksFactory;
+        _demoAksClient = demoAksClient;
         _appState = appState;
     }
 
@@ -55,8 +57,8 @@ public sealed class GetPodLogsTool : IAgentTool
             ? Math.Clamp(tl, 1, 500)
             : 100;
 
-        var config = _appState.Config.AksConfig;
-        var client = _aksFactory.Create(config?.KubeconfigContext, config?.KubeconfigPath);
+        // Use DemoAksClient in demo mode
+        IAksClient client = _appState.UseDemoData ? _demoAksClient : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
 
         var opts = new LogStreamOptions
         {

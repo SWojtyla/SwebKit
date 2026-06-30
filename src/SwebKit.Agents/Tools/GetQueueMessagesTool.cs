@@ -54,6 +54,13 @@ public sealed class GetQueueMessagesTool : IAgentTool
 
     public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
     {
+        // Use DemoServiceBusClient in demo mode
+        if (_appState.UseDemoData)
+        {
+            var demoClient = DemoServiceBusClient.OrdersDev();
+            return await GetMessagesFromDemoClientAsync(arguments, demoClient, ct);
+        }
+
         // Use the first configured Service Bus namespace
         var namespaces = _appState.ServiceBusNamespaces;
         if (namespaces.Count == 0)
@@ -139,6 +146,68 @@ public sealed class GetQueueMessagesTool : IAgentTool
             {
                 await asyncDisp.DisposeAsync();
             }
+        }
+    }
+
+    private async Task<string> GetMessagesFromDemoClientAsync(JsonElement arguments, IServiceBusClient demoClient, CancellationToken ct)
+    {
+        var queueName = arguments.GetProperty("queue_name").GetString()!;
+        var count = arguments.TryGetProperty("count", out var countEl) && countEl.TryGetInt32(out var c)
+            ? Math.Clamp(c, 1, 100)
+            : 10;
+
+        var peekDeadLetter = arguments.TryGetProperty("peek_dead_letter", out var dlEl)
+            ? dlEl.GetBoolean()
+            : false;
+
+        try
+        {
+            var entityPath = "queues/" + queueName;
+
+            IReadOnlyList<SbMessage> messages;
+            if (peekDeadLetter)
+            {
+                messages = await demoClient.PeekDeadLetterAsync(entityPath, count, ct);
+            }
+            else
+            {
+                messages = await demoClient.PeekMessagesAsync(entityPath, count, ct);
+            }
+
+            var messageList = messages.Select(m => new
+            {
+                message_id = m.MessageId,
+                correlation_id = m.CorrelationId,
+                subject = m.Subject,
+                content_type = m.ContentType,
+                body = m.Body,
+                enqueued_at = m.EnqueuedAt.ToString("o"),
+                delivery_count = m.DeliveryCount,
+                dead_letter_reason = m.DeadLetterReason,
+                dead_letter_error = m.DeadLetterErrorDescription,
+                sequence_number = m.SequenceNumber,
+                session_id = m.SessionId,
+                application_properties = m.ApplicationProperties
+            }).ToList();
+
+            return JsonSerializer.Serialize(new
+            {
+                namespace_name = "demo-servicebus",
+                namespace_alias = "demo",
+                queue_name = queueName,
+                peek_dead_letter = peekDeadLetter,
+                messages_returned = messageList.Count,
+                messages = messageList
+            });
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                error = ex.Message,
+                queue_name = queueName,
+                peek_dead_letter = peekDeadLetter
+            });
         }
     }
 }
