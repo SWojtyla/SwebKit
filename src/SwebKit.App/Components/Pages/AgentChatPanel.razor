@@ -101,10 +101,13 @@
         </div>
 
         <div class="agent-panel-input-bar">
-            <FluentTextArea class="agent-input" @bind-Value="_inputText" Placeholder="Ask a question…"
-                            Disabled="@_isLoading" Rows="2" @onkeydown="HandleKeyDown" />
+            <div class="agent-input-wrapper">
+                <textarea class="agent-input" @bind="_inputText" @bind:event="oninput"
+                          placeholder="Ask a question…" disabled="@_isLoading"
+                          rows="2" @onkeydown="HandleKeyDown"></textarea>
+            </div>
             <AppButton CssClass="agent-send-btn" Disabled="@(string.IsNullOrWhiteSpace(_inputText) || _isLoading)"
-                       OnClick="SendMessage" Variant="Primary">
+                       OnClick="SendMessage" Variant="Secondary">
                 <FluentIcon Value="@(new Icons.Regular.Size20.Send())" Width="16px" />
             </AppButton>
         </div>

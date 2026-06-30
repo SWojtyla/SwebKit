@@ -119,8 +119,8 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
       return;
     }
 
-    // ? shortcut — open keyboard shortcuts panel (not when typing)
-    if (key === '?' && !inInput) {
+    // Ctrl+/ shortcut — open keyboard shortcuts panel (not when typing)
+    if (ctrl && key === '/' && !inInput) {
       e.preventDefault();
       dotNetRef.invokeMethodAsync('OnShortcut', 'KeyboardShortcuts');
       return;

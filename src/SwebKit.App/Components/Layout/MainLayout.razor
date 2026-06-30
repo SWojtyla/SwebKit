@@ -257,7 +257,15 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
         RequestCoalescedRender();
     }
 
-    private void OnUserSettingsChanged() => RequestCoalescedRender();
+    private void OnUserSettingsChanged()
+    {
+        // If agent is disabled while panel is open, close the panel
+        if (UserSettings.Settings.Agent?.IsEnabled != true && _isAgentPanelOpen)
+        {
+            _isAgentPanelOpen = false;
+        }
+        RequestCoalescedRender();
+    }
 
     private void ToggleAgentPanel()
     {
@@ -483,7 +491,7 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
             Label = "Keyboard Shortcuts",
             Category = "Actions",
             Icon = "⌨",
-            Shortcut = "?",
+            Shortcut = "Ctrl+/",
             Execute = () =>
             {
                 _isShortcutsPanelOpen = true;
@@ -535,8 +543,13 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
             if (!string.IsNullOrWhiteSpace(UserSettings.Settings.Theme))
             {
                 _currentTheme = NormalizeTheme(UserSettings.Settings.Theme);
-                return;
             }
+            // Initialize agent panel state - open by default if agent is enabled
+            if (UserSettings.Settings.Agent?.IsEnabled == true)
+            {
+                _isAgentPanelOpen = true;
+            }
+            return;
         }
         catch (OperationCanceledException)
         {
