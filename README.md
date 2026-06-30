@@ -9,6 +9,7 @@ and AKS (Kubernetes) debugging helpers in a single developer-centric desktop app
 - **Service Bus** — inspect queue/topic/subscription messages, fix DLQ messages, send/replay test messages
 - **Observability** — query Application Insights logs, explore distributed traces, view metrics dashboards
 - **AKS** — workload overview, live pod log tailing, port-forwarding, pod shell
+- **AI Agent** — intelligent assistant with Mistral AI integration, tool-based architecture for DevOps operations
 - **Project + Environment** — everything scoped to a project (e.g. "OrderPlatform") and environment (Dev / Test / Acc / Prod)
 
 ## Tech Stack
@@ -60,10 +61,12 @@ dotnet test
 src/
   SwebKit.App/          # MAUI Blazor Hybrid app (Razor components)
   SwebKit.Core/         # Domain models, interfaces, configuration
+  SwebKit.Agents/       # AI Agent with Mistral AI integration
   SwebKit.Azure/        # Azure Service Bus + App Insights implementations
   SwebKit.Kubernetes/   # AKS / Kubernetes implementation
   SwebKit.OpenTelemetry/ # OTLP observability provider
 tests/
+  SwebKit.Agents.Tests/
   SwebKit.Core.Tests/
   SwebKit.Azure.Tests/
   SwebKit.Kubernetes.Tests/

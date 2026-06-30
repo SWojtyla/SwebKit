@@ -22,7 +22,8 @@ SwebKit is a .NET MAUI Blazor Hybrid desktop operations tool for Azure-focused d
   - Redis
   - Azure DevOps REST API
   - Azure Monitor Logs API and Azure Resource Manager (Application Insights discovery)
-    - Git CLI for user-configured API Client linked repositories
+  - Git CLI for user-configured API Client linked repositories
+  - Mistral AI API for agent capabilities
 
 ## High-Level Flow
 
@@ -47,6 +48,9 @@ flowchart LR
     DevOps --> Ado[(Azure DevOps REST API)]
     Obs --> Monitor[(Azure Monitor Logs API)]
     Obs --> Arm[(Azure Resource Manager)]
+    App --> Agents[SwebKit.Agents
+AI Agent with Mistral integration]
+    Agents --> Mistral[(Mistral AI API)]
 ```
 
 ## Runtime Components
@@ -94,6 +98,18 @@ Key files:
 
 - `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`
 
+### SwebKit.Agents (`src/SwebKit.Agents`)
+
+Responsibility: AI Agent integration with Mistral AI, tool-based architecture, and conversational interface.
+
+Key files:
+- `src/SwebKit.Agents/IMistralClient.cs` - Core Mistral integration interface
+- `src/SwebKit.Agents/MistralHttpClient.cs` - Mistral API client implementation
+- `src/SwebKit.Agents/AgentChatService.cs` - Main agent orchestrator
+- `src/SwebKit.Agents/AgentToolRegistry.cs` - Tool discovery and execution
+- `src/SwebKit.Agents/IAgentTool.cs` - Tool interface
+- `src/SwebKit.Agents/Tools/` - All agent tools implementation
+
 ### SwebKit.Redis (`src/SwebKit.Redis`)
 
 Responsibility: Redis data and admin operations via StackExchange.Redis.
@@ -127,6 +143,7 @@ Key files:
 
 Feature-level behavior notes live in `docs/architecture/functionalities/`:
 
+- `docs/architecture/functionalities/agent.md` - AI Agent with Mistral AI integration
 - `docs/architecture/functionalities/service-bus.md`
 - `docs/architecture/functionalities/dashboard.md`
 - `docs/architecture/functionalities/aks.md`
@@ -148,6 +165,7 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 | API Client persistence and linked roots | `src/SwebKit.Core/Configuration/CollectionRepository.cs`, `src/SwebKit.Core/Configuration/EnvironmentRepository.cs`, `src/SwebKit.Core/Configuration/LinkedCollectionRootRepository.cs`, `src/SwebKit.Core/Services/LinkedCollectionFileService.cs`                                             | Local JSON state plus optional `.swebkit-api/` folders inside user repositories.                       |
 | Eventing and shared app state           | `src/SwebKit.Core/Services/AppEventBus.cs`, `src/SwebKit.Core/Services/AppStateService.cs`                                                                                                                                                                                                      | Coordinates area navigation, refresh events, and shared app state.                                     |
 | Demo mode routing                       | `src/SwebKit.Core/Services/Demo*Client.cs`, `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`                                                                                                                                                                                            | `UseDemoData` toggles between real and synthetic providers.                                            |
+| AI Agent integration                     | `src/SwebKit.Agents/IMistralClient.cs`, `src/SwebKit.Agents/MistralHttpClient.cs`, `src/SwebKit.Agents/AgentChatService.cs`, `src/SwebKit.Agents/AgentToolRegistry.cs`, `src/SwebKit.Agents/Tools/`                                                                                                | Mistral AI integration with tool-based architecture for DevOps assistance.                         |
 | HTTP resilience                         | `src/SwebKit.App/MauiProgram.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                                                                                                                                                       | Azure DevOps named HttpClient uses standard resilience handler with retries.                           |
 | Command and shortcut system             | `src/SwebKit.App/Services/CommandRegistry.cs`, `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`                                                                                                                                                                                                | Global and area-scoped commands drive keyboard workflows.                                              |
 | Workspace and resource navigation       | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.Core/Domain/WorkspaceModels.cs`, `src/SwebKit.Core/Configuration/ProfileRepository.cs`, `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                                              | Provider-backed search, named favorites, recents, and route-first snapshot restore live here.          |
@@ -164,6 +182,8 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 | Implement a new Service Bus operation                                       | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                                                                                          |
 | Add AKS diagnostics behavior                                                | `src/SwebKit.Core/Abstractions/IAksClient.cs` and `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                                                                                               |
 | Extend Observability querying or discovery                                  | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` and `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                                                                     |
+| Add or modify agent tools                                                   | `src/SwebKit.Agents/IAgentTool.cs` and `src/SwebKit.Agents/Tools/`                                                                                                                                           |
+| Extend agent capabilities or Mistral integration                           | `src/SwebKit.Agents/IMistralClient.cs`, `src/SwebKit.Agents/MistralHttpClient.cs`, and `src/SwebKit.Agents/AgentChatService.cs`                                                                                           |
 | Extend the incident timeline workbench UI                                   | `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor`, `src/SwebKit.App/Components/IncidentTimeline/`, and `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs`                                            |
 | Add Azure DevOps Pipelines/Releases workflow behavior                       | `src/SwebKit.Core/Abstractions/IDevOpsClient.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                                                                 |
 | Extend API Client requests, variables, linked roots, or Git actions         | `src/SwebKit.App/Components/ApiClient/ApiClientPage.razor`, `src/SwebKit.Core/Domain/ApiClientModels.cs`, `src/SwebKit.Core/Services/LinkedCollectionFileService.cs`, and `src/SwebKit.Core/Services/LinkedGitService.cs` |

@@ -11,8 +11,9 @@ This is the canonical starting point for SwebKit documentation.
 5. `docs/features/observability/index.md`
 6. `docs/features/aks/index.md`
 7. `docs/features/polish-advanced/index.md`
-8. `docs/plans/docs-rework-traceability/index.md` (canonical docs governance)
-9. `docs/MIGRATION-NOTES.md` (what was removed and why)
+8. `docs/agents/` (AI Agent implementation and phases)
+9. `docs/plans/docs-rework-traceability/index.md` (canonical docs governance)
+10. `docs/MIGRATION-NOTES.md` (what was removed and why)
 
 ## Documentation Model
 
