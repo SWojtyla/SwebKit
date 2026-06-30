@@ -229,12 +229,24 @@ public static class MauiProgram
         });
         builder.Services.AddSingleton<IMistralClient, MistralHttpClient>();
 
+        // Agent infrastructure
+        builder.Services.AddSingleton<IAgentContextBuilder, AgentContextBuilder>();
+
         // Tools — registered as IAgentTool so AgentToolRegistry receives them all via IEnumerable<IAgentTool>
+        // Kubernetes Tools
         builder.Services.AddSingleton<IAgentTool, GetPodStatusTool>();
         builder.Services.AddSingleton<IAgentTool, ListNamespacesTool>();
         builder.Services.AddSingleton<IAgentTool, ListPodsTool>();
         builder.Services.AddSingleton<IAgentTool, GetPodLogsTool>();
         builder.Services.AddSingleton<IAgentTool, GetPodEventsTool>();
+
+        // Service Bus Tools
+        builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
+        builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
+
+        // Observability Tools
+        builder.Services.AddSingleton<IAgentTool, QueryLogsTool>();
+        builder.Services.AddSingleton<IAgentTool, GetMetricsTool>();
 
         builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
         builder.Services.AddSingleton<IAgentChatService, AgentChatService>();

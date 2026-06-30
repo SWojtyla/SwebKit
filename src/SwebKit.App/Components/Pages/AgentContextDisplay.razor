@@ -1,0 +1,27 @@
+@using SwebKit.Agents
+@inject AppStateService AppState
+@inject IAgentContextBuilder ContextBuilder
+
+<div class="agent-context-display" title="Current workspace context visible to AI Agent">
+    <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px" />
+    <span class="agent-context-text">@_currentContext</span>
+</div>
+
+@code {
+    private string _currentContext = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        UpdateContext();
+    }
+
+    protected override void OnParametersSet()
+    {
+        UpdateContext();
+    }
+
+    private void UpdateContext()
+    {
+        _currentContext = ContextBuilder.BuildContext(AppState);
+    }
+}

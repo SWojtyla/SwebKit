@@ -12,6 +12,12 @@
 - **TEST ALWAYS**: Run `dotnet test` to validate no regressions
 - **SMOKE TEST**: Manually test the affected functionality in the UI
 
+### Always Update Documentation
+- **DOCS FIRST**: Whenever implementing a feature, always update the corresponding documentation (phase docs, architecture docs, etc.)
+- **MARK COMPLETE**: Update checkboxes in documentation to reflect actual implementation status
+- **NOTHING IS DONE**: Until documentation is updated, nothing is considered complete
+- **STANDALONE CHAT PAGE**: AgentChatPage.razor is NOT NEEDED - the AgentChatPanel.razor is sufficient
+
 ### Workflow
 1. Make changes
 2. Run build: `dotnet build`

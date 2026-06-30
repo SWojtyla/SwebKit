@@ -1,0 +1,24 @@
+@using SwebKit.Agents
+@inject IAgentChatService Agent
+
+<div class="agent-tool-execution-status">
+    @if (Agent.HistoryMessageCount > 0)
+    {
+        <span class="agent-status-badge">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Wrench())" Width="12px" />
+            <span>@Agent.HistoryMessageCount messages in history</span>
+        </span>
+    }
+    @if (Agent.IsNearHistoryLimit)
+    {
+        <span class="agent-status-badge agent-status--warning">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
+            <span>History nearing limit</span>
+        </span>
+    }
+</div>
+
+@code {
+    // Component for displaying tool execution status
+    // Integrated into AgentChatPanel for a unified experience
+}

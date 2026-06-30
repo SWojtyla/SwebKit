@@ -34,6 +34,7 @@ public sealed class AgentChatService : IAgentChatService
     private readonly AppStateService _appState;
     private readonly UserSettingsRepository _settings;
     private readonly MistralConfig _mistralConfig;
+    private readonly IAgentContextBuilder _contextBuilder;
     private readonly ConversationSession _session;
 
     public AgentChatService(
@@ -41,13 +42,15 @@ public sealed class AgentChatService : IAgentChatService
         IAgentToolRegistry registry,
         AppStateService appState,
         UserSettingsRepository settings,
-        MistralConfig mistralConfig)
+        MistralConfig mistralConfig,
+        IAgentContextBuilder contextBuilder)
     {
         _mistral = mistral;
         _registry = registry;
         _appState = appState;
         _settings = settings;
         _mistralConfig = mistralConfig;
+        _contextBuilder = contextBuilder;
 
         var maxMessages = _settings.Settings.Agent.MaxHistoryMessages;
         _session = new ConversationSession(maxMessages);
@@ -94,14 +97,7 @@ public sealed class AgentChatService : IAgentChatService
 
     private string BuildSystemPrompt()
     {
-        var config = _appState.Config;
-        var aksContext = config.AksConfig?.KubeconfigContext ?? "(not configured)";
-        var aksPath = config.AksConfig?.KubeconfigPath;
-
-        var context = $"Kubernetes context: {aksContext}";
-        if (!string.IsNullOrWhiteSpace(aksPath))
-            context += $" | kubeconfig: {aksPath}";
-
+        var context = _contextBuilder.BuildContext(_appState);
         return SystemPromptTemplate.Replace("{CONTEXT}", context);
     }
 }
