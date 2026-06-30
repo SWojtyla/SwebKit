@@ -71,7 +71,7 @@
     justify-content: center;
     flex: 1;
     gap: 8px;
-    color: var(--neutral-foreground-hint);
+    color: var(--color-text-muted);
     text-align: center;
     padding: 32px 16px;
 }
@@ -109,14 +109,14 @@
 }
 
 .agent-bubble--user .agent-bubble__text {
-    background-color: var(--accent-fill-rest);
-    color: var(--foreground-on-accent-rest);
+    background-color: var(--color-accent);
+    color: white;
     border-bottom-right-radius: 3px;
 }
 
 .agent-bubble--assistant .agent-bubble__text {
-    background-color: var(--neutral-fill-layer-rest);
-    color: var(--neutral-foreground-rest);
+    background-color: var(--color-surface);
+    color: var(--color-text);
     border-bottom-left-radius: 3px;
 }
 
@@ -125,7 +125,7 @@
     flex-direction: row;
     align-items: center;
     gap: 8px;
-    color: var(--neutral-foreground-hint);
+    color: var(--color-text-muted);
     font-size: 0.82rem;
     padding: 4px 0;
 }
@@ -145,14 +145,14 @@
     gap: 3px;
     padding: 2px 6px;
     border-radius: 999px;
-    background-color: var(--neutral-fill-secondary-rest);
-    color: var(--neutral-foreground-hint);
+    background-color: var(--color-surface);
+    color: var(--color-text-muted);
     font-size: 0.7rem;
     font-family: var(--font-family-monospace, monospace);
 }
 
 .agent-elapsed {
-    color: var(--neutral-foreground-hint);
+    color: var(--color-text-muted);
     font-size: 0.7rem;
     margin-left: 2px;
 }
@@ -163,8 +163,8 @@
     align-items: flex-end;
     gap: 6px;
     padding: 8px 10px 10px;
-    border-top: 1px solid var(--neutral-stroke-rest);
-    background-color: var(--neutral-layer-1);
+    border-top: 1px solid var(--color-border);
+    background-color: var(--color-surface);
     flex-shrink: 0;
 }
 

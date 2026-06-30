@@ -264,6 +264,10 @@
     cursor: pointer;
 }
 
+.top-bar-icon-btn fluent-icon {
+    opacity: 0.85;
+}
+
 .nav-toggle {
     appearance: none;
     -webkit-appearance: none;

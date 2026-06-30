@@ -9,6 +9,8 @@ public sealed class UserSettingsRepository
     private static readonly JsonSerializerOptions Options = SwebKitJsonOptions.Indented;
 
     public UserSettings Settings { get; private set; } = new();
+    
+    public event Action? Changed;
 
     public async Task LoadAsync()
     {
@@ -36,11 +38,13 @@ public sealed class UserSettingsRepository
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(Settings, Options);
         await AppDataFileStore.SaveAsync(AppDataPaths.UserSettingsJson, json);
+        Changed?.Invoke();
     }
 
     public void ReplaceSettings(UserSettings settings)
     {
         Settings = NormalizeSettings(settings);
+        Changed?.Invoke();
     }
 
     public async Task ImportAsync(UserSettings settings)

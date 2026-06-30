@@ -1,4 +1,5 @@
 @inherits SwebKit.App.Components.Shared.SwebKitLayoutBase
+@using SwebKit.App.Components.Pages
 @inject AppStateService AppState
 @inject IAppEventBus Events
 @inject TabService Tabs
@@ -55,7 +56,10 @@
                     <LoadingSpinner Message="Starting SwebKit\u2026" />
                 }
             </main>
-            <AgentChatPanel IsOpen="@_isAgentPanelOpen" OnClose="ToggleAgentPanel" />
+            @if (UserSettings.Settings.Agent.IsEnabled)
+            {
+                <AgentChatPanel IsOpen="@_isAgentPanelOpen" OnClose="ToggleAgentPanel" />
+            }
 
             <StatusBar CurrentRoute="@CurrentRoute" />
 
@@ -243,6 +247,7 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
         AppState.DemoModeChanged += OnDemoModeChanged;
         AppState.Initialized += OnAppStateInitialized;
         Nav.LocationChanged += OnLocationChanged;
+        UserSettings.Changed += OnUserSettingsChanged;
     }
 
     private void OnAppStateInitialized()
@@ -251,6 +256,8 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
         ConnectionWarmup.InvalidateCaches();
         RequestCoalescedRender();
     }
+
+    private void OnUserSettingsChanged() => RequestCoalescedRender();
 
     private void ToggleAgentPanel()
     {
@@ -654,6 +661,7 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
         AppState.DemoModeChanged -= OnDemoModeChanged;
         AppState.Initialized -= OnAppStateInitialized;
         Nav.LocationChanged -= OnLocationChanged;
+        UserSettings.Changed -= OnUserSettingsChanged;
         _jsRef?.Dispose();
     }
 }
