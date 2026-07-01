@@ -135,6 +135,13 @@
 }
 
 .agent-bubble__markdown { white-space: normal; }
+.agent-bubble__markdown .mermaid[data-rendered="true"] {
+    border-radius: 6px;
+    transition: box-shadow 0.15s;
+}
+.agent-bubble__markdown .mermaid[data-rendered="true"]:hover {
+    box-shadow: 0 0 0 2px var(--color-accent, #7c6af7);
+}
 .agent-bubble__markdown table { border-collapse: collapse; width: 100%; font-size: 0.82em; }
 .agent-bubble__markdown th,
 .agent-bubble__markdown td   { border: 1px solid var(--neutral-stroke-rest); padding: 4px 8px; }
