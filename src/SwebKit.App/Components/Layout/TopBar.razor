@@ -173,7 +173,7 @@
 
             @if (UserSettings.Settings?.Agent?.IsEnabled == true)
             {
-                <button class="top-bar-icon-btn @(IsAgentPanelOpen ? "top-bar-icon-btn--active" : "")" @onclick="OnAgentPanelToggle"
+                <button class="top-bar-icon-btn top-bar-icon-btn--agent @(IsAgentPanelOpen ? "top-bar-icon-btn--active" : "")" @onclick="OnAgentPanelToggle"
                         title="@(IsAgentPanelOpen ? "Close AI Agent panel" : "Open AI Agent panel")"
                         aria-label="@(IsAgentPanelOpen ? "Close AI Agent panel" : "Open AI Agent panel")"
                         aria-pressed="@IsAgentPanelOpen">

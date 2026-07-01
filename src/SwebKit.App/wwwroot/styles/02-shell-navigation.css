@@ -475,6 +475,11 @@ kbd {
     color: var(--color-accent, #0078d4);
 }
 
+.top-bar-icon-btn--agent fluent-icon {
+    color: var(--color-nav-agent);
+    opacity: 1;
+}
+
 .main-content {
     grid-row: 3;
     background: var(--color-bg);
@@ -716,6 +721,7 @@ kbd {
 .nav-item[data-area='observability'] fluent-icon    { color: var(--color-nav-observability); opacity: 0.65; }
 .nav-item[data-area='incident-timeline'] fluent-icon{ color: var(--color-nav-incident);   opacity: 0.65; }
 .nav-item[data-area='settings'] fluent-icon         { color: var(--color-nav-settings);   opacity: 0.65; }
+.nav-item[data-area='agent'] fluent-icon            { color: var(--color-nav-agent);      opacity: 0.65; }
 
 /* Active: full opacity */
 .nav-item.active[data-area='dashboard'] fluent-icon  { opacity: 1; }
@@ -727,6 +733,7 @@ kbd {
 .nav-item.active[data-area='observability'] fluent-icon { opacity: 1; }
 .nav-item.active[data-area='incident-timeline'] fluent-icon { opacity: 1; }
 .nav-item.active[data-area='settings'] fluent-icon   { opacity: 1; }
+.nav-item.active[data-area='agent'] fluent-icon      { opacity: 1; }
 
 /* Active: feature-colored left border + background */
 .nav-item.active[data-area='dashboard']  { border-left-color: var(--color-nav-dashboard);  background: color-mix(in srgb, var(--color-nav-dashboard)  10%, transparent); color: var(--color-nav-dashboard); }
@@ -738,3 +745,4 @@ kbd {
 .nav-item.active[data-area='observability'] { border-left-color: var(--color-nav-observability); background: color-mix(in srgb, var(--color-nav-observability) 10%, transparent); color: var(--color-nav-observability); }
 .nav-item.active[data-area='incident-timeline'] { border-left-color: var(--color-nav-incident); background: color-mix(in srgb, var(--color-nav-incident) 10%, transparent); color: var(--color-nav-incident); }
 .nav-item.active[data-area='settings']   { border-left-color: var(--color-nav-settings);   background: color-mix(in srgb, var(--color-nav-settings)   10%, transparent); color: var(--color-nav-settings); }
+.nav-item.active[data-area='agent']      { border-left-color: var(--color-nav-agent);      background: color-mix(in srgb, var(--color-nav-agent)      10%, transparent); color: var(--color-nav-agent); }

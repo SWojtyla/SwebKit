@@ -246,6 +246,7 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
         Events.Subscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
         AppState.DemoModeChanged += OnDemoModeChanged;
         AppState.Initialized += OnAppStateInitialized;
+        AppState.ConfigChanged += OnConfigChanged;
         Nav.LocationChanged += OnLocationChanged;
         UserSettings.Changed += OnUserSettingsChanged;
     }
@@ -274,6 +275,8 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
     }
 
     private void OnDemoModeChanged() => RequestCoalescedRender();
+
+    private void OnConfigChanged() => ConnectionWarmup.InvalidateCaches();
 
     private string GetProfileLoadWarningText()
     {
@@ -673,6 +676,7 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
         Events.Unsubscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
         AppState.DemoModeChanged -= OnDemoModeChanged;
         AppState.Initialized -= OnAppStateInitialized;
+        AppState.ConfigChanged -= OnConfigChanged;
         Nav.LocationChanged -= OnLocationChanged;
         UserSettings.Changed -= OnUserSettingsChanged;
         _jsRef?.Dispose();

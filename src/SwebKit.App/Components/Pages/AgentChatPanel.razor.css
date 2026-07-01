@@ -31,6 +31,10 @@
     flex-shrink: 0;
 }
 
+.agent-panel-title fluent-icon {
+    color: var(--color-nav-agent);
+}
+
 .agent-panel-pills {
     display: flex;
     align-items: center;
@@ -74,6 +78,11 @@
     color: var(--color-text-muted);
     text-align: center;
     padding: 32px 16px;
+}
+
+.agent-empty-state fluent-icon {
+    color: var(--color-nav-agent);
+    opacity: 0.75;
 }
 
 .agent-empty-hint {
