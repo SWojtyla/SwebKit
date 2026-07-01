@@ -109,12 +109,16 @@
 .agent-bubble__text {
     padding: 10px 14px;
     border-radius: 12px;
-    white-space: pre-wrap;
     word-break: break-word;
     font-size: 0.9rem;
     line-height: 1.5;
     font-family: inherit;
     margin: 0;
+}
+
+/* User messages are plain text — preserve newlines. Markdown (assistant) uses HTML flow. */
+.agent-bubble--user .agent-bubble__text {
+    white-space: pre-wrap;
 }
 
 .agent-bubble--user .agent-bubble__text {
@@ -130,6 +134,7 @@
     border: 1px solid var(--color-border);
 }
 
+.agent-bubble__markdown { white-space: normal; }
 .agent-bubble__markdown table { border-collapse: collapse; width: 100%; font-size: 0.82em; }
 .agent-bubble__markdown th,
 .agent-bubble__markdown td   { border: 1px solid var(--neutral-stroke-rest); padding: 4px 8px; }

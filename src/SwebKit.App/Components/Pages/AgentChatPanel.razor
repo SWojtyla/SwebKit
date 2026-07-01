@@ -1,12 +1,9 @@
 @using SwebKit.Agents
-@using SwebKit.Core.Abstractions
-@using SwebKit.Core.Models
 @using SwebKit.App.Services
+@using Markdig
 @inject IAgentChatService Agent
 @inject UserSettingsRepository UserSettings
 @inject IJSRuntime JS
-@inject IncidentInvestigationLauncher InvestigationLauncher
-@inject ISelectionContext SelectionCtx
 @implements IDisposable
 
 <aside class="agent-panel @(IsOpen ? "" : "agent-panel--closed")" aria-label="AI Agent chat panel"
@@ -50,12 +47,6 @@
                         <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="14px" />
                     </button>
                 }
-                <button class="top-bar-icon-btn agent-panel-header-btn"
-                        @onclick="LaunchInvestigation"
-                        disabled="!_canInvestigate"
-                        title="@(_canInvestigate ? "Investigate current selection in Incident Timeline" : "Select an AKS resource to investigate in Timeline")">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.History())" Width="14px" />
-                </button>
                 <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="OnClose" title="Close AI Agent panel"
                         aria-label="Close AI Agent panel">
                     <FluentIcon Value="@(new Icons.Regular.Size16.ChevronDoubleRight())" Width="14px" />
@@ -138,6 +129,14 @@
         IReadOnlyList<string> ToolsUsed,
         TimeSpan Elapsed);
 
+    // Static counter: globally unique Mermaid source IDs across all rendered messages.
+    private static int _mermaidIdCounter;
+
+    // Shared pipeline with common extensions (tables, autolinks, strikethrough, task lists, etc.).
+    private static readonly MarkdownPipeline _markdownPipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .Build();
+
     private readonly List<ChatMessage> _messages = [];
     private string _inputText = string.Empty;
     private bool _isLoading;
@@ -145,28 +144,32 @@
     private string? _currentToolName;
     private CancellationTokenSource? _cts;
 
+    private bool _prevIsOpen;
+    private bool _resizerNeedsInit;
+    // Deferred post-render work: set flags then let OnAfterRenderAsync act once the DOM is updated.
+    private bool _pendingScroll;
+    private bool _pendingMermaidRender;
+
+    private bool _historyWarning => Agent.IsNearHistoryLimit;
     private static MarkupString RenderMarkdown(string text)
     {
         if (string.IsNullOrEmpty(text))
             return new MarkupString(string.Empty);
-        
-        // Handle Mermaid diagrams specially BEFORE Markdig processes them
-        // Replace mermaid code blocks with placeholder divs
-        var mermaidCount = 0;
+
+        // Intercept mermaid fences BEFORE Markdig sees them so they aren't treated as code blocks.
+        // Code is base64-encoded into a data attribute — this survives Markdig without whitespace mangling.
         var processed = System.Text.RegularExpressions.Regex.Replace(
             text,
-            "```mermaid([\\s\\S]*?)```",
-            m => {
-                var mermaidCode = m.Groups[1].Value.Trim();
-                // Store the raw code in a script tag with a unique ID, then reference it in the div
-                var id = "mermaid-src-" + mermaidCount++;
-                return "<div class=\"mermaid\" data-mermaid-id=\"" + id + "\"></div>" +
-                       "<script type=\"text/plain\" id=\"" + id + "\">" + 
-                       System.Net.WebUtility.HtmlEncode(mermaidCode) + "</script>";
+            @"```mermaid([\s\S]*?)```",
+            m =>
+            {
+                var code = m.Groups[1].Value.Trim();
+                var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(code));
+                var id = "mermaid-" + System.Threading.Interlocked.Increment(ref _mermaidIdCounter);
+                return $"""<div class="mermaid" id="{id}" data-mermaid-b64="{b64}"></div>""";
             });
-        
-        var html = Markdig.Markdown.ToHtml(processed);
-        return new MarkupString(html);
+
+        return new MarkupString(Markdown.ToHtml(processed, _markdownPipeline));
     }
 
     private async Task RenderMermaidAsync()
@@ -177,17 +180,9 @@
         }
         catch (Exception ex)
         {
-            // Mermaid rendering failed, but this is not critical
             Console.WriteLine("Mermaid rendering error: " + ex.Message);
         }
     }
-
-    private bool _prevIsOpen;
-    private bool _resizerNeedsInit;
-
-    private bool _historyWarning => Agent.IsNearHistoryLimit;
-
-    private bool _canInvestigate => SelectionCtx.GetSelection<object>("aks") is not null;
 
     protected override void OnParametersSet()
     {
@@ -206,10 +201,17 @@
             _resizerNeedsInit = false;
             await InitResizerAsync();
         }
-        
-        // Render Mermaid diagrams after markdown is rendered
-        if (firstRender)
+
+        // Run deferred work AFTER the DOM reflects the latest render.
+        if (_pendingScroll)
         {
+            _pendingScroll = false;
+            await ScrollToBottomAsync();
+        }
+
+        if (_pendingMermaidRender)
+        {
+            _pendingMermaidRender = false;
             await RenderMermaidAsync();
         }
     }
@@ -247,8 +249,9 @@
         _messages.Add(new ChatMessage(true, text, [], TimeSpan.Zero));
         _isLoading = true;
         _currentToolName = null;
-        StateHasChanged();
+        StateHasChanged(); // Safe: synchronous, before any await.
 
+        _cts?.Dispose();
         _cts = new CancellationTokenSource();
         try
         {
@@ -267,9 +270,11 @@
         {
             _isLoading = false;
             _currentToolName = null;
-            StateHasChanged();
-            await ScrollToBottomAsync();
-            await RenderMermaidAsync();
+            // BL-2: dispatch on Blazor thread after async continuation.
+            // Set flags so OnAfterRenderAsync acts once the DOM is actually updated.
+            _pendingScroll = true;
+            _pendingMermaidRender = true;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -278,18 +283,6 @@
         Agent.ClearHistory();
         _messages.Clear();
         _showClearConfirm = false;
-    }
-
-    private void LaunchInvestigation()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var seed = new IncidentInvestigationSeed
-        {
-            SourceArea = IncidentInvestigationSourceArea.Observability,
-            LaunchedAtUtc = now,
-            SelectedRange = new TimeRange(now.AddHours(-2), now)
-        };
-        InvestigationLauncher.Launch(seed);
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)

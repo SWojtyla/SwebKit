@@ -27,38 +27,35 @@
     <script src="js/uiState.js"></script>
     <script src="js/yamlHighlight.js"></script>
     <script>
-        // Initialize Mermaid for SwebKit
-        window.renderMermaidDiagrams = function() {
+        // Initialize Mermaid for SwebKit (v10+ async API)
+        mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+
+        window.renderMermaidDiagrams = async function() {
             if (typeof mermaid === 'undefined') {
                 console.warn('Mermaid library not loaded');
                 return;
             }
-            
-            mermaid.initialize({ startOnLoad: false, theme: 'default' });
-            
-            var diagrams = document.querySelectorAll('.mermaid');
-            diagrams.forEach(function(diagram) {
+
+            // Only target unrendered diagrams to avoid re-rendering on subsequent calls
+            var diagrams = document.querySelectorAll('.mermaid[data-mermaid-b64]:not([data-rendered])');
+            for (var i = 0; i < diagrams.length; i++) {
+                var diagram = diagrams[i];
                 try {
-                    var sourceId = diagram.getAttribute('data-mermaid-id');
-                    if (sourceId) {
-                        var sourceEl = document.getElementById(sourceId);
-                        if (sourceEl) {
-                            var code = sourceEl.textContent;
-                            var containerId = 'mermaid-render-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
-                            diagram.id = containerId;
-                            diagram.style.display = 'block';
-                            diagram.style.minHeight = '100px';
-                            mermaid.mermaidAPI.render(containerId, code, function(svgCode) {
-                                diagram.innerHTML = svgCode;
-                            }, diagram);
-                        }
-                    }
+                    var b64 = diagram.getAttribute('data-mermaid-b64');
+                    if (!b64) continue;
+                    var code = decodeURIComponent(escape(atob(b64)));
+                    var svgId = diagram.id + '-svg';
+                    var result = await mermaid.render(svgId, code);
+                    diagram.innerHTML = result.svg;
+                    diagram.setAttribute('data-rendered', 'true');
                 } catch (e) {
                     console.error('Mermaid rendering error:', e);
+                    diagram.innerHTML = '<pre style="color:var(--error-color,#f88);font-size:12px">Failed to render diagram: ' + e.message + '</pre>';
+                    diagram.setAttribute('data-rendered', 'error');
                 }
-            });
+            }
         };
-        
+
         // Also render on page load
         window.addEventListener('DOMContentLoaded', function() {
             setTimeout(window.renderMermaidDiagrams, 500);
