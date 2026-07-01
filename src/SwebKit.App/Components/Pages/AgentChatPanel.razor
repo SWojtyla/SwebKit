@@ -1,7 +1,12 @@
 @using SwebKit.Agents
+@using SwebKit.Core.Abstractions
+@using SwebKit.Core.Models
+@using SwebKit.App.Services
 @inject IAgentChatService Agent
 @inject UserSettingsRepository UserSettings
 @inject IJSRuntime JS
+@inject IncidentInvestigationLauncher InvestigationLauncher
+@inject ISelectionContext SelectionCtx
 @implements IDisposable
 
 <aside class="agent-panel @(IsOpen ? "" : "agent-panel--closed")" aria-label="AI Agent chat panel"
@@ -45,6 +50,14 @@
                         <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="14px" />
                     </button>
                 }
+                @if (_canInvestigate)
+                {
+                    <button class="top-bar-icon-btn agent-panel-header-btn"
+                            @onclick="LaunchInvestigation"
+                            title="Investigate current selection in Incident Timeline">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.History())" Width="14px" />
+                    </button>
+                }
                 <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="OnClose" title="Close AI Agent panel"
                         aria-label="Close AI Agent panel">
                     <FluentIcon Value="@(new Icons.Regular.Size16.ChevronDoubleRight())" Width="14px" />
@@ -86,7 +99,9 @@
                                 <span class="agent-elapsed">@msg.Elapsed.TotalSeconds.ToString("F1")s</span>
                             </div>
                         }
-                        <pre class="agent-bubble__text">@msg.Content</pre>
+                        <div class="agent-bubble__text agent-bubble__markdown">
+                            @RenderMarkdown(msg.Content)
+                        </div>
                     </div>
                 }
             }
@@ -132,10 +147,18 @@
     private string? _currentToolName;
     private CancellationTokenSource? _cts;
 
+    private static MarkupString RenderMarkdown(string text)
+    {
+        var html = Markdig.Markdown.ToHtml(text ?? string.Empty);
+        return new MarkupString(html);
+    }
+
     private bool _prevIsOpen;
     private bool _resizerNeedsInit;
 
     private bool _historyWarning => Agent.IsNearHistoryLimit;
+
+    private bool _canInvestigate => SelectionCtx.GetSelection<object>("aks") is not null;
 
     protected override void OnParametersSet()
     {
@@ -219,6 +242,18 @@
         Agent.ClearHistory();
         _messages.Clear();
         _showClearConfirm = false;
+    }
+
+    private void LaunchInvestigation()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var seed = new IncidentInvestigationSeed
+        {
+            SourceArea = IncidentInvestigationSourceArea.Observability,
+            LaunchedAtUtc = now,
+            SelectedRange = new TimeRange(now.AddHours(-2), now)
+        };
+        InvestigationLauncher.Launch(seed);
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)

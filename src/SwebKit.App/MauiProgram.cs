@@ -239,10 +239,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAgentTool, ListPodsTool>();
         builder.Services.AddSingleton<IAgentTool, GetPodLogsTool>();
         builder.Services.AddSingleton<IAgentTool, GetPodEventsTool>();
+        builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
 
         // Service Bus Tools
         builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
         builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
+        builder.Services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
 
         // Observability Tools
         builder.Services.AddSingleton<IAgentTool, QueryLogsTool>();

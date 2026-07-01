@@ -130,6 +130,15 @@
     border: 1px solid var(--color-border);
 }
 
+.agent-bubble__markdown table { border-collapse: collapse; width: 100%; font-size: 0.82em; }
+.agent-bubble__markdown th,
+.agent-bubble__markdown td   { border: 1px solid var(--neutral-stroke-rest); padding: 4px 8px; }
+.agent-bubble__markdown code { background: var(--neutral-fill-secondary-rest); padding: 1px 4px; border-radius: 3px; font-size: 0.85em; }
+.agent-bubble__markdown pre  { background: var(--neutral-fill-secondary-rest); padding: 8px; border-radius: 4px; overflow-x: auto; }
+.agent-bubble__markdown p    { margin: 0 0 6px; }
+.agent-bubble__markdown ul,
+.agent-bubble__markdown ol   { margin: 0 0 6px; padding-left: 18px; }
+
 .agent-bubble--loading {
     display: flex;
     flex-direction: row;

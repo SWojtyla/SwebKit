@@ -1,3 +1,5 @@
+using SwebKit.Core.Abstractions;
+using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents;
@@ -9,6 +11,15 @@ namespace SwebKit.Agents;
 /// </summary>
 public sealed class AgentContextBuilder : IAgentContextBuilder
 {
+    private readonly ISelectionContext _selectionContext;
+    private readonly IAlertMonitorService _alertMonitor;
+
+    public AgentContextBuilder(ISelectionContext selectionContext, IAlertMonitorService alertMonitor)
+    {
+        _selectionContext = selectionContext;
+        _alertMonitor = alertMonitor;
+    }
+
     public string BuildContext(AppStateService appState)
     {
         var config = appState.Config;
@@ -70,12 +81,49 @@ public sealed class AgentContextBuilder : IAgentContextBuilder
             contextParts.Add("DevOps: " + devOpsConfig.Organization);
         }
 
-        if (contextParts.Count == 0)
+        // Add selection context
+        var selections = new List<string>();
+        var knownAreas = new[] { "aks", "servicebus", "redis", "storage", "observability" };
+        foreach (var area in knownAreas)
         {
-            return "No workspace services configured.";
+            var selected = _selectionContext.GetSelection<object>(area);
+            if (selected != null)
+            {
+                var selectedStr = selected.ToString();
+                // Fall back to type name if ToString() returns the full type name
+                if (selectedStr == selected.GetType().FullName)
+                {
+                    selectedStr = selected.GetType().Name;
+                }
+                selections.Add($"{area}={selectedStr}");
+            }
+        }
+        if (selections.Count > 0)
+        {
+            contextParts.Add("Selected: " + string.Join(", ", selections));
         }
 
-        return string.Join(" | ", contextParts);
+        // Build the base context
+        var baseContext = contextParts.Count == 0
+            ? "No workspace services configured."
+            : string.Join(" | ", contextParts);
+
+        // Add recent alerts context (on separate lines)
+        var recentAlerts = _alertMonitor.RecentAlerts;
+        if (recentAlerts.Count > 0)
+        {
+            var alertLines = recentAlerts
+                .OrderByDescending(a => a.FiredAt)
+                .Take(3)
+                .Select(a => $"- [{a.Severity}] {a.RuleName} on {a.Message} at {a.FiredAt:yyyy-MM-dd HH:mm UTC}")
+                .ToList();
+            if (alertLines.Count > 0)
+            {
+                baseContext += "\nRecent alerts (last 3):\n" + string.Join("\n", alertLines);
+            }
+        }
+
+        return baseContext;
     }
 }
 
