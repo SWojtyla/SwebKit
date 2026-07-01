@@ -36,6 +36,9 @@ public interface IServiceBusClientFactory
     /// <summary>Creates a new <see cref="IServiceBusClient"/> from a raw connection string.</summary>
     IServiceBusClient Create(string connectionString);
 
+    /// <summary>Creates a new <see cref="IServiceBusClient"/> authenticated via Microsoft Entra ID (DefaultAzureCredential).</summary>
+    IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace);
+
     /// <summary>
     /// Parses the fully qualified namespace from a Service Bus connection string without creating a client.
     /// </summary>

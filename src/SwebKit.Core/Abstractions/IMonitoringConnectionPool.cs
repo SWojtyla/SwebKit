@@ -42,4 +42,11 @@ public interface IMonitoringConnectionPool : IAsyncDisposable
     /// signal sources pick up updated credentials on the next poll.
     /// </summary>
     void InvalidateStaleConnections();
+
+    /// <summary>
+    /// Evicts the cached <see cref="IServiceBusClient"/> for <paramref name="alias"/> so that
+    /// a fresh client is created on the next call to <see cref="GetServiceBusClient"/>.
+    /// Use this when Entra credentials may have changed or a stale connection needs resetting.
+    /// </summary>
+    void EvictServiceBusClient(string alias);
 }

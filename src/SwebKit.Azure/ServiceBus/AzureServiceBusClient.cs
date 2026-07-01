@@ -1,3 +1,4 @@
+using Azure.Core;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
@@ -20,11 +21,11 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     private readonly string? _scopedEntityPath;
     private readonly ILogger<AzureServiceBusClient> _logger;
 
-    /// <summary>Primary constructor: creates a client from a raw connection string.</summary>
+    /// <summary>Creates a client from a raw connection string.</summary>
     public AzureServiceBusClient(string connectionString)
         : this(connectionString, NullLogger<AzureServiceBusClient>.Instance) { }
 
-    /// <summary>Primary constructor: creates a client from a raw connection string.</summary>
+    /// <summary>Creates a client from a raw connection string.</summary>
     public AzureServiceBusClient(string connectionString, ILogger<AzureServiceBusClient> logger)
     {
         _logger = logger;
@@ -32,6 +33,19 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         _scopedEntityPath = string.IsNullOrWhiteSpace(props.EntityPath) ? null : props.EntityPath;
         _client = new ServiceBusClient(connectionString);
         _adminClient = new ServiceBusAdministrationClient(connectionString);
+    }
+
+    /// <summary>Creates a client authenticated via Microsoft Entra ID.</summary>
+    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential)
+        : this(fullyQualifiedNamespace, credential, NullLogger<AzureServiceBusClient>.Instance) { }
+
+    /// <summary>Creates a client authenticated via Microsoft Entra ID.</summary>
+    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential, ILogger<AzureServiceBusClient> logger)
+    {
+        _logger = logger;
+        _scopedEntityPath = null;
+        _client = new ServiceBusClient(fullyQualifiedNamespace, credential);
+        _adminClient = new ServiceBusAdministrationClient(fullyQualifiedNamespace, credential);
     }
 
     /// <summary>Legacy constructor retained for backward-compatibility with config-based setup.</summary>

@@ -59,7 +59,7 @@
                         {
                             <div class="workspace-hub__resource-card">
                                 <div class="workspace-hub__resource-title">@(CurrentSnapshot.Resource.DisplayPath ??
-                                                                                                                                                                                                                CurrentSnapshot.Resource.DisplayName)</div>
+                                                                                                                                                                                                                                                    CurrentSnapshot.Resource.DisplayName)</div>
                                     <div class="workspace-hub__resource-summary">@BuildResourceSummary(CurrentSnapshot)</div>
                                     <div class="workspace-hub__save-row">
                                         <input class="workspace-hub__input" placeholder="Name favorite as" value="@_favoriteName"
@@ -118,7 +118,7 @@
                                 {
                                     <button class="workspace-hub__list-item" @onclick="() => OpenRecentAsync(recent)">
                                         <span class="workspace-hub__list-title">@(recent.Snapshot.Resource.DisplayPath ??
-                                                                                                                                                                                                                                                            recent.Snapshot.Resource.DisplayName)</span>
+                                                                                                                                                                                                                                                                                                        recent.Snapshot.Resource.DisplayName)</span>
                                             <span class="workspace-hub__list-summary">@recent.AccessedAt.ToLocalTime().ToString("g")</span>
                                         </button>
                                     }
@@ -173,8 +173,8 @@
 
             @if (UserSettings.Settings?.Agent?.IsEnabled == true)
             {
-                <button class="top-bar-icon-btn top-bar-icon-btn--agent @(IsAgentPanelOpen ? "top-bar-icon-btn--active" : "")" @onclick="OnAgentPanelToggle"
-                        title="@(IsAgentPanelOpen ? "Close AI Agent panel" : "Open AI Agent panel")"
+                <button class="top-bar-icon-btn top-bar-icon-btn--agent @(IsAgentPanelOpen ? "top-bar-icon-btn--active" : "")"
+                        @onclick="OnAgentPanelToggle" title="@(IsAgentPanelOpen ? "Close AI Agent panel" : "Open AI Agent panel")"
                         aria-label="@(IsAgentPanelOpen ? "Close AI Agent panel" : "Open AI Agent panel")"
                         aria-pressed="@IsAgentPanelOpen">
                     <FluentIcon Value="@(new Icons.Regular.Size20.Bot())" Width="16px" />

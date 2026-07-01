@@ -1,3 +1,4 @@
+using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using SwebKit.Core.Abstractions;
 
@@ -10,6 +11,9 @@ public sealed class ServiceBusClientFactory : IServiceBusClientFactory
 {
     public IServiceBusClient Create(string connectionString) =>
         new AzureServiceBusClient(connectionString);
+
+    public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace) =>
+        new AzureServiceBusClient(fullyQualifiedNamespace, new DefaultAzureCredential());
 
     public string ParseFullyQualifiedNamespace(string connectionString) =>
         ServiceBusConnectionStringProperties.Parse(connectionString).FullyQualifiedNamespace;

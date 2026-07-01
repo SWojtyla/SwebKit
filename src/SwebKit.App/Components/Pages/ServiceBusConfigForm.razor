@@ -1,6 +1,8 @@
 @using SwebKit.Core.Domain
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
+@inject IMonitoringConnectionPool MonitoringPool
+@inject IServiceBusNamespaceBootstrapper NamespaceBootstrapper
 
 @* Displays and manages global Service Bus namespaces and entity links pinned to the current configuration. *@
 <div class="sb-settings-shell">
@@ -8,27 +10,77 @@
     <div class="sb-settings-section">
         <label class="app-form-field__label">Namespaces</label>
         <p class="app-form-field__hint">
-            Global Service Bus namespaces. Paste a connection string to add one.
+            Connect with Entra ID (recommended) or a connection string.
             Entities can then be pinned from the Service Bus page.
         </p>
 
         @foreach (var ns in AppState.ServiceBusNamespaces.ToList())
         {
+            var rs = GetReconnectState(ns.Id);
             <div class="sb-settings-ns-row">
-                <span class="sb-settings-ns-row__alias">@ns.Alias</span>
-                <span class="sb-settings-ns-row__fqns">@ns.FullyQualifiedNamespace</span>
+                <span class="sb-settings-ns-row__alias" title="@ns.Alias">@ns.Alias</span>
+                <span class="sb-settings-ns-row__fqns" title="@ns.FullyQualifiedNamespace">@ns.FullyQualifiedNamespace</span>
+                <span class="sb-settings-ns-row__badge sb-settings-ns-row__badge--@(ns.AuthMode == SbAuthMode.DefaultAzureCredential ? "entra" : "key")">
+                    @(ns.AuthMode == SbAuthMode.DefaultAzureCredential ? "Entra ID" : "Key")
+                </span>
+                <AppIconButton Label="Refresh connection"
+                               Title="@(rs.Status == ReconnectStatus.Error ? rs.Error : "Refresh connection / re-authenticate")"
+                               Size="Small" Variant="Ghost"
+                               Loading="@(rs.Status == ReconnectStatus.Connecting)"
+                               OnClick="() => ReconnectAsync(ns)">
+                    <Icon>
+                        @if (rs.Status == ReconnectStatus.Success) { <span class="sb-settings-reconnect-ok">✓</span> }
+                        else if (rs.Status == ReconnectStatus.Error) { <span class="sb-settings-reconnect-err">✗</span> }
+                        else { <span>↺</span> }
+                    </Icon>
+                </AppIconButton>
                 <button type="button" class="sb-settings-ns-row__remove" title="Remove namespace"
                         @onclick="() => RemoveNamespaceAsync(ns)">×</button>
             </div>
+            @if (rs.Status == ReconnectStatus.Error && !string.IsNullOrWhiteSpace(rs.Error))
+            {
+                <div class="sb-settings-ns-inline-error">@rs.Error</div>
+            }
         }
 
         @if (_showAddForm)
         {
             <div class="sb-settings-add-form">
-                <PasswordField Value="@_addConnStr" ValueChanged="@(v => _addConnStr = v ?? string.Empty)"
-                               Label="Connection string"
-                               Placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
-                               InputClass="app-native-control sb-settings-add-form__input" />
+                <div class="sb-settings-add-form__auth-section">
+                    <span class="app-form-field__label sb-settings-add-form__auth-label">Authentication</span>
+                    <SegmentedControl Items="@_authModeItems"
+                                      Value="@_authModeDisplay"
+                                      ValueChanged="@OnAuthModeChanged"
+                                      Size="Small" />
+                    <p class="app-form-field__hint">
+                        @if (_addAuthMode == SbAuthMode.DefaultAzureCredential)
+                        {
+                            <span>Uses your current Azure identity (az cli, VS Code, managed identity, etc.)</span>
+                        }
+                        else
+                        {
+                            <span>Uses a SAS connection string with shared access key.</span>
+                        }
+                    </p>
+                </div>
+
+                @if (_addAuthMode == SbAuthMode.DefaultAzureCredential)
+                {
+                    <FormField Label="Namespace hostname" Hint="e.g. myns or myns.servicebus.windows.net">
+                        <input type="text" class="app-native-control sb-settings-add-form__input"
+                               placeholder="myns.servicebus.windows.net"
+                               value="@_addHostname"
+                               @oninput="@(e => _addHostname = e.Value?.ToString() ?? string.Empty)" />
+                    </FormField>
+                }
+                else
+                {
+                    <PasswordField Value="@_addConnStr" ValueChanged="@(v => _addConnStr = v ?? string.Empty)"
+                                   Label="Connection string"
+                                   Placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                                   InputClass="app-native-control sb-settings-add-form__input" />
+                }
+
                 @if (!string.IsNullOrWhiteSpace(_addError))
                 {
                     <div class="app-form-field__error">@_addError</div>
@@ -79,19 +131,100 @@
 </div>
 
 @code {
+    private enum ReconnectStatus { Idle, Connecting, Success, Error }
+    private record ReconnectState(ReconnectStatus Status, string? Error = null);
+    private static readonly ReconnectState Idle = new(ReconnectStatus.Idle);
+
+    private static readonly IReadOnlyList<string> _authModeItems = ["Entra ID", "Connection string"];
+
     [Parameter, EditorRequired] public AppConfig Environment { get; set; } = default!;
     [Parameter] public EventCallback OnSaved { get; set; }
 
     private bool _showAddForm;
+    private SbAuthMode _addAuthMode = SbAuthMode.DefaultAzureCredential;
+    private string _authModeDisplay = "Entra ID";
+    private string _addHostname = string.Empty;
     private string _addConnStr = string.Empty;
     private string? _addError;
+
+    private readonly Dictionary<Guid, ReconnectState> _reconnectStates = new();
+
+    private ReconnectState GetReconnectState(Guid id) =>
+        _reconnectStates.TryGetValue(id, out var s) ? s : Idle;
+
+    private void OnAuthModeChanged(string? value)
+    {
+        _authModeDisplay = value ?? "Entra ID";
+        _addAuthMode = value == "Connection string" ? SbAuthMode.ConnectionString : SbAuthMode.DefaultAzureCredential;
+        _addError = null;
+    }
 
     private Task OnAddClickAsync(Microsoft.AspNetCore.Components.Web.MouseEventArgs _) => HandleAddAsync();
     private void OnCancelClick(Microsoft.AspNetCore.Components.Web.MouseEventArgs _) => CancelAdd();
 
+    private async Task ReconnectAsync(ServiceBusNamespace ns)
+    {
+        _reconnectStates[ns.Id] = new(ReconnectStatus.Connecting);
+        StateHasChanged();
+
+        try
+        {
+            MonitoringPool.EvictServiceBusClient(ns.Alias);
+            var result = await NamespaceBootstrapper.ConnectAsync(ns);
+            _reconnectStates[ns.Id] = result.ConnectionError is null
+                ? new(ReconnectStatus.Success)
+                : new(ReconnectStatus.Error, result.ConnectionError);
+        }
+        catch (Exception ex)
+        {
+            _reconnectStates[ns.Id] = new(ReconnectStatus.Error, ex.Message);
+        }
+
+        StateHasChanged();
+    }
+
     private async Task HandleAddAsync()
     {
         _addError = null;
+
+        if (_addAuthMode == SbAuthMode.DefaultAzureCredential)
+            await HandleAddEntraAsync();
+        else
+            await HandleAddConnectionStringAsync();
+    }
+
+    private async Task HandleAddEntraAsync()
+    {
+        var raw = _addHostname.Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            _addError = "Namespace hostname is required.";
+            return;
+        }
+
+        var fqns = raw.Contains('.') ? raw : $"{raw}.servicebus.windows.net";
+
+        if (AppState.ServiceBusNamespaces.Any(n => n.FullyQualifiedNamespace.Equals(fqns, StringComparison.OrdinalIgnoreCase)))
+        {
+            _addError = "This namespace is already added.";
+            return;
+        }
+
+        var ns = new ServiceBusNamespace
+        {
+            Alias = fqns.Split('.')[0],
+            FullyQualifiedNamespace = fqns,
+            AuthMode = SbAuthMode.DefaultAzureCredential,
+            CredentialKey = string.Empty
+        };
+
+        await AppState.AddServiceBusNamespaceAsync(ns);
+        _showAddForm = false;
+        _addHostname = string.Empty;
+    }
+
+    private async Task HandleAddConnectionStringAsync()
+    {
         var raw = _addConnStr.Trim();
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -126,6 +259,7 @@
         {
             Alias = fqns.Split('.')[0],
             FullyQualifiedNamespace = fqns,
+            AuthMode = SbAuthMode.ConnectionString,
             CredentialKey = credKey
         };
 
@@ -136,13 +270,16 @@
 
     private async Task RemoveNamespaceAsync(ServiceBusNamespace ns)
     {
-        CredentialStore.Delete(ns.CredentialKey);
+        _reconnectStates.Remove(ns.Id);
+        if (!string.IsNullOrWhiteSpace(ns.CredentialKey))
+            CredentialStore.Delete(ns.CredentialKey);
         await AppState.RemoveServiceBusNamespaceAsync(ns.Id);
     }
 
     private void CancelAdd()
     {
         _showAddForm = false;
+        _addHostname = string.Empty;
         _addConnStr = string.Empty;
         _addError = null;
     }
@@ -153,3 +290,4 @@
         await OnSaved.InvokeAsync();
     }
 }
+
