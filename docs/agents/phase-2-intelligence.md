@@ -1,514 +1,472 @@
 # Phase 2: Intelligence
 
+## Status: Planned
+
+---
+
 ## 🎯 Purpose
 
-**Elevate the agent from a basic query tool to an intelligent assistant** that understands context, provides deeper insights, and proactively helps users solve complex problems.
+Make the agent **context-aware and investigation-capable**: it should know what the user is currently looking at, reflect active alerts in its reasoning, bundle multi-step diagnostics into single tool calls, and let users jump directly from a chat response into the Incident Timeline.
 
-Phase 1 proved that the basic agent works. Phase 2 focuses on making it **smarter, more context-aware, and more valuable** by leveraging SwebKit's rich data and the agent's ability to understand and correlate information across different systems.
-
----
-
-## 🧠 Abstract Analysis
-
-### What Phase 2 Is
-
-While Phase 1 was about "Can we make it work?", Phase 2 is about "Can we make it **intelligent**?"
-
-This phase transforms the agent from:
-- **Reactive** → **Proactive** (anticipates needs, provides context)
-- **Basic** → **Sophisticated** (handles complex queries, multi-step reasoning)
-- **Isolated** → **Integrated** (deeply connected to SwebKit's state and workflows)
-- **Generic** → **Specialized** (understands SwebKit's specific domain and patterns)
-
-### Key Questions This Phase Answers
-
-1. **Context Awareness**: Can the agent understand and leverage SwebKit's current state?
-2. **Advanced Reasoning**: Can it handle multi-step investigations and correlations?
-3. **Domain Specialization**: Can it develop expertise in SwebKit's specific patterns and issues?
-4. **User Experience**: Can it provide a seamless, intelligent conversation experience?
-5. **Integration Depth**: Can it integrate deeply with SwebKit's existing features?
-
-### Phase 2 vs. Phase 1
-
-| Aspect | Phase 1 | Phase 2 |
-|--------|---------|---------|
-| **Agent Intelligence** | Basic query/response | Context-aware, reasoning |
-| **Tool Complexity** | Simple, single-purpose | Advanced, multi-step |
-| **Data Integration** | Individual tools | Cross-tool correlation |
-| **Context Awareness** | Minimal | Full SwebKit state |
-| **User Experience** | Basic chat | Intelligent conversation |
-| **Integration** | Standalone feature | Deep SwebKit integration |
+Phase 1 proved the agent works. Phase 2 makes it genuinely useful on a daily basis.
 
 ---
 
-## 🎯 Goals
+## 🔑 What This Phase Delivers (5 Tasks)
 
-### Primary Goals
-1. **Context Awareness**: Agent understands current SwebKit state (selected resources, active connections, recent alerts)
-2. **Advanced Tooling**: Tools that combine data from multiple sources and perform multi-step reasoning
-3. **Smart Prompting**: Automatic inclusion of relevant context to improve response quality
-4. **Deep Integration**: Connect agent with SwebKit's incident investigation framework
-5. **Domain Specialization**: Train/optimize the agent for SwebKit's specific patterns and terminology
+| # | Task | Value |
+|---|------|-------|
+| T1 | Context awareness — inject selection + alerts into the system prompt | Agent answers feel relevant to what is on screen |
+| T2 | Composite tool: `InvestigatePodIssueTool` | One message instead of 3-4 separate queries |
+| T3 | Composite tool: `AnalyzeQueueHealthTool` | One message for queue dead-letter analysis |
+| T4 | Markdown rendering in the chat panel | Responses render tables, bold, code blocks properly |
+| T5 | "Investigate in Timeline" button in chat panel | Direct hand-off to the Incident Timeline from agent context |
 
-### Secondary Goals
-1. **Improved UX**: More intuitive conversation flow, better error handling, suggestions
-2. **Performance Optimization**: Faster responses, better caching, optimized token usage
-3. **Observability**: Enhanced logging and monitoring for agent operations
-4. **Feedback Loop**: Better mechanisms for collecting user feedback to improve the agent
+> **Note for implementer:** Every file path, type name, and interface below is exact. Do not rename or reorganize unless the existing code has already changed. Build after each task and fix any errors before moving to the next.
 
 ---
 
-## 📋 Scope
-
-### ✅ In Scope
-
-**Context Awareness System**
-- Current resource selection (pod, queue, namespace, etc.)
-- Active connections and configurations
-- Recent alerts and incidents
-- User preferences and history
-- Cross-service correlations (e.g., "This pod is in the same namespace as the failing queue")
-
-**Advanced Tooling**
-- Multi-step investigation tools
-- Cross-service correlation tools
-- Pattern analysis tools
-- Diagnostic and remediation suggestion tools
-
-**Smart Prompting**
-- Automatic context injection into prompts
-- Dynamic prompt templates based on task type
-- Context window optimization
-- Conversation history for multi-turn context
-
-**Deep Integration**
-- Integration with incident investigation framework
-- Trigger agent from alerts
-- Include agent analysis in incident timelines
-- Agent can suggest alert rules and configurations
-
-**Enhanced UI/UX**
-- Context-aware suggestions and auto-complete
-- Conversation history with search
-- Rich formatting of responses (tables, code blocks, links)
-- Tool execution visualization
-- Error explanation and recovery suggestions
-
-### ❌ Out of Scope
-
-**Proactive Features**
-- Continuous monitoring (Phase 3)
-- Scheduled analysis (Phase 3)
-- Automated remediation (Phase 3)
-
-**Advanced Enterprise Features**
-- Team collaboration features
-- Audit logging (basic logging is in scope, comprehensive audit is Phase 3)
-- Usage analytics dashboard
-- Multi-tenant support
-
-**Performance Optimizations**
-- Advanced load balancing
-- Distributed processing
-- Complex caching strategies
-
----
-
-## 🏗️ Architecture Enhancements
-
-### Context System Architecture
+## 📁 Key Files Reference
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Context Awareness System                    │
-├─────────────────────────────────────────────────────────────┤
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │                 AgentContextBuilder                      │  │
-│  │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │  │
-│  │   │Selection     │  │Connections   │  │Alerts       │  │  │
-│  │   │Context       │  │& Config      │  │& Incidents   │  │  │
-│  │   └─────────────┘  └─────────────┘  └─────────────┘  │  │
-│  │   ┌─────────────────────────────────────────────────┐  │  │
-│  │   │              Context Cache                         │  │  │
-│  │   │  (Recent contexts for performance)                 │  │  │
-│  │   └─────────────────────────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────┘  │
-│                                                               │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │                 Smart Prompt Builder                     │  │
-│  │   ┌─────────────────────────────────────────────────┐  │  │
-│  │   │  Template:                                       │  │  │
-│  │   │  "You are a SwebKit expert. Current context:       │  │  │
-│  │   │   - Cluster: {cluster}                            │  │  │
-│  │   │   - Namespace: {namespace}                         │  │  │
-│  │   │   - Selected: {resource}                          │  │  │
-│  │   │   - Recent alerts: {alerts}                        │  │  │
-│  │   │   User query: {query}"                           │  │  │
-│  │   └─────────────────────────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
+src/SwebKit.Agents/
+  AgentContextBuilder.cs          ← T1: modify
+  IAgentContextBuilder.cs         ← T1: no change to interface signature
+  AgentChatService.cs             ← no change needed
+  Tools/
+    InvestigatePodIssueTool.cs    ← T2: create
+    AnalyzeQueueHealthTool.cs     ← T3: create
+    (existing tools stay as-is)
 
-### Enhanced Tool Architecture
+src/SwebKit.App/
+  Components/Pages/
+    AgentChatPanel.razor          ← T4 + T5: modify
+  MauiProgram.cs                  ← T2 + T3: register new tools
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Enhanced Tool System                      │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────────┐    ┌──────────────────┐    ┌──────────┐ │
-│  │   Basic Tools     │    │   Composite Tools │    │   Agent   │ │
-│  │   (Phase 1)       │    │   (Phase 2)       │    │  Tools   │ │
-│  │  • GetPodStatus   │    │  • InvestigatePod │    │  (Future)│ │
-│  │  • GetPodLogs     │    │  • AnalyzeQueue   │    │          │ │
-│  │  • ListPods       │    │  • CorrelateEvents│    │          │ │
-│  │  • GetQueueStats  │    │  • SuggestRemedy │    │          │ │
-│  └────────┬─────────┘    └────────┬─────────┘    └──────────┘ │
-│            │                   │                        │
-│            ▼                   ▼                        ▼
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │                    Tool Execution Engine                 │  │
-│  │   • Sequential execution                                  │  │
-│  │   • Parallel execution (where possible)                  │  │
-│  │   • Result aggregation                                     │  │
-│  │   • Error handling and recovery                            │  │
-│  └───────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
+src/SwebKit.Core/
+  Abstractions/
+    ISelectionContext.cs          ← read-only (interface for T1)
+    IAlertMonitorService.cs       ← read-only (interface for T1)
+  Models/
+    IncidentTimelineModels.cs     ← read-only (IncidentInvestigationSeed, etc.)
 
-### Integration Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                 SwebKit Integration Points                    │
-├─────────────────────────────────────────────────────────────┤
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │  Incident Investigation Framework                      │  │
-│  │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │  │
-│  │   │  Agent can   │  │  Agent can   │  │  Agent can   │    │  │
-│  │   │  trigger     │  │  analyze     │  │  suggest     │    │  │
-│  │   │  investigations│  │  timelines   │  │  alert rules │    │  │
-│  │   └─────────────┘  └─────────────┘  └─────────────┘    │  │
-│  └───────────────────────────────────────────────────────┘  │
-│                                                               │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │  Alert System                                             │  │
-│  │   ┌─────────────────────────────────────────────────┐  │  │
-│  │   │  Auto-trigger agent analysis on new alerts          │  │  │
-│  │   │  Display agent insights in alert details            │  │  │
-│  │   └─────────────────────────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+src/SwebKit.App/Services/
+  IncidentInvestigationLauncher.cs  ← read-only (launcher for T5)
+  SelectionContext.cs               ← read-only (implementation)
 ```
 
 ---
 
-## 📦 Deliverables
+## T1 — Enhanced Context Awareness
 
-### 1. Context Awareness System
+### What to do
 
-**Enhanced AgentContextBuilder**
-- Current selection from `ISelectionContext`
-- Active connections from various factories
-- Recent alerts from `IAlertMonitorService`
-- User preferences from `AppStateService`
-- Historical context from conversation
-- Resource relationships and topology
+Modify `AgentContextBuilder` so that `BuildContext()` also appends:
+- The currently selected resource (from `ISelectionContext`)
+- The last 3 fired alerts (from `IAlertMonitorService`)
 
-**Smart Prompting**
-- Template system for different query types
-- Automatic context injection
-- Context window management
-- Token budget optimization
+### Existing interfaces (do not change)
 
-### 2. Advanced Tooling
+**`ISelectionContext`** (`SwebKit.Core.Abstractions`):
+```csharp
+public interface ISelectionContext
+{
+    void SetSelection(string area, object? selected);
+    T? GetSelection<T>(string area) where T : class;
+    event Action? SelectionChanged;
+}
+```
+Selection areas used by the app: `"aks"`, `"servicebus"`, `"redis"`, `"storage"`, `"observability"`.
 
-**Investigation Tools**
-- `InvestigatePodIssueTool`: Multi-step pod diagnosis (status + logs + events + metrics)
-- `AnalyzeQueueErrorsTool`: Analyze error patterns in Service Bus queues
-- `CorrelateEventsTool`: Find related events across services
-- `AnalyzeDeploymentTool`: Comprehensive deployment analysis
+**`IAlertMonitorService`** (`SwebKit.Core.Abstractions`):
+```csharp
+public interface IAlertMonitorService : IAsyncDisposable
+{
+    bool IsMonitoring { get; }
+    IReadOnlyList<AlertFiredEvent> RecentAlerts { get; }
+    // ...
+}
+```
 
-**Diagnostic Tools**
-- `SuggestRemediationTool`: Provide actionable fix suggestions
-- `ExplainAlertTool`: Deep analysis of alert meanings and implications
-- `CompareDeploymentsTool`: Compare configurations between deployments
-- `AnalyzeResourceHealthTool`: Holistic health assessment
+**`AlertFiredEvent`** (`SwebKit.Core.Models`):
+```csharp
+public sealed record AlertFiredEvent(
+    string RuleId,
+    string RuleName,
+    AlertRuleSource Source,
+    AlertSeverity Severity,
+    string Message,
+    string Detail,
+    DateTimeOffset FiredAt,
+    string ProfileName);
+```
 
-**Pattern Analysis Tools**
-- `FindSimilarIssuesTool`: Find historical issues matching current pattern
-- `PredictImpactTool`: Assess potential impact of changes
-- `AnalyzeTrendsTool`: Identify trends in metrics and logs
+### Current `AgentContextBuilder` constructor
 
-### 3. Deep Integration
+```csharp
+// Current: no parameters
+public sealed class AgentContextBuilder : IAgentContextBuilder
+{
+    public string BuildContext(AppStateService appState) { ... }
+}
+```
 
-**Incident Investigation Integration**
-- Agent can trigger investigations from chat
-- Agent analysis included in incident timelines
-- Agent can pre-populate investigation scope
-- Incident timeline can invoke agent for analysis
+### How to change it
 
-**Alert System Integration**
-- Auto-trigger agent analysis on new alerts
-- Agent insights displayed in alert details
-- Agent can suggest alert rule adjustments
-- Alert context automatically included in agent queries
+1. Add constructor injection for `ISelectionContext` and `IAlertMonitorService`.
+2. Both interfaces are in `SwebKit.Core.Abstractions` which `SwebKit.Agents` already references via `SwebKit.Core`.
+3. Keep `BuildContext(AppStateService appState)` — do **not** change the interface `IAgentContextBuilder`.
+4. At the end of `BuildContext`, append selection and alerts as additional context lines.
 
-### 4. Enhanced UI/UX
+**New constructor signature:**
+```csharp
+public AgentContextBuilder(ISelectionContext selection, IAlertMonitorService alertMonitor)
+```
 
-**Conversation Features**
-- Conversation history with search and filtering
-- Context-aware suggestions (based on current selection, alerts, etc.)
-- Auto-complete for common queries
-- Multi-turn conversation support
-- Session management (save, restore conversations)
+**Context lines to append inside `BuildContext`:**
 
-**Response Enhancements**
-- Rich formatting (markdown, tables, code blocks)
-- Clickable links to relevant SwebKit pages
-- Structured data display (JSON, YAML views)
-- Visual tool execution flow
-- Progressive disclosure of complex information
+For selection — iterate the known areas and append any non-null selection:
+```
+Selected: aks=<value>, observability=<value>
+```
+Use `.ToString()` on the selected object. Fall back to the type name if `.ToString()` returns the full type name.
 
-**Feedback Mechanisms**
-- Response rating (thumbs up/down)
-- Detailed feedback option
-- Usage analytics (opt-in)
-- Suggested improvements collection
+For alerts — take at most the 3 most recent from `alertMonitor.RecentAlerts`:
+```
+Recent alerts (last 3):
+- [Critical] Pod OOM Kill on nginx-abc at 2026-07-01 14:05 UTC
+- [Warning] Queue depth > 500 on orders-queue at 2026-07-01 13:55 UTC
+```
+If `RecentAlerts` is empty, append nothing — do not write "No recent alerts".
 
-### 5. Performance & Reliability
+### Where DI registration lives
 
-**Optimizations**
-- Tool result caching with TTL
-- Conversation history caching
-- Context caching for frequently accessed resources
-- Token usage optimization
-- Parallel tool execution where possible
+`src/SwebKit.App/MauiProgram.cs` — `AgentContextBuilder` is already registered there. Since `ISelectionContext` and `IAlertMonitorService` are already registered as singletons in the app, DI will inject them automatically. **No change needed in `MauiProgram.cs` for T1.**
 
-**Monitoring**
-- Tool execution metrics
-- Agent response quality metrics
-- Performance monitoring
-- Error tracking and alerting
-- Usage analytics (aggregated, anonymized)
+### Acceptance criteria
 
----
-
-## ✅ Success Criteria
-
-### Technical Success
-- [ ] Context awareness system works reliably
-- [ ] Advanced tools provide value beyond basic tools
-- [ ] Integration with incident investigation works smoothly
-- [ ] Alert system integration functions correctly
-- [ ] Performance improvements meet targets
-- [ ] Error rates are within acceptable bounds
-
-### User Success
-- [ ] Users report the agent "understands" their context
-- [ ] Agent provides insights that users couldn't easily get themselves
-- [ ] Multi-turn conversations work naturally
-- [ ] Suggestions and auto-complete are helpful
-- [ ] Integration with existing workflows is seamless
-
-### Business Success
-- [ ] User engagement metrics show increased value
-- [ ] Incident investigation time is reduced
-- [ ] Alert triage is faster and more accurate
-- [ ] Users express satisfaction with enhanced capabilities
-- [ ] Stakeholders see clear ROI from Phase 2 investment
+- `AgentContextBuilder` constructor takes `ISelectionContext` and `IAlertMonitorService`.
+- `BuildContext()` appends a "Selected:" line when at least one selection is set.
+- `BuildContext()` appends alert lines when `RecentAlerts.Count > 0` (capped at 3).
+- `dotnet build` passes.
 
 ---
 
-## 📊 Metrics to Track
+## T2 — Composite Tool: `InvestigatePodIssueTool`
 
-### Technical Metrics
-- **Context Accuracy**: % of time context is correctly identified and used
-- **Tool Success Rate**: > 98% for advanced tools
-- **Response Quality**: > 90% user satisfaction rating
-- **Context Switch Time**: Time to adapt to new user context
-- **Cache Hit Rate**: % of requests served from cache
-- **Token Efficiency**: Average tokens per useful response
+### What it does
 
-### User Metrics
-- **Multi-turn Conversation Rate**: % of sessions with >1 query
-- **Context Usage**: % of queries that leverage context effectively
-- **Feature Adoption**: Usage rates of new Phase 2 features
-- **Time to Resolution**: Reduction in investigation time
-- **User Retention**: Return usage rate
+Runs `GetPodStatusTool`, `GetPodLogsTool`, and `GetPodEventsTool` in parallel for a given pod, then returns a single merged JSON object. This replaces 3-4 round-trips with one tool call.
 
-### Business Metrics
-- **Alert Triage Time**: Time to understand and categorize alerts
-- **Incident Investigation Efficiency**: Reduction in manual steps
-- **Proactive Issue Detection**: Issues caught before they escalate
-- **Knowledge Democratization**: Usage by junior vs. senior team members
+### File to create
 
----
+`src/SwebKit.Agents/Tools/InvestigatePodIssueTool.cs`
 
-## 🔄 Transition to Phase 3
+### Parameters schema
 
-### Go Criteria for Phase 3
-- [ ] Phase 2 deliverables are complete and stable
-- [ ] Success criteria are met
-- [ ] User feedback is strongly positive
-- [ ] Performance and reliability are production-ready
-- [ ] Architecture supports proactive features
-- [ ] Stakeholders approve proceeding
+```json
+{
+  "type": "object",
+  "properties": {
+    "namespace": { "type": "string", "description": "Kubernetes namespace" },
+    "pod_name":  { "type": "string", "description": "Exact pod name" }
+  },
+  "required": ["namespace", "pod_name"]
+}
+```
 
-### Lessons to Carry Forward
-From Phase 2, we should learn:
-- Which context elements are most valuable
-- Which advanced tools provide the most value
-- Common multi-step investigation patterns
-- User expectations for agent intelligence
-- Integration challenges and opportunities
-- Performance characteristics of complex queries
+### Implementation pattern
 
-### Phase 3 Preparation
-Based on Phase 2 learnings, Phase 3 should:
-- Focus on the most valuable proactive scenarios
-- Address the most impactful performance bottlenecks
-- Expand on the most successful integration points
-- Automate the most repetitive and valuable workflows
-- Scale the architecture for enterprise use
+**Read `GetPodStatusTool.cs`, `GetPodLogsTool.cs`, and `GetPodEventsTool.cs` before writing this.** You need to know exactly what Kubernetes client they inject (likely `IAksClientFactory` or `IAksClient`).
 
----
+- Implement `IAgentTool` (from `SwebKit.Agents.Tools`)
+- Name: `"investigate_pod_issue"`
+- Inject the same Kubernetes client dependency that the existing pod tools use
+- In `ExecuteAsync`:
+  1. Read `namespace` and `pod_name` from `arguments` (`arguments.GetProperty("namespace").GetString()`, etc.)
+  2. Call the status, logs, and events fetches in parallel with `Task.WhenAll`
+  3. Return a JSON string:
+     ```json
+     {
+       "pod": "...",
+       "namespace": "...",
+       "status": { ... },
+       "recent_logs": [ "line1", "line2", "..." ],
+       "events": [ ... ]
+     }
+     ```
+  4. Limit logs to 50 lines. If any sub-call throws, capture the exception message and put `{ "error": "message" }` in that field — do not let exceptions propagate.
 
-## 📈 Risk Assessment
+**Do not call `AgentToolRegistry` or instantiate the other tool classes.** Inject the underlying Kubernetes client directly and reuse the fetch logic.
 
-### High-Risk Areas
+### Registration
 
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| Context pollution | Medium | High | Careful context selection, relevance scoring |
-| Hallucination in complex queries | Medium | High | Validation, confidence scoring, user feedback |
-| Performance degradation | Medium | High | Caching, optimization, async processing |
-| Over-engineering | High | Medium | Strict scope management, user validation |
-| User confusion with complexity | Medium | Medium | Progressive disclosure, clear documentation |
-| Integration conflicts | Low | High | Early integration testing, coordination |
+In `src/SwebKit.App/MauiProgram.cs`, add alongside existing tool registrations:
+```csharp
+services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
+```
 
-### Mitigation Strategies
+### Acceptance criteria
 
-**Context Quality**
-- Implement relevance scoring for context elements
-- Limit context window size
-- Allow user control over context inclusion
-- Provide context preview before sending
-
-**Response Quality**
-- Implement response validation rules
-- Add confidence scoring where possible
-- Enable user feedback on every response
-- Provide "explain this answer" functionality
-
-**Performance**
-- Profile all new tools and features
-- Implement caching for expensive operations
-- Use streaming for long-running queries
-- Set reasonable timeouts and limits
-
-**User Experience**
-- Introduce new features gradually
-- Provide clear guidance and examples
-- Offer training and documentation
-- Make complex features optional
+- Tool is named `"investigate_pod_issue"`.
+- Returns merged JSON with `status`, `recent_logs`, and `events` fields.
+- If any sub-call fails, that field contains `{ "error": "..." }` rather than throwing.
+- `dotnet build` passes.
 
 ---
 
-## 🎯 Implementation Approach
+## T3 — Composite Tool: `AnalyzeQueueHealthTool`
 
-### Development Strategy
+### What it does
 
-**Incremental Enhancement**
-1. Start with context awareness enhancements
-2. Add advanced tools one at a time
-3. Integrate with existing features incrementally
-4. Test each enhancement with real users
-5. Optimize based on feedback and metrics
+Calls stats and dead-letter message fetch for a given queue in parallel, returns a merged result with a plain-English `health_summary` field.
 
-**Quality Focus**
-- Comprehensive unit tests for all new components
-- Integration tests for complex workflows
-- User acceptance testing for new features
-- Performance testing for all enhancements
-- Security review of all changes
+### File to create
 
-### Team Coordination
+`src/SwebKit.Agents/Tools/AnalyzeQueueHealthTool.cs`
 
-**Cross-Team Collaboration**
-- Work with Incident Timeline team on integration
-- Coordinate with Alerting team on alert system integration
-- Consult with UX team on enhanced interface design
-- Align with Observability team on advanced queries
+### Parameters schema
 
-**Knowledge Sharing**
-- Document patterns and best practices
-- Share learnings from Phase 1
-- Conduct cross-team design reviews
-- Establish coding standards for agent code
+```json
+{
+  "type": "object",
+  "properties": {
+    "queue_name":       { "type": "string", "description": "Service Bus queue name" },
+    "namespace_alias":  { "type": "string", "description": "Namespace alias configured in SwebKit (optional)" }
+  },
+  "required": ["queue_name"]
+}
+```
+
+### Implementation pattern
+
+**Read `GetQueueStatsTool.cs` and `GetQueueMessagesTool.cs` before writing this.** You need to know what Service Bus client they inject.
+
+- Name: `"analyze_queue_health"`
+- Inject the same Service Bus client dependency that `GetQueueStatsTool` uses
+- In `ExecuteAsync`:
+  1. Run stats and dead-letter fetches in parallel with `Task.WhenAll`
+  2. Return:
+     ```json
+     {
+       "queue": "...",
+       "stats": { ... },
+       "dead_letter_sample": [ ... ],
+       "health_summary": "Healthy"
+     }
+     ```
+  3. Derive `health_summary`:
+     - `"Critical"` if dead-letter count > 0 or active message count > 1000
+     - `"Warning"` if active message count > 100
+     - `"Healthy"` otherwise
+  4. If any sub-call throws, put `{ "error": "message" }` in that field.
+
+### Registration
+
+```csharp
+services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
+```
+
+### Acceptance criteria
+
+- Tool is named `"analyze_queue_health"`.
+- Returns merged JSON with `stats`, `dead_letter_sample`, and `health_summary`.
+- `health_summary` is exactly one of `"Healthy"`, `"Warning"`, or `"Critical"`.
+- `dotnet build` passes.
 
 ---
 
-## 📝 Implementation Priority
+## T4 — Markdown Rendering in AgentChatPanel
 
-### High Priority (Week 1-2)
-1. **Context Awareness**
-   - Enhanced `AgentContextBuilder`
-   - Smart prompting system
-   - Context caching
+### What to change
 
-2. **Core Advanced Tools**
-   - `InvestigatePodIssueTool`
-   - `SuggestRemediationTool`
-   - `ExplainAlertTool`
+**File:** `src/SwebKit.App/Components/Pages/AgentChatPanel.razor`
 
-3. **Incident Investigation Integration**
-   - Agent-triggered investigations
-   - Agent analysis in timelines
+### Current rendering (look for this line)
 
-### Medium Priority (Week 3-4)
-1. **Additional Advanced Tools**
-   - `AnalyzeQueueErrorsTool`
-   - `CorrelateEventsTool`
-   - `CompareDeploymentsTool`
+```razor
+<pre class="agent-bubble__text">@msg.Content</pre>
+```
 
-2. **Alert System Integration**
-   - Auto-trigger on alerts
-   - Agent insights in alert details
+### What to do
 
-3. **UI Enhancements**
-   - Conversation history
-   - Context-aware suggestions
-   - Rich response formatting
+Replace the `<pre>` tag with a Markdown renderer.
 
-### Lower Priority (If Time Permits)
-1. **Pattern Analysis Tools**
-   - `FindSimilarIssuesTool`
-   - `PredictImpactTool`
-   - `AnalyzeTrendsTool`
+**Option A — Check Fluent UI first:** Check `Microsoft.FluentUI.AspNetCore.Components` for a markdown/richtext component. If one exists, use it.
 
-2. **Performance Optimizations**
-   - Advanced caching
-   - Streaming responses
-   - Token optimization
+**Option B — Use Markdig (default if no Fluent UI component):**
+
+1. Add to `src/SwebKit.App/SwebKit.App.csproj`:
+   ```xml
+   <PackageReference Include="Markdig" Version="0.38.0" />
+   ```
+
+2. Add a helper in the `@code` block:
+   ```csharp
+   private static MarkupString RenderMarkdown(string text)
+   {
+       var html = Markdig.Markdown.ToHtml(text ?? string.Empty);
+       return new MarkupString(html);
+   }
+   ```
+
+3. Replace the `<pre>` tag with:
+   ```razor
+   <div class="agent-bubble__text agent-bubble__markdown">
+       @RenderMarkdown(msg.Content)
+   </div>
+   ```
+
+4. In `AgentChatPanel.razor.css`, add prose styles:
+   ```css
+   .agent-bubble__markdown table { border-collapse: collapse; width: 100%; font-size: 0.82em; }
+   .agent-bubble__markdown th,
+   .agent-bubble__markdown td   { border: 1px solid var(--neutral-stroke-rest); padding: 4px 8px; }
+   .agent-bubble__markdown code { background: var(--neutral-fill-secondary-rest); padding: 1px 4px; border-radius: 3px; font-size: 0.85em; }
+   .agent-bubble__markdown pre  { background: var(--neutral-fill-secondary-rest); padding: 8px; border-radius: 4px; overflow-x: auto; }
+   .agent-bubble__markdown p    { margin: 0 0 6px; }
+   .agent-bubble__markdown ul,
+   .agent-bubble__markdown ol   { margin: 0 0 6px; padding-left: 18px; }
+   ```
+
+> **Security note:** `Markdig.ToHtml()` uses a safe pipeline by default (HTML in source is escaped). Do not change the pipeline settings.
+
+### Acceptance criteria
+
+- Assistant messages render markdown: bold, tables, code blocks, bullet lists.
+- User messages still render as plain text (no change to the user bubble).
+- `dotnet build` passes.
+
+---
+
+## T5 — "Investigate in Timeline" Button
+
+### What it does
+
+Adds an icon button to the agent panel header. When clicked, it launches the Incident Timeline page with a pre-seeded investigation scope derived from the current AKS selection.
+
+### What to change
+
+**File:** `src/SwebKit.App/Components/Pages/AgentChatPanel.razor`
+
+### Services to inject (add to top of file)
+
+```razor
+@inject IncidentInvestigationLauncher InvestigationLauncher
+@inject ISelectionContext SelectionCtx
+```
+
+`IncidentInvestigationLauncher` is in `SwebKit.App.Services`.
+`ISelectionContext` is in `SwebKit.Core.Abstractions`.
+
+Both are already registered as singletons in `MauiProgram.cs`.
+
+### Relevant types (from `SwebKit.Core.Models`)
+
+```csharp
+// IncidentInvestigationSeed
+public sealed record IncidentInvestigationSeed
+{
+    public required IncidentInvestigationSourceArea SourceArea { get; init; }
+    public required DateTimeOffset LaunchedAtUtc { get; init; }
+    public required TimeRange SelectedRange { get; init; }   // TimeRange(DateTimeOffset start, DateTimeOffset end)
+    public IncidentSeedEvidenceRef? EvidenceRef { get; init; }
+    public IncidentWorkloadScope? CandidateScope { get; init; }
+}
+
+// IncidentInvestigationLauncher.Launch(seed) navigates to /incident-timeline
+```
+
+### Where to add the button
+
+Find the panel header actions block (contains clear + close buttons). Add the new button before the close button:
+
+```razor
+@if (_canInvestigate)
+{
+    <button class="top-bar-icon-btn agent-panel-header-btn"
+            @onclick="LaunchInvestigation"
+            title="Investigate current selection in Incident Timeline">
+        <FluentIcon Value="@(new Icons.Regular.Size16.Timeline())" Width="14px" />
+    </button>
+}
+```
+
+### Code to add in `@code` block
+
+```csharp
+private bool _canInvestigate =>
+    SelectionCtx.GetSelection<object>("aks") is not null;
+
+private void LaunchInvestigation()
+{
+    var now = DateTimeOffset.UtcNow;
+    var seed = new IncidentInvestigationSeed
+    {
+        SourceArea    = IncidentInvestigationSourceArea.Observability,
+        LaunchedAtUtc = now,
+        SelectedRange = new TimeRange(now.AddHours(-2), now)
+        // CandidateScope is null — user fills in the form on the timeline page
+    };
+    InvestigationLauncher.Launch(seed);
+}
+```
+
+### Namespaces to add at the top of the file (if not already present)
+
+```razor
+@using SwebKit.Core.Abstractions
+@using SwebKit.Core.Models
+@using SwebKit.App.Services
+```
+
+### Acceptance criteria
+
+- "Investigate in Timeline" button appears in the panel header.
+- Button is hidden when no AKS selection is active (`_canInvestigate` is false).
+- Clicking it navigates to `/incident-timeline`.
+- `dotnet build` passes.
+
+---
+
+## ✅ Acceptance Checklist (full phase)
+
+- [ ] T1: `AgentContextBuilder` constructor takes `ISelectionContext` and `IAlertMonitorService`
+- [ ] T1: `BuildContext()` appends "Selected:" line when at least one selection is set
+- [ ] T1: `BuildContext()` appends alert lines (max 3) when recent alerts exist
+- [ ] T2: `InvestigatePodIssueTool` registered, returns merged JSON with status + logs + events
+- [ ] T3: `AnalyzeQueueHealthTool` registered, returns merged JSON with health_summary
+- [ ] T4: Assistant bubbles render markdown (tables, bold, code blocks)
+- [ ] T5: "Investigate in Timeline" button works and navigates to `/incident-timeline`
+- [ ] `dotnet build` passes with zero errors
+- [ ] `dotnet test` passes with zero failures
+
+---
+
+## ❌ Deliberately Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| `PredictImpactTool`, `FindSimilarIssuesTool`, `AnalyzeTrendsTool` | Require persistent history storage not yet built |
+| `ExplainAlertTool`, `CompareDeploymentsTool`, `AnalyzeDeploymentTool` | Lower value; defer to Phase 3 |
+| Alert auto-trigger on `AlertFired` event | Complex wiring; lower priority than core tasks |
+| Conversation history search | Nice-to-have, not core value |
+| Session save/restore | Not needed yet |
+| Streaming responses | `MistralHttpClient` does not support streaming yet |
+| Smart prompt template system | Current single template is sufficient |
+| Context caching | Premature optimization |
+| Response rating (thumbs up/down) | No analytics backend yet |
 
 ---
 
 ## 🔗 Related Documents
 
-### Phase Documents
-- [README - Overview](../README.md)
-- [Phase 0: Proof of Concept - Previous phase](phase-0-poc.md)
-- [Phase 1: Foundation - Previous phase](phase-1-foundation.md)
-- [Phase 3: Automation - Next phase](phase-3-automation.md)
-
-### Supporting Documents
-- [Architecture](../architecture.md) - Context system and tool architecture
-- [Security Considerations](../security-considerations.md) - Context filtering and permission model
-- [Testing Strategy](../testing-strategy.md) - Advanced testing for Phase 2
-- [Performance Optimization](../performance-optimization.md) - Token optimization and caching strategies
-- [Metrics and Monitoring](../metrics-and-monitoring.md) - Quality and usage metrics for Phase 2
+- [Phase 1: Foundation (Done)](phase-1-foundation.md)
+- [Phase 3: Automation](phase-3-automation.md)
+- [Architecture](../architecture/architecture.md)
+- [Testing Strategy](testing-strategy.md)
 
 ---
 
 *Document created: 2026-06-29*
-*Last updated: 2026-06-29*
+*Last updated: 2026-07-01*
