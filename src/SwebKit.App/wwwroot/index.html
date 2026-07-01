@@ -20,10 +20,37 @@
     </div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
     <script src="js/keyboardShortcuts.js"></script>
     <script src="js/monacoLoader.js"></script>
     <script src="js/splitter.js"></script>
     <script src="js/uiState.js"></script>
     <script src="js/yamlHighlight.js"></script>
+    <script>
+        // Initialize Mermaid for SwebKit
+        window.renderMermaidDiagrams = function() {
+            if (typeof mermaid !== 'undefined') {
+                mermaid.initialize({ startOnLoad: false, theme: 'default' });
+                var diagrams = document.querySelectorAll('.mermaid');
+                diagrams.forEach(function(diagram, index) {
+                    try {
+                        var id = 'mermaid-' + Date.now() + '-' + index;
+                        diagram.id = id;
+                        diagram.style.display = 'block';
+                        mermaid.mermaidAPI.render(id, diagram.textContent, function(svgCode) {
+                            diagram.innerHTML = svgCode;
+                        });
+                    } catch (e) {
+                        console.error('Mermaid rendering error:', e);
+                    }
+                });
+            }
+        };
+        
+        // Also render on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            setTimeout(window.renderMermaidDiagrams, 500);
+        });
+    </script>
 </body>
 </html>

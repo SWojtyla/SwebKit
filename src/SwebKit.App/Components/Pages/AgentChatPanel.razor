@@ -50,14 +50,12 @@
                         <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="14px" />
                     </button>
                 }
-                @if (_canInvestigate)
-                {
-                    <button class="top-bar-icon-btn agent-panel-header-btn"
-                            @onclick="LaunchInvestigation"
-                            title="Investigate current selection in Incident Timeline">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.History())" Width="14px" />
-                    </button>
-                }
+                <button class="top-bar-icon-btn agent-panel-header-btn"
+                        @onclick="LaunchInvestigation"
+                        disabled="!_canInvestigate"
+                        title="@(_canInvestigate ? "Investigate current selection in Incident Timeline" : "Select an AKS resource to investigate in Timeline")">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.History())" Width="14px" />
+                </button>
                 <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="OnClose" title="Close AI Agent panel"
                         aria-label="Close AI Agent panel">
                     <FluentIcon Value="@(new Icons.Regular.Size16.ChevronDoubleRight())" Width="14px" />
@@ -149,8 +147,34 @@
 
     private static MarkupString RenderMarkdown(string text)
     {
-        var html = Markdig.Markdown.ToHtml(text ?? string.Empty);
+        if (string.IsNullOrEmpty(text))
+            return new MarkupString(string.Empty);
+        
+        // Handle Mermaid diagrams specially
+        // Replace mermaid code blocks with special divs that JS can render
+        var processed = System.Text.RegularExpressions.Regex.Replace(
+            text,
+            "```mermaid([\\s\\S]*?)```",
+            m => {
+                var mermaidCode = m.Groups[1].Value.Trim();
+                return "<div class=\"mermaid\">" + System.Net.WebUtility.HtmlEncode(mermaidCode) + "</div>";
+            });
+        
+        var html = Markdig.Markdown.ToHtml(processed);
         return new MarkupString(html);
+    }
+
+    private async Task RenderMermaidAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("renderMermaidDiagrams");
+        }
+        catch (Exception ex)
+        {
+            // Mermaid rendering failed, but this is not critical
+            Console.WriteLine("Mermaid rendering error: " + ex.Message);
+        }
     }
 
     private bool _prevIsOpen;
@@ -176,6 +200,12 @@
         {
             _resizerNeedsInit = false;
             await InitResizerAsync();
+        }
+        
+        // Render Mermaid diagrams after markdown is rendered
+        if (firstRender)
+        {
+            await RenderMermaidAsync();
         }
     }
 
@@ -234,6 +264,7 @@
             _currentToolName = null;
             StateHasChanged();
             await ScrollToBottomAsync();
+            await RenderMermaidAsync();
         }
     }
 
