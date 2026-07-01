@@ -150,14 +150,19 @@
         if (string.IsNullOrEmpty(text))
             return new MarkupString(string.Empty);
         
-        // Handle Mermaid diagrams specially
-        // Replace mermaid code blocks with special divs that JS can render
+        // Handle Mermaid diagrams specially BEFORE Markdig processes them
+        // Replace mermaid code blocks with placeholder divs
+        var mermaidCount = 0;
         var processed = System.Text.RegularExpressions.Regex.Replace(
             text,
             "```mermaid([\\s\\S]*?)```",
             m => {
                 var mermaidCode = m.Groups[1].Value.Trim();
-                return "<div class=\"mermaid\">" + System.Net.WebUtility.HtmlEncode(mermaidCode) + "</div>";
+                // Store the raw code in a script tag with a unique ID, then reference it in the div
+                var id = "mermaid-src-" + mermaidCount++;
+                return "<div class=\"mermaid\" data-mermaid-id=\"" + id + "\"></div>" +
+                       "<script type=\"text/plain\" id=\"" + id + "\">" + 
+                       System.Net.WebUtility.HtmlEncode(mermaidCode) + "</script>";
             });
         
         var html = Markdig.Markdown.ToHtml(processed);

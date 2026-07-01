@@ -29,22 +29,34 @@
     <script>
         // Initialize Mermaid for SwebKit
         window.renderMermaidDiagrams = function() {
-            if (typeof mermaid !== 'undefined') {
-                mermaid.initialize({ startOnLoad: false, theme: 'default' });
-                var diagrams = document.querySelectorAll('.mermaid');
-                diagrams.forEach(function(diagram, index) {
-                    try {
-                        var id = 'mermaid-' + Date.now() + '-' + index;
-                        diagram.id = id;
-                        diagram.style.display = 'block';
-                        mermaid.mermaidAPI.render(id, diagram.textContent, function(svgCode) {
-                            diagram.innerHTML = svgCode;
-                        });
-                    } catch (e) {
-                        console.error('Mermaid rendering error:', e);
-                    }
-                });
+            if (typeof mermaid === 'undefined') {
+                console.warn('Mermaid library not loaded');
+                return;
             }
+            
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            var diagrams = document.querySelectorAll('.mermaid');
+            diagrams.forEach(function(diagram) {
+                try {
+                    var sourceId = diagram.getAttribute('data-mermaid-id');
+                    if (sourceId) {
+                        var sourceEl = document.getElementById(sourceId);
+                        if (sourceEl) {
+                            var code = sourceEl.textContent;
+                            var containerId = 'mermaid-render-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+                            diagram.id = containerId;
+                            diagram.style.display = 'block';
+                            diagram.style.minHeight = '100px';
+                            mermaid.mermaidAPI.render(containerId, code, function(svgCode) {
+                                diagram.innerHTML = svgCode;
+                            }, diagram);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Mermaid rendering error:', e);
+                }
+            });
         };
         
         // Also render on page load
