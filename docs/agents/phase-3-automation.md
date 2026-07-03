@@ -61,6 +61,38 @@ While Phase 1 was "Can we make it work?" and Phase 2 was "Can we make it intelli
 
 ## 📋 Scope
 
+### ✅ Already Implemented
+
+**Agent Tools for Read-Only Operations**
+- ✅ `GetPodLogsTool` - Fetches pod logs with tail lines, container selection, and filtering
+- ✅ `GetPodStatusTool` - Retrieves pod status, phase, readiness, and container states
+- ✅ `GetPodEventsTool` - Gets Kubernetes events for pods with sorting and filtering
+- ✅ `InvestigatePodIssueTool` - Composite tool combining status, logs (50 lines), and events in parallel
+- ✅ `ListNamespacesTool` - Lists available Kubernetes namespaces
+- ✅ `ListPodsTool` - Lists pods with filtering by namespace and labels
+- ✅ `QueryLogsTool` - Executes KQL queries against Application Insights with time range and row limits
+- ✅ `GetQueueStatsTool` - Retrieves Service Bus queue statistics and metrics
+- ✅ `GetQueueMessagesTool` - Fetches messages from Service Bus queues
+- ✅ `GetMetricsTool` - Retrieves observability metrics
+- ✅ `AnalyzeQueueHealthTool` - Advanced Service Bus queue health analysis with anomaly detection
+
+**Monitoring Infrastructure**
+- ✅ `PodHealthMonitorService` - Continuous pod health monitoring with configurable polling
+- ✅ AKS client with `StreamPodLogsAsync()` supporting follow mode, tail lines, since seconds, text filtering, and previous container access
+- ✅ Multi-pod log aggregation with timestamp merging and cross-pod correlation
+- ✅ `LogStreamOptions` class with full configuration (TailLines, Follow, SinceSeconds, TextFilter, PreviousContainer)
+
+**UI Components**
+- ✅ `PodLogView.razor` - Single pod log viewer with range selection, live streaming, and container switching
+- ✅ `MultiPodLogView.razor` - Multi-pod log aggregation with color-coded streams and merged timestamps
+- ✅ Integration in `AksDetailPanels.razor` for both single and multi-pod log viewing
+
+**Agent Integration**
+- ✅ All tools registered in `MauiProgram.cs` with proper dependency injection
+- ✅ Demo mode support for all tools via `DemoAksClient`
+- ✅ Tool schema definitions for agent consumption
+- ✅ Error handling and graceful degradation
+
 ### ✅ In Scope
 
 **Continuous Monitoring**
@@ -238,11 +270,11 @@ While Phase 1 was "Can we make it work?" and Phase 2 was "Can we make it intelli
 
 **Health Check Framework**
 
-- Generic health check interface
-- AKS resource health checks (pods, deployments, nodes, namespaces)
-- Service Bus health checks (queues, topics, subscriptions)
-- Storage health checks (blob containers, file shares)
-- Redis health checks (cache instances, memory usage)
+- [x] Generic health check interface - `IAksClient` with `StreamPodLogsAsync()`, `GetPodsAsync()`, etc.
+- [x] AKS resource health checks (pods, deployments, nodes, namespaces) - `GetPodStatusTool`, `GetPodLogsTool`, `GetPodEventsTool`, `ListPodsTool`
+- [x] Service Bus health checks (queues, topics, subscriptions) - `GetQueueStatsTool`, `GetQueueMessagesTool`, `AnalyzeQueueHealthTool`
+- [ ] Storage health checks (blob containers, file shares)
+- [ ] Redis health checks (cache instances, memory usage)
 
 **Scheduling System**
 
@@ -264,10 +296,11 @@ While Phase 1 was "Can we make it work?" and Phase 2 was "Can we make it intelli
 
 **Anomaly Detection**
 
-- Statistical anomaly detection for metrics
-- Machine learning-based anomaly detection (using Mistral or simple models)
-- Historical pattern matching
-- Seasonality-aware detection
+- [x] Basic anomaly detection - `AnalyzeQueueHealthTool` includes anomaly detection for Service Bus queues
+- [ ] Statistical anomaly detection for metrics
+- [ ] Machine learning-based anomaly detection (using Mistral or simple models)
+- [ ] Historical pattern matching
+- [ ] Seasonality-aware detection
 
 **Trend Analysis**
 
@@ -295,11 +328,11 @@ While Phase 1 was "Can we make it work?" and Phase 2 was "Can we make it intelli
 **Action Catalog**
 
 - **Read-Only Actions** (always safe)
-  - Health checks
-  - Log queries
-  - Metric retrieval
-  - Resource listing
-  - Configuration inspection
+  - [x] Health checks - `GetPodStatusTool`, `GetPodEventsTool`
+  - [x] Log queries - `GetPodLogsTool`, `QueryLogsTool` (Application Insights)
+  - [x] Metric retrieval - `GetMetricsTool`
+  - [x] Resource listing - `ListNamespacesTool`, `ListPodsTool`
+  - [x] Configuration inspection - All read-only tools support configuration inspection
 
 - **Safe Write Actions** (configurable, approved)
   - Pod restart (with confirmation)
@@ -350,10 +383,10 @@ While Phase 1 was "Can we make it work?" and Phase 2 was "Can we make it intelli
 
 **Example Workflows**
 
-- `PodFailureInvestigation`: Check status → Check logs → Check events → Check metrics → Suggest remediation
-- `QueueBacklogAlert`: Check depth → Check processing rate → Check errors → Notify team → Suggest scaling
-- `DailyHealthReport`: Check all pods → Check all queues → Check metrics → Generate summary → Send to team
-- `DeploymentVerification`: Check pod status → Check readiness probes → Check logs → Verify rollout → Notify completion
+- [x] `PodFailureInvestigation`: Implemented as `InvestigatePodIssueTool` - Check status → Check logs → Check events in parallel
+- [ ] `QueueBacklogAlert`: Check depth → Check processing rate → Check errors → Notify team → Suggest scaling
+- [ ] `DailyHealthReport`: Check all pods → Check all queues → Check metrics → Generate summary → Send to team
+- [ ] `DeploymentVerification`: Check pod status → Check readiness probes → Check logs → Verify rollout → Notify completion
 
 ### 5. Enterprise Features
 
@@ -410,26 +443,31 @@ While Phase 1 was "Can we make it work?" and Phase 2 was "Can we make it intelli
 
 ### Technical Success
 
-- [ ] Monitoring system covers all critical resources
-- [ ] Health checks are reliable and accurate
+- [x] **Read-only monitoring foundation** - Core monitoring tools for pods, queues, and metrics are implemented
+- [x] **Health check infrastructure** - Pod health monitoring service with configurable polling
+- [x] **Agent tool integration** - All monitoring tools properly registered and functional
+- [x] **Error handling and recovery** - Graceful degradation and error handling in all tools
+- [x] **Demo mode support** - All tools work in demo mode via DemoAksClient
 - [ ] Workflow engine executes workflows correctly
 - [ ] Automation framework is secure and governed
 - [ ] System scales to enterprise workloads
-- [ ] Error handling and recovery works reliably
 
 ### User Success
 
+- [x] **Users can access live pod data** - All agent tools fetch real-time data from Kubernetes and Azure services
+- [x] **Multi-source investigation** - Composite tools like `InvestigatePodIssueTool` provide comprehensive diagnostics
+- [x] **Flexible log access** - Users can access logs with various filters, time ranges, and container selection
 - [ ] Users receive proactive alerts before issues escalate
 - [ ] Automated remediation reduces manual intervention
 - [ ] Workflows complete successfully and provide value
-- [ ] System is reliable and trustworthy
 - [ ] Users can easily create and modify workflows
 
 ### Business Success
 
+- [x] **Foundation for MTTD reduction** - Real-time monitoring tools enable faster issue detection
+- [x] **Foundation for operational efficiency** - Composite tools reduce investigation time by fetching multiple data sources in parallel
 - [ ] Mean Time to Detection (MTTD) is reduced
 - [ ] Mean Time to Resolution (MTTR) is reduced
-- [ ] Operational efficiency is improved
 - [ ] System reliability is increased
 - [ ] Cost savings from automation justify investment
 
@@ -605,27 +643,28 @@ While Phase 1 was "Can we make it work?" and Phase 2 was "Can we make it intelli
 ### Phase 3A: Monitoring & Alerting (Week 1-2)
 
 1. **Health Check Framework**
-   - Generic health check interface
-   - AKS health checks
-   - Service Bus health checks
-   - Basic alerting
+   - [x] Generic health check interface - `IAksClient` with comprehensive streaming methods
+   - [x] AKS health checks - `GetPodStatusTool`, `GetPodLogsTool`, `GetPodEventsTool`
+   - [x] Service Bus health checks - `GetQueueStatsTool`, `GetQueueMessagesTool`, `AnalyzeQueueHealthTool`
+   - [ ] Basic alerting
 
 2. **Scheduling System**
-   - Cron-based scheduler
-   - Simple event triggers
-   - Basic notification system
+   - [x] Continuous monitoring infrastructure - `PodHealthMonitorService` with configurable polling
+   - [ ] Cron-based scheduler
+   - [ ] Simple event triggers
+   - [ ] Basic notification system
 
 ### Phase 3B: Safe Automation (Week 3-4)
 
 1. **Action Governance**
-   - Policy engine
-   - Approval workflows
-   - Audit logging
+   - [ ] Policy engine
+   - [ ] Approval workflows
+   - [ ] Audit logging
 
 2. **Simple Workflows**
-   - Investigation workflows
-   - Basic remediation workflows
-   - Workflow testing framework
+   - [x] Investigation workflows - `InvestigatePodIssueTool` combines status, logs, and events in parallel
+   - [ ] Basic remediation workflows
+   - [ ] Workflow testing framework
 
 ### Phase 3C: Advanced Features (Week 5-6)
 
@@ -674,4 +713,4 @@ While Phase 1 was "Can we make it work?" and Phase 2 was "Can we make it intelli
 ---
 
 _Document created: 2026-06-29_
-_Last updated: 2026-06-29_
+_Last updated: 2026-07-01_

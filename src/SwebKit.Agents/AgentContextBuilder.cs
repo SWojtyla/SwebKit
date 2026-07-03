@@ -29,7 +29,9 @@ public sealed class AgentContextBuilder : IAgentContextBuilder
         var aksConfig = config.AksConfig;
         if (aksConfig != null)
         {
-            var aksContext = aksConfig.KubeconfigContext ?? "(not configured)";
+            var aksContext = string.IsNullOrWhiteSpace(aksConfig.KubeconfigContext)
+                ? "default"
+                : aksConfig.KubeconfigContext;
             var contextStr = "Kubernetes context: " + aksContext;
             if (!string.IsNullOrWhiteSpace(aksConfig.KubeconfigPath))
             {

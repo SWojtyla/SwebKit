@@ -157,7 +157,21 @@
 
 .aks-ns-dropdown--multi {
     min-width: 240px;
-    padding-bottom: 0;
+    /* The row list and the action footer scroll independently — the footer is a normal
+       flex item below the scrollable list, so it can never overlap the last row (BL-4-adjacent
+       fix: sticky-inside-scroll-container overlap can't happen if there's nothing to stick to). */
+    display: flex;
+    flex-direction: column;
+    max-height: 260px;
+    overflow: visible;
+    padding: 0;
+}
+
+.aks-ns-list-scroll {
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: var(--spacing-xs) 0;
 }
 
 .aks-ns-option {
@@ -192,9 +206,8 @@
     gap: var(--spacing-xs);
     padding: var(--spacing-xs);
     border-top: 1px solid var(--aks-toolbar-border);
-    background: color-mix(in srgb, var(--aks-monitor-surface) 86%, transparent);
-    position: sticky;
-    bottom: 0;
+    background: var(--aks-monitor-surface);
+    flex-shrink: 0;
 }
 
 .aks-ns-action {

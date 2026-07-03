@@ -51,23 +51,25 @@
             {
                 var filteredNamespaces = NsFiltered.ToList();
                 <div class="aks-ns-dropdown aks-ns-dropdown--multi">
-                    @if (filteredNamespaces.Count == 0)
-                    {
-                        <div class="aks-ns-empty">No namespaces match</div>
-                    }
-                    else
-                    {
-                        @foreach (var ns in filteredNamespaces)
+                    <div class="aks-ns-list-scroll">
+                        @if (filteredNamespaces.Count == 0)
                         {
-                            var nsLocal = ns;
-                            var checkedNamespace = IsPendingNamespace(nsLocal);
-                            <label class="aks-ns-option aks-ns-option-check @(checkedNamespace ? "current" : "")">
-                                <input type="checkbox" checked="@checkedNamespace"
-                                       @onchange="e => TogglePendingNamespace(nsLocal, e.Value is true)" aria-label="@nsLocal" />
-                                <span>@nsLocal</span>
-                            </label>
+                            <div class="aks-ns-empty">No namespaces match</div>
                         }
-                    }
+                        else
+                        {
+                            @foreach (var ns in filteredNamespaces)
+                            {
+                                var nsLocal = ns;
+                                var checkedNamespace = IsPendingNamespace(nsLocal);
+                                <label class="aks-ns-option aks-ns-option-check @(checkedNamespace ? "current" : "")">
+                                    <input type="checkbox" checked="@checkedNamespace"
+                                           @onchange="e => TogglePendingNamespace(nsLocal, e.Value is true)" aria-label="@nsLocal" />
+                                    <span>@nsLocal</span>
+                                </label>
+                            }
+                        }
+                    </div>
                     <div class="aks-ns-dropdown-actions">
                         <button type="button" class="aks-ns-action" @onclick="SelectAllNamespaces">All</button>
                         <button type="button" class="aks-ns-action" @onclick="ClearNamespaceSelection">None</button>

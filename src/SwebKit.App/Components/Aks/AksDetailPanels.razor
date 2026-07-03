@@ -4,7 +4,7 @@
 {
     <ResizablePanel DefaultWidth="620" MinWidth="320" MaxWidth="1600">
         <div class="aks-panels-col">
-            
+
             @* ── Tab Bar (when multiple panels are open) ── *@
             @if (ShouldShowTabs)
             {
@@ -20,9 +20,25 @@
                     }
                     @if (_containerDetailPodName != null)
                     {
-                        <div class="aks-tab @(_activeTab == "containers" ? "active" : string.Empty)" @onclick="ActivateContainersTab">
+                        <div class="aks-tab @(_activeTab == "containers" ? "active" : string.Empty)"
+                             @onclick="ActivateContainersTab">
                             <span class="aks-tab-title">@GetContainerTabTitle()</span>
                             <button class="aks-tab-close" @onclick="CloseContainerDetailFromTab" title="Close">
+                                <FluentIcon Value="@_iconClose" Width="14px" />
+                            </button>
+                        </div>
+                    }
+                    @if (IsHpaYamlPairActive)
+                    {
+                        <div class="aks-tab @(_activeTab == "hpa" ? "active" : string.Empty)" @onclick="ActivateHpaTab">
+                            <span class="aks-tab-title">HPA</span>
+                            <button class="aks-tab-close" @onclick="CloseHpaDetailFromTab" title="Close">
+                                <FluentIcon Value="@_iconClose" Width="14px" />
+                            </button>
+                        </div>
+                        <div class="aks-tab @(_activeTab == "yaml" ? "active" : string.Empty)" @onclick="ActivateYamlTab">
+                            <span class="aks-tab-title">YAML</span>
+                            <button class="aks-tab-close" @onclick="CloseYamlFromTab" title="Close">
                                 <FluentIcon Value="@_iconClose" Width="14px" />
                             </button>
                         </div>
@@ -31,9 +47,13 @@
             }
 
             @* ── YAML viewer / editor ── *@
-            <AksYamlViewer @ref="_yamlViewer" Client="Client" Namespace="@Namespace" IsProduction="@IsProduction"
-                           Confirm="Confirm" Notifications="Notifications" OnClose="OnChildPanelClosed" OnError="OnError"
-                           OnYamlApplied="OnDataChanged" />
+            @* When paired with the HPA detail panel, only one of the two tabs is visible at a time —
+               toggle CSS visibility (BL-4 pattern) instead of unmounting so state/scroll survive tab switches. *@
+            <div hidden="@(IsHpaYamlPairActive && _activeTab != "yaml")">
+                <AksYamlViewer @ref="_yamlViewer" Client="Client" Namespace="@Namespace" IsProduction="@IsProduction"
+                               Confirm="Confirm" Notifications="Notifications" OnClose="OnChildPanelClosed" OnError="OnError"
+                               OnYamlApplied="OnDataChanged" />
+            </div>
 
             @* ── Helm History / Values / Rollback ── *@
             <AksHelmPanel @ref="_helmPanel" Client="Client" Namespace="@Namespace" IsProduction="@IsProduction"
@@ -61,8 +81,8 @@
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                                                                                                                                                                                                                                                                                                                                    ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                                                                                                                                                                                                                                                                                                                                    : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -87,7 +107,8 @@
                 }
 
                 @* ── Multi-pod logs ── *@
-                @if (_logDeploymentName is not null && _logPodName is null && _yamlViewer?.IsOpen != true && (_activeTab == "logs" || !ShouldShowTabs))
+                @if (_logDeploymentName is not null && _logPodName is null && _yamlViewer?.IsOpen != true && (_activeTab ==
+     "logs" || !ShouldShowTabs))
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header aks-log-header">
@@ -102,7 +123,8 @@
                 }
 
                 @* ── Container details ── *@
-                @if (_containerDetailPodName is not null && _yamlViewer?.IsOpen != true && (_activeTab == "containers" || !ShouldShowTabs))
+                @if (_containerDetailPodName is not null && _yamlViewer?.IsOpen != true && (_activeTab == "containers" ||
+        !ShouldShowTabs))
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -147,7 +169,8 @@
                 }
 
                 @* ── HPA detail ── *@
-                @if (_hpaDetailTarget is not null && _yamlViewer?.IsOpen != true)
+                @if (_hpaDetailTarget is not null && (_yamlViewer?.IsOpen != true || (IsHpaYamlPairActive && _activeTab ==
+  "hpa")))
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -636,13 +659,13 @@
         _logPodContainers = containers?.Count > 0
             ? [.. containers]
             : [.. Pods.FirstOrDefault(p => string.Equals(p.Name, podName, StringComparison.Ordinal))?.Containers ?? []];
-        
+
         // Set active tab to logs if both logs and containers are open
         if (_containerDetailPodName is not null)
         {
             _activeTab = "logs";
         }
-        
+
         UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
@@ -654,13 +677,13 @@
         _logDeploymentName = deploymentName;
         _logDeploymentNamespace = targetNamespace ?? Namespace;
         _logPodContainers = [];
-        
+
         // Set active tab to logs if both logs and containers are open
         if (_containerDetailPodName is not null)
         {
             _activeTab = "logs";
         }
-        
+
         UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
@@ -672,13 +695,13 @@
         _logDeploymentName = null;
         _logDeploymentNamespace = null;
         _logPodContainers = [];
-        
+
         // Switch to containers tab if it was active
         if (_activeTab == "logs" && _containerDetailPodName is not null)
         {
             _activeTab = "containers";
         }
-        
+
         UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
@@ -691,12 +714,12 @@
         _containerDetailNamespace = targetNamespace
             ?? Pods.FirstOrDefault(p => string.Equals(p.Name, podName, StringComparison.Ordinal))?.Namespace
             ?? Namespace;
-        
+
         if ((_logPodName is not null || _logDeploymentName is not null) && _containerDetailPodName is not null)
         {
             _activeTab = "containers";
         }
-        
+
         UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
@@ -716,6 +739,7 @@
     public void ShowHpaDetail(HpaInfo? hpa)
     {
         _hpaDetailTarget = hpa;
+        UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
 
@@ -785,6 +809,17 @@
             var (kind, name, editMode, targetNamespace) = _pendingYamlOpen.Value;
             _pendingYamlOpen = null;
             await _yamlViewer.OpenAsync(kind, name, targetNamespace, startInEditMode: editMode);
+
+            // PERF/BUG: the child's own StateHasChanged only refreshes its own render tree — it does
+            // NOT re-evaluate this parent's @if conditions (e.g. the HPA pane's `_yamlViewer?.IsOpen`
+            // check). Without re-rendering here, the previously-open panel (HPA, etc.) stayed visible
+            // on screen at the same time as the newly-opened YAML pane ("mixed panes" bug).
+            if (string.Equals(kind, "HPA", StringComparison.OrdinalIgnoreCase) && _hpaDetailTarget is not null)
+            {
+                _activeTab = "yaml";
+            }
+            UpdateOpenTabs();
+            await InvokeAsync(StateHasChanged); // BL-2
         }
 
         if (_pendingHelmOpen.HasValue && _helmPanel is not null)
@@ -798,6 +833,7 @@
                 HelmPendingAction.Rollback => _helmPanel.ShowRollbackAsync(releaseName),
                 _ => Task.CompletedTask
             });
+            await InvokeAsync(StateHasChanged); // BL-2 — same parent re-render fix as above
         }
     }
 
@@ -850,19 +886,30 @@
         NotifyPanelStateChanged();
     }
 
-    private void CloseContainerDetail()
+    public void CloseContainerDetail()
     {
         _containerDetailPodName = null;
         _containerDetailNamespace = null;
-        
+
         // Switch to logs tab if it was active
         if (_activeTab == "containers" && (_logPodName is not null || _logDeploymentName is not null))
         {
             _activeTab = "logs";
         }
-        
+
         UpdateOpenTabs();
         NotifyPanelStateChanged();
+    }
+
+    /// <summary>
+    /// If the container detail panel is currently open, switches its target to a newly selected
+    /// pod instead of closing it. If no container detail panel is open, this is a no-op — selecting
+    /// a different row should not pop the panel open on its own.
+    /// </summary>
+    public void SwitchOrCloseContainerDetail(string podName, string? targetNamespace = null)
+    {
+        if (_containerDetailPodName is null) return;
+        ShowContainerDetails(podName, targetNamespace);
     }
 
     private void CloseConfigMapDetail()
@@ -880,6 +927,7 @@
     private void CloseHpaDetail()
     {
         _hpaDetailTarget = null;
+        UpdateOpenTabs();
         NotifyPanelStateChanged();
     }
 
@@ -945,6 +993,7 @@
 
     private async Task OnChildPanelClosed()
     {
+        UpdateOpenTabs();
         await InvokeAsync(StateHasChanged); // BL-2
         await OnPanelStateChanged.InvokeAsync();
     }
@@ -977,31 +1026,42 @@
 
     // ── Tab management methods ──
     private bool ShouldShowTabs => _openTabs.Count > 1;
-    
+
     private string GetLogsTabTitle()
     {
         if (_logPodName is not null) return "Logs: " + TruncatePodName(_logPodName);
         if (_logDeploymentName is not null) return "All-pod logs: " + _logDeploymentName;
         return "Logs";
     }
-    
+
     private string GetContainerTabTitle()
     {
         if (_containerDetailPodName is not null) return "Containers: " + TruncatePodName(_containerDetailPodName);
         return "Containers";
     }
-    
+
     private void SetActiveTab(string tab)
     {
         _activeTab = tab;
         StateHasChanged();
     }
-    
+
     private void ActivateLogsTab() => SetActiveTab("logs");
     private void ActivateContainersTab() => SetActiveTab("containers");
+    private void ActivateHpaTab() => SetActiveTab("hpa");
+    private void ActivateYamlTab() => SetActiveTab("yaml");
     private void CloseLogsFromTab() { CloseLogs(); }
     private void CloseContainerDetailFromTab() { CloseContainerDetail(); }
-    
+    private void CloseHpaDetailFromTab() { CloseHpaDetail(); }
+    private void CloseYamlFromTab() { CloseYaml(); }
+
+    /// <summary>True when the HPA detail panel and its YAML view are both open for the same
+    /// resource — in that case they render as two tabs in one pane instead of one replacing the other.</summary>
+    private bool IsHpaYamlPairActive =>
+        _hpaDetailTarget is not null &&
+        _yamlViewer?.IsOpen == true &&
+        string.Equals(_yamlViewer.TargetKind, "HPA", StringComparison.OrdinalIgnoreCase);
+
     private void UpdateOpenTabs()
     {
         var tabs = new List<string>();
@@ -1009,6 +1069,18 @@
             tabs.Add("logs");
         if (_containerDetailPodName is not null)
             tabs.Add("containers");
+        if (IsHpaYamlPairActive)
+        {
+            tabs.Add("hpa");
+            tabs.Add("yaml");
+        }
         _openTabs = tabs;
+
+        // Self-heal: if the active tab no longer exists (its panel was closed), fall back to
+        // whatever is still open instead of leaving every pane hidden.
+        if (tabs.Count > 0 && !tabs.Contains(_activeTab))
+        {
+            _activeTab = tabs[0];
+        }
     }
 }
