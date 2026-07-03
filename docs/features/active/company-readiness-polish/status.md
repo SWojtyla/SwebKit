@@ -16,13 +16,14 @@ last_updated: "2026-07-03"
 
 Screen-by-screen polish pass before company sharing. No new features — fix sloppy UI, inconsistent primitives, personal content, and known rough edges.
 
-**Current focus:** Screen 1 — Service Bus (user validation pass pending).
+**Current focus:** Screen 3 — Redis.
 
 ## Progress Checklist
 
 ### Cross-cutting
 
 - [ ] Decision recorded: `<a>` anchor vs `AppButton` for header navigation links
+- [ ] Decision needed: `FluentButton` vs `AppButton` — Redis panels use `FluentButton` pervasively (Refresh/Delete/Edit/Scan/etc.) while ServiceBus/AKS lean on `AppButton`. Not fixed in this pass — needs an explicit convention decision before a broad refactor.
 
 ### Screen 1 — Service Bus
 
@@ -34,24 +35,30 @@ Screen-by-screen polish pass before company sharing. No new features — fix slo
 - [ ] SB-5 grid audit: DLQ tooltip easter egg ("Sébastien would be proud 🥳") removal
 - [ ] Manual visual review (light + dark)
 
-### Screen 2 — AKS
+### Screen 2 — AKS ✅ DONE
 
 - [x] Remove/neutralise `"Suspiciously fine. — SW"` easter egg → now shows "All pods healthy"
 - [x] `System.Diagnostics.Debug.WriteLine` debug leak → replaced with `Logger.LogWarning`
 - [x] Connection bar and toolbar controls reviewed for consistency (context/namespace pickers intentional custom inputs)
 - [x] Regression: `AppButton Ghost` swap for Refresh overlapped the namespace picker → reverted to `FluentButton Appearance.Stealth`
-- [x] Bug: container detail panel stayed open with stale pod after selecting a different row → `CloseContainerDetail()` now called on every `SelectDeployment`/`SelectStatefulSet`/`SelectPod`
+- [x] Bug: container detail panel stayed open with stale pod after selecting a different row → now switches to the newly selected pod's containers instead of closing (`SwitchOrCloseContainerDetail`)
 - [x] Bug: app froze/became unresponsive when switching resource-type tabs repeatedly → BL-4 fix: `@switch` (destroy/recreate grids) replaced with always-mounted `<div hidden>` wrappers so `FluentDataGrid` virtualization isn't torn down and rebuilt every click
-- [ ] TODO: Raw `<input type="checkbox">` "Show completed" filter — tight CSS integration, defer to user review
-- [ ] TODO: Side panel animation — verify at runtime (no code issue found)
-- [ ] Manual visual review (light + dark)
-- [ ] Manual perf check: rapidly click through all resource-type tabs, confirm no freeze/lag
+- [x] Bug: namespace multi-select dropdown's sticky `All/None/Apply` footer overlapped the last namespace row → restructured to flex column layout (scrollable list + non-sticky footer) instead of padding+sticky hack
+- [x] Bug: YAML viewer "loads forever, no error shown" / HPA detail + YAML panes rendered mixed together → root cause was `AksDetailPanels` not re-rendering after the child `AksYamlViewer` finished its async open; fixed by re-rendering the parent after the child operation completes
+- [x] Improvement: HPA detail + its YAML view now render as two tabs in one pane (matching the existing Logs/Containers tab pattern) instead of one replacing the other
+- [x] Deferred by design: raw `<input type="checkbox">` "Show completed" filter — tight CSS integration, low severity, left as-is
+- [x] Manual visual review — user confirmed fixed
 
 ### Screen 3 — Redis
 
-- [ ] Replace `FluentButton` in key tree panel → AppButton (load more, etc.)
-- [ ] Panel heading `<h2>Keys</h2>` — review styling consistency
-- [ ] Workspace status bar (`redis-workspace-status`) — ensure consistent pill/label style
+- [x] Replace `FluentButton` "Load More" in key tree panel → `AppButton`
+- [x] Panel heading `<h2>Keys</h2>` — reviewed, consistent local pattern, no change needed
+- [x] Workspace status bar (`redis-workspace-status`) — reviewed, consistent styling, no change needed
+- [x] `RedisConnectionBar` raw `<select class="cache-selector">` → `AppSelect`
+- [x] Detail panels (`RedisKeyDetail`, `RedisToolbar`, `RedisKeyspaceHealthExplorer`, `RedisPubSubPanel`) reviewed — no personal/debug content; pervasive `FluentButton` usage documented as a deferred cross-cutting decision, not fixed
+- [x] UX: "No key selected"/"Loading key details" → shared `EmptyState`/`LoadingSpinner` components
+- [x] UX: "No keys found" copy now hints at next action (broaden pattern / hit Scan)
+- [x] UX bug: Insights drawer had no visible expand/collapse affordance (marker was hidden with nothing replacing it) → added rotating chevron + hover tint
 - [ ] Manual visual review (light + dark)
 
 ### Screen 4 — Storage

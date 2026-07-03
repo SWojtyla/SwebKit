@@ -8,11 +8,12 @@
 <div class="redis-key-detail">
     @if (SelectedKey is null)
     {
-        <div class="empty">Select a key to inspect.</div>
+        <EmptyState Icon="🔑" Title="No key selected"
+                    Subtitle="Pick a key from the tree on the left to inspect its value, TTL, and metadata." />
     }
     else if (KeyInfo is null)
     {
-        <div class="empty">Loading key details...</div>
+        <LoadingSpinner Message="Loading key details…" />
     }
     else
     {

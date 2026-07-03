@@ -9,13 +9,13 @@
             }
             else if (CacheEntries.Count > 1)
             {
-                <select class="cache-selector" @bind="_selectedCacheId" @bind:after="HandleCacheChangedAsync"
-                        aria-label="Select active Redis cache">
+                <AppSelect CssClass="cache-selector" Value="@_selectedCacheId" ValueChanged="OnCacheSelectChangedAsync"
+                           aria-label="Select active Redis cache">
                     @foreach (var cache in CacheEntries)
                     {
                         <option value="@cache.Id">@cache.DisplayName</option>
                     }
-                </select>
+                </AppSelect>
                 <button class="cache-rename-btn" type="button" @onclick="StartRename" title="Rename">&#9998;</button>
             }
             else
@@ -49,6 +49,12 @@
     }
 
     private Task HandleCacheChangedAsync() => OnCacheChanged.InvokeAsync(_selectedCacheId);
+
+    private Task OnCacheSelectChangedAsync(string? value)
+    {
+        _selectedCacheId = value ?? "";
+        return HandleCacheChangedAsync();
+    }
 
     private void StartRename()
     {
