@@ -22,29 +22,6 @@
     overflow-wrap: anywhere;
 }
 
-.copy-btn,
-.redis-key-detail ::deep .copy-btn {
-    width: auto;
-    height: auto;
-    min-height: 0;
-    gap: 0;
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    cursor: pointer;
-    color: var(--color-text-muted);
-    padding: 2px 4px;
-    font-size: 14px;
-    font-weight: 400;
-    line-height: 1;
-    box-shadow: none;
-}
-
-.copy-btn:hover,
-.redis-key-detail ::deep .copy-btn:hover {
-    color: var(--color-text);
-}
-
 .kv {
     font-size: 12px;
     color: var(--color-text-muted);
@@ -108,8 +85,11 @@
     font-size: 12px;
 }
 
-.hash-actions {
-    width: 120px;
+.row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
 }
 
 .table th,
@@ -237,7 +217,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     min-width: 0;
 }
 
