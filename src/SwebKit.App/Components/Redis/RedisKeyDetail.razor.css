@@ -40,6 +40,7 @@
 }
 
 .ttl-input {
+    box-sizing: border-box;
     width: 100px;
     padding: 6px var(--spacing-sm);
     background: var(--color-surface-2);
@@ -65,7 +66,8 @@
 .editor,
 .hash-editor {
     width: 100%;
-    padding: var(--spacing-sm);
+    box-sizing: border-box;
+    padding: 6px var(--spacing-sm);
     border: 1px solid var(--color-border);
     border-radius: 4px;
     background: var(--color-surface-2);
@@ -77,6 +79,24 @@
 .editor {
     min-height: 180px;
     resize: vertical;
+}
+
+/* FluentDataGrid renders plain <table>/<td> markup from a different
+   component library, so scoped rules must use ::deep to reach them.
+   Without an explicit row height, an in-place edit <input> (taller than
+   a plain text cell) makes that single row grow while neighbouring rows
+   stay tight, producing a cramped/overlapping look. Give every row a
+   consistent minimum height and breathing room instead. */
+.redis-key-detail ::deep .fluent-data-grid td,
+.redis-key-detail ::deep .fluent-data-grid th {
+    box-sizing: border-box;
+    min-height: 40px;
+    padding: 8px 12px;
+}
+
+.redis-key-detail ::deep .fluent-data-grid .hash-editor,
+.redis-key-detail ::deep .fluent-data-grid .zset-score-editor {
+    height: 26px;
 }
 
 .table {
@@ -180,6 +200,7 @@
 }
 
 .zset-score-editor {
+    box-sizing: border-box;
     width: 120px;
     padding: 2px 4px;
     font-size: 12px;
