@@ -2,8 +2,7 @@
 
 @if (Rules.Count == 0)
 {
-    <EmptyState Icon="bell-outline" Title="No alert rules"
-                Subtitle="Click Add rule to define your first monitoring alert." />
+    <EmptyState Icon="🔔" Title="No alert rules" Subtitle="Click Add rule to define your first monitoring alert." />
 }
 else
 {
@@ -37,7 +36,7 @@ AlertRuleUiStateKind.Firing);
                     var emptyTitle = $"No {group.Label} rules";
                     var emptySubtitle = $"Click Add rule to monitor {group.Label} resources.";
                     <div class="alert-rule-group__empty">
-                        <EmptyState Icon="add-circle-outline" Title="@emptyTitle" Subtitle="@emptySubtitle" />
+                        <EmptyState Icon="➕" Title="@emptyTitle" Subtitle="@emptySubtitle" />
                     </div>
                 }
                 else

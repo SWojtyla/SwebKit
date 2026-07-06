@@ -16,7 +16,7 @@ last_updated: "2026-07-03"
 
 Screen-by-screen polish pass before company sharing. No new features — fix sloppy UI, inconsistent primitives, personal content, and known rough edges.
 
-**Current focus:** Screen 4 — Storage.
+**Current focus:** Screen 5 — Monitoring.
 
 ## Progress Checklist
 
@@ -62,18 +62,23 @@ Screen-by-screen polish pass before company sharing. No new features — fix slo
 - [x] Bug: hash/zset `FluentDataGrid` rows looked cramped/overlapping, especially when a row entered inline-edit mode (edit `<input>` taller than the fixed row content) → gave `RedisKeyDetail` grid rows a consistent min-height/padding via `::deep` rules and constrained editor inputs to `border-box` sizing
 - [x] Manual visual review (light + dark) — user confirmed
 
-### Screen 4 — Storage
+### Screen 4 — Storage ✅ DONE
 
 - [x] `<select class="storage-select">` account picker → `AppSelect`
 - [x] Header Settings `<a>` reviewed — resolves the anchor-vs-button cross-cutting decision (see below)
 - [x] Bug: `StorageMutationBanner` had no CSS at all — "Mutation mode is active" warning rendered as unstyled plain text → added scoped CSS with warning/info tinted variants
 - [x] Storage body panels (`StorageContainerTree`, `StorageBlobList`, `BlobDetailPane`, upload/copy dialogs) reviewed — no personal/debug content, `ctx-item` raw buttons match the established cross-app context-menu convention
 - [x] `⚠` warning glyphs (empty state + mutation banner icon) → full-emoji-presentation glyphs (`🚫`, `⚠️`)
-- [ ] Manual visual review (light + dark)
+- [x] Bug: Storage (and Service Bus, Key Vault, App Insights) Entra ID auth silently authenticated as an unrelated service principal instead of the signed-in developer → root cause was `DefaultAzureCredential`'s `EnvironmentCredential` (tried before `AzureCliCredential`) winning because `AZURE_CLIENT_ID`/`TENANT_ID`/`CLIENT_SECRET` were set machine-wide for an unrelated tool; fixed by excluding `EnvironmentCredential` via a new shared `SwebKit.Core.Services.AzureCredentialFactory`, now used by every Entra-authenticated client in the app instead of each constructing `DefaultAzureCredential` inline. Documented as pitfall AZ-4.
+- [x] Bug: `RoutePageHeader`'s "context-hidden" mode (title/subtitle hidden, only Settings action shown) left oversized whitespace above the account badges → tightened header/support-strip margins for that variant
+- [x] Manual visual review (light + dark) — user confirmed
 
 ### Screen 5 — Monitoring
 
-- [ ] Full audit (not yet read in detail — first pass needed)
+- [x] Full audit — first pass complete
+- [x] Bug: `EmptyState` icon-name strings (`bell-outline`, `add-circle-outline`, `checkmark-circle-outline`) rendered as literal visible text instead of icons → replaced with emoji glyphs consistent with the rest of the app
+- [x] Raw buttons/selects (row actions, group header, drawer form fields, drawer footer) reviewed — same deferred `FluentButton`/`AppSelect` cross-cutting decision as Redis, not fixed individually
+- [x] Personal/debug content sweep — none found
 - [ ] Manual visual review (light + dark)
 
 ### Screen 6 — AI Agent (Sebski panel)

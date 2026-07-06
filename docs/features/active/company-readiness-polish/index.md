@@ -28,8 +28,8 @@ The app was built for personal use. Company sharing requires every surface to fe
 | 1   | Service Bus             | Planned     |
 | 2   | AKS                     | ✅ Done     |
 | 3   | Redis                   | ✅ Done     |
-| 4   | Storage                 | In Progress |
-| 5   | Monitoring              | Planned     |
+| 4   | Storage                 | ✅ Done     |
+| 5   | Monitoring              | In Progress |
 | 6   | AI Agent (Sebski panel) | Planned     |
 | 7   | Settings                | Planned     |
 

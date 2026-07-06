@@ -19,17 +19,19 @@
     <div class="alert-history-panel__list">
         @if (Events.Count == 0)
         {
-            <EmptyState Icon="checkmark-circle-outline" Title="No alerts this session" />
+            <EmptyState Icon="✅" Title="No alerts this session" />
         }
         else
         {
             @foreach (var evt in Events)
             {
-                <div class="alert-history-event @(evt.Severity == AlertSeverity.Critical ? "alert-history-event--critical" : "alert-history-event--warning")">
+                <div
+                    class="alert-history-event @(evt.Severity == AlertSeverity.Critical ? "alert-history-event--critical" : "alert-history-event--warning")">
                     <div class="alert-history-event__top">
                         <span class="alert-history-event__source-icon">@SourceIcon(evt.Source)</span>
                         <span class="alert-history-event__rule-name">@evt.RuleName</span>
-                        <span class="alert-history-event__source-badge alert-history-event__source-badge--@SourceGroup(evt.Source)">
+                        <span
+                            class="alert-history-event__source-badge alert-history-event__source-badge--@SourceGroup(evt.Source)">
                             @SourceGroupLabel(evt.Source)
                         </span>
                         <span class="alert-history-event__time" title="@evt.FiredAt.ToString("yyyy-MM-dd HH:mm:ss zzz")">
@@ -40,10 +42,8 @@
                         @TruncateMessage(evt.Message, 80)
                     </div>
                     <div class="alert-history-event__actions">
-                        <button class="alert-history-event__snooze-btn"
-                                @onclick="() => OnMuteRule.InvokeAsync(evt.RuleId)"
-                                title="Snooze this rule for 30 minutes"
-                                aria-label="Snooze @evt.RuleName for 30 minutes">
+                        <button class="alert-history-event__snooze-btn" @onclick="() => OnMuteRule.InvokeAsync(evt.RuleId)"
+                                title="Snooze this rule for 30 minutes" aria-label="Snooze @evt.RuleName for 30 minutes">
                             Snooze 30m
                         </button>
                     </div>
@@ -61,7 +61,8 @@
     private static string SourceIcon(AlertRuleSource source) => source switch
     {
         AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore => "☸",
-        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or AlertRuleSource.ServiceBusDeadSubscription => "⇄",
+        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or
+AlertRuleSource.ServiceBusDeadSubscription => "⇄",
         AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients => "⬡",
         AlertRuleSource.StorageBlobCount => "🗄",
         _ => "●"
@@ -70,7 +71,8 @@
     private static string SourceGroup(AlertRuleSource source) => source switch
     {
         AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore => "aks",
-        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or AlertRuleSource.ServiceBusDeadSubscription => "servicebus",
+        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or
+AlertRuleSource.ServiceBusDeadSubscription => "servicebus",
         AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients => "redis",
         AlertRuleSource.StorageBlobCount => "storage",
         _ => "unknown"
@@ -79,7 +81,8 @@
     private static string SourceGroupLabel(AlertRuleSource source) => source switch
     {
         AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore => "AKS",
-        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or AlertRuleSource.ServiceBusDeadSubscription => "Service Bus",
+        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or
+AlertRuleSource.ServiceBusDeadSubscription => "Service Bus",
         AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients => "Redis",
         AlertRuleSource.StorageBlobCount => "Storage",
         _ => source.ToString()
