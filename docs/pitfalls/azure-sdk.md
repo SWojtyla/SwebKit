@@ -44,4 +44,26 @@ await foreach (var _ in _adminClient.GetQueuesAsync(ct))
 
 ---
 
+## AZ-4 — `DefaultAzureCredential` silently prefers `EnvironmentCredential` over the signed-in developer
+
+**Symptom:** Azure AD (Entra) authenticated calls (Storage, Service Bus, Key Vault, App Insights) fail with `AuthorizationPermissionMismatch` even though the developer's own Azure AD account has the correct RBAC role on the resource (directly or via group membership). Re-running `az login`, clearing the CLI token cache, or confirming RBAC in the Portal changes nothing.
+
+**Cause:** `DefaultAzureCredential` tries credential sources in a fixed order, and `EnvironmentCredential` is tried **before** `AzureCliCredential`/`VisualStudioCredential`. If the machine has `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/`AZURE_CLIENT_SECRET` set anywhere in its environment (commonly at **Machine** scope, for an unrelated local automation tool/service principal), `EnvironmentCredential` succeeds immediately and `DefaultAzureCredential` never falls through to the developer's own interactive credential — with no visible indication of which identity was actually used. The service principal from those env vars may have zero RBAC on the resource being called, while the developer's own account is completely fine.
+
+**Diagnosis:** Check `[Environment]::GetEnvironmentVariables('Machine')` (and `'User'`) for `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/`AZURE_CLIENT_SECRET`. If present, that's very likely the culprit — not a code regression, not a token cache issue, not a missing role assignment.
+
+**Fix:** Don't rely on the bare `DefaultAzureCredential()` constructor in an interactive desktop app. Exclude `EnvironmentCredential` explicitly so ambient env vars set for unrelated automation never shadow the developer's own identity:
+
+```csharp
+// Wrong — silently authenticates as whatever AZURE_CLIENT_ID/SECRET happens to be set on the machine
+new DefaultAzureCredential();
+
+// Correct — use the shared factory (SwebKit.Core.Services.AzureCredentialFactory)
+AzureCredentialFactory.CreateDefault();
+```
+
+All Entra ID authenticated clients in this repo (Storage, Service Bus, Key Vault, App Insights) go through `SwebKit.Core.Services.AzureCredentialFactory.CreateDefault()` — do not construct `DefaultAzureCredential` inline in a new call site; use the factory instead.
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [dotnet-csharp.md](dotnet-csharp.md)_

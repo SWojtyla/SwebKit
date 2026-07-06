@@ -1,14 +1,14 @@
-using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using Microsoft.Extensions.Logging;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
 
 namespace SwebKit.Azure;
 
 /// <summary>
 /// Resolves Azure Key Vault secrets across multiple named vaults.
-/// Uses <see cref="DefaultAzureCredential"/> for all vaults.
+/// Uses <see cref="SwebKit.Core.Services.AzureCredentialFactory"/> for all vaults.
 /// When <paramref name="vaultName"/> is <c>null</c> or not found, falls back to the first configured vault.
 /// </summary>
 public sealed class MultiVaultKeyVaultSecretResolver : IKeyVaultSecretResolver
@@ -22,7 +22,8 @@ public sealed class MultiVaultKeyVaultSecretResolver : IKeyVaultSecretResolver
         ILogger<MultiVaultKeyVaultSecretResolver> logger)
     {
         _logger = logger;
-        var credential = new DefaultAzureCredential();
+        // See AzureCredentialFactory for why EnvironmentCredential is excluded.
+        var credential = AzureCredentialFactory.CreateDefault();
         var dict = new Dictionary<string, SecretClient>(StringComparer.OrdinalIgnoreCase);
         SecretClient? first = null;
 

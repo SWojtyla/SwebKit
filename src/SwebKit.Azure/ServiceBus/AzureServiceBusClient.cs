@@ -1,5 +1,4 @@
 using Azure.Core;
-using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
 using System.Globalization;
@@ -8,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 
 namespace SwebKit.Azure.ServiceBus;
 
@@ -65,7 +65,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         }
         else
         {
-            var credential = new DefaultAzureCredential();
+            // See AzureCredentialFactory for why EnvironmentCredential is excluded.
+            var credential = AzureCredentialFactory.CreateDefault();
             _client = new ServiceBusClient(fqns, credential);
             _adminClient = new ServiceBusAdministrationClient(fqns, credential);
         }

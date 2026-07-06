@@ -1,10 +1,10 @@
 using Azure;
 using Azure.Core;
-using Azure.Identity;
 using Azure.Monitor.Query;
 using Azure.Monitor.Query.Models;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 
 namespace SwebKit.Observability;
 
@@ -23,7 +23,8 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
     public AzureAppInsightsProvider(string resourceId)
     {
         _resourceId = new ResourceIdentifier(resourceId);
-        _client = new LogsQueryClient(new DefaultAzureCredential());
+        // See AzureCredentialFactory for why EnvironmentCredential is excluded.
+        _client = new LogsQueryClient(AzureCredentialFactory.CreateDefault());
     }
 
     // ── Overview ──────────────────────────────────────────────────────────────

@@ -82,6 +82,15 @@
     border: 0;
     border-radius: 0;
     box-shadow: none;
+    /* This variant has no visible title/subtitle — only the (small) Actions row
+       is shown, so the generous spacing designed for a full title block above
+       and below reads as an oversized empty gap. Pull both margins in. */
+    margin-top: var(--spacing-xs);
+    margin-bottom: 0;
+}
+
+.page-header-shell--context-hidden + .page-support-strip {
+    margin-top: var(--spacing-xs);
 }
 
 .page-header-shell__copy {
