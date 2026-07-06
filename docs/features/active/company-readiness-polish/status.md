@@ -16,13 +16,13 @@ last_updated: "2026-07-03"
 
 Screen-by-screen polish pass before company sharing. No new features — fix sloppy UI, inconsistent primitives, personal content, and known rough edges.
 
-**Current focus:** Screen 3 — Redis.
+**Current focus:** Screen 4 — Storage.
 
 ## Progress Checklist
 
 ### Cross-cutting
 
-- [ ] Decision recorded: `<a>` anchor vs `AppButton` for header navigation links
+- [x] Decision recorded: `<a>` anchor vs `AppButton` for header navigation links — settled by the pre-existing `style-system-polish-9` precedent: anchors that navigate to another page/section (e.g. "Settings") stay `<a>`; only in-place action buttons become `AppButton`. Confirmed via `IncidentTimelinePage`/`StoragePage` both using the identical Settings-link pattern.
 - [ ] Decision needed: `FluentButton` vs `AppButton` — Redis panels use `FluentButton` pervasively (Refresh/Delete/Edit/Scan/etc.) while ServiceBus/AKS lean on `AppButton`. Not fixed in this pass — needs an explicit convention decision before a broad refactor.
 
 ### Screen 1 — Service Bus
@@ -49,7 +49,7 @@ Screen-by-screen polish pass before company sharing. No new features — fix slo
 - [x] Deferred by design: raw `<input type="checkbox">` "Show completed" filter — tight CSS integration, low severity, left as-is
 - [x] Manual visual review — user confirmed fixed
 
-### Screen 3 — Redis
+### Screen 3 — Redis ✅ DONE
 
 - [x] Replace `FluentButton` "Load More" in key tree panel → `AppButton`
 - [x] Panel heading `<h2>Keys</h2>` — reviewed, consistent local pattern, no change needed
@@ -59,13 +59,16 @@ Screen-by-screen polish pass before company sharing. No new features — fix slo
 - [x] UX: "No key selected"/"Loading key details" → shared `EmptyState`/`LoadingSpinner` components
 - [x] UX: "No keys found" copy now hints at next action (broaden pattern / hit Scan)
 - [x] UX bug: Insights drawer had no visible expand/collapse affordance (marker was hidden with nothing replacing it) → added rotating chevron + hover tint
-- [ ] Manual visual review (light + dark)
+- [x] Bug: hash/zset `FluentDataGrid` rows looked cramped/overlapping, especially when a row entered inline-edit mode (edit `<input>` taller than the fixed row content) → gave `RedisKeyDetail` grid rows a consistent min-height/padding via `::deep` rules and constrained editor inputs to `border-box` sizing
+- [x] Manual visual review (light + dark) — user confirmed
 
 ### Screen 4 — Storage
 
-- [ ] `<select class="storage-select">` account picker → AppSelect
-- [ ] Header action slot audit
-- [ ] StorageMutationBanner — review prominence and copy
+- [x] `<select class="storage-select">` account picker → `AppSelect`
+- [x] Header Settings `<a>` reviewed — resolves the anchor-vs-button cross-cutting decision (see below)
+- [x] Bug: `StorageMutationBanner` had no CSS at all — "Mutation mode is active" warning rendered as unstyled plain text → added scoped CSS with warning/info tinted variants
+- [x] Storage body panels (`StorageContainerTree`, `StorageBlobList`, `BlobDetailPane`, upload/copy dialogs) reviewed — no personal/debug content, `ctx-item` raw buttons match the established cross-app context-menu convention
+- [x] `⚠` warning glyphs (empty state + mutation banner icon) → full-emoji-presentation glyphs (`🚫`, `⚠️`)
 - [ ] Manual visual review (light + dark)
 
 ### Screen 5 — Monitoring

@@ -52,19 +52,20 @@ else
     {
         <div class="storage-account-bar">
             <span>Account:</span>
-            <select class="storage-select" value="@_selectedAccountId" @onchange="OnAccountChangedAsync">
+            <AppSelect CssClass="storage-select" Value="@_selectedAccountId" ValueChanged="OnAccountChangedAsync"
+                       aria-label="Select active storage account">
                 @foreach (var acc in _storageAccounts)
                 {
                     <option value="@acc.Id">@acc.DisplayName (@acc.AccountName)</option>
                 }
-            </select>
+            </AppSelect>
         </div>
     }
 
     @if (_storageClient is null)
     {
         <div class="storage-not-configured">
-            <EmptyState Icon="⚠" Title="Selected storage account is unavailable"
+            <EmptyState Icon="🚫" Title="Selected storage account is unavailable"
                         Subtitle="The saved storage configuration is incomplete or invalid for this configuration.">
                 <Actions>
                     <a href="/settings?section=storage">Review Storage settings</a>
@@ -299,10 +300,10 @@ else
         _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
-    private async Task OnAccountChangedAsync(ChangeEventArgs e)
+    private async Task OnAccountChangedAsync(string? value)
     {
         await DisposeDetailSplitterAsync();
-        _selectedAccountId = e.Value?.ToString();
+        _selectedAccountId = value;
         _selectedContainer = null;
         _selectedBlob = null;
         RebuildClient();
