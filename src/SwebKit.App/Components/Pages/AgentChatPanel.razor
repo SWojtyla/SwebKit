@@ -4,6 +4,7 @@
 @inject IAgentChatService Agent
 @inject UserSettingsRepository UserSettings
 @inject IJSRuntime JS
+@inject ILogger<AgentChatPanel> Logger
 @implements IDisposable
 
 <aside class="agent-panel @(IsOpen ? "" : "agent-panel--closed")" aria-label="AI Agent chat panel"
@@ -31,26 +32,33 @@
             <div class="agent-panel-header-actions">
                 @if (_showClearConfirm)
                 {
-                    <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="ConfirmClearHistory"
-                            title="Confirm clear history" style="font-size: 11px;">
+                    <AppButton CssClass="agent-panel-header-btn" Size="Small" Variant="Danger" OnClick="ConfirmClearHistory"
+                               Title="Confirm clear history">
                         Yes, clear
-                    </button>
-                    <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="@(() => _showClearConfirm = false)"
-                            title="Cancel">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
-                    </button>
+                    </AppButton>
+                    <AppIconButton CssClass="agent-panel-header-btn" Size="Small" Variant="Ghost"
+                                   OnClick="@(() => _showClearConfirm = false)" Title="Cancel" Label="Cancel clear history">
+                        <Icon>
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
+                        </Icon>
+                    </AppIconButton>
                 }
                 else
                 {
-                    <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="@(() => _showClearConfirm = true)"
-                            disabled="@(Agent.HistoryMessageCount == 0)" title="Clear conversation history">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="14px" />
-                    </button>
+                    <AppIconButton CssClass="agent-panel-header-btn" Size="Small" Variant="Ghost"
+                                   OnClick="@(() => _showClearConfirm = true)" Disabled="@(Agent.HistoryMessageCount == 0)"
+                                   Title="Clear conversation history" Label="Clear conversation history">
+                        <Icon>
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="14px" />
+                        </Icon>
+                    </AppIconButton>
                 }
-                <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="OnClose" title="Close AI Agent panel"
-                        aria-label="Close AI Agent panel">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.ChevronDoubleRight())" Width="14px" />
-                </button>
+                <AppIconButton CssClass="agent-panel-header-btn" Size="Small" Variant="Ghost" OnClick="OnClose"
+                               Title="Close AI Agent panel" Label="Close AI Agent panel">
+                    <Icon>
+                        <FluentIcon Value="@(new Icons.Regular.Size16.ChevronDoubleRight())" Width="14px" />
+                    </Icon>
+                </AppIconButton>
             </div>
         </header>
 
@@ -180,7 +188,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Mermaid rendering error: " + ex.Message);
+            Logger.LogWarning(ex, "Mermaid rendering error");
         }
     }
 

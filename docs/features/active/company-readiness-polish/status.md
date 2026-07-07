@@ -16,7 +16,7 @@ last_updated: "2026-07-03"
 
 Screen-by-screen polish pass before company sharing. No new features — fix sloppy UI, inconsistent primitives, personal content, and known rough edges.
 
-**Current focus:** Screen 5 — Monitoring.
+**Current focus:** Screen 7 done — Settings. Next: manual visual review pass across Screens 6-7, then excluded-screens rework banners.
 
 ## Progress Checklist
 
@@ -32,6 +32,10 @@ Screen-by-screen polish pass before company sharing. No new features — fix slo
 - [ ] Breadcrumb `sb-breadcrumb-back` and `sb-breadcrumb-btn` raw buttons → AppButton
 - [ ] Header action slot audit
 - [ ] Empty states consistent and copy-reviewed
+- [x] Bug: "Load More" re-peeked the whole (growing) window from the start of the queue each time and **replaced** `Messages` entirely — on a live queue this could make already-viewed messages disappear when the window shifted. Fixed by adding `fromSequenceNumber` continuation to `IServiceBusClient.PeekMessagesAsync`/`PeekDeadLetterAsync` (`AzureServiceBusClient`, `DemoServiceBusClient`); "Load More" now peeks forward from the last loaded sequence number and **appends** instead of replacing. "Peek" (fresh refresh) still replaces the whole list, which is correct/expected for a manual refresh.
+- [x] UX: `MessageListView` toolbar (~15 controls in one unbroken row) grouped into logical clusters (view options / filtering / actions / send-export-nsb / primary Peek) with visual separators and a spacer, instead of one flat row.
+- [x] UX: the two stacked bottom bars (`window-status` + Load More, and a separate `CountSummary` bar) merged into a single summary bar.
+- [x] Bug: when the active filter matched zero of the currently loaded messages, the "No matches" empty state replaced the whole grid area — including the Load More button — leaving no way to fetch more messages without first clearing the filter. Fixed by moving the window-status/count/Load More bar out of the grid's `else` branch so it renders whenever a window is loaded, regardless of filtered count; "No matches" copy now also hints at Load More when more messages are available (`CanLoadMore`).
 - [ ] SB-5 grid audit: DLQ tooltip easter egg ("Sébastien would be proud 🥳") removal
 - [ ] Manual visual review (light + dark)
 
@@ -71,28 +75,36 @@ Screen-by-screen polish pass before company sharing. No new features — fix slo
 - [x] `⚠` warning glyphs (empty state + mutation banner icon) → full-emoji-presentation glyphs (`🚫`, `⚠️`)
 - [x] Bug: Storage (and Service Bus, Key Vault, App Insights) Entra ID auth silently authenticated as an unrelated service principal instead of the signed-in developer → root cause was `DefaultAzureCredential`'s `EnvironmentCredential` (tried before `AzureCliCredential`) winning because `AZURE_CLIENT_ID`/`TENANT_ID`/`CLIENT_SECRET` were set machine-wide for an unrelated tool; fixed by excluding `EnvironmentCredential` via a new shared `SwebKit.Core.Services.AzureCredentialFactory`, now used by every Entra-authenticated client in the app instead of each constructing `DefaultAzureCredential` inline. Documented as pitfall AZ-4.
 - [x] Bug: `RoutePageHeader`'s "context-hidden" mode (title/subtitle hidden, only Settings action shown) left oversized whitespace above the account badges → tightened header/support-strip margins for that variant
-- [x] Manual visual review (light + dark) — user confirmed
+- [x] Manual visual review (light + dark) — user confirmedI
 
-### Screen 5 — Monitoring
+### Screen 5 — Monitoring ✅ DONE
 
 - [x] Full audit — first pass complete
 - [x] Bug: `EmptyState` icon-name strings (`bell-outline`, `add-circle-outline`, `checkmark-circle-outline`) rendered as literal visible text instead of icons → replaced with emoji glyphs consistent with the rest of the app
 - [x] Raw buttons/selects (row actions, group header, drawer form fields, drawer footer) reviewed — same deferred `FluentButton`/`AppSelect` cross-cutting decision as Redis, not fixed individually
 - [x] Personal/debug content sweep — none found
-- [ ] Manual visual review (light + dark)
+- [x] Explored: convert "Add rule" from a small centered pop-up to a wider right-anchored drawer with a custom toggle switch → user reviewed and reverted, prefers the original compact modal as-is; no further UI change needed
+- [x] Manual visual review (light + dark) — user confirmed good as-is
 
 ### Screen 6 — AI Agent (Sebski panel)
 
-- [ ] `<button class="top-bar-icon-btn agent-panel-header-btn">` → AppIconButton
-- [ ] Confirm/cancel clear-history button row — polish
-- [ ] Empty state copy review ("What's going on in your cluster?" — ok for company use?)
+- [x] Header action buttons (Clear/Confirm/Cancel/Close) → `AppButton`/`AppIconButton`
+- [x] Reviewed "Sebski" personal-branding findings — already stale, current code uses generic "AI Agent" copy/labels, nothing to fix
+- [x] History warning threshold (75% of max) and UX reviewed — clear, unit-tested, no change needed
+- [x] Resizer (`uiState.js` `SwebKitAgentPanel`) reviewed — clean drag-resize with proper cleanup
+- [x] Bug: `Console.WriteLine` debug leak in Mermaid render error handler → replaced with injected `ILogger<AgentChatPanel>`
+- [x] Bug: `.agent-bubble__markdown` CSS used the same undefined `--neutral-*` tokens as Monitoring (pitfall BL-17) → table/code/blockquote styling in chat replies was a silent no-op → remapped to real `--color-*` tokens
+- [x] Noted unreferenced `ToolExecutionStatus.razor` component (dead code) — cleanup out of scope for this pass
 - [ ] Manual visual review (light + dark)
 
 ### Screen 7 — Settings
 
-- [ ] Nav sidebar `<button>` items — review active-state pattern consistency
-- [ ] Section header area (RoutePageHeader) — consistent subtitle copy per section
-- [ ] Health/readiness report display — confirm it looks intentional
+- [x] Nav sidebar `<button>` items — reviewed, well-styled with real tokens and clear active/hover states, no change needed
+- [x] Section header area (RoutePageHeader) — subtitle copy is distinct and accurate per section, `Section:` pill reviewed and kept
+- [x] Health/readiness report display (`ConfigurationReadinessAreaCard`) — confirmed intentional, proper scoped CSS, no bugs
+- [x] Config forms (ServiceBus, AKS, Redis, DevOps, Storage, Observability, ApiClient, Agent) audited for raw controls, debug leaks, personal content, and the `--neutral-*` CSS token bug (BL-17) — none found; noted `AgentConfigForm`/`AksConfigForm`/`DevOpsConfigForm`/`StorageConfigForm` use inline styles instead of scoped CSS (S-4, low severity, deferred)
+- [x] Bug: Key Vault list editor's raw remove/add `<button>`s (no `aria-label` on remove) → converted to `AppIconButton`/`AppButton`
+- [x] `AgentConfigForm`'s Mistral API key reviewed — uses `PasswordField` + `ICredentialStore` (Windows Credential Manager), never persisted in plain text
 - [ ] Manual visual review (light + dark)
 
 ### Excluded screens — rework banner

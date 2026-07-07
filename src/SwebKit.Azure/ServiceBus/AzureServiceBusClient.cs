@@ -260,18 +260,22 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         };
     }
 
-    public async Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null)
     {
         await using var receiver = _client.CreateReceiver(entityPath);
-        var messages = await receiver.PeekMessagesAsync(count, cancellationToken: ct);
+        var messages = fromSequenceNumber is long seq
+            ? await receiver.PeekMessagesAsync(count, seq, ct)
+            : await receiver.PeekMessagesAsync(count, cancellationToken: ct);
         return messages.Select(MapMessage).ToList();
     }
 
-    public async Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null)
     {
         var dlqPath = $"{entityPath}/$DeadLetterQueue";
         await using var receiver = _client.CreateReceiver(dlqPath);
-        var messages = await receiver.PeekMessagesAsync(count, cancellationToken: ct);
+        var messages = fromSequenceNumber is long seq
+            ? await receiver.PeekMessagesAsync(count, seq, ct)
+            : await receiver.PeekMessagesAsync(count, cancellationToken: ct);
         return messages.Select(MapMessage).ToList();
     }
 

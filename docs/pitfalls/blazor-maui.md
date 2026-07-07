@@ -451,4 +451,32 @@ private async Task LoadAsync()
 
 ---
 
+## BL-17 — CSS referencing undefined custom properties fails silently, no error anywhere
+
+**Symptom:** A whole screen "looks flat" — borders, fills, hover states, and accent-colored buttons don't render as designed, but there's no build error, no CSS lint warning, and no visible clue why.
+
+**Cause:** `var(--some-token)` with no fallback, where `--some-token` is never declared in any `:root`/`[data-theme]` block, does not error — the browser treats the whole property value as invalid and drops the declaration, leaving whatever was inherited/default (usually nothing). This is invisible in code review because the CSS looks perfectly reasonable; it only shows up as a visual defect. It's especially easy to introduce by copy-pasting from a different design-token vocabulary (e.g. Fluent UI's `--neutral-*`/`--accent-fill-*`/`--foreground-on-accent-*` tokens) into this app's `--color-*`/`--control-*` token system — the names look plausible but don't exist here. Confirmed present in the Monitoring screen's CSS (`AlertRuleDrawer`/`AlertRuleRow`/`AlertRuleGroups`/`MonitoringAlertHistoryPanel`/`MonitoringPage`) — 91 references to tokens that were never defined anywhere in the app.
+
+**Diagnosis:** `grep` the component's CSS for `var(--` and check every custom property name against `src/SwebKit.App/wwwroot/styles/00-tokens-themes.css`. Any name not defined there is a silent no-op.
+
+**Fix:** Map to the app's real tokens instead:
+
+```css
+/* Wrong — --neutral-* is never defined anywhere in this app */
+border: 1px solid var(--neutral-stroke-rest);
+background: var(--neutral-fill-rest);
+color: var(--neutral-foreground-hint);
+
+/* Correct */
+border: 1px solid var(--color-border);
+background: var(--color-surface-2);
+color: var(--color-text-muted);
+```
+
+Real tokens available: `--color-surface`, `--color-surface-2`, `--color-surface-3`, `--color-border`, `--color-text`, `--color-text-muted`, `--color-text-faint`, `--color-accent`, `--color-accent-subtle`, `--color-error`/`--color-warning`/`--color-success`, `--control-*` (native form controls), `--radius-*`, `--shadow-*`.
+
+**Rule:** before trusting a component's CSS to look right, verify every `var(--x)` it uses resolves to a token actually declared in `00-tokens-themes.css`.
+
+---
+
 _See also: [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

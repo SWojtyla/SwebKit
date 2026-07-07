@@ -148,9 +148,9 @@ public sealed class MessageListViewTests : TestContext
         });
 
         Assert.Contains(client.PeekRequests,
-            req => req.EntityPath == "orders" && req.Count == 5 && !req.DeadLetter);
+            req => req.EntityPath == "orders" && req.Count == 5 && req.FromSequenceNumber == null && !req.DeadLetter);
         Assert.Contains(client.PeekRequests,
-            req => req.EntityPath == "orders" && req.Count == 10 && !req.DeadLetter);
+            req => req.EntityPath == "orders" && req.Count == 5 && req.FromSequenceNumber == 9006 && !req.DeadLetter);
     }
 
     [Fact]
@@ -234,6 +234,58 @@ public sealed class MessageListViewTests : TestContext
             Assert.Contains("Showing 1 filtered of 10 loaded", cut.Markup);
             Assert.Contains("5 selected", cut.Markup);
             Assert.Contains("track-001", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public void LoadMore_StillAvailable_WhenActiveFilterMatchesNoLoadedMessages()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var messages = Enumerable.Range(1, 12)
+            .Select(i => new SbMessage
+            {
+                MessageId = $"evt-{i:000}",
+                Body = i == 7 ? "needle payload" : "other payload",
+                EnqueuedAt = now.AddSeconds(i),
+                SequenceNumber = 9000 + i
+            })
+            .ToList();
+
+        var client = new FakeServiceBusClient(
+            statsResolver: _ => new SbEntityStats { ActiveMessageCount = messages.Count, DeadLetterMessageCount = 0 },
+            peekResolver: _ => messages,
+            dlqResolver: _ => []);
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false));
+
+        cut.Find("[data-testid='peek-count-select']").Change("5");
+        cut.Find("[data-testid='peek-button']").Click();
+
+        cut.WaitForAssertion(() => Assert.Contains("Showing 5 of 12 message(s)", cut.Markup));
+
+        // The active filter matches nothing in the currently loaded window — the empty state
+        // must not hide the Load More affordance, otherwise there's no way to reach a match
+        // without first clearing the filter.
+        cut.Find("input[placeholder='Filter messages...']").Input("needle");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("No matches", cut.Markup);
+            Assert.Contains("Load More below", cut.Markup);
+        });
+
+        var loadMoreButton = cut.Find("[data-testid='load-more-button']");
+        Assert.Null(loadMoreButton.GetAttribute("disabled"));
+
+        loadMoreButton.Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("evt-007", cut.Markup);
+            Assert.Contains("Showing 1 filtered of 10 loaded", cut.Markup);
         });
     }
 
@@ -638,31 +690,31 @@ public sealed class MessageListViewTests : TestContext
         cut.WaitForAssertion(() => Assert.Contains("invoice-eu-001", cut.Markup));
 
         // Roundtrip: configure advanced criteria in the UI, save them, then re-apply via saved filters.
-        cut.Find("[data-testid='advanced-toggle']").Click();
+        await cut.InvokeAsync(() => cut.Find("[data-testid='advanced-toggle']").Click());
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid='advanced-rule']")));
 
-        cut.Find("input[placeholder='Filter messages...']").Input("invoice");
-        cut.FindAll("[data-testid='advanced-rule']")[0]
+        await cut.InvokeAsync(() => cut.Find("input[placeholder='Filter messages...']").Input("invoice"));
+        await cut.InvokeAsync(() => cut.FindAll("[data-testid='advanced-rule']")[0]
             .QuerySelector("[data-testid='rule-property']")!
-            .Input("region");
-        cut.FindAll("[data-testid='advanced-rule']")[0]
+            .Input("region"));
+        await cut.InvokeAsync(() => cut.FindAll("[data-testid='advanced-rule']")[0]
             .QuerySelector("[data-testid='rule-operator']")!
-            .Change("equals");
-        cut.FindAll("[data-testid='advanced-rule']")[0]
+            .Change("equals"));
+        await cut.InvokeAsync(() => cut.FindAll("[data-testid='advanced-rule']")[0]
             .QuerySelector("[data-testid='rule-value']")!
-            .Input("eu");
+            .Input("eu"));
 
-        cut.Find("[data-testid='add-rule']").Click();
+        await cut.InvokeAsync(() => cut.Find("[data-testid='add-rule']").Click());
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid='advanced-rule']").Count));
-        cut.FindAll("[data-testid='advanced-rule']")[1]
+        await cut.InvokeAsync(() => cut.FindAll("[data-testid='advanced-rule']")[1]
             .QuerySelector("[data-testid='rule-field']")!
-            .Change("delivery-count");
-        cut.FindAll("[data-testid='advanced-rule']")[1]
+            .Change("delivery-count"));
+        await cut.InvokeAsync(() => cut.FindAll("[data-testid='advanced-rule']")[1]
             .QuerySelector("[data-testid='rule-operator']")!
-            .Change("gte");
-        cut.FindAll("[data-testid='advanced-rule']")[1]
+            .Change("gte"));
+        await cut.InvokeAsync(() => cut.FindAll("[data-testid='advanced-rule']")[1]
             .QuerySelector("[data-testid='rule-value']")!
-            .Input("5");
+            .Input("5"));
 
         cut.WaitForAssertion(() =>
         {
@@ -671,10 +723,10 @@ public sealed class MessageListViewTests : TestContext
             Assert.DoesNotContain("legacy-only-003", cut.Markup);
         });
 
-        cut.Find("button[title='Save current filter']").Click();
+        await cut.InvokeAsync(() => cut.Find("button[title='Save current filter']").Click());
         cut.WaitForAssertion(() => Assert.Contains("Save Filter", cut.Markup));
-        cut.Find("input[placeholder='Filter name…']").Change("EU Invoice High");
-        cut.FindAll("button").First(b => b.TextContent.Trim() == "Save").Click();
+        await cut.InvokeAsync(() => cut.Find("input[placeholder='Filter name…']").Change("EU Invoice High"));
+        await cut.InvokeAsync(() => cut.FindAll("button").First(b => b.TextContent.Trim() == "Save").Click());
 
         cut.WaitForAssertion(() =>
         {
@@ -688,14 +740,15 @@ public sealed class MessageListViewTests : TestContext
         });
 
         // Reset UI state so applying the saved filter has observable effect.
-        cut.Find("[data-testid='filters-toggle']").Click();
-        cut.Find("input[placeholder='Filter messages...']").Input(string.Empty);
+        await cut.InvokeAsync(() => cut.Find("[data-testid='filters-toggle']").Click());
+        cut.WaitForAssertion(() => Assert.Contains("Filters: Off", cut.Markup));
+        await cut.InvokeAsync(() => cut.Find("input[placeholder='Filter messages...']").Input(string.Empty));
 
-        cut.Find("button[title='Saved filters']").Click();
+        await cut.InvokeAsync(() => cut.Find("button[title='Saved filters']").Click());
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid='saved-filter-item']")));
-        cut.FindAll("[data-testid='saved-filter-item']")
+        await cut.InvokeAsync(() => cut.FindAll("[data-testid='saved-filter-item']")
             .First(i => i.GetAttribute("data-filter-name") == "EU Invoice High")
-            .Click();
+            .Click());
 
         cut.WaitForAssertion(() =>
         {
@@ -705,11 +758,11 @@ public sealed class MessageListViewTests : TestContext
             Assert.NotEmpty(cut.FindAll("[data-testid='advanced-rule']"));
         });
 
-        cut.Find("button[title='Saved filters']").Click();
+        await cut.InvokeAsync(() => cut.Find("button[title='Saved filters']").Click());
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid='saved-filter-item']")));
-        cut.FindAll("[data-testid='saved-filter-item']")
+        await cut.InvokeAsync(() => cut.FindAll("[data-testid='saved-filter-item']")
             .First(i => i.GetAttribute("data-filter-name") == "Legacy Text")
-            .Click();
+            .Click());
 
         cut.WaitForAssertion(() =>
         {
@@ -1261,8 +1314,8 @@ public sealed class MessageListViewTests : TestContext
 
     private sealed class FakeServiceBusClient : IServiceBusClient
     {
-        private readonly Func<string, int, IReadOnlyList<SbMessage>> _peekResolver;
-        private readonly Func<string, int, IReadOnlyList<SbMessage>> _dlqResolver;
+        private readonly Func<string, int, long?, IReadOnlyList<SbMessage>> _peekResolver;
+        private readonly Func<string, int, long?, IReadOnlyList<SbMessage>> _dlqResolver;
         private readonly Func<string, SbEntityStats> _statsResolver;
         private readonly Func<string, Task>? _beforePeekAsync;
         private readonly Func<string, IReadOnlyList<long>, int>? _completeResolver;
@@ -1270,7 +1323,7 @@ public sealed class MessageListViewTests : TestContext
         private readonly Func<string, bool, int>? _purgeResolver;
 
         public ConcurrentQueue<string> PeekedEntityPaths { get; } = [];
-        public List<(string EntityPath, int Count, bool DeadLetter)> PeekRequests { get; } = [];
+        public List<(string EntityPath, int Count, bool DeadLetter, long? FromSequenceNumber)> PeekRequests { get; } = [];
         public List<(string EntityPath, IReadOnlyList<long> SequenceNumbers)> CompleteMessagesCalls { get; } = [];
         public List<(string EntityPath, IReadOnlyList<string> SequenceNumbers)> CompleteDeadLetterCalls { get; } = [];
         public List<(string EntityPath, bool DeadLetter)> PurgeMessagesCalls { get; } = [];
@@ -1295,13 +1348,16 @@ public sealed class MessageListViewTests : TestContext
             Func<string, bool, int>? purgeResolver = null)
         {
             _statsResolver = statsResolver;
-            _peekResolver = (entityPath, count) => peekResolver(entityPath).Take(count).ToList();
-            _dlqResolver = (entityPath, count) => dlqResolver(entityPath).Take(count).ToList();
+            _peekResolver = (entityPath, count, fromSequenceNumber) => Filter(peekResolver(entityPath), fromSequenceNumber).Take(count).ToList();
+            _dlqResolver = (entityPath, count, fromSequenceNumber) => Filter(dlqResolver(entityPath), fromSequenceNumber).Take(count).ToList();
             _beforePeekAsync = beforePeekAsync;
             _completeResolver = completeResolver;
             _completeDeadLetterResolver = completeDeadLetterResolver;
             _purgeResolver = purgeResolver;
         }
+
+        private static IEnumerable<SbMessage> Filter(IReadOnlyList<SbMessage> source, long? fromSequenceNumber) =>
+            fromSequenceNumber is long seq ? source.Where(m => m.SequenceNumber >= seq) : source;
 
         public Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default) =>
             Task.FromResult(new SbNamespaceInfo { Name = "demo", Endpoint = "demo.servicebus.windows.net" });
@@ -1327,28 +1383,28 @@ public sealed class MessageListViewTests : TestContext
         public Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default) =>
             Task.FromResult(_statsResolver(entityPath));
 
-        public async Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default)
+        public async Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null)
         {
             PeekedEntityPaths.Enqueue(entityPath);
-            PeekRequests.Add((entityPath, count, false));
+            PeekRequests.Add((entityPath, count, false, fromSequenceNumber));
             if (_beforePeekAsync is not null)
             {
                 await _beforePeekAsync(entityPath);
             }
 
-            return _peekResolver(entityPath, count);
+            return _peekResolver(entityPath, count, fromSequenceNumber);
         }
 
-        public async Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default)
+        public async Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null)
         {
             PeekedEntityPaths.Enqueue($"dlq:{entityPath}");
-            PeekRequests.Add((entityPath, count, true));
+            PeekRequests.Add((entityPath, count, true, fromSequenceNumber));
             if (_beforePeekAsync is not null)
             {
                 await _beforePeekAsync(entityPath);
             }
 
-            return _dlqResolver(entityPath, count);
+            return _dlqResolver(entityPath, count, fromSequenceNumber);
         }
 
         public Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)

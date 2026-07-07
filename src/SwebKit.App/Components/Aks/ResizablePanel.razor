@@ -21,6 +21,7 @@
     [Parameter] public int DefaultWidth { get; set; } = 380;
     [Parameter] public int MinWidth { get; set; } = 200;
     [Parameter] public int MaxWidth { get; set; } = 800;
+    [Parameter] public EventCallback<int> OnWidthChanged { get; set; }
 
     private int Width;
     private bool _dragging;
@@ -49,15 +50,18 @@
         StateHasChanged();
     }
 
-    private void OnMouseUp(MouseEventArgs e)
+    private async Task OnMouseUp(MouseEventArgs e)
     {
+        if (!_dragging) return;
         _dragging = false;
+        await OnWidthChanged.InvokeAsync(Width);
     }
 
-    private void ResetWidth()
+    private async Task ResetWidth()
     {
         Width = DefaultWidth;
         _dragging = false;
         StateHasChanged();
+        await OnWidthChanged.InvokeAsync(Width);
     }
 }

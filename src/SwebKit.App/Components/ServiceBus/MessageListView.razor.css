@@ -13,8 +13,48 @@
 
 .message-list-view__toolbar {
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
     background: color-mix(in srgb, var(--color-table-toolbar-bg, var(--color-surface)) 78%, var(--color-panel-card, var(--color-surface)));
     border-bottom-color: var(--color-table-header-border, var(--color-border));
+}
+
+/* Two logical rows — filters/view controls on top, destructive + primary
+   actions on the bottom — instead of one row with one giant flex-spacer gap. */
+.message-list-view__toolbar-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* Logical toolbar groups — visually separate view/filter/action/primary clusters
+   instead of one unbroken row of ~15 controls. */
+.message-list-view__toolbar-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-right: 10px;
+    border-right: 1px solid var(--color-table-header-border, var(--color-border));
+}
+
+.message-list-view__toolbar-group:last-child {
+    padding-right: 0;
+    border-right: none;
+}
+
+.message-list-view__toolbar-spacer {
+    flex: 1 1 0;
+    min-width: 8px;
+}
+
+.message-list-view__toolbar-group--primary {
+    border-right: none;
+    padding-right: 0;
 }
 
 .message-list-view__toolbar-select,
@@ -417,7 +457,7 @@
 .message-list-view__summary-bar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
     background: color-mix(in srgb, var(--color-panel-card, var(--color-surface)) 92%, var(--color-table-toolbar-bg, var(--color-surface)));
 }
@@ -425,6 +465,10 @@
 .message-list-view__summary-bar--secondary {
     justify-content: flex-start;
     background: var(--color-panel-card, var(--color-surface));
+}
+
+.message-list-view__summary-sep {
+    color: var(--color-table-header-border, var(--color-border));
 }
 
 .message-list-view__save-filter-dialog {

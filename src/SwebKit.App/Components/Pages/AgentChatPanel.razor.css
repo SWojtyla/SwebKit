@@ -144,14 +144,14 @@
 }
 .agent-bubble__markdown table { border-collapse: collapse; width: 100%; font-size: 0.82em; }
 .agent-bubble__markdown th,
-.agent-bubble__markdown td   { border: 1px solid var(--neutral-stroke-rest); padding: 4px 8px; }
-.agent-bubble__markdown code { background: var(--neutral-fill-secondary-rest); padding: 1px 4px; border-radius: 3px; font-size: 0.85em; }
-.agent-bubble__markdown pre  { background: var(--neutral-fill-secondary-rest); padding: 8px; border-radius: 4px; overflow-x: auto; margin: 4px 0; }
+.agent-bubble__markdown td   { border: 1px solid var(--color-border); padding: 4px 8px; }
+.agent-bubble__markdown code { background: var(--color-surface-3); padding: 1px 4px; border-radius: 3px; font-size: 0.85em; }
+.agent-bubble__markdown pre  { background: var(--color-surface-3); padding: 8px; border-radius: 4px; overflow-x: auto; margin: 4px 0; }
 .agent-bubble__markdown p    { margin: 2px 0; }
 .agent-bubble__markdown ul,
 .agent-bubble__markdown ol   { margin: 2px 0; padding-left: 18px; }
 .agent-bubble__markdown li   { margin: 1px 0; }
-.agent-bubble__markdown blockquote { margin: 4px 0; padding-left: 8px; border-left: 2px solid var(--neutral-stroke-rest); }
+.agent-bubble__markdown blockquote { margin: 4px 0; padding-left: 8px; border-left: 2px solid var(--color-border); }
 
 .agent-bubble--loading {
     display: flex;

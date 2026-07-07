@@ -138,16 +138,16 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             ScheduledMessageCount = 0
         });
 
-    public Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default) =>
+    public Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null) =>
         Task.FromResult<IReadOnlyList<SbMessage>>(
             _entityData.TryGetValue(entityPath, out var d)
-                ? d.ActiveMessages.Take(count).ToList()
+                ? d.ActiveMessages.Where(m => fromSequenceNumber is null || m.SequenceNumber >= fromSequenceNumber).Take(count).ToList()
                 : []);
 
-    public Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default) =>
+    public Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null) =>
         Task.FromResult<IReadOnlyList<SbMessage>>(
             _entityData.TryGetValue(entityPath, out var d)
-                ? d.DeadLetterMessages.Take(count).ToList()
+                ? d.DeadLetterMessages.Where(m => fromSequenceNumber is null || m.SequenceNumber >= fromSequenceNumber).Take(count).ToList()
                 : []);
 
     public Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)

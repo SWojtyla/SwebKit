@@ -1,0 +1,56 @@
+@* ── SidePanel: the one shared side-panel primitive for the whole app —
+     always drag-resizable, with a standard title + close-button header
+     (or none, via ShowHeader="false" for hosts that render their own
+     multi-section/tab header, e.g. AKS), and an optional overlay mode for
+     narrow viewports. Wraps ResizablePanel so features don't need to
+     hand-roll the header/close/overlay branching. ── *@
+
+@if (Visible)
+{
+    @if (Overlay)
+    {
+        <div class="panel-drawer overlay">
+            @if (ShowHeader)
+            {
+                <div class="panel-drawer-header">
+                    <span>@Title</span>
+                    <button type="button" class="panel-close-btn" title="@CloseTitle" @onclick="() => OnClose.InvokeAsync()">×</button>
+                </div>
+            }
+            <div class="panel-drawer-content">
+                @ChildContent
+            </div>
+        </div>
+    }
+    else
+    {
+        <ResizablePanel DefaultWidth="DefaultWidth" MinWidth="MinWidth" MaxWidth="MaxWidth" OnWidthChanged="OnWidthChanged">
+            <div class="panel-drawer">
+                @if (ShowHeader)
+                {
+                    <div class="panel-drawer-header">
+                        <span>@Title</span>
+                        <button type="button" class="panel-close-btn" title="@CloseTitle" @onclick="() => OnClose.InvokeAsync()">×</button>
+                    </div>
+                }
+                <div class="panel-drawer-content">
+                    @ChildContent
+                </div>
+            </div>
+        </ResizablePanel>
+    }
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public bool ShowHeader { get; set; } = true;
+    [Parameter] public string Title { get; set; } = "Details";
+    [Parameter] public string CloseTitle { get; set; } = "Close details";
+    [Parameter] public bool Overlay { get; set; }
+    [Parameter] public int DefaultWidth { get; set; } = 380;
+    [Parameter] public int MinWidth { get; set; } = 240;
+    [Parameter] public int MaxWidth { get; set; } = 600;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<int> OnWidthChanged { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

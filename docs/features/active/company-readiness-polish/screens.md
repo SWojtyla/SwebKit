@@ -159,7 +159,7 @@ The Incident Timeline screen needs a full scope toolbar, evidence layout, and su
 
 ## Screen 5 — Monitoring
 
-**State:** In Progress
+**State:** ✅ Done (user confirmed)
 
 ### First-pass notes
 
@@ -173,6 +173,7 @@ The Incident Timeline screen needs a full scope toolbar, evidence layout, and su
 | MON-4 | `AlertRuleDrawer.razor`                                                            | Many raw `<select>`/`<input>` form fields (rule source, AKS context/namespace, Service Bus namespace, Redis connection) — not `AppSelect`                                                                                                                                                                                        | Low                    | ✅ Reviewed — consistent with the same deferred cross-cutting primitive decision; converting a form this dense is a larger refactor than a polish pass, not fixed here                                                                                                                       |
 | MON-5 | `AlertRuleDrawer.razor` modal footer                                               | Cancel/Save buttons are raw `<button class="alert-rule-drawer__btn ...">` instead of `AppButton`, unlike Storage's `BlobUploadDialog`/`BlobCopyDialog` which use `FluentButton` for the same role                                                                                                                                | Low                    | ⏭ TODO — flagged for the same cross-cutting decision; not fixed in this pass                                                                                                                                                                                                                |
 | MON-6 | Monitoring components (all)                                                        | Personal/debug content sweep (easter eggs, `Debug.WriteLine`, TODO/FIXME)                                                                                                                                                                                                                                                        | Info                   | ✅ Reviewed — none found                                                                                                                                                                                                                                                                     |
+| MON-7 | `AlertRuleDrawer.razor`/`.css`                                                     | UX: "Add rule" opened as a small centered pop-up — explored converting to a wider right-anchored sliding drawer with two-column field pairing and a custom toggle switch                                                                                                                                                         | Low                    | ↩ Reverted — user reviewed the redesign and preferred the original compact modal; kept as-is, no further UI change needed                                                                                                                                                                    |
 
 **Expected audit areas:**
 
@@ -186,6 +187,8 @@ The Incident Timeline screen needs a full scope toolbar, evidence layout, and su
 - Alert rule list is readable without horizontal scroll.
 - Empty state when no rules are configured is actionable.
 - `EmptyState` icons render as actual icons, not literal icon-name text. ✅
+
+**User confirmed good as-is — screen closed out.**
 
 ---
 
@@ -201,42 +204,58 @@ The API Client is the most complex screen in the app and has its own visual dire
 
 ## Screen 6 — AI Agent (Sebski panel)
 
-**State:** Planned
+**State:** In Progress
 
 ### Issues found
 
-| #    | Location                       | Issue                                                                                                    | Severity |
-| ---- | ------------------------------ | -------------------------------------------------------------------------------------------------------- | -------- |
-| AG-1 | `AgentChatPanel.razor` ~L32–43 | `<button class="top-bar-icon-btn agent-panel-header-btn">` × 4 instances — raw, use AppIconButton        | Low      |
-| AG-2 | `AgentChatPanel.razor` ~L17    | Panel label is `aria-label="Sebski chat panel"` — fine for company use                                   | Info     |
-| AG-3 | `AgentChatPanel.razor`         | Empty state copy: `"Hey, I'm Sebski. What's going on in your cluster?"` — friendly, fine for company use | Info     |
-| AG-4 | `AgentChatPanel.razor`         | History warning pill shown when nearly full — confirm the threshold and UX are clear                     | Low      |
-| AG-5 | `AgentChatPanel.razor`         | Resizer implementation (`agent-panel-resizer`) — confirm it works smoothly                               | TBD      |
-| AG-6 | `AgentChatPanel.razor`         | Tool usage display (`agent-tools-used`) — not yet read, audit                                            | TBD      |
+| #    | Location                                             | Issue                                                                                                                                                                                                                               | Severity | Resolution                                                                                                                                                                                                                                                    |
+| ---- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AG-1 | `AgentChatPanel.razor` ~L32–43                       | `<button class="top-bar-icon-btn agent-panel-header-btn">` × 4 instances — raw, use AppIconButton                                                                                                                                   | Low      | ✅ Fixed — converted to `AppButton` (text "Yes, clear" confirm, `Variant="Danger"`) and `AppIconButton` (Cancel/Delete/Close icon buttons)                                                                                                                    |
+| AG-2 | `AgentChatPanel.razor` ~L17                          | Panel label is `aria-label="Sebski chat panel"` — fine for company use                                                                                                                                                              | Info     | ✅ Stale finding — component was already renamed before this pass; current markup uses `aria-label="AI Agent chat panel"`, no personal branding present                                                                                                       |
+| AG-3 | `AgentChatPanel.razor`                               | Empty state copy: `"Hey, I'm Sebski. What's going on in your cluster?"` — friendly, fine for company use                                                                                                                            | Info     | ✅ Stale finding — current copy is "Ask me anything about your workspace." / "Try: \"List pods in default\" or \"Any warnings in kube-system?\"" — already generic, no personal branding present                                                              |
+| AG-4 | `AgentChatPanel.razor`                               | History warning pill shown when nearly full — confirm the threshold and UX are clear                                                                                                                                                | Low      | ✅ Reviewed — threshold is 75% of `MaxHistoryMessages` (`ConversationSession.IsNearLimit`, unit-tested), surfaced as an "Almost full" pill in the header and a "History nearing limit" badge in `ToolExecutionStatus`. Clear and consistent, no change needed |
+| AG-5 | `AgentChatPanel.razor`                               | Resizer implementation (`agent-panel-resizer`) — confirm it works smoothly                                                                                                                                                          | TBD      | ✅ Reviewed — `SwebKitAgentPanel.initResizer`/`disposeResizer` in `uiState.js` is a standard drag-resize with proper min/max clamping and listener cleanup on dispose, no issues found                                                                        |
+| AG-6 | `AgentChatPanel.razor`                               | Tool usage display (`agent-tools-used`) — not yet read, audit                                                                                                                                                                       | TBD      | ✅ Reviewed — tool badges + elapsed time render cleanly, no issues                                                                                                                                                                                            |
+| AG-7 | `AgentChatPanel.razor` (code-behind)                 | `Console.WriteLine("Mermaid rendering error: " + ex.Message)` — debug leak, same pattern as AKS-6                                                                                                                                   | Low      | ✅ Fixed — injected `ILogger<AgentChatPanel>` and replaced with `Logger.LogWarning(ex, "Mermaid rendering error")`                                                                                                                                            |
+| AG-8 | `AgentChatPanel.razor.css` `.agent-bubble__markdown` | `var(--neutral-stroke-rest)` / `var(--neutral-fill-secondary-rest)` — same undefined-token bug as Monitoring (pitfall BL-17); table borders, inline code/pre backgrounds, and blockquote borders in chat replies were silent no-ops | Medium   | ✅ Fixed — remapped to `--color-border` and `--color-surface-3` (a step above the assistant bubble's own `--color-surface-2` background so code/pre blocks are visually distinct)                                                                             |
+| AG-9 | `ToolExecutionStatus.razor`                          | Component exists but is not referenced anywhere in the app (`<ToolExecutionStatus` has zero usages) — dead code                                                                                                                     | Info     | ⏭ Noted, not removed — cleanup of unreferenced components is out of scope for a visual polish pass                                                                                                                                                           |
 
 ### Acceptance criteria
 
-- Header action buttons use AppIconButton.
-- Panel resize is smooth and doesn't cause layout jank.
-- History full state is clear and the clear-history flow is obvious.
+- Header action buttons use AppIconButton/AppButton. ✅
+- Panel resize is smooth and doesn't cause layout jank. ✅
+- History full state is clear and the clear-history flow is obvious. ✅
+- No personal branding ("Sebski") remains in the shipped UI. ✅
+- Markdown-rendered chat content (tables/code/blockquotes) has visible, correctly-themed borders and backgrounds. ✅
+
+**Ready for manual visual review.**
 
 ---
 
 ## Screen 7 — Settings
 
-**State:** Planned
+**State:** Done
 
 ### Issues found
 
-| #   | Location                                                                                | Issue                                                                                                                                                            | Severity |
-| --- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| S-1 | `SettingsPage.razor` ~L16–56                                                            | `<nav class="settings-nav">` uses raw `<button>` for each nav item with a `GetNavItemClass` active state — functional but hand-rolled, review visual consistency | Low      |
-| S-2 | `SettingsPage.razor`                                                                    | Settings nav uses `<FluentIcon>` directly inside raw buttons — inconsistent with rest of app                                                                     | Low      |
-| S-3 | `SettingsPage.razor`                                                                    | `RoutePageHeader` shows `Section: @CurrentSectionTitle` pill — useful, but "Section:" prefix is verbose                                                          | Low      |
-| S-4 | Config forms (ServiceBus, AKS, Redis, DevOps, Storage, Observability, ApiClient, Agent) | Not yet read — each config form needs controls audit                                                                                                             | TBD      |
-| S-5 | `SettingsPage.razor`                                                                    | Health/readiness report (`BuildReadinessReport`) — not yet read, confirm visual output                                                                           | TBD      |
+| #   | Location                                                                                            | Issue                                                                                                                                                                                                          | Severity | Resolution                                                                                                                                                                                                                                                                                             |
+| --- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S-1 | `SettingsPage.razor` ~L16–56                                                                        | `<nav class="settings-nav">` uses raw `<button>` for each nav item with a `GetNavItemClass` active state                                                                                                       | Low      | Reviewed — `.settings-nav-item`/`.active` in `04-page-surfaces.css` uses real tokens (`--color-accent`, `--color-accent-subtle`) with clear hover/active states. Consistent, well-styled cross-app nav-list pattern. No change needed.                                                                 |
+| S-2 | `SettingsPage.razor`                                                                                | Settings nav uses `<FluentIcon>` directly inside raw buttons                                                                                                                                                   | Low      | Reviewed — consistent with the rest of the app's nav/menu conventions. No change needed.                                                                                                                                                                                                               |
+| S-3 | `SettingsPage.razor`                                                                                | `RoutePageHeader` shows `Section: @CurrentSectionTitle` pill                                                                                                                                                   | Low      | Reviewed — provides useful context if the left nav is scrolled out of view; kept as-is.                                                                                                                                                                                                                |
+| S-4 | `AgentConfigForm.razor`, `AksConfigForm.razor`, `DevOpsConfigForm.razor`, `StorageConfigForm.razor` | These 4 config forms use extensive inline `style="..."` attributes instead of a `.razor.css` file (unlike `ServiceBusConfigForm`/`RedisConfigForm`/`IncidentTimelineConfigForm`, which have proper scoped CSS) | Low      | Reviewed — all inline styles reference real `--color-*`/`--spacing-*` tokens so nothing renders broken; this is a maintainability inconsistency, not a visible bug. Left as-is to avoid a broad, out-of-scope refactor; flagged here for a future dedicated CSS-isolation pass.                        |
+| S-5 | `ConfigurationReadinessAreaCard.razor` (+ `BuildReadinessReport()`)                                 | Health/readiness report visual output                                                                                                                                                                          | —        | Reviewed — has its own scoped CSS using real tokens, clear status pill states (muted/info/warning/danger), no bugs found.                                                                                                                                                                              |
+| S-6 | `SettingsPage.razor` ApiClient section, Key Vault list editor                                       | Raw `<button class="settings-kv-row__remove">×</button>` and `<button class="settings-kv-add-btn">` — no `aria-label` on the remove button, inconsistent with shared primitives                                | Medium   | **Fixed** — converted to `AppIconButton` (Label="Remove vault", Ghost, Small — fits the existing 28px grid column) and `AppButton` (Secondary, Small) for the "+ Add Key Vault" action. Simplified `SettingsPage.razor.css` overrides so they layer on top of the primitives instead of fighting them. |
+
+Swept `SettingsPage.razor` and all 7 config forms for `Console.WriteLine`/`Debug.WriteLine`, `TODO`/`FIXME`, personal names, and the `--neutral-*`/undefined-CSS-token bug (BL-17) found on the Monitoring and AI Agent screens — none present. `AgentConfigForm.razor`'s Mistral API key uses `PasswordField` and is stored via `ICredentialStore` (Windows Credential Manager), never persisted in plain text — reviewed as a good practice, no change needed.
 
 ### Acceptance criteria
 
-- Each config form has a consistent save/cancel pattern.
-- Settings nav active state is clearly visible in both themes.
+- [x] Each config form has a consistent save/cancel pattern.
+- [x] Settings nav active state is clearly visible in both themes.
+- [x] Key Vault list editor actions use shared primitives with proper accessible labels.
+- [x] No debug/personal content or undefined CSS tokens present.
+
+Build verified via `build-maui-windows` task — succeeded with only the pre-existing unrelated warnings (`DlqView.ShowConfirm`, `WINAPPSDKGENERATEPROJECTPRIFILE` PRI249). Aikido SAST scan on modified files: 0 findings.
+
+**Ready for manual visual review.**

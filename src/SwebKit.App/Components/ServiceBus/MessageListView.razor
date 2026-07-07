@@ -15,6 +15,8 @@
     }
 
     <div class="filter-bar message-list-view__toolbar">
+      <div class="message-list-view__toolbar-row message-list-view__toolbar-row--top">
+      <div class="message-list-view__toolbar-group message-list-view__toolbar-group--view">
         <span class="view-mode-badge @(IsDlqMode ? "dlq" : "peek")" aria-label="Message list mode">
             @(IsDlqMode ? "DLQ mode" : "Peek mode")
         </span>
@@ -143,6 +145,8 @@
                 @(_selection.Count == Messages.Count ? "Deselect all" : "Select all")
             </AppButton>
         }
+      </div>
+      <div class="message-list-view__toolbar-group message-list-view__toolbar-group--filter">
         <div class="message-list-view__filter-group">
             <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter messages..."
                    class="message-list-view__filter-input app-native-control" />
@@ -192,6 +196,10 @@
                 + Rule
             </AppButton>
         }
+      </div>
+      </div>
+      <div class="message-list-view__toolbar-row message-list-view__toolbar-row--bottom">
+      <div class="message-list-view__toolbar-group message-list-view__toolbar-group--actions">
         @if (IsDetailPaneOpen && OnCloseDetails.HasDelegate)
         {
             <AppButton OnClick="@(() => OnCloseDetails.InvokeAsync())" Size="Small" Variant="Secondary"
@@ -237,11 +245,24 @@
                    Title="Toggle NServiceBus view — shows endpoint, message type, conversation ID">
             NSB
         </AppButton>
+      </div>
+      <div class="message-list-view__toolbar-spacer"></div>
+      <div class="message-list-view__toolbar-group message-list-view__toolbar-group--primary">
+        @if (Messages.Count > 0 || TotalAvailableCount is not null)
+        {
+            <AppButton data-testid="load-more-button" OnClick="LoadMoreAsync" Size="Small" Variant="Secondary"
+                       CssClass="message-list-view__toolbar-button" Disabled="@(!CanLoadMore)"
+                       Title="Fetch the next batch of messages and add them to the list below">
+                @LoadMoreButtonLabel
+            </AppButton>
+        }
         <AppButton data-testid="peek-button" OnClick="LoadInitialWindowAsync" Size="Small" Variant="Primary"
                    CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--primary"
                    Disabled="@IsLoading">
             @(IsLoading ? "Loading…" : "↺ Peek")
         </AppButton>
+      </div>
+      </div>
     </div>
 
     @if (_advancedFilterEnabled)
@@ -309,14 +330,16 @@
 
         @if (ErrorMessage is not null)
         {
-            <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
+            <ErrorCallout Message="@ErrorMessage" OnRetry="() => LoadAsync()" />
         }
 
         @if (IsLoading)
         {
             <LoadingSpinner Message="Peeking messages..." />
         }
-        else if (FilteredMessages.Count == 0)
+        else
+        {
+        @if (FilteredMessages.Count == 0)
         {
             @if (Messages.Count == 0)
             {
@@ -451,25 +474,24 @@
                                 }
                             </FluentDataGrid>
                         </div>
-                        <div class="message-list-view__summary-bar">
-                            <span data-testid="window-status">@WindowStatusSummary</span>
-                            @if (Messages.Count >= LargeWindowThreshold)
-                            {
-                                <span class="message-list-view__large-window-cue" data-testid="large-window-cue"
-                                      title="The loaded window is large. Filtering and scroll performance may be impacted.">
-                                    Large window
-                                </span>
-                            }
-                            <AppButton data-testid="load-more-button" OnClick="LoadMoreAsync" Size="Small" Variant="Secondary"
-                                       CssClass="message-list-view__toolbar-button" Disabled="@(!CanLoadMore)"
-                                       Title="Load additional messages into the current window">
-                                @LoadMoreButtonLabel
-                            </AppButton>
-                        </div>
-                        <div class="message-list-view__summary-bar message-list-view__summary-bar--secondary">
-                            @CountSummary
-                        </div>
-                    }
+        }
+
+        @if (Messages.Count > 0 || TotalAvailableCount is not null)
+        {
+            <div class="message-list-view__summary-bar">
+                <span data-testid="window-status">@WindowStatusSummary</span>
+                <span class="message-list-view__summary-sep">·</span>
+                <span data-testid="count-summary">@CountSummary</span>
+                @if (Messages.Count >= LargeWindowThreshold)
+                {
+                    <span class="message-list-view__large-window-cue" data-testid="large-window-cue"
+                          title="The loaded window is large. Filtering and scroll performance may be impacted.">
+                        Large window
+                    </span>
+                }
+            </div>
+        }
+    }
 
                     <Modal IsOpen="@_showSaveFilterDialog" OnClose="@(() => _showSaveFilterDialog = false)">
                         <div class="message-list-view__save-filter-dialog">
@@ -610,7 +632,7 @@
     private Guid? _loadedNamespaceId;
     private long _loadedRefreshToken = long.MinValue;
     private int _loadVersion;
-    private int _requestedWindowSize;
+    private long? _lastSequenceNumber;
     private string? _loadedPreferenceScopeKey;
     private string? _lastAppliedTracePivotFilter;
 
@@ -677,7 +699,9 @@ HasEnabledAdvancedRules));
     private bool CanAddCustomPropertyColumn => !string.IsNullOrWhiteSpace(_newCustomPropertyColumn);
 
     private string NoMatchesSubtitle =>
-        "No messages match the current filter criteria. Try a different rule or disable filters.";
+        CanLoadMore
+            ? "No messages match the current filter criteria in the loaded window. Try a different rule, disable filters, or use Load More below to fetch more messages."
+            : "No messages match the current filter criteria. Try a different rule or disable filters.";
 
     private string CurrentFilterSummary
     {
@@ -731,9 +755,6 @@ HasEnabledAdvancedRules));
         _ => 36
     };
 
-    private int CurrentWindowRequestCount =>
-        _requestedWindowSize > 0 ? _requestedWindowSize : NormalizePeekCount(PeekCount);
-
     private bool CanLoadMore =>
         !IsLoading
         && !IsMutating
@@ -771,13 +792,7 @@ HasEnabledAdvancedRules));
             if (TotalAvailableCount is long total)
             {
                 var loaded = Messages.Count;
-                if (loaded >= total)
-                {
-                    return $"Window {loaded}/{total} loaded";
-                }
-
-                var nextTarget = Math.Min(total, (long)CurrentWindowRequestCount + NormalizePeekCount(PeekCount));
-                return $"Window {loaded}/{total} loaded · next target {nextTarget}";
+                return $"Window {loaded}/{total} loaded";
             }
 
             return $"Window {Messages.Count} loaded";
@@ -785,12 +800,6 @@ HasEnabledAdvancedRules));
     }
 
     private static int NormalizePeekCount(int count) => count > 0 ? count : 1;
-
-    private static int ExpandWindowSize(int currentWindowSize, int pageSize)
-    {
-        var expanded = (long)currentWindowSize + pageSize;
-        return expanded >= int.MaxValue ? int.MaxValue : (int)expanded;
-    }
 
     private string GetRowClass(SbMessage m)
     {
@@ -825,13 +834,12 @@ HasEnabledAdvancedRules));
     {
         _autoRefresh.SetInterval(_autoRefreshSeconds, async () =>
         {
-            await InvokeAsync(LoadAsync);
+            await InvokeAsync(() => LoadAsync());
         });
     }
 
     private async Task LoadInitialWindowAsync()
     {
-        _requestedWindowSize = NormalizePeekCount(PeekCount);
         _isLoadingMoreWindow = false;
         await LoadAsync();
     }
@@ -843,9 +851,8 @@ HasEnabledAdvancedRules));
             return;
         }
 
-        _requestedWindowSize = ExpandWindowSize(CurrentWindowRequestCount, NormalizePeekCount(PeekCount));
         _isLoadingMoreWindow = true;
-        await LoadAsync();
+        await LoadAsync(append: true);
     }
 
     private async Task OnComposerSent()
@@ -1039,7 +1046,7 @@ StringComparison.Ordinal))
             ErrorMessage = null;
             IsLoading = false;
             _isLoadingMoreWindow = false;
-            _requestedWindowSize = NormalizePeekCount(PeekCount);
+            _lastSequenceNumber = null;
             return;
         }
 
@@ -1063,7 +1070,7 @@ StringComparison.Ordinal))
         {
             _selection.Clear();
             _isLoadingMoreWindow = false;
-            _requestedWindowSize = NormalizePeekCount(PeekCount);
+            _lastSequenceNumber = null;
             LoadMessageListPreferences();
         }
 
@@ -1149,12 +1156,13 @@ StringComparison.Ordinal))
         });
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(bool append = false)
     {
         if (Client is null || EntityPath is null) return;
 
         var requestVersion = Interlocked.Increment(ref _loadVersion);
-        var requestCount = CurrentWindowRequestCount;
+        var requestCount = NormalizePeekCount(PeekCount);
+        var fromSequenceNumber = append && _lastSequenceNumber is long lastSeq ? lastSeq + 1 : (long?)null;
         IsLoading = true;
         ErrorMessage = null;
         await InvokeAsync(StateHasChanged);
@@ -1164,8 +1172,8 @@ StringComparison.Ordinal))
             long? totalAvailableCount = null;
 
             var loadedMessages = (IsDlqMode
-                ? (await Client.PeekDeadLetterAsync(EntityPath, requestCount)).ToList()
-                : (await Client.PeekMessagesAsync(EntityPath, requestCount)).ToList());
+                ? (await Client.PeekDeadLetterAsync(EntityPath, requestCount, fromSequenceNumber: fromSequenceNumber)).ToList()
+                : (await Client.PeekMessagesAsync(EntityPath, requestCount, fromSequenceNumber: fromSequenceNumber)).ToList());
 
             try
             {
@@ -1179,10 +1187,32 @@ StringComparison.Ordinal))
 
             if (requestVersion == _loadVersion)
             {
-                var currentIds = loadedMessages.Select(m => m.MessageId).ToHashSet();
-                foreach (var id in _selection.Selected.ToList())
-                    if (!currentIds.Contains(id)) _selection.Toggle(id, false);
-                Messages = loadedMessages;
+                if (append)
+                {
+                    var existingIds = Messages.Select(m => m.MessageId).ToHashSet();
+                    Messages = [.. Messages, .. loadedMessages.Where(m => !existingIds.Contains(m.MessageId))];
+                }
+                else
+                {
+                    var currentIds = loadedMessages.Select(m => m.MessageId).ToHashSet();
+                    foreach (var id in _selection.Selected.ToList())
+                        if (!currentIds.Contains(id)) _selection.Toggle(id, false);
+                    Messages = loadedMessages;
+                }
+
+                var maxSequenceInBatch = loadedMessages.Count > 0
+                    ? loadedMessages.Max(m => m.SequenceNumber)
+                    : null;
+                if (append)
+                {
+                    if (maxSequenceInBatch is long newMax)
+                        _lastSequenceNumber = _lastSequenceNumber is long prevMax ? Math.Max(prevMax, newMax) : newMax;
+                }
+                else
+                {
+                    _lastSequenceNumber = maxSequenceInBatch;
+                }
+
                 TotalAvailableCount = totalAvailableCount;
             }
         }
@@ -1195,8 +1225,12 @@ StringComparison.Ordinal))
             if (requestVersion == _loadVersion)
             {
                 ErrorMessage = ex.Message;
-                Messages = [];
-                TotalAvailableCount = null;
+                if (!append)
+                {
+                    Messages = [];
+                    TotalAvailableCount = null;
+                    _lastSequenceNumber = null;
+                }
             }
         }
         finally

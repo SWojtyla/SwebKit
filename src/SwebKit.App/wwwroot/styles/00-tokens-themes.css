@@ -28,7 +28,7 @@
     --top-bar-height: 48px;
     --sb-entity-panel-width: 295px;
     --sb-entity-panel-collapsed-width: 48px;
-    --sb-detail-drawer-width: 380px;
+    --panel-default-width: 380px;
 
     /* z-index scale */
     --z-dropdown: 3000;

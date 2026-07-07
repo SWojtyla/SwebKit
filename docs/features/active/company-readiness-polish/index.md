@@ -23,15 +23,15 @@ The app was built for personal use. Company sharing requires every surface to fe
 
 ## Screens in scope (nav order)
 
-| #   | Screen                  | Status      |
-| --- | ----------------------- | ----------- |
-| 1   | Service Bus             | Planned     |
-| 2   | AKS                     | ✅ Done     |
-| 3   | Redis                   | ✅ Done     |
-| 4   | Storage                 | ✅ Done     |
-| 5   | Monitoring              | In Progress |
-| 6   | AI Agent (Sebski panel) | Planned     |
-| 7   | Settings                | Planned     |
+| #   | Screen                  | Status  |
+| --- | ----------------------- | ------- |
+| 1   | Service Bus             | Planned |
+| 2   | AKS                     | ✅ Done |
+| 3   | Redis                   | ✅ Done |
+| 4   | Storage                 | ✅ Done |
+| 5   | Monitoring              | ✅ Done |
+| 6   | AI Agent (Sebski panel) | ✅ Done |
+| 7   | Settings                | ✅ Done |
 
 ## Screens excluded — full rework required (separate features)
 

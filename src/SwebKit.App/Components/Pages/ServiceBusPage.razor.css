@@ -156,8 +156,3 @@
     display: inline-flex;
     align-items: center;
 }
-
-.sb-detail-pane-content {
-    flex: 1;
-    overflow: hidden;
-}

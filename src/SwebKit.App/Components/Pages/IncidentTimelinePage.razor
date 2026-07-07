@@ -160,7 +160,10 @@
                         <IncidentTimelineList Items="_page.Items" SelectedItemId="@_selectedItem?.ItemId"
                                               OnSelectItem="HandleItemSelectedAsync" />
 
-                        <IncidentTimelineDetailPanel Item="_selectedItem" OnClose="ClearSelectedItemAsync" />
+                        <SidePanel Visible="_selectedItem is not null" ShowHeader="false" DefaultWidth="380"
+                                   MinWidth="320" MaxWidth="640">
+                            <IncidentTimelineDetailPanel Item="_selectedItem" OnClose="ClearSelectedItemAsync" />
+                        </SidePanel>
                     </div>
                 }
             }

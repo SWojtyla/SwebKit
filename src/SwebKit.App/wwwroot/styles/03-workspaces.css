@@ -766,19 +766,6 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Details pane
-   ═══════════════════════════════════════════════════════════ */
-
-.details-pane {
-    border-left: 1px solid var(--color-border);
-    background: var(--color-surface);
-    overflow: auto;
-    width: 340px;
-    flex: 0 0 340px;
-    min-width: 200px;
-}
-
-/* ═══════════════════════════════════════════════════════════
    Service Bus page layout
    ═══════════════════════════════════════════════════════════ */
 
@@ -852,26 +839,32 @@
     min-width: 0;
 }
 
-.sb-detail-drawer {
+/* ═══════════════════════════════════════════════════════════
+   Shared resizable side-panel primitives (ResizableSidePanel.razor)
+   Used by any feature-side drawer: header + title + close button,
+   plus an optional fixed-position overlay mode for narrow viewports.
+   ═══════════════════════════════════════════════════════════ */
+
+.panel-drawer {
     display: flex;
     flex-direction: column;
     overflow: hidden;
     background: var(--color-surface);
-    animation: sb-drawer-slide-in 0.18s ease;
+    animation: panel-drawer-slide-in 0.18s ease;
 }
 
-.sb-detail-drawer.overlay {
+.panel-drawer.overlay {
     position: absolute;
     top: 0;
     right: 0;
     bottom: 0;
-    width: var(--sb-detail-drawer-width);
+    width: var(--panel-default-width);
     z-index: var(--z-dropdown);
     box-shadow: var(--shadow-lg);
     border-left: 1px solid var(--color-border);
 }
 
-.sb-detail-drawer-header {
+.panel-drawer-header {
     padding: 6px 8px 6px 12px;
     border-bottom: 1px solid var(--color-border);
     font-size: var(--font-size-xs);
@@ -881,7 +874,12 @@
     flex-shrink: 0;
 }
 
-.sb-detail-close-btn {
+.panel-drawer-content {
+    flex: 1;
+    overflow: hidden;
+}
+
+.panel-close-btn {
     margin-left: auto;
     background: transparent;
     border: none;
@@ -893,7 +891,7 @@
     line-height: 1;
 }
 
-.sb-detail-close-btn:hover {
+.panel-close-btn:hover {
     background: var(--color-surface-2);
     color: var(--color-text);
 }
@@ -931,7 +929,7 @@
 .message-grid-host.density-default fluent-data-grid-row { height: 36px; }
 .message-grid-host.density-comfort fluent-data-grid-row { height: 44px; }
 
-@keyframes sb-drawer-slide-in {
+@keyframes panel-drawer-slide-in {
     from { transform: translateX(100%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
 }

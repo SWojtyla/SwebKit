@@ -24,23 +24,14 @@
     border-right: 1px solid var(--color-border);
 }
 
-.storage-detail-splitter {
-    display: none;
-}
-
-.storage-blob-split.has-selection .storage-detail-splitter {
-    display: block;
-}
-
-.storage-detail-pane {
+/* SidePanel/ResizablePanel owns its own width + resize handle now (see
+   Components/Shared/SidePanel.razor) — this only styles the content
+   rendered inside it. */
+.storage-detail-pane-inner {
     min-width: 0;
     min-height: 0;
     height: 100%;
-    overflow: hidden;
-    width: clamp(360px, 38vw, 560px);
-    flex: 0 0 clamp(360px, 38vw, 560px);
-    min-width: 320px;
-    max-width: 880px;
+    overflow: auto;
     background: color-mix(in srgb, var(--color-panel-card, var(--color-surface)) 94%, transparent);
 }
 
@@ -57,14 +48,12 @@
         border-bottom: 1px solid var(--color-border);
     }
 
-    .storage-blob-split.has-selection .storage-detail-splitter {
-        display: none;
+    .storage-blob-split.has-selection .resizable-panel {
+        width: 100% !important;
+        min-width: 0 !important;
     }
 
-    .storage-detail-pane {
-        width: 100% !important;
-        flex: 1 1 auto !important;
-        min-width: 0;
-        max-width: none;
+    .storage-blob-split.has-selection .resizable-panel .resize-handle {
+        display: none;
     }
 }

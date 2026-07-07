@@ -2,7 +2,7 @@
 
 @if (HasOpenPanel)
 {
-    <ResizablePanel DefaultWidth="620" MinWidth="320" MaxWidth="1600">
+    <SidePanel Visible="true" ShowHeader="false" DefaultWidth="620" MinWidth="320" MaxWidth="1600">
         <div class="aks-panels-col">
 
             @* ── Tab Bar (when multiple panels are open) ── *@
@@ -424,7 +424,7 @@
                     }
 
                 </div>
-            </ResizablePanel>
+            </SidePanel>
         }
 
 @code {

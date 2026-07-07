@@ -352,6 +352,7 @@ public class AlertMonitorServiceTests
         public IServiceBusClient? GetServiceBusClient(string alias) => null;
         public ValueTask<IRedisClient?> GetRedisClientAsync(string displayName, CancellationToken ct = default) => default;
         public void InvalidateStaleConnections() { }
+        public void EvictServiceBusClient(string alias) { }
         public ValueTask DisposeAsync() => default;
     }
 
