@@ -3,6 +3,8 @@ using Azure.Identity;
 using k8s;
 using k8s.KubeConfigModels;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
 using SwebKit.Core.Models;
@@ -17,6 +19,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
+using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 
 namespace SwebKit.Kubernetes.AksClient;
@@ -60,6 +63,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     private k8s.Kubernetes _client;
     private readonly string? _kubeconfigPath;
     private readonly string? _kubeconfigContext;
+    private readonly ILogger<KubernetesAksClient> _logger;
 
     private readonly Dictionary<Guid, Process> _portForwardProcesses = [];
     private readonly Lock _portForwardLock = new();
@@ -68,10 +72,12 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public KubernetesAksClient(
         string? kubeconfigContext = null,
-        string? kubeconfigPath = null)
+        string? kubeconfigPath = null,
+        ILogger<KubernetesAksClient>? logger = null)
     {
         _kubeconfigPath = kubeconfigPath;
         _kubeconfigContext = kubeconfigContext;
+        _logger = logger ?? NullLogger<KubernetesAksClient>.Instance;
 
         var config = BuildClientConfiguration(kubeconfigContext, kubeconfigPath);
         TryApplyAzureCredentialFallback(config, kubeconfigPath);
@@ -1332,25 +1338,42 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     /// (this resource's own managedFields shows multiple controllers updating it every few
     /// minutes). <c>kubectl apply</c> is patch-based and does not need any of these fields.
     /// </summary>
+    /// <remarks>
+    /// This operates on the YAML representation-model (node/AST) API, not a typed
+    /// Dictionary&lt;object, object&gt; round-trip. A dictionary round-trip loses each scalar's
+    /// original type: YamlDotNet's default deserializer reads every plain scalar into that kind
+    /// of dictionary as a <see cref="string"/>, so re-serializing turns genuinely-numeric fields
+    /// like <c>spec.replicas</c> into quoted strings (which Kubernetes then rejects — a `*int32`
+    /// field can't unmarshal a JSON string) while unquoted numeric-looking annotation values
+    /// (e.g. a revision "251") also can't round-trip safely. Editing the node tree directly and
+    /// only removing specific mapping entries leaves every other node's original style/type
+    /// completely untouched.
+    /// </remarks>
     internal static string CleanEditableYaml(string rawYaml)
     {
-        var deserializer = new DeserializerBuilder().Build();
-        var obj = deserializer.Deserialize<Dictionary<object, object>>(rawYaml);
-        if (obj is null) return rawYaml;
-
-        obj.Remove("status");
-
-        if (obj.TryGetValue("metadata", out var metaObj) && metaObj is Dictionary<object, object> metadata)
+        var yamlStream = new YamlStream();
+        using (var reader = new StringReader(rawYaml))
         {
-            metadata.Remove("managedFields");
-            metadata.Remove("resourceVersion");
-            metadata.Remove("generation");
-            metadata.Remove("uid");
-            metadata.Remove("creationTimestamp");
+            yamlStream.Load(reader);
         }
 
-        var serializer = new SerializerBuilder().Build();
-        return serializer.Serialize(obj);
+        if (yamlStream.Documents.Count == 0 || yamlStream.Documents[0].RootNode is not YamlMappingNode root)
+            return rawYaml;
+
+        root.Children.Remove(new YamlScalarNode("status"));
+
+        if (root.Children.TryGetValue(new YamlScalarNode("metadata"), out var metadataNode) &&
+            metadataNode is YamlMappingNode metadata)
+        {
+            foreach (var key in new[] { "managedFields", "resourceVersion", "generation", "uid", "creationTimestamp" })
+            {
+                metadata.Children.Remove(new YamlScalarNode(key));
+            }
+        }
+
+        using var writer = new StringWriter();
+        yamlStream.Save(writer, assignAnchors: false);
+        return writer.ToString();
     }
 
     private async Task<object?> ListGatewayApiCustomObjectsAsync(string ns, string plural, CancellationToken ct)
@@ -2463,18 +2486,31 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                     {
                         var (retryExit, retryStderr) = await RunKubectlApplyWithTokenAsync(tempFile, ns, token, ct);
                         if (retryExit != 0)
+                        {
+                            _logger.LogWarning(
+                                "kubectl apply failed for {Kind}/{Name} in {Namespace} after credential refresh (exit {ExitCode}): {Output}",
+                                kind, name, ns, retryExit, retryStderr);
                             throw new InvalidOperationException($"kubectl apply failed after credential refresh (exit {retryExit}): {retryStderr}");
+                        }
                     }
                     else
                     {
+                        _logger.LogWarning(
+                            "kubectl apply failed for {Kind}/{Name} in {Namespace} with a Forbidden error and no fresh Azure credential was available (exit {ExitCode}): {Output}",
+                            kind, name, ns, exitCode, stderr);
                         throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {stderr}");
                     }
                 }
                 else
                 {
+                    _logger.LogWarning(
+                        "kubectl apply failed for {Kind}/{Name} in {Namespace} (exit {ExitCode}): {Output}",
+                        kind, name, ns, exitCode, stderr);
                     throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {stderr}");
                 }
             }
+
+            _logger.LogInformation("Applied YAML for {Kind}/{Name} in {Namespace}", kind, name, ns);
         }
         finally
         {
@@ -2489,7 +2525,14 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         try
         {
             var (exitCode, stderr) = await RunKubectlDryRunAsync(tempFile, ns, ct);
-            return exitCode == 0 ? null : stderr.Trim();
+            if (exitCode != 0)
+            {
+                _logger.LogWarning(
+                    "Server-side dry-run validation failed for a resource in {Namespace} (exit {ExitCode}): {Output}",
+                    ns, exitCode, stderr);
+                return stderr.Trim();
+            }
+            return null;
         }
         finally
         {
@@ -2521,7 +2564,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     /// could keep running in the background and still apply the change moments later, leaving
     /// the user unsure whether their save actually went through.
     /// </summary>
-    private static async Task<(int ExitCode, string Stderr)> RunKubectlProcessAsync(string arguments, CancellationToken ct)
+    private async Task<(int ExitCode, string Stderr)> RunKubectlProcessAsync(string arguments, CancellationToken ct)
     {
         var psi = new ProcessStartInfo("kubectl")
         {
@@ -2563,6 +2606,9 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         {
             string captured;
             lock (outputLock) { captured = output.ToString().Trim(); }
+            _logger.LogWarning(
+                "kubectl was cancelled (caller-side timeout) running 'kubectl {Arguments}'. Captured output before cancellation: {Output}",
+                arguments, string.IsNullOrEmpty(captured) ? "(none)" : captured);
             throw new TimeoutException(string.IsNullOrEmpty(captured)
                 ? "kubectl produced no output before it was cancelled — it may be stuck waiting on cluster/network connectivity or an interactive credential prompt (e.g. kubelogin device-code sign-in) that never surfaced."
                 : $"kubectl was cancelled after producing this output:\n{captured}");

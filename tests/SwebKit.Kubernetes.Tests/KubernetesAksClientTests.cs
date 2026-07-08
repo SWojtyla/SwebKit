@@ -177,6 +177,41 @@ users:
         Assert.Equal(string.Empty, KubernetesAksClient.CleanEditableYaml(string.Empty));
     }
 
+    [Fact]
+    public void CleanEditableYaml_PreservesScalarTypeFidelity_ForNumericAnnotationsAndRealNumbers()
+    {
+        // Regression test: metadata.annotations is map[string]string on the Kubernetes side, but
+        // spec.replicas is a genuine int32. CleanEditableYaml must not blur that distinction —
+        // it previously round-tripped through an untyped Dictionary<object, object>, and
+        // YamlDotNet's default deserializer reads *every* plain scalar into that shape as a
+        // string. Re-serializing then either (a) left a numeric-looking annotation value like
+        // "251" unquoted — kubectl rejects that with "json: cannot unmarshal number into Go
+        // struct field ObjectMeta.metadata.annotations of type string" — or, once quoting was
+        // added to fix that, (b) incorrectly quoted genuinely-numeric fields like
+        // spec.replicas, which Kubernetes then rejects the opposite way (string into *int32).
+        // Operating on the YAML node tree instead of a boxed dictionary avoids both failure
+        // modes because scalar style/type is never inferred or lost for untouched nodes.
+        const string rawYaml = """
+                                apiVersion: apps/v1
+                                kind: Deployment
+                                metadata:
+                                  name: boa-brioengine
+                                  namespace: prd-boa
+                                  annotations:
+                                    deployment.kubernetes.io/revision: "251"
+                                    some.other/flag-like-annotation: "true"
+                                spec:
+                                  replicas: 4
+                                """;
+
+        var cleaned = KubernetesAksClient.CleanEditableYaml(rawYaml);
+
+        Assert.Contains("deployment.kubernetes.io/revision: \"251\"", cleaned, StringComparison.Ordinal);
+        Assert.Contains("some.other/flag-like-annotation: \"true\"", cleaned, StringComparison.Ordinal);
+        Assert.Contains("replicas: 4", cleaned, StringComparison.Ordinal);
+        Assert.DoesNotContain("replicas: \"4\"", cleaned, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("https://cluster.region.azmk8s.io:443", null, true)]
     [InlineData("https://cluster.region.azmk8s.io:443", "already-token", false)]
