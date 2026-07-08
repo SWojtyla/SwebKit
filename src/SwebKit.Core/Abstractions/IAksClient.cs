@@ -39,6 +39,17 @@ public interface IAksClient
     Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default);
     Task ApplyResourceYamlAsync(string ns, string kind, string name, string yaml, CancellationToken ct = default);
 
+    /// <summary>
+    /// Validates a resource manifest against the live cluster without persisting any change
+    /// (a server-side dry-run). Returns <see langword="null"/> when the manifest is valid,
+    /// or a human-readable error message describing why the cluster rejected it.
+    /// Clients that cannot perform a server-side dry-run should return <see langword="null"/>
+    /// (treat as "no additional validation available") rather than throwing.
+    /// </summary>
+    Task<string?> ValidateResourceYamlAsync(string ns, string yaml, CancellationToken ct = default)
+        => Task.FromResult<string?>(null);
+
+
     // ── Feature 1: Multi-pod log aggregation ─────────────────────────────────
     IAsyncEnumerable<AggregatedLogLine> StreamDeploymentLogsAsync(
         string ns, string deploymentName, LogStreamOptions opts, CancellationToken ct = default);

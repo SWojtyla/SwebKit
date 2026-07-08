@@ -173,9 +173,9 @@ public sealed class ServiceBusPageBootstrapTests : TestContext
 
     private sealed class FakeServiceBusClientFactory : IServiceBusClientFactory
     {
-        public IServiceBusClient Create(string connectionString) => new FakeServiceBusClient();
+        public IServiceBusClient Create(string connectionString, SbTransportType transportType = SbTransportType.Amqp) => new FakeServiceBusClient();
 
-        public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace) => new FakeServiceBusClient();
+        public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace, SbTransportType transportType = SbTransportType.Amqp) => new FakeServiceBusClient();
 
         public string ParseFullyQualifiedNamespace(string connectionString) => "test.servicebus.windows.net";
     }

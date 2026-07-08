@@ -246,6 +246,221 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         return LinkedRequestSaveResult.Success(requestPath, await ComputeRequestContentStampAsync(requestPath, cancellationToken));
     }
 
+    /// <summary>
+    /// Deletes a request's file (and any body/GraphQL sidecar files) from a linked collection.
+    /// </summary>
+    public async Task DeleteRequestAsync(string apiRootPath, ApiCollection collection, string requestId, CancellationToken cancellationToken = default)
+    {
+        var collectionDirectory = ResolveExistingCollectionDirectory(apiRootPath, collection);
+        var requestPath = FindRequestFile(collectionDirectory, requestId)
+            ?? throw new FileNotFoundException($"Could not locate the linked request on disk (id: {requestId}).");
+
+        EnsureWithinApiRoot(apiRootPath, requestPath);
+        var directory = Path.GetDirectoryName(requestPath)!;
+        foreach (var sidecar in await ReadSidecarFileNamesAsync(requestPath, cancellationToken))
+        {
+            var sidecarPath = Path.Combine(directory, sidecar);
+            if (File.Exists(sidecarPath) && IsWithinApiRoot(apiRootPath, sidecarPath))
+            {
+                File.Delete(sidecarPath);
+            }
+        }
+
+        File.Delete(requestPath);
+    }
+
+    /// <summary>
+    /// Deletes a folder (and everything nested inside it) from a linked collection.
+    /// </summary>
+    public Task DeleteFolderAsync(string apiRootPath, ApiCollection collection, string folderId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var collectionDirectory = ResolveExistingCollectionDirectory(apiRootPath, collection);
+        var folderDirectory = FindFolderDirectory(collectionDirectory, folderId)
+            ?? throw new DirectoryNotFoundException($"Could not locate the linked folder on disk (id: {folderId}).");
+
+        EnsureWithinApiRoot(apiRootPath, folderDirectory);
+        Directory.Delete(folderDirectory, recursive: true);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Creates a new, empty folder under the given parent (or the collection root when
+    /// <paramref name="parentFolder"/> is <c>null</c>) in a linked collection. Empty folders are
+    /// not tracked by git until a request is saved inside them, which matches how the rest of
+    /// this file already treats untracked directories.
+    /// </summary>
+    public Task<string> CreateFolderAsync(string apiRootPath, ApiCollection collection, ApiCollectionNode? parentFolder, string folderName, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(folderName))
+        {
+            throw new ArgumentException("Folder name is required.", nameof(folderName));
+        }
+
+        var collectionDirectory = ResolveExistingCollectionDirectory(apiRootPath, collection);
+        var parentDirectory = parentFolder is null
+            ? collectionDirectory
+            : FindFolderDirectory(collectionDirectory, parentFolder.Id)
+                ?? throw new DirectoryNotFoundException($"Could not locate the linked parent folder on disk (id: {parentFolder.Id}).");
+
+        var folderDirectory = GetUniqueCollectionDirectory(parentDirectory, Slugify(folderName));
+        EnsureWithinApiRoot(apiRootPath, folderDirectory);
+        Directory.CreateDirectory(folderDirectory);
+        return Task.FromResult(folderDirectory);
+    }
+
+    /// <summary>
+    /// Renames a folder in a linked collection by moving its directory to a new slugified name.
+    /// </summary>
+    public Task RenameFolderAsync(string apiRootPath, ApiCollection collection, string folderId, string newName, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            throw new ArgumentException("Folder name is required.", nameof(newName));
+        }
+
+        var collectionDirectory = ResolveExistingCollectionDirectory(apiRootPath, collection);
+        var folderDirectory = FindFolderDirectory(collectionDirectory, folderId)
+            ?? throw new DirectoryNotFoundException($"Could not locate the linked folder on disk (id: {folderId}).");
+
+        var parentDirectory = Path.GetDirectoryName(folderDirectory)!;
+        var newDirectory = GetUniqueSiblingDirectory(parentDirectory, Slugify(newName), folderDirectory);
+        if (!string.Equals(folderDirectory, newDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            EnsureWithinApiRoot(apiRootPath, folderDirectory);
+            EnsureWithinApiRoot(apiRootPath, newDirectory);
+            Directory.Move(folderDirectory, newDirectory);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Deletes an entire linked collection's directory under <c>collections/</c>.
+    /// </summary>
+    public Task DeleteCollectionDirectoryAsync(string apiRootPath, ApiCollection collection, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var collectionDirectory = ResolveExistingCollectionDirectory(apiRootPath, collection);
+        EnsureWithinApiRoot(apiRootPath, collectionDirectory);
+        Directory.Delete(collectionDirectory, recursive: true);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Renames a linked collection's directory under <c>collections/</c> and updates its manifest name.
+    /// </summary>
+    public async Task RenameCollectionDirectoryAsync(string apiRootPath, ApiCollection collection, string newName, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            throw new ArgumentException("Collection name is required.", nameof(newName));
+        }
+
+        var collectionDirectory = ResolveExistingCollectionDirectory(apiRootPath, collection);
+        var collectionsPath = Path.Combine(apiRootPath, "collections");
+        var newDirectory = GetUniqueSiblingDirectory(collectionsPath, Slugify(newName), collectionDirectory);
+        if (!string.Equals(collectionDirectory, newDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            EnsureWithinApiRoot(apiRootPath, collectionDirectory);
+            EnsureWithinApiRoot(apiRootPath, newDirectory);
+            Directory.Move(collectionDirectory, newDirectory);
+        }
+
+        var manifestPath = Path.Combine(newDirectory, "collection.json");
+        var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(manifestPath, [], cancellationToken) ?? new SwebKitCollectionManifest();
+        manifest.Name = newName.Trim();
+        await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken);
+    }
+
+    /// <summary>
+    /// Moves a request or folder node to a new parent within the same linked collection (used for
+    /// drag-and-drop reorder/reparent). Moving within the same parent directory is a no-op on disk
+    /// because sibling order is not persisted — directories are always enumerated alphabetically.
+    /// </summary>
+    public async Task MoveNodeAsync(string apiRootPath, ApiCollection collection, ApiCollectionNode node, ApiCollectionNode? newParentFolder, CancellationToken cancellationToken = default)
+    {
+        var collectionDirectory = ResolveExistingCollectionDirectory(apiRootPath, collection);
+        var newParentDirectory = newParentFolder is null
+            ? collectionDirectory
+            : FindFolderDirectory(collectionDirectory, newParentFolder.Id)
+                ?? throw new DirectoryNotFoundException($"Could not locate the linked target folder on disk (id: {newParentFolder.Id}).");
+
+        if (node.Type == ApiCollectionNodeType.Folder)
+        {
+            var sourceDirectory = FindFolderDirectory(collectionDirectory, node.Id)
+                ?? throw new DirectoryNotFoundException($"Could not locate the linked folder on disk (id: {node.Id}).");
+
+            if (IsSameOrDescendantDirectory(sourceDirectory, newParentDirectory))
+            {
+                throw new InvalidOperationException("Cannot move a folder into itself or one of its descendants.");
+            }
+
+            if (string.Equals(Path.GetDirectoryName(sourceDirectory), newParentDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                return; // same-parent reorder — sibling order isn't persisted on disk
+            }
+
+            var destinationDirectory = GetUniqueCollectionDirectory(newParentDirectory, Path.GetFileName(sourceDirectory));
+            EnsureWithinApiRoot(apiRootPath, sourceDirectory);
+            EnsureWithinApiRoot(apiRootPath, destinationDirectory);
+            Directory.Move(sourceDirectory, destinationDirectory);
+        }
+        else if (node.Request is not null)
+        {
+            var sourcePath = FindRequestFile(collectionDirectory, node.Id)
+                ?? throw new FileNotFoundException($"Could not locate the linked request on disk (id: {node.Id}).");
+
+            var sourceDirectory = Path.GetDirectoryName(sourcePath)!;
+            if (string.Equals(sourceDirectory, newParentDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                return; // same-parent reorder — sibling order isn't persisted on disk
+            }
+
+            var fileName = Path.GetFileName(sourcePath);
+            var sidecars = await ReadSidecarFileNamesAsync(sourcePath, cancellationToken);
+            var destinationPath = Path.Combine(newParentDirectory, fileName);
+            EnsureWithinApiRoot(apiRootPath, sourcePath);
+            EnsureWithinApiRoot(apiRootPath, destinationPath);
+            File.Move(sourcePath, destinationPath);
+
+            foreach (var sidecar in sidecars)
+            {
+                var sidecarPath = Path.Combine(sourceDirectory, sidecar);
+                var sidecarDestination = Path.Combine(newParentDirectory, sidecar);
+                if (File.Exists(sidecarPath) && IsWithinApiRoot(apiRootPath, sidecarPath) && IsWithinApiRoot(apiRootPath, sidecarDestination))
+                {
+                    File.Move(sidecarPath, sidecarDestination);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Defense-in-depth guard for the structural mutation methods above: every path they hand to
+    /// <see cref="Directory"/>/<see cref="File"/> APIs must already be a real, discovered child of
+    /// <paramref name="apiRootPath"/> (found via <see cref="FindRequestFile"/>/<see cref="FindFolderDirectory"/>
+    /// or built from a <see cref="Slugify"/>'d name) — this just asserts that invariant before the
+    /// operation runs, rather than accepting an arbitrary caller-supplied path.
+    /// </summary>
+    private static bool IsWithinApiRoot(string apiRootPath, string path)
+    {
+        var rootFull = Path.GetFullPath(apiRootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var pathFull = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return pathFull.Equals(rootFull, StringComparison.OrdinalIgnoreCase)
+            || pathFull.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void EnsureWithinApiRoot(string apiRootPath, string path)
+    {
+        if (!IsWithinApiRoot(apiRootPath, path))
+        {
+            throw new UnauthorizedAccessException("Resolved path is outside the linked API root.");
+        }
+    }
+
     private static LinkedCollectionRootLoadResult BuildResult(
         LinkedCollectionRootConfig config,
         string apiRootPath,
@@ -445,11 +660,26 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
     private static string GetRequestFilePath(string apiRootPath, ApiCollection collection, HttpRequestEntry request)
     {
         var collectionsPath = Path.Combine(apiRootPath, "collections");
-        var collectionDirectory = Directory.GetDirectories(collectionsPath, "*", SearchOption.TopDirectoryOnly)
-            .FirstOrDefault(p => StableId(p) == collection.Id)
+        var collectionDirectory = FindCollectionDirectory(apiRootPath, collection)
             ?? Path.Combine(collectionsPath, Slugify(collection.Name));
         return FindRequestFile(collectionDirectory, request.Id) ?? Path.Combine(collectionDirectory, $"{Slugify(request.Name)}{RequestFileExtension}");
     }
+
+    private static string? FindCollectionDirectory(string apiRootPath, ApiCollection collection)
+    {
+        var collectionsPath = Path.Combine(apiRootPath, "collections");
+        if (!Directory.Exists(collectionsPath))
+        {
+            return null;
+        }
+
+        return Directory.GetDirectories(collectionsPath, "*", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault(p => StableId(p) == collection.Id);
+    }
+
+    private static string ResolveExistingCollectionDirectory(string apiRootPath, ApiCollection collection) =>
+        FindCollectionDirectory(apiRootPath, collection)
+            ?? throw new DirectoryNotFoundException($"Could not locate the linked collection '{collection.Name}' on disk.");
 
     private static string? FindRequestFile(string directory, string requestId)
     {
@@ -467,6 +697,38 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         }
 
         return null;
+    }
+
+    private static string? FindFolderDirectory(string directory, string folderId)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return null;
+        }
+
+        foreach (var childDirectory in Directory.GetDirectories(directory, "*", SearchOption.AllDirectories))
+        {
+            if (StableId(childDirectory) == folderId)
+            {
+                return childDirectory;
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<IReadOnlyList<string>> ReadSidecarFileNamesAsync(string requestPath, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var json = await File.ReadAllTextAsync(requestPath, cancellationToken);
+            var requestFile = JsonSerializer.Deserialize<SwebKitRequestFile>(json, Options);
+            return requestFile?.GetSidecarFiles().ToList() ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     private static async Task WriteJsonAtomicAsync<T>(string path, T value, CancellationToken cancellationToken)
@@ -573,6 +835,36 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
                 return candidate;
             }
         }
+    }
+
+    /// <summary>
+    /// Like <see cref="GetUniqueCollectionDirectory"/>, but treats <paramref name="excludeDirectory"/>
+    /// (the directory currently being renamed) as available even though it already exists.
+    /// </summary>
+    private static string GetUniqueSiblingDirectory(string parentDirectory, string slug, string excludeDirectory)
+    {
+        var candidate = Path.Combine(parentDirectory, slug);
+        if (string.Equals(candidate, excludeDirectory, StringComparison.OrdinalIgnoreCase) || !Directory.Exists(candidate))
+        {
+            return candidate;
+        }
+
+        for (var index = 2; ; index++)
+        {
+            candidate = Path.Combine(parentDirectory, $"{slug}-{index}");
+            if (string.Equals(candidate, excludeDirectory, StringComparison.OrdinalIgnoreCase) || !Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    private static bool IsSameOrDescendantDirectory(string ancestorDirectory, string candidateDirectory)
+    {
+        var ancestorFull = Path.GetFullPath(ancestorDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidateFull = Path.GetFullPath(candidateDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return candidateFull.Equals(ancestorFull, StringComparison.OrdinalIgnoreCase)
+            || candidateFull.StartsWith(ancestorFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     [GeneratedRegex("[^a-z0-9]+", RegexOptions.CultureInvariant)]

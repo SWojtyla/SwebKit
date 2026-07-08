@@ -1317,8 +1317,40 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 _ => throw new ArgumentException($"Unsupported resource kind: {kind}")
             };
 
-            return KubernetesYaml.Serialize(resource);
+            return CleanEditableYaml(KubernetesYaml.Serialize(resource));
         });
+    }
+
+    /// <summary>
+    /// Strips server-managed/read-only fields (the whole <c>status</c> block, plus
+    /// <c>metadata.managedFields</c>, <c>resourceVersion</c>, <c>generation</c>, <c>uid</c>, and
+    /// <c>creationTimestamp</c>) from a full API object dump before it's shown for editing —
+    /// matching <c>kubectl edit</c> conventions. These fields are populated and owned by the API
+    /// server: leaving them in isn't just noisy, a large <c>managedFields</c> block or a
+    /// <c>resourceVersion</c> that goes stale while the user is still editing can make the
+    /// eventual <c>kubectl apply</c> behave unpredictably against a fast-changing live object
+    /// (this resource's own managedFields shows multiple controllers updating it every few
+    /// minutes). <c>kubectl apply</c> is patch-based and does not need any of these fields.
+    /// </summary>
+    internal static string CleanEditableYaml(string rawYaml)
+    {
+        var deserializer = new DeserializerBuilder().Build();
+        var obj = deserializer.Deserialize<Dictionary<object, object>>(rawYaml);
+        if (obj is null) return rawYaml;
+
+        obj.Remove("status");
+
+        if (obj.TryGetValue("metadata", out var metaObj) && metaObj is Dictionary<object, object> metadata)
+        {
+            metadata.Remove("managedFields");
+            metadata.Remove("resourceVersion");
+            metadata.Remove("generation");
+            metadata.Remove("uid");
+            metadata.Remove("creationTimestamp");
+        }
+
+        var serializer = new SerializerBuilder().Build();
+        return serializer.Serialize(obj);
     }
 
     private async Task<object?> ListGatewayApiCustomObjectsAsync(string ns, string plural, CancellationToken ct)
@@ -2450,24 +2482,64 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         }
     }
 
+    public async Task<string?> ValidateResourceYamlAsync(string ns, string yaml, CancellationToken ct = default)
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"swebkit-validate-{Guid.NewGuid():N}.yaml");
+        await File.WriteAllTextAsync(tempFile, yaml, ct);
+        try
+        {
+            var (exitCode, stderr) = await RunKubectlDryRunAsync(tempFile, ns, ct);
+            return exitCode == 0 ? null : stderr.Trim();
+        }
+        finally
+        {
+            try { File.Delete(tempFile); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    private async Task<(int ExitCode, string Stderr)> RunKubectlDryRunAsync(string tempFile, string ns, CancellationToken ct)
+    {
+        // --dry-run=server sends the manifest through the API server's full validation and
+        // admission chain (schema checks, webhooks, etc.) without persisting anything —
+        // a much stronger check than local YAML parsing.
+        return await RunKubectlProcessAsync($"apply -f \"{tempFile}\" --namespace {ns} --dry-run=server{BuildKubeconfigArgs()}", ct);
+    }
+
     private async Task<(int ExitCode, string Stderr)> RunKubectlApplyAsync(string tempFile, string ns, CancellationToken ct)
+    {
+        return await RunKubectlProcessAsync($"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()}", ct);
+    }
+
+    /// <summary>
+    /// Starts `kubectl` with the given arguments and awaits its exit. If <paramref name="ct"/> is
+    /// cancelled (e.g. a caller-side timeout), the still-running kubectl process is killed rather
+    /// than abandoned — otherwise a "timed out" result to the caller would be a false negative:
+    /// kubectl could keep running in the background and still apply the change moments later,
+    /// leaving the user unsure whether their save actually went through.
+    /// </summary>
+    private static async Task<(int ExitCode, string Stderr)> RunKubectlProcessAsync(string arguments, CancellationToken ct)
     {
         var psi = new ProcessStartInfo("kubectl")
         {
-            Arguments = $"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()}",
+            Arguments = arguments,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
 
-        var process = Process.Start(psi)
+        using var process = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
+
+        await using var killOnCancel = ct.Register(() =>
+        {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+        });
 
         await process.WaitForExitAsync(ct);
 
         var stderr = process.ExitCode != 0
-            ? await process.StandardError.ReadToEndAsync(ct)
+            ? await process.StandardError.ReadToEndAsync(CancellationToken.None)
             : string.Empty;
 
         return (process.ExitCode, stderr);
@@ -2494,25 +2566,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private async Task<(int ExitCode, string Stderr)> RunKubectlApplyWithTokenAsync(string tempFile, string ns, string token, CancellationToken ct)
     {
-        var psi = new ProcessStartInfo("kubectl")
-        {
-            Arguments = $"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()} --token {token}",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        var process = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
-
-        await process.WaitForExitAsync(ct);
-
-        var stderr = process.ExitCode != 0
-            ? await process.StandardError.ReadToEndAsync(ct)
-            : string.Empty;
-
-        return (process.ExitCode, stderr);
+        return await RunKubectlProcessAsync($"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()} --token {token}", ct);
     }
 
     private string? TryAcquireFreshAzureToken()

@@ -343,10 +343,10 @@ public sealed class InvestigationDrillThroughTests : TestContext
 
     private sealed class NullServiceBusClientFactory : IServiceBusClientFactory
     {
-        public IServiceBusClient Create(string connectionString) =>
+        public IServiceBusClient Create(string connectionString, SbTransportType transportType = SbTransportType.Amqp) =>
             throw new InvalidOperationException("Factory should not be called in this test.");
 
-        public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace) =>
+        public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace, SbTransportType transportType = SbTransportType.Amqp) =>
             throw new InvalidOperationException("Factory should not be called in this test.");
 
         public string ParseFullyQualifiedNamespace(string connectionString) =>

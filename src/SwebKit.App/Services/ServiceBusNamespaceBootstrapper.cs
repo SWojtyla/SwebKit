@@ -91,7 +91,7 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
         {
             if (ns.AuthMode == SbAuthMode.DefaultAzureCredential)
             {
-                client = _clientFactory.CreateWithEntra(ns.FullyQualifiedNamespace);
+                client = _clientFactory.CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType);
             }
             else
             {
@@ -103,7 +103,7 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
                         ConnectionError: "Connection string not found in credential store.");
                 }
 
-                client = _clientFactory.Create(connectionString);
+                client = _clientFactory.Create(connectionString, ns.TransportType);
             }
 
             var ok = await client.TestConnectionAsync(ct);

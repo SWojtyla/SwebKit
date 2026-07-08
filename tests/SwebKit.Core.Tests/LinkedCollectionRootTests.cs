@@ -242,6 +242,204 @@ public sealed class LinkedCollectionRootTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteRequestAsync_RemovesRequestFileAndSidecars()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionPath = Path.Combine(apiRoot, "collections", "admin");
+        Directory.CreateDirectory(collectionPath);
+        await File.WriteAllTextAsync(Path.Combine(collectionPath, "users.swebreq.json"), """
+            {
+              "method": "GraphQl",
+              "url": "{{graphqlUrl}}",
+              "queryFile": "users.graphql"
+            }
+            """);
+
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections);
+        var request = Assert.Single(collection.Nodes).Request!;
+        request.GraphQlQuery = "query Users { users { id } }";
+        request.Body.Mode = RequestBodyMode.Json;
+        request.Body.RawContent = "{ \"sample\": true }";
+        await _fileService.SaveRequestAsync(result.ApiRootPath, collection, request);
+
+        Assert.True(File.Exists(Path.Combine(collectionPath, "users.swebreq.json")));
+        Assert.True(File.Exists(Path.Combine(collectionPath, "users.graphql")));
+        Assert.True(File.Exists(Path.Combine(collectionPath, "users.body.json")));
+
+        await _fileService.DeleteRequestAsync(result.ApiRootPath, collection, request.Id);
+
+        Assert.False(File.Exists(Path.Combine(collectionPath, "users.swebreq.json")));
+        Assert.False(File.Exists(Path.Combine(collectionPath, "users.graphql")));
+        Assert.False(File.Exists(Path.Combine(collectionPath, "users.body.json")));
+    }
+
+    [Fact]
+    public async Task DeleteFolderAsync_WithNestedChildren_RemovesEverything()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionPath = Path.Combine(apiRoot, "collections", "orders");
+        var folderPath = Path.Combine(collectionPath, "nested");
+        var subFolderPath = Path.Combine(folderPath, "deep");
+        Directory.CreateDirectory(subFolderPath);
+        await File.WriteAllTextAsync(Path.Combine(folderPath, "list.swebreq.json"), """{ "method": "Get", "url": "/orders" }""");
+        await File.WriteAllTextAsync(Path.Combine(subFolderPath, "get.swebreq.json"), """{ "method": "Get", "url": "/orders/1" }""");
+
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections);
+        var folderNode = Assert.Single(collection.Nodes, n => n.Type == ApiCollectionNodeType.Folder);
+
+        await _fileService.DeleteFolderAsync(result.ApiRootPath, collection, folderNode.Id);
+
+        Assert.False(Directory.Exists(folderPath));
+        Assert.False(Directory.Exists(subFolderPath));
+        Assert.True(Directory.Exists(collectionPath));
+    }
+
+    [Fact]
+    public async Task CreateFolderAsync_UnderCollectionRoot_CreatesDirectory()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionId = await _fileService.CreateCollectionAsync(apiRoot, "Orders");
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections, c => c.Id == collectionId);
+
+        var folderDirectory = await _fileService.CreateFolderAsync(apiRoot, collection, parentFolder: null, "Admin Endpoints");
+
+        Assert.True(Directory.Exists(folderDirectory));
+        Assert.Equal("admin-endpoints", Path.GetFileName(folderDirectory));
+    }
+
+    [Fact]
+    public async Task CreateFolderAsync_UnderExistingFolder_CreatesNestedDirectory()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionPath = Path.Combine(apiRoot, "collections", "orders");
+        var folderPath = Path.Combine(collectionPath, "admin");
+        Directory.CreateDirectory(folderPath);
+        await File.WriteAllTextAsync(Path.Combine(folderPath, "list.swebreq.json"), """{ "method": "Get", "url": "/orders" }""");
+
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections);
+        var parentFolder = Assert.Single(collection.Nodes, n => n.Type == ApiCollectionNodeType.Folder);
+
+        var subFolderDirectory = await _fileService.CreateFolderAsync(apiRoot, collection, parentFolder, "Sub Folder");
+
+        Assert.True(Directory.Exists(subFolderDirectory));
+        Assert.Equal(folderPath, Path.GetDirectoryName(subFolderDirectory));
+    }
+
+    [Fact]
+    public async Task RenameFolderAsync_RenamesDirectoryOnDisk()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionPath = Path.Combine(apiRoot, "collections", "orders");
+        var folderPath = Path.Combine(collectionPath, "admin");
+        Directory.CreateDirectory(folderPath);
+        await File.WriteAllTextAsync(Path.Combine(folderPath, "list.swebreq.json"), """{ "method": "Get", "url": "/orders" }""");
+
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections);
+        var folderNode = Assert.Single(collection.Nodes, n => n.Type == ApiCollectionNodeType.Folder);
+
+        await _fileService.RenameFolderAsync(apiRoot, collection, folderNode.Id, "Renamed Admin");
+
+        Assert.False(Directory.Exists(folderPath));
+        Assert.True(Directory.Exists(Path.Combine(collectionPath, "renamed-admin")));
+        Assert.True(File.Exists(Path.Combine(collectionPath, "renamed-admin", "list.swebreq.json")));
+    }
+
+    [Fact]
+    public async Task MoveNodeAsync_Request_MovesFileToNewParentFolder()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionPath = Path.Combine(apiRoot, "collections", "orders");
+        var targetFolderPath = Path.Combine(collectionPath, "archive");
+        Directory.CreateDirectory(targetFolderPath);
+        await File.WriteAllTextAsync(Path.Combine(collectionPath, "get-order.swebreq.json"), """{ "method": "Get", "url": "/orders/1" }""");
+
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections);
+        var requestNode = Assert.Single(collection.Nodes, n => n.Type == ApiCollectionNodeType.Request);
+        var targetFolderNode = Assert.Single(collection.Nodes, n => n.Type == ApiCollectionNodeType.Folder);
+
+        await _fileService.MoveNodeAsync(apiRoot, collection, requestNode, targetFolderNode);
+
+        Assert.False(File.Exists(Path.Combine(collectionPath, "get-order.swebreq.json")));
+        Assert.True(File.Exists(Path.Combine(targetFolderPath, "get-order.swebreq.json")));
+    }
+
+    [Fact]
+    public async Task MoveNodeAsync_Folder_MovesDirectoryToNewParentFolder()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionPath = Path.Combine(apiRoot, "collections", "orders");
+        var sourceFolderPath = Path.Combine(collectionPath, "admin");
+        var targetFolderPath = Path.Combine(collectionPath, "archive");
+        Directory.CreateDirectory(sourceFolderPath);
+        Directory.CreateDirectory(targetFolderPath);
+        await File.WriteAllTextAsync(Path.Combine(sourceFolderPath, "list.swebreq.json"), """{ "method": "Get", "url": "/orders" }""");
+
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections);
+        var sourceFolderNode = collection.Nodes.Single(n => n.Name == "Admin");
+        var targetFolderNode = collection.Nodes.Single(n => n.Name == "Archive");
+
+        await _fileService.MoveNodeAsync(apiRoot, collection, sourceFolderNode, targetFolderNode);
+
+        Assert.False(Directory.Exists(sourceFolderPath));
+        Assert.True(Directory.Exists(Path.Combine(targetFolderPath, "admin")));
+        Assert.True(File.Exists(Path.Combine(targetFolderPath, "admin", "list.swebreq.json")));
+    }
+
+    [Fact]
+    public async Task MoveNodeAsync_FolderIntoOwnDescendant_ThrowsInvalidOperationException()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionPath = Path.Combine(apiRoot, "collections", "orders");
+        var parentFolderPath = Path.Combine(collectionPath, "admin");
+        var childFolderPath = Path.Combine(parentFolderPath, "nested");
+        Directory.CreateDirectory(childFolderPath);
+
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections);
+        var parentFolderNode = collection.Nodes.Single(n => n.Name == "Admin");
+        var childFolderNode = Assert.Single(parentFolderNode.Children);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _fileService.MoveNodeAsync(apiRoot, collection, parentFolderNode, childFolderNode));
+    }
+
+    [Fact]
+    public async Task DeleteCollectionDirectoryAsync_RemovesCollectionDirectory()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionId = await _fileService.CreateCollectionAsync(apiRoot, "Temp Collection");
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections, c => c.Id == collectionId);
+
+        await _fileService.DeleteCollectionDirectoryAsync(apiRoot, collection);
+
+        Assert.False(Directory.Exists(Path.Combine(apiRoot, "collections", "temp-collection")));
+    }
+
+    [Fact]
+    public async Task RenameCollectionDirectoryAsync_RenamesDirectoryAndManifest()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionId = await _fileService.CreateCollectionAsync(apiRoot, "Temp Collection");
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections, c => c.Id == collectionId);
+
+        await _fileService.RenameCollectionDirectoryAsync(apiRoot, collection, "Renamed Collection");
+
+        var newDirectory = Path.Combine(apiRoot, "collections", "renamed-collection");
+        Assert.True(Directory.Exists(newDirectory));
+        var manifestJson = await File.ReadAllTextAsync(Path.Combine(newDirectory, "collection.json"));
+        Assert.Contains("Renamed Collection", manifestJson);
+    }
+
+    [Fact]
     public async Task LoadRootAsync_EnvironmentFile_LoadsGeneratedVariables()
     {
         var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");

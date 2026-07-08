@@ -23,10 +23,10 @@
             }
             @if (_editMode)
             {
-                <FluentButton Appearance="Appearance.Accent" Disabled="@_applying" @onclick="OnSave" Title="Apply YAML">
-                    @(_applying ? "Saving…" : "Save")
+                <FluentButton Appearance="Appearance.Accent" Disabled="@(_applying || _validating)" @onclick="OnSave" Title="Apply YAML">
+                    @(_validating ? "Validating…" : _applying ? "Saving…" : "Save")
                 </FluentButton>
-                <FluentButton Appearance="Appearance.Stealth" Disabled="@_applying" @onclick="OnCancelEdit" Title="Cancel edit">
+                <FluentButton Appearance="Appearance.Stealth" Disabled="@(_applying || _validating)" @onclick="OnCancelEdit" Title="Cancel edit">
                     Cancel</FluentButton>
                 }
                 <FluentButton Appearance="Appearance.Stealth" @onclick="Close" Title="Close">
@@ -41,7 +41,7 @@
                     @if (!string.IsNullOrEmpty(_search))
                     {
                         <span class="aks-yaml-search-count">@_searchCount match@(_searchCount != 1 ? "es" :
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    "")</span>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "")</span>
                             <button class="aks-yaml-search-clear" @onclick="ClearSearch" title="Clear">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
                             </button>
@@ -107,6 +107,8 @@
     [Parameter] public EventCallback OnYamlApplied { get; set; }
 
     // YAML viewer/editor state
+    private const int ApplyTimeoutSeconds = 120;
+    private const int ValidateTimeoutSeconds = 45;
     private (string Kind, string Name)? _target;
     private string? _text;
     private string? _error;
@@ -114,6 +116,7 @@
     private bool _editMode;
     private string _editText = string.Empty;
     private bool _applying;
+    private bool _validating;
     private string? _targetNamespace;
 
     // Highlighted markup for YAML panels
@@ -285,6 +288,45 @@
         if (_validationWarning is not null && !_bypassValidation) { StateHasChanged(); return; }
 
         _bypassValidation = false;
+        var resourceNamespace = _targetNamespace ?? Namespace;
+
+        // Server-side dry-run — catches real cluster/schema/admission errors that local parsing
+        // and the basic structure check above can never see (unknown fields, bad enum values,
+        // immutable-field changes, webhook rejections, etc.).
+        _validating = true;
+        StateHasChanged();
+        try
+        {
+            using var validateCts = new CancellationTokenSource(TimeSpan.FromSeconds(ValidateTimeoutSeconds));
+            string? dryRunError;
+            try
+            {
+                dryRunError = await Client.ValidateResourceYamlAsync(resourceNamespace, _editText, validateCts.Token);
+            }
+            catch (OperationCanceledException) when (validateCts.IsCancellationRequested)
+            {
+                dryRunError = $"Validation timed out after {ValidateTimeoutSeconds}s. Check cluster connectivity and try again.";
+            }
+            catch (Exception ex)
+            {
+                // A failing validation call itself (e.g. kubectl missing) should not block saving —
+                // fall back to the local checks only, same as clients with no dry-run support.
+                dryRunError = null;
+                _ = ex;
+            }
+
+            if (dryRunError is not null)
+            {
+                _validationError = dryRunError;
+                return;
+            }
+        }
+        finally
+        {
+            _validating = false;
+            StateHasChanged();
+        }
+
         _applying = true;
         StateHasChanged();
 
@@ -299,8 +341,19 @@
                 if (!confirmed) { _applying = false; StateHasChanged(); return; }
             }
 
-            var resourceNamespace = _targetNamespace ?? Namespace;
-            await Client.ApplyResourceYamlAsync(resourceNamespace, _target.Value.Kind, _target.Value.Name, _editText);
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(ApplyTimeoutSeconds));
+            try
+            {
+                await Client.ApplyResourceYamlAsync(resourceNamespace, _target.Value.Kind, _target.Value.Name, _editText,
+timeoutCts.Token);
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+            {
+                // Our own timeout fired (not an external/caller cancellation) — surface it as a
+                // regular error below instead of letting it hit the CS-2 rethrow branch, since
+                // there is no ambient caller token here to propagate cancellation to.
+                throw new TimeoutException($"Applying YAML timed out after {ApplyTimeoutSeconds}s. Check cluster connectivity and try again.");
+            }
             _text = _editText;
             _highlighted = await HighlightAsync(_text);
             _editMode = false;

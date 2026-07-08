@@ -20,5 +20,12 @@ public class ServiceBusNamespace
     /// <summary>Key used to retrieve the connection string from ICredentialStore. Only used when <see cref="AuthMode"/> is <see cref="SbAuthMode.ConnectionString"/>.</summary>
     public string CredentialKey { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Data-plane transport for this namespace. Defaults to <see cref="SbTransportType.Amqp"/> for backward
+    /// compatibility with existing persisted configs. Switch to <see cref="SbTransportType.AmqpWebSockets"/>
+    /// when the network path blocks plain AMQP (port 5671) but allows HTTPS (port 443).
+    /// </summary>
+    public SbTransportType TransportType { get; set; } = SbTransportType.Amqp;
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

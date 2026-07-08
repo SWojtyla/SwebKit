@@ -40,8 +40,8 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
         = new(StringComparer.Ordinal);
 
     // ── Service Bus ──────────────────────────────────────────────────────────
-    // Key = alias (case-insensitive). Value = (client, credentialKey last used).
-    private readonly Dictionary<string, (IServiceBusClient Client, string CredentialKey)> _sbClients
+    // Key = alias (case-insensitive). Value = (client, credentialKey + transportType last used).
+    private readonly Dictionary<string, (IServiceBusClient Client, string CredentialKey, SwebKit.Core.Domain.SbTransportType TransportType)> _sbClients
         = new(StringComparer.OrdinalIgnoreCase);
 
     // ── Redis ────────────────────────────────────────────────────────────────
@@ -154,11 +154,13 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
 
         lock (_lock)
         {
-            // Return cached if credential key is unchanged.
-            if (_sbClients.TryGetValue(alias, out var entry) && entry.CredentialKey == ns.CredentialKey)
+            // Return cached if credential key and transport type are unchanged.
+            if (_sbClients.TryGetValue(alias, out var entry) &&
+                entry.CredentialKey == ns.CredentialKey &&
+                entry.TransportType == ns.TransportType)
                 return entry.Client;
 
-            // Credential changed or first call — create a fresh client.
+            // Credential or transport type changed (or first call) — create a fresh client.
             _sbClients.Remove(alias);
         }
 
@@ -167,11 +169,11 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
             return null;
 
         var client = ns.AuthMode == SwebKit.Core.Domain.SbAuthMode.DefaultAzureCredential
-            ? _sbFactory.CreateWithEntra(ns.FullyQualifiedNamespace)
-            : _sbFactory.Create(connStr!);
+            ? _sbFactory.CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType)
+            : _sbFactory.Create(connStr!, ns.TransportType);
         lock (_lock)
         {
-            _sbClients[alias] = (client, ns.CredentialKey);
+            _sbClients[alias] = (client, ns.CredentialKey, ns.TransportType);
         }
         _logger.LogDebug("MonitoringConnectionPool: Service Bus client (re)created for '{Alias}'", alias);
         return client;

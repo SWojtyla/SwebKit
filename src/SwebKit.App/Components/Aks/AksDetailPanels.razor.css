@@ -21,6 +21,21 @@
     min-height: 0;
 }
 
+/* Host wrapper around the YAML viewer — must participate in the flex column so
+   the viewer (and its edit textarea) fills the full panel height. The [hidden]
+   override keeps the HPA/YAML tab-toggle working (higher specificity than the
+   base rule so display:none still wins when the tab is inactive). */
+.aks-yaml-host {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.aks-yaml-host[hidden] {
+    display: none;
+}
+
 
 
 /* ── Side panel header ── */

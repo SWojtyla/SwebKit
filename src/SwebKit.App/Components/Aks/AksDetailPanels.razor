@@ -49,7 +49,7 @@
             @* ── YAML viewer / editor ── *@
             @* When paired with the HPA detail panel, only one of the two tabs is visible at a time —
                toggle CSS visibility (BL-4 pattern) instead of unmounting so state/scroll survive tab switches. *@
-            <div hidden="@(IsHpaYamlPairActive && _activeTab != "yaml")">
+            <div class="aks-yaml-host" hidden="@(IsHpaYamlPairActive && _activeTab != "yaml")">
                 <AksYamlViewer @ref="_yamlViewer" Client="Client" Namespace="@Namespace" IsProduction="@IsProduction"
                                Confirm="Confirm" Notifications="Notifications" OnClose="OnChildPanelClosed" OnError="OnError"
                                OnYamlApplied="OnDataChanged" />
