@@ -9,6 +9,7 @@ using SwebKit.Azure.ServiceBus.IncidentTimeline;
 using SwebKit.Azure;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Diagnostics;
 using SwebKit.Core.Services;
 using SwebKit.DevOps;
 using SwebKit.DevOps.IncidentTimeline;
@@ -36,6 +37,24 @@ public static class MauiProgram
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
             });
 
+        // Structured file logging + crash handlers — constructed and wired as early as possible,
+        // before any other startup work that could itself throw/log during construction.
+        // See docs/features/active/structured-file-logging/backend.md "Crash-Safe Emergency Path" / "Startup Wiring".
+        var userSettingsRepository = new UserSettingsRepository();
+        var fileLoggerProvider = new FileLoggerProvider(() => userSettingsRepository.Settings.Logging, AppDataPaths.LogsDirectory);
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            var ex = e.ExceptionObject as Exception;
+            fileLoggerProvider.EmergencyWriteAndFlush(LogEntry.ForCrash(ex, e.IsTerminating));
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            fileLoggerProvider.EmergencyWriteAndFlush(LogEntry.ForCrash(e.Exception, isTerminating: false));
+            e.SetObserved();
+        };
+
         builder.Services.AddMauiBlazorWebView();
         builder.Services.AddFluentUIComponents();
 
@@ -44,6 +63,7 @@ public static class MauiProgram
         builder.Logging.SetMinimumLevel(LogLevel.Information);
         builder.Logging.AddDebug();
 #endif
+        builder.Logging.AddProvider(fileLoggerProvider);
 
         // Core infrastructure
         builder.Services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
@@ -51,7 +71,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<ITaskQueue, TaskQueueService>();
         builder.Services.AddSingleton<ProfileRepository>();
         builder.Services.AddSingleton<UiStateRepository>();
-        builder.Services.AddSingleton<UserSettingsRepository>();
+        builder.Services.AddSingleton(userSettingsRepository);
+        builder.Services.AddSingleton<ILogRetentionCleanupService>(_ => new LogRetentionCleanupService(AppDataPaths.LogsDirectory));
         builder.Services.AddSingleton<PinnedPortForwardService>();
         builder.Services.AddSingleton<ScheduledMessageRepository>();
         builder.Services.AddSingleton<AppStateService>();
@@ -254,6 +275,27 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAgentChatService, AgentChatService>();
 
         var app = builder.Build();
+
+        // Fire-and-forget startup log retention cleanup — same "perf startup" style as
+        // PerformanceBaselineRecorder/MonitoringMigrationService: never delays first paint,
+        // never throws out to the caller.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var retentionCleanup = app.Services.GetRequiredService<ILogRetentionCleanupService>();
+                await retentionCleanup.RunAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected during shutdown; nothing to do.
+            }
+            catch
+            {
+                // Best-effort startup cleanup — must never surface failures to the UI.
+            }
+        });
+
         PerformanceBaselineRecorder.Record(nameof(MauiProgram), "Perf startup CreateMauiApp completed");
         return app;
     }

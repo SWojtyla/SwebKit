@@ -24,6 +24,7 @@
 - Settings page includes a dedicated Workspace section for whole-workspace transfer plus a readiness overview, while section-specific readiness detail remains scoped to the owning settings area.
 - DevOps configuration validation and connection testing through fresh `IDevOpsClientFactory` snapshots.
 - Query-driven preselection of the Incident Timeline settings section when the incident page links into `/settings?section=incident-timeline`.
+- Diagnostics section for structured file logging: enable/disable toggle, minimum log level (Information/Debug/Trace/Warning), "Open logs folder", and "Export logs as .zip" for attaching to a bug report. Preference is stored in `user-settings.json` alongside appearance settings.
 
 ## Core Runtime Flow
 
@@ -63,6 +64,8 @@
 - `src/SwebKit.Core/Configuration/UserSettingsRepository.cs`
 - `src/SwebKit.Core/Configuration/ReleaseRepository.cs`
 - `src/SwebKit.Core/Configuration/ScheduledMessageRepository.cs`
+- `src/SwebKit.App/Components/Pages/DiagnosticsSettingsForm.razor`
+- `src/SwebKit.Core/Diagnostics/LoggingSettings.cs`
 - `src/SwebKit.Core/Models/ConfigurationHealthModels.cs`
 - `src/SwebKit.Core/Models/ConfigurationBundleModels.cs`
 - `src/SwebKit.Core/Services/ConfigurationHealthService.cs`

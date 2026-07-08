@@ -1,0 +1,135 @@
+@using System.IO.Compression
+@inject UserSettingsRepository UserSettings
+
+<div style="display:grid; gap:12px; padding:12px 0;">
+    <div style="display:grid; gap:4px;">
+        <FluentCheckbox Value="@Enabled"
+                        ValueChanged="@(async v => { Enabled = v; UserSettings.Settings.Logging.Enabled = v; await UserSettings.SaveAsync(); await OnSaved.InvokeAsync(); })">
+            Enable structured file logging
+        </FluentCheckbox>
+        <span style="font-size:12px; color:var(--color-text-muted);">
+            When enabled, diagnostic logs are written to per-feature files under the app data folder. Crash evidence
+            is always captured regardless of this setting.
+        </span>
+    </div>
+
+    <div style="display:grid; gap:4px;">
+        <label style="font-size:12px; color:var(--color-text-muted);">Minimum log level</label>
+        <FluentSelect TOption="string" Value="@SelectedLevel" ValueChanged="@OnLevelChangedAsync"
+                      Style="min-width:200px">
+            <FluentOption Value="Trace">Trace</FluentOption>
+            <FluentOption Value="Debug">Debug</FluentOption>
+            <FluentOption Value="Information">Information</FluentOption>
+            <FluentOption Value="Warning">Warning</FluentOption>
+        </FluentSelect>
+        <span style="font-size:12px; color:var(--color-text-muted);">
+            Entries below this level are not written to disk. Warning and above are always flushed immediately.
+        </span>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px;">
+        <FluentButton Appearance="Appearance.Outline" @onclick="OpenLogsFolderAsync">Open logs folder</FluentButton>
+        <FluentButton Appearance="Appearance.Outline" Disabled="@_isExporting" @onclick="ExportLogsAsync">
+            @(_isExporting ? "Exporting…" : "Export logs as .zip")
+        </FluentButton>
+
+        @if (StatusMessage is not null)
+        {
+            <span
+            style="font-size:12px; color:@(StatusOk ? "var(--color-success)" : "var(--color-error)");">@StatusMessage</span>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private bool Enabled = true;
+    private string SelectedLevel = nameof(LogLevel.Information);
+    private bool _isExporting;
+    private string? StatusMessage;
+    private bool StatusOk;
+
+    protected override void OnParametersSet()
+    {
+        var logging = UserSettings.Settings.Logging;
+        Enabled = logging.Enabled;
+        SelectedLevel = logging.MinimumLevel.ToString();
+        StatusMessage = null;
+    }
+
+    private async Task OnLevelChangedAsync(string value)
+    {
+        SelectedLevel = value;
+
+        if (Enum.TryParse<LogLevel>(value, out var level))
+        {
+            UserSettings.Settings.Logging.MinimumLevel = level;
+            await UserSettings.SaveAsync();
+            await OnSaved.InvokeAsync();
+        }
+    }
+
+    private static Task OpenLogsFolderAsync()
+    {
+        try
+        {
+            Directory.CreateDirectory(AppDataPaths.LogsDirectory);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = AppDataPaths.LogsDirectory,
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // Shell launch can be unavailable in tests or restricted environments.
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task ExportLogsAsync()
+    {
+        if (_isExporting)
+        {
+            return;
+        }
+
+        _isExporting = true;
+        StatusMessage = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            if (!Directory.Exists(AppDataPaths.LogsDirectory) ||
+                Directory.GetFiles(AppDataPaths.LogsDirectory).Length == 0)
+            {
+                StatusOk = false;
+                StatusMessage = "No log files found to export.";
+                return;
+            }
+
+            var downloadsPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Downloads");
+            Directory.CreateDirectory(downloadsPath);
+
+            var zipPath = Path.Combine(downloadsPath, $"swebkit-logs-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
+            await Task.Run(() => ZipFile.CreateFromDirectory(AppDataPaths.LogsDirectory, zipPath));
+
+            StatusOk = true;
+            StatusMessage = $"Logs exported to {zipPath}";
+        }
+        catch (Exception ex)
+        {
+            StatusOk = false;
+            StatusMessage = $"Log export failed: {ex.Message}";
+        }
+        finally
+        {
+            _isExporting = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}

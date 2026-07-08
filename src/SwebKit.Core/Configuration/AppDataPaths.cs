@@ -31,6 +31,10 @@ public static class AppDataPaths
     public static string EnvironmentsJson => Path.Combine(Root, "environments.json");
     public static string ApiLinkedRootsJson => Path.Combine(Root, "api-linked-roots.json");
     public static string PerformanceBaselineLog => Path.Combine(Root, "logs", "performance-baseline.log");
+    public static string LogsDirectory => Path.Combine(Root, "logs");
+
+    public static string FeatureLogFile(string feature, DateOnly date) =>
+        Path.Combine(LogsDirectory, $"{feature}-{date:yyyy-MM-dd}.log");
 
     public static void EnsureDirectoryExists()
     {
