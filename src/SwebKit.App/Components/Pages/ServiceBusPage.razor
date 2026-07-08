@@ -133,8 +133,8 @@
                             </div>
                             @if (IsDetailPaneOpen)
                             {
-                                <SidePanel Visible="true" Title="Message details" Overlay="_isDetailDrawerOverlay"
-                                                     DefaultWidth="380" MinWidth="240" MaxWidth="600" OnClose="CloseDetailPane">
+                                <SidePanel Visible="true" Title="Message details" Overlay="_isDetailDrawerOverlay" DefaultWidth="380"
+                                           MinWidth="240" MaxWidth="600" OnClose="CloseDetailPane">
                                     <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
                                                        OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
                                                        OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"

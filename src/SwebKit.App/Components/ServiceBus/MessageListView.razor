@@ -15,254 +15,259 @@
     }
 
     <div class="filter-bar message-list-view__toolbar">
-      <div class="message-list-view__toolbar-row message-list-view__toolbar-row--top">
-      <div class="message-list-view__toolbar-group message-list-view__toolbar-group--view">
-        <span class="view-mode-badge @(IsDlqMode ? "dlq" : "peek")" aria-label="Message list mode">
-            @(IsDlqMode ? "DLQ mode" : "Peek mode")
-        </span>
-        @if (!string.IsNullOrWhiteSpace(PinnedSessionId))
-        {
-            <span class="view-mode-badge message-list-view__session-pin" data-testid="pinned-session-badge"
-                  title="Message list is filtered to session: @PinnedSessionId">
-                Session: @PinnedSessionId
-            </span>
-        }
-        <select data-testid="peek-count-select" @bind="PeekCount"
-                class="message-list-view__toolbar-select app-native-control app-native-select">
-            <option value="5">5 messages</option>
-            <option value="10">10 messages</option>
-            <option value="50">50 messages</option>
-            <option value="100">100 messages</option>
-            <option value="200">200 messages</option>
-        </select>
-        <select @bind="_autoRefreshSeconds" @bind:after="ApplyAutoRefresh" title="Auto-refresh interval"
-                class="message-list-view__toolbar-select app-native-control app-native-select">
-            <option value="0">No auto-refresh</option>
-            <option value="10">Refresh 10 s</option>
-            <option value="30">Refresh 30 s</option>
-            <option value="60">Refresh 60 s</option>
-        </select>
-        <div class="density-toggle" title="Row density" aria-label="Row density">
-            <button type="button" class="density-btn @(_density == "compact" ? "active" : "")"
-                    @onclick='() => SetDensityAsync("compact")'>Compact</button>
-            <button type="button" class="density-btn @(_density == "default" ? "active" : "")"
-                    @onclick='() => SetDensityAsync("default")'>Default</button>
-            <button type="button" class="density-btn @(_density == "comfort" ? "active" : "")"
-                    @onclick='() => SetDensityAsync("comfort")'>Comfort</button>
-        </div>
-        <div class="message-list-view__menu-anchor">
-            <AppButton data-testid="column-chooser-toggle" Title="Configure visible columns"
-                       OnClick="ToggleColumnChooser" Size="Small" Variant="Secondary"
-                       CssClass="message-list-view__toolbar-button">
-                Columns
-            </AppButton>
-            @if (_showColumnChooser)
-            {
-                <div data-testid="column-chooser-menu" class="message-list-view__menu message-list-view__menu--chooser">
-                    <div class="message-list-view__menu-heading">Built-in columns</div>
-                    @foreach (var option in BuiltInColumnOptions)
+        <div class="message-list-view__toolbar-row">
+            <div class="message-list-view__toolbar-group message-list-view__toolbar-group--view">
+                <span class="view-mode-badge @(IsDlqMode ? "dlq" : "peek")" aria-label="Message list mode">
+                    @(IsDlqMode ? "DLQ mode" : "Peek mode")
+                </span>
+                @if (!string.IsNullOrWhiteSpace(PinnedSessionId))
+                {
+                    <span class="view-mode-badge message-list-view__session-pin" data-testid="pinned-session-badge"
+                          title="Message list is filtered to session: @PinnedSessionId">
+                        Session: @PinnedSessionId
+                    </span>
+                }
+                <div class="message-list-view__select-wrap">
+                    <select data-testid="peek-count-select" @bind="PeekCount"
+                            class="message-list-view__toolbar-select app-native-control app-native-select">
+                        <option value="5">5 messages</option>
+                        <option value="10">10 messages</option>
+                        <option value="50">50 messages</option>
+                        <option value="100">100 messages</option>
+                        <option value="200">200 messages</option>
+                    </select>
+                </div>
+                <div class="message-list-view__select-wrap">
+                    <select @bind="_autoRefreshSeconds" @bind:after="ApplyAutoRefresh" title="Auto-refresh interval"
+                            class="message-list-view__toolbar-select app-native-control app-native-select">
+                        <option value="0">No auto-refresh</option>
+                        <option value="10">Refresh 10 s</option>
+                        <option value="30">Refresh 30 s</option>
+                        <option value="60">Refresh 60 s</option>
+                    </select>
+                </div>
+                <div class="density-toggle" title="Row density" aria-label="Row density">
+                    <button type="button" class="density-btn @(_density == "compact" ? "active" : "")"
+                            @onclick='() => SetDensityAsync("compact")'>Compact</button>
+                    <button type="button" class="density-btn @(_density == "default" ? "active" : "")"
+                            @onclick='() => SetDensityAsync("default")'>Default</button>
+                    <button type="button" class="density-btn @(_density == "comfort" ? "active" : "")"
+                            @onclick='() => SetDensityAsync("comfort")'>Comfort</button>
+                </div>
+                <div class="message-list-view__menu-anchor">
+                    <AppButton data-testid="column-chooser-toggle" Title="Configure visible columns"
+                               OnClick="ToggleColumnChooser" Size="Small" Variant="Secondary"
+                               CssClass="message-list-view__toolbar-button">
+                        Columns
+                    </AppButton>
+                    @if (_showColumnChooser)
                     {
-                        if (!option.DlqOnly || ShowDlqColumns)
-                        {
-                            <label data-testid="built-in-column-option" data-column-key="@option.Key"
-                                   class="message-list-view__chooser-option">
-                                <span>@option.Label</span>
-                                <input type="checkbox" checked="@IsBuiltInColumnVisible(option.Key)"
-                                       @onchange="args => SetBuiltInColumnVisibleAsync(option.Key, ParseCheckboxValue(args))" />
-                            </label>
-                        }
-                    }
+                        <div data-testid="column-chooser-menu"
+                             class="message-list-view__menu message-list-view__menu--chooser">
+                            <div class="message-list-view__menu-heading">Built-in columns</div>
+                            @foreach (var option in BuiltInColumnOptions)
+                            {
+                                if (!option.DlqOnly || ShowDlqColumns)
+                                {
+                                    <label data-testid="built-in-column-option" data-column-key="@option.Key"
+                                           class="message-list-view__chooser-option">
+                                        <span>@option.Label</span>
+                                        <input type="checkbox" checked="@IsBuiltInColumnVisible(option.Key)"
+                                               @onchange="args => SetBuiltInColumnVisibleAsync(option.Key, ParseCheckboxValue(args))" />
+                                    </label>
+                                }
+                            }
 
-                    <div class="message-list-view__menu-divider"></div>
-                    <div class="message-list-view__menu-heading">Custom property columns</div>
+                            <div class="message-list-view__menu-divider"></div>
+                            <div class="message-list-view__menu-heading">Custom property columns</div>
 
-                    <div class="message-list-view__custom-column-row">
-                        <input type="text" data-testid="custom-column-input" @bind="_newCustomPropertyColumn"
-                               @bind:event="oninput" placeholder="Application property key"
-                               class="message-list-view__custom-column-input app-native-control" />
-                        <AppButton data-testid="add-custom-column" OnClick="AddCustomPropertyColumnAsync"
-                                   Disabled="@(!CanAddCustomPropertyColumn)" Size="Small" Variant="Secondary"
-                                   CssClass="message-list-view__toolbar-button">
-                            Add
-                        </AppButton>
-                    </div>
-
-                    @if (_customPropertyColumns.Count == 0)
-                    {
-                        <div class="message-list-view__helper-copy">No custom columns configured.</div>
-                    }
-                    else
-                    {
-                        @foreach (var customColumn in _customPropertyColumns)
-                        {
-                            <div data-testid="custom-column-item" data-column-name="@customColumn"
-                                 class="message-list-view__custom-column-item">
-                                <span class="message-list-view__custom-column-name">@customColumn</span>
-                                <AppButton data-testid="remove-custom-column" data-column-name="@customColumn"
-                                           Title="Remove custom column" OnClick="() => RemoveCustomPropertyColumnAsync(customColumn)"
-                                           Size="Small" Variant="Subtle"
-                                           CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--subtle message-list-view__custom-column-remove">
-                                    ✕
+                            <div class="message-list-view__custom-column-row">
+                                <input type="text" data-testid="custom-column-input" @bind="_newCustomPropertyColumn"
+                                       @bind:event="oninput" placeholder="Application property key"
+                                       class="message-list-view__custom-column-input app-native-control" />
+                                <AppButton data-testid="add-custom-column" OnClick="AddCustomPropertyColumnAsync"
+                                           Disabled="@(!CanAddCustomPropertyColumn)" Size="Small" Variant="Secondary"
+                                           CssClass="message-list-view__toolbar-button">
+                                    Add
                                 </AppButton>
                             </div>
-                        }
-                    }
 
-                    @if (SuggestedCustomPropertyColumns.Count > 0)
-                    {
-                        <div class="message-list-view__helper-copy">From loaded messages:</div>
-                        <div class="message-list-view__suggestions">
-                            @foreach (var suggestion in SuggestedCustomPropertyColumns)
+                            @if (_customPropertyColumns.Count == 0)
                             {
-                                <button type="button" data-testid="custom-column-suggestion" data-column-name="@suggestion"
-                                        @onclick="() => AddCustomPropertyColumnAsync(suggestion)"
-                                        class="message-list-view__suggestion-chip">
-                                    @suggestion
-                                </button>
+                                <div class="message-list-view__helper-copy">No custom columns configured.</div>
                             }
+                            else
+                            {
+                                @foreach (var customColumn in _customPropertyColumns)
+                                {
+                                    <div data-testid="custom-column-item" data-column-name="@customColumn"
+                                         class="message-list-view__custom-column-item">
+                                        <span class="message-list-view__custom-column-name">@customColumn</span>
+                                        <AppButton data-testid="remove-custom-column" data-column-name="@customColumn"
+                                                   Title="Remove custom column"
+                                                   OnClick="() => RemoveCustomPropertyColumnAsync(customColumn)" Size="Small"
+                                                   Variant="Subtle"
+                                                   CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--subtle message-list-view__custom-column-remove">
+                                            ✕
+                                        </AppButton>
+                                    </div>
+                                }
+                            }
+
+                            @if (SuggestedCustomPropertyColumns.Count > 0)
+                            {
+                                <div class="message-list-view__helper-copy">From loaded messages:</div>
+                                <div class="message-list-view__suggestions">
+                                    @foreach (var suggestion in SuggestedCustomPropertyColumns)
+                                    {
+                                        <button type="button" data-testid="custom-column-suggestion" data-column-name="@suggestion"
+                                                @onclick="() => AddCustomPropertyColumnAsync(suggestion)"
+                                                class="message-list-view__suggestion-chip">
+                                            @suggestion
+                                        </button>
+                                    }
+                                </div>
+                            }
+
+                            <div class="message-list-view__menu-footer">
+                                <AppButton data-testid="reset-column-preferences"
+                                           Title="Reset columns and density to defaults" OnClick="ResetColumnPreferencesAsync"
+                                           Size="Small" Variant="Secondary" CssClass="message-list-view__toolbar-button">
+                                    Reset Defaults
+                                </AppButton>
+                                <AppButton Title="Close column chooser" OnClick="() => _showColumnChooser = false"
+                                           Size="Small" Variant="Subtle"
+                                           CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--subtle">
+                                    Close
+                                </AppButton>
+                            </div>
                         </div>
                     }
-
-                    <div class="message-list-view__menu-footer">
-                        <AppButton data-testid="reset-column-preferences" Title="Reset columns and density to defaults"
-                                   OnClick="ResetColumnPreferencesAsync" Size="Small" Variant="Secondary"
-                                   CssClass="message-list-view__toolbar-button">
-                            Reset Defaults
-                        </AppButton>
-                        <AppButton Title="Close column chooser" OnClick="() => _showColumnChooser = false" Size="Small"
-                                   Variant="Subtle"
-                                   CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--subtle">
-                            Close
-                        </AppButton>
-                    </div>
                 </div>
-            }
-        </div>
-        @if (MultiSelect && Messages.Count > 0)
-        {
-            <AppButton OnClick="ToggleSelectAll" Size="Small" Variant="Secondary"
-                       CssClass="message-list-view__toolbar-button" Title="Select / deselect all visible messages">
-                @(_selection.Count == Messages.Count ? "Deselect all" : "Select all")
-            </AppButton>
-        }
-      </div>
-      <div class="message-list-view__toolbar-group message-list-view__toolbar-group--filter">
-        <div class="message-list-view__filter-group">
-            <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter messages..."
-                   class="message-list-view__filter-input app-native-control" />
-            @if (CanSaveCurrentFilter)
-            {
-                <button type="button" @onclick="SaveCurrentFilter" title="Save current filter"
-                        class="message-list-view__filter-addon">
-                    💾
-                </button>
-            }
-            <div class="message-list-view__menu-anchor message-list-view__menu-anchor--right">
-                <button type="button" @onclick="() => _showFilterMenu = !_showFilterMenu" title="Saved filters"
-                        class="message-list-view__filter-addon message-list-view__filter-addon--menu"
-                        disabled="@(SavedFilters.Count == 0)">▾</button>
-                @if (_showFilterMenu && SavedFilters.Count > 0)
+                @if (MultiSelect && Messages.Count > 0)
                 {
-                    <div class="message-list-view__menu message-list-view__menu--saved">
-                        @foreach (var f in SavedFilters)
+                    <AppButton OnClick="ToggleSelectAll" Size="Small" Variant="Secondary"
+                               CssClass="message-list-view__toolbar-button" Title="Select / deselect all visible messages">
+                        @(_selection.Count == Messages.Count ? "Deselect all" : "Select all")
+                    </AppButton>
+                }
+            </div>
+            <div class="message-list-view__toolbar-group message-list-view__toolbar-group--filter">
+                <div class="message-list-view__filter-group">
+                    <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter messages..."
+                           class="message-list-view__filter-input app-native-control" />
+                    @if (CanSaveCurrentFilter)
+                    {
+                        <button type="button" @onclick="SaveCurrentFilter" title="Save current filter"
+                                class="message-list-view__filter-addon">
+                            💾
+                        </button>
+                    }
+                    <div class="message-list-view__menu-anchor message-list-view__menu-anchor--right">
+                        <button type="button" @onclick="() => _showFilterMenu = !_showFilterMenu" title="Saved filters"
+                                class="message-list-view__filter-addon message-list-view__filter-addon--menu"
+                                disabled="@(SavedFilters.Count == 0)">▾</button>
+                        @if (_showFilterMenu && SavedFilters.Count > 0)
                         {
-                            <div data-testid="saved-filter-item" data-filter-name="@f.Name"
-                                 class="message-list-view__saved-filter-item" @onclick="() => ApplySavedFilter(f)">
-                                <span class="message-list-view__saved-filter-name"
-                                      title="@GetSavedFilterTooltip(f)">@f.Name</span>
-                                <button type="button" @onclick:stopPropagation="true" @onclick="() => DeleteSavedFilter(f.Name)"
-                                        title="Remove filter" class="message-list-view__saved-filter-remove">✕</button>
+                            <div class="message-list-view__menu message-list-view__menu--saved">
+                                @foreach (var f in SavedFilters)
+                                {
+                                    <div data-testid="saved-filter-item" data-filter-name="@f.Name"
+                                         class="message-list-view__saved-filter-item" @onclick="() => ApplySavedFilter(f)">
+                                        <span class="message-list-view__saved-filter-name"
+                                              title="@GetSavedFilterTooltip(f)">@f.Name</span>
+                                        <button type="button" @onclick:stopPropagation="true"
+                                                @onclick="() => DeleteSavedFilter(f.Name)" title="Remove filter"
+                                                class="message-list-view__saved-filter-remove">✕</button>
+                                    </div>
+                                }
                             </div>
                         }
                     </div>
+                </div>
+                <button type="button" data-testid="filters-toggle" title="Toggle all filters on or off"
+                        class="message-list-view__state-toggle @(_filtersEnabled ? "is-active" : null)"
+                        aria-pressed="@_filtersEnabled" @onclick="ToggleFiltersEnabled">
+                    @(_filtersEnabled ? "Filters: On" : "Filters: Off")
+                </button>
+                <button type="button" data-testid="advanced-toggle" title="Toggle advanced rule filtering"
+                        class="message-list-view__state-toggle message-list-view__state-toggle--advanced @(_advancedFilterEnabled && _filtersEnabled ? "is-active" : null)"
+                        aria-pressed="@(_advancedFilterEnabled && _filtersEnabled)" @onclick="ToggleAdvancedFilterEnabled"
+                        disabled="@(!_filtersEnabled)">
+                    @(_advancedFilterEnabled ? "Advanced: On" : "Advanced: Off")
+                </button>
+                @if (_advancedFilterEnabled)
+                {
+                    <AppButton data-testid="add-rule" Title="Add advanced filter rule" OnClick="AddAdvancedRule"
+                               Size="Small" Variant="Secondary" CssClass="message-list-view__toolbar-button">
+                        + Rule
+                    </AppButton>
                 }
             </div>
+            <div class="message-list-view__toolbar-group message-list-view__toolbar-group--actions">
+                @if (IsDetailPaneOpen && OnCloseDetails.HasDelegate)
+                {
+                    <AppButton OnClick="@(() => OnCloseDetails.InvokeAsync())" Size="Small" Variant="Secondary"
+                               CssClass="message-list-view__toolbar-button" Title="Close message details">
+                        Close Details
+                    </AppButton>
+                }
+                @if (!IsDlqMode)
+                {
+                    <AppButton OnClick="ConfirmDeleteSelectedMessage" Size="Small" Variant="Danger"
+                               CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
+                               Disabled="@(IsLoading || IsMutating || !CanDeleteSelectedMessage)"
+                               Title="Delete selected active message">
+                        Delete Selected
+                    </AppButton>
+                }
+                <AppButton OnClick="ConfirmDeleteFilteredMessages" Size="Small" Variant="Danger"
+                           CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
+                           Disabled="@(IsLoading || IsMutating || !CanDeleteFilteredMessages)"
+                           Title="Delete currently filtered messages in the current mode">
+                    Delete Filtered
+                </AppButton>
+                <AppButton OnClick="ConfirmPurgeAllMessages" Size="Small" Variant="Danger"
+                           CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
+                           Disabled="@(IsLoading || IsMutating || string.IsNullOrWhiteSpace(EntityPath))"
+                           Title="Permanently delete all messages in the current mode">
+                    Purge All
+                </AppButton>
+                @if (ShowCompose && !IsDlqMode && Client is not null)
+                {
+                    <AppButton OnClick="@(() => _showComposer = !_showComposer)" Size="Small" Variant="Secondary"
+                               CssClass="@($"message-list-view__toolbar-button message-list-view__toolbar-button--compose {(_showComposer ? "message-list-view__toolbar-button--active" : string.Empty)}")"
+                               Title="Compose and send a new message">
+                        ✉ Send
+                    </AppButton>
+                }
+                <AppButton OnClick="ExportFilteredJsonAsync" Size="Small" Variant="Secondary"
+                           CssClass="message-list-view__toolbar-button" Disabled="@(FilteredMessages.Count == 0)"
+                           Title="Export currently visible messages as JSON">
+                    ⬇ Export JSON
+                </AppButton>
+                <AppButton OnClick="ToggleNsbMode" Size="Small" Variant="Secondary"
+                           CssClass="@($"message-list-view__toolbar-button message-list-view__toolbar-button--nsb {(_nsbMode ? "message-list-view__toolbar-button--active" : string.Empty)}")"
+                           Title="Toggle NServiceBus view — shows endpoint, message type, conversation ID">
+                    NSB
+                </AppButton>
+            </div>
+            <div class="message-list-view__toolbar-group message-list-view__toolbar-group--primary">
+                @if (Messages.Count > 0 || TotalAvailableCount is not null)
+                {
+                    <AppButton data-testid="load-more-button" OnClick="LoadMoreAsync" Size="Small" Variant="Secondary"
+                               CssClass="message-list-view__toolbar-button" Disabled="@(!CanLoadMore)"
+                               Title="Fetch the next batch of messages and add them to the list below">
+                        @LoadMoreButtonLabel
+                    </AppButton>
+                }
+                <AppButton data-testid="peek-button" OnClick="LoadInitialWindowAsync" Size="Small" Variant="Primary"
+                           CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--primary"
+                           Disabled="@IsLoading">
+                    @(IsLoading ? "Loading…" : "↺ Peek")
+                </AppButton>
+            </div>
         </div>
-        <button type="button" data-testid="filters-toggle" title="Toggle all filters on or off"
-                class="message-list-view__state-toggle @(_filtersEnabled ? "is-active" : null)"
-                aria-pressed="@_filtersEnabled" @onclick="ToggleFiltersEnabled">
-            @(_filtersEnabled ? "Filters: On" : "Filters: Off")
-        </button>
-        <button type="button" data-testid="advanced-toggle" title="Toggle advanced rule filtering"
-                class="message-list-view__state-toggle message-list-view__state-toggle--advanced @(_advancedFilterEnabled && _filtersEnabled ? "is-active" : null)"
-                aria-pressed="@(_advancedFilterEnabled && _filtersEnabled)" @onclick="ToggleAdvancedFilterEnabled"
-                disabled="@(!_filtersEnabled)">
-            @(_advancedFilterEnabled ? "Advanced: On" : "Advanced: Off")
-        </button>
-        @if (_advancedFilterEnabled)
-        {
-            <AppButton data-testid="add-rule" Title="Add advanced filter rule" OnClick="AddAdvancedRule" Size="Small"
-                       Variant="Secondary" CssClass="message-list-view__toolbar-button">
-                + Rule
-            </AppButton>
-        }
-      </div>
-      </div>
-      <div class="message-list-view__toolbar-row message-list-view__toolbar-row--bottom">
-      <div class="message-list-view__toolbar-group message-list-view__toolbar-group--actions">
-        @if (IsDetailPaneOpen && OnCloseDetails.HasDelegate)
-        {
-            <AppButton OnClick="@(() => OnCloseDetails.InvokeAsync())" Size="Small" Variant="Secondary"
-                       CssClass="message-list-view__toolbar-button" Title="Close message details">
-                Close Details
-            </AppButton>
-        }
-        @if (!IsDlqMode)
-        {
-            <AppButton OnClick="ConfirmDeleteSelectedMessage" Size="Small" Variant="Danger"
-                       CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
-                       Disabled="@(IsLoading || IsMutating || !CanDeleteSelectedMessage)" Title="Delete selected active message">
-                Delete Selected
-            </AppButton>
-        }
-        <AppButton OnClick="ConfirmDeleteFilteredMessages" Size="Small" Variant="Danger"
-                   CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
-                   Disabled="@(IsLoading || IsMutating || !CanDeleteFilteredMessages)"
-                   Title="Delete currently filtered messages in the current mode">
-            Delete Filtered
-        </AppButton>
-        <AppButton OnClick="ConfirmPurgeAllMessages" Size="Small" Variant="Danger"
-                   CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
-                   Disabled="@(IsLoading || IsMutating || string.IsNullOrWhiteSpace(EntityPath))"
-                   Title="Permanently delete all messages in the current mode">
-            Purge All
-        </AppButton>
-        @if (ShowCompose && !IsDlqMode && Client is not null)
-        {
-            <AppButton OnClick="@(() => _showComposer = !_showComposer)" Size="Small" Variant="Secondary"
-                       CssClass="@($"message-list-view__toolbar-button message-list-view__toolbar-button--compose {(_showComposer ? "message-list-view__toolbar-button--active" : string.Empty)}")"
-                       Title="Compose and send a new message">
-                ✉ Send
-            </AppButton>
-        }
-        <AppButton OnClick="ExportFilteredJsonAsync" Size="Small" Variant="Secondary"
-                   CssClass="message-list-view__toolbar-button" Disabled="@(FilteredMessages.Count == 0)"
-                   Title="Export currently visible messages as JSON">
-            ⬇ Export JSON
-        </AppButton>
-        <AppButton OnClick="ToggleNsbMode" Size="Small" Variant="Secondary"
-                   CssClass="@($"message-list-view__toolbar-button message-list-view__toolbar-button--nsb {(_nsbMode ? "message-list-view__toolbar-button--active" : string.Empty)}")"
-                   Title="Toggle NServiceBus view — shows endpoint, message type, conversation ID">
-            NSB
-        </AppButton>
-      </div>
-      <div class="message-list-view__toolbar-spacer"></div>
-      <div class="message-list-view__toolbar-group message-list-view__toolbar-group--primary">
-        @if (Messages.Count > 0 || TotalAvailableCount is not null)
-        {
-            <AppButton data-testid="load-more-button" OnClick="LoadMoreAsync" Size="Small" Variant="Secondary"
-                       CssClass="message-list-view__toolbar-button" Disabled="@(!CanLoadMore)"
-                       Title="Fetch the next batch of messages and add them to the list below">
-                @LoadMoreButtonLabel
-            </AppButton>
-        }
-        <AppButton data-testid="peek-button" OnClick="LoadInitialWindowAsync" Size="Small" Variant="Primary"
-                   CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--primary"
-                   Disabled="@IsLoading">
-            @(IsLoading ? "Loading…" : "↺ Peek")
-        </AppButton>
-      </div>
-      </div>
     </div>
 
     @if (_advancedFilterEnabled)
@@ -339,159 +344,159 @@
         }
         else
         {
-        @if (FilteredMessages.Count == 0)
-        {
-            @if (Messages.Count == 0)
+            @if (FilteredMessages.Count == 0)
             {
-                <EmptyState Icon="📭" Title="No messages" Subtitle="Click Peek to load messages from the queue." />
+                @if (Messages.Count == 0)
+                {
+                    <EmptyState Icon="📭" Title="No messages" Subtitle="Click Peek to load messages from the queue." />
+                }
+                else
+                {
+                    <EmptyState Icon="🔍" Title="No matches" Subtitle="@NoMatchesSubtitle" />
+                }
             }
             else
             {
-                <EmptyState Icon="🔍" Title="No matches" Subtitle="@NoMatchesSubtitle" />
-            }
-        }
-        else
-        {
-            <div class="data-table-container message-grid-scroll message-grid-host message-list-view__grid-shell density-@_density"
-                 tabindex="0" @onkeydown="HandleKeyDown" @onkeydown:preventDefault="@_preventKeyDefault"
-                 aria-label="Message list scroll container">
-                <FluentDataGrid Items="@FilteredMessages.AsQueryable()" TGridItem="SbMessage" Class="message-grid"
-                                ResizableColumns="true" Virtualize="true" ItemSize="@ItemSize" RowClass="@(m => GetRowClass(m))"
-                                OnRowClick="@(e => OnRowClickedAsync(e.Item))">
-                    @if (MultiSelect)
-                    {
-                        <TemplateColumn Title="" Width="40px">
-                            <input type="checkbox" checked="@_selection.IsSelected(context.MessageId)"
-                                   class="message-list-view__row-select" @onclick:stopPropagation="true"
-                                   @onchange="async e => await ToggleSelection(context, (bool)e.Value!)" />
-                        </TemplateColumn>
-                    }
-                    @if (IsBuiltInColumnVisible(ColumnEnqueued))
-                    {
-                        <PropertyColumn Property="m => m.EnqueuedAt" Title="Enqueued" Format="HH:mm:ss.fff" Width="120px"
-                                        Sortable="true" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" />
-                    }
-                    @if (IsBuiltInColumnVisible(ColumnMessageId))
-                    {
-                        <TemplateColumn Title="Message ID" Width="220px"
-                                        SortBy="@(GridSort<SbMessage>.ByAscending(m => m.MessageId))">
-                            <span class="cell-truncate" title="@context.MessageId">@context.MessageId</span>
-                        </TemplateColumn>
-                    }
-                    @if (IsBuiltInColumnVisible(ColumnCorrelationId))
-                    {
-                        <TemplateColumn Title="Correlation ID" Width="180px"
-                                        SortBy="@(GridSort<SbMessage>.ByAscending(m => m.CorrelationId))">
-                            <span class="cell-truncate" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ??
-                                                                                                                                                                                                                                                                                                           "-")</span>
+                <div class="data-table-container message-grid-scroll message-grid-host message-list-view__grid-shell density-@_density"
+                     tabindex="0" @onkeydown="HandleKeyDown" @onkeydown:preventDefault="@_preventKeyDefault"
+                     aria-label="Message list scroll container">
+                    <FluentDataGrid Items="@FilteredMessages.AsQueryable()" TGridItem="SbMessage" Class="message-grid"
+                                    ResizableColumns="true" Virtualize="true" ItemSize="@ItemSize" RowClass="@(m => GetRowClass(m))"
+                                    OnRowClick="@(e => OnRowClickedAsync(e.Item))">
+                        @if (MultiSelect)
+                        {
+                            <TemplateColumn Title="" Width="40px">
+                                <input type="checkbox" checked="@_selection.IsSelected(context.MessageId)"
+                                       class="message-list-view__row-select" @onclick:stopPropagation="true"
+                                       @onchange="async e => await ToggleSelection(context, (bool)e.Value!)" />
                             </TemplateColumn>
                         }
-                        @if (IsBuiltInColumnVisible(ColumnSubject))
+                        @if (IsBuiltInColumnVisible(ColumnEnqueued))
                         {
-                            <TemplateColumn Title="Subject" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.Subject))">
-                                <span class="cell-truncate" title="@(context.Subject ?? "-")">@(context.Subject ?? "-")</span>
+                            <PropertyColumn Property="m => m.EnqueuedAt" Title="Enqueued" Format="HH:mm:ss.fff" Width="120px"
+                                            Sortable="true" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" />
+                        }
+                        @if (IsBuiltInColumnVisible(ColumnMessageId))
+                        {
+                            <TemplateColumn Title="Message ID" Width="220px"
+                                            SortBy="@(GridSort<SbMessage>.ByAscending(m => m.MessageId))">
+                                <span class="cell-truncate" title="@context.MessageId">@context.MessageId</span>
                             </TemplateColumn>
                         }
-                        @if (IsBuiltInColumnVisible(ColumnDelivery))
+                        @if (IsBuiltInColumnVisible(ColumnCorrelationId))
                         {
-                            <TemplateColumn Title="Delivery" Width="72px"
-                                            SortBy="@(GridSort<SbMessage>.ByDescending(m => m.DeliveryCount))">@context.DeliveryCount
-                            </TemplateColumn>
-                        }
-                        @if (!IsDetailPaneOpen && IsBuiltInColumnVisible(ColumnExpires))
-                        {
-                            <TemplateColumn Title="Expires" Width="130px"
-                                            SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SystemProperties.ExpiresAt))">
-                                <span class="cell-truncate" title="@(context.SystemProperties.ExpiresAt?.ToString("O") ?? "-")">
-                                    @(context.SystemProperties.ExpiresAt?.ToString("HH:mm:ss") ?? "-")
-                                </span>
-                            </TemplateColumn>
-                        }
-                        @if (!IsDetailPaneOpen && IsBuiltInColumnVisible(ColumnContentType))
-                        {
-                            <TemplateColumn Title="Content Type" Width="110px"
-                                            SortBy="@(GridSort<SbMessage>.ByAscending(m => m.ContentType))">
-                                <span class="cell-truncate" title="@(context.ContentType ?? "-")">@(context.ContentType ?? "-")</span>
-                            </TemplateColumn>
-                        }
-                        @if (!IsDetailPaneOpen && IsBuiltInColumnVisible(ColumnSession))
-                        {
-                            <TemplateColumn Title="Session" Width="130px" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SessionId))">
-                                <span class="cell-truncate" title="@(context.SessionId ?? "-")">@(context.SessionId ?? "-")</span>
-                            </TemplateColumn>
-                        }
-                        @if (!IsDetailPaneOpen && IsBuiltInColumnVisible(ColumnPartitionKey))
-                        {
-                            <TemplateColumn Title="Partition Key" Width="130px"
-                                            SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SystemProperties.PartitionKey))">
-                                <span class="cell-truncate"
-                                      title="@(context.SystemProperties.PartitionKey ?? "-")">@(context.SystemProperties.PartitionKey ??
-                                                                                                                                                                                                                                                                                                                                                           "-")</span>
+                            <TemplateColumn Title="Correlation ID" Width="180px"
+                                            SortBy="@(GridSort<SbMessage>.ByAscending(m => m.CorrelationId))">
+                                <span class="cell-truncate" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ??
+                                                                                                                                                                                                                                                                                                                                                                                   "-")</span>
                                 </TemplateColumn>
                             }
-                            @if (ShowDlqColumns && IsBuiltInColumnVisible(ColumnDeadLetterReason))
+                            @if (IsBuiltInColumnVisible(ColumnSubject))
                             {
-                                <TemplateColumn Title="DLQ Reason" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.DeadLetterReason))">
-                                    <span class="cell-truncate" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ??
-                                                                                                                                                                                                                                                                                                                                                                                 "-")</span>
+                                <TemplateColumn Title="Subject" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.Subject))">
+                                    <span class="cell-truncate" title="@(context.Subject ?? "-")">@(context.Subject ?? "-")</span>
+                                </TemplateColumn>
+                            }
+                            @if (IsBuiltInColumnVisible(ColumnDelivery))
+                            {
+                                <TemplateColumn Title="Delivery" Width="72px"
+                                                SortBy="@(GridSort<SbMessage>.ByDescending(m => m.DeliveryCount))">@context.DeliveryCount
+                                </TemplateColumn>
+                            }
+                            @if (!IsDetailPaneOpen && IsBuiltInColumnVisible(ColumnExpires))
+                            {
+                                <TemplateColumn Title="Expires" Width="130px"
+                                                SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SystemProperties.ExpiresAt))">
+                                    <span class="cell-truncate" title="@(context.SystemProperties.ExpiresAt?.ToString("O") ?? "-")">
+                                        @(context.SystemProperties.ExpiresAt?.ToString("HH:mm:ss") ?? "-")
+                                    </span>
+                                </TemplateColumn>
+                            }
+                            @if (!IsDetailPaneOpen && IsBuiltInColumnVisible(ColumnContentType))
+                            {
+                                <TemplateColumn Title="Content Type" Width="110px"
+                                                SortBy="@(GridSort<SbMessage>.ByAscending(m => m.ContentType))">
+                                    <span class="cell-truncate" title="@(context.ContentType ?? "-")">@(context.ContentType ?? "-")</span>
+                                </TemplateColumn>
+                            }
+                            @if (!IsDetailPaneOpen && IsBuiltInColumnVisible(ColumnSession))
+                            {
+                                <TemplateColumn Title="Session" Width="130px" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SessionId))">
+                                    <span class="cell-truncate" title="@(context.SessionId ?? "-")">@(context.SessionId ?? "-")</span>
+                                </TemplateColumn>
+                            }
+                            @if (!IsDetailPaneOpen && IsBuiltInColumnVisible(ColumnPartitionKey))
+                            {
+                                <TemplateColumn Title="Partition Key" Width="130px"
+                                                SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SystemProperties.PartitionKey))">
+                                    <span class="cell-truncate"
+                                          title="@(context.SystemProperties.PartitionKey ?? "-")">@(context.SystemProperties.PartitionKey ??
+                                                                                                                                                                                                                                                                                                                                                                                                                                               "-")</span>
                                     </TemplateColumn>
                                 }
-                                @foreach (var customColumn in _customPropertyColumns)
+                                @if (ShowDlqColumns && IsBuiltInColumnVisible(ColumnDeadLetterReason))
                                 {
-                                    var customColumnName = customColumn;
-                                    <TemplateColumn Title="@customColumnName" Width="160px">
-                                        <span class="cell-truncate" title="@GetCustomPropertyValue(context, customColumnName)">
-                                            @GetCustomPropertyValue(context, customColumnName)
-                                        </span>
-                                    </TemplateColumn>
-                                }
-                                @if (_nsbMode)
-                                {
-                                    <TemplateColumn Title="NSB Endpoint" Width="200px"
-                                                    SortBy="@(GridSort<SbMessage>.ByAscending(m => GetNsbProp(m, "NServiceBus.OriginatingEndpoint")))">
-                                        <span class="cell-truncate" title="@GetNsbProp(context, "NServiceBus.OriginatingEndpoint")">
-                                            @GetNsbProp(context, "NServiceBus.OriginatingEndpoint")
-                                        </span>
-                                    </TemplateColumn>
-                                    <TemplateColumn Title="NSB Message Type">
-                                        <span class="cell-truncate nsb-type-cell"
-                                              title="@GetNsbProp(context, "NServiceBus.EnclosedMessageTypes")">
-                                            @TruncateNsbType(GetNsbProp(context, "NServiceBus.EnclosedMessageTypes"))
-                                        </span>
-                                    </TemplateColumn>
-                                    <TemplateColumn Title="NSB Time Sent" Width="150px"
-                                                    SortBy="@(GridSort<SbMessage>.ByAscending(m => GetNsbProp(m, "NServiceBus.TimeSent")))">
-                                        <span class="cell-truncate" title="@GetNsbProp(context, "NServiceBus.TimeSent")">
-                                            @GetNsbProp(context, "NServiceBus.TimeSent")
-                                        </span>
-                                    </TemplateColumn>
-                                    <TemplateColumn Title="NSB Conversation" Width="200px"
-                                                    SortBy="@(GridSort<SbMessage>.ByAscending(m => GetNsbProp(m, "NServiceBus.ConversationId")))">
-                                        <span class="cell-truncate" title="@GetNsbProp(context, "NServiceBus.ConversationId")">
-                                            @GetNsbProp(context, "NServiceBus.ConversationId")
-                                        </span>
-                                    </TemplateColumn>
-                                }
-                            </FluentDataGrid>
-                        </div>
-        }
+                                    <TemplateColumn Title="DLQ Reason" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.DeadLetterReason))">
+                                        <span class="cell-truncate" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ??
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                         "-")</span>
+                                        </TemplateColumn>
+                                    }
+                                    @foreach (var customColumn in _customPropertyColumns)
+                                    {
+                                        var customColumnName = customColumn;
+                                        <TemplateColumn Title="@customColumnName" Width="160px">
+                                            <span class="cell-truncate" title="@GetCustomPropertyValue(context, customColumnName)">
+                                                @GetCustomPropertyValue(context, customColumnName)
+                                            </span>
+                                        </TemplateColumn>
+                                    }
+                                    @if (_nsbMode)
+                                    {
+                                        <TemplateColumn Title="NSB Endpoint" Width="200px"
+                                                        SortBy="@(GridSort<SbMessage>.ByAscending(m => GetNsbProp(m, "NServiceBus.OriginatingEndpoint")))">
+                                            <span class="cell-truncate" title="@GetNsbProp(context, "NServiceBus.OriginatingEndpoint")">
+                                                @GetNsbProp(context, "NServiceBus.OriginatingEndpoint")
+                                            </span>
+                                        </TemplateColumn>
+                                        <TemplateColumn Title="NSB Message Type">
+                                            <span class="cell-truncate nsb-type-cell"
+                                                  title="@GetNsbProp(context, "NServiceBus.EnclosedMessageTypes")">
+                                                @TruncateNsbType(GetNsbProp(context, "NServiceBus.EnclosedMessageTypes"))
+                                            </span>
+                                        </TemplateColumn>
+                                        <TemplateColumn Title="NSB Time Sent" Width="150px"
+                                                        SortBy="@(GridSort<SbMessage>.ByAscending(m => GetNsbProp(m, "NServiceBus.TimeSent")))">
+                                            <span class="cell-truncate" title="@GetNsbProp(context, "NServiceBus.TimeSent")">
+                                                @GetNsbProp(context, "NServiceBus.TimeSent")
+                                            </span>
+                                        </TemplateColumn>
+                                        <TemplateColumn Title="NSB Conversation" Width="200px"
+                                                        SortBy="@(GridSort<SbMessage>.ByAscending(m => GetNsbProp(m, "NServiceBus.ConversationId")))">
+                                            <span class="cell-truncate" title="@GetNsbProp(context, "NServiceBus.ConversationId")">
+                                                @GetNsbProp(context, "NServiceBus.ConversationId")
+                                            </span>
+                                        </TemplateColumn>
+                                    }
+                                </FluentDataGrid>
+                            </div>
+                        }
 
-        @if (Messages.Count > 0 || TotalAvailableCount is not null)
-        {
-            <div class="message-list-view__summary-bar">
-                <span data-testid="window-status">@WindowStatusSummary</span>
-                <span class="message-list-view__summary-sep">·</span>
-                <span data-testid="count-summary">@CountSummary</span>
-                @if (Messages.Count >= LargeWindowThreshold)
-                {
-                    <span class="message-list-view__large-window-cue" data-testid="large-window-cue"
-                          title="The loaded window is large. Filtering and scroll performance may be impacted.">
-                        Large window
-                    </span>
-                }
-            </div>
-        }
-    }
+                        @if (Messages.Count > 0 || TotalAvailableCount is not null)
+                        {
+                            <div class="message-list-view__summary-bar">
+                                <span data-testid="window-status">@WindowStatusSummary</span>
+                                <span class="message-list-view__summary-sep">·</span>
+                                <span data-testid="count-summary">@CountSummary</span>
+                                @if (Messages.Count >= LargeWindowThreshold)
+                                {
+                                    <span class="message-list-view__large-window-cue" data-testid="large-window-cue"
+                                          title="The loaded window is large. Filtering and scroll performance may be impacted.">
+                                        Large window
+                                    </span>
+                                }
+                            </div>
+                        }
+                    }
 
                     <Modal IsOpen="@_showSaveFilterDialog" OnClose="@(() => _showSaveFilterDialog = false)">
                         <div class="message-list-view__save-filter-dialog">

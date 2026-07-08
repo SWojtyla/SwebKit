@@ -63,7 +63,7 @@
         @if (SelectedMessage is not null)
         {
             <SidePanel Visible="true" Title="Message details" DefaultWidth="340" MinWidth="200" MaxWidth="700"
-                                 OnClose="CloseDetailPane">
+                       OnClose="CloseDetailPane">
                 <MessageDetailPane Message="SelectedMessage" OnApplyTracePivotFilter="ApplyDlqPivotFilter" />
             </SidePanel>
         }
@@ -71,8 +71,8 @@
 </div>
 
 <ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"
-    IsProduction="@AppState.Config.IsProduction" RequireTyping="@AppState.Config.IsProduction" ConfirmLabel="Proceed"
-    OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
+               IsProduction="@AppState.Config.IsProduction" RequireTyping="@AppState.Config.IsProduction" ConfirmLabel="Proceed"
+               OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
 
 @code {
     [Parameter] public IServiceBusClient? Client { get; set; }
