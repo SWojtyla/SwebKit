@@ -28,8 +28,30 @@ and AKS (Kubernetes) debugging helpers in a single developer-centric desktop app
 - [Full Design Document](docs/DESIGN.md)
 - [Docs Rework Traceability Plan](docs/plans/docs-rework-traceability/index.md)
 - [Documentation Migration Notes](docs/MIGRATION-NOTES.md)
+- [Packaging & Install Details](docs/packaging-and-install.md)
 
-## Getting Started
+## Install SwebKit (Windows)
+
+SwebKit isn't published anywhere yet — it's a self-signed local install. One command
+does everything: generates a signing certificate, builds the Release package, trusts
+it, installs it, and launches it.
+
+```powershell
+git clone <this-repo-url>
+cd SwebKit
+pwsh -File scripts/install.ps1
+```
+
+That's it. You'll get a single UAC prompt (to trust the certificate for sideloading)
+the first time only. SwebKit will appear in the Start Menu afterwards, and you can
+re-run the same command any time to rebuild and update it.
+
+This script is also safe for an AI coding agent to run on your behalf — every step is
+non-interactive except that one UAC prompt, and re-running it is a no-op wherever
+nothing changed. See [docs/packaging-and-install.md](docs/packaging-and-install.md)
+for what the script does under the hood and how to troubleshoot it.
+
+## Getting Started (Contributors)
 
 ### Prerequisites
 

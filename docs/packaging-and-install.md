@@ -1,81 +1,111 @@
 # Packaging & Local Installation (MSIX)
 
-SwebKit is distributed as an MSIX package for Windows. This document covers the one-time setup already done, what you need to reproduce it on a new machine, and how to build and install.
+SwebKit is distributed as a self-signed MSIX package for Windows — there is no public
+distribution yet, so every machine (yours, a teammate's, or an AI agent acting on your
+behalf) signs its own local build with its own certificate.
+
+## Quick start (recommended)
+
+From a full clone of the repo, in PowerShell:
+
+```powershell
+pwsh -File scripts/install.ps1
+```
+
+This single command:
+
+1. Generates a local `CN=SwebKit` self-signed code-signing certificate (or reuses one
+   you already have, if it's still valid).
+2. Updates `SwebKit.App.csproj`'s `PackageCertificateThumbprint` to match it.
+3. Runs `dotnet publish -c Release` to produce the MSIX.
+4. Trusts that certificate for local sideloading — this needs admin rights, so expect
+   **one UAC prompt** the first time you ever run it on a machine.
+5. Installs the MSIX with `Add-AppxPackage`.
+6. Launches SwebKit.
+
+Re-run the exact same command any time (e.g. after pulling new changes) to rebuild and
+update the installed app — every step is idempotent, so nothing happens twice
+unnecessarily (an already-trusted certificate isn't re-trusted, an up-to-date csproj
+isn't rewritten, etc.).
+
+Useful flags:
+
+| Flag           | Effect                                                             |
+| -------------- | ------------------------------------------------------------------ |
+| `-SkipInstall` | Build and sign the package only; leaves the `.msix` for you to run |
+| `-NoLaunch`    | Install but don't open the app afterwards                          |
+
+**This script is safe for an AI coding agent to run unattended.** The only interactive
+moment is the OS-level UAC elevation prompt for trusting the certificate (a real human
+must click "Yes" on that dialog once per machine — an agent cannot and should not try
+to bypass it). Everything else — certificate generation, csproj updates, build, install,
+launch — is fully scripted with no prompts.
 
 ---
 
-## What was configured
+## How it works (what the script automates)
 
 ### 1. Application icon
 
-`src/SwebKit.App/SwebKit.App.csproj` — `MauiIcon` now points to the custom icon:
+`src/SwebKit.App/SwebKit.App.csproj` — `MauiIcon` points to the custom icon:
 
 ```xml
 <MauiIcon Include="Resources\AppIcon\swebkit_icon.svg" />
 ```
 
-### 2. MSIX packaging enabled
+### 2. MSIX packaging
 
-`WindowsPackageType` was removed (it was previously set to `None`, which disabled packaging).
-The following was added to `SwebKit.App.csproj`:
+`SwebKit.App.csproj` has packaging enabled by default (no `WindowsPackageType` override):
 
 ```xml
 <WindowsPackagePublisherName>CN=SwebKit</WindowsPackagePublisherName>
 <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
-<PackageCertificateThumbprint>284DD5251E7471870A273AE03290B7114034F3C4</PackageCertificateThumbprint>
+<PackageCertificateThumbprint>...</PackageCertificateThumbprint>
 ```
 
-### 3. Package manifest updated
+`scripts/install.ps1` keeps `PackageCertificateThumbprint` in sync with whatever
+certificate exists on the current machine — you should never need to edit this by hand.
 
-`src/SwebKit.App/Platforms/Windows/Package.appxmanifest` — Identity and publisher updated:
+### 3. Package manifest
+
+`src/SwebKit.App/Platforms/Windows/Package.appxmanifest` — Identity and publisher:
 
 ```xml
 <Identity Name="com.swebkit.app" Publisher="CN=SwebKit" Version="0.0.0.0" />
 <PublisherDisplayName>SwebKit</PublisherDisplayName>
 ```
 
-### 4. Self-signed certificate created (your machine)
+`Publisher` must always match `WindowsPackagePublisherName`/the certificate's
+`Subject` (`CN=SwebKit`) — this is why the script always generates certificates with
+that exact subject, so any machine's self-signed cert satisfies the manifest.
 
-A self-signed certificate was generated and trusted in `CurrentUser\Root` on your machine:
+### 4. The self-signed certificate
 
-- **Subject:** `CN=SwebKit`
-- **Thumbprint:** `284DD5251E7471870A273AE03290B7114034F3C4`
-- **Store:** `Cert:\CurrentUser\My` + trusted in `Cert:\CurrentUser\Root`
+Generated with:
+
+```powershell
+New-SelfSignedCertificate `
+  -Type Custom `
+  -Subject "CN=SwebKit" `
+  -KeyUsage DigitalSignature `
+  -FriendlyName "SwebKit" `
+  -CertStoreLocation "Cert:\CurrentUser\My" `
+  -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+```
+
+Stored in `Cert:\CurrentUser\My` (needed to _sign_ the package at publish time) and its
+public `.cer` is imported into `Cert:\LocalMachine\TrustedPeople` (needed for Windows to
+_trust_ the signature at install time — `CurrentUser\Root` is not sufficient and
+produces error `0x800B0109`).
 
 ---
 
-## Building the MSIX
+## Manual steps (if you don't want to run the script)
 
-```bash
-dotnet publish src/SwebKit.App/SwebKit.App.csproj -c Release -f net10.0-windows10.0.19041.0
-```
+<details>
+<summary>Expand for the fully manual equivalent</summary>
 
-Output lands in:
-
-```
-src/SwebKit.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/AppPackages/
-```
-
-Double-click the `.msix` file to install. SwebKit will appear in the Start Menu and can be pinned to the taskbar. It can be uninstalled from Windows Settings → Apps.
-
----
-
-## Installing on your machine (after setup is done)
-
-Prerequisites are already met on the developer machine. Just:
-
-1. Build the MSIX (see above)
-2. Double-click the `.msix` to install
-
----
-
-## Setting up on a new machine
-
-The certificate and trust chain do not transfer automatically. Follow these steps on each new machine:
-
-### Step 1 — Generate a new self-signed certificate
-
-Run in PowerShell (no admin needed):
+### Step 1 — Generate a certificate
 
 ```powershell
 $cert = New-SelfSignedCertificate `
@@ -89,42 +119,49 @@ $cert = New-SelfSignedCertificate `
 Write-Output $cert.Thumbprint
 ```
 
-Copy the thumbprint output.
+### Step 2 — Update the csproj thumbprint
 
-### Step 2 — Trust the certificate
-
-Run in an **elevated PowerShell (Run as Administrator)**:
-
-```powershell
-$cert = Get-Item "Cert:\CurrentUser\My\<THUMBPRINT>"
-$store = New-Object System.Security.Cryptography.X509Certificates.X509Store("TrustedPeople", "LocalMachine")
-$store.Open("ReadWrite")
-$store.Add($cert)
-$store.Close()
-```
-
-> `LocalMachine\TrustedPeople` is required for MSIX sideloading. `CurrentUser\Root` is not sufficient and will produce error `0x800B0109`.
-
-### Step 3 — Update the csproj thumbprint
-
-In `src/SwebKit.App/SwebKit.App.csproj`, replace the thumbprint:
+In `src/SwebKit.App/SwebKit.App.csproj`:
 
 ```xml
-<PackageCertificateThumbprint>YOUR_NEW_THUMBPRINT_HERE</PackageCertificateThumbprint>
+<PackageCertificateThumbprint>YOUR_THUMBPRINT_HERE</PackageCertificateThumbprint>
 ```
 
-### Step 4 — Build and install
+### Step 3 — Publish
 
 ```bash
 dotnet publish src/SwebKit.App/SwebKit.App.csproj -c Release -f net10.0-windows10.0.19041.0
 ```
 
-Double-click the generated `.msix` to install.
+Output lands under `src/SwebKit.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/`,
+in an `AppPackages/` folder containing the `.msix` and a matching `.cer`.
+
+### Step 4 — Trust the certificate (elevated PowerShell)
+
+```powershell
+Import-Certificate -FilePath "path\to\the.cer" -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+```
+
+### Step 5 — Install
+
+```powershell
+Add-AppxPackage -Path "path\to\the.msix"
+```
+
+Or just double-click the `.msix` file.
+
+</details>
 
 ---
 
 ## Notes
 
-- The self-signed certificate is only valid for sideloading on machines that explicitly trust it. It is not suitable for Microsoft Store distribution.
-- The certificate expires in 1 year by default. Regenerate and repeat the setup steps when it expires.
-- If you publish a new version, increment `ApplicationDisplayVersion` / `ApplicationVersion` in `SwebKit.App.csproj` so Windows recognises it as an update rather than a conflicting install.
+- The self-signed certificate is only valid for sideloading on machines that explicitly
+  trust it. It is **not** suitable for Microsoft Store distribution — see
+  [MICROSOFT_STORE_SUBMISSION_GUIDE.md](../MICROSOFT_STORE_SUBMISSION_GUIDE.md) for that
+  path when SwebKit is ready to publish for real.
+- Certificates expire after 1 year. `scripts/install.ps1` detects an expired/missing
+  certificate and generates a fresh one automatically — nothing to remember.
+- Bumping `ApplicationDisplayVersion` / `ApplicationVersion` in `SwebKit.App.csproj`
+  before a rebuild makes Windows treat the new package as an update instead of a
+  conflicting install (the script always uses whatever version is currently set).
