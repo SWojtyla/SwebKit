@@ -1,5 +1,7 @@
+using Azure.Messaging.ServiceBus;
 using SwebKit.Azure.ServiceBus;
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Domain;
 
 namespace SwebKit.Azure.Tests;
 
@@ -40,5 +42,26 @@ public sealed class ServiceBusClientFactoryTests
         var client = _factory.Create(connStr);
 
         Assert.IsAssignableFrom<IAsyncDisposable>(client);
+    }
+
+    [Theory]
+    [InlineData(SbTransportType.Amqp, ServiceBusTransportType.AmqpTcp)]
+    [InlineData(SbTransportType.AmqpWebSockets, ServiceBusTransportType.AmqpWebSockets)]
+    public void MapTransportType_MapsDomainEnumToSdkEnum(SbTransportType input, ServiceBusTransportType expected)
+    {
+        var result = ServiceBusClientFactory.MapTransportType(input);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void Create_WithAmqpWebSockets_ReturnsNonNullClient()
+    {
+        var connStr = "Endpoint=sb://my-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc=";
+
+        var client = _factory.Create(connStr, SbTransportType.AmqpWebSockets);
+
+        Assert.NotNull(client);
+        Assert.IsAssignableFrom<IServiceBusClient>(client);
     }
 }

@@ -3,6 +3,8 @@ using Azure.Identity;
 using k8s;
 using k8s.KubeConfigModels;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
 using SwebKit.Core.Models;
@@ -17,6 +19,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
+using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 
 namespace SwebKit.Kubernetes.AksClient;
@@ -60,6 +63,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     private k8s.Kubernetes _client;
     private readonly string? _kubeconfigPath;
     private readonly string? _kubeconfigContext;
+    private readonly ILogger<KubernetesAksClient> _logger;
 
     private readonly Dictionary<Guid, Process> _portForwardProcesses = [];
     private readonly Lock _portForwardLock = new();
@@ -68,10 +72,12 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public KubernetesAksClient(
         string? kubeconfigContext = null,
-        string? kubeconfigPath = null)
+        string? kubeconfigPath = null,
+        ILogger<KubernetesAksClient>? logger = null)
     {
         _kubeconfigPath = kubeconfigPath;
         _kubeconfigContext = kubeconfigContext;
+        _logger = logger ?? NullLogger<KubernetesAksClient>.Instance;
 
         var config = BuildClientConfiguration(kubeconfigContext, kubeconfigPath);
         TryApplyAzureCredentialFallback(config, kubeconfigPath);
@@ -1317,8 +1323,57 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 _ => throw new ArgumentException($"Unsupported resource kind: {kind}")
             };
 
-            return KubernetesYaml.Serialize(resource);
+            return CleanEditableYaml(KubernetesYaml.Serialize(resource));
         });
+    }
+
+    /// <summary>
+    /// Strips server-managed/read-only fields (the whole <c>status</c> block, plus
+    /// <c>metadata.managedFields</c>, <c>resourceVersion</c>, <c>generation</c>, <c>uid</c>, and
+    /// <c>creationTimestamp</c>) from a full API object dump before it's shown for editing —
+    /// matching <c>kubectl edit</c> conventions. These fields are populated and owned by the API
+    /// server: leaving them in isn't just noisy, a large <c>managedFields</c> block or a
+    /// <c>resourceVersion</c> that goes stale while the user is still editing can make the
+    /// eventual <c>kubectl apply</c> behave unpredictably against a fast-changing live object
+    /// (this resource's own managedFields shows multiple controllers updating it every few
+    /// minutes). <c>kubectl apply</c> is patch-based and does not need any of these fields.
+    /// </summary>
+    /// <remarks>
+    /// This operates on the YAML representation-model (node/AST) API, not a typed
+    /// Dictionary&lt;object, object&gt; round-trip. A dictionary round-trip loses each scalar's
+    /// original type: YamlDotNet's default deserializer reads every plain scalar into that kind
+    /// of dictionary as a <see cref="string"/>, so re-serializing turns genuinely-numeric fields
+    /// like <c>spec.replicas</c> into quoted strings (which Kubernetes then rejects — a `*int32`
+    /// field can't unmarshal a JSON string) while unquoted numeric-looking annotation values
+    /// (e.g. a revision "251") also can't round-trip safely. Editing the node tree directly and
+    /// only removing specific mapping entries leaves every other node's original style/type
+    /// completely untouched.
+    /// </remarks>
+    internal static string CleanEditableYaml(string rawYaml)
+    {
+        var yamlStream = new YamlStream();
+        using (var reader = new StringReader(rawYaml))
+        {
+            yamlStream.Load(reader);
+        }
+
+        if (yamlStream.Documents.Count == 0 || yamlStream.Documents[0].RootNode is not YamlMappingNode root)
+            return rawYaml;
+
+        root.Children.Remove(new YamlScalarNode("status"));
+
+        if (root.Children.TryGetValue(new YamlScalarNode("metadata"), out var metadataNode) &&
+            metadataNode is YamlMappingNode metadata)
+        {
+            foreach (var key in new[] { "managedFields", "resourceVersion", "generation", "uid", "creationTimestamp" })
+            {
+                metadata.Children.Remove(new YamlScalarNode(key));
+            }
+        }
+
+        using var writer = new StringWriter();
+        yamlStream.Save(writer, assignAnchors: false);
+        return writer.ToString();
     }
 
     private async Task<object?> ListGatewayApiCustomObjectsAsync(string ns, string plural, CancellationToken ct)
@@ -2431,18 +2486,31 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                     {
                         var (retryExit, retryStderr) = await RunKubectlApplyWithTokenAsync(tempFile, ns, token, ct);
                         if (retryExit != 0)
+                        {
+                            _logger.LogWarning(
+                                "kubectl apply failed for {Kind}/{Name} in {Namespace} after credential refresh (exit {ExitCode}): {Output}",
+                                kind, name, ns, retryExit, retryStderr);
                             throw new InvalidOperationException($"kubectl apply failed after credential refresh (exit {retryExit}): {retryStderr}");
+                        }
                     }
                     else
                     {
+                        _logger.LogWarning(
+                            "kubectl apply failed for {Kind}/{Name} in {Namespace} with a Forbidden error and no fresh Azure credential was available (exit {ExitCode}): {Output}",
+                            kind, name, ns, exitCode, stderr);
                         throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {stderr}");
                     }
                 }
                 else
                 {
+                    _logger.LogWarning(
+                        "kubectl apply failed for {Kind}/{Name} in {Namespace} (exit {ExitCode}): {Output}",
+                        kind, name, ns, exitCode, stderr);
                     throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {stderr}");
                 }
             }
+
+            _logger.LogInformation("Applied YAML for {Kind}/{Name} in {Namespace}", kind, name, ns);
         }
         finally
         {
@@ -2450,27 +2518,106 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         }
     }
 
+    public async Task<string?> ValidateResourceYamlAsync(string ns, string yaml, CancellationToken ct = default)
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"swebkit-validate-{Guid.NewGuid():N}.yaml");
+        await File.WriteAllTextAsync(tempFile, yaml, ct);
+        try
+        {
+            var (exitCode, stderr) = await RunKubectlDryRunAsync(tempFile, ns, ct);
+            if (exitCode != 0)
+            {
+                _logger.LogWarning(
+                    "Server-side dry-run validation failed for a resource in {Namespace} (exit {ExitCode}): {Output}",
+                    ns, exitCode, stderr);
+                return stderr.Trim();
+            }
+            return null;
+        }
+        finally
+        {
+            try { File.Delete(tempFile); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    private async Task<(int ExitCode, string Stderr)> RunKubectlDryRunAsync(string tempFile, string ns, CancellationToken ct)
+    {
+        // --dry-run=server sends the manifest through the API server's full validation and
+        // admission chain (schema checks, webhooks, etc.) without persisting anything —
+        // a much stronger check than local YAML parsing.
+        return await RunKubectlProcessAsync($"apply -f \"{tempFile}\" --namespace {ns} --dry-run=server{BuildKubeconfigArgs()}", ct);
+    }
+
     private async Task<(int ExitCode, string Stderr)> RunKubectlApplyAsync(string tempFile, string ns, CancellationToken ct)
+    {
+        return await RunKubectlProcessAsync($"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()}", ct);
+    }
+
+    /// <summary>
+    /// Starts `kubectl` with the given arguments and awaits its exit. Stdout and stderr are
+    /// captured continuously (not just after a clean exit) so that if <paramref name="ct"/> is
+    /// cancelled (e.g. a caller-side timeout), whatever kubectl had already printed — including a
+    /// stuck interactive auth prompt from a kubelogin/exec credential plugin, which is a common
+    /// cause of an apply that hangs with zero feedback — can be surfaced instead of a bare
+    /// "timed out" message. On cancellation the still-running kubectl process is also killed
+    /// rather than abandoned — otherwise a "timed out" result would be a false negative: kubectl
+    /// could keep running in the background and still apply the change moments later, leaving
+    /// the user unsure whether their save actually went through.
+    /// </summary>
+    private async Task<(int ExitCode, string Stderr)> RunKubectlProcessAsync(string arguments, CancellationToken ct)
     {
         var psi = new ProcessStartInfo("kubectl")
         {
-            Arguments = $"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()}",
+            Arguments = arguments,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
 
-        var process = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
+        using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
-        await process.WaitForExitAsync(ct);
+        var output = new StringBuilder();
+        var outputLock = new object();
+        void OnData(object? _, DataReceivedEventArgs e)
+        {
+            if (e.Data is null) return;
+            lock (outputLock) { output.AppendLine(e.Data); }
+        }
+        process.OutputDataReceived += OnData;
+        process.ErrorDataReceived += OnData;
 
-        var stderr = process.ExitCode != 0
-            ? await process.StandardError.ReadToEndAsync(ct)
-            : string.Empty;
+        if (!process.Start())
+            throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
 
-        return (process.ExitCode, stderr);
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        await using var killOnCancel = ct.Register(() =>
+        {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+        });
+
+        try
+        {
+            await process.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            string captured;
+            lock (outputLock) { captured = output.ToString().Trim(); }
+            _logger.LogWarning(
+                "kubectl was cancelled (caller-side timeout) running 'kubectl {Arguments}'. Captured output before cancellation: {Output}",
+                arguments, string.IsNullOrEmpty(captured) ? "(none)" : captured);
+            throw new TimeoutException(string.IsNullOrEmpty(captured)
+                ? "kubectl produced no output before it was cancelled — it may be stuck waiting on cluster/network connectivity or an interactive credential prompt (e.g. kubelogin device-code sign-in) that never surfaced."
+                : $"kubectl was cancelled after producing this output:\n{captured}");
+        }
+
+        string combinedOutput;
+        lock (outputLock) { combinedOutput = output.ToString().Trim(); }
+
+        return (process.ExitCode, combinedOutput);
     }
 
     private static bool IsForbiddenError(string stderr)
@@ -2494,25 +2641,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private async Task<(int ExitCode, string Stderr)> RunKubectlApplyWithTokenAsync(string tempFile, string ns, string token, CancellationToken ct)
     {
-        var psi = new ProcessStartInfo("kubectl")
-        {
-            Arguments = $"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()} --token {token}",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        var process = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
-
-        await process.WaitForExitAsync(ct);
-
-        var stderr = process.ExitCode != 0
-            ? await process.StandardError.ReadToEndAsync(ct)
-            : string.Empty;
-
-        return (process.ExitCode, stderr);
+        return await RunKubectlProcessAsync($"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()} --token {token}", ct);
     }
 
     private string? TryAcquireFreshAzureToken()

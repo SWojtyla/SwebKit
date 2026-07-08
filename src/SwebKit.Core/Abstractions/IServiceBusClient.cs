@@ -1,3 +1,4 @@
+using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 
 namespace SwebKit.Core.Abstractions;
@@ -40,10 +41,10 @@ public interface IServiceBusClient
 public interface IServiceBusClientFactory
 {
     /// <summary>Creates a new <see cref="IServiceBusClient"/> from a raw connection string.</summary>
-    IServiceBusClient Create(string connectionString);
+    IServiceBusClient Create(string connectionString, SbTransportType transportType = SbTransportType.Amqp);
 
     /// <summary>Creates a new <see cref="IServiceBusClient"/> authenticated via Microsoft Entra ID (DefaultAzureCredential).</summary>
-    IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace);
+    IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace, SbTransportType transportType = SbTransportType.Amqp);
 
     /// <summary>
     /// Parses the fully qualified namespace from a Service Bus connection string without creating a client.

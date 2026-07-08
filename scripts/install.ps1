@@ -164,7 +164,32 @@ else {
 # 6. Install
 # ---------------------------------------------------------------------------
 Write-Step "Installing SwebKit..."
-Add-AppxPackage -Path $msix.FullName -ForceApplicationShutdown
+
+try {
+    Add-AppxPackage -Path $msix.FullName -ForceApplicationShutdown
+}
+catch {
+    # This script always publishes the same fixed package version, so a rebuild with code
+    # changes but no version bump has the same identity as the already-installed package —
+    # Windows blocks that (HRESULT 0x80073CFB) instead of silently upgrading it. Remove the
+    # stale package and retry once instead of making the user do it by hand; this is what
+    # "safe to re-run any time" above actually promises.
+    $isSameIdentityConflict = $_.Exception.Message -match '0x80073CFB' -or
+    $_.Exception.Message -match 'same identity as an already-installed package'
+
+    if (-not $isSameIdentityConflict) {
+        throw
+    }
+
+    Write-Host "An older build with the same package version is already installed — removing it and retrying..." -ForegroundColor Yellow
+
+    Get-AppxPackage -Name "*SwebKit*" | ForEach-Object {
+        Remove-AppxPackage -Package $_.PackageFullName -ErrorAction Stop
+    }
+
+    Add-AppxPackage -Path $msix.FullName -ForceApplicationShutdown
+}
+
 Write-Host "SwebKit installed." -ForegroundColor Green
 
 # ---------------------------------------------------------------------------

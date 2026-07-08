@@ -107,6 +107,25 @@ public sealed class ServiceBusNamespaceBootstrapperTests
         Assert.Equal(store.CredentialValue, factory.LastConnectionString);
     }
 
+    [Fact]
+    public async Task ConnectAsync_AmqpWebSocketsTransport_PassesTransportTypeToFactory()
+    {
+        var store = new FakeCredentialStore { CredentialValue = "Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc=" };
+        var fakeClient = new FakeServiceBusClient();
+        var factory = new CapturingServiceBusClientFactory(fakeClient);
+        var bootstrapper = new ServiceBusNamespaceBootstrapper(store, factory);
+
+        await bootstrapper.ConnectAsync(new ServiceBusNamespace
+        {
+            Alias = "orders-prd",
+            FullyQualifiedNamespace = "orders-prd.servicebus.windows.net",
+            CredentialKey = "orders-key",
+            TransportType = SbTransportType.AmqpWebSockets
+        });
+
+        Assert.Equal(SbTransportType.AmqpWebSockets, factory.LastTransportType);
+    }
+
     private sealed class FakeCredentialStore : ICredentialStore
     {
         public string? CredentialValue { get; set; }
@@ -122,10 +141,10 @@ public sealed class ServiceBusNamespaceBootstrapperTests
 
     private sealed class NullServiceBusClientFactory : IServiceBusClientFactory
     {
-        public IServiceBusClient Create(string connectionString) =>
+        public IServiceBusClient Create(string connectionString, SbTransportType transportType = SbTransportType.Amqp) =>
             throw new InvalidOperationException("Factory.Create should not be called in this test.");
 
-        public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace) =>
+        public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace, SbTransportType transportType = SbTransportType.Amqp) =>
             throw new InvalidOperationException("Factory.CreateWithEntra should not be called in this test.");
 
         public string ParseFullyQualifiedNamespace(string connectionString) =>
@@ -136,16 +155,22 @@ public sealed class ServiceBusNamespaceBootstrapperTests
     {
         private readonly IServiceBusClient _client;
         public string? LastConnectionString { get; private set; }
+        public SbTransportType? LastTransportType { get; private set; }
 
         public CapturingServiceBusClientFactory(IServiceBusClient client) => _client = client;
 
-        public IServiceBusClient Create(string connectionString)
+        public IServiceBusClient Create(string connectionString, SbTransportType transportType = SbTransportType.Amqp)
         {
             LastConnectionString = connectionString;
+            LastTransportType = transportType;
             return _client;
         }
 
-        public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace) => _client;
+        public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace, SbTransportType transportType = SbTransportType.Amqp)
+        {
+            LastTransportType = transportType;
+            return _client;
+        }
 
         public string ParseFullyQualifiedNamespace(string connectionString) =>
             connectionString.Split(';')[0].Replace("Endpoint=sb://", string.Empty);

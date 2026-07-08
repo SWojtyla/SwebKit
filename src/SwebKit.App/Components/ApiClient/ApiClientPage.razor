@@ -212,7 +212,8 @@
                                         OnRequestSelected="OnRequestSelectedAsync" OnCollectionSelected="OnCollectionSelectedAsync"
                                         OnAddFolder="OnAddFolderAsync" OnAddRequest="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
                                         OnDeleteNode="OnDeleteNodeAsync" OnLinkedRootSelected="OnLinkedRootSelectedAsync" OnRenameCollection="OnRenameCollectionAsync"
-                                        OnDeleteCollection="OnDeleteCollectionAsync" OnLinkCollectionToRepo="OnLinkCollectionToRepoAsync" />
+                                        OnDeleteCollection="OnDeleteCollectionAsync" OnLinkCollectionToRepo="OnLinkCollectionToRepoAsync"
+                                        OnMoveNode="OnMoveNodeAsync" />
                     }
                 </div>
 
@@ -1473,6 +1474,43 @@ expectedStamp);
         return true;
     }
 
+    /// <summary>
+    /// Runs a structural linked-collection filesystem operation (delete/create/rename/move) and
+    /// surfaces any failure via <see cref="_linkedSaveError"/> instead of silently no-op'ing.
+    /// </summary>
+    private async Task<bool> TryRunLinkedFileOperationAsync(Func<Task> operation)
+    {
+        try
+        {
+            await operation();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            _linkedSaveError = ex.Message;
+            await InvokeAsync(StateHasChanged);
+            return false;
+        }
+
+        _linkedSaveError = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Reloads linked roots from disk after a successful structural mutation and re-points
+    /// <see cref="_activeCollection"/> at the freshly-parsed collection (same refresh pattern as
+    /// <see cref="SaveActiveCollectionAsync"/>).
+    /// </summary>
+    private async Task RefreshAfterLinkedMutationAsync(string collectionId)
+    {
+        await LoadLinkedRootsAsync();
+        var refreshed = _collections.FirstOrDefault(collection => collection.Id == collectionId);
+        if (refreshed is not null)
+        {
+            _activeCollection = refreshed;
+        }
+    }
+
     private async Task ReloadLinkedConflictAsync()
     {
         if (_linkedSaveConflict is null) return;
@@ -1587,7 +1625,7 @@ expectedStamp);
     private async Task OnAddFolderAsync((string CollectionId, ApiCollectionNode ParentNode) args)
     {
         var collection = _collections.FirstOrDefault(c => c.Id == args.CollectionId);
-        if (collection is null || IsLinkedCollection(collection.Id))
+        if (collection is null)
             return;
 
         var folder = new ApiCollectionNode
@@ -1599,12 +1637,29 @@ expectedStamp);
         };
 
         ActivateCollection(collection);
-        if (args.ParentNode.Id.StartsWith("__col__", StringComparison.Ordinal))
+        var isRoot = args.ParentNode.Id.StartsWith("__col__", StringComparison.Ordinal);
+        if (isRoot)
             collection.Nodes.Add(folder);
         else
             AddNodeToParent(collection.Nodes, args.ParentNode.Id, folder);
-        await CollectionRepo.UpdateCollectionAsync(collection);
-        _collections = BuildCombinedCollections();
+
+        var linkedRoot = FindLinkedRootForCollection(collection.Id);
+        if (linkedRoot is not null)
+        {
+            if (!await TryRunLinkedFileOperationAsync(() =>
+                LinkedFileService.CreateFolderAsync(linkedRoot.ApiRootPath, collection, isRoot ? null : args.ParentNode, folder.Name)))
+            {
+                return;
+            }
+
+            await RefreshAfterLinkedMutationAsync(collection.Id);
+        }
+        else
+        {
+            await CollectionRepo.UpdateCollectionAsync(collection);
+            _collections = BuildCombinedCollections();
+        }
+
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -1645,28 +1700,55 @@ expectedStamp);
     private async Task OnRenameNodeAsync((ApiCollectionNode Node, string NewName) args)
     {
         if (_activeCollection is null) return;
-        if (IsLinkedCollection(_activeCollection.Id) && args.Node.Type == ApiCollectionNodeType.Folder)
-            return;
 
         RenameNodeInTree(_activeCollection.Nodes, args.Node.Id, args.NewName);
         if (args.Node.Request is not null)
             args.Node.Request.Name = args.NewName;
         _selectedRequest = args.Node.Request ?? _selectedRequest;
-        if (IsLinkedCollection(_activeCollection.Id) && args.Node.Request is not null)
+
+        var linkedRoot = FindLinkedRootForCollection(_activeCollection.Id);
+        if (linkedRoot is not null && args.Node.Request is not null)
+        {
             await SaveActiveCollectionAsync();
+        }
+        else if (linkedRoot is not null)
+        {
+            if (!await TryRunLinkedFileOperationAsync(() =>
+                LinkedFileService.RenameFolderAsync(linkedRoot.ApiRootPath, _activeCollection, args.Node.Id, args.NewName)))
+            {
+                return;
+            }
+
+            await RefreshAfterLinkedMutationAsync(_activeCollection.Id);
+        }
         else
+        {
             await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = BuildCombinedCollections();
+            _collections = BuildCombinedCollections();
+        }
+
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private async Task OnDeleteNodeAsync(ApiCollectionNode node)
     {
         if (_activeCollection is null) return;
-        if (IsLinkedCollection(_activeCollection.Id))
-            return;
 
-        RemoveNodeFromTree(_activeCollection.Nodes, node.Id);
+        var collection = _activeCollection;
+        var linkedRoot = FindLinkedRootForCollection(collection.Id);
+        if (linkedRoot is not null)
+        {
+            var operation = node.Type == ApiCollectionNodeType.Folder
+                ? () => LinkedFileService.DeleteFolderAsync(linkedRoot.ApiRootPath, collection, node.Id)
+                : node.Request is not null
+                    ? () => LinkedFileService.DeleteRequestAsync(linkedRoot.ApiRootPath, collection, node.Request.Id)
+                    : (Func<Task>?)null;
+
+            if (operation is null) return;
+            if (!await TryRunLinkedFileOperationAsync(operation)) return;
+        }
+
+        RemoveNodeFromTree(collection.Nodes, node.Id);
 
         if (_selectedRequestId is not null &&
             (node.Request?.Id == _selectedRequestId ||
@@ -1677,8 +1759,16 @@ expectedStamp);
             _isDirty = false;
         }
 
-        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = BuildCombinedCollections();
+        if (linkedRoot is not null)
+        {
+            await RefreshAfterLinkedMutationAsync(collection.Id);
+        }
+        else
+        {
+            await CollectionRepo.UpdateCollectionAsync(collection);
+            _collections = BuildCombinedCollections();
+        }
+
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -1686,20 +1776,30 @@ expectedStamp);
     {
         var collection = _collections.FirstOrDefault(c => c.Id == args.CollectionId);
         if (collection is null) return;
-        if (IsLinkedCollection(collection.Id))
-            return;
 
-        collection.Name = args.NewName;
-        await CollectionRepo.UpdateCollectionAsync(collection);
-        _collections = BuildCombinedCollections();
+        var linkedRoot = FindLinkedRootForCollection(collection.Id);
+        if (linkedRoot is not null)
+        {
+            if (!await TryRunLinkedFileOperationAsync(() =>
+                LinkedFileService.RenameCollectionDirectoryAsync(linkedRoot.ApiRootPath, collection, args.NewName)))
+            {
+                return;
+            }
+
+            await RefreshAfterLinkedMutationAsync(collection.Id);
+        }
+        else
+        {
+            collection.Name = args.NewName;
+            await CollectionRepo.UpdateCollectionAsync(collection);
+            _collections = BuildCombinedCollections();
+        }
+
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private Task OnDeleteCollectionAsync(string collectionId)
     {
-        if (IsLinkedCollection(collectionId))
-            return Task.CompletedTask;
-
         var collection = _collections.FirstOrDefault(c => c.Id == collectionId);
         _pendingDeleteCollectionId = collectionId;
         _pendingDeleteCollectionName = collection?.Name ?? "this collection";
@@ -1710,10 +1810,27 @@ expectedStamp);
     {
         if (_pendingDeleteCollectionId is null) return;
         var id = _pendingDeleteCollectionId;
+        var collection = _collections.FirstOrDefault(c => c.Id == id);
         _pendingDeleteCollectionId = null;
         _pendingDeleteCollectionName = null;
-        await CollectionRepo.DeleteCollectionAsync(id);
-        _collections = BuildCombinedCollections();
+
+        var linkedRoot = collection is not null ? FindLinkedRootForCollection(collection.Id) : null;
+        if (linkedRoot is not null && collection is not null)
+        {
+            if (!await TryRunLinkedFileOperationAsync(() =>
+                LinkedFileService.DeleteCollectionDirectoryAsync(linkedRoot.ApiRootPath, collection)))
+            {
+                return;
+            }
+
+            await LoadLinkedRootsAsync();
+        }
+        else
+        {
+            await CollectionRepo.DeleteCollectionAsync(id);
+            _collections = BuildCombinedCollections();
+        }
+
         if (_activeCollection?.Id == id)
         {
             _activeCollection = _collections.FirstOrDefault();
@@ -1721,6 +1838,41 @@ expectedStamp);
             _selectedRequestId = null;
             _isDirty = false;
         }
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    /// <summary>
+    /// Drag-and-drop reorder/reparent. Restricted to moves within the same collection — the
+    /// dragged node and its new parent must both belong to <paramref name="args"/>.CollectionId.
+    /// </summary>
+    private async Task OnMoveNodeAsync((string CollectionId, ApiCollectionNode DraggedNode, ApiCollectionNode? NewParent, int? NewIndex) args)
+    {
+        var collection = _collections.FirstOrDefault(c => c.Id == args.CollectionId);
+        if (collection is null) return;
+        if (args.NewParent is not null && args.DraggedNode.Id == args.NewParent.Id) return;
+
+        ActivateCollection(collection);
+
+        if (!RemoveNodeFromTree(collection.Nodes, args.DraggedNode.Id)) return;
+        InsertNodeAtParent(collection.Nodes, args.NewParent?.Id, args.DraggedNode, args.NewIndex);
+
+        var linkedRoot = FindLinkedRootForCollection(collection.Id);
+        if (linkedRoot is not null)
+        {
+            if (!await TryRunLinkedFileOperationAsync(() =>
+                LinkedFileService.MoveNodeAsync(linkedRoot.ApiRootPath, collection, args.DraggedNode, args.NewParent)))
+            {
+                return;
+            }
+
+            await RefreshAfterLinkedMutationAsync(collection.Id);
+        }
+        else
+        {
+            await CollectionRepo.UpdateCollectionAsync(collection);
+            _collections = BuildCombinedCollections();
+        }
+
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -1748,6 +1900,40 @@ expectedStamp);
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Like <see cref="AddNodeToParent"/> but supports inserting at a specific sibling index
+    /// (used by drag-and-drop reorder). <paramref name="parentId"/> of <c>null</c> targets the
+    /// collection's top-level <paramref name="nodes"/> list.
+    /// </summary>
+    private static bool InsertNodeAtParent(List<ApiCollectionNode> nodes, string? parentId, ApiCollectionNode newNode, int? index)
+    {
+        if (parentId is null)
+        {
+            InsertAt(nodes, newNode, index);
+            return true;
+        }
+
+        foreach (var node in nodes)
+        {
+            if (node.Id == parentId && node.Type == ApiCollectionNodeType.Folder)
+            {
+                InsertAt(node.Children, newNode, index);
+                return true;
+            }
+            if (node.Type == ApiCollectionNodeType.Folder && InsertNodeAtParent(node.Children, parentId, newNode, index))
+                return true;
+        }
+        return false;
+    }
+
+    private static void InsertAt(List<ApiCollectionNode> siblings, ApiCollectionNode node, int? index)
+    {
+        if (index is int idx && idx >= 0 && idx <= siblings.Count)
+            siblings.Insert(idx, node);
+        else
+            siblings.Add(node);
     }
 
     private static bool RenameNodeInTree(List<ApiCollectionNode> nodes, string nodeId, string newName)

@@ -6,21 +6,23 @@
 
     <div class="collection-tree__search">
         <label for="collection-tree-search" class="sr-only">Filter collection tree</label>
-        <input type="text" id="collection-tree-search" placeholder="Filter..." class="collection-tree__search-input" value="@_filter"
-               @oninput="OnFilterInput" aria-label="Filter collection tree" 
+        <input type="text" id="collection-tree-search" placeholder="Filter..." class="collection-tree__search-input"
+               value="@_filter" @oninput="OnFilterInput" aria-label="Filter collection tree"
                aria-describedby="collection-tree-search-help" />
         <span id="collection-tree-search-help" class="sr-only">Type to filter API requests and collections</span>
     </div>
 
     <div class="collection-tree__rows" role="tree" aria-label="API request collection">
         <Virtualize Items="@_visibleNodes" Context="node" ItemSize="28" OverscanCount="8">
-            <div @key="node.Id" class="collection-tree__row @GetRowClass(node)"
+            <div @key="node.Id" class="collection-tree__row @GetRowClass(node) @GetDragClass(node)"
                  style="--depth: @node.Depth" role="treeitem"
-                 aria-selected="@(node.Node.Request?.Id == SelectedRequestId)" 
+                 aria-selected="@(node.Node.Request?.Id == SelectedRequestId)"
                  aria-expanded="@(node.Node.Type == ApiCollectionNodeType.Folder && node.IsExpanded)"
-                 aria-level="@(node.Depth + 1)"
-                 tabindex="@(node.Node.Request?.Id == SelectedRequestId ? 0 : -1)"
-                 @onclick="() => OnRowClickAsync(node)"
+                 aria-level="@(node.Depth + 1)" tabindex="@(node.Node.Request?.Id == SelectedRequestId ? 0 : -1)"
+                 draggable="@(CanDrag(node) ? "true" : "false")" @ondragstart="() => OnDragStart(node)"
+                 @ondragover="() => OnDragOver(node)" @ondragover:preventDefault="@CanDrop(node)"
+                 @ondragleave="() => OnDragLeave(node)" @ondrop="e => OnDropAsync(node)" @ondrop:preventDefault="true"
+                 @ondrop:stopPropagation="true" @ondragend="OnDragEnd" @onclick="() => OnRowClickAsync(node)"
                  @oncontextmenu="e => ShowContextMenu(e, node)" @oncontextmenu:preventDefault="true"
                  @onkeydown:preventDefault="true" @onkeydown="e => HandleTreeKeyDown(e, node)">
 
@@ -119,11 +121,15 @@
             @if (isFolder)
             {
                 <button class="ctx-item" @onclick="AddSubFolderCtxAsync">
-                    <span class="ctx-item-icon" aria-hidden="true"><FluentIcon Value="@_iconAddFolder" Width="12px" /></span>
+                    <span class="ctx-item-icon" aria-hidden="true">
+                        <FluentIcon Value="@_iconAddFolder" Width="12px" />
+                    </span>
                     <span>New sub-folder</span>
                 </button>
                 <button class="ctx-item" @onclick="AddRequestCtxAsync">
-                    <span class="ctx-item-icon" aria-hidden="true"><FluentIcon Value="@_iconAddRequest" Width="12px" /></span>
+                    <span class="ctx-item-icon" aria-hidden="true">
+                        <FluentIcon Value="@_iconAddRequest" Width="12px" />
+                    </span>
                     <span>New request here</span>
                 </button>
                 <div class="ctx-separator"></div>
@@ -131,18 +137,24 @@
             @if (isCollRoot && !IsLinkedCollection(_ctxNode.CollectionId))
             {
                 <button class="ctx-item" @onclick="LinkToRepoCtxAsync">
-                    <span class="ctx-item-icon" aria-hidden="true"><FluentIcon Value="@_iconLinked" Width="12px" /></span>
+                    <span class="ctx-item-icon" aria-hidden="true">
+                        <FluentIcon Value="@_iconLinked" Width="12px" />
+                    </span>
                     <span>Link to Git repo…</span>
                 </button>
                 <div class="ctx-separator"></div>
             }
             <button class="ctx-item" @onclick="BeginRenameCtx">
-                <span class="ctx-item-icon" aria-hidden="true"><FluentIcon Value="@_iconRename" Width="12px" /></span>
+                <span class="ctx-item-icon" aria-hidden="true">
+                    <FluentIcon Value="@_iconRename" Width="12px" />
+                </span>
                 <span>@(isCollRoot ? "Rename collection" : "Rename")</span>
             </button>
             <div class="ctx-separator"></div>
             <button class="ctx-item destructive" @onclick="DeleteNodeCtxAsync">
-                <span class="ctx-item-icon" aria-hidden="true"><FluentIcon Value="@_iconDelete" Width="12px" /></span>
+                <span class="ctx-item-icon" aria-hidden="true">
+                    <FluentIcon Value="@_iconDelete" Width="12px" />
+                </span>
                 <span>@(isCollRoot ? "Delete collection" : "Delete")</span>
             </button>
         </div>
@@ -166,15 +178,24 @@
     [Parameter] public EventCallback<(string CollectionId, string NewName)> OnRenameCollection { get; set; }
     [Parameter] public EventCallback<string> OnDeleteCollection { get; set; }
     [Parameter] public EventCallback<string> OnLinkCollectionToRepo { get; set; }
+    [Parameter]
+    public EventCallback<(string CollectionId, ApiCollectionNode DraggedNode, ApiCollectionNode? NewParent, int?
+NewIndex)> OnMoveNode
+    { get; set; }
 
     // Icon cache for performance - prevents re-renders on every parent render
-    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconChevronRight = new Icons.Regular.Size16.ChevronRight();
-    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconChevronDown = new Icons.Regular.Size16.ChevronDown();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconChevronRight = new
+Icons.Regular.Size16.ChevronRight();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconChevronDown = new
+Icons.Regular.Size16.ChevronDown();
     private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconFolder = new Icons.Regular.Size16.Folder();
-    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconFolderOpen = new Icons.Regular.Size16.FolderOpen();
-    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconCollection = new Icons.Regular.Size16.Folder();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconFolderOpen = new
+Icons.Regular.Size16.FolderOpen();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconCollection = new
+Icons.Regular.Size16.Folder();
     private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconLinked = new Icons.Regular.Size16.Globe();
-    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconAddFolder = new Icons.Regular.Size16.AddSquare();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconAddFolder = new
+Icons.Regular.Size16.AddSquare();
     private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconAddRequest = new Icons.Regular.Size16.Add();
     private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconRename = new Icons.Regular.Size16.Edit();
     private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconDelete = new Icons.Regular.Size16.Delete();
@@ -514,6 +535,134 @@
         if (node.Node.Id == $"__col__{ActiveCollectionId}" && ActiveCollectionId is not null)
             return "collection-tree__row--active-collection";
         return string.Empty;
+    }
+
+    // ── Drag-and-drop reorder (native HTML5 drag events) ────────────────────────
+    // Restricted to moves within a single collection (see ApiClientPage.OnMoveNodeAsync).
+
+    private FlatTreeNode? _draggedNode;
+    private string? _dragOverNodeId;
+
+    private static bool CanDrag(FlatTreeNode node) =>
+        node.Kind == FlatTreeNodeKind.Node && !node.Node.Id.StartsWith("__col__", StringComparison.Ordinal);
+
+    private static bool CanDrop(FlatTreeNode node) => node.Kind == FlatTreeNodeKind.Node;
+
+    private string GetDragClass(FlatTreeNode node)
+    {
+        if (_draggedNode is not null && _draggedNode.Id == node.Id)
+            return "collection-tree__row--dragging";
+        if (_dragOverNodeId == node.Id && _draggedNode is not null && _draggedNode.Id != node.Id)
+            return "collection-tree__row--drop-target";
+        return string.Empty;
+    }
+
+    private void OnDragStart(FlatTreeNode node)
+    {
+        if (!CanDrag(node)) return;
+        _draggedNode = node;
+    }
+
+    private void OnDragOver(FlatTreeNode node)
+    {
+        if (_draggedNode is null || !CanDrop(node) || _dragOverNodeId == node.Id) return;
+        _dragOverNodeId = node.Id;
+        StateHasChanged();
+    }
+
+    private void OnDragLeave(FlatTreeNode node)
+    {
+        if (_dragOverNodeId != node.Id) return;
+        _dragOverNodeId = null;
+        StateHasChanged();
+    }
+
+    private void OnDragEnd()
+    {
+        _draggedNode = null;
+        _dragOverNodeId = null;
+        StateHasChanged();
+    }
+
+    private async Task OnDropAsync(FlatTreeNode target)
+    {
+        var dragged = _draggedNode;
+        _draggedNode = null;
+        _dragOverNodeId = null;
+        StateHasChanged();
+
+        if (dragged is null || !CanDrop(target)) return;
+        if (dragged.Id == target.Id) return;
+        if (dragged.CollectionId != target.CollectionId) return; // cross-collection moves not supported
+        if (dragged.Node.Type == ApiCollectionNodeType.Folder && IsDescendant(dragged, target)) return;
+
+        ApiCollectionNode? newParent;
+        int? newIndex;
+
+        if (target.Node.Type == ApiCollectionNodeType.Folder)
+        {
+            // Drop onto a folder or the collection root row → reparent as its last child.
+            newParent = target.Node.Id.StartsWith("__col__", StringComparison.Ordinal) ? null : target.Node;
+            newIndex = null;
+        }
+        else
+        {
+            // Drop onto a request row → reorder as a sibling at that position.
+            newParent = FindParentOfFlatNode(target);
+            newIndex = ComputeSiblingIndex(target, newParent);
+        }
+
+        await OnMoveNode.InvokeAsync((target.CollectionId, dragged.Node, newParent, newIndex));
+    }
+
+    /// <summary>
+    /// True when <paramref name="candidate"/> is nested anywhere inside <paramref name="ancestor"/>'s
+    /// subtree. <see cref="_flatNodes"/> is a pre-order DFS, so descendants of a node are exactly the
+    /// contiguous run of rows after it whose depth is greater than its own.
+    /// </summary>
+    private bool IsDescendant(FlatTreeNode ancestor, FlatTreeNode candidate)
+    {
+        var startIndex = _flatNodes.FindIndex(n => n.Id == ancestor.Id);
+        if (startIndex < 0) return false;
+
+        for (var i = startIndex + 1; i < _flatNodes.Count; i++)
+        {
+            if (_flatNodes[i].Depth <= ancestor.Depth) break;
+            if (_flatNodes[i].Id == candidate.Id) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Finds the immediate parent folder node of <paramref name="target"/> by walking backwards
+    /// through the flattened (pre-order) tree for the nearest preceding shallower row. Returns
+    /// <c>null</c> when the parent is the collection root itself.
+    /// </summary>
+    private ApiCollectionNode? FindParentOfFlatNode(FlatTreeNode target)
+    {
+        var index = _flatNodes.FindIndex(n => n.Id == target.Id);
+        for (var i = index - 1; i >= 0; i--)
+        {
+            var candidate = _flatNodes[i];
+            if (candidate.Kind == FlatTreeNodeKind.Group) continue;
+            if (candidate.Depth < target.Depth)
+            {
+                return candidate.Node.Id.StartsWith("__col__", StringComparison.Ordinal) ? null : candidate.Node;
+            }
+        }
+
+        return null;
+    }
+
+    private int? ComputeSiblingIndex(FlatTreeNode target, ApiCollectionNode? parent)
+    {
+        var collection = Collections.FirstOrDefault(c => c.Id == target.CollectionId);
+        if (collection is null) return null;
+
+        var siblings = parent?.Children ?? collection.Nodes;
+        var index = siblings.FindIndex(n => n.Id == target.Node.Id);
+        return index >= 0 ? index : null;
     }
 
     private async Task HandleTreeKeyDown(KeyboardEventArgs e, FlatTreeNode node)

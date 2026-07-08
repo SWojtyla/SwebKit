@@ -146,6 +146,20 @@
 }
 
 /* ===================================================================
+   DRAG AND DROP
+   =================================================================== */
+
+.collection-tree__row--dragging {
+    opacity: 0.5;
+}
+
+.collection-tree__row--drop-target {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+/* ===================================================================
    CHEVRON (EXPAND/COLLAPSE)
    =================================================================== */
 

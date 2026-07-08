@@ -97,15 +97,16 @@
 /* ── Main content area ── */
 .aks-content {
     flex: 1;
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: row;
     overflow: hidden;
     min-height: 0;
 }
 
-.aks-content.side-open {
-    grid-template-columns: 1fr auto;
-}
+/* Main resource list takes remaining space; the side panel (ResizablePanel)
+   owns its own draggable width, so we must NOT constrain it with a grid track —
+   that caused the panel to only fill part of its cell and made drag-resize
+   appear broken. A simple flex row lets the panel's own width be authoritative. */
 
 /* ── Unified right-side panel column ── */
 .aks-panels-col {
@@ -220,6 +221,7 @@
 
 /* ── Resource panel (main table area) ── */
 .aks-resource-panel {
+    flex: 1;
     display: flex;
     flex-direction: column;
     overflow: hidden;
