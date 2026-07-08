@@ -13,8 +13,54 @@
 
 .message-list-view__toolbar {
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 6px 12px;
     background: color-mix(in srgb, var(--color-table-toolbar-bg, var(--color-surface)) 78%, var(--color-panel-card, var(--color-surface)));
     border-bottom-color: var(--color-table-header-border, var(--color-border));
+}
+
+/* Single dense row — ribbon-style: view controls, then a filter box that grows
+   to soak up whatever space is left, then actions, then the primary CTA —
+   instead of two half-empty stacked rows. Only wraps as a last resort on
+   genuinely narrow windows. */
+.message-list-view__toolbar-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Logical toolbar groups — visually separate view/filter/action/primary clusters
+   instead of one unbroken row of ~20 controls. Groups themselves don't grow
+   (flex-grow: 0 by default) so only the filter group below absorbs slack. */
+.message-list-view__toolbar-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+    gap: 6px;
+    padding-right: 8px;
+    border-right: 1px solid color-mix(in srgb, var(--color-table-header-border, var(--color-border)) 55%, transparent);
+}
+
+.message-list-view__toolbar-group:last-child {
+    padding-right: 0;
+    border-right: none;
+}
+
+/* Filter group grows to fill the row's remaining width, like Office's
+   "Tell me"/search box — this is what eliminates the dead gap. */
+.message-list-view__toolbar-group--filter {
+    flex: 1 1 240px;
+    min-width: 200px;
+}
+
+.message-list-view__toolbar-group--primary {
+    border-right: none;
+    padding-right: 0;
 }
 
 .message-list-view__toolbar-select,
@@ -31,6 +77,36 @@
 .message-list-view__rule-select {
     padding: 3px 6px;
     font-size: 11px;
+}
+
+/* Native <select> elements render with OS chrome that clashes with the
+   button/pill styling around them. Strip that chrome and draw our own
+   arrow, matching the app-wide .filter-select-wrap convention. */
+.message-list-view__select-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.message-list-view__select-wrap::after {
+    content: '';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--color-text-muted);
+    pointer-events: none;
+}
+
+.message-list-view__select-wrap .message-list-view__toolbar-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 22px;
+    min-height: 24px;
 }
 
 .message-list-view__menu-anchor {
@@ -283,11 +359,10 @@
 }
 
 .message-list-view__filter-group {
-    flex: 1 1 260px;
+    flex: 1 1 160px;
     display: flex;
     gap: 0;
     min-width: 0;
-    max-width: 440px;
 }
 
 .message-list-view__filter-input {
@@ -325,16 +400,20 @@
     cursor: pointer;
 }
 
+/* Softer "on" pill — a saturated solid fill reads as an alarm/status chip
+   rather than a toggle state, and clashes with the muted toolbar around it. */
 .message-list-view__state-toggle.is-active {
-    background: var(--color-accent);
-    border-color: color-mix(in srgb, var(--color-accent) 70%, white);
-    color: var(--color-solid-foreground, white);
+    background: var(--color-accent-subtle);
+    border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-table-header-border, var(--color-border)));
+    color: var(--color-accent);
+    font-weight: 600;
 }
 
 .message-list-view__state-toggle--advanced.is-active {
-    background: color-mix(in srgb, var(--color-accent-2, var(--color-accent)) 76%, var(--color-panel-card, var(--color-surface)));
-    border-color: color-mix(in srgb, var(--color-accent-2, var(--color-accent)) 46%, var(--color-table-header-border, var(--color-border)));
-    color: var(--color-text);
+    background: color-mix(in srgb, var(--color-accent-2, var(--color-accent)) 16%, var(--color-panel-card, var(--color-surface)));
+    border-color: color-mix(in srgb, var(--color-accent-2, var(--color-accent)) 45%, var(--color-table-header-border, var(--color-border)));
+    color: var(--color-accent-2, var(--color-accent));
+    font-weight: 600;
 }
 
 .message-list-view__advanced-panel {
@@ -417,7 +496,7 @@
 .message-list-view__summary-bar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
     background: color-mix(in srgb, var(--color-panel-card, var(--color-surface)) 92%, var(--color-table-toolbar-bg, var(--color-surface)));
 }
@@ -425,6 +504,10 @@
 .message-list-view__summary-bar--secondary {
     justify-content: flex-start;
     background: var(--color-panel-card, var(--color-surface));
+}
+
+.message-list-view__summary-sep {
+    color: var(--color-table-header-border, var(--color-border));
 }
 
 .message-list-view__save-filter-dialog {

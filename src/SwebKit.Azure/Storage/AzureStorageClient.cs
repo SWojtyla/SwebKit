@@ -1,9 +1,9 @@
 using Azure;
-using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Sas;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
 using AzureBlobProperties = Azure.Storage.Blobs.Models.BlobProperties;
 using AzureBlobUploadOptions = Azure.Storage.Blobs.Models.BlobUploadOptions;
 using BlobDownloadOptions = Azure.Storage.Blobs.Models.BlobDownloadOptions;
@@ -33,9 +33,10 @@ public class AzureStorageClient : IStorageClient
         }
         else if (config.UseAad && !string.IsNullOrEmpty(config.AccountName))
         {
+            // See AzureCredentialFactory for why EnvironmentCredential is excluded.
             _blobService = new BlobServiceClient(
                 new Uri($"https://{config.AccountName}.blob.core.windows.net"),
-                new DefaultAzureCredential());
+                AzureCredentialFactory.CreateDefault());
         }
         else
         {

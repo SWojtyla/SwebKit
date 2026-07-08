@@ -1,7 +1,10 @@
 @using SwebKit.Agents
+@using SwebKit.App.Services
+@using Markdig
 @inject IAgentChatService Agent
 @inject UserSettingsRepository UserSettings
 @inject IJSRuntime JS
+@inject ILogger<AgentChatPanel> Logger
 @implements IDisposable
 
 <aside class="agent-panel @(IsOpen ? "" : "agent-panel--closed")" aria-label="AI Agent chat panel"
@@ -29,26 +32,33 @@
             <div class="agent-panel-header-actions">
                 @if (_showClearConfirm)
                 {
-                    <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="ConfirmClearHistory"
-                            title="Confirm clear history" style="font-size: 11px;">
+                    <AppButton CssClass="agent-panel-header-btn" Size="Small" Variant="Danger" OnClick="ConfirmClearHistory"
+                               Title="Confirm clear history">
                         Yes, clear
-                    </button>
-                    <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="@(() => _showClearConfirm = false)"
-                            title="Cancel">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
-                    </button>
+                    </AppButton>
+                    <AppIconButton CssClass="agent-panel-header-btn" Size="Small" Variant="Ghost"
+                                   OnClick="@(() => _showClearConfirm = false)" Title="Cancel" Label="Cancel clear history">
+                        <Icon>
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
+                        </Icon>
+                    </AppIconButton>
                 }
                 else
                 {
-                    <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="@(() => _showClearConfirm = true)"
-                            disabled="@(Agent.HistoryMessageCount == 0)" title="Clear conversation history">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="14px" />
-                    </button>
+                    <AppIconButton CssClass="agent-panel-header-btn" Size="Small" Variant="Ghost"
+                                   OnClick="@(() => _showClearConfirm = true)" Disabled="@(Agent.HistoryMessageCount == 0)"
+                                   Title="Clear conversation history" Label="Clear conversation history">
+                        <Icon>
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="14px" />
+                        </Icon>
+                    </AppIconButton>
                 }
-                <button class="top-bar-icon-btn agent-panel-header-btn" @onclick="OnClose" title="Close AI Agent panel"
-                        aria-label="Close AI Agent panel">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.ChevronDoubleRight())" Width="14px" />
-                </button>
+                <AppIconButton CssClass="agent-panel-header-btn" Size="Small" Variant="Ghost" OnClick="OnClose"
+                               Title="Close AI Agent panel" Label="Close AI Agent panel">
+                    <Icon>
+                        <FluentIcon Value="@(new Icons.Regular.Size16.ChevronDoubleRight())" Width="14px" />
+                    </Icon>
+                </AppIconButton>
             </div>
         </header>
 
@@ -86,7 +96,9 @@
                                 <span class="agent-elapsed">@msg.Elapsed.TotalSeconds.ToString("F1")s</span>
                             </div>
                         }
-                        <pre class="agent-bubble__text">@msg.Content</pre>
+                        <div class="agent-bubble__text agent-bubble__markdown">
+                            @RenderMarkdown(msg.Content)
+                        </div>
                     </div>
                 }
             }
@@ -125,6 +137,14 @@
         IReadOnlyList<string> ToolsUsed,
         TimeSpan Elapsed);
 
+    // Static counter: globally unique Mermaid source IDs across all rendered messages.
+    private static int _mermaidIdCounter;
+
+    // Shared pipeline with common extensions (tables, autolinks, strikethrough, task lists, etc.).
+    private static readonly MarkdownPipeline _markdownPipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .Build();
+
     private readonly List<ChatMessage> _messages = [];
     private string _inputText = string.Empty;
     private bool _isLoading;
@@ -134,8 +154,43 @@
 
     private bool _prevIsOpen;
     private bool _resizerNeedsInit;
+    // Deferred post-render work: set flags then let OnAfterRenderAsync act once the DOM is updated.
+    private bool _pendingScroll;
+    private bool _pendingMermaidRender;
 
     private bool _historyWarning => Agent.IsNearHistoryLimit;
+    private static MarkupString RenderMarkdown(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return new MarkupString(string.Empty);
+
+        // Intercept mermaid fences BEFORE Markdig sees them so they aren't treated as code blocks.
+        // Code is base64-encoded into a data attribute — this survives Markdig without whitespace mangling.
+        var processed = System.Text.RegularExpressions.Regex.Replace(
+            text,
+            @"```mermaid([\s\S]*?)```",
+            m =>
+            {
+                var code = m.Groups[1].Value.Trim();
+                var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(code));
+                var id = "mermaid-" + System.Threading.Interlocked.Increment(ref _mermaidIdCounter);
+                return $"""<div class="mermaid" id="{id}" data-mermaid-b64="{b64}"></div>""";
+            });
+
+        return new MarkupString(Markdown.ToHtml(processed, _markdownPipeline));
+    }
+
+    private async Task RenderMermaidAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("renderMermaidDiagrams");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Mermaid rendering error");
+        }
+    }
 
     protected override void OnParametersSet()
     {
@@ -153,6 +208,19 @@
         {
             _resizerNeedsInit = false;
             await InitResizerAsync();
+        }
+
+        // Run deferred work AFTER the DOM reflects the latest render.
+        if (_pendingScroll)
+        {
+            _pendingScroll = false;
+            await ScrollToBottomAsync();
+        }
+
+        if (_pendingMermaidRender)
+        {
+            _pendingMermaidRender = false;
+            await RenderMermaidAsync();
         }
     }
 
@@ -189,8 +257,9 @@
         _messages.Add(new ChatMessage(true, text, [], TimeSpan.Zero));
         _isLoading = true;
         _currentToolName = null;
-        StateHasChanged();
+        StateHasChanged(); // Safe: synchronous, before any await.
 
+        _cts?.Dispose();
         _cts = new CancellationTokenSource();
         try
         {
@@ -209,8 +278,11 @@
         {
             _isLoading = false;
             _currentToolName = null;
-            StateHasChanged();
-            await ScrollToBottomAsync();
+            // BL-2: dispatch on Blazor thread after async continuation.
+            // Set flags so OnAfterRenderAsync acts once the DOM is actually updated.
+            _pendingScroll = true;
+            _pendingMermaidRender = true;
+            await InvokeAsync(StateHasChanged);
         }
     }
 

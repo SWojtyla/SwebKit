@@ -103,7 +103,7 @@ public class AppStateService
     public void RefreshFromImportedState()
     {
         UseDemoData = _uiState.State.UseDemoData;
-        Initialized?.Invoke();
+        ConfigChanged?.Invoke();
         DemoModeChanged?.Invoke();
     }
 

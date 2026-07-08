@@ -1,7 +1,5 @@
 @inject AppStateService AppState
 @inject ITaskQueue TaskQueue
-@inject IJSRuntime JS
-@inject ILogger<DlqView> Logger
 @using SwebKit.Core.Models
 
 <div class="dlq-host">
@@ -14,7 +12,8 @@
         <div class="dlq-main">
             <MessageListView Client="Client" EntityPath="@EntityPath" IsDlqMode="true" ShowDlqColumns="true"
                              RefreshToken="@_refreshToken" MultiSelect="true" SelectedMessage="SelectedMessage"
-                             TracePivotFilter="@_dlqPivotFilter"
+                             TracePivotFilter="@_dlqPivotFilter" IsDetailPaneOpen="@(SelectedMessage is not null)"
+                             OnCloseDetails="CloseDetailPane"
                              OnMessageSelected="msg => { SelectedMessage = msg; StateHasChanged(); }"
                              OnMultiSelectionChanged="OnBatchSelectionChanged" />
 
@@ -61,14 +60,19 @@
             }
         </div>
 
-        <div @ref="_dlqSplitterRef" class="pane-splitter"></div>
-        <div @ref="_dlqDetailRef" class="details-pane">
-            <MessageDetailPane Message="SelectedMessage" OnApplyTracePivotFilter="ApplyDlqPivotFilter" />
-        </div>
+        @if (SelectedMessage is not null)
+        {
+            <SidePanel Visible="true" Title="Message details" DefaultWidth="340" MinWidth="200" MaxWidth="700"
+                       OnClose="CloseDetailPane">
+                <MessageDetailPane Message="SelectedMessage" OnApplyTracePivotFilter="ApplyDlqPivotFilter" />
+            </SidePanel>
+        }
     </div>
-</div> Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"
-IsProduction="@AppState.Config.IsProduction" RequireTyping="@AppState.Config.IsProduction" ConfirmLabel="Proceed"
-OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
+</div>
+
+<ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"
+               IsProduction="@AppState.Config.IsProduction" RequireTyping="@AppState.Config.IsProduction" ConfirmLabel="Proceed"
+               OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
 
 @code {
     [Parameter] public IServiceBusClient? Client { get; set; }
@@ -84,24 +88,13 @@ OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
     private Func<Task>? PendingAction;
     private List<SbMessage> _batchSelected = [];
     private bool _showBatchReplayPanel;
-    private ElementReference _dlqSplitterRef;
-    private ElementReference _dlqDetailRef;
-    private IJSObjectReference? _dlqSplitterHandle;
     private long _refreshToken;
     private string? _dlqPivotFilter;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private void CloseDetailPane()
     {
-        if (firstRender && _dlqSplitterHandle is null)
-        {
-            try
-            {
-                _dlqSplitterHandle = await JS.InvokeAsync<IJSObjectReference>(
-                    "SwebKitSplitter.init", _dlqSplitterRef, _dlqDetailRef,
-                    new { minWidth = 200, maxWidth = 700 });
-            }
-            catch (Exception ex) { Logger.LogDebug(ex, "JS interop failed: {Method}", "SwebKitSplitter.init"); }
-        }
+        SelectedMessage = null;
+        StateHasChanged();
     }
 
     private void OnBatchSelectionChanged(List<SbMessage> messages)

@@ -1,5 +1,4 @@
 @page "/settings"
-@using Microsoft.AspNetCore.Components.Forms
 @inject AppStateService AppState
 @inject UserSettingsRepository UserSettings
 @inject ConfigurationBundleService ConfigurationBundles
@@ -64,6 +63,10 @@
             <FluentIcon Value="@(new Icons.Regular.Size20.Bot())" Width="18px" />
             Agent
         </button>
+        <button class="@GetNavItemClass(DiagnosticsSection)" @onclick="@(() => SelectSection(DiagnosticsSection))">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Wrench())" Width="18px" />
+            Diagnostics
+        </button>
     </nav>
 
     @* ── Right content well ── *@
@@ -107,15 +110,12 @@
                     </p>
                 </div>
                 <div class="settings-transfer-strip__actions">
-                    <FluentInputFile class="settings-transfer-strip__picker" AnchorId="settings-transfer-bundle-trigger"
-                                     Accept=".json,application/json" MaximumFileCount="1" DragDropZoneVisible="false"
-                                     Disabled="@_isImportingBundle" OnInputFileChange="OnConfigurationBundleSelected" />
                     <FluentButton id="settings-transfer-bundle-trigger" Appearance="Appearance.Outline"
-                                  Disabled="@_isImportingBundle">
-                        @(_selectedConfigurationBundle is null ? "Choose bundle" : "Change bundle")
+                                  Disabled="@_isImportingBundle" @onclick="PickConfigurationBundleAsync">
+                        @(_selectedConfigurationBundlePath is null ? "Choose bundle" : "Change bundle")
                     </FluentButton>
                     <FluentButton Appearance="Appearance.Lightweight"
-                                  Disabled="@(_selectedConfigurationBundle is null || _isImportingBundle)"
+                                  Disabled="@(_selectedConfigurationBundlePath is null || _isImportingBundle)"
                                   @onclick="ImportConfigurationBundleAsync">
                         @(_isImportingBundle ? "Importing…" : "Import bundle")
                     </FluentButton>
@@ -124,9 +124,9 @@
                         @(_isExportingBundle ? "Exporting…" : "Export bundle")
                     </FluentButton>
                 </div>
-                @if (_selectedConfigurationBundle is not null)
+                @if (_selectedConfigurationBundlePath is not null)
                 {
-                    <p class="settings-transfer-strip__selection">Selected bundle: @_selectedConfigurationBundle.Name</p>
+                    <p class="settings-transfer-strip__selection">Selected bundle: @Path.GetFileName(_selectedConfigurationBundlePath)</p>
                 }
             </section>
 
@@ -225,20 +225,26 @@
                                value="@kv.Name" @onchange="async e => { kv.Name = e.Value?.ToString() ?? string.Empty; await SaveAsync(); }" />
                         <input type="text" class="settings-input settings-kv-row__url" placeholder="https://my-vault.vault.azure.net/"
                                value="@kv.Url" @onchange="async e => { kv.Url = e.Value?.ToString() ?? string.Empty; await SaveAsync(); }" />
-                        <button type="button" class="settings-kv-row__remove" title="Remove vault"
-                                @onclick="async () => { AppState.Config.KeyVaults.Remove(kv); await SaveAsync(); }">×</button>
+                        <AppIconButton Label="Remove vault" Variant="Ghost" Size="Small" CssClass="settings-kv-row__remove"
+                                       OnClick="async () => { AppState.Config.KeyVaults.Remove(kv); await SaveAsync(); }">
+                            <Icon>×</Icon>
+                        </AppIconButton>
                     </div>
                 }
 
-                <button type="button" class="settings-kv-add-btn"
-                        @onclick="async () => { AppState.Config.KeyVaults.Add(new SwebKit.Core.Domain.KeyVaultEntry()); await SaveAsync(); }">
+                <AppButton Variant="Secondary" Size="Small" CssClass="settings-kv-add-btn"
+                           OnClick="async () => { AppState.Config.KeyVaults.Add(new SwebKit.Core.Domain.KeyVaultEntry()); await SaveAsync(); }">
                     + Add Key Vault
-                </button>
+                </AppButton>
             </div>
             break;
 
         case AgentSection:
             <AgentConfigForm OnSaved="SaveAsync" />
+            break;
+
+        case DiagnosticsSection:
+            <DiagnosticsSettingsForm OnSaved="SaveAsync" />
             break;
 
         case ObservabilitySection:
@@ -332,6 +338,7 @@
     private const string ObservabilitySection = "observability";
     private const string ApiClientSection = "api-client";
     private const string AgentSection = "agent";
+    private const string DiagnosticsSection = "diagnostics";
 
     [CascadingParameter(Name = "Layout")] private MainLayout? _layout { get; set; }
     [SupplyParameterFromQuery(Name = "section")] private string? RequestedSection { get; set; }
@@ -346,7 +353,7 @@
     private string? _lastRequestedSection;
     private readonly CancellationTokenSource _liveChecksCts = new();
     private bool _isRunningLiveChecks;
-    private IBrowserFile? _selectedConfigurationBundle;
+    private string? _selectedConfigurationBundlePath;
     private bool _isExportingBundle;
     private bool _isImportingBundle;
 
@@ -372,6 +379,7 @@
         ObservabilitySection => "Observability",
         ApiClientSection => "API Client",
         AgentSection => "AI Agent",
+        DiagnosticsSection => "Diagnostics",
         _ => "Settings"
     };
 
@@ -388,6 +396,7 @@
         ObservabilitySection => "Review query limits and the Azure CLI identity model used for Application Insights access.",
         ApiClientSection => "Configure auto-save behavior and SSL verification for outgoing HTTP requests.",
         AgentSection => "Configure AI agent API key and settings for Mistral AI integration.",
+        DiagnosticsSection => "Manage structured file logging, log level, and log export for troubleshooting.",
         _ => "Manage workspace-specific configuration for the app."
     };
 
@@ -438,9 +447,23 @@
 
     }
 
-    private void OnConfigurationBundleSelected(InputFileChangeEventArgs e)
+    private async Task PickConfigurationBundleAsync()
     {
-        _selectedConfigurationBundle = e.File;
+        try
+        {
+            var result = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Select configuration bundle…",
+            });
+            if (result is null) return;
+            _selectedConfigurationBundlePath = result.FullPath;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            await ShowTransientMessageAsync($"Bundle selection failed: {ex.Message}");
+        }
     }
 
     private async Task ExportConfigurationBundleAsync()
@@ -477,7 +500,7 @@
 
     private async Task ImportConfigurationBundleAsync()
     {
-        if (_selectedConfigurationBundle is null || _isImportingBundle)
+        if (_selectedConfigurationBundlePath is null || _isImportingBundle)
         {
             return;
         }
@@ -487,15 +510,13 @@
 
         try
         {
-            using var stream = _selectedConfigurationBundle.OpenReadStream(maxAllowedSize: 32L * 1024 * 1024);
-            using var reader = new StreamReader(stream);
-            var json = await reader.ReadToEndAsync();
+            var json = await File.ReadAllTextAsync(_selectedConfigurationBundlePath);
 
             var bundle = ConfigurationBundles.Deserialize(json);
             await ConfigurationBundles.ImportAsync(bundle);
             ConfigurationProbes.Invalidate();
             _configSnapshot = CurrentConfigJson();
-            _selectedConfigurationBundle = null;
+            _selectedConfigurationBundlePath = null;
 
             if (_layout is not null && !string.IsNullOrWhiteSpace(UserSettings.Settings.Theme))
             {
@@ -599,6 +620,7 @@
         ObservabilitySection => ObservabilitySection,
         ApiClientSection => ApiClientSection,
         AgentSection => AgentSection,
+        DiagnosticsSection => DiagnosticsSection,
         _ => null,
     };
 

@@ -31,6 +31,10 @@
     flex-shrink: 0;
 }
 
+.agent-panel-title fluent-icon {
+    color: var(--color-nav-agent);
+}
+
 .agent-panel-pills {
     display: flex;
     align-items: center;
@@ -76,6 +80,11 @@
     padding: 32px 16px;
 }
 
+.agent-empty-state fluent-icon {
+    color: var(--color-nav-agent);
+    opacity: 0.75;
+}
+
 .agent-empty-hint {
     font-size: 0.75rem;
     opacity: 0.7;
@@ -100,12 +109,16 @@
 .agent-bubble__text {
     padding: 10px 14px;
     border-radius: 12px;
-    white-space: pre-wrap;
     word-break: break-word;
     font-size: 0.9rem;
     line-height: 1.5;
     font-family: inherit;
     margin: 0;
+}
+
+/* User messages are plain text — preserve newlines. Markdown (assistant) uses HTML flow. */
+.agent-bubble--user .agent-bubble__text {
+    white-space: pre-wrap;
 }
 
 .agent-bubble--user .agent-bubble__text {
@@ -120,6 +133,25 @@
     border-bottom-left-radius: 3px;
     border: 1px solid var(--color-border);
 }
+
+.agent-bubble__markdown { white-space: normal; }
+.agent-bubble__markdown .mermaid[data-rendered="true"] {
+    border-radius: 6px;
+    transition: box-shadow 0.15s;
+}
+.agent-bubble__markdown .mermaid[data-rendered="true"]:hover {
+    box-shadow: 0 0 0 2px var(--color-accent, #7c6af7);
+}
+.agent-bubble__markdown table { border-collapse: collapse; width: 100%; font-size: 0.82em; }
+.agent-bubble__markdown th,
+.agent-bubble__markdown td   { border: 1px solid var(--color-border); padding: 4px 8px; }
+.agent-bubble__markdown code { background: var(--color-surface-3); padding: 1px 4px; border-radius: 3px; font-size: 0.85em; }
+.agent-bubble__markdown pre  { background: var(--color-surface-3); padding: 8px; border-radius: 4px; overflow-x: auto; margin: 4px 0; }
+.agent-bubble__markdown p    { margin: 2px 0; }
+.agent-bubble__markdown ul,
+.agent-bubble__markdown ol   { margin: 2px 0; padding-left: 18px; }
+.agent-bubble__markdown li   { margin: 1px 0; }
+.agent-bubble__markdown blockquote { margin: 4px 0; padding-left: 8px; border-left: 2px solid var(--color-border); }
 
 .agent-bubble--loading {
     display: flex;

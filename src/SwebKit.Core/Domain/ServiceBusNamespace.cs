@@ -1,6 +1,6 @@
 namespace SwebKit.Core.Domain;
 
-/// <summary>Global (not per-project) Service Bus namespace, added by connection string.</summary>
+/// <summary>Global (not per-project) Service Bus namespace.</summary>
 public class ServiceBusNamespace
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -11,7 +11,13 @@ public class ServiceBusNamespace
     /// <summary>e.g. sb-dev-shared-sb-weu.servicebus.windows.net</summary>
     public string FullyQualifiedNamespace { get; set; } = string.Empty;
 
-    /// <summary>Key used to retrieve the connection string from ICredentialStore.</summary>
+    /// <summary>
+    /// Authentication mode. Defaults to <see cref="SbAuthMode.ConnectionString"/> for backward compatibility
+    /// with persisted configs that pre-date Entra support.
+    /// </summary>
+    public SbAuthMode AuthMode { get; set; } = SbAuthMode.ConnectionString;
+
+    /// <summary>Key used to retrieve the connection string from ICredentialStore. Only used when <see cref="AuthMode"/> is <see cref="SbAuthMode.ConnectionString"/>.</summary>
     public string CredentialKey { get; set; } = string.Empty;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

@@ -60,6 +60,21 @@
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion> -->
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+
+        <!--
+            Pin these so every build path (F5 debug launch, the "build-maui-windows" task,
+            plain `dotnet build`/`dotnet run`) produces the exact same self-contained,
+            unpackaged Windows App SDK deployment into bin/obj. Previously these were only
+            passed as -p: command-line overrides on the task, so a debug launch that built
+            without them (framework-dependent, no RID) could write a mismatched deployment
+            into the same output folder as a prior self-contained build — corrupting the
+            merged WinUI resource index and turning the normally-benign, internally-caught
+            XamlControlsResources bootstrap COMException ("Cannot locate resource from
+            'ms-appx:///Microsoft.UI.Xaml/Themes/themeresources.xaml'") into a real,
+            unrecoverable crash on activation.
+        -->
+        <RuntimeIdentifier Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">win-x64</RuntimeIdentifier>
+        <WindowsAppSDKSelfContained Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">true</WindowsAppSDKSelfContained>
     </PropertyGroup>
 
     <ItemGroup>
@@ -83,6 +98,7 @@
     <ItemGroup>
         <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
         <PackageReference Include="BlazorMonaco" Version="3.4.0" />
+        <PackageReference Include="Markdig" Version="0.38.0" />
         <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.14.2" />
         <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" Version="4.14.2" />
         <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />

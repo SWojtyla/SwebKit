@@ -41,7 +41,7 @@
                     @if (!string.IsNullOrEmpty(_search))
                     {
                         <span class="aks-yaml-search-count">@_searchCount match@(_searchCount != 1 ? "es" :
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        "")</span>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    "")</span>
                             <button class="aks-yaml-search-clear" @onclick="ClearSearch" title="Clear">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
                             </button>
@@ -137,6 +137,9 @@
 
     /// <summary>Whether the YAML panel is currently showing.</summary>
     public bool IsOpen => _target is not null;
+
+    /// <summary>The resource kind currently displayed, if any (e.g. "HPA", "Deployment").</summary>
+    public string? TargetKind => _target?.Kind;
 
     /// <summary>Whether the YAML panel is in edit mode.</summary>
     public bool IsEditing => _editMode;

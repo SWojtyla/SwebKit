@@ -163,16 +163,27 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
         }
 
         var connStr = _credentials.Get(ns.CredentialKey);
-        if (string.IsNullOrWhiteSpace(connStr))
+        if (ns.AuthMode != SwebKit.Core.Domain.SbAuthMode.DefaultAzureCredential && string.IsNullOrWhiteSpace(connStr))
             return null;
 
-        var client = _sbFactory.Create(connStr);
+        var client = ns.AuthMode == SwebKit.Core.Domain.SbAuthMode.DefaultAzureCredential
+            ? _sbFactory.CreateWithEntra(ns.FullyQualifiedNamespace)
+            : _sbFactory.Create(connStr!);
         lock (_lock)
         {
             _sbClients[alias] = (client, ns.CredentialKey);
         }
         _logger.LogDebug("MonitoringConnectionPool: Service Bus client (re)created for '{Alias}'", alias);
         return client;
+    }
+
+    public void EvictServiceBusClient(string alias)
+    {
+        lock (_lock)
+        {
+            _sbClients.Remove(alias);
+        }
+        _logger.LogDebug("MonitoringConnectionPool: Service Bus client for '{Alias}' manually evicted.", alias);
     }
 
     // ── IRedisClient ─────────────────────────────────────────────────────────

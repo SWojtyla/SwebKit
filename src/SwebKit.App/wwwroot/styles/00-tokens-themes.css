@@ -28,7 +28,7 @@
     --top-bar-height: 48px;
     --sb-entity-panel-width: 295px;
     --sb-entity-panel-collapsed-width: 48px;
-    --sb-detail-drawer-width: 380px;
+    --panel-default-width: 380px;
 
     /* z-index scale */
     --z-dropdown: 3000;
@@ -475,7 +475,7 @@
     --color-nav-observability: #1565c0;
     --color-nav-incident:   #a15c00;
     --color-nav-settings:   #455a64;
-    --color-nav-agent:      #6a1b9a;
+    --color-nav-agent:      #8e24aa;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.22);
@@ -517,7 +517,7 @@
     --color-nav-observability: #005b9a;
     --color-nav-incident:   #8b5a00;
     --color-nav-settings:   #505050;
-    --color-nav-agent:      #6020a0;
+    --color-nav-agent:      #8b20aa;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.22);
@@ -558,7 +558,7 @@
     --color-nav-observability: #0a5c7d;
     --color-nav-incident:   #8a5a14;
     --color-nav-settings:   #446058;
-    --color-nav-agent:      #581888;
+    --color-nav-agent:      #8420aa;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.22);
@@ -599,7 +599,7 @@
     --color-nav-observability: #355fba;
     --color-nav-incident:   #8a5a14;
     --color-nav-settings:   #506070;
-    --color-nav-agent:      #4820a8;
+    --color-nav-agent:      #7b1fa2;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.22);
@@ -770,7 +770,7 @@
     --color-nav-observability: #1560c8;
     --color-nav-incident:   #9a5800;
     --color-nav-settings:   #455060;
-    --color-nav-agent:      #6820a8;
+    --color-nav-agent:      #8e24aa;
     --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.08);
     --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.11);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.16);
@@ -889,7 +889,7 @@
     --color-nav-observability: #285ca0;
     --color-nav-incident:   #9a5800;
     --color-nav-settings:   #56504a;
-    --color-nav-agent:      #6020a0;
+    --color-nav-agent:      #8e24aa;
     --shadow-sm: 0 1px 4px rgba(60, 30, 0, 0.10);
     --shadow-md: 0 4px 14px rgba(60, 30, 0, 0.14);
     --shadow-lg: 0 8px 32px rgba(60, 30, 0, 0.18);
@@ -1010,7 +1010,7 @@
     --color-nav-observability: #205898;
     --color-nav-incident:   #9a6800;
     --color-nav-settings:   #445a4e;
-    --color-nav-agent:      #502898;
+    --color-nav-agent:      #7b1fa2;
     --shadow-sm: 0 1px 4px rgba(10, 34, 18, 0.09);
     --shadow-md: 0 4px 14px rgba(10, 34, 18, 0.13);
     --shadow-lg: 0 8px 32px rgba(10, 34, 18, 0.18);

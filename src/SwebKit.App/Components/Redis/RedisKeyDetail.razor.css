@@ -22,29 +22,6 @@
     overflow-wrap: anywhere;
 }
 
-.copy-btn,
-.redis-key-detail ::deep .copy-btn {
-    width: auto;
-    height: auto;
-    min-height: 0;
-    gap: 0;
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    cursor: pointer;
-    color: var(--color-text-muted);
-    padding: 2px 4px;
-    font-size: 14px;
-    font-weight: 400;
-    line-height: 1;
-    box-shadow: none;
-}
-
-.copy-btn:hover,
-.redis-key-detail ::deep .copy-btn:hover {
-    color: var(--color-text);
-}
-
 .kv {
     font-size: 12px;
     color: var(--color-text-muted);
@@ -63,6 +40,7 @@
 }
 
 .ttl-input {
+    box-sizing: border-box;
     width: 100px;
     padding: 6px var(--spacing-sm);
     background: var(--color-surface-2);
@@ -88,7 +66,8 @@
 .editor,
 .hash-editor {
     width: 100%;
-    padding: var(--spacing-sm);
+    box-sizing: border-box;
+    padding: 6px var(--spacing-sm);
     border: 1px solid var(--color-border);
     border-radius: 4px;
     background: var(--color-surface-2);
@@ -102,14 +81,35 @@
     resize: vertical;
 }
 
+/* FluentDataGrid renders plain <table>/<td> markup from a different
+   component library, so scoped rules must use ::deep to reach them.
+   Without an explicit row height, an in-place edit <input> (taller than
+   a plain text cell) makes that single row grow while neighbouring rows
+   stay tight, producing a cramped/overlapping look. Give every row a
+   consistent minimum height and breathing room instead. */
+.redis-key-detail ::deep .fluent-data-grid td,
+.redis-key-detail ::deep .fluent-data-grid th {
+    box-sizing: border-box;
+    min-height: 40px;
+    padding: 8px 12px;
+}
+
+.redis-key-detail ::deep .fluent-data-grid .hash-editor,
+.redis-key-detail ::deep .fluent-data-grid .zset-score-editor {
+    height: 26px;
+}
+
 .table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
 }
 
-.hash-actions {
-    width: 120px;
+.row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
 }
 
 .table th,
@@ -200,6 +200,7 @@
 }
 
 .zset-score-editor {
+    box-sizing: border-box;
     width: 120px;
     padding: 2px 4px;
     font-size: 12px;
@@ -237,7 +238,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     min-width: 0;
 }
 

@@ -133,42 +133,14 @@
                             </div>
                             @if (IsDetailPaneOpen)
                             {
-                                if (_isDetailDrawerOverlay)
-                                {
-                                    <div class="sb-detail-drawer overlay">
-                                        <div class="sb-detail-drawer-header">
-                                            <span>Message details</span>
-                                            <button type="button" class="sb-detail-close-btn" title="Close details"
-                                                    @onclick="CloseDetailPane">×</button>
-                                        </div>
-                                        <div class="sb-detail-pane-content">
-                                            <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
-                                                               OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
-                                                               OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
-                                                               OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
-                                                               OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
-                                        </div>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <ResizablePanel DefaultWidth="380" MinWidth="240" MaxWidth="600">
-                                        <div class="sb-detail-drawer">
-                                            <div class="sb-detail-drawer-header">
-                                                <span>Message details</span>
-                                                <button type="button" class="sb-detail-close-btn" title="Close details"
-                                                        @onclick="CloseDetailPane">×</button>
-                                            </div>
-                                            <div class="sb-detail-pane-content">
-                                                <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
-                                                                   OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
-                                                                   OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
-                                                                   OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
-                                                                   OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
-                                            </div>
-                                        </div>
-                                    </ResizablePanel>
-                                }
+                                <SidePanel Visible="true" Title="Message details" Overlay="_isDetailDrawerOverlay" DefaultWidth="380"
+                                           MinWidth="240" MaxWidth="600" OnClose="CloseDetailPane">
+                                    <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
+                                                       OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
+                                                       OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
+                                                       OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
+                                                       OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
+                                </SidePanel>
                             }
                         </div>
                     }

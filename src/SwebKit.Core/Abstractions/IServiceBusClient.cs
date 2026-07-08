@@ -12,8 +12,14 @@ public interface IServiceBusClient
     Task SetTopicEnabledAsync(string topicName, bool enabled, CancellationToken ct = default);
     Task SetSubscriptionEnabledAsync(string topicName, string subscriptionName, bool enabled, CancellationToken ct = default);
     Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default);
-    Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default);
-    Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default);
+    /// <summary>
+    /// Peeks up to <paramref name="count"/> active messages. When <paramref name="fromSequenceNumber"/> is supplied,
+    /// peeking continues forward from that sequence number instead of restarting at the head of the entity —
+    /// use this for "load more" so previously loaded messages are not replaced by a shifted window.
+    /// </summary>
+    Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null);
+    /// <summary>Peeks up to <paramref name="count"/> dead-lettered messages. See <see cref="PeekMessagesAsync"/> for <paramref name="fromSequenceNumber"/> semantics.</summary>
+    Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null);
     Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default);
     Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default);
     Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default);
@@ -35,6 +41,9 @@ public interface IServiceBusClientFactory
 {
     /// <summary>Creates a new <see cref="IServiceBusClient"/> from a raw connection string.</summary>
     IServiceBusClient Create(string connectionString);
+
+    /// <summary>Creates a new <see cref="IServiceBusClient"/> authenticated via Microsoft Entra ID (DefaultAzureCredential).</summary>
+    IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace);
 
     /// <summary>
     /// Parses the fully qualified namespace from a Service Bus connection string without creating a client.

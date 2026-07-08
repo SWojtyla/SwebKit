@@ -48,7 +48,14 @@
         else
         {
             <div class="redis-workspace-status">
-                <span><strong>@Keys.Count</strong> loaded</span>
+                <span><strong>@Keys.Count.ToString("N0")</strong> loaded</span>
+                @if (_estimatedTotalKeys is { } totalKeyCount && totalKeyCount > 0)
+                {
+                    <span class="total-key-estimate"
+                          title="Approximate total keys in the selected database (from Redis INFO), regardless of the current filter pattern">
+                        of <strong>~@totalKeyCount.ToString("N0")</strong> in database
+                    </span>
+                }
                 <span><strong>@((_toolbar?.SelectedKeys.Count ?? 0))</strong> selected</span>
                 @if (SelectedKey is not null)
                 {
@@ -62,11 +69,19 @@
                     <div class="panel-heading">
                         <div>
                             <h2>Keys</h2>
-                            <span>@Keys.Count loaded match(es)</span>
+                            <span>@Keys.Count loaded match(es)@(_isLoadingAll ? $" — loading all…" : string.Empty)</span>
                         </div>
                         @if (_hasMoreKeys)
                         {
-                            <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load More</FluentButton>
+                            <div class="panel-heading-actions">
+                                <AppButton Variant="Secondary" Size="Small" OnClick="LoadMoreKeysAsync"
+                                           Disabled="@(IsLoading || _isLoadingAll)">Load More</AppButton>
+                                <AppButton Variant="Secondary" Size="Small" OnClick="LoadAllKeysAsync"
+                                           Disabled="@(IsLoading || _isLoadingAll)"
+                                           Title="@($"Keep loading matching keys until none remain, up to a {MaxLoadAllKeys:N0}-key safety limit")">
+                                    @(_isLoadingAll ? "Loading all…" : "Load All")
+                                </AppButton>
+                            </div>
                         }
                     </div>
                     <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
@@ -90,8 +105,11 @@
 
                     <details class="insights-drawer">
                         <summary>
-                            <span>Insights</span>
-                            <small>Health, memory, slowlog, and Pub/Sub</small>
+                            <div class="insights-drawer-label">
+                                <span>Insights</span>
+                                <small>Health, memory, slowlog, and Pub/Sub</small>
+                            </div>
+                            <span class="insights-drawer-chevron" aria-hidden="true">▸</span>
                         </summary>
                         <div class="insights-stack">
                             <div class="panel health-panel">
@@ -142,9 +160,14 @@
     private long _scanCursor;
     private long _scanSessionVersion;
     private bool _hasMoreKeys;
+    private bool _isLoadingAll;
+    private long? _estimatedTotalKeys;
     private const int ScanPageSize = 250;
     private const int ScanBatchSize = 250;
     private const int KeyTypeBatchSize = 25;
+    // Hard ceiling for "Load All" so a huge keyspace can't hang the UI or exhaust memory.
+    // Users who need more should narrow the scan pattern instead.
+    private const int MaxLoadAllKeys = 20_000;
 
     // RDS-4: Item pagination
     private long _itemsOffset;
@@ -471,7 +494,11 @@
         PrefixMemoryBuckets.Clear();
         InvalidateHealthReport();
         _scanPageAccumulator.Reset();
+        _estimatedTotalKeys = null;
         await InvokeAsync(StateHasChanged);
+
+        // Fire-and-forget: cheap Redis INFO call, independent of the (potentially slow) key scan below.
+        _ = RefreshEstimatedTotalKeysAsync(scanSession, ct);
 
         try
         {
@@ -813,6 +840,39 @@ default)
                 IsLoading = false;
                 await InvokeAsync(StateHasChanged);
             }
+        }
+    }
+
+    // Streams in every remaining page until the keyspace scan is exhausted or the safety cap is
+    // hit, reusing LoadMoreKeysAsync's per-page fetch/render so the tree grows incrementally
+    // instead of blocking on one giant fetch.
+    private async Task LoadAllKeysAsync()
+    {
+        if (Client is null || !_hasMoreKeys || _isLoadingAll) return;
+
+        var scanSession = _scanSessionVersion;
+        _isLoadingAll = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            while (_hasMoreKeys && IsCurrentScanSession(scanSession))
+            {
+                if (Keys.Count >= MaxLoadAllKeys)
+                {
+                    Notifications.ShowWarning(
+                        "Load All stopped",
+                        $"Reached the {MaxLoadAllKeys:N0}-key safety limit. Narrow the pattern to see the rest.");
+                    break;
+                }
+
+                await LoadMoreKeysAsync();
+            }
+        }
+        finally
+        {
+            _isLoadingAll = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -1230,6 +1290,22 @@ default)
         {
             return null;
         }
+    }
+
+    // Updates the "~X in database" badge independently of the key scan so it doesn't block or
+    // slow down the (potentially much slower) SCAN loop.
+    private async Task RefreshEstimatedTotalKeysAsync(long scanSession, CancellationToken ct)
+    {
+        try
+        {
+            var estimate = await TryGetEstimatedKeyCountAsync(ct);
+            if (!IsCurrentScanSession(scanSession))
+                return;
+
+            _estimatedTotalKeys = estimate;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { } // CS-2: cancelled — silently abort
     }
 
     private async Task AnalyzeKeyspaceHealthAsync()

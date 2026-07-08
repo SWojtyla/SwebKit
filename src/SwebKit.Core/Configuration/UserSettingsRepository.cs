@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SwebKit.Core.Diagnostics;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
@@ -60,6 +61,7 @@ public sealed class UserSettingsRepository
     {
         settings.Theme ??= string.Empty;
         settings.Agent ??= new AgentConfig();
+        settings.Logging ??= new LoggingSettings();
         return settings;
     }
 }
@@ -80,6 +82,9 @@ public sealed class UserSettings
 
     /// <summary>AI agent feature configuration (user-scoped).</summary>
     public AgentConfig Agent { get; set; } = new();
+
+    /// <summary>Structured file logging preference (enabled flag, minimum level).</summary>
+    public LoggingSettings Logging { get; set; } = new();
 }
 
 public sealed record PinnedPortForwardEntry(

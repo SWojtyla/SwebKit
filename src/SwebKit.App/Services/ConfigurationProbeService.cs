@@ -366,7 +366,10 @@ public sealed class ConfigurationProbeService(
     }
 
     private bool CanProbeServiceBus(IReadOnlyList<ServiceBusNamespace> namespaces) =>
-        namespaces.Count > 0 && namespaces.All(namespaceConfig => HasCredential(namespaceConfig.CredentialKey));
+        namespaces.Count > 0 && namespaces.All(ns =>
+            ns.AuthMode == SbAuthMode.DefaultAzureCredential
+                ? !string.IsNullOrWhiteSpace(ns.FullyQualifiedNamespace)
+                : HasCredential(ns.CredentialKey));
 
     private static bool CanProbeAks(AksConfig? config) =>
         config is not null && !string.IsNullOrWhiteSpace(config.DefaultNamespace);

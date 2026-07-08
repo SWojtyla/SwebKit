@@ -8,11 +8,12 @@
 <div class="redis-key-detail">
     @if (SelectedKey is null)
     {
-        <div class="empty">Select a key to inspect.</div>
+        <EmptyState Icon="🔑" Title="No key selected"
+                    Subtitle="Pick a key from the tree on the left to inspect its value, TTL, and metadata." />
     }
     else if (KeyInfo is null)
     {
-        <div class="empty">Loading key details...</div>
+        <LoadingSpinner Message="Loading key details…" />
     }
     else
     {
@@ -22,16 +23,20 @@
                 {
                     <input class="rename-input" type="text" @bind="_renameValue" @onkeydown="HandleRenameKeyDown"
                            @onkeydown:preventDefault="@(_renamePrevent)" />
-                    <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmRenameAsync">✓</FluentButton>
-                    <FluentButton @onclick="CancelRename">✕</FluentButton>
+                    <AppIconButton Variant="Primary" Size="Small" Title="Confirm rename" Label="Confirm rename" OnClick="ConfirmRenameAsync">
+                        <Icon>✓</Icon>
+                    </AppIconButton>
+                    <AppIconButton Variant="Ghost" Size="Small" Title="Cancel rename" Label="Cancel rename" OnClick="CancelRename">
+                        <Icon>✕</Icon>
+                    </AppIconButton>
                 }
                 else
                 {
                     <div class="key-name">@KeyInfo.Key</div>
-                    <AppIconButton CssClass="copy-btn" Title="Copy key name" Label="Copy key name" OnClick="CopyKeyNameAsync">
+                    <AppIconButton Variant="Ghost" Size="Small" Title="Copy key name" Label="Copy key name" OnClick="CopyKeyNameAsync">
                         <Icon>📋</Icon>
                     </AppIconButton>
-                    <AppIconButton CssClass="copy-btn" Title="Rename key" Label="Rename key" OnClick="BeginRename">
+                    <AppIconButton Variant="Ghost" Size="Small" Title="Rename key" Label="Rename key" OnClick="BeginRename">
                         <Icon>✏️</Icon>
                     </AppIconButton>
                 }
@@ -53,18 +58,18 @@
         </div>
 
         <div class="actions">
-            <FluentButton Appearance="Appearance.Accent" @onclick="OnRefresh">Refresh</FluentButton>
-            <FluentButton @onclick="OnDelete">Delete</FluentButton>
+            <AppButton Variant="Primary" Size="Small" OnClick="OnRefresh">Refresh</AppButton>
+            <AppButton Variant="Danger" Size="Small" OnClick="OnDelete">Delete</AppButton>
             @if (CanEditCurrentType)
             {
-                <FluentButton @onclick="BeginEdit">Edit</FluentButton>
+                <AppButton Variant="Secondary" Size="Small" OnClick="BeginEdit">Edit</AppButton>
             }
         </div>
 
         <div class="ttl-actions">
             <input type="number" min="1" @bind="TtlSeconds" class="ttl-input" />
-            <FluentButton @onclick="ApplyTtlAsync">Set TTL (s)</FluentButton>
-            <FluentButton @onclick="RemoveTtl">Remove TTL</FluentButton>
+            <AppButton Variant="Secondary" Size="Small" OnClick="ApplyTtlAsync">Set TTL (s)</AppButton>
+            <AppButton Variant="Ghost" Size="Small" OnClick="RemoveTtl">Remove TTL</AppButton>
         </div>
 
         @if (KeyInfo.Type == "string")
@@ -73,8 +78,8 @@
             {
                 <textarea class="editor" @bind="StringEditorValue"></textarea>
                 <div class="edit-actions">
-                    <FluentButton Appearance="Appearance.Accent" @onclick="SaveStringAsync">Save</FluentButton>
-                    <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
+                    <AppButton Variant="Primary" Size="Small" OnClick="SaveStringAsync">Save</AppButton>
+                    <AppButton Variant="Ghost" Size="Small" OnClick="CancelEdit">Cancel</AppButton>
                 </div>
             }
             else
@@ -87,10 +92,10 @@
                 {
                     <div class="value-toolbar">
                         <span>Value</span>
-                        <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyStringValueAsync"
-                                      Disabled="@(StringValue is null)">
-                            Copy Value
-                        </FluentButton>
+                        <AppIconButton Variant="Ghost" Size="Small" Title="Copy value" Label="Copy value"
+                                       Disabled="@(StringValue is null)" OnClick="CopyStringValueAsync">
+                            <Icon>📋</Icon>
+                        </AppIconButton>
                     </div>
                     <pre class="blob" tabindex="0">@DisplayStringValue</pre>
                 }
@@ -109,38 +114,45 @@
                     }
                     else
                     {
-                        <div class="value-cell">
-                            <span class="hash-value" title="@context.Value">@context.Value</span>
-                            <AppButton Type="button" CssClass="copy-btn" Title="Copy value"
-                                       OnClick='() => CopyTextAsync(context.Value, "Copied field value")'>
-                                Copy
-                            </AppButton>
-                        </div>
+                        <span class="hash-value" title="@context.Value">@context.Value</span>
                     }
                 </TemplateColumn>
-                <TemplateColumn Title="" Width="140px">
-                    <div class="hash-actions">
+                <TemplateColumn Title="" Width="124px">
+                    <div class="row-actions">
                         @if (IsEditingHash && EditingHashField == context.Field)
                         {
-                            <FluentButton Appearance="Appearance.Accent" @onclick="SaveHashFieldAsync">Save</FluentButton>
-                            <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
+                            <AppIconButton Variant="Primary" Size="Small" Title="Save value" Label="Save value" OnClick="SaveHashFieldAsync">
+                                <Icon>✓</Icon>
+                            </AppIconButton>
+                            <AppIconButton Variant="Ghost" Size="Small" Title="Cancel edit" Label="Cancel edit" OnClick="CancelEdit">
+                                <Icon>✕</Icon>
+                            </AppIconButton>
                         }
                         else
                         {
-                            <FluentButton @onclick="() => BeginHashFieldEdit(context.Field, context.Value)">Edit</FluentButton>
+                            <AppIconButton Variant="Ghost" Size="Small" Title="Copy value" Label="Copy value"
+                                           OnClick='() => CopyTextAsync(context.Value, "Copied field value")'>
+                                <Icon>📋</Icon>
+                            </AppIconButton>
+                            <AppIconButton Variant="Ghost" Size="Small" Title="Edit value" Label="Edit value"
+                                           OnClick="() => BeginHashFieldEdit(context.Field, context.Value)">
+                                <Icon>✏️</Icon>
+                            </AppIconButton>
+                            <AppIconButton Variant="Danger" Size="Small" Title="Delete field" Label="Delete field"
+                                           OnClick="() => OnDeleteHashField.InvokeAsync(context.Field)">
+                                <Icon>🗑️</Icon>
+                            </AppIconButton>
                         }
                     </div>
-                </TemplateColumn>
-                <TemplateColumn Title="" Width="50px">
-                    <FluentButton @onclick="() => OnDeleteHashField.InvokeAsync(context.Field)" title="Delete field">−
-                    </FluentButton>
                 </TemplateColumn>
             </FluentDataGrid>
             <div class="hash-add-row">
                 <input type="text" class="hash-editor" placeholder="Field name" @bind="_newHashFieldName" />
                 <input type="text" class="hash-editor" placeholder="Value" @bind="_newHashFieldValue" />
-                <FluentButton @onclick="AddHashFieldAsync" Disabled="@(string.IsNullOrWhiteSpace(_newHashFieldName))">+
-                </FluentButton>
+                <AppIconButton Variant="Primary" Size="Small" Title="Add field" Label="Add field"
+                               Disabled="@(string.IsNullOrWhiteSpace(_newHashFieldName))" OnClick="AddHashFieldAsync">
+                    <Icon>+</Icon>
+                </AppIconButton>
             </div>
         }
         else if (KeyInfo.Type == "list" || KeyInfo.Type == "set")
@@ -150,16 +162,16 @@
                 {
                     <li>
                         <pre class="item-value">@item</pre>
-                        <AppButton Type="button" CssClass="copy-btn" Title="Copy item"
-                                   OnClick='() => CopyTextAsync(item, "Copied item")'>
-                            Copy
-                        </AppButton>
+                        <AppIconButton Variant="Ghost" Size="Small" Title="Copy item" Label="Copy item"
+                                       OnClick='() => CopyTextAsync(item, "Copied item")'>
+                            <Icon>📋</Icon>
+                        </AppIconButton>
                     </li>
                 }
             </ul>
             @if (HasMoreItems)
             {
-                <FluentButton @onclick="OnLoadMoreItems" class="load-more-btn">Load more (@Items.Count loaded)</FluentButton>
+                <AppButton Variant="Secondary" Size="Small" CssClass="load-more-btn" OnClick="OnLoadMoreItems">Load more (@Items.Count loaded)</AppButton>
             }
         }
         else if (KeyInfo.Type == "zset")
@@ -168,10 +180,10 @@
                 <TemplateColumn Title="Member" SortBy="@(GridSort<RedisSortedSetEntry>.ByAscending(e => e.Member))">
                     <div class="value-cell">
                         <span class="hash-value" title="@context.Member">@context.Member</span>
-                        <AppButton Type="button" CssClass="copy-btn" Title="Copy member"
-                                   OnClick='() => CopyTextAsync(context.Member, "Copied member")'>
-                            Copy
-                        </AppButton>
+                        <AppIconButton Variant="Ghost" Size="Small" Title="Copy member" Label="Copy member"
+                                       OnClick='() => CopyTextAsync(context.Member, "Copied member")'>
+                            <Icon>📋</Icon>
+                        </AppIconButton>
                     </div>
                 </TemplateColumn>
                 <TemplateColumn Title="Score" SortBy="@(GridSort<RedisSortedSetEntry>.ByAscending(e => e.Score))">
@@ -190,8 +202,7 @@
             </FluentDataGrid>
             @if (HasMoreItems)
             {
-                <FluentButton @onclick="OnLoadMoreItems" class="load-more-btn">Load more (@SortedSetItems.Count loaded)
-                </FluentButton>
+                <AppButton Variant="Secondary" Size="Small" CssClass="load-more-btn" OnClick="OnLoadMoreItems">Load more (@SortedSetItems.Count loaded)</AppButton>
             }
         }
     }

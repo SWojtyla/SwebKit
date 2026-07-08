@@ -1,18 +1,18 @@
-using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using Microsoft.Extensions.Logging;
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Services;
 
 namespace SwebKit.Azure;
 
 /// <summary>
-/// Resolves Azure Key Vault secrets using <see cref="DefaultAzureCredential"/>.
+/// Resolves Azure Key Vault secrets using <see cref="SwebKit.Core.Services.AzureCredentialFactory"/>.
 /// Requires the vault URL to be supplied at construction time.
 /// </summary>
 public sealed class AzureKeyVaultSecretResolver(string vaultUrl, ILogger<AzureKeyVaultSecretResolver> logger)
     : IKeyVaultSecretResolver
 {
-    private readonly SecretClient _client = new(new Uri(vaultUrl), new DefaultAzureCredential());
+    private readonly SecretClient _client = new(new Uri(vaultUrl), AzureCredentialFactory.CreateDefault());
 
     /// <inheritdoc />
     public bool IsAvailable => true;

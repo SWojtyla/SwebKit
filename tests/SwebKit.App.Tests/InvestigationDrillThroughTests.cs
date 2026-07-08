@@ -346,6 +346,9 @@ public sealed class InvestigationDrillThroughTests : TestContext
         public IServiceBusClient Create(string connectionString) =>
             throw new InvalidOperationException("Factory should not be called in this test.");
 
+        public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
+
         public string ParseFullyQualifiedNamespace(string connectionString) =>
             throw new InvalidOperationException("Factory should not be called in this test.");
     }

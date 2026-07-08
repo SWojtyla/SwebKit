@@ -16,36 +16,19 @@
 }
 
 .settings-kv-row__remove {
-    background: none;
-    border: none;
-    color: var(--color-text-muted);
     font-size: 16px;
-    cursor: pointer;
-    padding: 0;
-    line-height: 1;
-    opacity: 0.45;
-    transition: opacity 0.1s;
+    opacity: 0.6;
 }
 
-.settings-kv-row__remove:hover {
+.settings-kv-row__remove:hover:not(:disabled) {
     opacity: 1;
-    color: var(--color-danger, #ef4444);
+    color: var(--color-error);
 }
 
 .settings-kv-add-btn {
-    background: none;
-    border: 1px dashed var(--color-border);
-    border-radius: 4px;
-    color: var(--color-text-muted);
-    font-size: 12px;
-    padding: 4px 10px;
-    cursor: pointer;
+    border-style: dashed;
     margin-top: 2px;
-}
-
-.settings-kv-add-btn:hover {
-    border-color: var(--color-accent);
-    color: var(--color-accent);
+    align-self: start;
 }
 
 
@@ -95,17 +78,6 @@
     flex-wrap: wrap;
     gap: 0.75rem;
     align-items: center;
-}
-
-.settings-transfer-strip__picker {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
 }
 
 .settings-readiness-card {

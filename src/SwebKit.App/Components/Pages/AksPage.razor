@@ -67,7 +67,7 @@
                     <span class="aks-section-count">@ActiveResourceCount</span>
                     @if (_allPodsGreenBanner)
                     {
-                        <span class="aks-pods-green-banner">🎉 Everything's fine. Suspiciously fine. — SW</span>
+                        <span class="aks-pods-green-banner">All pods healthy</span>
                     }
                 </div>
                 <ResourceFilter Placeholder="@($"Filter {ActiveResourceType.ToLowerInvariant()}…")" Value="@ActiveFilter"
@@ -86,120 +86,125 @@
                 </ResourceFilter>
                 <div class="aks-table-wrap" @oncontextmenu="OnTableContextMenu" @oncontextmenu:preventDefault tabindex="0"
                      @onkeydown="HandleGridKeyDown" @onkeydown:preventDefault="@_preventGridKey">
-                    @switch (ActiveResourceType)
-                    {
-                        case "Deployments":
-                            <DeploymentGrid FilteredItems="@FilteredDeployments" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
-                                            SelectedDeployment="@SelectedDeployment"
-                                            OnContextMenu="@((args) => ShowDeploymentMenu(args.Item1, args.Item2))"
-                                            OnSelectRow="@SelectDeployment" OnOpenHpa="@OpenHpaDetail"
-                                            OnOpenNetworkAnalysis="@OpenDeploymentNetworkAnalysis"
-                                            OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                            break;
+                    @* PERF: BL-4 — keep every resource grid mounted and toggle visibility with `hidden`
+                       instead of an @switch. Recreating FluentDataGrid (Virtualize=true) on every tab click
+                       tears down and rebuilds its JS-side virtualization observers, which caused the app to
+                       become unresponsive when switching tabs quickly. All datasets are already loaded by
+                       LoadAsync, so keeping the grids mounted costs no extra network/data work. *@
+                    <div hidden="@(ActiveResourceType != "Deployments")">
+                        <DeploymentGrid FilteredItems="@FilteredDeployments" Hpas="@Hpas"
+                                        IsMultiNamespace="@IsMultiNamespace" SelectedDeployment="@SelectedDeployment"
+                                        OnContextMenu="@((args) => ShowDeploymentMenu(args.Item1, args.Item2))"
+                                        OnSelectRow="@SelectDeployment" OnOpenHpa="@OpenHpaDetail"
+                                        OnOpenNetworkAnalysis="@OpenDeploymentNetworkAnalysis"
+                                        OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                    </div>
 
-                        case "StatefulSets":
-                            <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
-                                             SelectedStatefulSet="@SelectedStatefulSet" OnSelectRow="@SelectStatefulSet"
-                                             OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))" OnOpenHpa="@OpenHpaDetail"
-                                             OnOpenNetworkAnalysis="@OpenStatefulSetNetworkAnalysis"
-                                             OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                            break;
-
-                        case "ConfigMaps":
-                            @if (IsMultiNamespace && ConfigMaps.Count == 0 && !IsLoading)
-                            {
-                                <div class="aks-mns-notice">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px"
-                                                style="vertical-align:middle;" />
-                                    ConfigMaps are not loaded in multi-namespace mode. Select a specific namespace to view them.
-                                </div>
-                            }
-                            else
-                            {
-                                <ConfigMapGrid FilteredItems="@FilteredConfigMaps" IsMultiNamespace="@IsMultiNamespace"
-                                               SelectedConfigMap="@SelectedConfigMap" OnSelectRow="@SelectConfigMap"
-                                               OnContextMenu="@((args) => ShowConfigMapMenu(args.Item1, args.Item2))" />
-                            }
-                            break;
-
-                        case "Secrets":
-                            @if (IsMultiNamespace && Secrets.Count == 0 && !IsLoading)
-                            {
-                                <div class="aks-mns-notice">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px"
-                                                style="vertical-align:middle;" />
-                                    Secrets are not loaded in multi-namespace mode. Select a specific namespace to view them.
-                                </div>
-                            }
-                            else
-                            {
-                                <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
-                                            SelectedSecret="@SelectedSecret" OnSelectRow="@SelectSecret"
-                                            OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
-                            }
-                            break;
-
-                        case "Pods":
-                            <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
-                                     IsMultiNamespace="@IsMultiNamespace" SelectedPod="@SelectedPod"
-                                     CpuCeiling="@(AppState.Config.AksConfig?.CpuBarCeilingMillicores ?? 500)"
-                                     MemoryCeiling="@(AppState.Config.AksConfig?.MemoryBarCeilingMi ?? 512)" OnSelectRow="@SelectPod"
-                                     OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
-                                     OnOpenNetworkAnalysis="@OpenPodNetworkAnalysis" OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                            break;
-
-                        case "Services":
-                            <ServiceGrid FilteredItems="@FilteredServices" IsMultiNamespace="@IsMultiNamespace"
-                                         SelectedService="@SelectedService" OnSelectRow="@SelectService"
-                                         OnContextMenu="@((args) => ShowServiceMenu(args.Item1, args.Item2))"
+                    <div hidden="@(ActiveResourceType != "StatefulSets")">
+                        <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas"
+                                         IsMultiNamespace="@IsMultiNamespace" SelectedStatefulSet="@SelectedStatefulSet"
+                                         OnSelectRow="@SelectStatefulSet"
+                                         OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))"
+                                         OnOpenHpa="@OpenHpaDetail" OnOpenNetworkAnalysis="@OpenStatefulSetNetworkAnalysis"
                                          OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                            break;
+                    </div>
 
-                        case "Ingresses":
-                            <IngressGrid FilteredItems="@FilteredIngresses" SelectedIngress="@SelectedIngress"
-                                         OnSelectRow="@SelectIngress" OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
-                                         OnOpenAnalysis="@OpenIngressAnalysis" OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
-                            break;
+                    <div hidden="@(ActiveResourceType != "ConfigMaps")">
+                        @if (IsMultiNamespace && ConfigMaps.Count == 0 && !IsLoading)
+                        {
+                            <div class="aks-mns-notice">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px"
+                                            style="vertical-align:middle;" />
+                                ConfigMaps are not loaded in multi-namespace mode. Select a specific namespace to view them.
+                            </div>
+                        }
+                        else
+                        {
+                            <ConfigMapGrid FilteredItems="@FilteredConfigMaps" IsMultiNamespace="@IsMultiNamespace"
+                                           SelectedConfigMap="@SelectedConfigMap" OnSelectRow="@SelectConfigMap"
+                                           OnContextMenu="@((args) => ShowConfigMapMenu(args.Item1, args.Item2))" />
+                        }
+                    </div>
 
-                        case "GatewayClasses":
-                            <GatewayClassGrid FilteredItems="@FilteredGatewayClasses" SelectedGatewayClass="@SelectedGatewayClass"
-                                              OnSelectRow="@SelectGatewayClass"
-                                              OnContextMenu="@((args) => ShowGatewayClassMenu(args.Item1, args.Item2))" />
-                            break;
+                    <div hidden="@(ActiveResourceType != "Secrets")">
+                        @if (IsMultiNamespace && Secrets.Count == 0 && !IsLoading)
+                        {
+                            <div class="aks-mns-notice">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px"
+                                            style="vertical-align:middle;" />
+                                Secrets are not loaded in multi-namespace mode. Select a specific namespace to view them.
+                            </div>
+                        }
+                        else
+                        {
+                            <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
+                                        SelectedSecret="@SelectedSecret" OnSelectRow="@SelectSecret"
+                                        OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
+                        }
+                    </div>
 
-                        case "Gateways":
-                            <GatewayGrid FilteredItems="@FilteredGateways" IsMultiNamespace="@IsMultiNamespace"
-                                         SelectedGateway="@SelectedGateway" OnSelectRow="@SelectGateway"
-                                         OnContextMenu="@((args) => ShowGatewayMenu(args.Item1, args.Item2))"
-                                         OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                            break;
+                    <div hidden="@(ActiveResourceType != "Pods")">
+                        <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
+                                 IsMultiNamespace="@IsMultiNamespace" SelectedPod="@SelectedPod"
+                                 CpuCeiling="@(AppState.Config.AksConfig?.CpuBarCeilingMillicores ?? 500)"
+                                 MemoryCeiling="@(AppState.Config.AksConfig?.MemoryBarCeilingMi ?? 512)" OnSelectRow="@SelectPod"
+                                 OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
+                                 OnOpenNetworkAnalysis="@OpenPodNetworkAnalysis" OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                    </div>
 
-                        case "HTTPRoutes":
-                            <HttpRouteGrid FilteredItems="@FilteredHttpRoutes" IsMultiNamespace="@IsMultiNamespace"
-                                           SelectedHttpRoute="@SelectedHttpRoute" OnSelectRow="@SelectHttpRoute"
-                                           OnContextMenu="@((args) => ShowHttpRouteMenu(args.Item1, args.Item2))"
-                                           OnNamespaceClick="@HandleNamespaceJumpAsync" OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
-                            break;
-
-                        case "Helm":
-                            <HelmGrid FilteredItems="@FilteredHelmReleases" SelectedHelm="@SelectedHelmRelease"
-                                      OnSelectRow="@SelectHelmRelease"
-                                      OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
-                            break;
-
-                        case "Jobs":
-                            <JobGrid FilteredItems="@FilteredJobs" IsMultiNamespace="@IsMultiNamespace" SelectedJob="@SelectedJob"
-                                     OnSelectRow="@SelectJob" OnContextMenu="@((args) => ShowJobMenu(args.Item1, args.Item2))"
+                    <div hidden="@(ActiveResourceType != "Services")">
+                        <ServiceGrid FilteredItems="@FilteredServices" IsMultiNamespace="@IsMultiNamespace"
+                                     SelectedService="@SelectedService" OnSelectRow="@SelectService"
+                                     OnContextMenu="@((args) => ShowServiceMenu(args.Item1, args.Item2))"
                                      OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                            break;
+                    </div>
 
-                        case "CronJobs":
-                            <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
-                                         SelectedCronJob="@SelectedCronJob" OnSelectRow="@SelectCronJob"
-                                         OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
-                                         OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                            break;
-                    }
+                    <div hidden="@(ActiveResourceType != "Ingresses")">
+                        <IngressGrid FilteredItems="@FilteredIngresses" SelectedIngress="@SelectedIngress"
+                                     OnSelectRow="@SelectIngress"
+                                     OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
+                                     OnOpenAnalysis="@OpenIngressAnalysis" OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
+                    </div>
+
+                    <div hidden="@(ActiveResourceType != "GatewayClasses")">
+                        <GatewayClassGrid FilteredItems="@FilteredGatewayClasses"
+                                          SelectedGatewayClass="@SelectedGatewayClass" OnSelectRow="@SelectGatewayClass"
+                                          OnContextMenu="@((args) => ShowGatewayClassMenu(args.Item1, args.Item2))" />
+                    </div>
+
+                    <div hidden="@(ActiveResourceType != "Gateways")">
+                        <GatewayGrid FilteredItems="@FilteredGateways" IsMultiNamespace="@IsMultiNamespace"
+                                     SelectedGateway="@SelectedGateway" OnSelectRow="@SelectGateway"
+                                     OnContextMenu="@((args) => ShowGatewayMenu(args.Item1, args.Item2))"
+                                     OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                    </div>
+
+                    <div hidden="@(ActiveResourceType != "HTTPRoutes")">
+                        <HttpRouteGrid FilteredItems="@FilteredHttpRoutes" IsMultiNamespace="@IsMultiNamespace"
+                                       SelectedHttpRoute="@SelectedHttpRoute" OnSelectRow="@SelectHttpRoute"
+                                       OnContextMenu="@((args) => ShowHttpRouteMenu(args.Item1, args.Item2))"
+                                       OnNamespaceClick="@HandleNamespaceJumpAsync" OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
+                    </div>
+
+                    <div hidden="@(ActiveResourceType != "Helm")">
+                        <HelmGrid FilteredItems="@FilteredHelmReleases" SelectedHelm="@SelectedHelmRelease"
+                                  OnSelectRow="@SelectHelmRelease"
+                                  OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
+                    </div>
+
+                    <div hidden="@(ActiveResourceType != "Jobs")">
+                        <JobGrid FilteredItems="@FilteredJobs" IsMultiNamespace="@IsMultiNamespace"
+                                 SelectedJob="@SelectedJob" OnSelectRow="@SelectJob"
+                                 OnContextMenu="@((args) => ShowJobMenu(args.Item1, args.Item2))"
+                                 OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                    </div>
+
+                    <div hidden="@(ActiveResourceType != "CronJobs")">
+                        <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
+                                     SelectedCronJob="@SelectedCronJob" OnSelectRow="@SelectCronJob"
+                                     OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
+                                     OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                    </div>
                 </div>
 
                 @* ── Keyboard hint bar ── *@
@@ -443,7 +448,7 @@
                                                                                                                                                                                                                                                         <button class="ctx-item" @onclick="OnCtxRerunJob"><span class="ctx-item-icon">&#8635;</span> Rerun
                                                                                                                                                                                                                                                             job</button>
                                                                                                                                                                                                                                                             <button class="ctx-item" @onclick="OnCtxToggleJobPause"><span class="ctx-item-icon">@(CtxJob?.Parallelism == 0 ?
-                                                                                                                                                                                                                                                                            "▶" : "⏸")</span> @(CtxJob?.Parallelism == 0 ? "Resume job" : "Pause job")</button>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            "▶" : "⏸")</span> @(CtxJob?.Parallelism == 0 ? "Resume job" : "Pause job")</button>
                                                                                                                                                                                                                                                             </ContextMenu>
 
                                                                                                                                                                                                                                                             <ContextMenu @ref="CronJobMenu">
@@ -455,7 +460,7 @@
                                                                                                                                                                                                                                                                         <button class="ctx-item" @onclick="OnCtxRunCronJob"><span class="ctx-item-icon">&#9654;</span> Run
                                                                                                                                                                                                                                                                             now</button>
                                                                                                                                                                                                                                                                             <button class="ctx-item" @onclick="OnCtxToggleCronJobSuspend"><span class="ctx-item-icon">@(CtxCronJob?.Suspend
-                                                                                                                                                                                                                                                                                                == true ? "▶" : "⏸")</span> @(CtxCronJob?.Suspend == true ? "Resume" : "Suspend")</button>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                == true ? "▶" : "⏸")</span> @(CtxCronJob?.Suspend == true ? "Resume" : "Suspend")</button>
                                                                                                                                                                                                                                                                             </ContextMenu>
 
                                                                                                                                                                                                                                                                         </div>
@@ -1147,7 +1152,7 @@ OnCtxRestartDeployment();
                 catch (OperationCanceledException) { throw; } // CS-2
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Dataset load failed: {ex.Message}");
+                    Logger.LogWarning(ex, "Dataset load failed for namespace {Namespace}", CurrentNamespace);
                 }
             }
 
@@ -1330,6 +1335,7 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
     private void SelectDeployment(DeploymentInfo deployment)
     {
         SelectedDeployment = deployment;
+        _detailPanels?.CloseContainerDetail();
         PushAksSelection();
         StateHasChanged();
     }
@@ -1337,6 +1343,7 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
     private void SelectStatefulSet(StatefulSetInfo statefulSet)
     {
         SelectedStatefulSet = statefulSet;
+        _detailPanels?.CloseContainerDetail();
         PushAksSelection();
         StateHasChanged();
     }
@@ -1358,6 +1365,7 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
     private void SelectPod(PodInfo pod)
     {
         SelectedPod = pod;
+        _detailPanels?.SwitchOrCloseContainerDetail(pod.Name, pod.Namespace);
         PushAksSelection();
         StateHasChanged();
     }

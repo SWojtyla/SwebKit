@@ -52,19 +52,20 @@ else
     {
         <div class="storage-account-bar">
             <span>Account:</span>
-            <select class="storage-select" value="@_selectedAccountId" @onchange="OnAccountChangedAsync">
+            <AppSelect CssClass="storage-select" Value="@_selectedAccountId" ValueChanged="OnAccountChangedAsync"
+                       aria-label="Select active storage account">
                 @foreach (var acc in _storageAccounts)
                 {
                     <option value="@acc.Id">@acc.DisplayName (@acc.AccountName)</option>
                 }
-            </select>
+            </AppSelect>
         </div>
     }
 
     @if (_storageClient is null)
     {
         <div class="storage-not-configured">
-            <EmptyState Icon="⚠" Title="Selected storage account is unavailable"
+            <EmptyState Icon="🚫" Title="Selected storage account is unavailable"
                         Subtitle="The saved storage configuration is incomplete or invalid for this configuration.">
                 <Actions>
                     <a href="/settings?section=storage">Review Storage settings</a>
@@ -114,20 +115,21 @@ else
                         </div>
                         @if (_selectedBlob is not null)
                         {
-                            <div @ref="_detailSplitterRef" class="pane-splitter storage-detail-splitter" role="separator"
-                                 aria-orientation="vertical" aria-label="Resize blob detail pane"
-                                 title="Drag to resize the detail pane"></div>
-                            <div @ref="_detailPaneRef" class="storage-detail-pane" style="@DetailPaneStyle">
-                                @if (_storageClient.Config.AllowMutations)
-                                {
-                                    <div class="storage-blob-mutation-bar">
-                                        <FluentButton Appearance="Appearance.Lightweight" @onclick="OpenCopyDialogAsync">Copy
-                                        </FluentButton>
-                                    </div>
-                                }
-                                <BlobDetailPane Client="_storageClient" ContainerName="@_selectedContainer" Blob="_selectedBlob"
-                                                AllowMutations="@(_storageClient.Config.AllowMutations)" />
-                            </div>
+                            <SidePanel Visible="true" ShowHeader="false" DefaultWidth="_detailPaneWidth"
+                                       MinWidth="MinDetailPaneWidth" MaxWidth="MaxDetailPaneWidth"
+                                       OnWidthChanged="PersistDetailPaneWidthAsync">
+                                <div class="storage-detail-pane-inner">
+                                    @if (_storageClient.Config.AllowMutations)
+                                    {
+                                        <div class="storage-blob-mutation-bar">
+                                            <FluentButton Appearance="Appearance.Lightweight" @onclick="OpenCopyDialogAsync">Copy
+                                            </FluentButton>
+                                        </div>
+                                    }
+                                    <BlobDetailPane Client="_storageClient" ContainerName="@_selectedContainer" Blob="_selectedBlob"
+                                                    AllowMutations="@(_storageClient.Config.AllowMutations)" />
+                                </div>
+                            </SidePanel>
                         }
                     </div>
                 }
@@ -162,10 +164,6 @@ else
     private string? _mutationMessage;
     private bool _mutationSuccess;
     private IReadOnlyList<string> _containerNames = [];
-    private ElementReference _detailSplitterRef;
-    private ElementReference _detailPaneRef;
-    private IJSObjectReference? _detailSplitterHandle;
-    private DotNetObjectReference<StoragePage>? _jsRef;
     private bool _disposed;
     private int _detailPaneWidth;
 
@@ -177,29 +175,14 @@ else
     private string? SelectedStorageAccountDisplayName =>
         _storageAccounts.FirstOrDefault(acc => acc.Id == _selectedAccountId)?.DisplayName;
 
-    private string DetailPaneStyle => $"width: {_detailPaneWidth}px; flex: 0 0 {_detailPaneWidth}px;";
-
     protected override void OnInitialized()
     {
         _detailPaneWidth = NormalizeDetailPaneWidth(UiState.GetViewState(DetailPaneWidthStateKey, DefaultDetailPaneWidth));
-        _jsRef = DotNetObjectReference.Create(this);
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Workspaces.RegisterRestoreHandler("storage", RestoreWorkspaceAsync);
         RebuildClient();
         RegisterStorageCommands();
         _ = Workspaces.ApplyPendingRestoreAsync("storage");
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (_selectedBlob is not null)
-        {
-            await EnsureDetailSplitterAsync();
-        }
-        else if (_detailSplitterHandle is not null)
-        {
-            await DisposeDetailSplitterAsync();
-        }
     }
 
     private void RegisterStorageCommands()
@@ -240,13 +223,12 @@ else
     public void Dispose()
     {
         DisposeCore();
-        _ = DisposeDetailSplitterAsync();
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         DisposeCore();
-        await DisposeDetailSplitterAsync();
+        return ValueTask.CompletedTask;
     }
 
     private void OnRefreshRequested(RefreshRequestedEvent refresh)
@@ -299,10 +281,9 @@ else
         _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
-    private async Task OnAccountChangedAsync(ChangeEventArgs e)
+    private async Task OnAccountChangedAsync(string? value)
     {
-        await DisposeDetailSplitterAsync();
-        _selectedAccountId = e.Value?.ToString();
+        _selectedAccountId = value;
         _selectedContainer = null;
         _selectedBlob = null;
         RebuildClient();
@@ -312,7 +293,6 @@ else
 
     private async Task OnContainerSelectedAsync(string? container)
     {
-        await DisposeDetailSplitterAsync();
         _selectedContainer = container;
         _selectedBlob = null;
         await PublishWorkspaceSnapshotAsync(recordRecent: !string.IsNullOrWhiteSpace(container));
@@ -321,65 +301,10 @@ else
 
     private async Task OnBlobSelectedAsync(StorageBlobItem? blob)
     {
-        if (blob is null)
-        {
-            await DisposeDetailSplitterAsync();
-        }
-
         _selectedBlob = blob;
         Selection.SetSelection("storage", blob);
         await PublishWorkspaceSnapshotAsync(recordRecent: blob is not null);
         await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task EnsureDetailSplitterAsync()
-    {
-        if (_detailSplitterHandle is not null)
-        {
-            return;
-        }
-
-        try
-        {
-            _detailSplitterHandle = await JS.InvokeAsync<IJSObjectReference>(
-                "SwebKitSplitter.init", _detailSplitterRef, _detailPaneRef,
-                new
-                {
-                    minWidth = MinDetailPaneWidth,
-                    maxWidth = MaxDetailPaneWidth,
-                    initialWidth = _detailPaneWidth,
-                    dotNetRef = _jsRef,
-                    onWidthChangedMethod = nameof(OnDetailPaneWidthChanged)
-                });
-        }
-        catch
-        {
-            _detailSplitterHandle = null;
-        }
-    }
-
-    private async Task DisposeDetailSplitterAsync()
-    {
-        if (_detailSplitterHandle is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var width = await _detailSplitterHandle.InvokeAsync<int>("getWidth");
-            await PersistDetailPaneWidthAsync(width);
-            await _detailSplitterHandle.InvokeVoidAsync("dispose");
-            await _detailSplitterHandle.DisposeAsync();
-        }
-        catch
-        {
-            // Best-effort cleanup. The renderer may already be gone.
-        }
-        finally
-        {
-            _detailSplitterHandle = null;
-        }
     }
 
     private void DisposeCore()
@@ -400,14 +325,6 @@ else
         }
 
         Selection.SetSelection("storage", null);
-        _jsRef?.Dispose();
-        _jsRef = null;
-    }
-
-    [JSInvokable]
-    public async Task OnDetailPaneWidthChanged(int width)
-    {
-        await PersistDetailPaneWidthAsync(width);
     }
 
     private async Task PersistDetailPaneWidthAsync(int width)

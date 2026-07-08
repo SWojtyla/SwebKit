@@ -1,4 +1,4 @@
-using Azure.Identity;
+using Azure.Core;
 using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
 using System.Globalization;
@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 
 namespace SwebKit.Azure.ServiceBus;
 
@@ -20,11 +21,11 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     private readonly string? _scopedEntityPath;
     private readonly ILogger<AzureServiceBusClient> _logger;
 
-    /// <summary>Primary constructor: creates a client from a raw connection string.</summary>
+    /// <summary>Creates a client from a raw connection string.</summary>
     public AzureServiceBusClient(string connectionString)
         : this(connectionString, NullLogger<AzureServiceBusClient>.Instance) { }
 
-    /// <summary>Primary constructor: creates a client from a raw connection string.</summary>
+    /// <summary>Creates a client from a raw connection string.</summary>
     public AzureServiceBusClient(string connectionString, ILogger<AzureServiceBusClient> logger)
     {
         _logger = logger;
@@ -32,6 +33,19 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         _scopedEntityPath = string.IsNullOrWhiteSpace(props.EntityPath) ? null : props.EntityPath;
         _client = new ServiceBusClient(connectionString);
         _adminClient = new ServiceBusAdministrationClient(connectionString);
+    }
+
+    /// <summary>Creates a client authenticated via Microsoft Entra ID.</summary>
+    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential)
+        : this(fullyQualifiedNamespace, credential, NullLogger<AzureServiceBusClient>.Instance) { }
+
+    /// <summary>Creates a client authenticated via Microsoft Entra ID.</summary>
+    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential, ILogger<AzureServiceBusClient> logger)
+    {
+        _logger = logger;
+        _scopedEntityPath = null;
+        _client = new ServiceBusClient(fullyQualifiedNamespace, credential);
+        _adminClient = new ServiceBusAdministrationClient(fullyQualifiedNamespace, credential);
     }
 
     /// <summary>Legacy constructor retained for backward-compatibility with config-based setup.</summary>
@@ -51,7 +65,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         }
         else
         {
-            var credential = new DefaultAzureCredential();
+            // See AzureCredentialFactory for why EnvironmentCredential is excluded.
+            var credential = AzureCredentialFactory.CreateDefault();
             _client = new ServiceBusClient(fqns, credential);
             _adminClient = new ServiceBusAdministrationClient(fqns, credential);
         }
@@ -245,18 +260,22 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         };
     }
 
-    public async Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null)
     {
         await using var receiver = _client.CreateReceiver(entityPath);
-        var messages = await receiver.PeekMessagesAsync(count, cancellationToken: ct);
+        var messages = fromSequenceNumber is long seq
+            ? await receiver.PeekMessagesAsync(count, seq, ct)
+            : await receiver.PeekMessagesAsync(count, cancellationToken: ct);
         return messages.Select(MapMessage).ToList();
     }
 
-    public async Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null)
     {
         var dlqPath = $"{entityPath}/$DeadLetterQueue";
         await using var receiver = _client.CreateReceiver(dlqPath);
-        var messages = await receiver.PeekMessagesAsync(count, cancellationToken: ct);
+        var messages = fromSequenceNumber is long seq
+            ? await receiver.PeekMessagesAsync(count, seq, ct)
+            : await receiver.PeekMessagesAsync(count, cancellationToken: ct);
         return messages.Select(MapMessage).ToList();
     }
 

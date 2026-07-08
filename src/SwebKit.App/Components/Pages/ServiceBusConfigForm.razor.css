@@ -12,10 +12,10 @@
 /* ── Namespace rows ── */
 .sb-settings-ns-row {
     display: grid;
-    grid-template-columns: 160px 1fr 28px;
-    gap: 6px;
+    grid-template-columns: 130px 1fr auto 28px 28px;
+    gap: 8px;
     align-items: center;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .sb-settings-ns-row__alias {
@@ -32,6 +32,45 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Auth badge pill */
+.sb-settings-ns-row__badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.sb-settings-ns-row__badge--entra {
+    background: color-mix(in srgb, var(--color-accent, #0078d4) 12%, transparent);
+    color: var(--color-accent, #0078d4);
+}
+
+.sb-settings-ns-row__badge--key {
+    background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+    color: var(--color-text-muted);
+}
+
+/* Reconnect icon status colors */
+.sb-settings-reconnect-ok {
+    color: var(--color-success, #107c10);
+}
+
+.sb-settings-reconnect-err {
+    color: var(--color-error);
+}
+
+/* Inline error beneath a row after a failed reconnect */
+.sb-settings-ns-inline-error {
+    font-size: var(--font-size-xs);
+    color: var(--color-error);
+    padding: 2px 0 4px 0;
+    margin-bottom: 2px;
 }
 
 .sb-settings-ns-row__remove {
@@ -77,6 +116,15 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     margin-top: 2px;
+}
+
+.sb-settings-add-form__auth-section {
+    display: grid;
+    gap: 4px;
+}
+
+.sb-settings-add-form__auth-label {
+    margin-bottom: 4px;
 }
 
 .sb-settings-add-form__input {

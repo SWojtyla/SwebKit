@@ -1,8 +1,8 @@
-using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.ApplicationInsights;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 
 namespace SwebKit.Observability;
 
@@ -29,7 +29,8 @@ public sealed class AppInsightsDiscoveryService : IObservabilityResourceDiscover
             }
 
             _cache = [];
-            var credential = new DefaultAzureCredential();
+            // See AzureCredentialFactory for why EnvironmentCredential is excluded.
+            var credential = AzureCredentialFactory.CreateDefault();
             var armClient = new ArmClient(credential);
 
             await foreach (var subscription in armClient.GetSubscriptions().GetAllAsync(ct))

@@ -89,22 +89,30 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
 
         try
         {
-            var connectionString = _credentialStore.Get(ns.CredentialKey);
-            if (string.IsNullOrWhiteSpace(connectionString))
+            if (ns.AuthMode == SbAuthMode.DefaultAzureCredential)
             {
-                return new ServiceBusNamespaceConnectionResult(
-                    Client: null,
-                    ConnectionError: "Connection string not found in credential store.");
+                client = _clientFactory.CreateWithEntra(ns.FullyQualifiedNamespace);
+            }
+            else
+            {
+                var connectionString = _credentialStore.Get(ns.CredentialKey);
+                if (string.IsNullOrWhiteSpace(connectionString))
+                {
+                    return new ServiceBusNamespaceConnectionResult(
+                        Client: null,
+                        ConnectionError: "Connection string not found in credential store.");
+                }
+
+                client = _clientFactory.Create(connectionString);
             }
 
-            client = _clientFactory.Create(connectionString);
             var ok = await client.TestConnectionAsync(ct);
             if (!ok)
             {
                 if (client is IAsyncDisposable d) await d.DisposeAsync();
                 return new ServiceBusNamespaceConnectionResult(
                     Client: null,
-                    ConnectionError: "Connection test failed. Check the connection string.");
+                    ConnectionError: "Connection test failed. Check the namespace configuration.");
             }
 
             return new ServiceBusNamespaceConnectionResult(client, ConnectionError: null);
