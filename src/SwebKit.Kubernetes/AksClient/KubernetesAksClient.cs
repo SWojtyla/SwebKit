@@ -2511,11 +2511,15 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     }
 
     /// <summary>
-    /// Starts `kubectl` with the given arguments and awaits its exit. If <paramref name="ct"/> is
-    /// cancelled (e.g. a caller-side timeout), the still-running kubectl process is killed rather
-    /// than abandoned — otherwise a "timed out" result to the caller would be a false negative:
-    /// kubectl could keep running in the background and still apply the change moments later,
-    /// leaving the user unsure whether their save actually went through.
+    /// Starts `kubectl` with the given arguments and awaits its exit. Stdout and stderr are
+    /// captured continuously (not just after a clean exit) so that if <paramref name="ct"/> is
+    /// cancelled (e.g. a caller-side timeout), whatever kubectl had already printed — including a
+    /// stuck interactive auth prompt from a kubelogin/exec credential plugin, which is a common
+    /// cause of an apply that hangs with zero feedback — can be surfaced instead of a bare
+    /// "timed out" message. On cancellation the still-running kubectl process is also killed
+    /// rather than abandoned — otherwise a "timed out" result would be a false negative: kubectl
+    /// could keep running in the background and still apply the change moments later, leaving
+    /// the user unsure whether their save actually went through.
     /// </summary>
     private static async Task<(int ExitCode, string Stderr)> RunKubectlProcessAsync(string arguments, CancellationToken ct)
     {
@@ -2528,21 +2532,46 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
             CreateNoWindow = true
         };
 
-        using var process = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
+        using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+
+        var output = new StringBuilder();
+        var outputLock = new object();
+        void OnData(object? _, DataReceivedEventArgs e)
+        {
+            if (e.Data is null) return;
+            lock (outputLock) { output.AppendLine(e.Data); }
+        }
+        process.OutputDataReceived += OnData;
+        process.ErrorDataReceived += OnData;
+
+        if (!process.Start())
+            throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
 
         await using var killOnCancel = ct.Register(() =>
         {
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { /* best-effort */ }
         });
 
-        await process.WaitForExitAsync(ct);
+        try
+        {
+            await process.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            string captured;
+            lock (outputLock) { captured = output.ToString().Trim(); }
+            throw new TimeoutException(string.IsNullOrEmpty(captured)
+                ? "kubectl produced no output before it was cancelled — it may be stuck waiting on cluster/network connectivity or an interactive credential prompt (e.g. kubelogin device-code sign-in) that never surfaced."
+                : $"kubectl was cancelled after producing this output:\n{captured}");
+        }
 
-        var stderr = process.ExitCode != 0
-            ? await process.StandardError.ReadToEndAsync(CancellationToken.None)
-            : string.Empty;
+        string combinedOutput;
+        lock (outputLock) { combinedOutput = output.ToString().Trim(); }
 
-        return (process.ExitCode, stderr);
+        return (process.ExitCode, combinedOutput);
     }
 
     private static bool IsForbiddenError(string stderr)

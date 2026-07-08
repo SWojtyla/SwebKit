@@ -23,10 +23,12 @@
             }
             @if (_editMode)
             {
-                <FluentButton Appearance="Appearance.Accent" Disabled="@(_applying || _validating)" @onclick="OnSave" Title="Apply YAML">
+                <FluentButton Appearance="Appearance.Accent" Disabled="@(_applying || _validating)" @onclick="OnSave"
+                              Title="Apply YAML">
                     @(_validating ? "Validating…" : _applying ? "Saving…" : "Save")
                 </FluentButton>
-                <FluentButton Appearance="Appearance.Stealth" Disabled="@(_applying || _validating)" @onclick="OnCancelEdit" Title="Cancel edit">
+                <FluentButton Appearance="Appearance.Stealth" Disabled="@(_applying || _validating)" @onclick="OnCancelEdit"
+                              Title="Cancel edit">
                     Cancel</FluentButton>
                 }
                 <FluentButton Appearance="Appearance.Stealth" @onclick="Close" Title="Close">
@@ -41,7 +43,7 @@
                     @if (!string.IsNullOrEmpty(_search))
                     {
                         <span class="aks-yaml-search-count">@_searchCount match@(_searchCount != 1 ? "es" :
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "")</span>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        "")</span>
                             <button class="aks-yaml-search-clear" @onclick="ClearSearch" title="Clear">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
                             </button>
@@ -303,6 +305,13 @@
             {
                 dryRunError = await Client.ValidateResourceYamlAsync(resourceNamespace, _editText, validateCts.Token);
             }
+            catch (TimeoutException ex)
+            {
+                // Our own cancellation (see KubernetesAksClient.RunKubectlProcessAsync) surfaces
+                // as a TimeoutException carrying whatever kubectl had already printed — show it
+                // instead of a bare "timed out" message with no context.
+                dryRunError = $"Validation timed out after {ValidateTimeoutSeconds}s. {ex.Message}";
+            }
             catch (OperationCanceledException) when (validateCts.IsCancellationRequested)
             {
                 dryRunError = $"Validation timed out after {ValidateTimeoutSeconds}s. Check cluster connectivity and try again.";
@@ -347,11 +356,17 @@
                 await Client.ApplyResourceYamlAsync(resourceNamespace, _target.Value.Kind, _target.Value.Name, _editText,
 timeoutCts.Token);
             }
+            catch (TimeoutException ex)
+            {
+                // Our own cancellation (see KubernetesAksClient.RunKubectlProcessAsync) already
+                // carries whatever kubectl had printed before being killed — re-throw with that
+                // context preserved instead of replacing it with a generic message.
+                throw new TimeoutException($"Applying YAML timed out after {ApplyTimeoutSeconds}s. {ex.Message}");
+            }
             catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
             {
-                // Our own timeout fired (not an external/caller cancellation) — surface it as a
-                // regular error below instead of letting it hit the CS-2 rethrow branch, since
-                // there is no ambient caller token here to propagate cancellation to.
+                // Our own timeout fired before reaching kubectl (e.g. during temp-file write) —
+                // no captured output is available in this rare case, fall back to a plain message.
                 throw new TimeoutException($"Applying YAML timed out after {ApplyTimeoutSeconds}s. Check cluster connectivity and try again.");
             }
             _text = _editText;

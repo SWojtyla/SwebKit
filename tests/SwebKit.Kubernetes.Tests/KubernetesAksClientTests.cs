@@ -130,6 +130,53 @@ users:
         Assert.Contains("--context prod-aks", kubectlArgs, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CleanEditableYaml_StripsStatusAndServerManagedMetadataFields()
+    {
+        const string rawYaml = """
+                                apiVersion: apps/v1
+                                kind: Deployment
+                                metadata:
+                                  name: boa-brioengine
+                                  namespace: prd-boa
+                                  generation: 733
+                                  resourceVersion: "2597455352"
+                                  uid: cb88ddef-1491-41df-bc5d-4e8a4ac9ed41
+                                  creationTimestamp: "2025-08-12T20:14:51Z"
+                                  managedFields:
+                                  - manager: kube-controller-manager
+                                    operation: Update
+                                  labels:
+                                    app.kubernetes.io/name: boa-brioengine
+                                spec:
+                                  replicas: 4
+                                status:
+                                  availableReplicas: 4
+                                  readyReplicas: 4
+                                """;
+
+        var cleaned = KubernetesAksClient.CleanEditableYaml(rawYaml);
+
+        Assert.DoesNotContain("status:", cleaned, StringComparison.Ordinal);
+        Assert.DoesNotContain("resourceVersion", cleaned, StringComparison.Ordinal);
+        Assert.DoesNotContain("managedFields", cleaned, StringComparison.Ordinal);
+        Assert.DoesNotContain("generation:", cleaned, StringComparison.Ordinal);
+        Assert.DoesNotContain("uid:", cleaned, StringComparison.Ordinal);
+        Assert.DoesNotContain("creationTimestamp", cleaned, StringComparison.Ordinal);
+
+        // Editable content must survive the cleanup untouched.
+        Assert.Contains("name: boa-brioengine", cleaned, StringComparison.Ordinal);
+        Assert.Contains("namespace: prd-boa", cleaned, StringComparison.Ordinal);
+        Assert.Contains("replicas: 4", cleaned, StringComparison.Ordinal);
+        Assert.Contains("app.kubernetes.io/name: boa-brioengine", cleaned, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CleanEditableYaml_ReturnsOriginal_WhenYamlIsEmpty()
+    {
+        Assert.Equal(string.Empty, KubernetesAksClient.CleanEditableYaml(string.Empty));
+    }
+
     [Theory]
     [InlineData("https://cluster.region.azmk8s.io:443", null, true)]
     [InlineData("https://cluster.region.azmk8s.io:443", "already-token", false)]
