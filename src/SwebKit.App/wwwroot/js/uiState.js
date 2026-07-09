@@ -4,6 +4,36 @@ window.SwebKitUi.getWindowWidth = function () {
   return window.innerWidth || 0;
 };
 
+// Shift a fixed-position element so it stays fully inside the viewport.
+// Used by context menus that are anchored to the click point and can overflow
+// the bottom/right edge (e.g. when right-clicking a request near the screen edge).
+window.SwebKitUi.clampMenu = function (el, margin) {
+  if (!el) return;
+  var m = typeof margin === 'number' ? margin : 8;
+  var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+  var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+  var rect = el.getBoundingClientRect();
+
+  var left = rect.left;
+  var top = rect.top;
+
+  if (rect.right > vw - m) {
+    left = Math.max(m, vw - rect.width - m);
+  }
+  if (left < m) {
+    left = m;
+  }
+  if (rect.bottom > vh - m) {
+    top = Math.max(m, vh - rect.height - m);
+  }
+  if (top < m) {
+    top = m;
+  }
+
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+};
+
 // Scroll a container element to its bottom (used by the AI Agent chat thread).
 window.scrollElementToBottom = function (elementId) {
   var el = document.getElementById(elementId);
