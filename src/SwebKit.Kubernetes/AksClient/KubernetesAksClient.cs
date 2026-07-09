@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
 using SwebKit.Core.Models;
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -2733,6 +2734,11 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     // ── Feature 1: Multi-pod log aggregation ─────────────────────────────────
 
+    // How often a live (Follow) aggregated stream re-lists pods for the deployment's selector,
+    // so pods created after the stream started (rolling updates, HPA scale-out, evictions) get
+    // picked up instead of being silently missing from the merged view.
+    private static readonly TimeSpan DeploymentLogPodDiscoveryInterval = TimeSpan.FromSeconds(10);
+
     public async IAsyncEnumerable<AggregatedLogLine> StreamDeploymentLogsAsync(
         string ns, string deploymentName, LogStreamOptions opts,
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -2750,10 +2756,18 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         var channel = Channel.CreateUnbounded<AggregatedLogLine>();
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        int remainingCount = pods.Count;
+        // Tracks which pods already have a running per-pod stream task, so re-discovery never
+        // double-tails the same pod. Only completed streams are removed, allowing a pod that
+        // gets recreated with the same name (rare, but possible with static pod names) to be
+        // re-attached on the next discovery pass.
+        var trackedPods = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+        var activeStreamCount = 0;
 
-        foreach (var pod in pods)
+        void StartPodStream(PodInfo pod)
         {
+            if (!trackedPods.TryAdd(pod.Name, 0)) return;
+            Interlocked.Increment(ref activeStreamCount);
+
             _ = Task.Run(async () =>
             {
                 try
@@ -2773,24 +2787,71 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
-                    // Pod-specific stream ended (e.g. pod restarted) — not overall cancellation.
-                    // Let the countdown handle completion.
+                    // Pod-specific stream ended (e.g. pod restarted, evicted, or rolled) — not
+                    // overall cancellation. In Follow mode the discovery loop below will pick up
+                    // any replacement pod; in a one-shot (non-Follow) window the countdown below
+                    // completes the channel once every currently known pod has finished.
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[StreamDeploymentLogs] Pod '{pod.Name}' stream failed: {ex.GetType().Name}: {ex.Message}");
+                    _logger.LogWarning(ex,
+                        "StreamDeploymentLogs: pod '{PodName}' stream failed", pod.Name);
                 }
                 finally
                 {
-                    if (Interlocked.Decrement(ref remainingCount) == 0)
+                    trackedPods.TryRemove(pod.Name, out _);
+                    // Only auto-complete for one-shot (non-Follow) windows. A live Follow session
+                    // must stay open even if every currently-tailed pod's stream happens to end at
+                    // the same time (e.g. a rolling update replacing every replica at once) —
+                    // otherwise "Live" silently stops even though the checkbox still shows enabled.
+                    var remaining = Interlocked.Decrement(ref activeStreamCount);
+                    if (!opts.Follow && remaining == 0)
                         channel.Writer.TryComplete();
                 }
             }, linkedCts.Token);
         }
 
-        await foreach (var item in channel.Reader.ReadAllAsync(ct))
-            yield return item;
+        foreach (var pod in pods)
+            StartPodStream(pod);
+
+        Task? discoveryTask = null;
+        if (opts.Follow)
+        {
+            discoveryTask = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!linkedCts.Token.IsCancellationRequested)
+                    {
+                        await Task.Delay(DeploymentLogPodDiscoveryInterval, linkedCts.Token);
+                        var currentPods = await GetPodsAsync(ns, labelSelector, linkedCts.Token);
+                        foreach (var pod in currentPods)
+                            StartPodStream(pod);
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "StreamDeploymentLogs: pod re-discovery for deployment '{DeploymentName}' failed", deploymentName);
+                }
+            }, linkedCts.Token);
+        }
+
+        try
+        {
+            await foreach (var item in channel.Reader.ReadAllAsync(ct))
+                yield return item;
+        }
+        finally
+        {
+            linkedCts.Cancel();
+            if (discoveryTask is not null)
+            {
+                try { await discoveryTask; }
+                catch { /* already logged/observed above */ }
+            }
+        }
     }
 
     // ── Feature 2: StatefulSets ───────────────────────────────────────────────
