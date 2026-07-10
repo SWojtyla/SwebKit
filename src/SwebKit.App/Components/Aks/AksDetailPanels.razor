@@ -379,8 +379,7 @@
                                 }
                                 else
                                 {
-                                    @foreach (var evt in _filteredEvents)
-                                    {
+                                    <Virtualize Items="@_filteredEvents" Context="evt" ItemSize="60">
                                         <div class="aks-event-item @(evt.Type == "Warning" ? "warning" : "")">
                                             <div class="aks-event-header">
                                                 @if (evt.Type == "Warning")
@@ -421,7 +420,7 @@
                                                 @evt.Message
                                             </div>
                                         </div>
-                                    }
+                                    </Virtualize>
                                 }
                             </div>
                         </div>
