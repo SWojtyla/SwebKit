@@ -2,7 +2,7 @@
     @if (!Collapsed)
     {
         <div class="pipeline-tree__toolbar">
-            <input class="pipeline-tree__search" type="search" @bind="_search" @bind:event="oninput"
+            <input class="pipeline-tree__search" type="search" @bind="Search" @bind:event="oninput"
                    placeholder="Filter..." />
             <button class="pipeline-tree__collapse-btn" @onclick="ToggleCollapse"
                     title="Collapse panel">
@@ -81,6 +81,7 @@
 </div>
 
 @code {
+@implements IDisposable
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
     [Parameter] public AdoProject? SelectedProject { get; set; }
     [Parameter] public AdoPipeline? SelectedPipeline { get; set; }
@@ -92,6 +93,27 @@
     private bool _isLoading;
     private string? _error;
     private string _search = string.Empty;
+    private System.Timers.Timer? _searchDebounceTimer;
+    private const int SearchDebounceMs = 300;
+    private string _debouncedSearch = string.Empty;
+
+    private string Search
+    {
+        get => _search;
+        set
+        {
+            _search = value;
+            _searchDebounceTimer ??= new System.Timers.Timer(SearchDebounceMs) { AutoReset = false };
+            _searchDebounceTimer.Stop();
+            _searchDebounceTimer.Interval = SearchDebounceMs;
+            _searchDebounceTimer.Elapsed += (_, _) => InvokeAsync(() =>
+            {
+                _debouncedSearch = _search;
+                StateHasChanged();
+            });
+            _searchDebounceTimer.Start();
+        }
+    }
     private List<AdoProject> _projects = [];
     private Dictionary<string, List<AdoPipeline>> _pipelinesByProject = new();
     private Dictionary<(string, int), AdoPipelineRun> _lastRuns = new();
@@ -163,9 +185,9 @@
     private List<AdoPipeline> FilteredPipelines(string project)
     {
         var all = _pipelinesByProject.GetValueOrDefault(project) ?? [];
-        return string.IsNullOrWhiteSpace(_search)
+        return string.IsNullOrWhiteSpace(_debouncedSearch)
             ? all
-            : all.Where(p => p.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)).ToList();
+            : all.Where(p => p.Name.Contains(_debouncedSearch, StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
     private Task SelectPipeline(AdoProject project, AdoPipeline pipeline) =>
@@ -199,4 +221,6 @@
         if (ago.TotalHours < 24) return $"{(int)ago.TotalHours}h";
         return $"{(int)ago.TotalDays}d";
     }
+
+    public void Dispose() => _searchDebounceTimer?.Dispose();
 }
