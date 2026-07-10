@@ -578,7 +578,6 @@
     public async Task OpenYamlAsync(string kind, string name, bool editMode = false, string? targetNamespace = null)
     {
         _pendingYamlOpen = (kind, name, editMode, targetNamespace);
-        await InvokeAsync(StateHasChanged);
     }
 
     public void CloseYaml() => _yamlViewer?.Close();
@@ -617,19 +616,16 @@
     public async Task ShowHelmHistoryAsync(string releaseName)
     {
         _pendingHelmOpen = (releaseName, HelmPendingAction.History);
-        await InvokeAsync(StateHasChanged);
     }
 
     public async Task ShowHelmValuesAsync(string releaseName)
     {
         _pendingHelmOpen = (releaseName, HelmPendingAction.Values);
-        await InvokeAsync(StateHasChanged);
     }
 
     public async Task ShowHelmRollbackAsync(string releaseName)
     {
         _pendingHelmOpen = (releaseName, HelmPendingAction.Rollback);
-        await InvokeAsync(StateHasChanged);
     }
 
     // Scale
