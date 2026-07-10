@@ -72,8 +72,7 @@
                 </div>
             }
 
-            @foreach (var msg in _messages)
-            {
+            <Virtualize Items="@_messages" Context="msg" ItemSize="80">
                 @if (msg.IsUser)
                 {
                     <div class="agent-bubble agent-bubble--user">
@@ -101,7 +100,7 @@
                         </div>
                     </div>
                 }
-            }
+            </Virtualize>
 
             @if (_isLoading)
             {
