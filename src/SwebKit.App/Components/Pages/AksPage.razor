@@ -547,6 +547,15 @@
     private string CronJobFilter = string.Empty;
     private bool ShowCompletedPods;
 
+    // Cache for filtered collections to avoid recomputation on every render
+    private IQueryable<DeploymentInfo>? _filteredDeploymentsCache;
+    private IQueryable<StatefulSetInfo>? _filteredStatefulSetsCache;
+    private IQueryable<PodInfo>? _filteredPodsCache;
+    private string? _lastDeploymentFilter;
+    private string? _lastStatefulSetFilter;
+    private string? _lastPodFilter;
+    private bool _lastShowCompletedPods;
+
     private string ActiveFilter
     {
         get => ActiveResourceType switch
@@ -587,23 +596,61 @@
         }
     }
 
-    private IQueryable<DeploymentInfo> FilteredDeployments => string.IsNullOrWhiteSpace(DeploymentFilter)
-    ? Deployments.AsQueryable()
-    : Deployments.Where(d => d.Name.Contains(DeploymentFilter, StringComparison.OrdinalIgnoreCase)
-    || d.Status.Contains(DeploymentFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
+    private IQueryable<DeploymentInfo> FilteredDeployments
+    {
+        get
+        {
+            if (_filteredDeploymentsCache is null ||
+                _lastDeploymentFilter != DeploymentFilter)
+            {
+                _lastDeploymentFilter = DeploymentFilter;
+                _filteredDeploymentsCache = string.IsNullOrWhiteSpace(DeploymentFilter)
+                    ? Deployments.AsQueryable()
+                    : Deployments.Where(d => d.Name.Contains(DeploymentFilter, StringComparison.OrdinalIgnoreCase)
+                        || d.Status.Contains(DeploymentFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
+            }
+            return _filteredDeploymentsCache;
+        }
+    }
 
-    private IQueryable<StatefulSetInfo> FilteredStatefulSets => string.IsNullOrWhiteSpace(StatefulSetFilter)
-    ? StatefulSets.AsQueryable()
-    : StatefulSets.Where(s => s.Name.Contains(StatefulSetFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
+    private IQueryable<StatefulSetInfo> FilteredStatefulSets
+    {
+        get
+        {
+            if (_filteredStatefulSetsCache is null ||
+                _lastStatefulSetFilter != StatefulSetFilter)
+            {
+                _lastStatefulSetFilter = StatefulSetFilter;
+                _filteredStatefulSetsCache = string.IsNullOrWhiteSpace(StatefulSetFilter)
+                    ? StatefulSets.AsQueryable()
+                    : StatefulSets.Where(s => s.Name.Contains(StatefulSetFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
+            }
+            return _filteredStatefulSetsCache;
+        }
+    }
 
-    private IQueryable<PodInfo> FilteredPods => Pods
-    .Where(p => ShowCompletedPods || !IsCompletedPod(p))
-    .Where(p => string.IsNullOrWhiteSpace(PodFilter)
-    || p.Name.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
-    || p.Status.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
-    || p.Phase.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
-    || (p.NodeName?.Contains(PodFilter, StringComparison.OrdinalIgnoreCase) ?? false))
-    .AsQueryable();
+    private IQueryable<PodInfo> FilteredPods
+    {
+        get
+        {
+            if (_filteredPodsCache is null ||
+                _lastPodFilter != PodFilter ||
+                _lastShowCompletedPods != ShowCompletedPods)
+            {
+                _lastPodFilter = PodFilter;
+                _lastShowCompletedPods = ShowCompletedPods;
+                _filteredPodsCache = Pods
+                    .Where(p => ShowCompletedPods || !IsCompletedPod(p))
+                    .Where(p => string.IsNullOrWhiteSpace(PodFilter)
+                        || p.Name.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
+                        || p.Status.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
+                        || p.Phase.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
+                        || (p.NodeName?.Contains(PodFilter, StringComparison.OrdinalIgnoreCase) ?? false))
+                    .AsQueryable();
+            }
+            return _filteredPodsCache;
+        }
+    }
 
     private int HiddenCompletedPodCount => Pods.Count(IsCompletedPod);
 
