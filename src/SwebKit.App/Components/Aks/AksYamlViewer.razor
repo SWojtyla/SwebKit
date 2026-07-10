@@ -16,7 +16,7 @@
             @if (!_loading && _error is null)
             {
                 <button class="aks-search-toggle-btn @(_showSearch ? "active" : "")"
-                        @onclick="() => { _showSearch = !_showSearch; if (!_showSearch) _ = ClearSearch(); StateHasChanged(); }"
+                        @onclick="() => { _showSearch = !_showSearch; if (!_showSearch) _ = ClearSearch(); InvokeAsync(StateHasChanged); }"
                         title="Search in YAML">
                     <FluentIcon Value="@(new Icons.Regular.Size16.Search())" Width="16px" />
                 </button>
@@ -69,7 +69,7 @@
                                 <FluentButton Appearance="Appearance.Accent" Disabled="@_applying" @onclick="ApplyAnyway">Apply anyway
                                 </FluentButton>
                                 <FluentButton Appearance="Appearance.Stealth"
-                                              @onclick="() => { _validationWarning = null; _bypassValidation = false; StateHasChanged(); }">Fix first
+                                              @onclick="() => { _validationWarning = null; _bypassValidation = false; InvokeAsync(StateHasChanged); }">Fix first
                                 </FluentButton>
                             </div>
                         </div>
@@ -218,7 +218,7 @@
         _validationError = null;
         _validationWarning = null;
         _bypassValidation = false;
-        StateHasChanged();
+        _ = InvokeAsync(StateHasChanged);
         _ = OnClose.InvokeAsync();
     }
 
@@ -239,12 +239,12 @@
             var currentText = await JS.InvokeAsync<string>("yamlHighlight.getEditorValue", _editTextarea);
             _searchCount = string.IsNullOrEmpty(_search) ? 0
                 : CountOccurrences(currentText, _search);
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
             return;
         }
-        if (_yamlViewPre.Id is null) { StateHasChanged(); return; }
+        if (_yamlViewPre.Id is null) { await InvokeAsync(StateHasChanged); return; }
         _searchCount = await JS.InvokeAsync<int>("yamlHighlight.searchInPre", _yamlViewPre, _search);
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task ClearSearch()
@@ -253,7 +253,7 @@
         _searchCount = 0;
         if (_yamlViewPre.Id is not null)
             await JS.InvokeVoidAsync("yamlHighlight.clearSearch", _yamlViewPre);
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnEditToggle()
@@ -262,11 +262,11 @@
         _editText = _text ?? string.Empty;
         _editKey++;
         _initEditOverlay = true;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
         await Task.CompletedTask;
     }
 
-    private void OnCancelEdit()
+    private async Task OnCancelEdit()
     {
         _editMode = false;
         _editText = string.Empty;
@@ -274,7 +274,7 @@
         _validationWarning = null;
         _bypassValidation = false;
         _replace = string.Empty;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnSave()
@@ -285,10 +285,10 @@
         _editText = await JS.InvokeAsync<string>("yamlHighlight.getEditorValue", _editTextarea);
 
         _validationError = ValidateYaml(_editText);
-        if (_validationError is not null) { _validationWarning = null; _bypassValidation = false; StateHasChanged(); return; }
+        if (_validationError is not null) { _validationWarning = null; _bypassValidation = false; await InvokeAsync(StateHasChanged); return; }
 
         _validationWarning = _bypassValidation ? null : CheckYamlStructure(_editText);
-        if (_validationWarning is not null && !_bypassValidation) { StateHasChanged(); return; }
+        if (_validationWarning is not null && !_bypassValidation) { await InvokeAsync(StateHasChanged); return; }
 
         _bypassValidation = false;
         var resourceNamespace = _targetNamespace ?? Namespace;
@@ -297,7 +297,7 @@
         // and the basic structure check above can never see (unknown fields, bad enum values,
         // immutable-field changes, webhook rejections, etc.).
         _validating = true;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
         try
         {
             using var validateCts = new CancellationTokenSource(TimeSpan.FromSeconds(ValidateTimeoutSeconds));
@@ -334,11 +334,11 @@
         finally
         {
             _validating = false;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
         }
 
         _applying = true;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
 
         try
         {
@@ -348,7 +348,7 @@
                 $"Apply YAML changes to {_target.Value.Kind} \"{_target.Value.Name}\" in production?",
                 _target.Value.Name,
                 requireTypedName: true);
-                if (!confirmed) { _applying = false; StateHasChanged(); return; }
+                if (!confirmed) { _applying = false; await InvokeAsync(StateHasChanged); return; }
             }
 
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(ApplyTimeoutSeconds));
@@ -374,7 +374,7 @@ timeoutCts.Token);
             _highlighted = await HighlightAsync(_text);
             _editMode = false;
             _editText = string.Empty;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
             Notifications.ShowSuccess("YAML applied", $"{_target.Value.Kind} {_target.Value.Name}");
             await OnYamlApplied.InvokeAsync();
         }
