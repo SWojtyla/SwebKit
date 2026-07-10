@@ -17,6 +17,7 @@ public sealed class AlertMonitorService : IAlertMonitorService
     private readonly IMonitoringConnectionPool _pool;
     private readonly IWindowsNotificationService _toast;
     private readonly INotificationService _notifications;
+    private readonly IToastDiagnosticService _toastDiagnostic;
     private readonly AppStateService _appState;
     private readonly ILogger<AlertMonitorService> _logger;
 
@@ -58,6 +59,7 @@ public sealed class AlertMonitorService : IAlertMonitorService
         IMonitoringConnectionPool pool,
         IWindowsNotificationService toast,
         INotificationService notifications,
+        IToastDiagnosticService toastDiagnostic,
         AppStateService appState,
         ILogger<AlertMonitorService> logger)
     {
@@ -66,6 +68,7 @@ public sealed class AlertMonitorService : IAlertMonitorService
         _pool = pool;
         _toast = toast;
         _notifications = notifications;
+        _toastDiagnostic = toastDiagnostic;
         _appState = appState;
         _logger = logger;
         _appState.Initialized += OnAppInitialized;
@@ -240,13 +243,25 @@ public sealed class AlertMonitorService : IAlertMonitorService
             try { AlertFired?.Invoke(evt); }
             catch (Exception ex) { _logger.LogWarning(ex, "AlertFired handler threw for rule {RuleId}", rule.Id); }
 
-            try { _toast.ShowAlert(evt); }
-            catch (Exception ex) { _logger.LogWarning(ex, "ShowAlert threw for rule {RuleId}", rule.Id); }
+            // Best-effort OS toast. The service never throws, but keep a defensive guard so a toast
+            // failure can never crash the monitoring loop (route the failure to the fallback below).
+            ToastDeliveryResult toastResult;
+            try { toastResult = _toast.ShowAlert(evt); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "ShowAlert threw for rule {RuleId}", rule.Id);
+                toastResult = ToastDeliveryResult.Failed(ex.Message);
+            }
 
+            // In-app notification is the reliable baseline — always raised so the alert is never lost.
             if (rule.Severity == AlertSeverity.Critical)
                 _notifications.ShowError(evt.RuleName, evt.Message);
             else
                 _notifications.ShowWarning(evt.RuleName, evt.Message);
+
+            // If the OS toast was lost, surface a one-time diagnostic hint explaining the fallback.
+            if (!toastResult.Delivered)
+                _toastDiagnostic.ReportToastUnavailable(toastResult.Reason);
         }
         finally
         {

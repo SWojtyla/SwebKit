@@ -263,6 +263,41 @@
     color: var(--color-error);
 }
 
+.sb-ns-error-callout {
+    margin: 8px 12px;
+    border: 1px solid color-mix(in srgb, var(--color-error) 40%, var(--color-border));
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--color-error) 8%, var(--color-surface));
+}
+
+.sb-ns-error-callout .sb-ns-error-message {
+    padding: 8px 12px 4px;
+}
+
+/* Non-secret credential diagnostic (DEC-3): identifiers only, never key material. */
+.sb-ns-error-diagnostic {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    margin: 0;
+    padding: 6px 12px 10px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.sb-ns-error-diagnostic dt {
+    font-weight: 600;
+    opacity: 0.85;
+    white-space: nowrap;
+}
+
+.sb-ns-error-diagnostic dd {
+    margin: 0;
+    color: var(--color-text);
+    word-break: break-all;
+}
+
 /* ── Focus rings ───────────────────────────────────────── */
 
 .sb-ns-pill:focus-visible,

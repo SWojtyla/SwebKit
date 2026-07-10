@@ -767,6 +767,17 @@
     background: var(--color-accent);
 }
 
+/* While a splitter drag is active, the JS drag handlers (splitter.js / uiState.js)
+   add `.is-resizing` to the resized pane or shell container. Killing any width / flex /
+   custom-property transition here makes the pane track the cursor 1:1 instead of easing
+   toward it (DEC-5). Shared across all workspaces (AKS, Redis, Service Bus, API client)
+   and the agent panel — the width is already at its final value on mouseup, so removing
+   the class does not animate a jump. */
+.is-resizing {
+    transition: none !important;
+    will-change: width;
+}
+
 /* ═══════════════════════════════════════════════════════════
    Service Bus page layout
    ═══════════════════════════════════════════════════════════ */

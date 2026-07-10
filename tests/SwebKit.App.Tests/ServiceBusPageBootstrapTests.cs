@@ -178,6 +178,18 @@ public sealed class ServiceBusPageBootstrapTests : TestContext
         public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace, SbTransportType transportType = SbTransportType.Amqp) => new FakeServiceBusClient();
 
         public string ParseFullyQualifiedNamespace(string connectionString) => "test.servicebus.windows.net";
+
+        public ServiceBusConnectionDiagnostic BuildConnectionDiagnostic(string connectionString, string credentialSource) =>
+            new(EndpointHost: "test.servicebus.windows.net",
+                SharedAccessKeyName: "RootManageSharedAccessKey",
+                AuthMethod: "SAS key",
+                CredentialSource: credentialSource);
+
+        public ServiceBusConnectionDiagnostic BuildEntraConnectionDiagnostic(string fullyQualifiedNamespace) =>
+            new(EndpointHost: fullyQualifiedNamespace,
+                SharedAccessKeyName: null,
+                AuthMethod: "Microsoft Entra (DefaultAzureCredential)",
+                CredentialSource: "DefaultAzureCredential");
     }
 
     private sealed class FakeCredentialStore : ICredentialStore

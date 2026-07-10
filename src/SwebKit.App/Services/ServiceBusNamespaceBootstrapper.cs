@@ -86,11 +86,13 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
     public async Task<ServiceBusNamespaceConnectionResult> ConnectAsync(ServiceBusNamespace ns, CancellationToken ct = default)
     {
         IServiceBusClient? client = null;
+        ServiceBusConnectionDiagnostic? diagnostic = null;
 
         try
         {
             if (ns.AuthMode == SbAuthMode.DefaultAzureCredential)
             {
+                diagnostic = _clientFactory.BuildEntraConnectionDiagnostic(ns.FullyQualifiedNamespace);
                 client = _clientFactory.CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType);
             }
             else
@@ -100,9 +102,18 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
                 {
                     return new ServiceBusNamespaceConnectionResult(
                         Client: null,
-                        ConnectionError: "Connection string not found in credential store.");
+                        ConnectionError: "Connection string not found in credential store.",
+                        Diagnostic: new ServiceBusConnectionDiagnostic(
+                            EndpointHost: ns.FullyQualifiedNamespace,
+                            SharedAccessKeyName: null,
+                            AuthMethod: "SAS key",
+                            CredentialSource: string.IsNullOrWhiteSpace(ns.CredentialKey) ? "(unnamed credential)" : ns.CredentialKey),
+                        IsAuthFailure: true);
                 }
 
+                // Build the non-secret diagnostic BEFORE creating the client, so the source label /
+                // endpoint / key name are available even if the connection attempt throws.
+                diagnostic = _clientFactory.BuildConnectionDiagnostic(connectionString, ns.CredentialKey);
                 client = _clientFactory.Create(connectionString, ns.TransportType);
             }
 
@@ -112,10 +123,11 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
                 if (client is IAsyncDisposable d) await d.DisposeAsync();
                 return new ServiceBusNamespaceConnectionResult(
                     Client: null,
-                    ConnectionError: "Connection test failed. Check the namespace configuration.");
+                    ConnectionError: "Connection test failed. Check the namespace configuration.",
+                    Diagnostic: diagnostic);
             }
 
-            return new ServiceBusNamespaceConnectionResult(client, ConnectionError: null);
+            return new ServiceBusNamespaceConnectionResult(client, ConnectionError: null, Diagnostic: diagnostic);
         }
         catch (OperationCanceledException)
         {
@@ -127,7 +139,36 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
         {
             if (client is IAsyncDisposable d3) await d3.DisposeAsync();
 
-            return new ServiceBusNamespaceConnectionResult(Client: null, ConnectionError: ex.Message);
+            var isAuthFailure = IsAuthenticationFailure(ex);
+            var source = diagnostic?.CredentialSource;
+            var message = isAuthFailure
+                ? $"Authentication/authorization failed for credential '{source ?? ns.CredentialKey}'. {ex.Message}"
+                : ex.Message;
+
+            return new ServiceBusNamespaceConnectionResult(
+                Client: null,
+                ConnectionError: message,
+                Diagnostic: diagnostic,
+                IsAuthFailure: isAuthFailure);
         }
+    }
+
+    /// <summary>
+    /// Classifies whether an exception represents a credential/authorization problem (as opposed to a
+    /// generic transport error) by walking the inner-exception chain. Used to phrase the error as a
+    /// credential issue with the (non-secret) source label.
+    /// </summary>
+    private static bool IsAuthenticationFailure(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is UnauthorizedAccessException)
+                return true;
+            // Service Bus management calls surface auth denials as an HTTP 401/403 RequestFailedException.
+            if (e is global::Azure.RequestFailedException rfe && rfe.Status is 401 or 403)
+                return true;
+        }
+
+        return false;
     }
 }

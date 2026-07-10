@@ -63,6 +63,9 @@ window.SwebKitSplitter = {
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
       splitterEl.classList.add('active');
+      // Kill any width/flex transition on the pane so it tracks the cursor 1:1
+      // instead of easing toward it during the drag (DEC-5).
+      paneEl.classList.add('is-resizing');
     }
 
     function onMouseMove(e) {
@@ -74,15 +77,19 @@ window.SwebKitSplitter = {
     function onMouseUp() {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      splitterEl.classList.remove('active');
+      // Re-enable transitions once the drag settles (DEC-5). The width is already at
+      // its final value, so restoring the transition here does not animate a jump.
+      paneEl.classList.remove('is-resizing');
       notifyWidthChanged();
     }
 
     splitterEl.addEventListener('mousedown', onMouseDown);
 
     // Return a dispose handle
+    return {
+      dispose: function () {
+        splitterEl.removeEventListener('mousedown', onMouseDown);
+        paneEl.classList.remove('is-resizing'
     return {
       dispose: function () {
         splitterEl.removeEventListener('mousedown', onMouseDown);

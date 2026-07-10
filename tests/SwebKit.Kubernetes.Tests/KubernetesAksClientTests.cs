@@ -259,6 +259,25 @@ users:
     }
 
     [Fact]
+    public void GatewayApiDenialKinds_ExcludesOptionalGatewayKinds_ButNotCoreKinds()
+    {
+        // C4 (#11): Gateway API resources are optional advanced networking. Their RBAC 403 kinds
+        // (model type name minus "Info", as recorded in AksAccessDeniedScope) must be in the
+        // exclusion set so BuildPermissionWarning does not raise a core "limited permissions" warning.
+        Assert.Contains("Gateway", KubernetesAksClient.GatewayApiDenialKinds);
+        Assert.Contains("GatewayClass", KubernetesAksClient.GatewayApiDenialKinds);
+        Assert.Contains("HttpRoute", KubernetesAksClient.GatewayApiDenialKinds);
+
+        // Case-insensitive: denial tuples may vary in casing across code paths.
+        Assert.Contains("gateway", KubernetesAksClient.GatewayApiDenialKinds);
+
+        // Core resource kinds must NOT be excluded — they must still surface the warning.
+        Assert.DoesNotContain("Pod", KubernetesAksClient.GatewayApiDenialKinds);
+        Assert.DoesNotContain("Deployment", KubernetesAksClient.GatewayApiDenialKinds);
+        Assert.DoesNotContain("Ingress", KubernetesAksClient.GatewayApiDenialKinds);
+    }
+
+    [Fact]
     public void MapGateways_MapsGatewayApiCustomObjects()
     {
         const string json = """

@@ -118,7 +118,25 @@
         }
         else if (active.ConnectionError is not null && active.Client is null)
         {
-            <div class="sb-ns-error-message">@active.ConnectionError</div>
+            <div class="sb-ns-error-callout">
+                <div class="sb-ns-error-message">@active.ConnectionError</div>
+                @if (active.ConnectionDiagnostic is { } diag)
+                {
+                    <dl class="sb-ns-error-diagnostic" aria-label="Connection diagnostic details">
+                        <dt>Endpoint</dt>
+                        <dd>@diag.EndpointHost</dd>
+                        <dt>Auth method</dt>
+                        <dd>@diag.AuthMethod</dd>
+                        @if (!string.IsNullOrWhiteSpace(diag.SharedAccessKeyName))
+                        {
+                            <dt>SAS key name</dt>
+                            <dd>@diag.SharedAccessKeyName</dd>
+                        }
+                        <dt>Credential source</dt>
+                        <dd>@diag.CredentialSource</dd>
+                    </dl>
+                }
+            </div>
         }
         else
         {

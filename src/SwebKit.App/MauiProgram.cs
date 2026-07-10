@@ -89,6 +89,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<CommandRegistry>();
         builder.Services.AddScoped<OperatorWorkspaceService>();
         builder.Services.AddSingleton<INotificationService, NotificationService>();
+        builder.Services.AddSingleton<IToastDiagnosticService, ToastDiagnosticService>();
         builder.Services.AddSingleton<IAksClientBootstrapper, AksClientBootstrapper>();
         builder.Services.AddSingleton<IShellErrorPresenter, ShellErrorPresenter>();
         builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();

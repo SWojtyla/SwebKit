@@ -21,4 +21,8 @@ public sealed record ServiceBusNamespaceBootstrapState(
     string? ConnectionError,
     bool IsDemo);
 
-public sealed record ServiceBusNamespaceConnectionResult(IServiceBusClient? Client, string? ConnectionError);
+public sealed record ServiceBusNamespaceConnectionResult(
+    IServiceBusClient? Client,
+    string? ConnectionError,
+    ServiceBusConnectionDiagnostic? Diagnostic = null,
+    bool IsAuthFailure = false);

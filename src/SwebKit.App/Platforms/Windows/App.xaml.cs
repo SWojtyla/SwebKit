@@ -1,4 +1,5 @@
 ﻿using Microsoft.UI.Xaml;
+using SwebKit.App.Platforms.Windows;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -24,6 +25,17 @@ public partial class App : MauiWinUIApplication
 			"WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
 			"--remote-debugging-port=9222");
 #endif
+
+		// A2/DEC-2: enforce a single instance as early as possible — before InitializeComponent()
+		// spins up the Windows App SDK / MAUI. If another instance already owns the guard, ask it to
+		// restore + focus its (possibly tray-hidden) window, then exit this second process immediately.
+		if (!SingleInstanceGuard.TryAcquire())
+		{
+			SingleInstanceGuard.SignalPrimaryInstance();
+			Environment.Exit(0);
+			return;
+		}
+
 		this.InitializeComponent();
 	}
 

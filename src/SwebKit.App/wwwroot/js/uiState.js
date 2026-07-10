@@ -86,6 +86,9 @@ window.SwebKitAgentPanel = (function () {
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
         splitterEl.classList.add('active');
+        // Disable the --agent-panel-width transition while dragging so the panel
+        // tracks the cursor 1:1 instead of easing toward it (DEC-5).
+        shellEl.classList.add('is-resizing');
       }
 
       function onMouseMove(e) {
@@ -100,6 +103,8 @@ window.SwebKitAgentPanel = (function () {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         splitterEl.classList.remove('active');
+        // Re-enable the transition once the drag settles (DEC-5).
+        shellEl.classList.remove('is-resizing');
       }
 
       splitterEl.addEventListener('mousedown', onMouseDown);
@@ -108,6 +113,7 @@ window.SwebKitAgentPanel = (function () {
         splitterEl.removeEventListener('mousedown', onMouseDown);
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        shellEl.classList.remove('is-resizing');
       };
     },
 

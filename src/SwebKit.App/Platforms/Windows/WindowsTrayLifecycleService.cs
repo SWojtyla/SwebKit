@@ -87,6 +87,10 @@ internal sealed partial class WindowsTrayLifecycleService : ITrayLifecycleServic
         AttachNativeWindow();
         EnsureTrayIcon();
         UpdateTrayIndicator();
+
+        // A2/DEC-2: now that a window exists, listen for a second launch asking us to restore + focus.
+        SingleInstanceGuard.StartActivationListener(
+            () => MainThread.BeginInvokeOnMainThread(RestoreFromTray));
     }
 
     private void OnWindowHandlerChanged(object? sender, EventArgs e)
@@ -222,18 +226,18 @@ internal sealed partial class WindowsTrayLifecycleService : ITrayLifecycleServic
 
     private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
-        if (!_state.ShouldInterceptClose)
-        {
-            return;
-        }
-
-        args.Cancel = true;
-        MainThread.BeginInvokeOnMainThread(HideToTray);
+        // A1/DEC-1 (option a): the window close (×) TRULY EXITS — it is no longer redirected to the tray.
+        // Run the same clean-shutdown resource release as the tray "Exit" menu, then let the real close
+        // proceed (args.Cancel stays false) so the process terminates with no lingering background instance.
+        _state.MarkExplicitExitRequested();
+        _logger.LogInformation("Window close (X) requested. Running clean shutdown and exiting.");
+        CleanupBeforeExit();
     }
 
     private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
     {
-        if (!_state.ShouldInterceptClose || !args.DidPresenterChange)
+        // A1: minimize STILL hides to tray so the background alert monitor keeps running.
+        if (!_state.ShouldRouteMinimizeToTray || !args.DidPresenterChange)
         {
             return;
         }
@@ -280,8 +284,8 @@ internal sealed partial class WindowsTrayLifecycleService : ITrayLifecycleServic
         _state.MarkExplicitExitRequested();
         _logger.LogInformation("Tray Exit requested. Beginning full application shutdown.");
 
-        // Remove the icon before shutdown to avoid stale shell entries.
-        RemoveTrayIcon();
+        // Remove the icon + release the single-instance guard before shutdown.
+        CleanupBeforeExit();
 
         try
         {
@@ -304,6 +308,18 @@ internal sealed partial class WindowsTrayLifecycleService : ITrayLifecycleServic
             _logger.LogWarning(ex, "Tray Exit failed to shut down the app window.");
             Environment.Exit(1);
         }
+    }
+
+    /// <summary>
+    /// Shared clean-shutdown resource release run by BOTH true-exit paths: the tray "Exit" menu
+    /// (<see cref="ExitApplication"/>) and the window close × (<see cref="OnAppWindowClosing"/>).
+    /// Removes the tray icon and releases the single-instance mutex so a later relaunch starts clean.
+    /// Idempotent.
+    /// </summary>
+    private void CleanupBeforeExit()
+    {
+        RemoveTrayIcon();
+        SingleInstanceGuard.Release();
     }
 
     private void OnAlertFired(AlertFiredEvent evt)
@@ -465,6 +481,10 @@ internal sealed partial class WindowsTrayLifecycleService : ITrayLifecycleServic
             _window.HandlerChanged -= OnWindowHandlerChanged;
             _window = null;
         }
+
+        // Safety net for teardown paths that bypass the exit routes (e.g. ProcessExit): stop the
+        // activation listener and close the mutex handle. Idempotent with CleanupBeforeExit.
+        SingleInstanceGuard.Release();
 
         RemoveTrayIcon();
         DetachNativeWindow();

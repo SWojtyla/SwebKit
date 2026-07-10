@@ -816,6 +816,7 @@ false)
     {
         EventBus.Subscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         EventBus.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        EventBus.Subscribe<AksShortcutEvent>(OnAksShortcut);
         Workspaces.RegisterRestoreHandler("aks", RestoreWorkspaceAsync);
         RegisterAksCommands();
     }
@@ -866,13 +867,9 @@ OnCtxRestartDeployment();
             Label = "View Logs",
             Category = "AKS",
             AreaScope = "aks",
+            Shortcut = "Alt+L",
             IsAvailable = () => SelectedDeployment is not null || SelectedPod is not null,
-            Execute = () =>
-            {
-                if (SelectedPod is not null) { CtxPod = SelectedPod; OnCtxViewPodLogs(); }
-                else if (SelectedDeployment is not null) { CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); }
-                return Task.CompletedTask;
-            }
+            Execute = () => JumpToLogsAsync()
         });
         Commands.Register(new AppCommand
         {
@@ -896,7 +893,84 @@ OnCtxRestartDeployment();
                 return Task.CompletedTask;
             }
         });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-focus-tabs",
+            Label = "Focus resource tabs",
+            Category = "AKS",
+            AreaScope = "aks",
+            Shortcut = "Alt+T",
+            Execute = FocusResourceTabsAsync
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-focus-grid",
+            Label = "Focus resource grid",
+            Category = "AKS",
+            AreaScope = "aks",
+            Shortcut = "Alt+G",
+            Execute = FocusGridAsync
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-close-detail",
+            Label = "Close detail panel",
+            Category = "AKS",
+            AreaScope = "aks",
+            Shortcut = "Alt+D",
+            IsAvailable = () => HasOpenPanel,
+            Execute = CloseDetailPanelAsync
+        });
     }
+
+    // ── AKS-scoped keyboard shortcut handlers ──────────────────────────────
+    // Dispatched from keyboardShortcuts.js → MainLayout.OnShortcut →
+    // AksShortcutEvent. Only handled while this page is mounted (subscribed in
+    // OnInitialized, unsubscribed in Dispose), so no cross-page double-handling.
+
+    private void OnAksShortcut(AksShortcutEvent e)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            switch (e.Action)
+            {
+                case "JumpLogs": await JumpToLogsAsync(); break;
+                case "FocusTabs": await FocusResourceTabsAsync(); break;
+                case "FocusGrid": await FocusGridAsync(); break;
+                case "CloseDetail": await CloseDetailPanelAsync(); break;
+            }
+            await InvokeAsync(StateHasChanged); // BL-2
+        });
+    }
+
+    private Task JumpToLogsAsync()
+    {
+        if (SelectedPod is not null) { CtxPod = SelectedPod; OnCtxViewPodLogs(); }
+        else if (SelectedDeployment is not null) { CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); }
+        return Task.CompletedTask;
+    }
+
+    private async Task FocusResourceTabsAsync()
+    {
+        try { await JS.InvokeVoidAsync("SwebKit.focusAksResourceTabs"); }
+        catch (OperationCanceledException) { throw; }
+        catch { /* focus is best-effort */ }
+    }
+
+    private async Task FocusGridAsync()
+    {
+        try { await JS.InvokeVoidAsync("SwebKit.focusAksGrid"); }
+        catch (OperationCanceledException) { throw; }
+        catch { /* focus is best-effort */ }
+    }
+
+    private async Task CloseDetailPanelAsync()
+    {
+        if (!HasOpenPanel) return;
+        _detailPanels?.ResetAllPanels();
+        await InvokeAsync(StateHasChanged);
+    }
+
 
     private void OnOpenPortForwardPanel(OpenPortForwardPanelEvent _)
     {
@@ -1314,7 +1388,16 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
     {
         if (denials.Count == 0) return null;
 
-        var byKind = denials
+        // Optional Gateway API resources (gateway.networking.k8s.io) are advanced networking, not baseline
+        // cluster access — a 403 on them must not raise the core "limited permissions" warning. Filter them
+        // out before grouping so their view simply hides/degrades. Core denials (pods, deployments, …) remain.
+        var filtered = denials
+            .Where(d => !SwebKit.Kubernetes.AksClient.KubernetesAksClient.GatewayApiDenialKinds.Contains(d.ResourceKind))
+            .ToList();
+
+        if (filtered.Count == 0) return null;
+
+        var byKind = filtered
             .GroupBy(d => d.ResourceKind, StringComparer.OrdinalIgnoreCase)
             .Select(g => $"{g.Key}: {string.Join(", ", g.Select(d => d.Namespace))}");
 
@@ -2795,9 +2878,11 @@ SelectedIngress.Namespace); break;
         cts?.Dispose();
         EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         EventBus.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        EventBus.Unsubscribe<AksShortcutEvent>(OnAksShortcut);
         Workspaces.UnregisterRestoreHandler("aks");
         foreach (var id in new[] { "aks-refresh", "aks-restart-deployment", "aks-scale-deployment",
-                                   "aks-view-logs", "aks-open-pod-shell", "aks-port-forward" })
+                                   "aks-view-logs", "aks-open-pod-shell", "aks-port-forward",
+                                   "aks-focus-tabs", "aks-focus-grid", "aks-close-detail" })
             Commands.Unregister(id);
         Selection.SetSelection("aks", null);
     }

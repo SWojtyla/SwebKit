@@ -36,6 +36,17 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private static readonly string[] GatewayApiVersions = ["v1", "v1beta1", "v1alpha2"];
 
+    /// <summary>
+    /// Resource kinds — as recorded in <see cref="SwebKit.Core.Abstractions.AksAccessDeniedScope"/> denial
+    /// tuples (model type name minus the "Info" suffix) — that belong to the optional Gateway API
+    /// (<see cref="GatewayApiGroup"/>). An RBAC 403 on these represents missing access to optional advanced
+    /// networking, not missing core cluster access, so the permission-warning builder excludes them to avoid
+    /// falsely implying a core-permission problem. Kept next to the Gateway API constants so the exclusion
+    /// list stays with the gateway feature (single source of truth). Compared case-insensitively.
+    /// </summary>
+    public static readonly IReadOnlySet<string> GatewayApiDenialKinds =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Gateway", "GatewayClass", "HttpRoute" };
+
     private static readonly HashSet<string> ControllerOwnedJobLabelKeys =
     [
         "controller-uid",

@@ -116,4 +116,21 @@ public sealed class PodLogViewTests
     {
         Assert.Equal("log-level-default", PodLogView.GetLineClass(""));
     }
+
+    [Theory]
+    // pageIndexFromNewest > 0 → Historical regardless of live/paused.
+    [InlineData(true, true, false, 2, "Historical")]
+    [InlineData(false, false, true, 1, "Historical")]
+    // At newest, actively streaming and not paused → Live.
+    [InlineData(true, true, false, 0, "Live")]
+    // Paused at newest → Paused.
+    [InlineData(true, true, true, 0, "Paused")]
+    // Stopped (not loading) at newest → Paused (idle).
+    [InlineData(false, false, false, 0, "Paused")]
+    [InlineData(true, false, false, 0, "Paused")]
+    public void ResolveFollowState_MapsStateCorrectly(
+        bool isLive, bool isLoading, bool paused, int pageIndexFromNewest, string expected)
+    {
+        Assert.Equal(expected, PodLogView.ResolveFollowState(isLive, isLoading, paused, pageIndexFromNewest).ToString());
+    }
 }

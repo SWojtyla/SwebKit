@@ -475,6 +475,11 @@ public class UiState
     public bool DemoMonitoringEnabled { get; set; }
     /// <summary>Shell-local dashboard tile visibility, order, size, and per-tile settings.</summary>
     public DashboardPreferences Dashboard { get; set; } = new();
+    /// <summary>
+    /// Set once the "OS toasts appear disabled" hint has been shown, so it is not repeated on
+    /// subsequent sessions. Acts as the persisted "don't show again" flag for the diagnostic (DEC-4).
+    /// </summary>
+    public bool SuppressToastUnavailableHint { get; set; }
 }
 
 public record DashboardPreferences

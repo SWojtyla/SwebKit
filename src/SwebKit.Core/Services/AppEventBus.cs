@@ -174,3 +174,4 @@ public record ActivityEvent(string Description, string Icon, string Area, DateTi
 }
 public record FocusFilterRequestedEvent(string Area);
 public record ApiClientShortcutEvent(string Action);
+public record AksShortcutEvent(string Action);

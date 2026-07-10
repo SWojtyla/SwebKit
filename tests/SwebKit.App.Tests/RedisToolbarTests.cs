@@ -61,7 +61,7 @@ public class RedisToolbarTests : TestContext
         var cut = RenderComponent<RedisToolbar>(ps => ps
             .Add(p => p.KeyCount, 3));
 
-        Assert.Contains("Select All Loaded", cut.Markup);
+        Assert.Contains("Select all loaded keys", cut.Markup);
         Assert.DoesNotContain("Purge All", cut.Markup);
     }
 
@@ -83,11 +83,37 @@ public class RedisToolbarTests : TestContext
             .Add(p => p.KeyCount, 3)
             .Add(p => p.OnSelectAllLoaded, () => calls++));
 
-        cut.FindAll("fluent-button")
-            .First(button => button.TextContent.Contains("Select All Loaded", StringComparison.Ordinal))
-            .Click();
+        cut.Find(".select-all-loaded input[type=checkbox]").Change(true);
 
         Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public void RedisToolbar_SelectAllLoadedUnchecked_ClearsSelection()
+    {
+        var cut = RenderComponent<RedisToolbar>(ps => ps
+            .Add(p => p.KeyCount, 3));
+
+        cut.Instance.ReplaceSelection(["a", "b", "c"]);
+
+        cut.Find(".select-all-loaded input[type=checkbox]").Change(false);
+
+        Assert.Empty(cut.Instance.SelectedKeys);
+    }
+
+    [Fact]
+    public void RedisToolbar_HeaderSelectionState_ReflectsNoneSomeAll()
+    {
+        var cut = RenderComponent<RedisToolbar>(ps => ps
+            .Add(p => p.KeyCount, 3));
+
+        Assert.Equal(RedisToolbar.SelectAllState.None, cut.Instance.HeaderSelectionState);
+
+        cut.Instance.AddSelection(["a"]);
+        Assert.Equal(RedisToolbar.SelectAllState.Some, cut.Instance.HeaderSelectionState);
+
+        cut.Instance.AddSelection(["b", "c"]);
+        Assert.Equal(RedisToolbar.SelectAllState.All, cut.Instance.HeaderSelectionState);
     }
 
     [Fact]

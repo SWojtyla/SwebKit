@@ -37,13 +37,16 @@ public partial class App : Application
     }
 #endif
 
-    public App(ITrayLifecycleService trayLifecycle)
+    public App(ITrayLifecycleService trayLifecycle, IWindowsNotificationService notifications)
     {
         _trayLifecycle = trayLifecycle;
         InitializeComponent();
 #if WINDOWS
         RegisterAumidInRegistry(AppAumid, "SwebKit");
         SetCurrentProcessExplicitAppUserModelID(AppAumid);
+        // Best-effort capability probe (DEC-4): record whether OS toasts appear available now that
+        // the AUMID is registered. Observational only — alerts still attempt toasts regardless.
+        notifications.ProbeCapability();
 #endif
         AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
     }

@@ -656,6 +656,10 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
             case "ApiNewCollection": Events.Publish(new ApiClientShortcutEvent("NewCollection")); break;
             case "ApiEnvManager": Events.Publish(new ApiClientShortcutEvent("EnvManager")); break;
             case "ApiSaveRequest": Events.Publish(new ApiClientShortcutEvent("SaveRequest")); break;
+            case "AksJumpLogs": Events.Publish(new AksShortcutEvent("JumpLogs")); break;
+            case "AksFocusTabs": Events.Publish(new AksShortcutEvent("FocusTabs")); break;
+            case "AksFocusGrid": Events.Publish(new AksShortcutEvent("FocusGrid")); break;
+            case "AksCloseDetail": Events.Publish(new AksShortcutEvent("CloseDetail")); break;
         }
         RequestRender();
         await InvokeAsync(StateHasChanged);

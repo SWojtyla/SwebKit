@@ -31,35 +31,59 @@
         <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
                class="log-filter-input app-native-control" />
         <span class="log-line-count">@WindowSummaryText</span>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="ShowOlder" Disabled="@(!CanShowOlder)"
-                      Title="Show older buffered lines">Older</FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="ShowNewer" Disabled="@(!CanShowNewer)"
-                      Title="Show newer buffered lines">Newer</FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="JumpToLatest" Disabled="@(!CanJumpToLatest)"
-                      Title="Jump back to the newest buffered lines">@LatestButtonText</FluentButton>
-        @if (CanLoadOlderHistory)
-        {
-            <FluentButton Appearance="Appearance.Stealth" @onclick="LoadOlderHistoryAsync" Disabled="@_historyReloading"
-                          Title="Request more All-history lines from Kubernetes">
-                @(_historyReloading ? "Loading older…" : $"Load older +{HistoryExpansionLabel}")
-            </FluentButton>
-        }
-        <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="CopyVisibleLogsAsync"
-                      Disabled="@(VisibleLines.Count == 0)" Title="Copy the currently visible log window to the clipboard">Copy
-            visible</FluentButton>
-            <FluentButton Appearance="Appearance.Stealth" @onclick="ExportAllLogsAsync"
-                          Disabled="@(Client is null || Namespace is null || PodName is null || _exportingAllLogs)"
-                          Title="Export the full pod log stream as text">
-                @(_exportingAllLogs ? "Exporting…" : "Export all")
-            </FluentButton>
-            @if (IsLive && IsLoading)
-            {
-                <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause"
-                              Title="@(_paused ? "Resume tailing" : "Pause tailing")">
-                    @(_paused ? "▶ Resume" : "⏸ Pause")
+
+        <div class="log-toolbar-actions">
+            @* Navigation cluster — browse the buffered window *@
+            <div class="log-btn-group" role="group" aria-label="Navigate log window">
+                <FluentButton Appearance="Appearance.Stealth" IconStart="@_iconOlder" @onclick="ShowOlder"
+                              Disabled="@(!CanShowOlder)" Title="Show older buffered lines">Older</FluentButton>
+                <FluentButton Appearance="Appearance.Stealth" IconStart="@_iconNewer" @onclick="ShowNewer"
+                              Disabled="@(!CanShowNewer)" Title="Show newer buffered lines">Newer</FluentButton>
+                <FluentButton Appearance="Appearance.Stealth" IconStart="@_iconLatest" @onclick="JumpToLatest"
+                              Disabled="@(!CanJumpToLatest)" Title="Jump back to the newest buffered lines">@LatestButtonText</FluentButton>
+            </div>
+
+            <span class="log-toolbar-sep" aria-hidden="true"></span>
+
+            @* State cluster — one-click tail + pause *@
+            <div class="log-btn-group" role="group" aria-label="Live tailing state">
+                <FluentButton Appearance="Appearance.Accent" IconStart="@_iconTail"
+                              Class="@TailButtonClass"
+                              @onclick="GoLiveTailAsync" Disabled="@IsPreviousContainerSelected"
+                              Title="Resume live tailing and jump to the newest lines">
+                    @(IsTailingLive ? "Live" : "Go to live")
                 </FluentButton>
-            }
+                @if (IsLive && IsLoading)
+                {
+                    <FluentButton Appearance="Appearance.Stealth" IconStart="@_iconPause" @onclick="TogglePause"
+                                  Title="@(_paused ? "Resume tailing" : "Pause tailing")">
+                        @(_paused ? "Resume" : "Pause")
+                    </FluentButton>
+                }
+            </div>
+
+            <span class="log-toolbar-sep" aria-hidden="true"></span>
+
+            @* Data cluster — copy / export / load / clear *@
+            <div class="log-btn-group" role="group" aria-label="Log data actions">
+                <FluentButton Appearance="Appearance.Stealth" @onclick="CopyVisibleLogsAsync"
+                              Disabled="@(VisibleLines.Count == 0)"
+                              Title="Copy the currently visible log window to the clipboard">Copy visible</FluentButton>
+                <FluentButton Appearance="Appearance.Stealth" @onclick="ExportAllLogsAsync"
+                              Disabled="@(Client is null || Namespace is null || PodName is null || _exportingAllLogs)"
+                              Title="Export the full pod log stream as text">
+                    @(_exportingAllLogs ? "Exporting…" : "Export all")
+                </FluentButton>
+                @if (CanLoadOlderHistory)
+                {
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="LoadOlderHistoryAsync" Disabled="@_historyReloading"
+                                  Title="Request more All-history lines from Kubernetes">
+                        @(_historyReloading ? "Loading older…" : $"Load older +{HistoryExpansionLabel}")
+                    </FluentButton>
+                }
+                <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
+            </div>
+        </div>
         </div>
 
         <div class="log-status-bar">
@@ -100,6 +124,11 @@
                 }
             }
         </div>
+
+        <div class="log-status-footer log-follow-@FollowStateCss">
+            <span class="log-follow-dot" aria-hidden="true"></span>
+            <span class="log-follow-text">@FollowStateText</span>
+        </div>
     </div>
 
 @code {
@@ -111,6 +140,52 @@
 
     private readonly record struct LogEntry(string Line, string CssClass);
     private enum LogRange { Last5m, Last10m, Last1h, All, PreviousContainer }
+
+    // C1: follow-state model for the one-click tail affordance + sticky status footer.
+    internal enum LogFollowState { Live, Paused, Historical }
+
+    private static readonly Icon _iconOlder = new Icons.Regular.Size16.ChevronUp();
+    private static readonly Icon _iconNewer = new Icons.Regular.Size16.ChevronDown();
+    private static readonly Icon _iconLatest = new Icons.Regular.Size16.ArrowDown();
+    private static readonly Icon _iconTail = new Icons.Regular.Size16.Play();
+    private static readonly Icon _iconPause = new Icons.Regular.Size16.Pause();
+
+    // Pure selector — clean seam for unit testing (mirrors GetLineClass).
+    internal static LogFollowState ResolveFollowState(bool isLive, bool isLoading, bool paused, int pageIndexFromNewest)
+    {
+        if (pageIndexFromNewest > 0)
+            return LogFollowState.Historical;
+        if (isLive && isLoading && !paused)
+            return LogFollowState.Live;
+        return LogFollowState.Paused;
+    }
+
+    private LogFollowState CurrentFollowState => ResolveFollowState(IsLive, IsLoading, _paused, _pageIndexFromNewest);
+    private bool IsTailingLive => CurrentFollowState == LogFollowState.Live;
+    private string TailButtonClass => IsTailingLive ? "log-tail-btn armed" : "log-tail-btn cta";
+
+    private string FollowStateCss => CurrentFollowState switch
+    {
+        LogFollowState.Live => "live",
+        LogFollowState.Historical => "historical",
+        _ => "paused"
+    };
+
+    private string FollowStateText => CurrentFollowState switch
+    {
+        LogFollowState.Live => "Live • tailing",
+        LogFollowState.Historical => "Historical (older loaded)",
+        _ => $"Paused at line {GetFollowLineNumber():N0}"
+    };
+
+    private int GetFollowLineNumber()
+    {
+        var total = FilteredLines.Count;
+        if (total == 0)
+            return 0;
+        var (_, endExclusive) = GetVisibleBounds(total);
+        return endExclusive;
+    }
 
     private Queue<string> Lines = new();
     private bool IsLive = true;
@@ -592,6 +667,37 @@
             ReleaseVisibleWindowAnchor();
         _visibleLineDirty = true;
         StateHasChanged();
+    }
+
+    // C1: one-click "go to live / tail" — resumes live, resets to newest, and pins to bottom
+    // via the existing SwebKit.scrollToBottom interop path (single click, not a per-append scroll).
+    private async Task GoLiveTailAsync()
+    {
+        if (IsPreviousContainerSelected)
+            return;
+
+        var wasStopped = !IsLive || !IsLoading;
+
+        IsLive = true;
+        _paused = false;
+        _pageIndexFromNewest = 0;
+        _pendingNewLineCount = 0;
+        ReleaseVisibleWindowAnchor();
+        _visibleLineDirty = true;
+
+        if (wasStopped && Client is not null && Namespace is not null && PodName is not null)
+        {
+            // Stream was stopped/ended — restart it; the render timer forces the first scroll.
+            await StartTailingAsync();
+            return;
+        }
+
+        // Already streaming (was paused or scrolled up) — pin to bottom now and let the
+        // throttled render loop keep it near-bottom on subsequent flushes.
+        _forceScrollToBottom = false;
+        _hasScrolledToBottom = true;
+        await InvokeAsync(StateHasChanged);
+        await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
     }
 
     private async Task CopyVisibleLogsAsync()

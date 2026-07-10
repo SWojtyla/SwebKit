@@ -49,6 +49,7 @@
         <Compile Include="..\..\src\SwebKit.App\Services\ServiceBusNamespaceBootstrapper.cs" Link="Services\ServiceBusNamespaceBootstrapper.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\ShellErrorPresenter.cs" Link="Services\ShellErrorPresenter.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\TrayLifecycleState.cs" Link="Services\TrayLifecycleState.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\SingleInstanceNaming.cs" Link="Services\SingleInstanceNaming.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\IncidentTimeline\IncidentTimelineDisplay.cs" Link="Components\IncidentTimeline\IncidentTimelineDisplay.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Layout\ShellNavigation.cs" Link="Components\Layout\ShellNavigation.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\NavItem.razor" Link="Components\Layout\NavItem.razor" />
