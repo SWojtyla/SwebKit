@@ -1,4 +1,5 @@
 @using SwebKit.Core.Services
+@using System.Threading
 
 @page "/api-client"
 @inject IFolderPickerService FolderPicker
@@ -245,7 +246,7 @@
     private string _exportDialogInitialTab = "export";
 
     // Auto-save debounce
-    private System.Timers.Timer? _autoSaveTimer;
+    private PeriodicTimer? _autoSaveTimer;
     private const int AutoSaveDebounceMs = 500;
 
     // ── Computed ──────────────────────────────────────────────────────────────
@@ -1647,34 +1648,44 @@ StringComparison.OrdinalIgnoreCase));
 
         if (_state.AutoSave)
         {
-            _autoSaveTimer?.Stop();
-            _autoSaveTimer ??= new System.Timers.Timer(AutoSaveDebounceMs) { AutoReset = false };
-            _autoSaveTimer.Elapsed -= OnAutoSaveElapsed;
-            _autoSaveTimer.Elapsed += OnAutoSaveElapsed;
-            _autoSaveTimer.Start();
+            _autoSaveTimer?.Dispose();
+            _autoSaveTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(AutoSaveDebounceMs));
+            _ = AutoSaveLoopAsync();
         }
 
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
-    private async void OnAutoSaveElapsed(object? sender, System.Timers.ElapsedEventArgs e)
+    private async Task AutoSaveLoopAsync()
     {
-        if (_state.ActiveCollection is null || _state.SelectedRequest is null) return;
+        if (_autoSaveTimer is null) return;
+        
         try
         {
-            if (await SaveActiveCollectionAsync())
+            while (await _autoSaveTimer.WaitForNextTickAsync())
             {
-                _state.IsDirty = false;
+                if (_state.ActiveCollection is null || _state.SelectedRequest is null) continue;
+                try
+                {
+                    if (await SaveActiveCollectionAsync())
+                    {
+                        _state.IsDirty = false;
+                    }
+                    await InvokeAsync(StateHasChanged); // BL-2
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Auto-save failed");
+                }
             }
-            await InvokeAsync(StateHasChanged); // BL-2
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
         {
-            Logger.LogError(ex, "Auto-save failed");
+            // Timer disposed - normal exit
         }
     }
 
-    // ── Request send ───────────────────────────────────────────────────────────
+    // ── Request send ────────────────────
 
 
 
@@ -1898,7 +1909,6 @@ StringComparison.OrdinalIgnoreCase));
         Commands.Unregister("api-env-manager");
         Commands.Unregister("api-quick-nav");
         Commands.Unregister("api-save-request");
-        _autoSaveTimer?.Stop();
         _autoSaveTimer?.Dispose();
         return ValueTask.CompletedTask;
     }
