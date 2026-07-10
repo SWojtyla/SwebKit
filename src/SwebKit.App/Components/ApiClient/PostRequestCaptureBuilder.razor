@@ -56,7 +56,7 @@
 
             <AppIconButton Label="Remove capture rule" Variant="Ghost" Size="Small" CssClass="capture-builder__rule-delete"
                            OnClick="@(() => RemoveRule(rule))">
-                <Icon>×</Icon>
+                <Icon><FluentIcon Value="@_iconDelete" Width="12px" /></Icon>
             </AppIconButton>
         </div>
     }
@@ -66,13 +66,17 @@
         <div class="capture-builder__warnings">
             @foreach (var w in CaptureWarnings)
             {
-                <div class="capture-builder__warning-row">⚠ @w</div>
+                <div class="capture-builder__warning-row"><FluentIcon Value="@_iconWarning" Width="12px" /> @w</div>
             }
         </div>
     }
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconDelete = new Icons.Regular.Size16.Delete();
+    private static readonly Icon _iconWarning = new Icons.Regular.Size16.Warning();
+
     [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = null!;
     [Parameter] public IReadOnlyList<ApiEnvironment> AvailableEnvironments { get; set; } = [];
     [Parameter] public IReadOnlyList<string> CaptureWarnings { get; set; } = [];

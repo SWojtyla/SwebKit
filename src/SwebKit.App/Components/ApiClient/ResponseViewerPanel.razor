@@ -18,7 +18,9 @@
     @if (SubscriptionMessages.Count > 0)
     {
         <div class="resp-viewer__subscription-header">
-            <span class="resp-viewer__subscription-badge">⚡ Subscription</span>
+            <span class="resp-viewer__subscription-badge">
+                <FluentIcon Value="@_iconFlash" Width="14px" /> Subscription
+            </span>
             <span class="resp-viewer__subscription-count">@SubscriptionMessages.Count message(s)</span>
         </div>
         <div class="resp-viewer__subscription-messages">
@@ -38,7 +40,9 @@
                     {
                         @foreach (var err in msg.Errors)
                         {
-                            <div class="resp-viewer__sub-msg-error-text">⚠ @err.Message</div>
+                            <div class="resp-viewer__sub-msg-error-text">
+                                <FluentIcon Value="@_iconWarning" Width="12px" /> @err.Message
+                            </div>
                         }
                     }
                 </div>
@@ -54,7 +58,9 @@
     else if (Result.ErrorMessage is not null)
     {
         <div class="resp-viewer__error">
-            <div class="resp-viewer__error-icon">⚠</div>
+            <div class="resp-viewer__error-icon">
+                <FluentIcon Value="@_iconWarning" Width="28px" />
+            </div>
             <div class="resp-viewer__error-text">@Result.ErrorMessage</div>
             @if (!string.IsNullOrEmpty(Result.ResolvedUrl))
             {
@@ -73,24 +79,25 @@
             <span class="resp-viewer__status-text">@Result.StatusText</span>
             <span class="resp-viewer__meta">
                 <span class="resp-viewer__meta-item" title="Round-trip time">
-                    🕐 @FormatElapsed(Result.Elapsed)
+                    <FluentIcon Value="@_iconClock" Width="12px" /> @FormatElapsed(Result.Elapsed)
                 </span>
                 @if (Result.ContentLength > 0)
                 {
                     <span class="resp-viewer__meta-item" title="Content-Length header">
-                        📦 @FormatSize(Result.ContentLength)
+                        <FluentIcon Value="@_iconBox" Width="12px" /> @FormatSize(Result.ContentLength)
                     </span>
                 }
                 else if (Result.ResponseBody is not null)
                 {
                     <span class="resp-viewer__meta-item" title="Response body size">
-                        📦 @FormatSize(System.Text.Encoding.UTF8.GetByteCount(Result.ResponseBody))
+                        <FluentIcon Value="@_iconBox" Width="12px" />
+                        @FormatSize(System.Text.Encoding.UTF8.GetByteCount(Result.ResponseBody))
                     </span>
                 }
                 @if (Result.ResponseBodyTruncated)
                 {
                     <span class="resp-viewer__truncated-badge" title="Response body was truncated at 4 MB">
-                        ⚠ Truncated
+                        <FluentIcon Value="@_iconWarning" Width="10px" /> Truncated
                     </span>
                 }
             </span>
@@ -221,9 +228,11 @@
                 <div class="resp-viewer__history-content">
                     <div class="resp-viewer__history-header">
                         <span class="resp-viewer__history-title">History</span>
-                        <button type="button" class="resp-viewer__history-clear" 
-                                @onclick="ClearHistory" aria-label="Clear response history">
-                            <span aria-hidden="true">✕</span>
+                        <button type="button" class="resp-viewer__history-clear" @onclick="ClearHistory"
+                                aria-label="Clear response history">
+                            <span aria-hidden="true">
+                                <FluentIcon Value="@_iconDismiss" Width="14px" />
+                            </span>
                         </button>
                     </div>
                     <div class="resp-viewer__history-entries">
@@ -232,10 +241,11 @@
                             var e = entry;
                             <button type="button"
                                     class="resp-viewer__history-item @(ReferenceEquals(Result, e) ? "resp-viewer__history-item--active" : "") @(StatusClass(e.StatusCode))"
-                                aria-label="@GetHistoryItemAriaLabel(e)"
-                                aria-current="@(ReferenceEquals(Result, e) ? "true" : "false")"
-                                @onclick="() => OnResend.InvokeAsync(e)">
-                                <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)" aria-hidden="true">
+                                    aria-label="@GetHistoryItemAriaLabel(e)"
+                                    aria-current="@(ReferenceEquals(Result, e) ? "true" : "false")"
+                                    @onclick="() => OnResend.InvokeAsync(e)">
+                                <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)"
+                                      aria-hidden="true">
                                     @(e.ErrorMessage is not null ? "ERR" : e.StatusCode.ToString())
                                 </span>
                                 <span class="resp-viewer__history-method">@e.Method</span>
@@ -252,6 +262,13 @@
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconFlash = new Icons.Regular.Size16.Flash();
+    private static readonly Icon _iconWarning = new Icons.Regular.Size16.Warning();
+    private static readonly Icon _iconClock = new Icons.Regular.Size16.Clock();
+    private static readonly Icon _iconBox = new Icons.Regular.Size16.Box();
+    private static readonly Icon _iconDismiss = new Icons.Regular.Size16.Dismiss();
+
     [Parameter] public HttpRequestResult? Result { get; set; }
     [Parameter] public ICollection<GraphQlSubscriptionMessage> SubscriptionMessages { get; set; } = [];
     [Parameter] public IReadOnlyList<HttpRequestResult> HistoryEntries { get; set; } = [];

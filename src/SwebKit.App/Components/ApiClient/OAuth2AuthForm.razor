@@ -57,7 +57,7 @@
                        value="@_secretDisplay" @oninput="OnSecretInput" autocomplete="new-password" />
                 <button type="button" class="oauth2-form__toggle" title="@(_showSecret ? "Hide" : "Show")"
                         @onclick="() => _showSecret = !_showSecret">
-                    @(_showSecret ? "🙈" : "👁")
+                    <FluentIcon Value="@(_showSecret ? _iconEyeOff : _iconEye)" Width="14px" />
                 </button>
             </div>
         </div>
@@ -88,6 +88,10 @@
         @if (!string.IsNullOrEmpty(_tokenStatus))
         {
             <span class="oauth2-form__status @(_tokenOk ? "oauth2-form__status--ok" : "oauth2-form__status--err")">
+                @if (_tokenOk)
+                {
+                    <FluentIcon Value="@_iconCheckmark" Width="12px" />
+                }
                 @_tokenStatus
             </span>
         }
@@ -96,6 +100,11 @@
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ──────────────────────────────────
+    private static readonly Icon _iconEye = new Icons.Regular.Size16.Eye();
+    private static readonly Icon _iconEyeOff = new Icons.Regular.Size16.EyeOff();
+    private static readonly Icon _iconCheckmark = new Icons.Regular.Size16.Checkmark();
+
     [Parameter, EditorRequired] public AuthConfig Auth { get; set; } = default!;
     [Parameter] public EventCallback OnChanged { get; set; }
 
@@ -181,7 +190,7 @@
             }
             else
             {
-                _tokenStatus = "✓ Token obtained successfully.";
+                _tokenStatus = "Token obtained successfully.";
                 _tokenOk = true;
             }
         }
@@ -212,7 +221,7 @@
             var ok = await OAuth2.AuthorizeAsync(Auth, Auth.CredentialKey);
             if (ok)
             {
-                _tokenStatus = "✓ Authorized successfully.";
+                _tokenStatus = "Authorized successfully.";
                 _tokenOk = true;
             }
             else

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
 using SwebKit.Core.Models;
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -87,7 +88,18 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private void RebuildClient()
     {
-        lock (_rebuildLock)
+        // Use a non-blocking TryEnter instead of `lock` so a storm of concurrent 403s (e.g. one
+        // resource type denied across several fanned-out namespaces at once) cannot pile up
+        // multiple threads waiting on this lock while the first one runs the potentially slow,
+        // synchronous credential rebuild (which can shell out to an exec-credential/kubelogin
+        // plugin). Callers that lose the race just skip rebuilding and retry with whatever client
+        // is already current — the 30s throttle below means at most one real rebuild per window
+        // regardless, so skipping here costs nothing but avoids thread-pool blocking that could
+        // otherwise stall the UI.
+        if (!_rebuildLock.TryEnter())
+            return;
+
+        try
         {
             if ((DateTime.UtcNow - _lastRebuild).TotalSeconds < 30)
                 return;
@@ -96,6 +108,10 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
             TryApplyAzureCredentialFallback(config, _kubeconfigPath);
             _client = new k8s.Kubernetes(config);
             _lastRebuild = DateTime.UtcNow;
+        }
+        finally
+        {
+            _rebuildLock.Exit();
         }
     }
 
@@ -108,7 +124,14 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.Forbidden)
         {
             RebuildClient();
-            return await action();
+            try
+            {
+                return await action();
+            }
+            catch (k8s.Autorest.HttpOperationException ex2) when (ex2.Response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                throw ToAccessDeniedException(ex2);
+            }
         }
     }
 
@@ -121,8 +144,41 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.Forbidden)
         {
             RebuildClient();
-            await action();
+            try
+            {
+                await action();
+            }
+            catch (k8s.Autorest.HttpOperationException ex2) when (ex2.Response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                throw ToAccessDeniedException(ex2);
+            }
         }
+    }
+
+    /// <summary>
+    /// Converts a Kubernetes API 403 into a client-library-agnostic <see cref="AksAccessDeniedException"/>,
+    /// extracting the human-readable RBAC denial message (e.g. "ingresses.networking.k8s.io is
+    /// forbidden: User ... cannot list resource ... in the namespace ...") from the response body
+    /// when available, so callers don't need to know about <c>k8s.Autorest.HttpOperationException</c>.
+    /// </summary>
+    private static AksAccessDeniedException ToAccessDeniedException(k8s.Autorest.HttpOperationException ex)
+    {
+        string message = ex.Message;
+        try
+        {
+            using var doc = JsonDocument.Parse(ex.Response.Content);
+            if (doc.RootElement.TryGetProperty("message", out var messageProperty) &&
+                messageProperty.GetString() is { Length: > 0 } parsedMessage)
+            {
+                message = parsedMessage;
+            }
+        }
+        catch (JsonException)
+        {
+            // Response body wasn't the expected Kubernetes Status JSON — fall back to ex.Message.
+        }
+
+        return new AksAccessDeniedException(message, ex);
     }
 
     internal static KubernetesClientConfiguration BuildClientConfiguration(string? kubeconfigContext, string? kubeconfigPath)
@@ -2733,6 +2789,11 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     // ── Feature 1: Multi-pod log aggregation ─────────────────────────────────
 
+    // How often a live (Follow) aggregated stream re-lists pods for the deployment's selector,
+    // so pods created after the stream started (rolling updates, HPA scale-out, evictions) get
+    // picked up instead of being silently missing from the merged view.
+    private static readonly TimeSpan DeploymentLogPodDiscoveryInterval = TimeSpan.FromSeconds(10);
+
     public async IAsyncEnumerable<AggregatedLogLine> StreamDeploymentLogsAsync(
         string ns, string deploymentName, LogStreamOptions opts,
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -2750,10 +2811,18 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         var channel = Channel.CreateUnbounded<AggregatedLogLine>();
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        int remainingCount = pods.Count;
+        // Tracks which pods already have a running per-pod stream task, so re-discovery never
+        // double-tails the same pod. Only completed streams are removed, allowing a pod that
+        // gets recreated with the same name (rare, but possible with static pod names) to be
+        // re-attached on the next discovery pass.
+        var trackedPods = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+        var activeStreamCount = 0;
 
-        foreach (var pod in pods)
+        void StartPodStream(PodInfo pod)
         {
+            if (!trackedPods.TryAdd(pod.Name, 0)) return;
+            Interlocked.Increment(ref activeStreamCount);
+
             _ = Task.Run(async () =>
             {
                 try
@@ -2773,24 +2842,71 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
-                    // Pod-specific stream ended (e.g. pod restarted) — not overall cancellation.
-                    // Let the countdown handle completion.
+                    // Pod-specific stream ended (e.g. pod restarted, evicted, or rolled) — not
+                    // overall cancellation. In Follow mode the discovery loop below will pick up
+                    // any replacement pod; in a one-shot (non-Follow) window the countdown below
+                    // completes the channel once every currently known pod has finished.
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[StreamDeploymentLogs] Pod '{pod.Name}' stream failed: {ex.GetType().Name}: {ex.Message}");
+                    _logger.LogWarning(ex,
+                        "StreamDeploymentLogs: pod '{PodName}' stream failed", pod.Name);
                 }
                 finally
                 {
-                    if (Interlocked.Decrement(ref remainingCount) == 0)
+                    trackedPods.TryRemove(pod.Name, out _);
+                    // Only auto-complete for one-shot (non-Follow) windows. A live Follow session
+                    // must stay open even if every currently-tailed pod's stream happens to end at
+                    // the same time (e.g. a rolling update replacing every replica at once) —
+                    // otherwise "Live" silently stops even though the checkbox still shows enabled.
+                    var remaining = Interlocked.Decrement(ref activeStreamCount);
+                    if (!opts.Follow && remaining == 0)
                         channel.Writer.TryComplete();
                 }
             }, linkedCts.Token);
         }
 
-        await foreach (var item in channel.Reader.ReadAllAsync(ct))
-            yield return item;
+        foreach (var pod in pods)
+            StartPodStream(pod);
+
+        Task? discoveryTask = null;
+        if (opts.Follow)
+        {
+            discoveryTask = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!linkedCts.Token.IsCancellationRequested)
+                    {
+                        await Task.Delay(DeploymentLogPodDiscoveryInterval, linkedCts.Token);
+                        var currentPods = await GetPodsAsync(ns, labelSelector, linkedCts.Token);
+                        foreach (var pod in currentPods)
+                            StartPodStream(pod);
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "StreamDeploymentLogs: pod re-discovery for deployment '{DeploymentName}' failed", deploymentName);
+                }
+            }, linkedCts.Token);
+        }
+
+        try
+        {
+            await foreach (var item in channel.Reader.ReadAllAsync(ct))
+                yield return item;
+        }
+        finally
+        {
+            linkedCts.Cancel();
+            if (discoveryTask is not null)
+            {
+                try { await discoveryTask; }
+                catch { /* already logged/observed above */ }
+            }
+        }
     }
 
     // ── Feature 2: StatefulSets ───────────────────────────────────────────────

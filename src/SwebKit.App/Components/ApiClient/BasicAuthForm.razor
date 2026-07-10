@@ -15,7 +15,7 @@
                    value="@_passwordDisplay" @oninput="OnPasswordInput" autocomplete="new-password" />
             <button type="button" class="basic-form__toggle" title="@(_showPassword ? "Hide" : "Show")"
                     @onclick="() => _showPassword = !_showPassword">
-                @(_showPassword ? "🙈" : "👁")
+                <FluentIcon Value="@(_showPassword ? _iconEyeOff : _iconEye)" Width="14px" />
             </button>
         </div>
     </div>
@@ -24,6 +24,10 @@
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconEye = new Icons.Regular.Size16.Eye();
+    private static readonly Icon _iconEyeOff = new Icons.Regular.Size16.EyeOff();
+
     [Parameter, EditorRequired] public AuthConfig Auth { get; set; } = default!;
     [Parameter] public EventCallback OnChanged { get; set; }
 

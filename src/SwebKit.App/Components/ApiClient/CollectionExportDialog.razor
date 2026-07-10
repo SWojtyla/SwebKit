@@ -61,7 +61,7 @@
             }
             else if (_exportError is not null)
             {
-                <div class="col-export-dialog__error">⚠ @_exportError</div>
+                <div class="col-export-dialog__error"><FluentIcon Value="@_iconWarning" Width="12px" /> @_exportError</div>
             }
 
             <div class="col-export-dialog__actions">
@@ -140,7 +140,7 @@
                         <div class="col-export-dialog__summary-warnings">
                             @foreach (var w in _importSummary.Warnings)
                             {
-                                <div class="col-export-dialog__summary-warning">⚠ @w</div>
+                                <div class="col-export-dialog__summary-warning"><FluentIcon Value="@_iconWarning" Width="12px" /> @w</div>
                             }
                         </div>
                     }
@@ -148,7 +148,7 @@
             }
             else if (_importError is not null)
             {
-                <div class="col-export-dialog__error">⚠ @_importError</div>
+                <div class="col-export-dialog__error"><FluentIcon Value="@_iconWarning" Width="12px" /> @_importError</div>
             }
 
             <div class="col-export-dialog__actions">
@@ -172,6 +172,9 @@
 }
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconWarning = new Icons.Regular.Size16.Warning();
+
     [Parameter] public bool Visible { get; set; }
     [Parameter] public ApiCollection? Collection { get; set; }
     [Parameter] public IReadOnlyList<ApiEnvironment> Environments { get; set; } = [];

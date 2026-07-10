@@ -16,7 +16,7 @@
             Variables
             @if (!string.IsNullOrWhiteSpace(Request.GraphQlVariables))
             {
-                <span class="gql-panel__tab-dot">●</span>
+                <FluentIcon Value="@_iconDirtyDot" Width="8px" Class="gql-panel__tab-dot" />
             }
         </button>
         <button type="button" class="gql-panel__tab @(_activeTab == "schema" ? "gql-panel__tab--active" : "")"
@@ -24,7 +24,7 @@
             Schema
             @if (_schemaLoaded)
             {
-                <span class="gql-panel__tab-ok">✓</span>
+                <FluentIcon Value="@_iconCheckmark" Width="12px" Class="gql-panel__tab-ok" />
             }
         </button>
 
@@ -40,7 +40,7 @@
                     <TriggerContent>
                         <button type="button" class="gql-panel__op-btn" @onclick="() => _showOpDropdown = !_showOpDropdown">
                             @(Request.GraphQlSelectedOperation ?? _operationNames[0])
-                            <span class="gql-panel__op-chevron">▾</span>
+                            <FluentIcon Value="@_iconChevronDown" Width="10px" Class="gql-panel__op-chevron" />
                         </button>
                     </TriggerContent>
                     <ChildContent>
@@ -122,23 +122,32 @@
                         }
                         else
                         {
-                            <span>⚡ Introspect Schema</span>
+                            <span>
+                                <FluentIcon Value="@_iconFlash" Width="14px" /> Introspect Schema
+                            </span>
                         }
                     </button>
                     @if (_schemaLoaded)
                     {
-                        <span class="gql-panel__schema-status--ok">✓ Schema loaded — @_schemaTypeCount types</span>
+                        <span class="gql-panel__schema-status--ok">
+                            <FluentIcon Value="@_iconCheckmark" Width="12px" /> Schema loaded — @_schemaTypeCount types
+                        </span>
                         <button type="button" class="gql-panel__schema-clear-btn" title="Clear cached schema"
-                                @onclick="ClearSchemaAsync">✕</button>
+                                @onclick="ClearSchemaAsync">
+                            <FluentIcon Value="@_iconDismiss" Width="12px" />
+                        </button>
                     }
                 </div>
 
                 @if (_introspectionError is not null)
                 {
                     <div class="gql-panel__schema-error" role="alert">
-                        <span>⚠ @_introspectionError</span>
-                        <button type="button" class="gql-panel__schema-dismiss"
-                                @onclick="() => _introspectionError = null">✕</button>
+                        <span>
+                            <FluentIcon Value="@_iconWarning" Width="12px" /> @_introspectionError
+                        </span>
+                        <button type="button" class="gql-panel__schema-dismiss" @onclick="() => _introspectionError = null">
+                            <FluentIcon Value="@_iconDismiss" Width="12px" />
+                        </button>
                     </div>
                 }
 
@@ -152,7 +161,9 @@
                 else if (!_introspecting && !_schemaLoaded)
                 {
                     <div class="gql-panel__schema-empty">
-                        <div class="gql-panel__schema-empty-icon">⚡</div>
+                        <div class="gql-panel__schema-empty-icon">
+                            <FluentIcon Value="@_iconFlash" Width="32px" />
+                        </div>
                         <div class="gql-panel__schema-empty-title">No schema loaded</div>
                         <div class="gql-panel__schema-empty-hint">
                             Click <strong>Introspect Schema</strong> to fetch type information from the endpoint.
@@ -171,6 +182,14 @@
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconDirtyDot = new Icons.Filled.Size12.Circle();
+    private static readonly Icon _iconCheckmark = new Icons.Regular.Size16.Checkmark();
+    private static readonly Icon _iconChevronDown = new Icons.Regular.Size16.ChevronDown();
+    private static readonly Icon _iconFlash = new Icons.Regular.Size16.Flash();
+    private static readonly Icon _iconDismiss = new Icons.Regular.Size16.Dismiss();
+    private static readonly Icon _iconWarning = new Icons.Regular.Size16.Warning();
+
     [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = default!;
     [Parameter, EditorRequired] public ApiCollection Collection { get; set; } = default!;
     [Parameter] public ApiEnvironment? ActiveEnvironment { get; set; }

@@ -7,8 +7,9 @@
             <div class="quick-nav-panel__header">
                 <input type="text" class="quick-nav-panel__filter" placeholder="Jump to request…" autofocus value="@_filter"
                        @oninput="OnFilterInput" aria-label="Filter requests" @ref="_filterInput" />
-                <button type="button" class="quick-nav-panel__close" aria-label="Close quick navigation"
-                        @onclick="Close">✕</button>
+                <button type="button" class="quick-nav-panel__close" aria-label="Close quick navigation" @onclick="Close">
+                    <FluentIcon Value="@_iconDismiss" Width="14px" />
+                </button>
             </div>
 
             <div class="quick-nav-panel__list" role="listbox">
@@ -49,6 +50,9 @@
 }
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconDismiss = new Icons.Regular.Size16.Dismiss();
+
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
     [Parameter, EditorRequired] public IReadOnlyList<ApiCollection> Collections { get; set; } = [];

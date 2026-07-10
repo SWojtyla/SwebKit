@@ -24,7 +24,7 @@
             <div class="env-editor__type-picker">
                 <button type="button" class="env-editor__type-btn" @onclick="() => ToggleTypePicker(v)">
                     <span>@GetTypeLabel(v.SecretSource)</span>
-                    <span class="env-editor__type-chevron">▾</span>
+                    <FluentIcon Value="@_iconChevronDown" Width="10px" Class="env-editor__type-chevron" />
                 </button>
                 @if (_openTypePickerVar == v)
                 {
@@ -60,7 +60,7 @@
                         <div class="env-editor__kv-vault-picker">
                             <button type="button" class="env-editor__type-btn" @onclick="() => ToggleVaultPicker(v)">
                                 <span>@(string.IsNullOrWhiteSpace(v.KeyVaultName) ? "— select vault —" : v.KeyVaultName)</span>
-                                <span class="env-editor__type-chevron">▾</span>
+                                <FluentIcon Value="@_iconChevronDown" Width="10px" Class="env-editor__type-chevron" />
                             </button>
                             @if (_openVaultPickerVar == v)
                             {
@@ -90,8 +90,9 @@
                 <input type="text" class="env-editor__var-value env-editor__var-value--secret" placeholder="Credential key"
                        value="@v.CredentialKey" @oninput="e => v.CredentialKey = e.Value?.ToString()" />
             }
-            <button type="button" class="env-editor__var-delete" title="Remove"
-                    @onclick="() => RemoveVariable(v)">×</button>
+            <button type="button" class="env-editor__var-delete" title="Remove" @onclick="() => RemoveVariable(v)">
+                <FluentIcon Value="@_iconDelete" Width="12px" />
+            </button>
         </div>
     }
 
@@ -104,6 +105,10 @@
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconChevronDown = new Icons.Regular.Size16.ChevronDown();
+    private static readonly Icon _iconDelete = new Icons.Regular.Size16.Delete();
+
     [Parameter, EditorRequired] public ApiEnvironment Environment { get; set; } = null!;
     [Parameter] public EventCallback OnSaved { get; set; }
     [Parameter] public EventCallback OnCancelled { get; set; }

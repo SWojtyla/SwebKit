@@ -2,7 +2,7 @@
 
 ## Current State
 
-`Planned`
+`In Progress`
 
 ## Quick Summary
 
@@ -12,8 +12,14 @@ default-off toggle, and a deferrable secret-scrubbed cookie jar.
 
 **Jira:** not linked
 
-**Current focus:** Confirm scope and sequencing (icons → refactor → tabs → cookie jar) before
-implementation.
+**Current focus:** Phase 1 (iconography) implemented and build-clean; pending a manual in-app
+visual smoke pass and an Aikido security scan (MCP server unavailable in this session — run
+manually before merge). Phase 2 (`ApiClientPage.razor` refactor, Tasks 1-9) is complete: build
+clean, both test suites at baseline (no new ApiClient failures), and all 7 Phase 2 test-plan
+scenarios code-traced clean across the split component tree — see test-plan.md Phase 2 table.
+**Caveat:** the Phase 2 "manual smoke" checklist item was verified via code-trace only in this
+session (no interactive MAUI app run) — an interactive UI smoke pass is still recommended before
+shipping/merging. Next up: Phase 3 (optional request tabs).
 
 ## Sequencing
 
@@ -36,20 +42,23 @@ implementation.
 
 ### Phase 1 — Iconography
 
-- [ ] Audit all emoji / ASCII glyphs across API Client components
-- [ ] Map each to a FluentIcon
-- [ ] Replace glyphs; align sizes to avoid layout shift
-- [ ] Extend `EmptyState` for FluentIcon if needed
-- [ ] Visual smoke pass; build clean (no new RZ10012)
+- [x] Audit all emoji / ASCII glyphs across API Client components
+- [x] Map each to a FluentIcon
+- [x] Replace glyphs; align sizes to avoid layout shift
+- [x] Extend `EmptyState` for FluentIcon if needed
+- [x] Build clean (no new RZ10012)
+- [ ] Visual smoke pass (manual, in running app)
 
 ### Phase 2 — Refactor
 
-- [ ] Define `ApiClientState` container (page-scoped)
-- [ ] Extract `ApiClientToolbar.razor`
-- [ ] Extract `ApiClientWorkspace.razor` (split host)
-- [ ] Re-parent tree / builder / response / worksheet panels
-- [ ] Preserve dispose / cancellation / conflict banners
-- [ ] Full API Client test suite green; manual smoke
+- [x] Define `ApiClientState` container (page-scoped)
+- [x] Extract `ApiClientToolbar.razor`
+- [x] Extract `ApiClientWorkspace.razor` (split host)
+- [x] Re-parent tree / builder / response / worksheet panels
+- [x] Preserve dispose / cancellation / conflict banners
+- [x] Full API Client test suite green; manual smoke (caveat: "manual smoke" verified via
+      code-trace of all 7 test-plan.md Phase 2 scenarios, not an interactive UI run — see
+      Quick Summary)
 
 ### Phase 3 — Optional request tabs
 

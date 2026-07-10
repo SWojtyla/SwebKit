@@ -1,0 +1,136 @@
+@* ── Left collection tree panel (extracted from ApiClientPage — Phase 2, Task 3) ──
+   Presentational component: reads State (page-owned ApiClientState instance, not a copy) and
+   forwards every CollectionTree callback unchanged up to the page. Method bodies stay on
+   ApiClientPage; this component only wires UI to callbacks (DEC-UX-3). The tree-splitter JS
+   lifecycle is fully self-contained here (own fields, own OnAfterRenderAsync, own dispose) —
+   nothing outside the tree panel touches these refs today, so self-containing this is lower
+   risk than threading @ref's back up to the page. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="api-client-tree-panel" @ref="_treePanelEl" role="navigation" aria-label="API request collections">
+    @if (State.LoadingCollections)
+    {
+        <div class="api-client-tree-panel__loading">
+            <LoadingSpinner Message="Loading collections…" />
+        </div>
+    }
+    else if (State.Collections.Count == 0 && State.LinkedRootInfos.Count == 0)
+    {
+        <div class="api-client-tree-panel__empty">
+            <EmptyState Title="No collections yet" Subtitle="Create a local collection or add a Git-backed API repository.">
+                <IconContent>
+                    <FluentIcon Value="@_iconBox" Width="32px" />
+                </IconContent>
+                <Actions>
+                    <button type="button" class="api-client-empty-action-btn" @onclick="OnAddCollection">
+                        + New Collection
+                    </button>
+                    <button type="button" class="api-client-empty-action-btn" @onclick="OnAddApiRepo">
+                        Add API Repo
+                    </button>
+                </Actions>
+            </EmptyState>
+        </div>
+    }
+    else
+    {
+        <CollectionTree Collections="@State.Collections" LinkedRoots="@State.LinkedRootInfos"
+                        SelectedRequestId="@State.SelectedRequestId" ActiveCollectionId="@State.ActiveCollection?.Id"
+                        ActiveLinkedRootId="@State.ActiveLinkedRootId" OnRequestSelected="OnRequestSelected"
+                        OnCollectionSelected="OnCollectionSelected" OnAddFolder="OnAddFolder" OnAddRequest="OnAddRequest"
+                        OnRenameNode="OnRenameNode" OnDeleteNode="OnDeleteNode" OnLinkedRootSelected="OnLinkedRootSelected"
+                        OnRenameCollection="OnRenameCollection" OnDeleteCollection="OnDeleteCollection"
+                        OnLinkCollectionToRepo="OnLinkCollectionToRepo" OnMoveNode="OnMoveNode" />
+    }
+</div>
+
+<div class="api-client-tree-splitter" @ref="_treeSplitterEl"></div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ApiClientState State { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnAddCollection { get; set; }
+
+    [Parameter]
+    public EventCallback OnAddApiRepo { get; set; }
+
+    [Parameter]
+    public EventCallback<HttpRequestEntry> OnRequestSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnCollectionSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnLinkedRootSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<(string CollectionId, ApiCollectionNode ParentNode)> OnAddFolder { get; set; }
+
+    [Parameter]
+    public EventCallback<(string CollectionId, ApiCollectionNode ParentNode)> OnAddRequest { get; set; }
+
+    [Parameter]
+    public EventCallback<(ApiCollectionNode Node, string NewName)> OnRenameNode { get; set; }
+
+    [Parameter]
+    public EventCallback<ApiCollectionNode> OnDeleteNode { get; set; }
+
+    [Parameter]
+    public EventCallback<(string CollectionId, string NewName)> OnRenameCollection { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnDeleteCollection { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnLinkCollectionToRepo { get; set; }
+
+    [Parameter]
+    public EventCallback<(string CollectionId, ApiCollectionNode DraggedNode, ApiCollectionNode? NewParent, int?
+NewIndex)> OnMoveNode
+    { get; set; }
+
+    private static readonly Icon _iconBox = new Icons.Regular.Size16.Box();
+
+    // ── Tree panel splitter (JS drag) ───────────────────────────────────────
+    private ElementReference _treeSplitterEl;
+    private ElementReference _treePanelEl;
+    private IJSObjectReference? _treeSplitterHandle;
+    private bool _treeSplitterInited;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // On the very first render the element refs may not be bound yet
+        // (the async init hasn't completed, so the workspace panels may not have rendered).
+        // Wait for the post-init render before touching the DOM via JS.
+        if (firstRender)
+            return;
+
+        // Init the tree panel splitter once the DOM is ready.
+        if (!_treeSplitterInited)
+        {
+            _treeSplitterInited = true;
+            _treeSplitterHandle = await JS.InvokeAsync<IJSObjectReference>(
+                "SwebKitSplitter.init",
+                _treeSplitterEl,
+                _treePanelEl,
+                new { leftPane = true, minWidth = 200, maxWidth = 520 });
+        }
+    }
+
+    private async Task DisposeTreeSplitterAsync()
+    {
+        if (_treeSplitterHandle is null) return;
+        try { await _treeSplitterHandle.InvokeVoidAsync("dispose"); } catch { }
+        try { await _treeSplitterHandle.DisposeAsync(); } catch { }
+        _treeSplitterHandle = null;
+        _treeSplitterInited = false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await DisposeTreeSplitterAsync();
+    }
+}

@@ -6,7 +6,6 @@
 @inject EnvironmentRepository EnvironmentRepo
 @inject LinkedCollectionRootRepository LinkedRootRepo
 @inject LinkedCollectionFileService LinkedFileService
-@inject LinkedGitService LinkedGit
 @inject ApiClientWorkflowService WorkflowService
 @inject ICredentialStore CredentialStore
 @inject UserSettingsRepository UserSettings
@@ -23,596 +22,138 @@
     @* Skip link for keyboard users *@
     <a href="#main-workspace" class="api-client-skip-link">Skip to workspace</a>
 
+    <ReworkBanner FeatureName="API Client" />
+
     @* ── Toolbar ── *@
-    <div class="api-client-toolbar" role="toolbar" aria-label="API Client toolbar">
-        <div class="api-client-toolbar__left" role="group" aria-label="Create actions">
-            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
-                    Title="New collection (Ctrl+Shift+N)" OnClick="OpenNewCollectionDialog">
-                <FluentIcon Value="@(new Icons.Regular.Size16.AddSquare())" Width="14px" />
-                <span>New Collection</span>
-                <kbd class="api-client-toolbar-btn__kbd">Ctrl+Shift+N</kbd>
+    <ApiClientToolbar State="_state" CanCreateRequest="CanCreateRequest" IsRepoMenuActive="IsRepoMenuActive"
+                      IsVariableMenuActive="IsVariableMenuActive"
+                      CurrentTargetLinkedRootPresent="@(CurrentTargetLinkedRoot is not null)" CurrentTargetLabel="CurrentTargetLabel"
+                      CurrentTargetHint="CurrentTargetHint" EnvsWorksheetActive="@(_state.WorksheetMode == WorksheetEnvs)"
+                      ActiveEnvironment="ActiveEnvironment" OnNewCollection="OpenNewCollectionDialog" OnAddRequest="AddRequestAsync"
+                      OnSaveRequest="SaveRequestAsync" OnAddGitRepo="OpenLinkedRootDialogFromMenu"
+                      OnGitForSelectedRepo="OpenCurrentTargetGitFromMenu" OnManageGitRepos="OpenLinkedRootManagementFromMenu"
+                      OnImportCurl="OpenCurlImportDialogFromMenu" OnImportCollection="OpenCollectionImportDialogFromMenu"
+                      OnExportCollection="OpenCollectionExportDialogFromMenu" OnReloadLinkedConflict="ReloadLinkedConflictAsync"
+                      OnKeepMineLinkedConflict="KeepMineLinkedConflictAsync"
+                      OnSaveLinkedConflictAsCopy="SaveLinkedConflictAsCopyAsync" OnCopyCurl="CopyCurlAsync"
+                      OnOpenCollectionVariables="OpenCollectionVariablesFromMenu"
+                      OnOpenRequestVariables="OpenRequestVariablesFromMenu" OnToggleEnvsWorksheet="ToggleEnvsWorksheet"
+                      OnSelectEnvironment="SelectEnvAsync" />
+
+    @* ── Main split: collection tree + request workspace ── *@
+    <ApiClientWorkspace State="_state" CanCreateRequest="CanCreateRequest" MissingSecretNames="MissingSecretNames"
+                        OnAddCollection="AddCollectionAsync" OnAddApiRepo="OpenLinkedRootDialog"
+                        OnRequestSelected="OnRequestSelectedAsync" OnCollectionSelected="OnCollectionSelectedAsync"
+                        OnAddFolder="OnAddFolderAsync" OnAddRequestInFolder="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
+                        OnDeleteNode="OnDeleteNodeAsync" OnLinkedRootSelected="OnLinkedRootSelectedAsync"
+                        OnRenameCollection="OnRenameCollectionAsync" OnDeleteCollection="OnDeleteCollectionAsync"
+                        OnLinkCollectionToRepo="OnLinkCollectionToRepoAsync" OnMoveNode="OnMoveNodeAsync"
+                        OnEnvironmentsChanged="OnEnvironmentsChangedAsync" OnCollectionVariablesSaved="OnCollVarEditorSavedAsync"
+                        OnRefreshLinkedRoots="LoadLinkedRootsAsync" OnOpenGitPanel="OpenGitPanelAsync"
+                        OnRemoveLinkedRoot="RemoveLinkedRootAsync" OnAddRequest="AddRequestAsync"
+                        OnRequestChanged="OnRequestChangedAsync" OnRequestResult="OnRequestResultAsync"
+                        OnSubscriptionMessage="OnSubscriptionMessageAsync" OnSubscriptionStopped="OnSubscriptionStoppedAsync"
+                        OnResendHistoryEntry="OnResendHistoryEntryAsync" OnSaveResponseExample="SaveResponseExampleAsync"
+                        OnConfigureSecret="OpenConfigureSecretDialog" />
+</div>
+
+@* ── New collection dialog ── *@
+@if (_showNewCollectionDialog)
+{
+    <div class="api-client-dialog-backdrop" @onclick="() => _showNewCollectionDialog = false"></div>
+    <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="New Collection">
+        <div class="api-client-dialog__title">New Collection</div>
+        <input type="text" class="api-client-dialog__input" placeholder="Collection name…" value="@_newCollectionName"
+               @oninput="e => _newCollectionName = e.Value?.ToString() ?? string.Empty"
+               @onkeydown="OnNewCollectionKeyDownAsync" @ref="_newCollectionInput" />
+        <div class="api-client-dialog__actions">
+            <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                       Disabled="@(string.IsNullOrWhiteSpace(_newCollectionName))" OnClick="ConfirmNewCollectionAsync">Create
             </AppButton>
-            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
-                    Title="New request (Ctrl+N)" Disabled="@(!CanCreateRequest)" OnClick="AddRequestAsync">
-                <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
-                <span>New Request</span>
-                <kbd class="api-client-toolbar-btn__kbd">Ctrl+N</kbd>
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                       OnClick="@(() => _showNewCollectionDialog = false)">Cancel</AppButton>
+        </div>
+    </div>
+}
+
+@* ── Add API repo dialog ── *@
+@if (_showLinkedRootDialog)
+{
+    <div class="api-client-dialog-backdrop" @onclick="() => _showLinkedRootDialog = false"></div>
+    <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Add API Repository">
+        <div class="api-client-dialog__title">Add API Repository</div>
+        <div class="api-client-dialog__hint">
+            Choose a Git repository folder, or an existing .swebkit-api folder. SwebKit keeps API request files there so
+            they can be committed with that repo.
+        </div>
+        <input type="text" class="api-client-dialog__input" placeholder="Display name (optional)"
+               value="@_newLinkedRootName" @oninput="e => _newLinkedRootName = e.Value?.ToString() ?? string.Empty" />
+        <div class="api-client-dialog__path-row">
+            <input type="text" class="api-client-dialog__input" placeholder="Path to Git repo or .swebkit-api folder"
+                   value="@_newLinkedRootPath" @oninput="e => _newLinkedRootPath = e.Value?.ToString() ?? string.Empty"
+                   @ref="_newLinkedRootInput" />
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                       OnClick="PickLinkedRootFolderAsync">…</AppButton>
+        </div>
+        @if (_linkedRootError is not null)
+        {
+            <div class="api-client-dialog__error">@_linkedRootError</div>
+        }
+        <div class="api-client-dialog__actions">
+            <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                       Disabled="@(string.IsNullOrWhiteSpace(_newLinkedRootPath))" OnClick="ConfirmLinkedRootAsync">Add repo
             </AppButton>
-            @if (_isDirty && !_autoSave)
-            {
-                <AppButton Variant="Primary" Size="Small" CssClass="api-client-toolbar-btn api-client-toolbar-btn--save"
-                        Title="Save request (Ctrl+S)" OnClick="SaveRequestAsync">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Save())" Width="14px" />
-                    <span>Save</span>
-                    <kbd class="api-client-toolbar-btn__kbd">Ctrl+S</kbd>
-                </AppButton>
-            }
-            <AppDropdown IsOpen="@_showRepoMenu"
-                         OnClose="@(() => _showRepoMenu = false)"
-                         CssClass="api-client-toolbar-menu"
-                         MenuCssClass="api-client-toolbar-menu__dropdown"
-                         Label="Git Repos">
-                <TriggerContent>
-                    <AppButton Variant="Secondary" Size="Small"
-                            CssClass="@(IsRepoMenuActive ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
-                            Title="Add or manage Git-backed API repositories"
-                            OnClick="@(() => _showRepoMenu = !_showRepoMenu)">
-                        <span>Git Repos</span>
-                        <span class="api-client-toolbar-menu__chevron">v</span>
-                    </AppButton>
-                </TriggerContent>
-                <ChildContent>
-                    <button type="button" class="ctx-item" @onclick="OpenLinkedRootDialogFromMenu">Add Git repo</button>
-                    <button type="button" class="ctx-item" disabled="@(CurrentTargetLinkedRoot is null)" @onclick="OpenCurrentTargetGitFromMenu">Git for selected repo</button>
-                    <button type="button" class="ctx-item" disabled="@(_linkedRootInfos.Count == 0)" @onclick="OpenLinkedRootManagementFromMenu">Manage Git repos</button>
-                </ChildContent>
-            </AppDropdown>
-            <AppDropdown IsOpen="@_showTransferMenu"
-                         OnClose="@(() => _showTransferMenu = false)"
-                         CssClass="api-client-toolbar-menu"
-                         MenuCssClass="api-client-toolbar-menu__dropdown"
-                         Label="Import and export">
-                <TriggerContent>
-                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
-                            Title="Import or export API requests and collections"
-                            OnClick="@(() => _showTransferMenu = !_showTransferMenu)">
-                        <span>Import / Export</span>
-                        <span class="api-client-toolbar-menu__chevron">v</span>
-                    </AppButton>
-                </TriggerContent>
-                <ChildContent>
-                    <button type="button" class="ctx-item" disabled="@(!CanCreateRequest)" @onclick="OpenCurlImportDialogFromMenu">Import cURL</button>
-                    <button type="button" class="ctx-item" @onclick="OpenCollectionImportDialogFromMenu">Import collection</button>
-                    <button type="button" class="ctx-item" disabled="@(_activeCollection is null)" @onclick="OpenCollectionExportDialogFromMenu">Export collection</button>
-                </ChildContent>
-            </AppDropdown>
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                       OnClick="@(() => _showLinkedRootDialog = false)">Cancel</AppButton>
         </div>
+    </div>
+}
 
-        <div class="api-client-toolbar__center" role="group" aria-label="Current request status">
-            <span class="api-client-target-chip" title="@CurrentTargetHint">
-                <span class="api-client-target-chip__label">Target</span>
-                <strong>@CurrentTargetLabel</strong>
-            </span>
-            @if (_isDirty && !_autoSave)
-            {
-                <span class="api-client-toolbar__dirty-badge" title="Unsaved changes — press Ctrl+S to save">
-                    ● Unsaved
-                </span>
-            }
-            @if (_linkedSaveConflict is not null)
-            {
-                <div class="api-client-conflict-banner">
-                    <span>@_linkedSaveConflict.Message</span>
-                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn" OnClick="ReloadLinkedConflictAsync">Reload from disk</AppButton>
-                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn" OnClick="KeepMineLinkedConflictAsync">Keep mine</AppButton>
-                    <AppButton Variant="Primary" Size="Small" CssClass="api-client-secret-warning__btn" OnClick="SaveLinkedConflictAsCopyAsync">Save as copy</AppButton>
-                </div>
-            }
-            @if (_linkedSaveError is not null)
-            {
-                <span class="api-client-toolbar__warning-badge" title="@_linkedSaveError">
-                    @_linkedSaveError
-                </span>
-            }
-            @if (_workflowMessage is not null)
-            {
-                <span class="api-client-toolbar__warning-badge @(_workflowMessageIsError ? "" : "api-client-toolbar__warning-badge--ok")" title="@_workflowMessage">
-                    @_workflowMessage
-                </span>
-            }
+@if (_showConfigureSecretDialog)
+{
+    <div class="api-client-dialog-backdrop" @onclick="() => _showConfigureSecretDialog = false"></div>
+    <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="Configure linked secret">
+        <div class="api-client-dialog__title">Configure Secret</div>
+        <div class="api-client-dialog__hint">@(_secretNameToConfigure ?? "Select a missing secret")</div>
+        <input type="password" class="api-client-dialog__input" placeholder="Secret value stored locally"
+               value="@_secretValueToConfigure"
+               @oninput="e => _secretValueToConfigure = e.Value?.ToString() ?? string.Empty" />
+        @if (_secretConfigError is not null)
+        {
+            <div class="api-client-dialog__error">@_secretConfigError</div>
+        }
+        <div class="api-client-dialog__actions">
+            <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                       Disabled="@(string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))"
+                       OnClick="SaveConfiguredSecretAsync">Save Secret</AppButton>
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                       OnClick="@(() => _showConfigureSecretDialog = false)">Cancel</AppButton>
         </div>
+    </div>
+}
 
-        <div class="api-client-toolbar__right" role="group" aria-label="Request actions">
-            @if (_selectedRequest is not null)
-            {
-                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Title="Copy request as cURL"
-                        OnClick="CopyCurlAsync">Copy cURL</AppButton>
-            }
-            <AppDropdown IsOpen="@_showVariableMenu"
-                         OnClose="@(() => _showVariableMenu = false)"
-                         CssClass="api-client-toolbar-menu"
-                         MenuCssClass="api-client-toolbar-menu__dropdown"
-                         Label="Variables">
-                <TriggerContent>
-                    <AppButton Variant="Secondary" Size="Small"
-                            CssClass="@(IsVariableMenuActive ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
-                            Title="Manage collection variables or inspect request variables"
-                            OnClick="@(() => _showVariableMenu = !_showVariableMenu)">
-                        <span>Variables</span>
-                        <span class="api-client-toolbar-menu__chevron">v</span>
-                    </AppButton>
-                </TriggerContent>
-                <ChildContent>
-                    <button type="button" class="ctx-item" disabled="@(_activeCollection is null)" @onclick="OpenCollectionVariablesFromMenu">Collection variables</button>
-                    <button type="button" class="ctx-item" disabled="@(_selectedRequest is null)" @onclick="OpenRequestVariablesFromMenu">Request variables</button>
-                </ChildContent>
-            </AppDropdown>
-                <AppButton Variant="Secondary" Size="Small"
-                        CssClass="@(_worksheetMode == WorksheetEnvs ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
-                        Title="Manage environments"
-                        OnClick="@(() => _worksheetMode = _worksheetMode == WorksheetEnvs ? null : WorksheetEnvs)">🌍
-                    Envs</AppButton>
-                    <span class="api-client-toolbar__env-label">Env:</span>
-                    <AppDropdown IsOpen="@_showEnvPicker"
-                                 OnClose="@(() => _showEnvPicker = false)"
-                                 CssClass="api-client-env-picker"
-                                 MenuCssClass="api-client-env-picker__dropdown"
-                                 Label="Environment picker">
-                        <TriggerContent>
-                            <button type="button" class="api-client-env-picker__btn"
-                                    @onclick="() => _showEnvPicker = !_showEnvPicker">
-                                <span>@(ActiveEnvironment?.Name ?? "— None —")</span>
-                                <span class="api-client-env-picker__chevron">▾</span>
-                            </button>
-                        </TriggerContent>
-                        <ChildContent>
-                            <button type="button" class="ctx-item @(_activeEnvironmentId is null ? "ctx-item--active" : "")"
-                                    @onclick="() => SelectEnvAsync(null)">— None —</button>
-                            @foreach (var env in _environments)
-                            {
-                                <button type="button" class="ctx-item @(env.Id == _activeEnvironmentId ? "ctx-item--active" : "")"
-                                        @onclick="() => SelectEnvAsync(env.Id)">@env.Name</button>
-                            }
-                        </ChildContent>
-                    </AppDropdown>
-                </div>
-            </div>
-
-            @* ── Main split: collection tree + request workspace ── *@
-            <div class="api-client-body">
-
-                @* Left: collection tree *@
-                <div class="api-client-tree-panel" @ref="_treePanelEl" role="navigation" aria-label="API request collections">
-                    @if (_loadingCollections)
-                    {
-                        <div class="api-client-tree-panel__loading">
-                            <LoadingSpinner Message="Loading collections…" />
-                        </div>
-                    }
-                    else if (_collections.Count == 0 && _linkedRootInfos.Count == 0)
-                    {
-                        <div class="api-client-tree-panel__empty">
-                            <EmptyState Icon="📦" Title="No collections yet"
-                                        Subtitle="Create a local collection or add a Git-backed API repository.">
-                                <Actions>
-                                    <button type="button" class="api-client-empty-action-btn" @onclick="AddCollectionAsync">
-                                        + New Collection
-                                    </button>
-                                    <button type="button" class="api-client-empty-action-btn" @onclick="OpenLinkedRootDialog">
-                                        Add API Repo
-                                    </button>
-                                </Actions>
-                            </EmptyState>
-                        </div>
-                    }
-                    else
-                    {
-                        <CollectionTree Collections="@_collections" LinkedRoots="@_linkedRootInfos"
-                                        SelectedRequestId="@_selectedRequestId" ActiveCollectionId="@_activeCollection?.Id" ActiveLinkedRootId="@_activeLinkedRootId"
-                                        OnRequestSelected="OnRequestSelectedAsync" OnCollectionSelected="OnCollectionSelectedAsync"
-                                        OnAddFolder="OnAddFolderAsync" OnAddRequest="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
-                                        OnDeleteNode="OnDeleteNodeAsync" OnLinkedRootSelected="OnLinkedRootSelectedAsync" OnRenameCollection="OnRenameCollectionAsync"
-                                        OnDeleteCollection="OnDeleteCollectionAsync" OnLinkCollectionToRepo="OnLinkCollectionToRepoAsync"
-                                        OnMoveNode="OnMoveNodeAsync" />
-                    }
-                </div>
-
-                <div class="api-client-tree-splitter" @ref="_treeSplitterEl"></div>
-
-                @* Right: request builder + response viewer OR management screens *@
-                <div class="api-client-workspace" id="main-workspace" role="main">
-                    @if (_worksheetMode == WorksheetEnvs)
-                    {
-                        <div class="api-client-management-screen">
-                            <div class="api-client-management-screen__header">
-                                <button type="button" class="api-client-management-screen__back"
-                                        @onclick="() => _worksheetMode = null">← Back to requests</button>
-                                <span class="api-client-management-screen__title">Environments</span>
-                            </div>
-                            <EnvironmentManagerPanel OnChanged="@OnEnvironmentsChangedAsync" />
-                        </div>
-                    }
-                    else if (_worksheetMode == WorksheetVars && _activeCollection is not null)
-                    {
-                        <div class="api-client-management-screen">
-                            <div class="api-client-management-screen__header">
-                                <button type="button" class="api-client-management-screen__back"
-                                        @onclick="() => _worksheetMode = null">← Back to requests</button>
-                                <span class="api-client-management-screen__title">Collection Variables —
-                                    @_activeCollection.Name</span>
-                                </div>
-                                <CollectionVariableEditor Collection="@_activeCollection" OnSaved="@OnCollVarEditorSavedAsync"
-                                                          OnCancelled="@(() => _worksheetMode = null)" />
-                            </div>
-                        }
-                    else if (_worksheetMode == WorksheetVariables && _selectedRequest is not null)
-                    {
-                        <div class="api-client-management-screen">
-                            <div class="api-client-management-screen__header">
-                                <button type="button" class="api-client-management-screen__back"
-                                        @onclick="() => _worksheetMode = null">← Back to requests</button>
-                                <span class="api-client-management-screen__title">Variables — @_selectedRequest.Name</span>
-                            </div>
-                            <div class="api-client-inspector">
-                                @if (_variableInspectorLoading)
-                                {
-                                    <LoadingSpinner Message="Resolving variables…" />
-                                }
-                                else if (_variableInspectionItems.Count == 0)
-                                {
-                                    <div class="api-client-linked-roots__empty">No variables found in this request.</div>
-                                }
-                                else
-                                {
-                                    @foreach (var item in _variableInspectionItems)
-                                    {
-                                        <div class="api-client-inspector__row @(item.IsResolved ? "" : "api-client-inspector__row--unresolved")">
-                                            <span class="api-client-inspector__key">{{@item.Key}}</span>
-                                            <span class="api-client-inspector__source">@item.Source</span>
-                                            <span class="api-client-inspector__value">@(item.DisplayValue ?? "unresolved")</span>
-                                        </div>
-                                    }
-                                }
-                            </div>
-                        </div>
-                    }
-            else if (_worksheetMode == WorksheetLinkedRoots)
-                        {
-                            <div class="api-client-management-screen">
-                                <div class="api-client-management-screen__header">
-                                    <button type="button" class="api-client-management-screen__back"
-                                            @onclick="() => _worksheetMode = null">← Back to requests</button>
-                                    <span class="api-client-management-screen__title">API Repositories</span>
-                                </div>
-                                <div class="api-client-linked-roots">
-                                    @if (_linkedRootResults.Count == 0)
-                                    {
-                                        <div class="api-client-linked-roots__empty">No API repositories configured.</div>
-                                    }
-                                    @foreach (var root in _linkedRootResults)
-                                    {
-                                        <div class="api-client-linked-root-card">
-                                            <div class="api-client-linked-root-card__main">
-                                                <div class="api-client-linked-root-card__name">@root.DisplayName</div>
-                                                <div class="api-client-linked-root-card__path">@root.ApiRootPath</div>
-                                                <div class="api-client-linked-root-card__meta">
-                                                    <span>@(root.GitStatus.IsGitRepository ? root.GitStatus.Branch ?? "detached" : "not a Git repo")</span>
-                                                    <span>@(root.GitStatus.ChangedFileCount > 0 ? $"{root.GitStatus.ChangedFileCount} changed" : "clean")</span>
-                                                    @if (root.Diagnostics.Count > 0)
-                                                    {
-                                                        <span>@root.Diagnostics.Count diagnostic(s)</span>
-                                                    }
-                                                </div>
-                                            </div>
-                                            <div class="api-client-linked-root-card__actions">
-                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
-                                                    OnClick="LoadLinkedRootsAsync">Refresh</AppButton>
-                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
-                                                    OnClick="@(() => OpenGitPanelAsync(root.Config.Id))">Git</AppButton>
-                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
-                                                    OnClick="@(() => RemoveLinkedRootAsync(root.Config.Id))">Remove</AppButton>
-                                            </div>
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                        }
-                        else if (_worksheetMode == WorksheetGit && ActiveGitRoot is not null)
-                        {
-                            <div class="api-client-management-screen">
-                                <div class="api-client-management-screen__header">
-                                    <button type="button" class="api-client-management-screen__back"
-                                            @onclick="() => _worksheetMode = WorksheetLinkedRoots">← Back to API repos</button>
-                                    <span class="api-client-management-screen__title">Git — @ActiveGitRoot.DisplayName</span>
-                                </div>
-                                <div class="api-client-git-panel">
-                                    <div class="api-client-git-panel__scroll">
-                                    @{
-                                        var stagedGitFiles = GetStagedGitFiles();
-                                        var unstagedGitFiles = GetUnstagedGitFiles();
-                                    }
-                                    <div class="api-client-git-panel__summary">
-                                        <span>Branch: @(ActiveGitRoot.GitStatus.Branch ?? "—")</span>
-                                        <span>Changed API files: @ActiveGitRoot.GitStatus.ChangedFileCount</span>
-                                        @if (stagedGitFiles.Count > 0)
-                                        {
-                                            <span>staged changes ready</span>
-                                        }
-                                    </div>
-                                    @if (_gitMessage is not null)
-                                    {
-                                        <div
-                                            class="api-client-git-panel__message @(_gitMessageIsError ? "api-client-git-panel__message--error" : "")">
-                                            @_gitMessage</div>
-                                        }
-                                        @if (stagedGitFiles.Count > 0)
-                                        {
-                                            <div class="api-client-git-panel__commit-preview">
-                                                <div class="api-client-git-panel__section-title">Commit preview</div>
-                                                <div class="api-client-git-panel__summary">
-                                                    <span>Branch: @(ActiveGitRoot.GitStatus.Branch ?? "—")</span>
-                                                    <span>Remote: @(_gitRemoteUrl ?? "origin remote unavailable")</span>
-                                                    <span>@stagedGitFiles.Count staged API file(s)</span>
-                                                </div>
-                                                <div class="api-client-git-panel__preview-files">
-                                                    @foreach (var file in stagedGitFiles)
-                                                    {
-                                                        <span>@file.Path</span>
-                                                    }
-                                                </div>
-                                            </div>
-                                        }
-                                        <div class="api-client-git-panel__row">
-                                            <input class="api-client-dialog__input" placeholder="branch name" value="@_gitBranchName"
-                                                   @oninput="e => _gitBranchName = e.Value?.ToString() ?? string.Empty" />
-                                            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="CreateGitBranchAsync">Create
-                                                branch</AppButton>
-                                                </div>
-                                                <div class="api-client-git-panel__row">
-                                                    <select class="api-client-dialog__input api-client-git-panel__branch-select" value="@_gitBranchToSwitch"
-                                                            @onchange="e => _gitBranchToSwitch = e.Value?.ToString() ?? string.Empty">
-                                                        @foreach (var branch in _gitBranches)
-                                                        {
-                                                            <option value="@branch.Name">@(branch.IsCurrent ? $"{branch.Name} (current)" : branch.Name)</option>
-                                                        }
-                                                    </select>
-                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Disabled="@(string.IsNullOrWhiteSpace(_gitBranchToSwitch))"
-                                                            OnClick="SwitchGitBranchAsync">Switch branch</AppButton>
-                                                </div>
-                                                <div class="api-client-git-panel__row">
-                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Disabled="@(unstagedGitFiles.Count == 0)"
-                                                            OnClick="StageAllGitFilesAsync">Stage all</AppButton>
-                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Disabled="@(stagedGitFiles.Count == 0)"
-                                                            OnClick="UnstageAllGitFilesAsync">Unstage all</AppButton>
-                                                    <input class="api-client-dialog__input" placeholder="commit message" value="@_gitCommitMessage"
-                                                           @oninput="e => _gitCommitMessage = e.Value?.ToString() ?? string.Empty" />
-                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Disabled="@(stagedGitFiles.Count == 0 || string.IsNullOrWhiteSpace(_gitCommitMessage))"
-                                                            OnClick="CommitGitChangesAsync">Commit staged</AppButton>
-                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="PushGitBranchAsync">Push</AppButton>
-                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="OpenRemoteCompareAsync">Open remote
-                                                            compare</AppButton>
-                                                        </div>
-                                                        <div class="api-client-git-panel__files">
-                                                            @if (ActiveGitRoot.GitStatus.ChangedFileDetails.Count == 0)
-                                                            {
-                                                                <div class="api-client-git-panel__file api-client-git-panel__file--empty">No changed API files.</div>
-                                                            }
-
-                                                            <div class="api-client-git-panel__section-title">Staged</div>
-                                                            @if (stagedGitFiles.Count == 0)
-                                                            {
-                                                                <div class="api-client-git-panel__file api-client-git-panel__file--empty">No staged API files.</div>
-                                                            }
-                                                            @foreach (var file in stagedGitFiles)
-                                                            {
-                                                                <div class="api-client-git-panel__file">
-                                                                    <div class="api-client-git-panel__file-main">
-                                                                        <span class="api-client-git-panel__file-status">@file.StatusLabel</span>
-                                                                        <span class="api-client-git-panel__file-path">@file.Path</span>
-                                                                    </div>
-                                                                    <div class="api-client-git-panel__file-actions">
-                                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="@(() => LoadGitDiffAsync(file.Path))">Review</AppButton>
-                                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="@(() => UnstageGitFileAsync(file.Path))">Unstage</AppButton>
-                                                                        <AppButton Variant="Danger" Size="Small" CssClass="api-client-toolbar-btn api-client-toolbar-btn--danger"
-                                                                            OnClick="@(() => QueueRevertGitFile(file.Path))">Revert</AppButton>
-                                                                    </div>
-                                                                </div>
-                                                            }
-
-                                                            <div class="api-client-git-panel__section-title">Unstaged</div>
-                                                            @if (unstagedGitFiles.Count == 0)
-                                                            {
-                                                                <div class="api-client-git-panel__file api-client-git-panel__file--empty">No unstaged API files.</div>
-                                                            }
-                                                            @foreach (var file in unstagedGitFiles)
-                                                            {
-                                                                <div class="api-client-git-panel__file">
-                                                                    <div class="api-client-git-panel__file-main">
-                                                                        <span class="api-client-git-panel__file-status">@file.StatusLabel</span>
-                                                                        <span class="api-client-git-panel__file-path">@file.Path</span>
-                                                                    </div>
-                                                                    <div class="api-client-git-panel__file-actions">
-                                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="@(() => LoadGitDiffAsync(file.Path))">Review</AppButton>
-                                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="@(() => StageGitFileAsync(file.Path))">Stage</AppButton>
-                                                                        <AppButton Variant="Danger" Size="Small" CssClass="api-client-toolbar-btn api-client-toolbar-btn--danger"
-                                                                            OnClick="@(() => QueueRevertGitFile(file.Path))">Revert</AppButton>
-                                                                    </div>
-                                                                </div>
-                                                            }
-                                                        </div>
-                                                        <div class="api-client-git-panel__diff">
-                                                            @if (_gitDiffLoading)
-                                                            {
-                                                                <div class="api-client-git-panel__file api-client-git-panel__file--empty">Loading diff preview…</div>
-                                                            }
-                                                            else if (_gitDiff is not null)
-                                                            {
-                                                                <div class="api-client-git-panel__diff-header">
-                                                                    <span>Diff preview — @_gitDiff.Path</span>
-                                                                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="@(() => _gitDiff = null)">Close</AppButton>
-                                                                </div>
-                                                                @if (!_gitDiff.IsSuccess)
-                                                                {
-                                                                    <div class="api-client-git-panel__message api-client-git-panel__message--error">@_gitDiff.ErrorMessage</div>
-                                                                }
-                                                                else
-                                                                {
-                                                                    <div class="api-client-git-panel__diff-grid">
-                                                                        <div>
-                                                                            <div class="api-client-git-panel__section-title">Original</div>
-                                                                            <pre>@GetDiffPreviewText(_gitDiff.OriginalContent)</pre>
-                                                                        </div>
-                                                                        <div>
-                                                                            <div class="api-client-git-panel__section-title">Current</div>
-                                                                            <pre>@GetDiffPreviewText(_gitDiff.CurrentContent)</pre>
-                                                                        </div>
-                                                                    </div>
-                                                                }
-                                                            }
-                                                        </div>
-                                                    </div>  @* end api-client-git-panel__scroll *@
-                                                </div>  @* end api-client-git-panel *@
-                                            </div>  @* end api-client-management-screen *@
-                                            }
-            else if (_selectedRequest is null)
-                                            {
-                                                <div class="api-client-workspace__empty">
-                                                    <EmptyState Icon="🌐" Title="No request selected"
-                                                                Subtitle="Select a request from the collection tree, or create a new one.">
-                                                        <Actions>
-                                                            <button type="button" class="api-client-empty-action-btn"
-                                                                    disabled="@(!CanCreateRequest)" @onclick="AddRequestAsync">
-                                                                + New Request
-                                                            </button>
-                                                        </Actions>
-                                                    </EmptyState>
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                                <div class="api-client-workspace__panels">
-                                                    <div class="api-client-workspace__builder" @ref="_builderPanelEl">
-                                                        @if (MissingSecretNames.Count > 0)
-                                                        {
-                                                            <div class="api-client-secret-warning">
-                                                                Missing secret reference(s): @string.Join(", ", MissingSecretNames).
-                                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn"
-                                                                    OnClick="OpenConfigureSecretDialog">Configure</AppButton>
-                                                            </div>
-                                                        }
-                                                        <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
-                                                                             ActiveEnvironment="@ActiveEnvironment" AllEnvironments="@_environments"
-                                                                             ScopeVersion="@_scopeVersion" IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
-                                                                             OnResult="@OnRequestResultAsync" OnSubscriptionMessage="@OnSubscriptionMessageAsync"
-                                                                             OnSubscriptionStopped="@OnSubscriptionStoppedAsync" />
-                                                    </div>
-                                                    <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
-                                                    <div class="api-client-workspace__response">
-                                                        <ResponseViewerPanel Result="@_lastResult" SubscriptionMessages="@_subscriptionMessages"
-                                                                             HistoryEntries="@GetHistoryForSelected()"
-                                                                             ResponseExamples="@(_selectedRequest?.ResponseExamples ?? [])"
-                                                                             OnResend="@OnResendHistoryEntryAsync"
-                                                                             OnSaveExample="@SaveResponseExampleAsync" />
-                                                    </div>
-                                                </div>
-                                            }
-                                        </div>
-                                    </div>
-                                </div>
-
-                                @* ── New collection dialog ── *@
-                                @if (_showNewCollectionDialog)
-                                {
-                                    <div class="api-client-dialog-backdrop" @onclick="() => _showNewCollectionDialog = false"></div>
-                                    <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="New Collection">
-                                        <div class="api-client-dialog__title">New Collection</div>
-                                        <input type="text" class="api-client-dialog__input" placeholder="Collection name…" value="@_newCollectionName"
-                                               @oninput="e => _newCollectionName = e.Value?.ToString() ?? string.Empty"
-                                               @onkeydown="OnNewCollectionKeyDownAsync" @ref="_newCollectionInput" />
-                                        <div class="api-client-dialog__actions">
-                                                <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
-                                                    Disabled="@(string.IsNullOrWhiteSpace(_newCollectionName))"
-                                                    OnClick="ConfirmNewCollectionAsync">Create</AppButton>
-                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
-                                                    OnClick="@(() => _showNewCollectionDialog = false)">Cancel</AppButton>
-                                        </div>
-                                    </div>
-                                }
-
-                                @* ── Add API repo dialog ── *@
-                                @if (_showLinkedRootDialog)
-                                {
-                                    <div class="api-client-dialog-backdrop" @onclick="() => _showLinkedRootDialog = false"></div>
-                                    <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Add API Repository">
-                                        <div class="api-client-dialog__title">Add API Repository</div>
-                                        <div class="api-client-dialog__hint">
-                                            Choose a Git repository folder, or an existing .swebkit-api folder. SwebKit keeps API request files there so they can be committed with that repo.
-                                        </div>
-                                        <input type="text" class="api-client-dialog__input" placeholder="Display name (optional)"
-                                               value="@_newLinkedRootName" @oninput="e => _newLinkedRootName = e.Value?.ToString() ?? string.Empty" />
-                                        <div class="api-client-dialog__path-row">
-                                            <input type="text" class="api-client-dialog__input" placeholder="Path to Git repo or .swebkit-api folder"
-                                                   value="@_newLinkedRootPath" @oninput="e => _newLinkedRootPath = e.Value?.ToString() ?? string.Empty"
-                                                   @ref="_newLinkedRootInput" />
-                                            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn" OnClick="PickLinkedRootFolderAsync">…</AppButton>
-                                        </div>
-                                        @if (_linkedRootError is not null)
-                                        {
-                                            <div class="api-client-dialog__error">@_linkedRootError</div>
-                                        }
-                                        <div class="api-client-dialog__actions">
-                                                <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
-                                                    Disabled="@(string.IsNullOrWhiteSpace(_newLinkedRootPath))" OnClick="ConfirmLinkedRootAsync">Add repo</AppButton>
-                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
-                                                    OnClick="@(() => _showLinkedRootDialog = false)">Cancel</AppButton>
-                                        </div>
-                                    </div>
-                                }
-
-                                @if (_showConfigureSecretDialog)
-                                {
-                                    <div class="api-client-dialog-backdrop" @onclick="() => _showConfigureSecretDialog = false"></div>
-                                    <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="Configure linked secret">
-                                        <div class="api-client-dialog__title">Configure Secret</div>
-                                        <div class="api-client-dialog__hint">@(_secretNameToConfigure ?? "Select a missing secret")</div>
-                                        <input type="password" class="api-client-dialog__input" placeholder="Secret value stored locally"
-                                               value="@_secretValueToConfigure"
-                                               @oninput="e => _secretValueToConfigure = e.Value?.ToString() ?? string.Empty" />
-                                        @if (_secretConfigError is not null)
-                                        {
-                                            <div class="api-client-dialog__error">@_secretConfigError</div>
-                                        }
-                                        <div class="api-client-dialog__actions">
-                                                <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
-                                                    Disabled="@(string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))"
-                                                    OnClick="SaveConfiguredSecretAsync">Save Secret</AppButton>
-                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
-                                                    OnClick="@(() => _showConfigureSecretDialog = false)">Cancel</AppButton>
-                                        </div>
-                                    </div>
-                                }
-
-                                @if (_showCurlImportDialog)
-                                {
-                                    <div class="api-client-dialog-backdrop" @onclick="() => _showCurlImportDialog = false"></div>
-                                    <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Import cURL">
-                                        <div class="api-client-dialog__title">Import cURL</div>
-                                        <div class="api-client-dialog__hint">Paste a cURL command. SwebKit will create a request in the active collection.</div>
-                                        <textarea class="api-client-dialog__textarea" placeholder="curl https://api.example.com ..."
-                                                  value="@_curlImportText" @oninput="e => _curlImportText = e.Value?.ToString() ?? string.Empty"></textarea>
-                                        @if (_curlImportError is not null)
-                                        {
-                                            <div class="api-client-dialog__error">@_curlImportError</div>
-                                        }
-                                        <div class="api-client-dialog__actions">
-                                                <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
-                                                    Disabled="@(string.IsNullOrWhiteSpace(_curlImportText) || _activeCollection is null)"
-                                                    OnClick="ImportCurlAsync">Import</AppButton>
-                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
-                                                    OnClick="@(() => _showCurlImportDialog = false)">Cancel</AppButton>
-                                        </div>
-                                    </div>
-                                }
+@if (_showCurlImportDialog)
+{
+    <div class="api-client-dialog-backdrop" @onclick="() => _showCurlImportDialog = false"></div>
+    <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Import cURL">
+        <div class="api-client-dialog__title">Import cURL</div>
+        <div class="api-client-dialog__hint">Paste a cURL command. SwebKit will create a request in the active collection.
+        </div>
+        <textarea class="api-client-dialog__textarea" placeholder="curl https://api.example.com ..."
+                  value="@_curlImportText" @oninput="e => _curlImportText = e.Value?.ToString() ?? string.Empty"></textarea>
+        @if (_curlImportError is not null)
+        {
+            <div class="api-client-dialog__error">@_curlImportError</div>
+        }
+        <div class="api-client-dialog__actions">
+            <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                       Disabled="@(string.IsNullOrWhiteSpace(_curlImportText) || _state.ActiveCollection is null)"
+                       OnClick="ImportCurlAsync">Import</AppButton>
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                       OnClick="@(() => _showCurlImportDialog = false)">Cancel</AppButton>
+        </div>
+    </div>
+}
 
 @* ── Delete collection confirm ── *@
 <ConfirmDialog Visible="@(_pendingDeleteCollectionId is not null)" Title="Delete collection?"
@@ -620,85 +161,42 @@
                ConfirmLabel="Delete" OnConfirm="ConfirmDeleteCollectionAsync"
                OnCancel="@(() => { _pendingDeleteCollectionId = null; _pendingDeleteCollectionName = null; })" />
 
-<ConfirmDialog Visible="@(_pendingRevertGitFilePath is not null)" Title="Revert API file?"
-               Message="@($"Discard changes in {_pendingRevertGitFilePath}? This cannot be undone.")"
-               ConfirmLabel="Revert" OnConfirm="ConfirmRevertGitFileAsync"
-               OnCancel="@(() => _pendingRevertGitFilePath = null)" />
-
-                                @* ── Export / Import dialog ── *@
-                                                        <CollectionExportDialog Visible="@_showExportDialog" Collection="@_activeCollection" Environments="@_environments"
-                                                        InitialTab="@_exportDialogInitialTab"
-                                                        TargetLinkedRootApiPath="@(CurrentTargetLinkedRoot?.ApiRootPath)"
-                                                        OnClose="@(() => _showExportDialog = false)" OnImported="@OnCollectionImportedAsync" />
+@* ── Export / Import dialog ── *@
+<CollectionExportDialog Visible="@_showExportDialog" Collection="@_state.ActiveCollection"
+                        Environments="@_state.Environments" InitialTab="@_exportDialogInitialTab"
+                        TargetLinkedRootApiPath="@(CurrentTargetLinkedRoot?.ApiRootPath)" OnClose="@(() => _showExportDialog = false)"
+                        OnImported="@OnCollectionImportedAsync" />
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary, reused across the page) ─────────
+    private static readonly Icon _iconChevronDown = new Icons.Regular.Size16.ChevronDown();
+    private static readonly Icon _iconDirtyDot = new Icons.Filled.Size12.Circle();
+
     // ── State ─────────────────────────────────────────────────────────────────
-    private bool _loadingCollections = true;
-    private List<ApiCollection> _collections = [];
-    private readonly List<LinkedCollectionRootLoadResult> _linkedRootResults = [];
-    private IReadOnlyList<LinkedCollectionTreeInfo> _linkedRootInfos = [];
-    private List<ApiEnvironment> _environments = [];
-    private ApiCollection? _activeCollection;
-    private string? _selectedRequestId;
-    private HttpRequestEntry? _selectedRequest;
-    private string? _activeEnvironmentId;
-    private bool _isDirty;
-    private bool _autoSave;
-    private string? _linkedSaveError;
-    private LinkedSaveConflict? _linkedSaveConflict;
-    private string? _activeLinkedRootId;
-    private string? _activeGitRootId;
-    private IReadOnlyList<LinkedGitBranch> _gitBranches = [];
-    private string? _gitRemoteUrl;
-    private string? _gitCompareUrl;
-    private LinkedGitFileDiff? _gitDiff;
-    private bool _gitDiffLoading;
-    private string _gitBranchToSwitch = string.Empty;
-    private string _gitBranchName = string.Empty;
-    private string _gitCommitMessage = string.Empty;
-    private string? _gitMessage;
-    private bool _gitMessageIsError;
-    private string? _pendingRevertGitFilePath;
+    // Page-scoped state container (DEC-UX-3): not DI-registered, one instance per page.
+    private readonly ApiClientState _state = new();
     private bool _showConfigureSecretDialog;
     private string? _secretNameToConfigure;
     private string _secretValueToConfigure = string.Empty;
     private string? _secretConfigError;
-    private string? _workflowMessage;
-    private bool _workflowMessageIsError;
-    private bool _showRepoMenu;
-    private bool _showTransferMenu;
-    private bool _showVariableMenu;
     private bool _showCurlImportDialog;
     private string _curlImportText = string.Empty;
     private string? _curlImportError;
-    private IReadOnlyList<VariableInspectionItem> _variableInspectionItems = [];
-    private bool _variableInspectorLoading;
-    private readonly Dictionary<string, bool> _dirtyByRequestId = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, HttpRequestResult> _lastResultByRequestId = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, List<GraphQlSubscriptionMessage>> _subscriptionMessagesByRequestId = new(StringComparer.Ordinal);
-
-    // Phase 2 — execution state
-    private HttpRequestResult? _lastResult;
 
     // Phase 8 — request history (last 20 per request, in-memory only)
-    private readonly Dictionary<string, List<HttpRequestResult>> _requestHistory = new(StringComparer.Ordinal);
     private const int HistoryCap = 20;
 
     // Phase 5 — subscription state (capped at 1 000; oldest entry dropped when full)
-    private readonly List<GraphQlSubscriptionMessage> _subscriptionMessages = [];
     private const int SubscriptionMessageCap = 1_000;
 
-    // Worksheet mode constants
-    private const string WorksheetEnvs = "envs";
-    private const string WorksheetVars = "vars";
-    private const string WorksheetLinkedRoots = "linked-roots";
-    private const string WorksheetGit = "git";
-    private const string WorksheetVariables = "variables";
-
-    // Worksheet mode: null = request, WorksheetVars = collection variable editor, WorksheetEnvs = environment manager
-    private string? _worksheetMode;
-    // Scope version: incremented when collection variables are saved so RequestBuilderPanel rebuilds its resolved scope
-    private int _scopeVersion;
+    // Worksheet mode constants — aliases of ApiClientState's public consts (single source of
+    // truth, Phase 2 Task 5), kept as page-local const so existing unqualified call sites below
+    // don't need to change.
+    private const string WorksheetEnvs = ApiClientState.WorksheetEnvs;
+    private const string WorksheetVars = ApiClientState.WorksheetVars;
+    private const string WorksheetLinkedRoots = ApiClientState.WorksheetLinkedRoots;
+    private const string WorksheetGit = ApiClientState.WorksheetGit;
+    private const string WorksheetVariables = ApiClientState.WorksheetVariables;
 
     // New-collection dialog state
     private bool _showNewCollectionDialog;
@@ -722,63 +220,53 @@
     private bool _showExportDialog;
     private string _exportDialogInitialTab = "export";
 
-    // Splitter drag
-    private ElementReference _splitterEl;
-    private ElementReference _builderPanelEl;
-    private IJSObjectReference? _splitterHandle;
-    private string? _lastSplitterRequestId;
-
-    // Tree panel splitter
-    private ElementReference _treeSplitterEl;
-    private ElementReference _treePanelEl;
-    private IJSObjectReference? _treeSplitterHandle;
-    private bool _treeSplitterInited;
-
     // Auto-save debounce
     private System.Timers.Timer? _autoSaveTimer;
     private const int AutoSaveDebounceMs = 500;
 
     // ── Computed ──────────────────────────────────────────────────────────────
     private ApiEnvironment? ActiveEnvironment =>
-        _environments.FirstOrDefault(e => e.Id == _activeEnvironmentId);
+        _state.Environments.FirstOrDefault(e => e.Id == _state.ActiveEnvironmentId);
 
     private LinkedCollectionRootLoadResult? ActiveGitRoot =>
-        _linkedRootResults.FirstOrDefault(root => root.Config.Id == _activeGitRootId);
+        _state.LinkedRootResults.FirstOrDefault(root => root.Config.Id == _state.ActiveGitRootId);
 
     private LinkedCollectionRootLoadResult? ActiveLinkedRoot =>
-        _linkedRootResults.FirstOrDefault(root => root.Config.Id == _activeLinkedRootId);
+        _state.LinkedRootResults.FirstOrDefault(root => root.Config.Id == _state.ActiveLinkedRootId);
 
     private LinkedCollectionRootLoadResult? CurrentTargetLinkedRoot =>
-        ActiveLinkedRoot ?? (_activeCollection is not null ? FindLinkedRootForCollection(_activeCollection.Id) : null);
+        ActiveLinkedRoot ?? (_state.ActiveCollection is not null ? FindLinkedRootForCollection(_state.ActiveCollection.Id) :
+null);
 
     private string CurrentTargetLabel => CurrentTargetLinkedRoot is { } linkedRoot
         ? $"Repo — {linkedRoot.DisplayName}"
-        : _activeCollection is not null
-            ? $"Local — {_activeCollection.Name}"
+        : _state.ActiveCollection is not null
+            ? $"Local — {_state.ActiveCollection.Name}"
             : "Local collections";
 
     private string CurrentTargetHint => CurrentTargetLinkedRoot is { } linkedRoot
         ? $"New collections are created in {linkedRoot.ApiRootPath}. New requests require a collection inside that linked repo."
-        : _activeCollection is not null
-            ? $"New requests are created in local collection '{_activeCollection.Name}'."
+        : _state.ActiveCollection is not null
+            ? $"New requests are created in local collection '{_state.ActiveCollection.Name}'."
             : "New collections are created in local SwebKit storage.";
 
     private bool CanCreateRequest => GetRequestTargetCollection() is not null;
 
-    private bool IsRepoMenuActive => _worksheetMode is WorksheetLinkedRoots or WorksheetGit;
+    private bool IsRepoMenuActive => _state.WorksheetMode is WorksheetLinkedRoots or WorksheetGit;
 
-    private bool IsVariableMenuActive => _worksheetMode is WorksheetVars or WorksheetVariables;
+    private bool IsVariableMenuActive => _state.WorksheetMode is WorksheetVars or WorksheetVariables;
 
     private IReadOnlyList<string> MissingSecretNames =>
-        _selectedRequest is not null && _activeCollection is not null && IsLinkedCollection(_activeCollection.Id)
-            ? GetMissingSecretNames(_selectedRequest, ActiveEnvironment)
+        _state.SelectedRequest is not null && _state.ActiveCollection is not null &&
+IsLinkedCollection(_state.ActiveCollection.Id)
+            ? GetMissingSecretNames(_state.SelectedRequest, ActiveEnvironment)
             : [];
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
-        _autoSave = UserSettings.Settings.AutoSaveRequests;
+        _state.AutoSave = UserSettings.Settings.AutoSaveRequests;
 
         // Kick Monaco asset load in the background so it is ready before the user opens a GQL request.
         // Fire-and-forget: failures are handled inside monacoLoader.js.
@@ -789,7 +277,7 @@
 
         // Subscribe to keyboard shortcut events published by MainLayout
         Events.Subscribe<ApiClientShortcutEvent>(OnApiClientShortcut);
-        
+
         // Subscribe to demo mode changes to show/hide demo collections
         AppState.DemoModeChanged += OnDemoModeChanged;
 
@@ -797,7 +285,7 @@
         await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
         await LoadLinkedRootsAsync();
 
-        _loadingCollections = false;
+        _state.LoadingCollections = false;
     }
 
     private async Task LoadCollectionsAsync()
@@ -805,14 +293,14 @@
         try
         {
             await CollectionRepo.LoadAsync();
-            _collections = BuildCombinedCollections();
-            
-            _activeCollection = _collections.FirstOrDefault();
+            _state.Collections = BuildCombinedCollections();
+
+            _state.ActiveCollection = _state.Collections.FirstOrDefault();
 
             // Restore last selected request for the active collection
-            if (_activeCollection is not null &&
+            if (_state.ActiveCollection is not null &&
                 EnvironmentRepo.UiState.LastSelectedRequestIdByCollection
-                    .TryGetValue(_activeCollection.Id, out var lastId))
+                    .TryGetValue(_state.ActiveCollection.Id, out var lastId))
             {
                 RestoreSelectedRequest(lastId);
             }
@@ -821,13 +309,14 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to load collections");
-            _collections = [];
+            _state.Collections = [];
         }
     }
 
     private async void OnDemoModeChanged()
     {
-        await InvokeAsync(async () => {
+        await InvokeAsync(async () =>
+        {
             await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
             await LoadLinkedRootsAsync();
         });
@@ -838,19 +327,19 @@
         try
         {
             await LinkedRootRepo.LoadAsync();
-            _linkedRootResults.Clear();
+            _state.LinkedRootResults.Clear();
             var linkedCollections = new List<ApiCollection>();
 
             foreach (var root in LinkedRootRepo.Roots.Where(static r => r.IsEnabled))
             {
                 var result = await LinkedFileService.LoadRootAsync(root);
-                _linkedRootResults.Add(result);
+                _state.LinkedRootResults.Add(result);
                 linkedCollections.AddRange(result.Collections);
             }
 
-            _collections = BuildCombinedCollections();
-            _environments = BuildCombinedEnvironments();
-            _linkedRootInfos = _linkedRootResults.Select(result => new LinkedCollectionTreeInfo
+            _state.Collections = BuildCombinedCollections();
+            _state.Environments = BuildCombinedEnvironments();
+            _state.LinkedRootInfos = _state.LinkedRootResults.Select(result => new LinkedCollectionTreeInfo
             {
                 Id = result.Config.Id,
                 Name = result.DisplayName,
@@ -862,13 +351,13 @@
                 CollectionIds = result.Collections.Select(c => c.Id).ToList(),
             }).ToList();
 
-            _activeCollection ??= _collections.FirstOrDefault();
+            _state.ActiveCollection ??= _state.Collections.FirstOrDefault();
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to load linked collection roots");
-            _linkedRootInfos = [];
+            _state.LinkedRootInfos = [];
         }
     }
 
@@ -877,25 +366,25 @@
         try
         {
             await EnvironmentRepo.LoadAsync();
-            _environments = BuildCombinedEnvironments();
-            _activeEnvironmentId = EnvironmentRepo.UiState.ActiveEnvironmentId;
+            _state.Environments = BuildCombinedEnvironments();
+            _state.ActiveEnvironmentId = EnvironmentRepo.UiState.ActiveEnvironmentId;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to load environments");
-            _environments = [];
+            _state.Environments = [];
         }
     }
 
     private void RestoreSelectedRequest(string requestId)
     {
-        if (_activeCollection is null) return;
+        if (_state.ActiveCollection is null) return;
         var (_, request) = CollectionRepo.FindRequest(requestId);
         if (request is not null)
         {
-            _selectedRequestId = requestId;
-            _selectedRequest = request;
+            _state.SelectedRequestId = requestId;
+            _state.SelectedRequest = request;
         }
     }
 
@@ -926,13 +415,12 @@
 
     private void OpenLinkedRootDialogFromMenu()
     {
-        _showRepoMenu = false;
         OpenLinkedRootDialog();
     }
 
     private void OnLinkCollectionToRepoAsync(string collectionId)
     {
-        var collection = _collections.FirstOrDefault(c => c.Id == collectionId);
+        var collection = _state.Collections.FirstOrDefault(c => c.Id == collectionId);
         _newLinkedRootName = collection?.Name ?? string.Empty;
         _newLinkedRootPath = string.Empty;
         _linkedRootError = null;
@@ -954,13 +442,11 @@
 
     private void OpenLinkedRootManagementFromMenu()
     {
-        _showRepoMenu = false;
-        _worksheetMode = _worksheetMode == WorksheetLinkedRoots ? null : WorksheetLinkedRoots;
+        _state.WorksheetMode = _state.WorksheetMode == WorksheetLinkedRoots ? null : WorksheetLinkedRoots;
     }
 
     private async Task OpenCurrentTargetGitFromMenu()
     {
-        _showRepoMenu = false;
         if (CurrentTargetLinkedRoot is { } linkedRoot)
         {
             await OpenGitPanelAsync(linkedRoot.Config.Id);
@@ -969,33 +455,33 @@
 
     private void OpenCurlImportDialogFromMenu()
     {
-        _showTransferMenu = false;
         OpenCurlImportDialog();
     }
 
     private void OpenCollectionImportDialogFromMenu()
     {
-        _showTransferMenu = false;
         _exportDialogInitialTab = "import";
         _showExportDialog = true;
     }
 
     private void OpenCollectionExportDialogFromMenu()
     {
-        _showTransferMenu = false;
         _exportDialogInitialTab = "export";
         _showExportDialog = true;
     }
 
     private void OpenCollectionVariablesFromMenu()
     {
-        _showVariableMenu = false;
-        _worksheetMode = _worksheetMode == WorksheetVars ? null : WorksheetVars;
+        _state.WorksheetMode = _state.WorksheetMode == WorksheetVars ? null : WorksheetVars;
+    }
+
+    private void ToggleEnvsWorksheet()
+    {
+        _state.WorksheetMode = _state.WorksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
     }
 
     private async Task OpenRequestVariablesFromMenu()
     {
-        _showVariableMenu = false;
         await OpenVariableInspectorAsync();
     }
 
@@ -1020,15 +506,15 @@
             Name = request.Name,
             Request = request,
         });
-        _selectedRequest = request;
-        _selectedRequestId = request.Id;
+        _state.SelectedRequest = request;
+        _state.SelectedRequestId = request.Id;
         _showCurlImportDialog = false;
-        _workflowMessage = "Imported cURL request.";
-        _workflowMessageIsError = false;
+        _state.WorkflowMessage = "Imported cURL request.";
+        _state.WorkflowMessageIsError = false;
 
         if (await SaveActiveCollectionAsync())
         {
-            _isDirty = false;
+            _state.IsDirty = false;
         }
 
         await InvokeAsync(StateHasChanged);
@@ -1036,19 +522,19 @@
 
     private async Task CopyCurlAsync()
     {
-        if (_selectedRequest is null || _activeCollection is null) return;
+        if (_state.SelectedRequest is null || _state.ActiveCollection is null) return;
 
-        var curl = await WorkflowService.BuildCurlAsync(_selectedRequest, _activeCollection, ActiveEnvironment);
+        var curl = await WorkflowService.BuildCurlAsync(_state.SelectedRequest, _state.ActiveCollection, ActiveEnvironment);
         try
         {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", curl);
-            _workflowMessage = "Copied masked cURL command.";
-            _workflowMessageIsError = false;
+            _state.WorkflowMessage = "Copied masked cURL command.";
+            _state.WorkflowMessageIsError = false;
         }
         catch (Exception ex) when (ex is InvalidOperationException or JSException)
         {
-            _workflowMessage = "Clipboard copy failed.";
-            _workflowMessageIsError = true;
+            _state.WorkflowMessage = "Clipboard copy failed.";
+            _state.WorkflowMessageIsError = true;
         }
 
         await InvokeAsync(StateHasChanged);
@@ -1056,16 +542,17 @@
 
     private async Task OpenVariableInspectorAsync()
     {
-        _worksheetMode = _worksheetMode == WorksheetVariables ? null : WorksheetVariables;
-        if (_worksheetMode != WorksheetVariables || _selectedRequest is null || _activeCollection is null)
+        _state.WorksheetMode = _state.WorksheetMode == WorksheetVariables ? null : WorksheetVariables;
+        if (_state.WorksheetMode != WorksheetVariables || _state.SelectedRequest is null || _state.ActiveCollection is null)
         {
             return;
         }
 
-        _variableInspectorLoading = true;
+        _state.VariableInspectorLoading = true;
         await InvokeAsync(StateHasChanged);
-        _variableInspectionItems = await WorkflowService.InspectVariablesAsync(_selectedRequest, _activeCollection, ActiveEnvironment);
-        _variableInspectorLoading = false;
+        _state.VariableInspectionItems = await WorkflowService.InspectVariablesAsync(_state.SelectedRequest,
+_state.ActiveCollection, ActiveEnvironment);
+        _state.VariableInspectorLoading = false;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -1093,155 +580,26 @@
     private async Task RemoveLinkedRootAsync(string rootId)
     {
         await LinkedRootRepo.RemoveRootAsync(rootId);
-        if (_activeGitRootId == rootId)
-            _activeGitRootId = null;
+        if (_state.ActiveGitRootId == rootId)
+            _state.ActiveGitRootId = null;
         await LoadLinkedRootsAsync();
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task OpenGitPanelAsync(string rootId)
+    private Task OpenGitPanelAsync(string rootId)
     {
-        _activeGitRootId = rootId;
-        _gitMessage = null;
-        _gitMessageIsError = false;
-        _worksheetMode = WorksheetGit;
-        await RefreshGitBranchesAsync();
-    }
-
-    private async Task CreateGitBranchAsync()
-    {
-        if (ActiveGitRoot is null) return;
-        await ApplyGitResultAsync(await LinkedGit.CreateBranchAsync(ActiveGitRoot.ApiRootPath, _gitBranchName));
-        if (!_gitMessageIsError)
-        {
-            _gitBranchName = string.Empty;
-        }
-    }
-
-    private async Task SwitchGitBranchAsync()
-    {
-        if (ActiveGitRoot is null) return;
-        await ApplyGitResultAsync(await LinkedGit.SwitchBranchAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath,
-_gitBranchToSwitch));
-    }
-
-    private async Task CommitGitChangesAsync()
-    {
-        if (ActiveGitRoot is null) return;
-        await ApplyGitResultAsync(await LinkedGit.CommitStagedApiFilesAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath,
-_gitCommitMessage));
-        if (!_gitMessageIsError)
-        {
-            _gitCommitMessage = string.Empty;
-        }
-    }
-
-    private async Task StageAllGitFilesAsync()
-    {
-        if (ActiveGitRoot is null) return;
-        await ApplyGitResultAsync(await LinkedGit.StageAllApiFilesAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath));
-    }
-
-    private async Task UnstageAllGitFilesAsync()
-    {
-        if (ActiveGitRoot is null) return;
-        await ApplyGitResultAsync(await LinkedGit.UnstageAllApiFilesAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath));
-    }
-
-    private async Task StageGitFileAsync(string path)
-    {
-        if (ActiveGitRoot is null) return;
-        await ApplyGitResultAsync(await LinkedGit.StageFileAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path));
-    }
-
-    private async Task UnstageGitFileAsync(string path)
-    {
-        if (ActiveGitRoot is null) return;
-        await ApplyGitResultAsync(await LinkedGit.UnstageFileAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path));
-    }
-
-    private async Task LoadGitDiffAsync(string path)
-    {
-        if (ActiveGitRoot is null) return;
-
-        _gitDiffLoading = true;
-        _gitDiff = null;
-        await InvokeAsync(StateHasChanged);
-
-        _gitDiff = await LinkedGit.GetFileDiffAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path);
-        _gitDiffLoading = false;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private void QueueRevertGitFile(string path)
-    {
-        _pendingRevertGitFilePath = path;
-    }
-
-    private async Task ConfirmRevertGitFileAsync()
-    {
-        if (ActiveGitRoot is null || _pendingRevertGitFilePath is null) return;
-        var path = _pendingRevertGitFilePath;
-        _pendingRevertGitFilePath = null;
-        await ApplyGitResultAsync(await LinkedGit.RevertFileAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path));
-    }
-
-    private async Task PushGitBranchAsync()
-    {
-        if (ActiveGitRoot is null) return;
-        await ApplyGitResultAsync(await LinkedGit.PushCurrentBranchAsync(ActiveGitRoot.ApiRootPath));
-    }
-
-    private async Task OpenRemoteCompareAsync()
-    {
-        if (ActiveGitRoot is null) return;
-        var url = _gitCompareUrl ?? await LinkedGit.GetRemoteCompareUrlAsync(ActiveGitRoot.ApiRootPath);
-        if (url is null)
-        {
-            _gitMessage = "Could not infer a GitHub or Azure DevOps compare URL from the origin remote.";
-            _gitMessageIsError = true;
-            return;
-        }
-
-        await JS.InvokeVoidAsync("open", url, "_blank");
-        _gitMessage = "Opened compare view in the browser.";
-        _gitMessageIsError = false;
-    }
-
-    private async Task ApplyGitResultAsync(LinkedGitCommandResult result)
-    {
-        _gitMessage = result.IsSuccess ? result.Message : result.ErrorMessage;
-        _gitMessageIsError = !result.IsSuccess;
-        _gitDiff = null;
-        await LoadLinkedRootsAsync();
-        await RefreshGitBranchesAsync();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task RefreshGitBranchesAsync()
-    {
-        if (ActiveGitRoot is null)
-        {
-            _gitBranches = [];
-            _gitBranchToSwitch = string.Empty;
-            return;
-        }
-
-        _gitBranches = await LinkedGit.GetBranchesAsync(ActiveGitRoot.ApiRootPath);
-        _gitRemoteUrl = await LinkedGit.GetOriginRemoteUrlAsync(ActiveGitRoot.ApiRootPath);
-        _gitCompareUrl = await LinkedGit.GetRemoteCompareUrlAsync(ActiveGitRoot.ApiRootPath);
-        var current = _gitBranches.FirstOrDefault(static branch => branch.IsCurrent)?.Name ?? ActiveGitRoot.GitStatus.Branch;
-        if (string.IsNullOrWhiteSpace(_gitBranchToSwitch) || !_gitBranches.Any(branch => branch.Name.Equals(_gitBranchToSwitch, StringComparison.OrdinalIgnoreCase)))
-        {
-            _gitBranchToSwitch = current ?? _gitBranches.FirstOrDefault()?.Name ?? string.Empty;
-        }
+        _state.ActiveGitRootId = rootId;
+        _state.GitMessage = null;
+        _state.GitMessageIsError = false;
+        _state.WorksheetMode = WorksheetGit;
+        return Task.CompletedTask;
     }
 
     private async Task ConfirmNewCollectionAsync()
     {
         if (string.IsNullOrWhiteSpace(_newCollectionName)) return;
         var collection = await CreateCollectionForCurrentTargetAsync(_newCollectionName.Trim());
-        _activeCollection = collection;
+        _state.ActiveCollection = collection;
         _showNewCollectionDialog = false;
         await InvokeAsync(StateHasChanged); // BL-2
     }
@@ -1255,7 +613,7 @@ _gitCommitMessage));
     private async Task AddCollectionAsync()
     {
         var collection = await CreateCollectionForCurrentTargetAsync("New Collection");
-        _activeCollection = collection;
+        _state.ActiveCollection = collection;
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -1266,21 +624,21 @@ _gitCommitMessage));
             var rootId = ActiveLinkedRoot.Config.Id;
             var collectionId = await LinkedFileService.CreateCollectionAsync(ActiveLinkedRoot.ApiRootPath, name);
             await LoadLinkedRootsAsync();
-            _activeLinkedRootId = rootId;
-            return _collections.First(collection => collection.Id == collectionId);
+            _state.ActiveLinkedRootId = rootId;
+            return _state.Collections.First(collection => collection.Id == collectionId);
         }
 
         var collection = await CollectionRepo.AddCollectionAsync(name);
-        _collections = BuildCombinedCollections();
-        _activeLinkedRootId = null;
+        _state.Collections = BuildCombinedCollections();
+        _state.ActiveLinkedRootId = null;
         return collection;
     }
 
     private ApiCollection? GetRequestTargetCollection()
     {
-        if (_activeCollection is not null)
+        if (_state.ActiveCollection is not null)
         {
-            return _activeCollection;
+            return _state.ActiveCollection;
         }
 
         var linkedRoot = ActiveLinkedRoot;
@@ -1291,10 +649,10 @@ _gitCommitMessage));
 
     private void ActivateCollection(ApiCollection collection)
     {
-        _activeCollection = collection;
-        _activeLinkedRootId = FindLinkedRootForCollection(collection.Id)?.Config.Id;
-        _linkedSaveConflict = null;
-        _linkedSaveError = null;
+        _state.ActiveCollection = collection;
+        _state.ActiveLinkedRootId = FindLinkedRootForCollection(collection.Id)?.Config.Id;
+        _state.LinkedSaveConflict = null;
+        _state.LinkedSaveError = null;
     }
 
     private async Task AddRequestAsync()
@@ -1321,27 +679,24 @@ _gitCommitMessage));
             Request = request,
         });
 
-        _selectedRequestId = request.Id;
-        _selectedRequest = request;
+        _state.SelectedRequestId = request.Id;
+        _state.SelectedRequest = request;
         await SaveActiveCollectionAsync();
-        _isDirty = false;
+        _state.IsDirty = false;
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
-    private bool _showEnvPicker;
-
     private async Task SelectEnvAsync(string? envId)
     {
-        _showEnvPicker = false;
-        _activeEnvironmentId = envId;
+        _state.ActiveEnvironmentId = envId;
         await EnvironmentRepo.SetActiveEnvironmentAsync(envId);
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private async Task OnEnvironmentsChangedAsync()
     {
-        _environments = BuildCombinedEnvironments();
-        _worksheetMode = null;
+        _state.Environments = BuildCombinedEnvironments();
+        _state.WorksheetMode = null;
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -1405,78 +760,79 @@ StringComparison.OrdinalIgnoreCase));
 
     private async Task OnCollVarEditorSavedAsync()
     {
-        _scopeVersion++; // Force RequestBuilderPanel to rebuild resolved scope
-        _worksheetMode = null;
+        _state.ScopeVersion++; // Force RequestBuilderPanel to rebuild resolved scope
+        _state.WorksheetMode = null;
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private async Task SaveRequestAsync()
     {
-        if (_activeCollection is null || _selectedRequest is null) return;
+        if (_state.ActiveCollection is null || _state.SelectedRequest is null) return;
         if (await SaveActiveCollectionAsync())
         {
-            _isDirty = false;
+            _state.IsDirty = false;
         }
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private async Task<bool> SaveActiveCollectionAsync(bool forceLinkedOverwrite = false)
     {
-        if (_activeCollection is null || _selectedRequest is null) return false;
+        if (_state.ActiveCollection is null || _state.SelectedRequest is null) return false;
 
-        var linkedRoot = FindLinkedRootForCollection(_activeCollection.Id);
+        var linkedRoot = FindLinkedRootForCollection(_state.ActiveCollection.Id);
         if (linkedRoot is not null)
         {
-            var savedRequestId = _selectedRequest.Id;
+            var savedRequestId = _state.SelectedRequest.Id;
             var expectedStamp = forceLinkedOverwrite ? null : FindLinkedRequestFileState(savedRequestId)?.ContentStamp;
-            var saveResult = await LinkedFileService.SaveRequestAsync(linkedRoot.ApiRootPath, _activeCollection, _selectedRequest,
+            var saveResult = await LinkedFileService.SaveRequestAsync(linkedRoot.ApiRootPath, _state.ActiveCollection,
+_state.SelectedRequest,
 expectedStamp);
             if (!saveResult.IsSuccess)
             {
                 if (saveResult.HasConflict)
                 {
-                    _linkedSaveConflict = new LinkedSaveConflict(
+                    _state.LinkedSaveConflict = new ApiClientPage.LinkedSaveConflict(
                         linkedRoot.Config.Id,
-                        _activeCollection.Id,
+                        _state.ActiveCollection.Id,
                         savedRequestId,
                         saveResult.RequestFilePath,
                         saveResult.ErrorMessage ?? "The linked request changed on disk.");
-                    _linkedSaveError = null;
+                    _state.LinkedSaveError = null;
                 }
                 else
                 {
-                    _linkedSaveError = saveResult.ErrorMessage;
-                    _linkedSaveConflict = null;
+                    _state.LinkedSaveError = saveResult.ErrorMessage;
+                    _state.LinkedSaveConflict = null;
                 }
 
                 return false;
             }
 
-            _linkedSaveError = null;
-            _linkedSaveConflict = null;
+            _state.LinkedSaveError = null;
+            _state.LinkedSaveConflict = null;
             await LoadLinkedRootsAsync();
-            var refreshed = _collections.FirstOrDefault(collection => collection.Id == _activeCollection.Id);
-            _activeCollection = refreshed ?? _activeCollection;
-            _selectedRequest = FindRequestInNodes(_activeCollection.Nodes, savedRequestId);
-            _selectedRequestId = _selectedRequest?.Id;
-            _dirtyByRequestId[savedRequestId] = false;
+            var refreshed = _state.Collections.FirstOrDefault(collection => collection.Id == _state.ActiveCollection.Id);
+            _state.ActiveCollection = refreshed ?? _state.ActiveCollection;
+            _state.SelectedRequest = FindRequestInNodes(_state.ActiveCollection.Nodes, savedRequestId);
+            _state.SelectedRequestId = _state.SelectedRequest?.Id;
+            _state.DirtyByRequestId[savedRequestId] = false;
             return true;
         }
 
-        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = BuildCombinedCollections();
-        _linkedSaveError = null;
-        _linkedSaveConflict = null;
-        if (_selectedRequestId is not null)
+        await CollectionRepo.UpdateCollectionAsync(_state.ActiveCollection);
+        _state.Collections = BuildCombinedCollections();
+        _state.LinkedSaveError = null;
+        _state.LinkedSaveConflict = null;
+        if (_state.SelectedRequestId is not null)
         {
-            _dirtyByRequestId[_selectedRequestId] = false;
+            _state.DirtyByRequestId[_state.SelectedRequestId] = false;
         }
         return true;
     }
 
     /// <summary>
     /// Runs a structural linked-collection filesystem operation (delete/create/rename/move) and
-    /// surfaces any failure via <see cref="_linkedSaveError"/> instead of silently no-op'ing.
+    /// surfaces any failure via <see cref="ApiClientState.LinkedSaveError"/> instead of silently no-op'ing.
     /// </summary>
     private async Task<bool> TryRunLinkedFileOperationAsync(Func<Task> operation)
     {
@@ -1485,55 +841,57 @@ expectedStamp);
             await operation();
         }
         catch (OperationCanceledException) { throw; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or
+ArgumentException)
         {
-            _linkedSaveError = ex.Message;
+            _state.LinkedSaveError = ex.Message;
             await InvokeAsync(StateHasChanged);
             return false;
         }
 
-        _linkedSaveError = null;
+        _state.LinkedSaveError = null;
         return true;
     }
 
     /// <summary>
     /// Reloads linked roots from disk after a successful structural mutation and re-points
-    /// <see cref="_activeCollection"/> at the freshly-parsed collection (same refresh pattern as
+    /// <see cref="ApiClientState.ActiveCollection"/> at the freshly-parsed collection (same refresh pattern as
     /// <see cref="SaveActiveCollectionAsync"/>).
     /// </summary>
     private async Task RefreshAfterLinkedMutationAsync(string collectionId)
     {
         await LoadLinkedRootsAsync();
-        var refreshed = _collections.FirstOrDefault(collection => collection.Id == collectionId);
+        var refreshed = _state.Collections.FirstOrDefault(collection => collection.Id == collectionId);
         if (refreshed is not null)
         {
-            _activeCollection = refreshed;
+            _state.ActiveCollection = refreshed;
         }
     }
 
     private async Task ReloadLinkedConflictAsync()
     {
-        if (_linkedSaveConflict is null) return;
+        if (_state.LinkedSaveConflict is null) return;
 
-        var conflict = _linkedSaveConflict;
+        var conflict = _state.LinkedSaveConflict;
         await LoadLinkedRootsAsync();
-        _activeLinkedRootId = conflict.RootId;
-        _activeCollection = _collections.FirstOrDefault(collection => collection.Id == conflict.CollectionId);
-        _selectedRequest = _activeCollection is not null ? FindRequestInNodes(_activeCollection.Nodes, conflict.RequestId) : null;
-        _selectedRequestId = _selectedRequest?.Id;
-        _linkedSaveConflict = null;
-        _linkedSaveError = null;
-        _isDirty = false;
+        _state.ActiveLinkedRootId = conflict.RootId;
+        _state.ActiveCollection = _state.Collections.FirstOrDefault(collection => collection.Id == conflict.CollectionId);
+        _state.SelectedRequest = _state.ActiveCollection is not null ? FindRequestInNodes(_state.ActiveCollection.Nodes,
+conflict.RequestId) : null;
+        _state.SelectedRequestId = _state.SelectedRequest?.Id;
+        _state.LinkedSaveConflict = null;
+        _state.LinkedSaveError = null;
+        _state.IsDirty = false;
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task KeepMineLinkedConflictAsync()
     {
-        if (_linkedSaveConflict is null || _activeCollection is null || _selectedRequest is null) return;
+        if (_state.LinkedSaveConflict is null || _state.ActiveCollection is null || _state.SelectedRequest is null) return;
 
         if (await SaveActiveCollectionAsync(forceLinkedOverwrite: true))
         {
-            _isDirty = false;
+            _state.IsDirty = false;
         }
 
         await InvokeAsync(StateHasChanged);
@@ -1541,22 +899,22 @@ expectedStamp);
 
     private async Task SaveLinkedConflictAsCopyAsync()
     {
-        if (_linkedSaveConflict is null || _activeCollection is null || _selectedRequest is null) return;
+        if (_state.LinkedSaveConflict is null || _state.ActiveCollection is null || _state.SelectedRequest is null) return;
 
-        var copy = CloneRequestAsCopy(_selectedRequest);
-        _activeCollection.Nodes.Add(new ApiCollectionNode
+        var copy = CloneRequestAsCopy(_state.SelectedRequest);
+        _state.ActiveCollection.Nodes.Add(new ApiCollectionNode
         {
             Id = Guid.NewGuid().ToString("N"),
             Type = ApiCollectionNodeType.Request,
             Name = copy.Name,
             Request = copy,
         });
-        _selectedRequest = copy;
-        _selectedRequestId = copy.Id;
+        _state.SelectedRequest = copy;
+        _state.SelectedRequestId = copy.Id;
 
         if (await SaveActiveCollectionAsync(forceLinkedOverwrite: true))
         {
-            _isDirty = false;
+            _state.IsDirty = false;
         }
 
         await InvokeAsync(StateHasChanged);
@@ -1566,15 +924,15 @@ expectedStamp);
 
     private Task OnCollectionSelectedAsync(string collectionId)
     {
-        var collection = _collections.FirstOrDefault(c => c.Id == collectionId);
-        if (collection is not null && !ReferenceEquals(collection, _activeCollection))
+        var collection = _state.Collections.FirstOrDefault(c => c.Id == collectionId);
+        if (collection is not null && !ReferenceEquals(collection, _state.ActiveCollection))
         {
             ActivateCollection(collection);
-            _selectedRequest = null;
-            _selectedRequestId = null;
-            _lastResult = null;
-            _subscriptionMessages.Clear();
-            _isDirty = false;
+            _state.SelectedRequest = null;
+            _state.SelectedRequestId = null;
+            _state.LastResult = null;
+            _state.SubscriptionMessages.Clear();
+            _state.IsDirty = false;
             StateHasChanged();
         }
         return Task.CompletedTask;
@@ -1582,36 +940,36 @@ expectedStamp);
 
     private Task OnLinkedRootSelectedAsync(string rootId)
     {
-        _activeLinkedRootId = rootId;
-        _activeCollection = null;
-        _selectedRequest = null;
-        _selectedRequestId = null;
-        _lastResult = null;
-        _isDirty = false;
-        _linkedSaveError = null;
-        _linkedSaveConflict = null;
+        _state.ActiveLinkedRootId = rootId;
+        _state.ActiveCollection = null;
+        _state.SelectedRequest = null;
+        _state.SelectedRequestId = null;
+        _state.LastResult = null;
+        _state.IsDirty = false;
+        _state.LinkedSaveError = null;
+        _state.LinkedSaveConflict = null;
         StateHasChanged();
         return Task.CompletedTask;
     }
 
     private async Task OnRequestSelectedAsync(HttpRequestEntry request)
     {
-        _selectedRequest = request;
-        _selectedRequestId = request.Id;
-        _isDirty = _dirtyByRequestId.GetValueOrDefault(request.Id);
-        _linkedSaveError = null;
-        _linkedSaveConflict = null;
-        _lastResult = _lastResultByRequestId.GetValueOrDefault(request.Id);
-        _subscriptionMessages.Clear();
-        if (_subscriptionMessagesByRequestId.TryGetValue(request.Id, out var messages))
+        _state.SelectedRequest = request;
+        _state.SelectedRequestId = request.Id;
+        _state.IsDirty = _state.DirtyByRequestId.GetValueOrDefault(request.Id);
+        _state.LinkedSaveError = null;
+        _state.LinkedSaveConflict = null;
+        _state.LastResult = _state.LastResultByRequestId.GetValueOrDefault(request.Id);
+        _state.SubscriptionMessages.Clear();
+        if (_state.SubscriptionMessagesByRequestId.TryGetValue(request.Id, out var messages))
         {
-            _subscriptionMessages.AddRange(messages);
+            _state.SubscriptionMessages.AddRange(messages);
         }
 
-        if (_activeCollection is not null)
+        if (_state.ActiveCollection is not null)
         {
             // Fire-and-forget persistence of last selection; non-blocking
-            _ = PersistLastSelectionAsync(_activeCollection.Id, request.Id);
+            _ = PersistLastSelectionAsync(_state.ActiveCollection.Id, request.Id);
         }
 
         await InvokeAsync(StateHasChanged); // BL-2
@@ -1624,7 +982,7 @@ expectedStamp);
 
     private async Task OnAddFolderAsync((string CollectionId, ApiCollectionNode ParentNode) args)
     {
-        var collection = _collections.FirstOrDefault(c => c.Id == args.CollectionId);
+        var collection = _state.Collections.FirstOrDefault(c => c.Id == args.CollectionId);
         if (collection is null)
             return;
 
@@ -1657,7 +1015,7 @@ expectedStamp);
         else
         {
             await CollectionRepo.UpdateCollectionAsync(collection);
-            _collections = BuildCombinedCollections();
+            _state.Collections = BuildCombinedCollections();
         }
 
         await InvokeAsync(StateHasChanged); // BL-2
@@ -1665,7 +1023,7 @@ expectedStamp);
 
     private async Task OnAddRequestInFolderAsync((string CollectionId, ApiCollectionNode ParentNode) args)
     {
-        var collection = _collections.FirstOrDefault(c => c.Id == args.CollectionId);
+        var collection = _state.Collections.FirstOrDefault(c => c.Id == args.CollectionId);
         if (collection is null) return;
         ActivateCollection(collection);
 
@@ -1691,22 +1049,22 @@ expectedStamp);
             collection.Nodes.Add(node);
         else
             AddNodeToParent(collection.Nodes, args.ParentNode.Id, node);
-        _selectedRequestId = request.Id;
-        _selectedRequest = request;
+        _state.SelectedRequestId = request.Id;
+        _state.SelectedRequest = request;
         await SaveActiveCollectionAsync();
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private async Task OnRenameNodeAsync((ApiCollectionNode Node, string NewName) args)
     {
-        if (_activeCollection is null) return;
+        if (_state.ActiveCollection is null) return;
 
-        RenameNodeInTree(_activeCollection.Nodes, args.Node.Id, args.NewName);
+        RenameNodeInTree(_state.ActiveCollection.Nodes, args.Node.Id, args.NewName);
         if (args.Node.Request is not null)
             args.Node.Request.Name = args.NewName;
-        _selectedRequest = args.Node.Request ?? _selectedRequest;
+        _state.SelectedRequest = args.Node.Request ?? _state.SelectedRequest;
 
-        var linkedRoot = FindLinkedRootForCollection(_activeCollection.Id);
+        var linkedRoot = FindLinkedRootForCollection(_state.ActiveCollection.Id);
         if (linkedRoot is not null && args.Node.Request is not null)
         {
             await SaveActiveCollectionAsync();
@@ -1714,17 +1072,17 @@ expectedStamp);
         else if (linkedRoot is not null)
         {
             if (!await TryRunLinkedFileOperationAsync(() =>
-                LinkedFileService.RenameFolderAsync(linkedRoot.ApiRootPath, _activeCollection, args.Node.Id, args.NewName)))
+                LinkedFileService.RenameFolderAsync(linkedRoot.ApiRootPath, _state.ActiveCollection, args.Node.Id, args.NewName)))
             {
                 return;
             }
 
-            await RefreshAfterLinkedMutationAsync(_activeCollection.Id);
+            await RefreshAfterLinkedMutationAsync(_state.ActiveCollection.Id);
         }
         else
         {
-            await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-            _collections = BuildCombinedCollections();
+            await CollectionRepo.UpdateCollectionAsync(_state.ActiveCollection);
+            _state.Collections = BuildCombinedCollections();
         }
 
         await InvokeAsync(StateHasChanged); // BL-2
@@ -1732,9 +1090,9 @@ expectedStamp);
 
     private async Task OnDeleteNodeAsync(ApiCollectionNode node)
     {
-        if (_activeCollection is null) return;
+        if (_state.ActiveCollection is null) return;
 
-        var collection = _activeCollection;
+        var collection = _state.ActiveCollection;
         var linkedRoot = FindLinkedRootForCollection(collection.Id);
         if (linkedRoot is not null)
         {
@@ -1750,13 +1108,13 @@ expectedStamp);
 
         RemoveNodeFromTree(collection.Nodes, node.Id);
 
-        if (_selectedRequestId is not null &&
-            (node.Request?.Id == _selectedRequestId ||
-             ContainsRequest(node.Children, _selectedRequestId)))
+        if (_state.SelectedRequestId is not null &&
+            (node.Request?.Id == _state.SelectedRequestId ||
+             ContainsRequest(node.Children, _state.SelectedRequestId)))
         {
-            _selectedRequest = null;
-            _selectedRequestId = null;
-            _isDirty = false;
+            _state.SelectedRequest = null;
+            _state.SelectedRequestId = null;
+            _state.IsDirty = false;
         }
 
         if (linkedRoot is not null)
@@ -1766,7 +1124,7 @@ expectedStamp);
         else
         {
             await CollectionRepo.UpdateCollectionAsync(collection);
-            _collections = BuildCombinedCollections();
+            _state.Collections = BuildCombinedCollections();
         }
 
         await InvokeAsync(StateHasChanged); // BL-2
@@ -1774,7 +1132,7 @@ expectedStamp);
 
     private async Task OnRenameCollectionAsync((string CollectionId, string NewName) args)
     {
-        var collection = _collections.FirstOrDefault(c => c.Id == args.CollectionId);
+        var collection = _state.Collections.FirstOrDefault(c => c.Id == args.CollectionId);
         if (collection is null) return;
 
         var linkedRoot = FindLinkedRootForCollection(collection.Id);
@@ -1792,7 +1150,7 @@ expectedStamp);
         {
             collection.Name = args.NewName;
             await CollectionRepo.UpdateCollectionAsync(collection);
-            _collections = BuildCombinedCollections();
+            _state.Collections = BuildCombinedCollections();
         }
 
         await InvokeAsync(StateHasChanged); // BL-2
@@ -1800,7 +1158,7 @@ expectedStamp);
 
     private Task OnDeleteCollectionAsync(string collectionId)
     {
-        var collection = _collections.FirstOrDefault(c => c.Id == collectionId);
+        var collection = _state.Collections.FirstOrDefault(c => c.Id == collectionId);
         _pendingDeleteCollectionId = collectionId;
         _pendingDeleteCollectionName = collection?.Name ?? "this collection";
         return Task.CompletedTask;
@@ -1810,7 +1168,7 @@ expectedStamp);
     {
         if (_pendingDeleteCollectionId is null) return;
         var id = _pendingDeleteCollectionId;
-        var collection = _collections.FirstOrDefault(c => c.Id == id);
+        var collection = _state.Collections.FirstOrDefault(c => c.Id == id);
         _pendingDeleteCollectionId = null;
         _pendingDeleteCollectionName = null;
 
@@ -1828,15 +1186,15 @@ expectedStamp);
         else
         {
             await CollectionRepo.DeleteCollectionAsync(id);
-            _collections = BuildCombinedCollections();
+            _state.Collections = BuildCombinedCollections();
         }
 
-        if (_activeCollection?.Id == id)
+        if (_state.ActiveCollection?.Id == id)
         {
-            _activeCollection = _collections.FirstOrDefault();
-            _selectedRequest = null;
-            _selectedRequestId = null;
-            _isDirty = false;
+            _state.ActiveCollection = _state.Collections.FirstOrDefault();
+            _state.SelectedRequest = null;
+            _state.SelectedRequestId = null;
+            _state.IsDirty = false;
         }
         await InvokeAsync(StateHasChanged); // BL-2
     }
@@ -1845,9 +1203,10 @@ expectedStamp);
     /// Drag-and-drop reorder/reparent. Restricted to moves within the same collection — the
     /// dragged node and its new parent must both belong to <paramref name="args"/>.CollectionId.
     /// </summary>
-    private async Task OnMoveNodeAsync((string CollectionId, ApiCollectionNode DraggedNode, ApiCollectionNode? NewParent, int? NewIndex) args)
+    private async Task OnMoveNodeAsync((string CollectionId, ApiCollectionNode DraggedNode, ApiCollectionNode? NewParent,
+int? NewIndex) args)
     {
-        var collection = _collections.FirstOrDefault(c => c.Id == args.CollectionId);
+        var collection = _state.Collections.FirstOrDefault(c => c.Id == args.CollectionId);
         if (collection is null) return;
         if (args.NewParent is not null && args.DraggedNode.Id == args.NewParent.Id) return;
 
@@ -1870,7 +1229,7 @@ expectedStamp);
         else
         {
             await CollectionRepo.UpdateCollectionAsync(collection);
-            _collections = BuildCombinedCollections();
+            _state.Collections = BuildCombinedCollections();
         }
 
         await InvokeAsync(StateHasChanged); // BL-2
@@ -1907,7 +1266,8 @@ expectedStamp);
     /// (used by drag-and-drop reorder). <paramref name="parentId"/> of <c>null</c> targets the
     /// collection's top-level <paramref name="nodes"/> list.
     /// </summary>
-    private static bool InsertNodeAtParent(List<ApiCollectionNode> nodes, string? parentId, ApiCollectionNode newNode, int? index)
+    private static bool InsertNodeAtParent(List<ApiCollectionNode> nodes, string? parentId, ApiCollectionNode newNode, int?
+index)
     {
         if (parentId is null)
         {
@@ -2001,7 +1361,7 @@ expectedStamp);
     }
 
     private bool IsLinkedCollection(string collectionId) =>
-        _linkedRootResults.Any(root => root.Collections.Any(collection => collection.Id == collectionId));
+        _state.LinkedRootResults.Any(root => root.Collections.Any(collection => collection.Id == collectionId));
 
     private IReadOnlyList<string> GetMissingSecretNames(HttpRequestEntry request, ApiEnvironment? activeEnvironment)
     {
@@ -2068,19 +1428,19 @@ StringComparison.OrdinalIgnoreCase));
 
     private async Task OnRequestChangedAsync()
     {
-        _isDirty = true;
-        _linkedSaveError = null;
+        _state.IsDirty = true;
+        _state.LinkedSaveError = null;
 
-        if (_selectedRequestId is not null)
+        if (_state.SelectedRequestId is not null)
         {
-            _dirtyByRequestId[_selectedRequestId] = true;
+            _state.DirtyByRequestId[_state.SelectedRequestId] = true;
         }
 
         // Sync ApiCollectionNode.Name from the live request name so the tree view reflects renames
-        if (_selectedRequest is not null && _activeCollection is not null)
-            SyncNodeName(_activeCollection.Nodes, _selectedRequest.Id, _selectedRequest.Name);
+        if (_state.SelectedRequest is not null && _state.ActiveCollection is not null)
+            SyncNodeName(_state.ActiveCollection.Nodes, _state.SelectedRequest.Id, _state.SelectedRequest.Name);
 
-        if (_autoSave)
+        if (_state.AutoSave)
         {
             _autoSaveTimer?.Stop();
             _autoSaveTimer ??= new System.Timers.Timer(AutoSaveDebounceMs) { AutoReset = false };
@@ -2094,12 +1454,12 @@ StringComparison.OrdinalIgnoreCase));
 
     private async void OnAutoSaveElapsed(object? sender, System.Timers.ElapsedEventArgs e)
     {
-        if (_activeCollection is null || _selectedRequest is null) return;
+        if (_state.ActiveCollection is null || _state.SelectedRequest is null) return;
         try
         {
             if (await SaveActiveCollectionAsync())
             {
-                _isDirty = false;
+                _state.IsDirty = false;
             }
             await InvokeAsync(StateHasChanged); // BL-2
         }
@@ -2118,17 +1478,17 @@ StringComparison.OrdinalIgnoreCase));
     private async Task OnRequestResultAsync(HttpRequestResult result)
     {
         // Clear any previous subscription messages when a normal request completes
-        _subscriptionMessages.Clear();
-        _lastResult = result;
+        _state.SubscriptionMessages.Clear();
+        _state.LastResult = result;
 
         // Record in history for the active request
-        if (_selectedRequest is not null)
+        if (_state.SelectedRequest is not null)
         {
-            _lastResultByRequestId[_selectedRequest.Id] = result;
-            if (!_requestHistory.TryGetValue(_selectedRequest.Id, out var hist))
+            _state.LastResultByRequestId[_state.SelectedRequest.Id] = result;
+            if (!_state.RequestHistory.TryGetValue(_state.SelectedRequest.Id, out var hist))
             {
                 hist = [];
-                _requestHistory[_selectedRequest.Id] = hist;
+                _state.RequestHistory[_state.SelectedRequest.Id] = hist;
             }
             // Prepend so newest is first; cap at HistoryCap
             hist.Insert(0, result);
@@ -2144,20 +1504,20 @@ StringComparison.OrdinalIgnoreCase));
     private async Task OnSubscriptionMessageAsync(GraphQlSubscriptionMessage msg)
     {
         // Clear the last HTTP result when subscription starts
-        if (_subscriptionMessages.Count == 0)
-            _lastResult = null;
+        if (_state.SubscriptionMessages.Count == 0)
+            _state.LastResult = null;
 
         // Drop oldest when cap reached to prevent unbounded memory growth
-        if (_subscriptionMessages.Count >= SubscriptionMessageCap)
-            _subscriptionMessages.RemoveAt(0);
+        if (_state.SubscriptionMessages.Count >= SubscriptionMessageCap)
+            _state.SubscriptionMessages.RemoveAt(0);
 
-        _subscriptionMessages.Add(msg);
-        if (_selectedRequestId is not null)
+        _state.SubscriptionMessages.Add(msg);
+        if (_state.SelectedRequestId is not null)
         {
-            if (!_subscriptionMessagesByRequestId.TryGetValue(_selectedRequestId, out var messages))
+            if (!_state.SubscriptionMessagesByRequestId.TryGetValue(_state.SelectedRequestId, out var messages))
             {
                 messages = [];
-                _subscriptionMessagesByRequestId[_selectedRequestId] = messages;
+                _state.SubscriptionMessagesByRequestId[_state.SelectedRequestId] = messages;
             }
 
             if (messages.Count >= SubscriptionMessageCap)
@@ -2176,37 +1536,32 @@ StringComparison.OrdinalIgnoreCase));
         return Task.CompletedTask;
     }
 
-    private IReadOnlyList<HttpRequestResult> GetHistoryForSelected() =>
-        _selectedRequest is not null && _requestHistory.TryGetValue(_selectedRequest.Id, out var hist)
-            ? hist
-            : [];
-
     private Task OnResendHistoryEntryAsync(HttpRequestResult entry)
     {
         // Load the historical result back into the viewer — does not re-execute the request
-        _lastResult = entry;
-        _subscriptionMessages.Clear();
+        _state.LastResult = entry;
+        _state.SubscriptionMessages.Clear();
         return InvokeAsync(StateHasChanged);
     }
 
     private async Task SaveResponseExampleAsync(HttpRequestResult result)
     {
-        if (_selectedRequest is null || _activeCollection is null) return;
+        if (_state.SelectedRequest is null || _state.ActiveCollection is null) return;
 
         var example = WorkflowService.CreateResponseExample(
             result,
             string.Empty,
             ActiveEnvironment?.Name);
-        _selectedRequest.ResponseExamples.Insert(0, example);
+        _state.SelectedRequest.ResponseExamples.Insert(0, example);
         if (await SaveActiveCollectionAsync())
         {
-            _workflowMessage = "Saved response example.";
-            _workflowMessageIsError = false;
+            _state.WorkflowMessage = "Saved response example.";
+            _state.WorkflowMessageIsError = false;
         }
         else
         {
-            _workflowMessage = "Response example needs conflict resolution before it can be saved.";
-            _workflowMessageIsError = true;
+            _state.WorkflowMessage = "Response example needs conflict resolution before it can be saved.";
+            _state.WorkflowMessageIsError = true;
         }
 
         await InvokeAsync(StateHasChanged);
@@ -2219,11 +1574,11 @@ StringComparison.OrdinalIgnoreCase));
         // Reload collections and environments from disk after a successful import
         await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
         await LoadLinkedRootsAsync();
-        _loadingCollections = false;
+        _state.LoadingCollections = false;
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
-    // ── Splitter (JS drag) ─────────────────────────────────────────────────────
+    // ── Dialog input focus ──────────────────────────────────────────────────────
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -2240,59 +1595,6 @@ StringComparison.OrdinalIgnoreCase));
             try { await _newLinkedRootInput.FocusAsync(); }
             catch { }
         }
-
-        // On the very first render the element refs may not be bound yet
-        // (the async init hasn't completed, so the workspace panels may not have rendered).
-        // Wait for the post-init render before touching the DOM via JS.
-        if (firstRender)
-            return;
-
-        // Init the tree panel splitter once the DOM is ready.
-        if (!_treeSplitterInited)
-        {
-            _treeSplitterInited = true;
-            _treeSplitterHandle = await JS.InvokeAsync<IJSObjectReference>(
-                "SwebKitSplitter.init",
-                _treeSplitterEl,
-                _treePanelEl,
-                new { leftPane = true, minWidth = 200, maxWidth = 520 });
-        }
-
-        // Init the splitter whenever the panels become visible for a new request.
-        // _lastSplitterRequestId tracks which request the current JS handle was set up for.
-        var shouldShowSplitter = _selectedRequest is not null && _worksheetMode is null;
-        if (shouldShowSplitter && _lastSplitterRequestId != _selectedRequestId)
-        {
-            await DisposeSplitterAsync();
-            _lastSplitterRequestId = _selectedRequestId;
-            _splitterHandle = await JS.InvokeAsync<IJSObjectReference>(
-                "SwebKitSplitter.init",
-                _splitterEl,
-                _builderPanelEl,
-                new { leftPane = true, minWidth = 400, maxWidth = 1600 });
-        }
-            else if (!shouldShowSplitter)
-        {
-            await DisposeSplitterAsync();
-            _lastSplitterRequestId = null;
-        }
-    }
-
-    private async Task DisposeSplitterAsync()
-    {
-        if (_splitterHandle is null) return;
-        try { await _splitterHandle.InvokeVoidAsync("dispose"); } catch { /* ignore teardown errors */ }
-        try { await _splitterHandle.DisposeAsync(); } catch { }
-        _splitterHandle = null;
-    }
-
-    private async Task DisposeTreeSplitterAsync()
-    {
-        if (_treeSplitterHandle is null) return;
-        try { await _treeSplitterHandle.InvokeVoidAsync("dispose"); } catch { }
-        try { await _treeSplitterHandle.DisposeAsync(); } catch { }
-        _treeSplitterHandle = null;
-        _treeSplitterInited = false;
     }
 
     // ── Keyboard shortcut event handler ─────────────────────────────────────────
@@ -2304,14 +1606,14 @@ StringComparison.OrdinalIgnoreCase));
             switch (e.Action)
             {
                 case "NewRequest":
-                    if (_activeCollection is not null)
+                    if (_state.ActiveCollection is not null)
                         await AddRequestAsync();
                     break;
                 case "NewCollection":
                     OpenNewCollectionDialog();
                     break;
                 case "EnvManager":
-                    _worksheetMode = _worksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
+                    _state.WorksheetMode = _state.WorksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
                     break;
             }
             await InvokeAsync(StateHasChanged); // BL-2
@@ -2328,7 +1630,7 @@ StringComparison.OrdinalIgnoreCase));
             Icon = "＋",
             Shortcut = "Ctrl+N",
             AreaScope = "api-client",
-            Execute = async () => { if (_activeCollection is not null) await AddRequestAsync(); },
+            Execute = async () => { if (_state.ActiveCollection is not null) await AddRequestAsync(); },
         });
         Commands.Register(new AppCommand
         {
@@ -2350,7 +1652,7 @@ StringComparison.OrdinalIgnoreCase));
             AreaScope = "api-client",
             Execute = () =>
             {
-                _worksheetMode = _worksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
+                _state.WorksheetMode = _state.WorksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
                 return InvokeAsync(StateHasChanged);
             },
         });
@@ -2368,7 +1670,7 @@ StringComparison.OrdinalIgnoreCase));
 
     // ── IAsyncDisposable ───────────────────────────────────────────────────────
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         Events.Unsubscribe<ApiClientShortcutEvent>(OnApiClientShortcut);
         AppState.DemoModeChanged -= OnDemoModeChanged;
@@ -2378,17 +1680,16 @@ StringComparison.OrdinalIgnoreCase));
         Commands.Unregister("api-quick-nav");
         _autoSaveTimer?.Stop();
         _autoSaveTimer?.Dispose();
-        await DisposeSplitterAsync();
-        await DisposeTreeSplitterAsync();
+        return ValueTask.CompletedTask;
     }
 
     private LinkedCollectionRootLoadResult? FindLinkedRootForCollection(string collectionId) =>
-        _linkedRootResults.FirstOrDefault(root => root.Collections.Any(collection => collection.Id == collectionId));
+        _state.LinkedRootResults.FirstOrDefault(root => root.Collections.Any(collection => collection.Id == collectionId));
 
     private (LinkedCollectionRootLoadResult Root, LinkedEnvironmentFileState EnvironmentFile)?
 FindLinkedRootForEnvironment(string environmentId)
     {
-        foreach (var root in _linkedRootResults)
+        foreach (var root in _state.LinkedRootResults)
         {
             var environmentFile = root.EnvironmentFiles.FirstOrDefault(file => file.EnvironmentId == environmentId);
             if (environmentFile is not null)
@@ -2399,11 +1700,11 @@ FindLinkedRootForEnvironment(string environmentId)
     }
 
     private LinkedRequestFileState? FindLinkedRequestFileState(string requestId) =>
-        _linkedRootResults.SelectMany(root => root.RequestFiles).FirstOrDefault(file => file.RequestId == requestId);
+        _state.LinkedRootResults.SelectMany(root => root.RequestFiles).FirstOrDefault(file => file.RequestId == requestId);
 
     private (ApiCollection? Collection, HttpRequestEntry? Request) FindCollectionAndRequest(string requestId)
     {
-        foreach (var collection in _collections)
+        foreach (var collection in _state.Collections)
         {
             var request = FindRequestInNodes(collection.Nodes, requestId);
             if (request is not null)
@@ -2427,21 +1728,7 @@ FindLinkedRootForEnvironment(string environmentId)
             : $"{elapsed.TotalMilliseconds:F0} ms";
     }
 
-    private IReadOnlyList<LinkedGitChangedFile> GetStagedGitFiles() =>
-        ActiveGitRoot?.GitStatus.ChangedFileDetails.Where(static file => file.IsStaged).ToList() ?? [];
-
-    private IReadOnlyList<LinkedGitChangedFile> GetUnstagedGitFiles() =>
-        ActiveGitRoot?.GitStatus.ChangedFileDetails.Where(static file => file.HasUnstagedChanges).ToList() ?? [];
-
-    private static string GetDiffPreviewText(string text)
-    {
-        const int MaxDiffPreviewChars = 40_000;
-        return text.Length <= MaxDiffPreviewChars
-            ? text
-            : string.Concat(text.AsSpan(0, MaxDiffPreviewChars), "\n... diff preview truncated ...");
-    }
-
-    private sealed record LinkedSaveConflict(
+    internal sealed record LinkedSaveConflict(
         string RootId,
         string CollectionId,
         string RequestId,
@@ -2450,18 +1737,19 @@ FindLinkedRootForEnvironment(string environmentId)
 
     private List<ApiCollection> BuildCombinedCollections()
     {
-        var combined = CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(root => root.Collections)).ToList();
-        
+        var combined = CollectionRepo.Collections.Concat(_state.LinkedRootResults.SelectMany(root =>
+root.Collections)).ToList();
+
         // Add demo collection if in demo mode
         if (AppState.UseDemoData)
         {
             var demoCollection = DemoApiCollectionFactory.CreateDemoCollection();
             combined = [demoCollection, .. combined];
         }
-        
+
         return combined;
     }
 
     private List<ApiEnvironment> BuildCombinedEnvironments() =>
-        EnvironmentRepo.Environments.Concat(_linkedRootResults.SelectMany(root => root.Environments)).ToList();
+        EnvironmentRepo.Environments.Concat(_state.LinkedRootResults.SelectMany(root => root.Environments)).ToList();
 }

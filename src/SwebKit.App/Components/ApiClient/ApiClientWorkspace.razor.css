@@ -1,0 +1,25 @@
+/* ApiClientWorkspace layout — moved from ApiClientPage.razor.css (Phase 2, Task 7):
+   the `.api-client-body` split host and its right-side `.api-client-workspace` panel are now
+   rendered by ApiClientWorkspace, so their scoped CSS must live alongside it. */
+
+/* ── Main split: collection tree + request workspace ────── */
+
+.api-client-body {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    background: var(--color-surface);
+}
+
+/* ── Workspace (right) ──────────────────────────────────── */
+
+.api-client-workspace {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}

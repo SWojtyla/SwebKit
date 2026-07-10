@@ -1,0 +1,106 @@
+/* ── Management screen (Vars / Envs / Variables / Linked Roots central panel) ───────── */
+/* Duplicated from ApiClientPage.razor.css (not removed there): the Git worksheet screen
+   (Task 6, still on ApiClientPage) also renders this same chrome, and Blazor CSS isolation
+   scopes rules per-component, so each component needs its own copy. */
+
+.api-client-management-screen {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--color-surface);
+}
+
+.api-client-management-screen__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-raised);
+    flex-shrink: 0;
+}
+
+.api-client-management-screen__back {
+    padding: 4px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}
+
+.api-client-management-screen__back:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+.api-client-management-screen__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+/* ── Request-variable inspector ──────────────────────────── */
+
+.api-client-inspector {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    overflow: auto;
+}
+
+.api-client-inspector__row {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 140px minmax(180px, 2fr);
+    gap: 10px;
+    align-items: center;
+    padding: 7px 9px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    font-size: 12px;
+}
+
+.api-client-inspector__row--unresolved {
+    border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+}
+
+.api-client-inspector__key {
+    font-family: var(--font-family-mono);
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.api-client-inspector__source {
+    color: var(--color-text-muted);
+}
+
+.api-client-inspector__value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── API repositories (linked roots) list ───────────────── */
+
+.api-client-linked-root-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--color-text-muted);
+    font-size: 11px;
+    padding: 6px 0;
+}
+
+.api-client-linked-root-card__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 4px 0;
+}

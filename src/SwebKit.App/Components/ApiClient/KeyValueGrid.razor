@@ -19,7 +19,9 @@
                    @oninput="e => SetKey(idx, e.Value?.ToString() ?? string.Empty)" />
             <input class="kv-grid__input kv-grid__input--value" type="text" placeholder="value" value="@pair.Value"
                    @oninput="e => SetValue(idx, e.Value?.ToString())" />
-            <button type="button" class="kv-grid__del-btn" title="Remove row" @onclick="() => RemoveRow(idx)">×</button>
+            <button type="button" class="kv-grid__del-btn" title="Remove row" @onclick="() => RemoveRow(idx)">
+                <FluentIcon Value="@_iconDelete" Width="12px" />
+            </button>
         </div>
     }
 
@@ -29,6 +31,9 @@
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconDelete = new Icons.Regular.Size16.Delete();
+
     [Parameter, EditorRequired] public List<KeyValuePair<string>> Pairs { get; set; } = default!;
     [Parameter] public EventCallback OnChanged { get; set; }
 

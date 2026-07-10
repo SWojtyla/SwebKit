@@ -1,0 +1,246 @@
+/* ── Toolbar ─────────────────────────────────────────────── */
+
+.api-client-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    min-height: 36px;
+}
+
+.api-client-toolbar__left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.api-client-toolbar__center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.api-client-toolbar__right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.api-client-toolbar-btn,
+.api-client-toolbar ::deep .api-client-toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+}
+
+.api-client-toolbar-btn:hover:not([disabled]),
+.api-client-toolbar ::deep .api-client-toolbar-btn:hover:not([disabled]) {
+    background: var(--color-surface-hover);
+    border-color: var(--color-accent);
+}
+
+.api-client-toolbar-btn:disabled,
+.api-client-toolbar ::deep .api-client-toolbar-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.api-client-toolbar ::deep .api-client-toolbar-btn .app-button__content {
+    gap: 5px;
+}
+
+/* Keyboard shortcut badges */
+.api-client-toolbar-btn__kbd {
+    font-family: var(--font-family-mono);
+    font-size: 10px;
+    padding: 1px 4px;
+    background: rgba(0, 0, 0, 0.08);
+    border-radius: 3px;
+    color: var(--color-text-muted);
+    margin-left: var(--api-spacing-xs);
+}
+
+.api-client-toolbar-btn--active,
+.api-client-toolbar ::deep .api-client-toolbar-btn--active {
+    background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.api-client-toolbar-btn--save,
+.api-client-toolbar ::deep .api-client-toolbar-btn--save {
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.api-client-toolbar-btn--save:hover,
+.api-client-toolbar ::deep .api-client-toolbar-btn--save:hover {
+    background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface));
+}
+
+.api-client-toolbar-btn--danger,
+.api-client-toolbar ::deep .api-client-toolbar-btn--danger {
+    border-color: color-mix(in srgb, var(--color-danger, #dc2626) 48%, var(--color-border));
+    color: var(--color-danger, #dc2626);
+}
+
+.api-client-toolbar-btn--danger:hover:not([disabled]),
+.api-client-toolbar ::deep .api-client-toolbar-btn--danger:hover:not([disabled]) {
+    background: color-mix(in srgb, var(--color-danger, #dc2626) 10%, var(--color-surface));
+    border-color: var(--color-danger, #dc2626);
+}
+
+.api-client-toolbar__dirty-badge {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.api-client-target-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 360px;
+    padding: 3px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-raised);
+    color: var(--color-text-muted);
+    font-size: 11px;
+}
+
+.api-client-target-chip strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.api-client-target-chip__label {
+    color: var(--color-text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.api-client-conflict-banner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: min(680px, 100%);
+    padding: 4px 8px;
+    border: 1px solid color-mix(in srgb, var(--color-warning) 48%, var(--color-border));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
+    color: var(--color-warning);
+    font-size: 11px;
+}
+
+.api-client-conflict-banner > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.api-client-toolbar__warning-badge {
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 3px 8px;
+    border: 1px solid color-mix(in srgb, var(--color-warning) 42%, var(--color-border));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
+    color: var(--color-warning);
+    font-size: 11px;
+}
+
+.api-client-toolbar__warning-badge--ok {
+    border-color: color-mix(in srgb, var(--color-success) 42%, var(--color-border));
+    background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+    color: var(--color-success);
+}
+
+.api-client-toolbar__env-label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.api-client-toolbar-menu,
+.api-client-toolbar ::deep .api-client-toolbar-menu {
+    position: relative;
+}
+
+.api-client-toolbar-menu__chevron,
+.api-client-toolbar ::deep .api-client-toolbar-menu__chevron {
+    margin-left: 2px;
+    color: var(--color-text-muted);
+    font-size: 10px;
+}
+
+.api-client-toolbar-menu__dropdown,
+.api-client-toolbar ::deep .api-client-toolbar-menu__dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: var(--z-overlay);
+    min-width: 180px;
+    background: var(--color-panel-card, var(--color-surface));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 4px 0;
+}
+
+.api-client-toolbar ::deep .api-client-toolbar-menu__dropdown .ctx-item:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* ── Env picker (custom dropdown, replaces native select) ── */
+
+.api-client-env-picker,
+.api-client-toolbar ::deep .api-client-env-picker {
+    position: relative;
+}
+
+.api-client-env-picker__btn,
+.api-client-toolbar ::deep .api-client-env-picker__btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 12px;
+    padding: 3px 6px;
+    min-width: 140px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.api-client-env-picker__chevron,
+.api-client-toolbar ::deep .api-client-env-picker__chevron {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

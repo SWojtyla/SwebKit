@@ -112,7 +112,7 @@
     @if (_ctxNode is not null && _ctxNode.Kind == FlatTreeNodeKind.Node)
     {
         <div class="ctx-backdrop" @onclick="() => _ctxNode = null"></div>
-        <div class="ctx-menu"
+        <div class="ctx-menu" @ref="_ctxMenu"
              style="top:@(_ctxY.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))px; left:@(_ctxX.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))px;">
             @{
                 var isCollRoot = _ctxNode.Node.Id.StartsWith("__col__", StringComparison.Ordinal);
@@ -435,11 +435,14 @@ Icons.Regular.Size16.AddSquare();
         _ctxNode = node;
         _ctxX = e.ClientX;
         _ctxY = e.ClientY;
+        _shouldClampCtx = true;
     }
 
     private FlatTreeNode? _ctxNode;
     private double _ctxX;
     private double _ctxY;
+    private ElementReference _ctxMenu;
+    private bool _shouldClampCtx;
 
     private string? _renamingNodeId;
     private string _renameValue = "";
@@ -518,6 +521,13 @@ Icons.Regular.Size16.AddSquare();
         {
             _shouldFocusRename = false;
             try { await _renameInput.FocusAsync(); }
+            catch { }
+        }
+
+        if (_shouldClampCtx && _ctxNode is not null)
+        {
+            _shouldClampCtx = false;
+            try { await JS.InvokeVoidAsync("SwebKitUi.clampMenu", _ctxMenu); }
             catch { }
         }
     }

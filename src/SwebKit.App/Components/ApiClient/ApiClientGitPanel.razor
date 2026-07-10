@@ -1,0 +1,349 @@
+@* ── Git worksheet screen (extracted from ApiClientPage — Phase 2, Task 6) ──
+   Presentational-ish component: reads/writes State (page-owned ApiClientState instance, not a
+   copy) so it survives its own mount/unmount when the user toggles worksheet mode (DEC-UX-3).
+   All Git action methods talk to LinkedGitService directly; the one page-owned operation
+   (reloading linked roots — which repopulates State.Collections/Environments/LinkedRootResults
+   from disk) is wired back via the OnRefreshLinkedRoots callback. *@
+
+@inject LinkedGitService LinkedGit
+@inject IJSRuntime JS
+
+<div class="api-client-management-screen">
+    <div class="api-client-management-screen__header">
+        <button type="button" class="api-client-management-screen__back"
+                @onclick="() => State.WorksheetMode = ApiClientState.WorksheetLinkedRoots">← Back to API repos</button>
+        <span class="api-client-management-screen__title">Git — @ActiveGitRoot?.DisplayName</span>
+    </div>
+    @if (ActiveGitRoot is not null)
+    {
+        <div class="api-client-git-panel">
+            <div class="api-client-git-panel__scroll">
+                @{
+                    var stagedGitFiles = GetStagedGitFiles();
+                    var unstagedGitFiles = GetUnstagedGitFiles();
+                }
+                <div class="api-client-git-panel__summary">
+                    <span>Branch: @(ActiveGitRoot.GitStatus.Branch ?? "—")</span>
+                    <span>Changed API files: @ActiveGitRoot.GitStatus.ChangedFileCount</span>
+                    @if (stagedGitFiles.Count > 0)
+                    {
+                        <span>staged changes ready</span>
+                    }
+                </div>
+                @if (State.GitMessage is not null)
+                {
+                    <div
+                        class="api-client-git-panel__message @(State.GitMessageIsError ? "api-client-git-panel__message--error" : "")">
+                        @State.GitMessage</div>
+                    }
+                    @if (stagedGitFiles.Count > 0)
+                    {
+                        <div class="api-client-git-panel__commit-preview">
+                            <div class="api-client-git-panel__section-title">Commit preview</div>
+                            <div class="api-client-git-panel__summary">
+                                <span>Branch: @(ActiveGitRoot.GitStatus.Branch ?? "—")</span>
+                                <span>Remote: @(State.GitRemoteUrl ?? "origin remote unavailable")</span>
+                                <span>@stagedGitFiles.Count staged API file(s)</span>
+                            </div>
+                            <div class="api-client-git-panel__preview-files">
+                                @foreach (var file in stagedGitFiles)
+                                {
+                                    <span>@file.Path</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                    <div class="api-client-git-panel__row">
+                        <input class="api-client-dialog__input" placeholder="branch name" value="@State.GitBranchName"
+                               @oninput="e => State.GitBranchName = e.Value?.ToString() ?? string.Empty" />
+                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                   OnClick="CreateGitBranchAsync">Create
+                            branch</AppButton>
+                        </div>
+                        <div class="api-client-git-panel__row">
+                            <select class="api-client-dialog__input api-client-git-panel__branch-select"
+                                    value="@State.GitBranchToSwitch"
+                                    @onchange="e => State.GitBranchToSwitch = e.Value?.ToString() ?? string.Empty">
+                                @foreach (var branch in State.GitBranches)
+                                {
+                                    <option value="@branch.Name">@(branch.IsCurrent ? $"{branch.Name} (current)" : branch.Name)</option>
+                                }
+                            </select>
+                            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                       Disabled="@(string.IsNullOrWhiteSpace(State.GitBranchToSwitch))" OnClick="SwitchGitBranchAsync">
+                                Switch branch</AppButton>
+                            </div>
+                            <div class="api-client-git-panel__row">
+                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                           Disabled="@(unstagedGitFiles.Count == 0)" OnClick="StageAllGitFilesAsync">Stage all</AppButton>
+                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                           Disabled="@(stagedGitFiles.Count == 0)" OnClick="UnstageAllGitFilesAsync">Unstage all</AppButton>
+                                <input class="api-client-dialog__input" placeholder="commit message" value="@State.GitCommitMessage"
+                                       @oninput="e => State.GitCommitMessage = e.Value?.ToString() ?? string.Empty" />
+                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                           Disabled="@(stagedGitFiles.Count == 0 || string.IsNullOrWhiteSpace(State.GitCommitMessage))"
+                                           OnClick="CommitGitChangesAsync">Commit staged</AppButton>
+                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                           OnClick="PushGitBranchAsync">Push</AppButton>
+                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                           OnClick="OpenRemoteCompareAsync">Open remote
+                                    compare</AppButton>
+                                </div>
+                                <div class="api-client-git-panel__files">
+                                    @if (ActiveGitRoot.GitStatus.ChangedFileDetails.Count == 0)
+                                    {
+                                        <div class="api-client-git-panel__file api-client-git-panel__file--empty">No changed API files.</div>
+                                    }
+
+                                    <div class="api-client-git-panel__section-title">Staged</div>
+                                    @if (stagedGitFiles.Count == 0)
+                                    {
+                                        <div class="api-client-git-panel__file api-client-git-panel__file--empty">No staged API files.</div>
+                                    }
+                                    @foreach (var file in stagedGitFiles)
+                                    {
+                                        <div class="api-client-git-panel__file">
+                                            <div class="api-client-git-panel__file-main">
+                                                <span class="api-client-git-panel__file-status">@file.StatusLabel</span>
+                                                <span class="api-client-git-panel__file-path">@file.Path</span>
+                                            </div>
+                                            <div class="api-client-git-panel__file-actions">
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                           OnClick="@(() => LoadGitDiffAsync(file.Path))">Review</AppButton>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                           OnClick="@(() => UnstageGitFileAsync(file.Path))">Unstage</AppButton>
+                                                <AppButton Variant="Danger" Size="Small"
+                                                           CssClass="api-client-toolbar-btn api-client-toolbar-btn--danger"
+                                                           OnClick="@(() => QueueRevertGitFile(file.Path))">Revert</AppButton>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    <div class="api-client-git-panel__section-title">Unstaged</div>
+                                    @if (unstagedGitFiles.Count == 0)
+                                    {
+                                        <div class="api-client-git-panel__file api-client-git-panel__file--empty">No unstaged API files.</div>
+                                    }
+                                    @foreach (var file in unstagedGitFiles)
+                                    {
+                                        <div class="api-client-git-panel__file">
+                                            <div class="api-client-git-panel__file-main">
+                                                <span class="api-client-git-panel__file-status">@file.StatusLabel</span>
+                                                <span class="api-client-git-panel__file-path">@file.Path</span>
+                                            </div>
+                                            <div class="api-client-git-panel__file-actions">
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                           OnClick="@(() => LoadGitDiffAsync(file.Path))">Review</AppButton>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                           OnClick="@(() => StageGitFileAsync(file.Path))">Stage</AppButton>
+                                                <AppButton Variant="Danger" Size="Small"
+                                                           CssClass="api-client-toolbar-btn api-client-toolbar-btn--danger"
+                                                           OnClick="@(() => QueueRevertGitFile(file.Path))">Revert</AppButton>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="api-client-git-panel__diff">
+                                    @if (State.GitDiffLoading)
+                                    {
+                                        <div class="api-client-git-panel__file api-client-git-panel__file--empty">Loading diff preview…</div>
+                                    }
+                                    else if (State.GitDiff is not null)
+                                    {
+                                        <div class="api-client-git-panel__diff-header">
+                                            <span>Diff preview — @State.GitDiff.Path</span>
+                                            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                       OnClick="@(() => State.GitDiff = null)">Close</AppButton>
+                                        </div>
+                                        @if (!State.GitDiff.IsSuccess)
+                                        {
+                                            <div class="api-client-git-panel__message api-client-git-panel__message--error">
+                                                @State.GitDiff.ErrorMessage</div>
+                                            }
+                                        else
+                                            {
+                                                <div class="api-client-git-panel__diff-grid">
+                                                    <div>
+                                                        <div class="api-client-git-panel__section-title">Original</div>
+                                                        <pre>@GetDiffPreviewText(State.GitDiff.OriginalContent)</pre>
+                                                    </div>
+                                                    <div>
+                                                        <div class="api-client-git-panel__section-title">Current</div>
+                                                        <pre>@GetDiffPreviewText(State.GitDiff.CurrentContent)</pre>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                </div> @* end api-client-git-panel__scroll *@
+                            </div> @* end api-client-git-panel *@
+                        }
+                    </div> @* end api-client-management-screen *@
+
+@* ── Revert-file confirm ── *@
+<ConfirmDialog Visible="@(State.PendingRevertGitFilePath is not null)" Title="Revert API file?"
+               Message="@($"Discard changes in {State.PendingRevertGitFilePath}? This cannot be undone.")" ConfirmLabel="Revert"
+               OnConfirm="ConfirmRevertGitFileAsync" OnCancel="@(() => State.PendingRevertGitFilePath = null)" />
+
+@code {
+    [Parameter, EditorRequired]
+    public ApiClientState State { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnRefreshLinkedRoots { get; set; }
+
+    private LinkedCollectionRootLoadResult? ActiveGitRoot =>
+        State.LinkedRootResults.FirstOrDefault(root => root.Config.Id == State.ActiveGitRootId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshGitBranchesAsync();
+    }
+
+    private async Task CreateGitBranchAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.CreateBranchAsync(ActiveGitRoot.ApiRootPath, State.GitBranchName));
+        if (!State.GitMessageIsError)
+        {
+            State.GitBranchName = string.Empty;
+        }
+    }
+
+    private async Task SwitchGitBranchAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.SwitchBranchAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath,
+State.GitBranchToSwitch));
+    }
+
+    private async Task CommitGitChangesAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.CommitStagedApiFilesAsync(ActiveGitRoot.ApiRootPath,
+ActiveGitRoot.ApiRootPath,
+State.GitCommitMessage));
+        if (!State.GitMessageIsError)
+        {
+            State.GitCommitMessage = string.Empty;
+        }
+    }
+
+    private async Task StageAllGitFilesAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.StageAllApiFilesAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath));
+    }
+
+    private async Task UnstageAllGitFilesAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.UnstageAllApiFilesAsync(ActiveGitRoot.ApiRootPath,
+ActiveGitRoot.ApiRootPath));
+    }
+
+    private async Task StageGitFileAsync(string path)
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.StageFileAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path));
+    }
+
+    private async Task UnstageGitFileAsync(string path)
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.UnstageFileAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path));
+    }
+
+    private async Task LoadGitDiffAsync(string path)
+    {
+        if (ActiveGitRoot is null) return;
+
+        State.GitDiffLoading = true;
+        State.GitDiff = null;
+        await InvokeAsync(StateHasChanged);
+
+        State.GitDiff = await LinkedGit.GetFileDiffAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path);
+        State.GitDiffLoading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void QueueRevertGitFile(string path)
+    {
+        State.PendingRevertGitFilePath = path;
+    }
+
+    private async Task ConfirmRevertGitFileAsync()
+    {
+        if (ActiveGitRoot is null || State.PendingRevertGitFilePath is null) return;
+        var path = State.PendingRevertGitFilePath;
+        State.PendingRevertGitFilePath = null;
+        await ApplyGitResultAsync(await LinkedGit.RevertFileAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path));
+    }
+
+    private async Task PushGitBranchAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.PushCurrentBranchAsync(ActiveGitRoot.ApiRootPath));
+    }
+
+    private async Task OpenRemoteCompareAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        var url = State.GitCompareUrl ?? await LinkedGit.GetRemoteCompareUrlAsync(ActiveGitRoot.ApiRootPath);
+        if (url is null)
+        {
+            State.GitMessage = "Could not infer a GitHub or Azure DevOps compare URL from the origin remote.";
+            State.GitMessageIsError = true;
+            return;
+        }
+
+        await JS.InvokeVoidAsync("open", url, "_blank");
+        State.GitMessage = "Opened compare view in the browser.";
+        State.GitMessageIsError = false;
+    }
+
+    private async Task ApplyGitResultAsync(LinkedGitCommandResult result)
+    {
+        State.GitMessage = result.IsSuccess ? result.Message : result.ErrorMessage;
+        State.GitMessageIsError = !result.IsSuccess;
+        State.GitDiff = null;
+        await OnRefreshLinkedRoots.InvokeAsync();
+        await RefreshGitBranchesAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshGitBranchesAsync()
+    {
+        if (ActiveGitRoot is null)
+        {
+            State.GitBranches = [];
+            State.GitBranchToSwitch = string.Empty;
+            return;
+        }
+
+        State.GitBranches = await LinkedGit.GetBranchesAsync(ActiveGitRoot.ApiRootPath);
+        State.GitRemoteUrl = await LinkedGit.GetOriginRemoteUrlAsync(ActiveGitRoot.ApiRootPath);
+        State.GitCompareUrl = await LinkedGit.GetRemoteCompareUrlAsync(ActiveGitRoot.ApiRootPath);
+        var current = State.GitBranches.FirstOrDefault(static branch => branch.IsCurrent)?.Name ??
+ActiveGitRoot.GitStatus.Branch;
+        if (string.IsNullOrWhiteSpace(State.GitBranchToSwitch) || !State.GitBranches.Any(branch =>
+branch.Name.Equals(State.GitBranchToSwitch, StringComparison.OrdinalIgnoreCase)))
+        {
+            State.GitBranchToSwitch = current ?? State.GitBranches.FirstOrDefault()?.Name ?? string.Empty;
+        }
+    }
+
+    private IReadOnlyList<LinkedGitChangedFile> GetStagedGitFiles() =>
+        ActiveGitRoot?.GitStatus.ChangedFileDetails.Where(static file => file.IsStaged).ToList() ?? [];
+
+    private IReadOnlyList<LinkedGitChangedFile> GetUnstagedGitFiles() =>
+        ActiveGitRoot?.GitStatus.ChangedFileDetails.Where(static file => file.HasUnstagedChanges).ToList() ?? [];
+
+    private static string GetDiffPreviewText(string text)
+    {
+        const int MaxDiffPreviewChars = 40_000;
+        return text.Length <= MaxDiffPreviewChars
+            ? text
+            : string.Concat(text.AsSpan(0, MaxDiffPreviewChars), "\n... diff preview truncated ...");
+    }
+}

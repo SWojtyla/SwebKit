@@ -2,8 +2,7 @@
 @using SwebKit.Core.Domain
 
 <div class="req-tabs">
-    <button type="button" 
-            class="req-tab @(_activeTab == RequestTab.Params ? "req-tab--active" : "")" 
+    <button type="button" class="req-tab @(_activeTab == RequestTab.Params ? "req-tab--active" : "")"
             @onclick="() => OnTabChange.InvokeAsync(RequestTab.Params)">
         <span>Params</span>
         @if (_paramCount > 0)
@@ -11,8 +10,7 @@
             <span class="req-tab__badge">@_paramCount</span>
         }
     </button>
-    <button type="button" 
-            class="req-tab @(_activeTab == RequestTab.Headers ? "req-tab--active" : "")" 
+    <button type="button" class="req-tab @(_activeTab == RequestTab.Headers ? "req-tab--active" : "")"
             @onclick="() => OnTabChange.InvokeAsync(RequestTab.Headers)">
         <span>Headers</span>
         @if (_headerCount > 0)
@@ -22,30 +20,27 @@
     </button>
     @if (_showBodyTab)
     {
-        <button type="button" 
-                class="req-tab @(_activeTab == RequestTab.Body ? "req-tab--active" : "")" 
+        <button type="button" class="req-tab @(_activeTab == RequestTab.Body ? "req-tab--active" : "")"
                 @onclick="() => OnTabChange.InvokeAsync(RequestTab.Body)">
             <span>Body</span>
             @if (!string.IsNullOrEmpty(_bodyContent))
             {
-                <span class="req-tab__badge">●</span>
+                <FluentIcon Value="@_iconDirtyDot" Width="8px" Class="req-tab__badge" />
             }
         </button>
     }
     @if (_showGraphQLTab)
     {
-        <button type="button" 
-                class="req-tab @(_activeTab == RequestTab.GraphQL ? "req-tab--active" : "")" 
+        <button type="button" class="req-tab @(_activeTab == RequestTab.GraphQL ? "req-tab--active" : "")"
                 @onclick="() => OnTabChange.InvokeAsync(RequestTab.GraphQL)">
             <span>GraphQL</span>
             @if (!string.IsNullOrEmpty(_graphQLContent))
             {
-                <span class="req-tab__badge">●</span>
+                <FluentIcon Value="@_iconDirtyDot" Width="8px" Class="req-tab__badge" />
             }
         </button>
     }
-    <button type="button" 
-            class="req-tab @(_activeTab == RequestTab.Auth ? "req-tab--active" : "")" 
+    <button type="button" class="req-tab @(_activeTab == RequestTab.Auth ? "req-tab--active" : "")"
             @onclick="() => OnTabChange.InvokeAsync(RequestTab.Auth)">
         <span>Auth</span>
         @if (_authType != AuthType.None)
@@ -53,14 +48,16 @@
             <span class="req-tab__badge">@GetAuthTypeShortName(_authType)</span>
         }
     </button>
-    <button type="button" 
-            class="req-tab @(_activeTab == RequestTab.Capture ? "req-tab--active" : "")" 
+    <button type="button" class="req-tab @(_activeTab == RequestTab.Capture ? "req-tab--active" : "")"
             @onclick="() => OnTabChange.InvokeAsync(RequestTab.Capture)">
         <span>Capture</span>
     </button>
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconDirtyDot = new Icons.Filled.Size12.Circle();
+
     public enum RequestTab
     {
         Params,
@@ -73,14 +70,14 @@
 
     [Parameter] public RequestTab ActiveTab { get; set; } = RequestTab.Params;
     [Parameter] public EventCallback<RequestTab> OnTabChange { get; set; }
-    
+
     // Content counts for badges
     [Parameter] public int ParamCount { get; set; } = 0;
     [Parameter] public int HeaderCount { get; set; } = 0;
     [Parameter] public string BodyContent { get; set; } = string.Empty;
     [Parameter] public string GraphQLContent { get; set; } = string.Empty;
     [Parameter] public AuthType AuthType { get; set; } = AuthType.None;
-    
+
     // Tab visibility controls
     [Parameter] public bool ShowBodyTab { get; set; } = true;
     [Parameter] public bool ShowGraphQLTab { get; set; } = false;

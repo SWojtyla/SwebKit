@@ -1,0 +1,249 @@
+/* ── Management screen chrome (Vars / Envs / Variables / Linked Roots central panel) ───── */
+/* Duplicated from ApiClientPage.razor.css (removed there in Phase 2, Task 6, since the Git
+   worksheet screen was the only remaining page-level user of this chrome): Blazor CSS isolation
+   scopes rules per-component, so this component needs its own copy — same duplicate already
+   kept by ApiClientManagementScreens.razor.css for the other 4 worksheet screens. */
+
+.api-client-management-screen {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--color-surface);
+}
+
+.api-client-management-screen__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-raised);
+    flex-shrink: 0;
+}
+
+.api-client-management-screen__back {
+    padding: 4px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}
+
+.api-client-management-screen__back:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+.api-client-management-screen__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+/* Duplicated from ApiClientPage.razor.css (not removed there — used by the page's own dialogs):
+   the branch-name/commit-message inputs and branch-switch select in this component reuse the
+   same input chrome. Blazor CSS isolation scopes rules per-component. */
+
+.api-client-dialog__input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    font-size: 13px;
+    padding: 6px 10px;
+}
+
+.api-client-dialog__input:focus {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+}
+
+/* ── Git worksheet panel (moved from ApiClientPage.razor.css — Phase 2, Task 6) ─────────── */
+
+.api-client-git-panel__summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--color-text-muted);
+    font-size: 11px;
+    padding: 6px 0;
+}
+
+.api-client-git-panel__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 4px 0;
+}
+
+.api-client-git-panel__scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.api-client-git-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.api-client-git-panel__section-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: 4px 0;
+}
+
+.api-client-git-panel__branch-select {
+    max-width: 320px;
+    flex: 1;
+    min-width: 0;
+}
+
+.api-client-git-panel__commit-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--color-accent) 28%, var(--color-border));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+}
+
+.api-client-git-panel__section-title {
+    color: var(--color-text);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.api-client-git-panel__preview-files {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-family: var(--font-family-mono);
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.api-client-git-panel__message {
+    padding: 6px 10px;
+    border: 1px solid color-mix(in srgb, var(--color-success) 38%, var(--color-border));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+    color: var(--color-success);
+    font-size: 12px;
+}
+
+.api-client-git-panel__message--error {
+    border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+    background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
+    color: var(--color-warning);
+}
+
+.api-client-git-panel__files {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-family: var(--font-family-mono);
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.api-client-git-panel__file {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+}
+
+.api-client-git-panel__file--empty {
+    justify-content: flex-start;
+    font-family: inherit;
+}
+
+.api-client-git-panel__file-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.api-client-git-panel__file-status {
+    flex-shrink: 0;
+    min-width: 76px;
+    color: var(--color-text);
+    font-family: inherit;
+    font-weight: 600;
+}
+
+.api-client-git-panel__file-path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.api-client-git-panel__file-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+}
+
+.api-client-git-panel__diff {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.api-client-git-panel__diff-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--color-text);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.api-client-git-panel__diff-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.api-client-git-panel__diff-grid pre {
+    min-height: 220px;
+    max-height: 420px;
+    margin: 0;
+    padding: 10px;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font-family: var(--font-family-mono);
+    font-size: 11px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

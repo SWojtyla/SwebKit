@@ -78,6 +78,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PageToolbar.razor" Link="Components\Shared\PageToolbar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PasswordField.razor" Link="Components\Shared\PasswordField.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SkeletonRows.razor" Link="Components\Shared\SkeletonRows.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ReworkBanner.razor" Link="Components\Shared\ReworkBanner.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessDashboard.razor" Link="Components\Shared\ConfigurationReadinessDashboard.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessAreaCard.razor" Link="Components\Shared\ConfigurationReadinessAreaCard.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ApiClient\PostRequestCaptureBuilder.razor" Link="Components\ApiClient\PostRequestCaptureBuilder.razor" />

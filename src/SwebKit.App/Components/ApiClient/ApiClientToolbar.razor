@@ -1,0 +1,306 @@
+@* ── Toolbar (extracted from ApiClientPage — Phase 2, Task 2) ──
+   Presentational component: reads State (page-owned ApiClientState instance, not a copy) and
+   raises EventCallback parameters for every action. Method bodies stay on ApiClientPage; this
+   component only wires UI to callbacks (DEC-UX-3). Dropdown-open booleans stay local fields —
+   the toolbar is never wrapped in @if on the page, so there is no BL-4 destroy/recreate risk. *@
+
+<div class="api-client-toolbar" role="toolbar" aria-label="API Client toolbar">
+    <div class="api-client-toolbar__left" role="group" aria-label="Create actions">
+        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                   Title="New collection (Ctrl+Shift+N)" OnClick="OnNewCollection">
+            <FluentIcon Value="@(new Icons.Regular.Size16.AddSquare())" Width="14px" />
+            <span>New Collection</span>
+            <kbd class="api-client-toolbar-btn__kbd">Ctrl+Shift+N</kbd>
+        </AppButton>
+        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Title="New request (Ctrl+N)"
+                   Disabled="@(!CanCreateRequest)" OnClick="OnAddRequest">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
+            <span>New Request</span>
+            <kbd class="api-client-toolbar-btn__kbd">Ctrl+N</kbd>
+        </AppButton>
+        @if (State.IsDirty && !State.AutoSave)
+        {
+            <AppButton Variant="Primary" Size="Small" CssClass="api-client-toolbar-btn api-client-toolbar-btn--save"
+                       Title="Save request (Ctrl+S)" OnClick="OnSaveRequest">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Save())" Width="14px" />
+                <span>Save</span>
+                <kbd class="api-client-toolbar-btn__kbd">Ctrl+S</kbd>
+            </AppButton>
+        }
+        <AppDropdown IsOpen="@_showRepoMenu" OnClose="@(() => _showRepoMenu = false)" CssClass="api-client-toolbar-menu"
+                     MenuCssClass="api-client-toolbar-menu__dropdown" Label="Git Repos">
+            <TriggerContent>
+                <AppButton Variant="Secondary" Size="Small"
+                           CssClass="@(IsRepoMenuActive ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
+                           Title="Add or manage Git-backed API repositories" OnClick="@(() => _showRepoMenu = !_showRepoMenu)">
+                    <span>Git Repos</span>
+                    <FluentIcon Value="@_iconChevronDown" Width="10px" Class="api-client-toolbar-menu__chevron" />
+                </AppButton>
+            </TriggerContent>
+            <ChildContent>
+                <button type="button" class="ctx-item" @onclick="HandleAddGitRepoAsync">Add Git repo</button>
+                <button type="button" class="ctx-item" disabled="@(!CurrentTargetLinkedRootPresent)"
+                        @onclick="HandleGitForSelectedRepoAsync">Git for selected repo</button>
+                <button type="button" class="ctx-item" disabled="@(State.LinkedRootInfos.Count == 0)"
+                        @onclick="HandleManageGitReposAsync">Manage Git repos</button>
+            </ChildContent>
+        </AppDropdown>
+        <AppDropdown IsOpen="@_showTransferMenu" OnClose="@(() => _showTransferMenu = false)"
+                     CssClass="api-client-toolbar-menu" MenuCssClass="api-client-toolbar-menu__dropdown"
+                     Label="Import and export">
+            <TriggerContent>
+                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                           Title="Import or export API requests and collections"
+                           OnClick="@(() => _showTransferMenu = !_showTransferMenu)">
+                    <span>Import / Export</span>
+                    <FluentIcon Value="@_iconChevronDown" Width="10px" Class="api-client-toolbar-menu__chevron" />
+                </AppButton>
+            </TriggerContent>
+            <ChildContent>
+                <button type="button" class="ctx-item" disabled="@(!CanCreateRequest)"
+                        @onclick="HandleImportCurlAsync">Import cURL</button>
+                <button type="button" class="ctx-item" @onclick="HandleImportCollectionAsync">Import collection</button>
+                <button type="button" class="ctx-item" disabled="@(State.ActiveCollection is null)"
+                        @onclick="HandleExportCollectionAsync">Export collection</button>
+            </ChildContent>
+        </AppDropdown>
+    </div>
+
+    <div class="api-client-toolbar__center" role="group" aria-label="Current request status">
+        <span class="api-client-target-chip" title="@CurrentTargetHint">
+            <span class="api-client-target-chip__label">Target</span>
+            <strong>@CurrentTargetLabel</strong>
+        </span>
+        @if (State.IsDirty && !State.AutoSave)
+        {
+            <span class="api-client-toolbar__dirty-badge" title="Unsaved changes — press Ctrl+S to save">
+                <FluentIcon Value="@_iconDirtyDot" Width="8px" /> Unsaved
+            </span>
+        }
+        @if (State.LinkedSaveConflict is not null)
+        {
+            <div class="api-client-conflict-banner">
+                <span>@State.LinkedSaveConflict.Message</span>
+                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn"
+                           OnClick="OnReloadLinkedConflict">Reload from disk</AppButton>
+                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn"
+                           OnClick="OnKeepMineLinkedConflict">Keep mine</AppButton>
+                <AppButton Variant="Primary" Size="Small" CssClass="api-client-secret-warning__btn"
+                           OnClick="OnSaveLinkedConflictAsCopy">Save as copy</AppButton>
+            </div>
+        }
+        @if (State.LinkedSaveError is not null)
+        {
+            <span class="api-client-toolbar__warning-badge" title="@State.LinkedSaveError">
+                @State.LinkedSaveError
+            </span>
+        }
+        @if (State.WorkflowMessage is not null)
+        {
+            <span
+                class="api-client-toolbar__warning-badge @(State.WorkflowMessageIsError ? "" : "api-client-toolbar__warning-badge--ok")"
+                title="@State.WorkflowMessage">
+                @State.WorkflowMessage
+            </span>
+        }
+    </div>
+
+    <div class="api-client-toolbar__right" role="group" aria-label="Request actions">
+        @if (State.SelectedRequest is not null)
+        {
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Title="Copy request as cURL"
+                       OnClick="OnCopyCurl">Copy cURL</AppButton>
+        }
+        <AppDropdown IsOpen="@_showVariableMenu" OnClose="@(() => _showVariableMenu = false)"
+                     CssClass="api-client-toolbar-menu" MenuCssClass="api-client-toolbar-menu__dropdown" Label="Variables">
+            <TriggerContent>
+                <AppButton Variant="Secondary" Size="Small"
+                           CssClass="@(IsVariableMenuActive ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
+                           Title="Manage collection variables or inspect request variables"
+                           OnClick="@(() => _showVariableMenu = !_showVariableMenu)">
+                    <span>Variables</span>
+                    <FluentIcon Value="@_iconChevronDown" Width="10px" Class="api-client-toolbar-menu__chevron" />
+                </AppButton>
+            </TriggerContent>
+            <ChildContent>
+                <button type="button" class="ctx-item" disabled="@(State.ActiveCollection is null)"
+                        @onclick="HandleOpenCollectionVariablesAsync">Collection variables</button>
+                <button type="button" class="ctx-item" disabled="@(State.SelectedRequest is null)"
+                        @onclick="HandleOpenRequestVariablesAsync">Request variables</button>
+            </ChildContent>
+        </AppDropdown>
+        <AppButton Variant="Secondary" Size="Small"
+                   CssClass="@(EnvsWorksheetActive ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
+                   Title="Manage environments" OnClick="OnToggleEnvsWorksheet">
+            <FluentIcon Value="@_iconGlobe" Width="14px" />
+            Envs
+        </AppButton>
+        <span class="api-client-toolbar__env-label">Env:</span>
+        <AppDropdown IsOpen="@_showEnvPicker" OnClose="@(() => _showEnvPicker = false)" CssClass="api-client-env-picker"
+                     MenuCssClass="api-client-env-picker__dropdown" Label="Environment picker">
+            <TriggerContent>
+                <button type="button" class="api-client-env-picker__btn"
+                        @onclick="() => _showEnvPicker = !_showEnvPicker">
+                    <span>@(ActiveEnvironment?.Name ?? "— None —")</span>
+                    <FluentIcon Value="@_iconChevronDown" Width="10px" Class="api-client-env-picker__chevron" />
+                </button>
+            </TriggerContent>
+            <ChildContent>
+                <button type="button" class="ctx-item @(State.ActiveEnvironmentId is null ? "ctx-item--active" : "")"
+                        @onclick="() => HandleSelectEnvironmentAsync(null)">— None —</button>
+                @foreach (var env in State.Environments)
+                {
+                    <button type="button" class="ctx-item @(env.Id == State.ActiveEnvironmentId ? "ctx-item--active" : "")"
+                            @onclick="() => HandleSelectEnvironmentAsync(env.Id)">@env.Name</button>
+                }
+            </ChildContent>
+        </AppDropdown>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ApiClientState State { get; set; } = default!;
+
+    [Parameter]
+    public bool CanCreateRequest { get; set; }
+
+    [Parameter]
+    public bool IsRepoMenuActive { get; set; }
+
+    [Parameter]
+    public bool IsVariableMenuActive { get; set; }
+
+    [Parameter]
+    public bool CurrentTargetLinkedRootPresent { get; set; }
+
+    [Parameter]
+    public string CurrentTargetLabel { get; set; } = string.Empty;
+
+    [Parameter]
+    public string CurrentTargetHint { get; set; } = string.Empty;
+
+    [Parameter]
+    public bool EnvsWorksheetActive { get; set; }
+
+    [Parameter]
+    public ApiEnvironment? ActiveEnvironment { get; set; }
+
+    [Parameter]
+    public EventCallback OnNewCollection { get; set; }
+
+    [Parameter]
+    public EventCallback OnAddRequest { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaveRequest { get; set; }
+
+    [Parameter]
+    public EventCallback OnAddGitRepo { get; set; }
+
+    [Parameter]
+    public EventCallback OnGitForSelectedRepo { get; set; }
+
+    [Parameter]
+    public EventCallback OnManageGitRepos { get; set; }
+
+    [Parameter]
+    public EventCallback OnImportCurl { get; set; }
+
+    [Parameter]
+    public EventCallback OnImportCollection { get; set; }
+
+    [Parameter]
+    public EventCallback OnExportCollection { get; set; }
+
+    [Parameter]
+    public EventCallback OnReloadLinkedConflict { get; set; }
+
+    [Parameter]
+    public EventCallback OnKeepMineLinkedConflict { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaveLinkedConflictAsCopy { get; set; }
+
+    [Parameter]
+    public EventCallback OnCopyCurl { get; set; }
+
+    [Parameter]
+    public EventCallback OnOpenCollectionVariables { get; set; }
+
+    [Parameter]
+    public EventCallback OnOpenRequestVariables { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggleEnvsWorksheet { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> OnSelectEnvironment { get; set; }
+
+    // Dropdown-open state — local to the toolbar; the toolbar is never conditionally rendered
+    // on the page, so there's no BL-4 destroy/recreate risk in keeping these as local fields.
+    private bool _showRepoMenu;
+    private bool _showTransferMenu;
+    private bool _showVariableMenu;
+    private bool _showEnvPicker;
+
+    private static readonly Icon _iconChevronDown = new Icons.Regular.Size16.ChevronDown();
+    private static readonly Icon _iconGlobe = new Icons.Regular.Size16.Globe();
+    private static readonly Icon _iconDirtyDot = new Icons.Filled.Size12.Circle();
+
+    // Menu-item handlers: close the local dropdown (mirrors the pre-extraction behaviour where
+    // selecting a menu item also closed it) then delegate the actual action to the page.
+    private async Task HandleAddGitRepoAsync()
+    {
+        _showRepoMenu = false;
+        await OnAddGitRepo.InvokeAsync();
+    }
+
+    private async Task HandleGitForSelectedRepoAsync()
+    {
+        _showRepoMenu = false;
+        await OnGitForSelectedRepo.InvokeAsync();
+    }
+
+    private async Task HandleManageGitReposAsync()
+    {
+        _showRepoMenu = false;
+        await OnManageGitRepos.InvokeAsync();
+    }
+
+    private async Task HandleImportCurlAsync()
+    {
+        _showTransferMenu = false;
+        await OnImportCurl.InvokeAsync();
+    }
+
+    private async Task HandleImportCollectionAsync()
+    {
+        _showTransferMenu = false;
+        await OnImportCollection.InvokeAsync();
+    }
+
+    private async Task HandleExportCollectionAsync()
+    {
+        _showTransferMenu = false;
+        await OnExportCollection.InvokeAsync();
+    }
+
+    private async Task HandleOpenCollectionVariablesAsync()
+    {
+        _showVariableMenu = false;
+        await OnOpenCollectionVariables.InvokeAsync();
+    }
+
+    private async Task HandleOpenRequestVariablesAsync()
+    {
+        _showVariableMenu = false;
+        await OnOpenRequestVariables.InvokeAsync();
+    }
+
+    private async Task HandleSelectEnvironmentAsync(string? envId)
+    {
+        _showEnvPicker = false;
+        await OnSelectEnvironment.InvokeAsync(envId);
+    }
+}

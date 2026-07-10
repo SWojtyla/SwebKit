@@ -1,0 +1,12 @@
+@* Visible notice for screens currently excluded from the company-readiness polish pass. *@
+<div class="rework-banner" role="status" aria-live="polite" data-testid="rework-banner">
+    <span class="rework-banner__icon" aria-hidden="true">🚧</span>
+    <span class="rework-banner__text">
+        <strong>@FeatureName is under rework.</strong>
+        Some areas of this screen may be incomplete, unstable, or subject to change.
+    </span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string FeatureName { get; set; } = string.Empty;
+}

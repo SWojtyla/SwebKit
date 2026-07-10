@@ -30,7 +30,7 @@
                 <span class="unified-body-editor__status-sep">│</span>
                 <span
                     class="unified-body-editor__status-valid @(_isValidJson ? "unified-body-editor__status-valid--ok" : "unified-body-editor__status-valid--err")">
-                    @(_isValidJson ? "✓ Valid JSON" : "⚠ Invalid JSON")
+                    <FluentIcon Value="@(_isValidJson ? _iconCheckmark : _iconWarning)" Width="12px" /> @(_isValidJson ? "Valid JSON" : "Invalid JSON")
                 </span>
             }
         </div>
@@ -38,6 +38,10 @@
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconCheckmark = new Icons.Regular.Size16.Checkmark();
+    private static readonly Icon _iconWarning = new Icons.Regular.Size16.Warning();
+
     [Parameter] public string Value { get; set; } = string.Empty;
     [Parameter] public RequestBodyMode BodyMode { get; set; } = RequestBodyMode.Json;
     [Parameter] public EventCallback<string> ValueChanged { get; set; }

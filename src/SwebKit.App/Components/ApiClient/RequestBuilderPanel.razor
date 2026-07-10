@@ -21,7 +21,9 @@
         }
         @if (IsDirty)
         {
-            <span class="req-builder__dirty-dot" title="Unsaved changes">●</span>
+            <span class="req-builder__dirty-dot" title="Unsaved changes">
+                <FluentIcon Value="@_iconDirtyDot" Width="8px" />
+            </span>
         }
     </div>
 
@@ -133,7 +135,7 @@
             @if (!UserSettings.Settings.VerifyApiClientSsl)
             {
                 <span class="req-builder__ssl-badge" title="SSL verification is disabled — do not use in production">
-                    ⚠ SSL off
+                    <FluentIcon Value="@_iconShieldError" Width="12px" /> SSL off
                 </span>
             }
         </div>
@@ -215,11 +217,9 @@
                         {
                             <div class="req-builder__format-error" role="alert">@_bodyFormatError</div>
                         }
-                        <UnifiedBodyEditor Value="@Request.Body.RawContent"
-                                          BodyMode="@Request.Body.Mode"
-                                          Placeholder="@BodyPlaceholder(Request.Body.Mode)"
-                                          Height="400"
-                                          ValueChanged="OnBodyContentChangedAsync" />
+                        <UnifiedBodyEditor Value="@Request.Body.RawContent" BodyMode="@Request.Body.Mode"
+                                           Placeholder="@BodyPlaceholder(Request.Body.Mode)" Height="400"
+                                           ValueChanged="OnBodyContentChangedAsync" />
                     </div>
                 }
                 else if (Request.Body.Mode == RequestBodyMode.FormData)
@@ -256,6 +256,10 @@
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconDirtyDot = new Icons.Filled.Size12.Circle();
+    private static readonly Icon _iconShieldError = new Icons.Regular.Size16.ShieldError();
+
     [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = default!;
     [Parameter, EditorRequired] public ApiCollection Collection { get; set; } = default!;
     [Parameter] public ApiEnvironment? ActiveEnvironment { get; set; }

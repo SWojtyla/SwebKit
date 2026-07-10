@@ -81,7 +81,7 @@
                     class="ws-panel__log-entry ws-panel__log-entry--@(msg.Direction == WebSocketMessageDirection.Sent ? "sent" : "received")">
                     <div class="ws-panel__log-entry-header">
                         <span class="ws-panel__log-dir">@(msg.Direction == WebSocketMessageDirection.Sent ? "↑" :
-                                                                   "↓")</span>
+                                                                                               "↓")</span>
                             <span class="ws-panel__log-time">@msg.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</span>
                             @if (msg.FrameType == WebSocketFrameType.Binary)
                             {
@@ -99,8 +99,12 @@
         @if (_error is not null)
         {
             <div class="ws-panel__error-banner" role="alert">
-                <span>⚠ @_error</span>
-                <button type="button" class="ws-panel__error-dismiss" @onclick="() => _error = null">✕</button>
+                <span>
+                    <FluentIcon Value="@_iconWarning" Width="12px" /> @_error
+                </span>
+                <button type="button" class="ws-panel__error-dismiss" @onclick="() => _error = null">
+                    <FluentIcon Value="@_iconDismiss" Width="12px" />
+                </button>
             </div>
         }
 
@@ -126,7 +130,8 @@
                         <TriggerContent>
                             <button type="button" class="ws-panel__saved-btn"
                                     @onclick="() => _showSavedDropdown = !_showSavedDropdown">
-                                Saved Messages ▾
+                                Saved Messages
+                                <FluentIcon Value="@_iconChevronDown" Width="10px" />
                             </button>
                         </TriggerContent>
                         <ChildContent>
@@ -183,6 +188,11 @@
     </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconWarning = new Icons.Regular.Size16.Warning();
+    private static readonly Icon _iconDismiss = new Icons.Regular.Size16.Dismiss();
+    private static readonly Icon _iconChevronDown = new Icons.Regular.Size16.ChevronDown();
+
     [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = default!;
     [Parameter] public EventCallback OnChanged { get; set; }
 
