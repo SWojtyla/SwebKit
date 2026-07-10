@@ -108,7 +108,7 @@
                 <div class="mplog-legend">
                     @foreach (var kv in PodLegend)
                     {
-                        <button type="button" class="mplog-legend-item @(IsPodFocused(kv.Key) ? "focused" : string.Empty)"
+                        <button @key="kv.Key" type="button" class="mplog-legend-item @(IsPodFocused(kv.Key) ? "focused" : string.Empty)"
                                 @onclick="() => ToggleFocusedPod(kv.Key)" title="Focus or clear focus for pod @kv.Key in the merged view">
                             <span class="mplog-dot mplog-pod-@kv.Value"></span>
                             <span class="mplog-legend-name">@TruncatePodSuffix(kv.Key)</span>

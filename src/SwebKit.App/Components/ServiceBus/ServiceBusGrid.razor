@@ -15,7 +15,7 @@
                         @onchange="e => SelectNamespace(Guid.Parse(e.Value?.ToString() ?? string.Empty))">
                     @foreach (var ns in NamespaceStates)
                     {
-                        <option value="@ns.Namespace.Id">@ns.Namespace.Alias</option>
+                        <option @key="ns.Namespace.Id" value="@ns.Namespace.Id">@ns.Namespace.Alias</option>
                     }
                 </select>
             }

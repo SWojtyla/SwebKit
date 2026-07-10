@@ -16,7 +16,7 @@
                     @onchange="OnContainerChanged">
                 @foreach (var c in Containers)
                 {
-                    <option value="@c" selected="@(c == _selectedContainer)">@c</option>
+                    <option @key="c" value="@c" selected="@(c == _selectedContainer)">@c</option>
                 }
             </select>
         }

@@ -5,7 +5,7 @@
                   Style="min-width:160px">
         @foreach (var (label, _) in TimeRange.Presets)
         {
-            <FluentOption Value="@label">@label</FluentOption>
+            <FluentOption @key="label" Value="@label">@label</FluentOption>
         }
         <FluentOption Value="custom">Custom range…</FluentOption>
     </FluentSelect>
