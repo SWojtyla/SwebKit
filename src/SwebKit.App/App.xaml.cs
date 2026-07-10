@@ -66,6 +66,6 @@ public partial class App : Application
 
         var sessions = IPlatformApplication.Current?.Services.GetService<IPortForwardSessionService>();
         if (sessions is not null)
-            Task.Run(() => sessions.StopAllAsync()).GetAwaiter().GetResult();
+            _ = sessions.StopAllAsync(); // Fire-and-forget — do not block ProcessExit
     }
 }
