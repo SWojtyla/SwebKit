@@ -153,7 +153,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
 
         _cts = new CancellationTokenSource();
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(120));
-        _loopTask = Task.Run(() => PollingLoopAsync(_cts.Token));
+        _loopTask = PollingLoopAsync(_cts.Token);
     }
 
     public async Task StopAsync()
@@ -233,7 +233,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
             await _appState.SaveConfigAsync();
 
         if (_isMonitoring)
-            await TakeBaselineAsync(ns);
+            await TakeBaselineAsync(ns, CancellationToken.None);
     }
 
     public async Task RemoveNamespaceAsync(string ns)
@@ -447,7 +447,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         }
     }
 
-    private async Task TakeBaselineAsync(string ns)
+    private async Task TakeBaselineAsync(string ns, CancellationToken ct = default)
     {
         IAksClient? client;
         await _lock.WaitAsync();
@@ -466,7 +466,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         IReadOnlyList<PodInfo> pods;
         try
         {
-            pods = await client.GetPodsAsync(ns, null, CancellationToken.None);
+            pods = await client.GetPodsAsync(ns, null, ct);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

@@ -85,7 +85,7 @@ public sealed class AlertMonitorService : IAlertMonitorService
         _isMonitoring = true;
         _cts = new CancellationTokenSource();
         _timer = new PeriodicTimer(TickInterval);
-        _loopTask = Task.Run(() => PollingLoopAsync(_cts.Token));
+        _loopTask = PollingLoopAsync(_cts.Token);
     }
 
     public async Task StopAsync()
