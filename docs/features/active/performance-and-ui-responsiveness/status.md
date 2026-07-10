@@ -61,12 +61,12 @@ fixes land first.
 
 ### Phase 3 — Render correctness & micro-optimizations
 
-- [ ] Add `@key` to reorderable `@foreach` loops (Service Bus columns, Observability presets, log lines)
-- [ ] Cache per-render allocations/sorts (`RequestBuilderPanel`, `NotificationHistory`, `ServiceBusGrid`, `ObservabilityPerformance`)
+- [x] Add `@key` to reorderable `@foreach` loops — ServiceBus, Observability, log lines
+- [ ] Cache per-render allocations/sorts — RequestBuilderPanel, NotificationHistory, ServiceBusGrid, ObservabilityPerformance
 - [ ] `CollectionTree` — implement `ShouldRender()` guard
-- [ ] Dashboard — virtualize/lazy-render tiles; scope auto-refresh to changed tiles
-- [ ] `ApiClientPage` — `System.Timers.Timer` → `PeriodicTimer` for auto-save
-- [ ] `AksYamlViewer` — route onclick `StateHasChanged()` through `InvokeAsync`
+- [ ] Dashboard — virtualize/lazy-render tiles
+- [x] `ApiClientPage` — `System.Timers.Timer` → `PeriodicTimer`
+- [x] `AksYamlViewer` — route onclick `StateHasChanged()` through `InvokeAsync`
 - [ ] Build clean + tests + smoke
 
 ### Phase 4 — Structural cleanliness (deferrable)
