@@ -89,10 +89,7 @@ window.SwebKitSplitter = {
     return {
       dispose: function () {
         splitterEl.removeEventListener('mousedown', onMouseDown);
-        paneEl.classList.remove('is-resizing'
-    return {
-      dispose: function () {
-        splitterEl.removeEventListener('mousedown', onMouseDown);
+        paneEl.classList.remove('is-resizing');
       },
       getWidth: function () {
         return getWidth();
