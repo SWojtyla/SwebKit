@@ -44,19 +44,19 @@ fixes land first.
 
 ### Phase 1 — Async / UI-thread stalls
 
-- [ ] `PodHealthMonitorService.RecentEvents` — remove `_lock.Wait()`; lock-free snapshot read
-- [ ] `App.xaml.cs` shutdown — remove `.GetAwaiter().GetResult()`; bounded fire-and-forget
-- [ ] Remove pointless `Task.Run` in `AlertMonitorService`, `PodHealthMonitorService`, `FileLoggerProvider`
-- [ ] `PodHealthMonitorService.TakeBaselineAsync` — honor `ct` instead of `CancellationToken.None`
+- [x] `PodHealthMonitorService.RecentEvents` — remove `_lock.Wait()`; lock-free snapshot read
+- [x] `App.xaml.cs` shutdown — remove `.GetAwaiter().GetResult()`; bounded fire-and-forget
+- [x] Remove pointless `Task.Run` in `AlertMonitorService`, `PodHealthMonitorService`, `FileLoggerProvider`
+- [x] `PodHealthMonitorService.TakeBaselineAsync` — honor `ct` instead of `CancellationToken.None`
 - [ ] Build clean + focused service tests + Aikido scan
 
 ### Phase 2 — Blazor render hot paths
 
-- [ ] `AksPage` / `AksDetailPanels` — decouple internal panel state from parent re-render
-- [ ] `AksPage` `Filtered*` — cache filtered collections; invalidate on filter/data change
-- [ ] `MultiPodLogView` / `PodLogView` — render only when log lines are dirty
-- [ ] `AgentChatPanel` — `<Virtualize>` the message list
-- [ ] `AksDetailPanels` events — `<Virtualize>` the events list
+- [x] `AksPage` / `AksDetailPanels` — decouple internal panel state from parent re-render
+- [x] `AksPage` `Filtered*` — cache filtered collections; invalidate on filter/data change
+- [x] `MultiPodLogView` / `PodLogView` — render only when log lines are dirty
+- [x] `AgentChatPanel` — `<Virtualize>` the message list
+- [x] `AksDetailPanels` events — `<Virtualize>` the events list
 - [ ] Build clean + component tests + manual smoke (AKS open-panel, log tail, chat)
 
 ### Phase 3 — Render correctness & micro-optimizations
