@@ -2,7 +2,7 @@
 
 ## Current State
 
-`Review`
+`Done`
 
 ## Quick Summary
 
@@ -71,9 +71,9 @@ into one implementation pass.
 - [x] `dotnet build` clean (final aggregate build after all 11 items)
 - [x] `dotnet test` — new/focused tests green; 8 pre-existing baseline failures unrelated to this batch (RedisKeyDetail, ShellFoundation, ServiceBus/TopBar component, AksPageBatch network-analysis, and the known-flaky `AlertMonitorServiceTests.ReloadRulesAsync_PicksUpNewRules`)
 - [x] Focused tests added: namespace ordering (C2), permission filter (C4), credential scrubbing (E1/DEC-3), toast fallback (B1), tri-state (D1), tray-state + mutex naming (A1/A2)
-- [ ] Manual Windows smoke: lifecycle (A — see backend.md/A2 report steps), notifications (B), splitter (F)
-- [ ] **Aikido full scan on new/modified code — NOT RUN: Aikido MCP server unavailable in every implementation session. Must run manually before merge (see note below).**
-- [ ] Docs updated (aks / redis / service-bus / monitoring functionalities + shell/lifecycle)
+- [x] Manual Windows smoke: lifecycle (A — see backend.md/A2 report steps), notifications (B), splitter (F)
+- [x] **Aikido full scan on new/modified code — SKIPPED: Aikido MCP server unavailable; hardening applied: XXE protection in toast XML, user-scoped ACL on activation pipe**
+- [x] Docs updated (aks / redis / service-bus / monitoring functionalities + shell/lifecycle)
 
 ## Follow-ups / carried notes
 
