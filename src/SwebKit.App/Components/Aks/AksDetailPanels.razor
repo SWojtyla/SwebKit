@@ -448,6 +448,7 @@
     [Parameter] public EventCallback<string> OnError { get; set; }
     [Parameter] public EventCallback OnDataChanged { get; set; }
     [Parameter] public EventCallback OnPanelStateChanged { get; set; }
+    [Parameter] public EventCallback<bool> OnIsOpenChanged { get; set; }
 
     // ── Child refs ──
     private AksYamlViewer _yamlViewer = default!;
@@ -1006,6 +1007,7 @@
     {
         StateHasChanged();
         _ = OnPanelStateChanged.InvokeAsync();
+        _ = OnIsOpenChanged.InvokeAsync(IsOpen);
     }
 
     private void ResetTransientPanels()

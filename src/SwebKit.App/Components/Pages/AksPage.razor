@@ -282,7 +282,7 @@
                              IsProduction="@IsProduction" Confirm="Confirm" Notifications="Notifications" Events="@Events"
                              Deployments="@Deployments" Pods="@Pods" StatefulSets="@StatefulSets" ShowEvents="@ShowEvents"
                              OnShowEventsChanged="HandleToggleEventsOff" OnError="@(msg => ErrorMessage = msg)" OnDataChanged="LoadAsync"
-                             OnPanelStateChanged="StateHasChanged" OnJumpToResource="HandleJumpToResource" />
+                             OnIsOpenChanged="HandlePanelOpenChanged" OnJumpToResource="HandleJumpToResource" />
 
         </div>
     }
@@ -529,6 +529,7 @@
 
     // Detail panels component (hosts YAML viewer, Helm panel, logs, scale, etc.)
     private AksDetailPanels _detailPanels = default!;
+    private bool _isPanelOpen;
 
     // Filter state (per-tab)
     private string DeploymentFilter = string.Empty;
@@ -773,7 +774,9 @@ false)
         ? $"aks:{ActiveContext}:{CurrentNamespaceScope.CacheKeyPart}"
         : null;
 
-    private bool HasOpenPanel => _detailPanels?.IsOpen == true;
+    private bool HasOpenPanel => _isPanelOpen;
+
+    private void HandlePanelOpenChanged(bool isOpen) => _isPanelOpen = isOpen;
 
     private bool HasAnyPanel => HasOpenPanel || ShowEvents || ShowPortForwardSessions;
 
