@@ -1,7 +1,16 @@
 @* Displays a centred empty/placeholder state with an icon, title, and optional subtitle. *@
 
 <div class="empty-state">
-    <div class="empty-state-icon">@Icon</div>
+    <div class="empty-state-icon">
+        @if (IconContent is not null)
+        {
+            @IconContent
+        }
+        else
+        {
+            @Icon
+        }
+    </div>
     <div class="empty-state-title">@Title</div>
     @if (!string.IsNullOrEmpty(Subtitle))
     {
@@ -14,7 +23,10 @@
 </div>
 
 @code {
-    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    /// <summary>Emoji/text icon. Ignored when <see cref="IconContent"/> is supplied.</summary>
+    [Parameter] public string Icon { get; set; } = "";
+    /// <summary>Optional FluentIcon (or other markup) render fragment; takes precedence over <see cref="Icon"/>.</summary>
+    [Parameter] public RenderFragment? IconContent { get; set; }
     [Parameter, EditorRequired] public string Title { get; set; } = "";
     [Parameter] public string? Subtitle { get; set; }
     [Parameter] public RenderFragment? Actions { get; set; }

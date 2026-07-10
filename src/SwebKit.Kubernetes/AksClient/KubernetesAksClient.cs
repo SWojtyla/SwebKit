@@ -88,7 +88,18 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private void RebuildClient()
     {
-        lock (_rebuildLock)
+        // Use a non-blocking TryEnter instead of `lock` so a storm of concurrent 403s (e.g. one
+        // resource type denied across several fanned-out namespaces at once) cannot pile up
+        // multiple threads waiting on this lock while the first one runs the potentially slow,
+        // synchronous credential rebuild (which can shell out to an exec-credential/kubelogin
+        // plugin). Callers that lose the race just skip rebuilding and retry with whatever client
+        // is already current — the 30s throttle below means at most one real rebuild per window
+        // regardless, so skipping here costs nothing but avoids thread-pool blocking that could
+        // otherwise stall the UI.
+        if (!_rebuildLock.TryEnter())
+            return;
+
+        try
         {
             if ((DateTime.UtcNow - _lastRebuild).TotalSeconds < 30)
                 return;
@@ -97,6 +108,10 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
             TryApplyAzureCredentialFallback(config, _kubeconfigPath);
             _client = new k8s.Kubernetes(config);
             _lastRebuild = DateTime.UtcNow;
+        }
+        finally
+        {
+            _rebuildLock.Exit();
         }
     }
 
@@ -109,7 +124,14 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.Forbidden)
         {
             RebuildClient();
-            return await action();
+            try
+            {
+                return await action();
+            }
+            catch (k8s.Autorest.HttpOperationException ex2) when (ex2.Response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                throw ToAccessDeniedException(ex2);
+            }
         }
     }
 
@@ -122,8 +144,41 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.Forbidden)
         {
             RebuildClient();
-            await action();
+            try
+            {
+                await action();
+            }
+            catch (k8s.Autorest.HttpOperationException ex2) when (ex2.Response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                throw ToAccessDeniedException(ex2);
+            }
         }
+    }
+
+    /// <summary>
+    /// Converts a Kubernetes API 403 into a client-library-agnostic <see cref="AksAccessDeniedException"/>,
+    /// extracting the human-readable RBAC denial message (e.g. "ingresses.networking.k8s.io is
+    /// forbidden: User ... cannot list resource ... in the namespace ...") from the response body
+    /// when available, so callers don't need to know about <c>k8s.Autorest.HttpOperationException</c>.
+    /// </summary>
+    private static AksAccessDeniedException ToAccessDeniedException(k8s.Autorest.HttpOperationException ex)
+    {
+        string message = ex.Message;
+        try
+        {
+            using var doc = JsonDocument.Parse(ex.Response.Content);
+            if (doc.RootElement.TryGetProperty("message", out var messageProperty) &&
+                messageProperty.GetString() is { Length: > 0 } parsedMessage)
+            {
+                message = parsedMessage;
+            }
+        }
+        catch (JsonException)
+        {
+            // Response body wasn't the expected Kubernetes Status JSON — fall back to ex.Message.
+        }
+
+        return new AksAccessDeniedException(message, ex);
     }
 
     internal static KubernetesClientConfiguration BuildClientConfiguration(string? kubeconfigContext, string? kubeconfigPath)

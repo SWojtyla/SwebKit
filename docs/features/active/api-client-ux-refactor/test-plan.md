@@ -26,15 +26,15 @@ Build/test commands per `AGENTS.md`: `dotnet build` then `dotnet test` (focused 
 
 ## Phase 2 — Refactor (behaviour-preserving)
 
-| #   | Scenario                              | Expected                                                                 |
-| --- | ------------------------------------- | ------------------------------------------------------------------------ |
-| 1   | Existing API Client test suite        | All pre-refactor tests still pass unchanged                              |
-| 2   | Select request in tree                | Request loads into builder; response panel resets — same as before       |
-| 3   | Dirty + switch request (autosave off) | Save/discard prompt still fires                                          |
-| 4   | Splitter init on collection switch    | No stale/zero-width splitter (the previously fixed bug does not regress) |
-| 5   | Linked-save conflict                  | Reload / Keep mine / Save as copy banner still works                     |
-| 6   | Env picker + worksheet toggles        | State survives child re-render (no BL-4 reset)                           |
-| 7   | Navigate away and back                | Streams cancelled on dispose (BL-7); no stale updates                    |
+| #   | Scenario                              | Expected                                                                                                                                                                                                          |
+| --- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Existing API Client test suite        | All pre-refactor tests still pass unchanged                                                                                                                                                                       |
+| 2   | Select request in tree                | Request loads into builder; response panel resets — same as before                                                                                                                                                |
+| 3   | Dirty + switch request (autosave off) | Dirty badge persists per-request (`_dirtyByRequestId`); edits are not lost (in-place mutation on the shared `HttpRequestEntry`). No blocking save/discard prompt exists today — none is introduced by this phase. |
+| 4   | Splitter init on collection switch    | No stale/zero-width splitter (the previously fixed bug does not regress)                                                                                                                                          |
+| 5   | Linked-save conflict                  | Reload / Keep mine / Save as copy banner still works                                                                                                                                                              |
+| 6   | Env picker + worksheet toggles        | State survives child re-render (no BL-4 reset)                                                                                                                                                                    |
+| 7   | Navigate away and back                | Streams cancelled on dispose (BL-7); no stale updates                                                                                                                                                             |
 
 ---
 

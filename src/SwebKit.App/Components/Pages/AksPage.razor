@@ -40,6 +40,13 @@
         <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
     }
 
+    @* ── Limited permissions (partial RBAC denial — other data still loaded) ── *@
+    @if (PermissionWarning is not null)
+    {
+        <ErrorCallout Title="Limited permissions" Message="@PermissionWarning"
+                      OnDismiss="@(() => PermissionWarning = null)" />
+    }
+
     @* ── Confirm bar ── *@
     <AksConfirmBar @ref="Confirm" />
 
@@ -373,18 +380,20 @@
                                                                                                                                             class="ctx-item-icon">📋</span> Copy name</button>
                                                                                                                                             <button class="ctx-item" @onclick="OnCtxViewYamlHttpRoute"><span class="ctx-item-icon">{ }</span> View
                                                                                                                                                 YAML</button>
-                                                                                                                                                <div class="ctx-separator"></div>
-                                                                                                                                                <button class="ctx-item destructive" @onclick="OnCtxDeleteHttpRoute"><span class="ctx-item-icon">&#10005;</span>
-                                                                                                                                                    Delete
-                                                                                                                                                    HTTPRoute</button>
-                                                                                                                                                </ContextMenu>
+                <button class="ctx-item" @onclick="OnCtxEditYamlHttpRoute"><span class="ctx-item-icon">✎</span> Edit
+                    YAML</button>
+                    <div class="ctx-separator"></div>
+                    <button class="ctx-item destructive" @onclick="OnCtxDeleteHttpRoute"><span class="ctx-item-icon">&#10005;</span>
+                        Delete
+                        HTTPRoute</button>
+                    </ContextMenu>
 
-                                                                                                                                                <ContextMenu @ref="HelmMenu">
-                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxHelm?.Name)"><span
-                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('H')"><span class="ctx-item-icon">{ }</span> View Release
-                                                                                                                                                            YAML</button>
-                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxViewHelmValues"><span class="ctx-item-icon">&#9998;</span> View
+                    <ContextMenu @ref="HelmMenu">
+                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxHelm?.Name)"><span
+                            class="ctx-item-icon">📋</span> Copy name</button>
+                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('H')"><span class="ctx-item-icon">{ }</span> View Release
+                                YAML</button>
+                                <button class="ctx-item" @onclick="OnCtxViewHelmValues"><span class="ctx-item-icon">&#9998;</span> View
                                                                                                                                                                 Values</button>
                                                                                                                                                                 <button class="ctx-item" @onclick="OnCtxViewHelmHistory"><span class="ctx-item-icon">&#128337;</span> View
                                                                                                                                                                     History</button>
@@ -515,6 +524,7 @@
     private CronJobInfo? SelectedCronJob;
     private bool IsLoading;
     private string? ErrorMessage;
+    private string? PermissionWarning;
     private CancellationTokenSource _cts = new();
 
     // Detail panels component (hosts YAML viewer, Helm panel, logs, scale, etc.)
@@ -1139,6 +1149,14 @@ OnCtxRestartDeployment();
             // PERF2-8: Batch StateHasChanged via dirty flag + debounced flush loop
             bool datasetDirty = false;
 
+            // Multi-namespace fan-out (IAksClient.FanOutNamespacesAsync) already isolates
+            // per-namespace RBAC denials so one forbidden namespace doesn't discard data from
+            // namespaces the operator does have access to; it records each denial here. This
+            // scope also catches AksAccessDeniedException raised directly by LoadDataset below,
+            // which only happens for calls that bypass fan-out (cluster-scoped GatewayClasses, or
+            // any call in single-namespace mode).
+            using var accessScope = new AksAccessDeniedScope();
+
             async Task LoadDataset<T>(Func<Task<IReadOnlyList<T>>> fetch, Action<List<T>> assign)
             {
                 ct.ThrowIfCancellationRequested();
@@ -1150,6 +1168,11 @@ OnCtxRestartDeployment();
                     datasetDirty = true;
                 }
                 catch (OperationCanceledException) { throw; } // CS-2
+                catch (AksAccessDeniedException)
+                {
+                    var kind = typeof(T).Name.EndsWith("Info", StringComparison.Ordinal) ? typeof(T).Name[..^4] : typeof(T).Name;
+                    AksAccessDeniedScope.Record(kind, CurrentNamespaceScope.IsMulti ? "(cluster)" : CurrentNamespace);
+                }
                 catch (Exception ex)
                 {
                     Logger.LogWarning(ex, "Dataset load failed for namespace {Namespace}", CurrentNamespace);
@@ -1264,6 +1287,8 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
                 datasetDirty = false;
                 await InvokeAsync(StateHasChanged);
             }
+
+            PermissionWarning = BuildPermissionWarning(accessScope.Denials);
         }
         catch (OperationCanceledException) { return; } // CS-2: cancelled — new load takes over
         catch (Exception ex) { ErrorMessage = ex.Message; }
@@ -1283,6 +1308,17 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
                 CheckAllPodsGreen();
             }
         }
+    }
+
+    private static string? BuildPermissionWarning(IReadOnlyList<(string ResourceKind, string Namespace)> denials)
+    {
+        if (denials.Count == 0) return null;
+
+        var byKind = denials
+            .GroupBy(d => d.ResourceKind, StringComparer.OrdinalIgnoreCase)
+            .Select(g => $"{g.Key}: {string.Join(", ", g.Select(d => d.Namespace))}");
+
+        return "No permission to list some resources — showing everything else. " + string.Join(" · ", byKind);
     }
 
     private static bool CanReuseWarmBootstrapResult(
@@ -2386,6 +2422,14 @@ SelectedIngress.Namespace); break;
         CloseAllMenus();
         if (httpRoute is null) return;
         await _detailPanels.OpenYamlAsync("HTTPRoute", httpRoute.Name, targetNamespace: httpRoute.Namespace);
+    }
+
+    private async Task OnCtxEditYamlHttpRoute()
+    {
+        var httpRoute = CtxHttpRoute;
+        CloseAllMenus();
+        if (httpRoute is null) return;
+        await _detailPanels.OpenYamlAsync("HTTPRoute", httpRoute.Name, editMode: true, targetNamespace: httpRoute.Namespace);
     }
 
     private async Task OnCtxViewYamlCronJob()

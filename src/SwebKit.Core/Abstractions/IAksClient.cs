@@ -135,6 +135,11 @@ public interface IAksClient
             return [];
         }
 
+        // Friendly-ish resource kind for the "limited permissions" banner, e.g. "IngressInfo" -> "Ingress".
+        var resourceKind = typeof(T).Name.EndsWith("Info", StringComparison.Ordinal)
+            ? typeof(T).Name[..^4]
+            : typeof(T).Name;
+
         using var throttle = new SemaphoreSlim(Math.Min(maxNamespaceFanOut, namespaces.Count));
         var tasks = namespaces.Select(async ns =>
         {
@@ -142,6 +147,14 @@ public interface IAksClient
             try
             {
                 return await fetch(ns, ct);
+            }
+            catch (AksAccessDeniedException)
+            {
+                // A single namespace lacking RBAC permission must not discard data the caller
+                // *does* have access to in sibling namespaces — record it for the caller's
+                // "limited permissions" banner and continue with an empty result for this one.
+                AksAccessDeniedScope.Record(resourceKind, ns);
+                return (IReadOnlyList<T>)[];
             }
             finally
             {

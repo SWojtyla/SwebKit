@@ -23,20 +23,21 @@
                    @onchange="e => OnVarChanged(v, isEnabled: (bool)(e.Value ?? true))" />
             <input type="text" class="collection-var-editor__key" placeholder="key" value="@v.Key"
                    @oninput="e => OnVarChanged(v, key: e.Value?.ToString() ?? string.Empty)" />
-                 <button type="button" class="collection-var-editor__type-btn" @onclick="() => ToggleGenerated(v)">
-                  @(v.Generator is null ? "Plain" : "Generated")
-                 </button>
-                 @if (v.Generator is null)
-                 {
-                  <input type="text" class="collection-var-editor__value" placeholder="value" value="@v.Value"
-                      @oninput="e => OnVarChanged(v, value: e.Value?.ToString())" />
-                 }
-                 else
-                 {
-                  <VariableGeneratorEditor Definition="@v.Generator" />
-                 }
-            <button type="button" class="collection-var-editor__delete" title="Remove"
-                    @onclick="() => RemoveVar(v)">×</button>
+            <button type="button" class="collection-var-editor__type-btn" @onclick="() => ToggleGenerated(v)">
+                @(v.Generator is null ? "Plain" : "Generated")
+            </button>
+            @if (v.Generator is null)
+            {
+                <input type="text" class="collection-var-editor__value" placeholder="value" value="@v.Value"
+                       @oninput="e => OnVarChanged(v, value: e.Value?.ToString())" />
+            }
+            else
+            {
+                <VariableGeneratorEditor Definition="@v.Generator" />
+            }
+            <button type="button" class="collection-var-editor__delete" title="Remove" @onclick="() => RemoveVar(v)">
+                <FluentIcon Value="@_iconDelete" Width="12px" />
+            </button>
         </div>
     }
 
@@ -51,6 +52,9 @@
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconDelete = new Icons.Regular.Size16.Delete();
+
     [Parameter, EditorRequired] public ApiCollection Collection { get; set; } = null!;
     [Parameter] public EventCallback OnSaved { get; set; }
     [Parameter] public EventCallback OnCancelled { get; set; }
@@ -64,7 +68,14 @@
         if (ReferenceEquals(_lastCollection, Collection)) return; // BL-5
         _lastCollection = Collection; // BL-3
         _vars = Collection.Variables
-            .Select(v => new CollectionVariable { Key = v.Key, Value = v.Value, Generator = CloneGenerator(v.Generator), IsEnabled = v.IsEnabled })
+            .Select(v => new CollectionVariable
+            {
+                Key = v.Key,
+                Value = v.Value,
+                Generator = CloneGenerator(v.Generator),
+                IsEnabled =
+v.IsEnabled
+            })
             .ToList();
     }
 

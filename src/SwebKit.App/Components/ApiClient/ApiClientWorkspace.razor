@@ -1,0 +1,141 @@
+@* ── Body split host: collection tree + right-side worksheet/request area (extracted from
+   ApiClientPage — Phase 2, Task 7) ──
+   Presentational composition layer: reads State (page-owned ApiClientState instance, not a
+   copy) and forwards every callback unchanged up to the page (DEC-UX-3). No method bodies live
+   here — this component only wires ApiClientTreePanel plus the mutually-exclusive right-side
+   worksheet branch (ApiClientManagementScreens | ApiClientGitPanel | ApiClientRequestWorkspace)
+   dispatched off State.WorksheetMode, exactly as ApiClientPage did before extraction. *@
+
+<div class="api-client-body">
+
+    @* Left: collection tree *@
+    <ApiClientTreePanel State="State" OnAddCollection="OnAddCollection" OnAddApiRepo="OnAddApiRepo"
+                        OnRequestSelected="OnRequestSelected" OnCollectionSelected="OnCollectionSelected" OnAddFolder="OnAddFolder"
+                        OnAddRequest="OnAddRequestInFolder" OnRenameNode="OnRenameNode" OnDeleteNode="OnDeleteNode"
+                        OnLinkedRootSelected="OnLinkedRootSelected" OnRenameCollection="OnRenameCollection"
+                        OnDeleteCollection="OnDeleteCollection" OnLinkCollectionToRepo="OnLinkCollectionToRepo"
+                        OnMoveNode="OnMoveNode" />
+
+    @* Right: request builder + response viewer OR management screens *@
+    <div class="api-client-workspace" id="main-workspace" role="main">
+        @if (State.WorksheetMode is ApiClientState.WorksheetEnvs or ApiClientState.WorksheetVars or
+        ApiClientState.WorksheetVariables or ApiClientState.WorksheetLinkedRoots)
+        {
+            <ApiClientManagementScreens State="State" OnEnvironmentsChanged="OnEnvironmentsChanged"
+                                        OnCollectionVariablesSaved="OnCollectionVariablesSaved" OnRefreshLinkedRoots="OnRefreshLinkedRoots"
+                                        OnOpenGitPanel="OnOpenGitPanel" OnRemoveLinkedRoot="OnRemoveLinkedRoot" />
+        }
+        else if (State.WorksheetMode == ApiClientState.WorksheetGit && ActiveGitRoot is not null)
+        {
+            <ApiClientGitPanel State="State" OnRefreshLinkedRoots="OnRefreshLinkedRoots" />
+        }
+        else
+        {
+            <ApiClientRequestWorkspace State="State" CanCreateRequest="CanCreateRequest"
+                                       MissingSecretNames="MissingSecretNames" OnAddRequest="OnAddRequest" OnRequestChanged="OnRequestChanged"
+                                       OnRequestResult="OnRequestResult" OnSubscriptionMessage="OnSubscriptionMessage"
+                                       OnSubscriptionStopped="OnSubscriptionStopped" OnResendHistoryEntry="OnResendHistoryEntry"
+                                       OnSaveResponseExample="OnSaveResponseExample" OnConfigureSecret="OnConfigureSecret" />
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ApiClientState State { get; set; } = default!;
+
+    [Parameter]
+    public bool CanCreateRequest { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<string> MissingSecretNames { get; set; } = [];
+
+    // ── Tree panel callbacks ─────────────────────────────────────────────────
+    [Parameter]
+    public EventCallback OnAddCollection { get; set; }
+
+    [Parameter]
+    public EventCallback OnAddApiRepo { get; set; }
+
+    [Parameter]
+    public EventCallback<HttpRequestEntry> OnRequestSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnCollectionSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnLinkedRootSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<(string CollectionId, ApiCollectionNode ParentNode)> OnAddFolder { get; set; }
+
+    [Parameter]
+    public EventCallback<(string CollectionId, ApiCollectionNode ParentNode)> OnAddRequestInFolder { get; set; }
+
+    [Parameter]
+    public EventCallback<(ApiCollectionNode Node, string NewName)> OnRenameNode { get; set; }
+
+    [Parameter]
+    public EventCallback<ApiCollectionNode> OnDeleteNode { get; set; }
+
+    [Parameter]
+    public EventCallback<(string CollectionId, string NewName)> OnRenameCollection { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnDeleteCollection { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnLinkCollectionToRepo { get; set; }
+
+    [Parameter]
+    public EventCallback<(string CollectionId, ApiCollectionNode DraggedNode, ApiCollectionNode? NewParent, int? NewIndex)>
+OnMoveNode
+    { get; set; }
+
+    // ── Management-screen callbacks (OnRefreshLinkedRoots is also used by the Git panel below —
+    // both map to the same page-level LoadLinkedRootsAsync handler) ────────────────────────────
+    [Parameter]
+    public EventCallback OnEnvironmentsChanged { get; set; }
+
+    [Parameter]
+    public EventCallback OnCollectionVariablesSaved { get; set; }
+
+    [Parameter]
+    public EventCallback OnRefreshLinkedRoots { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnOpenGitPanel { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnRemoveLinkedRoot { get; set; }
+
+    // ── Request workspace callbacks ──────────────────────────────────────────
+    [Parameter]
+    public EventCallback OnAddRequest { get; set; }
+
+    [Parameter]
+    public EventCallback OnRequestChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<HttpRequestResult> OnRequestResult { get; set; }
+
+    [Parameter]
+    public EventCallback<GraphQlSubscriptionMessage> OnSubscriptionMessage { get; set; }
+
+    [Parameter]
+    public EventCallback OnSubscriptionStopped { get; set; }
+
+    [Parameter]
+    public EventCallback<HttpRequestResult> OnResendHistoryEntry { get; set; }
+
+    [Parameter]
+    public EventCallback<HttpRequestResult> OnSaveResponseExample { get; set; }
+
+    [Parameter]
+    public EventCallback OnConfigureSecret { get; set; }
+
+    // Same derivation as ApiClientPage/ApiClientGitPanel — required to decide whether the Git
+    // worksheet branch is renderable (mirrors the page's original guard verbatim).
+    private LinkedCollectionRootLoadResult? ActiveGitRoot =>
+        State.LinkedRootResults.FirstOrDefault(root => root.Config.Id == State.ActiveGitRootId);
+}

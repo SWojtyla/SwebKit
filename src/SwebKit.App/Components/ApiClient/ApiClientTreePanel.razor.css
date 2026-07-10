@@ -1,0 +1,60 @@
+/* ── Tree panel (left) ───────────────────────────────────── */
+
+.api-client-tree-panel {
+    flex: 0 0 280px;
+    width: 280px;
+    min-width: 180px;
+    max-width: 600px;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-surface);
+}
+
+.api-client-tree-splitter {
+    flex: 0 0 5px;
+    width: 5px;
+    background: var(--color-border);
+    cursor: col-resize;
+    transition: background 0.15s;
+    align-self: stretch;
+}
+
+.api-client-tree-splitter:hover,
+.api-client-tree-splitter.active {
+    background: var(--color-accent);
+}
+
+.api-client-tree-panel__loading,
+.api-client-tree-panel__empty {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    overflow: auto;
+}
+
+/* ── Empty action button ─────────────────────────────────── */
+
+.api-client-empty-action-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--color-accent);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.api-client-empty-action-btn:hover:not([disabled]) {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.api-client-empty-action-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}

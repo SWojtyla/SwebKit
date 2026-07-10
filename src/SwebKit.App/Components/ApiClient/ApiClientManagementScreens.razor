@@ -1,0 +1,128 @@
+@* ── Worksheet-mode management screens (extracted from ApiClientPage — Phase 2, Task 5) ──
+   Presentational component: reads State (page-owned ApiClientState instance, not a copy) and
+   forwards every callback unchanged up to the page. Covers the 4 lighter worksheet-mode screens
+   — Environments, Collection Variables, Request Variables (inspector), and API Repositories —
+   dispatched off State.WorksheetMode using the shared constants defined on ApiClientState
+   (single source of truth, avoids magic-string drift). The Git worksheet screen is NOT covered
+   here (Task 6, separate); it stays on ApiClientPage.
+   No JS/splitter interop in this component, so the page's `if (firstRender) return;` guard
+   pattern (needed only when a branch's visibility depends on an in-flight async load completing
+   on a LATER render) does not apply here. *@
+
+@if (State.WorksheetMode == ApiClientState.WorksheetEnvs)
+{
+    <div class="api-client-management-screen">
+        <div class="api-client-management-screen__header">
+            <button type="button" class="api-client-management-screen__back" @onclick="() => State.WorksheetMode = null">←
+                Back to requests</button>
+                <span class="api-client-management-screen__title">Environments</span>
+            </div>
+            <EnvironmentManagerPanel OnChanged="OnEnvironmentsChanged" />
+        </div>
+    }
+else if (State.WorksheetMode == ApiClientState.WorksheetVars && State.ActiveCollection is not null)
+    {
+        <div class="api-client-management-screen">
+            <div class="api-client-management-screen__header">
+                <button type="button" class="api-client-management-screen__back" @onclick="() => State.WorksheetMode = null">←
+                    Back to requests</button>
+                    <span class="api-client-management-screen__title">Collection Variables —
+                        @State.ActiveCollection.Name</span>
+                    </div>
+                    <CollectionVariableEditor Collection="@State.ActiveCollection" OnSaved="OnCollectionVariablesSaved"
+                                              OnCancelled="@(() => State.WorksheetMode = null)" />
+                </div>
+            }
+else if (State.WorksheetMode == ApiClientState.WorksheetVariables && State.SelectedRequest is not null)
+            {
+                <div class="api-client-management-screen">
+                    <div class="api-client-management-screen__header">
+                        <button type="button" class="api-client-management-screen__back" @onclick="() => State.WorksheetMode = null">←
+                            Back to requests</button>
+                            <span class="api-client-management-screen__title">Variables — @State.SelectedRequest.Name</span>
+                        </div>
+                        <div class="api-client-inspector">
+                            @if (State.VariableInspectorLoading)
+                            {
+                                <LoadingSpinner Message="Resolving variables…" />
+                            }
+                            else if (State.VariableInspectionItems.Count == 0)
+                            {
+                                <div class="api-client-linked-roots__empty">No variables found in this request.</div>
+                            }
+                            else
+                            {
+                                @foreach (var item in State.VariableInspectionItems)
+                                {
+                                    <div class="api-client-inspector__row @(item.IsResolved ? "" : "api-client-inspector__row--unresolved")">
+                                        <span class="api-client-inspector__key">{{@item.Key}}</span>
+                                        <span class="api-client-inspector__source">@item.Source</span>
+                                        <span class="api-client-inspector__value">@(item.DisplayValue ?? "unresolved")</span>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+else if (State.WorksheetMode == ApiClientState.WorksheetLinkedRoots)
+                {
+                    <div class="api-client-management-screen">
+                        <div class="api-client-management-screen__header">
+                            <button type="button" class="api-client-management-screen__back" @onclick="() => State.WorksheetMode = null">←
+                                Back to requests</button>
+                                <span class="api-client-management-screen__title">API Repositories</span>
+                            </div>
+                            <div class="api-client-linked-roots">
+                                @if (State.LinkedRootResults.Count == 0)
+                                {
+                                    <div class="api-client-linked-roots__empty">No API repositories configured.</div>
+                                }
+                                @foreach (var root in State.LinkedRootResults)
+                                {
+                                    <div class="api-client-linked-root-card">
+                                        <div class="api-client-linked-root-card__main">
+                                            <div class="api-client-linked-root-card__name">@root.DisplayName</div>
+                                            <div class="api-client-linked-root-card__path">@root.ApiRootPath</div>
+                                            <div class="api-client-linked-root-card__meta">
+                                                <span>@(root.GitStatus.IsGitRepository ? root.GitStatus.Branch ?? "detached" : "not a Git repo")</span>
+                                                <span>@(root.GitStatus.ChangedFileCount > 0 ? $"{root.GitStatus.ChangedFileCount} changed" :
+                                                       "clean")</span>
+                                                    @if (root.Diagnostics.Count > 0)
+                                                    {
+                                                        <span>@root.Diagnostics.Count diagnostic(s)</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div class="api-client-linked-root-card__actions">
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                           OnClick="OnRefreshLinkedRoots">Refresh</AppButton>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                           OnClick="@(() => OnOpenGitPanel.InvokeAsync(root.Config.Id))">Git</AppButton>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                           OnClick="@(() => OnRemoveLinkedRoot.InvokeAsync(root.Config.Id))">Remove</AppButton>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+@code {
+    [Parameter, EditorRequired]
+    public ApiClientState State { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnEnvironmentsChanged { get; set; }
+
+    [Parameter]
+    public EventCallback OnCollectionVariablesSaved { get; set; }
+
+    [Parameter]
+    public EventCallback OnRefreshLinkedRoots { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnOpenGitPanel { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnRemoveLinkedRoot { get; set; }
+}

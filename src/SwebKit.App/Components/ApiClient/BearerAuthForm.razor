@@ -8,13 +8,17 @@
                placeholder="Paste your bearer token…" value="@_tokenDisplay" @oninput="OnTokenInput" />
         <button type="button" class="bearer-form__toggle" title="@(_showToken ? "Hide" : "Show")"
                 @onclick="() => _showToken = !_showToken">
-            @(_showToken ? "🙈" : "👁")
+            <FluentIcon Value="@(_showToken ? _iconEyeOff : _iconEye)" Width="14px" />
         </button>
     </div>
     <p class="bearer-form__hint">Sent as <code>Authorization: Bearer &lt;token&gt;</code></p>
 </div>
 
 @code {
+    // ── Icons (Phase 1: FluentIcon vocabulary) ─────────────────────────────────
+    private static readonly Icon _iconEye = new Icons.Regular.Size16.Eye();
+    private static readonly Icon _iconEyeOff = new Icons.Regular.Size16.EyeOff();
+
     [Parameter, EditorRequired] public AuthConfig Auth { get; set; } = default!;
     [Parameter] public EventCallback OnChanged { get; set; }
 

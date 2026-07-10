@@ -1,0 +1,159 @@
+@* ── Request/response workspace (extracted from ApiClientPage — Phase 2, Task 4) ──
+   Presentational component: reads State (page-owned ApiClientState instance, not a copy) and
+   raises EventCallback parameters for every callback RequestBuilderPanel/ResponseViewerPanel need.
+   Method bodies stay on ApiClientPage; this component only wires UI to callbacks (DEC-UX-3).
+   The request/response splitter JS lifecycle is fully self-contained here (own fields, own
+   OnAfterRenderAsync, own dispose) — the BL-12 firstRender guard and the
+   `_lastSplitterRequestId != State.SelectedRequestId` re-init check are preserved verbatim from
+   ApiClientPage; this is the exact pattern that previously fixed a stale/zero-width splitter bug
+   (see docs/pitfalls/blazor-maui.md, BL-12). Do not restructure this conditional. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@if (State.SelectedRequest is null)
+{
+    <div class="api-client-workspace__empty">
+        <EmptyState Title="No request selected" Subtitle="Select a request from the collection tree, or create a new one.">
+            <IconContent>
+                <FluentIcon Value="@_iconGlobe" Width="32px" />
+            </IconContent>
+            <Actions>
+                <button type="button" class="api-client-empty-action-btn" disabled="@(!CanCreateRequest)"
+                        @onclick="OnAddRequest">
+                    + New Request
+                </button>
+            </Actions>
+        </EmptyState>
+    </div>
+}
+else
+{
+    <div class="api-client-workspace__panels">
+        <div class="api-client-workspace__builder" @ref="_builderPanelEl">
+            @if (MissingSecretNames.Count > 0)
+            {
+                <div class="api-client-secret-warning">
+                    Missing secret reference(s): @string.Join(", ", MissingSecretNames).
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn"
+                               OnClick="OnConfigureSecret">Configure</AppButton>
+                </div>
+            }
+            <RequestBuilderPanel Request="@State.SelectedRequest" Collection="@(State.ActiveCollection!)"
+                                 ActiveEnvironment="@ActiveEnvironment" AllEnvironments="@State.Environments"
+                                 ScopeVersion="@State.ScopeVersion" IsDirty="@State.IsDirty" OnChanged="@OnRequestChanged"
+                                 OnResult="@OnRequestResult" OnSubscriptionMessage="@OnSubscriptionMessage"
+                                 OnSubscriptionStopped="@OnSubscriptionStopped" />
+        </div>
+        <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
+        <div class="api-client-workspace__response">
+            <ResponseViewerPanel Result="@State.LastResult" SubscriptionMessages="@State.SubscriptionMessages"
+                                 HistoryEntries="@GetHistoryForSelected()"
+                                 ResponseExamples="@(State.SelectedRequest?.ResponseExamples ?? [])" OnResend="@OnResendHistoryEntry"
+                                 OnSaveExample="@OnSaveResponseExample" />
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public ApiClientState State { get; set; } = default!;
+
+    [Parameter]
+    public bool CanCreateRequest { get; set; }
+
+    [Parameter]
+    public EventCallback OnAddRequest { get; set; }
+
+    [Parameter]
+    public EventCallback OnRequestChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<HttpRequestResult> OnRequestResult { get; set; }
+
+    [Parameter]
+    public EventCallback<GraphQlSubscriptionMessage> OnSubscriptionMessage { get; set; }
+
+    [Parameter]
+    public EventCallback OnSubscriptionStopped { get; set; }
+
+    [Parameter]
+    public EventCallback<HttpRequestResult> OnResendHistoryEntry { get; set; }
+
+    [Parameter]
+    public EventCallback<HttpRequestResult> OnSaveResponseExample { get; set; }
+
+    [Parameter]
+    public EventCallback OnConfigureSecret { get; set; }
+
+    // Computed once on the page (single source of truth — avoids duplicating the
+    // secret-extraction logic in two places; see ApiClientPage.MissingSecretNames /
+    // GetMissingSecretNames / ExtractSecretNames / IsSecretConfigured).
+    [Parameter]
+    public IReadOnlyList<string> MissingSecretNames { get; set; } = [];
+
+    private static readonly Icon _iconGlobe = new Icons.Regular.Size16.Globe();
+
+    // ── Computed ──────────────────────────────────────────────────────────────
+    private ApiEnvironment? ActiveEnvironment =>
+        State.Environments.FirstOrDefault(e => e.Id == State.ActiveEnvironmentId);
+
+    private IReadOnlyList<HttpRequestResult> GetHistoryForSelected() =>
+        State.SelectedRequest is not null && State.RequestHistory.TryGetValue(State.SelectedRequest.Id, out var hist)
+            ? hist
+            : [];
+
+    // ── Splitter (JS drag) ─────────────────────────────────────────────────────
+    private ElementReference _splitterEl;
+    private ElementReference _builderPanelEl;
+    private IJSObjectReference? _splitterHandle;
+    private string? _lastSplitterRequestId;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Unlike ApiClientPage (where BL-12's firstRender guard was needed because the workspace
+        // branch depended on an in-flight async collection load completing on a *later* render),
+        // this component is only ever mounted once ApiClientPage has already decided to render the
+        // "request selected" branch — its own conditional markup (State.SelectedRequest is null)
+        // resolves synchronously on this component's first render, so `@ref` bindings inside the
+        // else-branch (including the splitter div) are already live by the time this method runs,
+        // even when firstRender is true. Because the parent wraps this whole component in an
+        // `@if (WorksheetMode is null)`, it unmounts/remounts on every worksheet toggle — if we
+        // unconditionally skipped firstRender here (copy-pasting the page-level guard verbatim),
+        // the splitter would never re-initialize after returning from a worksheet screen until some
+        // unrelated re-render happened to fire. So: no firstRender early-return in this component.
+
+        // Init the splitter whenever the panels become visible for a new request.
+        // _lastSplitterRequestId tracks which request the current JS handle was set up for.
+        var shouldShowSplitter = State.SelectedRequest is not null && State.WorksheetMode is null;
+        if (shouldShowSplitter && _lastSplitterRequestId != State.SelectedRequestId)
+        {
+            await DisposeSplitterAsync();
+            _lastSplitterRequestId = State.SelectedRequestId;
+            _splitterHandle = await JS.InvokeAsync<IJSObjectReference>(
+                "SwebKitSplitter.init",
+                _splitterEl,
+                _builderPanelEl,
+                new { leftPane = true, minWidth = 400, maxWidth = 1600 });
+        }
+        else if (!shouldShowSplitter)
+        {
+            await DisposeSplitterAsync();
+            _lastSplitterRequestId = null;
+        }
+    }
+
+    private async Task DisposeSplitterAsync()
+    {
+        if (_splitterHandle is null) return;
+        try { await _splitterHandle.InvokeVoidAsync("dispose"); } catch { /* ignore teardown errors */ }
+        try { await _splitterHandle.DisposeAsync(); } catch { }
+        _splitterHandle = null;
+    }
+
+    // ── IAsyncDisposable ───────────────────────────────────────────────────────
+
+    public async ValueTask DisposeAsync()
+    {
+        await DisposeSplitterAsync();
+    }
+}
