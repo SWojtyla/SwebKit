@@ -10,7 +10,7 @@ public sealed class UserSettingsRepository
     private static readonly JsonSerializerOptions Options = SwebKitJsonOptions.Indented;
 
     public UserSettings Settings { get; private set; } = new();
-    
+
     public event Action? Changed;
 
     public async Task LoadAsync()
@@ -79,6 +79,12 @@ public sealed class UserSettings
     /// Should only be disabled in development environments. Exposed with a visible warning badge in the UI.
     /// </summary>
     public bool VerifyApiClientSsl { get; set; } = true;
+
+    /// <summary>
+    /// When <c>true</c>, enables an open-requests tab strip in the API Client. Default off, which keeps
+    /// today's single-request model.
+    /// </summary>
+    public bool ApiClientRequestTabs { get; set; } = false;
 
     /// <summary>AI agent feature configuration (user-scoped).</summary>
     public AgentConfig Agent { get; set; } = new();

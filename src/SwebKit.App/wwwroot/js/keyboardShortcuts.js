@@ -146,6 +146,11 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
         dotNetRef.invokeMethodAsync('OnShortcut', 'SbEditResubmit');
         return;
       }
+      if (ctrl && key === 's' && !shift) {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiSaveRequest');
+        return;
+      }
       if (ctrl && key === 'r' && !shift) {
         e.preventDefault();
         dotNetRef.invokeMethodAsync('OnShortcut', 'SbReplay');

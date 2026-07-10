@@ -33,6 +33,13 @@ public sealed class ApiClientState
     public ApiCollection? ActiveCollection { get; set; }
     public string? SelectedRequestId { get; set; }
     public HttpRequestEntry? SelectedRequest { get; set; }
+
+    // Phase 3 (docs/features/active/api-client-ux-refactor/decisions.md, DEC-UX-3 / DEC-UX-7):
+    // state model for the optional request tab strip. Session-only (not persisted across app
+    // restart) and currently unused by any component — wiring happens in a later task.
+    public List<ApiClientOpenTab> OpenTabs { get; set; } = [];
+    public string? ActiveTabRequestId { get; set; }
+
     public string? ActiveEnvironmentId { get; set; }
     public bool IsDirty { get; set; }
     public bool AutoSave { get; set; }

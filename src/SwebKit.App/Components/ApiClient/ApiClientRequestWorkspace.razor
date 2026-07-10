@@ -28,30 +28,77 @@
 }
 else
 {
-    <div class="api-client-workspace__panels">
-        <div class="api-client-workspace__builder" @ref="_builderPanelEl">
-            @if (MissingSecretNames.Count > 0)
-            {
-                <div class="api-client-secret-warning">
-                    Missing secret reference(s): @string.Join(", ", MissingSecretNames).
-                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn"
-                               OnClick="OnConfigureSecret">Configure</AppButton>
+    @if (RequestTabsEnabled)
+    {
+        <ApiClientOpenTabsStrip State="State" OnTabSelected="OnTabSelected" OnTabCloseRequested="OnTabCloseRequested" />
+    }
+    @if (RequestTabsEnabled && State.OpenTabs.Count > 0)
+    {
+        @* Phase 3, Task 6 (DEC-UX-4): one RequestBuilderPanel/ResponseViewerPanel pair PER open tab, all
+           mounted simultaneously and toggled with display:none/display:flex — never @if (BL-4/BL-15) —
+           so an inactive tab's in-flight send/subscription and cancellation-token fields keep running on
+           their own still-mounted component instance, untouched by switching tabs. @key="tab.RequestId"
+           gives Blazor's diffing a stable identity per tab so component instances are preserved (not
+           reused/rebound) regardless of OpenTabs list order or which tab is active. Applying the existing
+           .api-client-workspace__panels flex class directly to this per-tab wrapper (instead of wrapping
+           it in an extra display:contents div) reuses today's layout CSS unchanged — no new styles. *@
+        @foreach (var tab in State.OpenTabs)
+        {
+            var isActiveTab = tab.RequestId == State.ActiveTabRequestId;
+            <div @key="tab.RequestId" class="api-client-workspace__panels" style="display:@(isActiveTab ? "flex" : "none")">
+                <div class="api-client-workspace__builder">
+                    @if (isActiveTab && MissingSecretNames.Count > 0)
+                    {
+                        <div class="api-client-secret-warning">
+                            Missing secret reference(s): @string.Join(", ", MissingSecretNames).
+                            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn"
+                                       OnClick="OnConfigureSecret">Configure</AppButton>
+                        </div>
+                    }
+                    <RequestBuilderPanel Request="@tab.Request" Collection="@(State.ActiveCollection!)"
+                                         ActiveEnvironment="@ActiveEnvironment" AllEnvironments="@State.Environments"
+                                         ScopeVersion="@State.ScopeVersion" IsDirty="@State.DirtyByRequestId.GetValueOrDefault(tab.RequestId)"
+                                         OnChanged="@(() => OnTabChangedAsync(tab))" OnResult="@(result => OnTabResultAsync(tab, result))"
+                                         OnSubscriptionMessage="@(msg => OnTabSubscriptionMessageAsync(tab, msg))"
+                                         OnSubscriptionStopped="@OnSubscriptionStopped" />
                 </div>
-            }
-            <RequestBuilderPanel Request="@State.SelectedRequest" Collection="@(State.ActiveCollection!)"
-                                 ActiveEnvironment="@ActiveEnvironment" AllEnvironments="@State.Environments"
-                                 ScopeVersion="@State.ScopeVersion" IsDirty="@State.IsDirty" OnChanged="@OnRequestChanged"
-                                 OnResult="@OnRequestResult" OnSubscriptionMessage="@OnSubscriptionMessage"
-                                 OnSubscriptionStopped="@OnSubscriptionStopped" />
+                <div class="api-client-workspace__splitter"></div>
+                <div class="api-client-workspace__response">
+                    <ResponseViewerPanel Result="@State.LastResultByRequestId.GetValueOrDefault(tab.RequestId)"
+                                         SubscriptionMessages="@State.SubscriptionMessagesByRequestId.GetValueOrDefault(tab.RequestId, [])"
+                                         HistoryEntries="@GetHistoryFor(tab.RequestId)" ResponseExamples="@(tab.Request.ResponseExamples)"
+                                         OnResend="@(entry => OnTabResendAsync(tab, entry))" OnSaveExample="@OnSaveResponseExample" />
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="api-client-workspace__panels">
+            <div class="api-client-workspace__builder" @ref="_builderPanelEl">
+                @if (MissingSecretNames.Count > 0)
+                {
+                    <div class="api-client-secret-warning">
+                        Missing secret reference(s): @string.Join(", ", MissingSecretNames).
+                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn"
+                                   OnClick="OnConfigureSecret">Configure</AppButton>
+                    </div>
+                }
+                <RequestBuilderPanel Request="@State.SelectedRequest" Collection="@(State.ActiveCollection!)"
+                                     ActiveEnvironment="@ActiveEnvironment" AllEnvironments="@State.Environments"
+                                     ScopeVersion="@State.ScopeVersion" IsDirty="@State.IsDirty" OnChanged="@OnRequestChanged"
+                                     OnResult="@OnRequestResult" OnSubscriptionMessage="@OnSubscriptionMessage"
+                                     OnSubscriptionStopped="@OnSubscriptionStopped" />
+            </div>
+            <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
+            <div class="api-client-workspace__response">
+                <ResponseViewerPanel Result="@State.LastResult" SubscriptionMessages="@State.SubscriptionMessages"
+                                     HistoryEntries="@GetHistoryForSelected()"
+                                     ResponseExamples="@(State.SelectedRequest?.ResponseExamples ?? [])" OnResend="@OnResendHistoryEntry"
+                                     OnSaveExample="@OnSaveResponseExample" />
+            </div>
         </div>
-        <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
-        <div class="api-client-workspace__response">
-            <ResponseViewerPanel Result="@State.LastResult" SubscriptionMessages="@State.SubscriptionMessages"
-                                 HistoryEntries="@GetHistoryForSelected()"
-                                 ResponseExamples="@(State.SelectedRequest?.ResponseExamples ?? [])" OnResend="@OnResendHistoryEntry"
-                                 OnSaveExample="@OnSaveResponseExample" />
-        </div>
-    </div>
+    }
 }
 
 @code {
@@ -60,6 +107,22 @@ else
 
     [Parameter]
     public bool CanCreateRequest { get; set; }
+
+    // Phase 3 (DEC-UX-1/DEC-UX-7): gates the optional request tab strip. Threaded down from
+    // ApiClientPage via ApiClientWorkspace, mirroring the CanCreateRequest prop-drilling pattern.
+    // OFF (default) leaves this component's markup byte-identical to before this parameter existed.
+    [Parameter]
+    public bool RequestTabsEnabled { get; set; }
+
+    // Phase 3, Task 4: raised by ApiClientOpenTabsStrip when a tab chip is clicked. Forwarded
+    // unchanged up to ApiClientWorkspace/ApiClientPage (DEC-UX-3 — no method bodies here).
+    [Parameter]
+    public EventCallback<string> OnTabSelected { get; set; }
+
+    // Phase 3, Task 5: raised by ApiClientOpenTabsStrip when a tab's close (✕) button is clicked.
+    // Forwarded unchanged up to ApiClientWorkspace/ApiClientPage (DEC-UX-3 — no method bodies here).
+    [Parameter]
+    public EventCallback<string> OnTabCloseRequested { get; set; }
 
     [Parameter]
     public EventCallback OnAddRequest { get; set; }
@@ -102,6 +165,111 @@ else
             ? hist
             : [];
 
+    private IReadOnlyList<HttpRequestResult> GetHistoryFor(string requestId) =>
+        State.RequestHistory.TryGetValue(requestId, out var hist) ? hist : [];
+
+    // ── Per-tab callback routing (Phase 3, Task 6 — DEC-UX-4) ───────────────────
+    // When multiple RequestBuilderPanel instances are mounted at once (one per open tab), routing
+    // through ApiClientPage's singular OnRequestChanged/OnRequestResult/OnSubscriptionMessage
+    // handlers would write into whichever request the page's singular fields (SelectedRequest,
+    // LastResult, SubscriptionMessages) currently mirror — i.e. the ACTIVE tab — even when the
+    // event was raised by a background tab's still-running send/subscription. These closures write
+    // straight into the per-request dictionaries on State, keyed by tab.RequestId, so a background
+    // tab's completed send/message never bleeds into whichever tab happens to be active when it
+    // arrives. Mirrors ApiClientPage.OnRequestChangedAsync/OnRequestResultAsync/
+    // OnSubscriptionMessageAsync exactly, just keyed per-tab instead of off the singular fields.
+    //
+    // OnResendHistoryEntry gets a small per-tab closure too (OnTabResendAsync below) — it loads a
+    // historical result back into the *visible* response viewer, which in this branch reads
+    // State.LastResultByRequestId[tab.RequestId], not the singular State.LastResult the page
+    // handler writes to, so forwarding it unchanged would silently fail to update the UI.
+    //
+    // OnSaveResponseExample is NOT given a per-tab closure: it is only reachable by clicking
+    // inside the currently visible (active) tab's ResponseViewerPanel — inactive tabs are
+    // display:none and non-interactive — so forwarding it unchanged to the page's existing handler
+    // (which persists via ApiClientPage.SaveActiveCollectionAsync against the active-tab-mirroring
+    // singular fields) is correct and lower-risk than re-plumbing a persistence-touching code path.
+
+    private const int RequestHistoryCap = 20; // mirrors ApiClientPage.HistoryCap
+    private const int SubscriptionMessageCap = 1_000; // mirrors ApiClientPage.SubscriptionMessageCap
+
+    private async Task OnTabChangedAsync(ApiClientOpenTab tab)
+    {
+        State.DirtyByRequestId[tab.RequestId] = true;
+
+        // Keep the tree node label in sync with a live rename (mirrors
+        // ApiClientPage.OnRequestChangedAsync's SyncNodeName call for the single-instance branch).
+        if (State.ActiveCollection is not null)
+            SyncNodeName(State.ActiveCollection.Nodes, tab.RequestId, tab.Request.Name);
+
+        if (tab.RequestId == State.ActiveTabRequestId)
+        {
+            // "Current tab" concerns (the IsDirty banner, the auto-save timer) stay page-owned —
+            // forwarding here re-runs ApiClientPage.OnRequestChangedAsync, which is safe/idempotent
+            // since it re-derives everything from the singular fields that already mirror this tab.
+            State.IsDirty = true;
+            await OnRequestChanged.InvokeAsync();
+            return;
+        }
+
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnTabResultAsync(ApiClientOpenTab tab, HttpRequestResult result)
+    {
+        // Clear any previous subscription messages when a normal request completes (mirrors
+        // ApiClientPage.OnRequestResultAsync).
+        State.SubscriptionMessagesByRequestId.Remove(tab.RequestId);
+        State.LastResultByRequestId[tab.RequestId] = result;
+
+        if (!State.RequestHistory.TryGetValue(tab.RequestId, out var hist))
+        {
+            hist = [];
+            State.RequestHistory[tab.RequestId] = hist;
+        }
+        hist.Insert(0, result);
+        if (hist.Count > RequestHistoryCap)
+            hist.RemoveAt(hist.Count - 1);
+
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnTabSubscriptionMessageAsync(ApiClientOpenTab tab, GraphQlSubscriptionMessage msg)
+    {
+        if (!State.SubscriptionMessagesByRequestId.TryGetValue(tab.RequestId, out var messages))
+        {
+            messages = [];
+            State.SubscriptionMessagesByRequestId[tab.RequestId] = messages;
+        }
+
+        // Clear the last HTTP result when a subscription starts (mirrors
+        // ApiClientPage.OnSubscriptionMessageAsync).
+        if (messages.Count == 0)
+            State.LastResultByRequestId.Remove(tab.RequestId);
+
+        if (messages.Count >= SubscriptionMessageCap)
+            messages.RemoveAt(0);
+
+        messages.Add(msg);
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnTabResendAsync(ApiClientOpenTab tab, HttpRequestResult entry)
+    {
+        State.LastResultByRequestId[tab.RequestId] = entry;
+        State.SubscriptionMessagesByRequestId.Remove(tab.RequestId);
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private static void SyncNodeName(List<ApiCollectionNode> nodes, string requestId, string name)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Request?.Id == requestId) { node.Name = name; return; }
+            if (node.Type == ApiCollectionNodeType.Folder) SyncNodeName(node.Children, requestId, name);
+        }
+    }
+
     // ── Splitter (JS drag) ─────────────────────────────────────────────────────
     private ElementReference _splitterEl;
     private ElementReference _builderPanelEl;
@@ -122,9 +290,13 @@ else
         // the splitter would never re-initialize after returning from a worksheet screen until some
         // unrelated re-render happened to fire. So: no firstRender early-return in this component.
 
-        // Init the splitter whenever the panels become visible for a new request.
+        // Init the splitter whenever the panels become visible for a new request. Skipped entirely
+        // in the per-tab branch (RequestTabsEnabled && OpenTabs.Count > 0): that branch never binds
+        // _splitterEl/_builderPanelEl via @ref (each tab has its own static, non-draggable divider),
+        // so attempting to init here would target dead ElementReference values.
         // _lastSplitterRequestId tracks which request the current JS handle was set up for.
-        var shouldShowSplitter = State.SelectedRequest is not null && State.WorksheetMode is null;
+        var usingTabBranch = RequestTabsEnabled && State.OpenTabs.Count > 0;
+        var shouldShowSplitter = State.SelectedRequest is not null && State.WorksheetMode is null && !usingTabBranch;
         if (shouldShowSplitter && _lastSplitterRequestId != State.SelectedRequestId)
         {
             await DisposeSplitterAsync();

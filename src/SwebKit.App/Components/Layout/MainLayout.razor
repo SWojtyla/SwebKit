@@ -655,6 +655,7 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
             case "ApiNewRequest": Events.Publish(new ApiClientShortcutEvent("NewRequest")); break;
             case "ApiNewCollection": Events.Publish(new ApiClientShortcutEvent("NewCollection")); break;
             case "ApiEnvManager": Events.Publish(new ApiClientShortcutEvent("EnvManager")); break;
+            case "ApiSaveRequest": Events.Publish(new ApiClientShortcutEvent("SaveRequest")); break;
         }
         RequestRender();
         await InvokeAsync(StateHasChanged);

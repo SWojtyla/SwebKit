@@ -82,6 +82,8 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessDashboard.razor" Link="Components\Shared\ConfigurationReadinessDashboard.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessAreaCard.razor" Link="Components\Shared\ConfigurationReadinessAreaCard.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ApiClient\PostRequestCaptureBuilder.razor" Link="Components\ApiClient\PostRequestCaptureBuilder.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ApiClient\ApiClientOpenTabsStrip.razor" Link="Components\ApiClient\ApiClientOpenTabsStrip.razor" />
+        <Compile Include="..\..\src\SwebKit.App\Components\ApiClient\ApiClientOpenTab.cs" Link="Components\ApiClient\ApiClientOpenTab.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SwebKitComponentBase.cs" Link="Components\Shared\SwebKitComponentBase.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\DashboardTileModels.cs" Link="Components\Shared\DashboardTileModels.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SelectionService.cs" Link="Components\Shared\SelectionService.cs" />

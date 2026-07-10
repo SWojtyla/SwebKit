@@ -212,6 +212,17 @@
             </div>
 
             <div class="settings-field-group">
+                <p class="settings-hint">
+                    Keep several API requests open at once in tabs. When off, the API Client uses
+                    today's single-request workflow.
+                </p>
+                <FluentCheckbox Value="@UserSettings.Settings.ApiClientRequestTabs"
+                                ValueChanged="@(async (bool v) => { UserSettings.Settings.ApiClientRequestTabs = v; await UserSettings.SaveAsync(); })">
+                    Enable request tabs
+                </FluentCheckbox>
+            </div>
+
+            <div class="settings-field-group">
                 <label class="settings-label">Azure Key Vaults</label>
                 <p class="settings-hint">
                     Named Key Vault endpoints used by environment variables of type "Key Vault".

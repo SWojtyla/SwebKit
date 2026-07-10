@@ -40,6 +40,18 @@ Build/test commands per `AGENTS.md`: `dotnet build` then `dotnet test` (focused 
 
 ## Phase 3 — Optional request tabs
 
+**Verification status:** Automated coverage exists for OFF #1 (`UserSettingsRepositoryTests`),
+the tab strip's render/click/close behaviour and the `ApiClientOpenTab` POCO
+(`ApiClientOpenTabsStripTests`, `ApiClientOpenTabTests`), and the Ctrl+S / Ctrl+P command contracts
+underlying ON #4 / #10 (`ApiClientSaveCommandTests`, `ApiClientQuickNavCommandTests`).
+`tests/SwebKit.App.Tests` cannot bUnit-render `ApiClientPage` / `ApiClientWorkspace` /
+`ApiClientRequestWorkspace` (they transitively pull in the MAUI-only `FilePicker` API via
+`RequestBuilderPanel` / `CollectionExportDialog` — a build-time reference issue, not a mocking
+gap). As a result OFF #2, OFF #3, and ON #5-#9 are verified via code-trace only (same
+verification category already accepted for Phase 2's manual-smoke caveat); ON #4 and ON #10 are
+partially covered (static contracts tested, full behavioural wiring code-traced only). ON #11 is
+not yet implementable — see status.md caveats.
+
 ### Toggle OFF (default)
 
 | #   | Scenario             | Expected                                                  |

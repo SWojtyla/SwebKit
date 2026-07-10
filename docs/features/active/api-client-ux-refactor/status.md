@@ -19,7 +19,31 @@ clean, both test suites at baseline (no new ApiClient failures), and all 7 Phase
 scenarios code-traced clean across the split component tree — see test-plan.md Phase 2 table.
 **Caveat:** the Phase 2 "manual smoke" checklist item was verified via code-trace only in this
 session (no interactive MAUI app run) — an interactive UI smoke pass is still recommended before
-shipping/merging. Next up: Phase 3 (optional request tabs).
+shipping/merging.
+
+Phase 3 (optional request tabs, Tasks 1-9) is implemented: the `ApiClientRequestTabs` setting
+(default off) is wired end-to-end — settings toggle, a session-only open-tabs model (DEC-UX-7),
+the tab strip UI, open/focus/close with a hand-rolled 3-button dirty-close confirm dialog, one
+`RequestBuilderPanel`/`ResponseViewerPanel` pair per open tab kept alive via CSS visibility (per
+BL-4, not `@if`) so background-tab sends/subscriptions survive tab switches, and Ctrl+S / Send /
+Ctrl+P shortcut routing to the active tab. Build is clean and focused tests were added for the
+setting default, the `ApiClientOpenTab` POCO, the tab strip component, and the Ctrl+S/Ctrl+P
+command contracts.
+**Caveats (open items before Phase 3 can be considered fully done):** (a) per-tab splitter
+drag-resize is **not** wired when tabs are ON — each tab renders a static, non-draggable divider;
+only the OFF path retains working JS drag-resize. (b) Ctrl+W / Ctrl+Tab close/cycle shortcuts were
+explicitly **not** implemented — those chords are already globally bound to app-level page-tab
+navigation, and reusing them would silently override existing behaviour; this needs a maintainer
+decision (e.g. rebind to different chords) before test-plan Phase 3 ON scenario #11 can land.
+(c) `tests/SwebKit.App.Tests` cannot bUnit-render `ApiClientPage` / `ApiClientWorkspace` /
+`ApiClientRequestWorkspace` (they transitively pull in the MAUI-only `FilePicker` API via
+`RequestBuilderPanel` / `CollectionExportDialog` — a build-time reference issue, not a mocking
+gap), so several ON-path scenarios are verified via code-trace only, not automated — see
+test-plan.md Phase 3 verification note. (d) the Aikido MCP server was unavailable in all 8
+implementation sessions for this phase — a manual Aikido full scan across all Phase 3 changed
+files is still required before merge; flag prominently, do not let it get buried.
+Next up: Phase 4 (cookie jar), gated on resolving the Phase 3 caveats above (Aikido scan at
+minimum).
 
 ## Sequencing
 
@@ -62,13 +86,18 @@ shipping/merging. Next up: Phase 3 (optional request tabs).
 
 ### Phase 3 — Optional request tabs
 
-- [ ] Add `ApiClientRequestTabs` setting (default off)
-- [ ] Settings UI toggle
-- [ ] Open-tabs model in `ApiClientState`
-- [ ] Tab strip component + open/focus/close behaviour
-- [ ] Per-tab dirty / cancellation / editor lifecycle
-- [ ] Shortcut routing to active tab (Ctrl+S / Send / Ctrl+P; Ctrl+W / Ctrl+Tab)
-- [ ] Focused tests (off-path unchanged; on-path behaviours)
+- [x] Add `ApiClientRequestTabs` setting (default off)
+- [x] Settings UI toggle
+- [x] Open-tabs model in `ApiClientState`
+- [x] Tab strip component + open/focus/close behaviour
+- [x] Per-tab dirty / cancellation / editor lifecycle (caveat: per-tab splitter drag-resize is
+      not wired when tabs are ON — known gap, see Quick Summary)
+- [ ] Shortcut routing to active tab (Ctrl+S / Send / Ctrl+P; Ctrl+W / Ctrl+Tab) — Ctrl+S / Send /
+      Ctrl+P routed and tested; Ctrl+W / Ctrl+Tab deferred pending a maintainer decision on chord
+      rebinding (see Quick Summary)
+- [x] Focused tests (off-path unchanged; on-path behaviours) (caveat: several on-path scenarios
+      are verified via code-trace only, not bUnit-automated, due to a test-project MAUI reference
+      limitation — see Quick Summary and test-plan.md Phase 3 verification note)
 
 ### Phase 4 — Cookie jar (deferrable)
 

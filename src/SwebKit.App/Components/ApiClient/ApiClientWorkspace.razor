@@ -32,10 +32,12 @@
         else
         {
             <ApiClientRequestWorkspace State="State" CanCreateRequest="CanCreateRequest"
-                                       MissingSecretNames="MissingSecretNames" OnAddRequest="OnAddRequest" OnRequestChanged="OnRequestChanged"
-                                       OnRequestResult="OnRequestResult" OnSubscriptionMessage="OnSubscriptionMessage"
-                                       OnSubscriptionStopped="OnSubscriptionStopped" OnResendHistoryEntry="OnResendHistoryEntry"
-                                       OnSaveResponseExample="OnSaveResponseExample" OnConfigureSecret="OnConfigureSecret" />
+                                       RequestTabsEnabled="RequestTabsEnabled" MissingSecretNames="MissingSecretNames" OnAddRequest="OnAddRequest"
+                                       OnRequestChanged="OnRequestChanged" OnRequestResult="OnRequestResult"
+                                       OnSubscriptionMessage="OnSubscriptionMessage" OnSubscriptionStopped="OnSubscriptionStopped"
+                                       OnResendHistoryEntry="OnResendHistoryEntry" OnSaveResponseExample="OnSaveResponseExample"
+                                       OnConfigureSecret="OnConfigureSecret" OnTabSelected="OnTabSelected"
+                                       OnTabCloseRequested="OnTabCloseRequested" />
         }
     </div>
 </div>
@@ -46,6 +48,21 @@
 
     [Parameter]
     public bool CanCreateRequest { get; set; }
+
+    // Phase 3 (DEC-UX-1/DEC-UX-7): threaded down from ApiClientPage to ApiClientRequestWorkspace,
+    // mirroring the CanCreateRequest prop-drilling pattern already used on this component.
+    [Parameter]
+    public bool RequestTabsEnabled { get; set; }
+
+    // Phase 3, Task 4: raised by ApiClientOpenTabsStrip when a tab chip is clicked. Forwarded
+    // unchanged from ApiClientRequestWorkspace up to ApiClientPage (DEC-UX-3).
+    [Parameter]
+    public EventCallback<string> OnTabSelected { get; set; }
+
+    // Phase 3, Task 5: raised by ApiClientOpenTabsStrip when a tab's close (✕) button is clicked.
+    // Forwarded unchanged from ApiClientRequestWorkspace up to ApiClientPage (DEC-UX-3).
+    [Parameter]
+    public EventCallback<string> OnTabCloseRequested { get; set; }
 
     [Parameter]
     public IReadOnlyList<string> MissingSecretNames { get; set; } = [];
