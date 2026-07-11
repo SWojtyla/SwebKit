@@ -1,5 +1,6 @@
 @* Flattened + virtualized collection tree (BL-5 guard on ShouldRender) *@
 @using Microsoft.FluentUI.AspNetCore.Components
+@using Microsoft.JSInterop
 @inject IJSRuntime JS
 
 <div class="api-client collection-tree">
@@ -238,14 +239,28 @@ Icons.Regular.Size16.AddSquare();
             _prevCollections = Collections;
             _prevLinkedRoots = LinkedRoots;
             RebuildFlatTree();
+            InvalidateRender();
         }
         else if (selectionChanged)
         {
             _prevSelectedRequestId = SelectedRequestId;
+            InvalidateRender();
         }
     }
 
-    protected override bool ShouldRender() => true;
+    private bool _shouldRender = true;
+
+    protected override bool ShouldRender()
+    {
+        if (_shouldRender)
+        {
+            _shouldRender = false;
+            return true;
+        }
+        return false;
+    }
+
+    private void InvalidateRender() => _shouldRender = true;
 
     private void RebuildFlatTree()
     {
@@ -368,12 +383,14 @@ Icons.Regular.Size16.AddSquare();
         var current = _GetExpandedState(flatNode.Node.Id, flatNode.Node.IsExpanded);
         _expandedOverrides[flatNode.Node.Id] = !current;
         RebuildFlatTree();
+        InvalidateRender();
     }
 
     private void OnFilterInput(ChangeEventArgs e)
     {
         _filter = e.Value as string ?? string.Empty;
         ApplyFilter();
+        InvalidateRender();
     }
 
     private void ApplyFilter()
