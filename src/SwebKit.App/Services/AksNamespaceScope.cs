@@ -96,6 +96,12 @@ public sealed record AksNamespaceScope(AksNamespaceScopeMode Mode, IReadOnlyList
             }
         }
 
+        // In demo mode or when fallback is empty, use first available namespace
+        if (availableNamespaces.Count > 0)
+        {
+            return [availableNamespaces[0]];
+        }
+
         return [];
     }
 }
