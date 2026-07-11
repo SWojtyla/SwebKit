@@ -503,7 +503,10 @@ public class DevOpsClient : IDevOpsClient
                 {
                     throw;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Fallback exception while processing pipeline run");
+                }
             }
 
             foreach (var stage in run.Stages)
