@@ -88,14 +88,17 @@
         set
         {
             _filter = value;
-            _filterDebounceTimer ??= new System.Timers.Timer(FilterDebounceMs) { AutoReset = false };
+            if (_filterDebounceTimer is null)
+            {
+                _filterDebounceTimer = new System.Timers.Timer(FilterDebounceMs) { AutoReset = false };
+                _filterDebounceTimer.Elapsed += (_, _) => InvokeAsync(() =>
+                {
+                    _debouncedFilter = _filter;
+                    StateHasChanged();
+                });
+            }
             _filterDebounceTimer.Stop();
             _filterDebounceTimer.Interval = FilterDebounceMs;
-            _filterDebounceTimer.Elapsed += (_, _) => InvokeAsync(() =>
-            {
-                _debouncedFilter = _filter;
-                StateHasChanged();
-            });
             _filterDebounceTimer.Start();
         }
     }

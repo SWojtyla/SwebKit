@@ -1936,7 +1936,17 @@ StringComparison.Ordinal))
             case "/": _ = FocusFilterAsync(); return;
         }
 
-        _ = HandleLetterActionAsync(e.Key);
+        // HandleLetterActionAsync (e.g. "y" → OpenYamlAsync) mutates state on child components
+        // (AksDetailPanels) that no longer self-render. Because this handler is a fire-and-forget
+        // task detached from Blazor's event dispatch, it must trigger its own render on completion —
+        // otherwise the requested panel silently never appears.
+        _ = HandleLetterActionAndRenderAsync(e.Key);
+    }
+
+    private async Task HandleLetterActionAndRenderAsync(string key)
+    {
+        await HandleLetterActionAsync(key);
+        await InvokeAsync(StateHasChanged);
     }
 
     private static T? NavigateInList<T>(IEnumerable<T> items, T? current, int delta, Func<T, string> getName) where T :

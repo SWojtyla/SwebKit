@@ -103,14 +103,17 @@
         set
         {
             _search = value;
-            _searchDebounceTimer ??= new System.Timers.Timer(SearchDebounceMs) { AutoReset = false };
+            if (_searchDebounceTimer is null)
+            {
+                _searchDebounceTimer = new System.Timers.Timer(SearchDebounceMs) { AutoReset = false };
+                _searchDebounceTimer.Elapsed += (_, _) => InvokeAsync(() =>
+                {
+                    _debouncedSearch = _search;
+                    StateHasChanged();
+                });
+            }
             _searchDebounceTimer.Stop();
             _searchDebounceTimer.Interval = SearchDebounceMs;
-            _searchDebounceTimer.Elapsed += (_, _) => InvokeAsync(() =>
-            {
-                _debouncedSearch = _search;
-                StateHasChanged();
-            });
             _searchDebounceTimer.Start();
         }
     }
