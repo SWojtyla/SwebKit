@@ -278,8 +278,21 @@
     private static readonly string[] _tabs = ["Body", "Params", "Headers", "Auth", "Capture"];
     private static readonly string[] _graphQlTabs = ["GraphQL", "Headers", "Auth", "Capture"];
     private string _activeTab = "Body";
+    private ApiRequestMethod _cachedActiveTabsMethod;
+    private string[]? _cachedActiveTabs;
 
-    private string[] ActiveTabs => Request.Method == ApiRequestMethod.GraphQl ? _graphQlTabs : _tabs;
+    private string[] ActiveTabs
+    {
+        get
+        {
+            if (_cachedActiveTabs is null || _cachedActiveTabsMethod != Request.Method)
+            {
+                _cachedActiveTabs = Request.Method == ApiRequestMethod.GraphQl ? _graphQlTabs : _tabs;
+                _cachedActiveTabsMethod = Request.Method;
+            }
+            return _cachedActiveTabs;
+        }
+    }
 
     private IReadOnlyList<string> _captureWarnings = [];
     private bool _executing;
@@ -297,10 +310,26 @@
     private ElementReference _urlInputRef;
     private ElementReference _nameInputRef;
     private bool _editingName;
+    private RequestBodyMode _cachedCanPrettifyMode;
+    private string? _cachedCanPrettifyContent;
+    private bool? _cachedCanPrettify;
 
-    private bool CanPrettifyBody =>
-        Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml &&
-        !string.IsNullOrWhiteSpace(Request.Body.RawContent);
+    private bool CanPrettifyBody
+    {
+        get
+        {
+            if (!_cachedCanPrettify.HasValue ||
+                _cachedCanPrettifyMode != Request.Body.Mode ||
+                _cachedCanPrettifyContent != Request.Body.RawContent)
+            {
+                _cachedCanPrettify = Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml &&
+                                   !string.IsNullOrWhiteSpace(Request.Body.RawContent);
+                _cachedCanPrettifyMode = Request.Body.Mode;
+                _cachedCanPrettifyContent = Request.Body.RawContent;
+            }
+            return _cachedCanPrettify.Value;
+        }
+    }
 
     private string GetSendButtonAriaLabel()
     {

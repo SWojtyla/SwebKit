@@ -434,7 +434,7 @@
                         <div class="@GetTileGridClass(boardTiles)">
                             @foreach (var tile in boardTiles)
                             {
-                                <div class="@GetTileClass(tile)">
+                                <div @key="tile.Id" class="@GetTileClass(tile)">
                                     @switch (DashboardTileRegistry.GetTemplateId(tile.Id))
                                     {
                                         case DashboardTileRegistry.Favorites:
