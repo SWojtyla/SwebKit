@@ -346,6 +346,17 @@
             _loadedForNs = ns;
             await LoadEntitiesAsync(ns);
         }
+        // Force load if we have namespaces but nothing loaded yet (demo mode fix)
+        else if (_loadedForNs is null && NamespaceStates.Count > 0 && AppState.UseDemoData)
+        {
+            _activeNsId = NamespaceStates.First().Namespace.Id;
+            ns = ActiveNamespace;
+            if (ns?.Client is not null)
+            {
+                _loadedForNs = ns;
+                await LoadEntitiesAsync(ns);
+            }
+        }
     }
 
     private void SelectNamespace(Guid id)
