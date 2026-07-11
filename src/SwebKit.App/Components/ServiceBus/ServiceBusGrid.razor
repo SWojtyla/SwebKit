@@ -257,6 +257,8 @@
     private bool _cachedSortAsc;
     private List<SbEntityInfo>? _cachedFilteredSortedQueues;
     private List<SbEntityInfo>? _cachedFilteredSortedTopics;
+    private List<SbEntityInfo>? _cachedQueuesSource;
+    private List<SbEntityInfo>? _cachedTopicsSource;
     private CancellationTokenSource _statsCts = new();
     private static readonly SemaphoreSlim _statsGate = new(6, 6);
 
@@ -271,7 +273,8 @@
             if (_cachedFilteredSortedQueues is null ||
                 _cachedFilter != _filter ||
                 _cachedSortCol != _sortCol ||
-                _cachedSortAsc != _sortAsc)
+                _cachedSortAsc != _sortAsc ||
+                !ReferenceEquals(_cachedQueuesSource, _queues))
             {
                 var list = string.IsNullOrWhiteSpace(_filter)
                     ? _queues
@@ -280,6 +283,7 @@
                 _cachedFilter = _filter;
                 _cachedSortCol = _sortCol;
                 _cachedSortAsc = _sortAsc;
+                _cachedQueuesSource = _queues;
             }
             return _cachedFilteredSortedQueues;
         }
@@ -292,7 +296,8 @@
             if (_cachedFilteredSortedTopics is null ||
                 _cachedFilter != _filter ||
                 _cachedSortCol != _sortCol ||
-                _cachedSortAsc != _sortAsc)
+                _cachedSortAsc != _sortAsc ||
+                !ReferenceEquals(_cachedTopicsSource, _topics))
             {
                 var list = string.IsNullOrWhiteSpace(_filter)
                     ? _topics
@@ -304,6 +309,7 @@
                 _cachedFilter = _filter;
                 _cachedSortCol = _sortCol;
                 _cachedSortAsc = _sortAsc;
+                _cachedTopicsSource = _topics;
             }
             return _cachedFilteredSortedTopics;
         }

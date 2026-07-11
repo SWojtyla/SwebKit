@@ -34,60 +34,88 @@ L'analyse du codebase a révélé les problèmes suivants :
 9. **LinkedCollectionFileService.cs** - 1,118 lignes
 10. **AksDetailPanels.razor** - 1,087 lignes
 
-## 🗂️ Structure des Plans
+## 🗂️ Structure des Plans (Mise à jour)
 
 ```
 docs/features/active/refactoring/
-├── index.md                    # Ce fichier - Vue d'ensemble globale
-├── aks/                       # Feature AKS/Kubernetes
-│   ├── index.md               # Plan principal
-│   ├── status.md              # Statut et progression
+├── index.md                    # Vue d'ensemble GLOBALE (ce fichier)
+├── test-plan.md               # Stratégie de TEST GLOBALE
+├── aks/                       # Feature AKS/Kubernetes ✅ COMPLET
+│   ├── index.md               # Plan détaillé (427 lignes)
+│   ├── status.md              # Suivi de progression
 │   ├── test-plan.md           # Stratégie de tests
-│   ├── backend.md             # Refactoring backend (KubernetesAksClient)
-│   └── frontend.md            # Refactoring frontend (AksPage, AksDetailPanels)
-├── service-bus/               # Feature Service Bus
-│   ├── index.md
-│   ├── status.md
-│   ├── test-plan.md
-│   └── frontend.md
-├── dashboard/                 # Feature Dashboard
-│   ├── index.md
-│   ├── status.md
-│   └── test-plan.md
-├── api-client/                # Feature API Client
-│   ├── index.md
-│   ├── status.md
-│   └── test-plan.md
-├── redis/                     # Feature Redis
-│   ├── index.md
-│   ├── status.md
-│   └── test-plan.md
-├── observability/             # Feature Observability
-│   ├── index.md
-│   ├── status.md
-│   └── test-plan.md
-├── core-services/             # Feature Services Core
-│   ├── index.md
-│   ├── status.md
-│   └── test-plan.md
-└── layout/                    # Feature Layout & Navigation
-    ├── index.md
-    ├── status.md
-    └── test-plan.md
+│   └── decisions.md           # Décisions techniques ⭐ NOUVEAU
+├── service-bus/               # Feature Service Bus ✅ COMPLET
+│   ├── index.md               # Plan détaillé (~300 lignes)
+│   ├── status.md              # Suivi de progression
+│   └── test-plan.md           # Stratégie de tests
+├── dashboard/                 # Feature Dashboard ✅ COMPLET
+│   ├── index.md               # Plan détaillé (~390 lignes) 
+│   ├── status.md              # Suivi de progression
+│   └── test-plan.md           # Stratégie de tests
+├── api-client/                # Feature API Client ✅ COMPLET
+│   ├── index.md               # Plan détaillé (~270 lignes)
+│   ├── status.md              # Suivi de progression
+│   └── test-plan.md           # Stratégie de tests
+├── redis/                     # Feature Redis ✅ COMPLET
+│   ├── index.md               # Plan détaillé (~290 lignes)
+│   ├── status.md              # Suivi de progression
+│   └── test-plan.md           # Stratégie de tests
+├── observability/             # Feature Observability ✅ COMPLET
+│   ├── index.md               # Plan détaillé (~240 lignes)
+│   ├── status.md              # Suivi de progression
+│   └── test-plan.md           # Stratégie de tests
+├── core-services/             # Core Services ✅ COMPLET
+│   ├── index.md               # Plan détaillé (~280 lignes)
+│   ├── status.md              # Suivi de progression
+│   └── test-plan.md           # Stratégie de tests
+└── layout/                    # Feature Layout ✅ COMPLET
+    ├── index.md               # Plan détaillé (~290 lignes)
+    ├── status.md              # Suivi de progression
+    └── test-plan.md           # Stratégie de tests
 ```
 
-## 📊 Métriques et Fortes de Progression
+### 📁 Fichiers par Feature
 
-| Feature | Fichiers Critiques | Lignes Totales | Priorité | Statut |
-|---------|-------------------|----------------|----------|--------|
-| [AKS](./aks/index.md) | 3+ | 8,471 | 🔴 CRITIQUE | À faire |
-| [Service Bus](./service-bus/index.md) | 2+ | 2,742 | 🔴 CRITIQUE | À faire |
-| [Dashboard](./dashboard/index.md) | 1 | 2,960 | 🔴 CRITIQUE | À faire |
-| [API Client](./api-client/index.md) | 2+ | 2,305 | 🔴 CRITIQUE | À faire |
-| [Redis](./redis/index.md) | 2+ | 2,081 | 🟡 ÉLEVÉE | À faire |
-| [Observability](./observability/index.md) | 2+ | 1,800 | 🟡 ÉLEVÉE | À faire |
-| [Core Services](./core-services/index.md) | 2+ | 1,812 | 🟡 ÉLEVÉE | À faire |
-| [Layout](./layout/index.md) | 2+ | 1,170 | 🟡 ÉLEVÉE | À faire |
+| Feature | index.md | status.md | test-plan.md | ecrans | total |
+|---------|----------|-----------|--------------|--------|-------|
+| AKS | ✅ | ✅ | ✅ | ✅ | **4** |
+| Service Bus | ✅ | ✅ | ✅ | ❌ | **3** |
+| Dashboard | ✅ | ✅ | ✅ | ❌ | **3** |
+| API Client | ✅ | ✅ | ✅ | ❌ | **3** |
+| Redis | ✅ | ✅ | ✅ | ❌ | **3** |
+| Observability | ✅ | ✅ | ✅ | ❌ | **3** |
+| Core Services | ✅ | ✅ | ✅ | ❌ | **3** |
+| Layout | ✅ | ✅ | ✅ | ❌ | **3** |
+
+## 📊 Métriques et Progression par Feature
+
+| Feature | Fichiers Critiques | Lignes Totales | Priorité | Statut | Durée Estimée | Responsable |
+|---------|-------------------|----------------|----------|--------|---------------|-------------|
+| [AKS](./aks/index.md) | 5+ (KubernetesAksClient, AksPage, AksDetailPanels, etc.) | **~8,471** | 🔴 CRITIQUE | ⬜ Planification | 3-4 semaines | À assigner |
+| [Service Bus](./service-bus/index.md) | 6+ (MessageListView, ServiceBusPage, etc.) | **~2,742** | 🔴 CRITIQUE | ⬜ Planification | 2-3 semaines | À assigner |
+| [Dashboard](./dashboard/index.md) | 1 (DashboardPage) | **2,960** | 🔴 CRITIQUE | ⬜ Planification | 3-4 semaines | À assigner |
+| [API Client](./api-client/index.md) | 2+ (ApiClientPage, CollectionTree) | **~2,305** | 🔴 CRITIQUE | ⬜ Planification | 2-3 semaines | À assigner |
+| [Redis](./redis/index.md) | 5+ (RedisPage, DemoRedisClient, etc.) | **~2,081** | 🟡 ÉLEVÉE | ⬜ Planification | 2-3 semaines | À assigner |
+| [Observability](./observability/index.md) | 4+ (ObservabilityLogs, etc.) | **~1,800** | 🟡 ÉLEVÉE | ⬜ Planification | 2-3 semaines | À assigner |
+| [Core Services](./core-services/index.md) | 3+ (DemoAksClient, LinkedCollectionFileService, etc.) | **~1,812+** | 🟡 ÉLEVÉE | ⬜ Planification | 3-4 semaines | À assigner |
+| [Layout](./layout/index.md) | 3+ (MainLayout, TopBar, LeftNav) | **~1,170** | 🟡 ÉLEVÉE | ⬜ Planification | 2-3 semaines | À assigner |
+
+### 💰 ROI par Feature
+- **AKS** : Réduction de ~8,500 lignes → **Gain maximal** 🏆
+- **Dashboard** : 2,960 → 150 lignes = **95% de réduction** 📉
+- **API Client** : 3 fichiers de 600-2,000 lignes
+- **Service Bus** : 2 fichiers de 1,800+ lignes
+- **Redis** : 5 fichiers améliorables
+
+### 📈 Totaux Global
+- **Fichiers > 1000 lignes** : 8 → **0** (cible)
+- **Fichiers 500-1000 lignes** : 25+ → **< 10** (cible)  
+- **Lignes totales à refactorer** : **~24,300+ lignes**
+- **Nouveaux services à créer** : **~40-50 services**
+- **Nouveaux composants à créer** : **~80-100 composants**
+- **Durée totale estimée** : **16-22 semaines** (avec 2-3 semaines pour les tests
+- **Couverture de code cible** : **> 85% Global, > 90% Services**
 
 ## 🎯 Principes de Refactoring
 
@@ -180,18 +208,84 @@ public interface IYamlService { /* 100-200 lignes max */ }
 - [Architecture globale](../../architecture/architecture.md)
 - [Design des composants](../../architecture/design.md)
 - [Guide du codebase](../../architecture/codebase-guide.md)
-- [Functionalities AKS](../../architecture/functionalities/aks.md)
-- [Functionalities Service Bus](../../architecture/functionalities/service-bus.md)
+- [Documentation swebiplan](https://hermes-agent.nousresearch.com/docs/skills/swebiplan)
 
-## 📝 Notes
+## 🎯 Décisions Clés et Patterns Communs
 
-- Tous les plans doivent suivre le template [swebiplan](https://hermes-agent.nousresearch.com/docs/skills/swebiplan)
-- Chaque feature doit avoir son propre dossier avec `index.md`, `status.md`, `test-plan.md`
-- Les changements doivent être validés par : `dotnet build` → `dotnet test` → vérification manuelle
-- Ne Jamais committer sans tests qui passent
+### Patterns à Appliquer Partout
+
+1. **Subdivision par Domaine**
+   - Frontend → Composants modulaires
+   - Backend → Services spécialisés
+   - Shared → Extraction de la logique commune
+
+2. **Injection de Dépendances**
+   - Toujours utiliser des interfaces
+   - code behind pour \@inject
+   - Facilite le mocking
+
+3. **Gestion des Erreurs Centralisée**
+   - Exception custom par domaine
+   - Error handler central
+   - Messages utilisateur clairs
+
+4. **Lazy Loading et Virtualisation**
+   - Virtualize pour les grands listes
+   - Lazy<T> pour les services lourds
+   - Cache intelligent avec invalidation
+
+5. **Séparation UI/Business Logic**
+   - Services pour la logique métier
+   - ViewModels pour les données
+   - Composants pour l'affichage
+
+## 📊 Résumé Complet
+
+### 🟢 Assets Créés
+
+| Type | Nombre | Localisation |
+|------|---------|-------------|
+| Dossiers de feature | 8 | `docs/features/active/refactoring/` |
+| Fichiers index.md | 8 | 1 par feature + 1 global |
+| Fichiers status.md | 8 | 1 par feature |
+| Fichiers test-plan.md | 9 | 1 par feature + 1 global |
+| Fichiers decisions.md | 1 | AKS uniquement (optionnel pour les autres) |
+| **TOTAL** | **34 fichiers** | **~200 KB de documentation** |
+
+### 📈 Impact Attendu
+
+| Métrique | Avant | Cible | Amélioration |
+|----------|-------|-------|-------------|
+| Fichiers > 1000 lignes | 8+ | 0 | ⭐⭐⭐⭐⭐ |
+| Fichiers 500-1000 lignes | 25+ | < 10 | ⭐⭐⭐⭐⭐ |
+| Couverture de code | ~30-50% | > 85% | ⭐⭐⭐⭐ |
+| Complexité moyenne | Non mesurée | < 15/méthode | ⭐⭐⭐⭐ |
+| Maintenabilité | Faible | Elevée | ⭐⭐⭐⭐⭐ |
+----
+
+*Créé le: 2026-07-11*
+*Dernière mise à jour: 2026-07-11*
+*Statut global: **✅ COMPLET - Tous les plans créés**
+*Responsable: À assigner par feature
+*Priorité globale: 🔴 CRITIQUE
+
+## ✅ Prochaines Étapes
+
+1. **👥 Assigner les responsables** à chaque feature
+2. **📅 Prioriser les features** pour l'implémentation
+3. **📝 Détailler les sous-tâches** spécifiques pour AKS (déjà bien avancé)
+4. **✅ Valider les plans** avec l'équipe
+5. **🎯 Commencer par AKS** (ROI maximal)
+6. **📊 Mettre en place le tracking** GitHub Projects ou équivalent
+
+## 🔥 Recommandation
+
+**Commencer par AKS** car:
+- Réduction maximale de lignes (8,400+ → ~500)
+- ROI le plus élevé
+- Plan le plus détaillé avec décisions techniques complètes
+- Architectures bien maturas avec données claires
 
 ---
 
-*Créé le: {{date}}*
-*Statut global: En planification*
-*Priorité: 🔴 CRITIQUE*
+_[Documentation générée via swebiplan + Hermès Agent]_

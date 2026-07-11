@@ -555,6 +555,9 @@
     private string? _lastStatefulSetFilter;
     private string? _lastPodFilter;
     private bool _lastShowCompletedPods;
+    private List<DeploymentInfo>? _lastDeploymentsSource;
+    private List<StatefulSetInfo>? _lastStatefulSetsSource;
+    private List<PodInfo>? _lastPodsSource;
 
     private string ActiveFilter
     {
@@ -601,9 +604,11 @@
         get
         {
             if (_filteredDeploymentsCache is null ||
-                _lastDeploymentFilter != DeploymentFilter)
+                _lastDeploymentFilter != DeploymentFilter ||
+                !ReferenceEquals(_lastDeploymentsSource, Deployments))
             {
                 _lastDeploymentFilter = DeploymentFilter;
+                _lastDeploymentsSource = Deployments;
                 _filteredDeploymentsCache = string.IsNullOrWhiteSpace(DeploymentFilter)
                     ? Deployments.AsQueryable()
                     : Deployments.Where(d => d.Name.Contains(DeploymentFilter, StringComparison.OrdinalIgnoreCase)
@@ -618,9 +623,11 @@
         get
         {
             if (_filteredStatefulSetsCache is null ||
-                _lastStatefulSetFilter != StatefulSetFilter)
+                _lastStatefulSetFilter != StatefulSetFilter ||
+                !ReferenceEquals(_lastStatefulSetsSource, StatefulSets))
             {
                 _lastStatefulSetFilter = StatefulSetFilter;
+                _lastStatefulSetsSource = StatefulSets;
                 _filteredStatefulSetsCache = string.IsNullOrWhiteSpace(StatefulSetFilter)
                     ? StatefulSets.AsQueryable()
                     : StatefulSets.Where(s => s.Name.Contains(StatefulSetFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
@@ -635,10 +642,12 @@
         {
             if (_filteredPodsCache is null ||
                 _lastPodFilter != PodFilter ||
-                _lastShowCompletedPods != ShowCompletedPods)
+                _lastShowCompletedPods != ShowCompletedPods ||
+                !ReferenceEquals(_lastPodsSource, Pods))
             {
                 _lastPodFilter = PodFilter;
                 _lastShowCompletedPods = ShowCompletedPods;
+                _lastPodsSource = Pods;
                 _filteredPodsCache = Pods
                     .Where(p => ShowCompletedPods || !IsCompletedPod(p))
                     .Where(p => string.IsNullOrWhiteSpace(PodFilter)

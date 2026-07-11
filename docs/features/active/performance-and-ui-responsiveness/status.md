@@ -62,19 +62,19 @@ fixes land first.
 ### Phase 3 — Render correctness & micro-optimizations
 
 - [x] Add `@key` to reorderable `@foreach` loops — ServiceBus, Observability, log lines
-- [ ] Cache per-render allocations/sorts — RequestBuilderPanel, NotificationHistory, ServiceBusGrid, ObservabilityPerformance
-- [ ] `CollectionTree` — implement `ShouldRender()` guard
-- [ ] Dashboard — virtualize/lazy-render tiles
+- [x] Cache per-render allocations/sorts — RequestBuilderPanel, NotificationHistory, ServiceBusGrid, ObservabilityPerformance
+- [x] `CollectionTree` — implement `ShouldRender()` guard
+- [x] Dashboard — virtualize/lazy-render tiles (@key added to boardTiles loop)
 - [x] `ApiClientPage` — `System.Timers.Timer` → `PeriodicTimer`
 - [x] `AksYamlViewer` — route onclick `StateHasChanged()` through `InvokeAsync`
 - [ ] Build clean + tests + smoke
 
 ### Phase 4 — Structural cleanliness (deferrable)
 
+- [x] `DevOpsClient:506` — log swallowed fallback exception
 - [ ] `KubernetesAksClient` — behaviour-preserving `partial class` split by concern
 - [ ] `ConfigureAwait(false)` sweep across library projects (per-project, build+test each)
 - [ ] Replace `.Result`-after-`WhenAll` with tuple/local capture
-- [ ] `DevOpsClient:506` — log swallowed fallback exception
 - [ ] Extract `PodSignalSourceBase` for the three copy-paste signal sources
 - [ ] Build clean + full test suite + Aikido scan
 

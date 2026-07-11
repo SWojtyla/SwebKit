@@ -1,8 +1,8 @@
-# Test Plan - Feature: Aks
+# Test Plan - Feature: Core Services
 
 ## 🎯 Objectifs de Test
 
-### Pour la feature Aks
+### Pour la feature Core Services
 - ✅ **Couverture de code > 85%** (target: 90%+ pour les services)
 - ✅ **Tous les tests de régression passent**
 - ✅ **Tests exécutés en < 30 secondes** (par feature)
@@ -18,7 +18,7 @@
 |---------|------------|---------------|----------|
 | [À compléter par feature] | ⭐⭐⭐⭐ | ~10-15 tests | 🟡 |
 
-**Exemple** pour la feature Aks:
+**Exemple** pour la feature Core Services:
 - Test de création des ressources
 - Test de récupération
 - Test de mise à jour
@@ -73,7 +73,7 @@
 - `Integration` - Tests d'intégration
 - `Regression` - Tests de régression
 
-## 💡 Conseils Spécifiques à Aks
+## 💡 Conseils Spécifiques à Core Services
 
 [Conseils spécifiques à ajouter par feature]
 
