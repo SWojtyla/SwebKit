@@ -2,7 +2,7 @@
 
 ## Current State
 
-`In Progress`
+`Review`
 
 ## Quick Summary
 
@@ -25,16 +25,23 @@ Phase 3 (optional request tabs, Tasks 1-9) is implemented: the `ApiClientRequest
 (default off) is wired end-to-end — settings toggle, a session-only open-tabs model (DEC-UX-7),
 the tab strip UI, open/focus/close with a hand-rolled 3-button dirty-close confirm dialog, one
 `RequestBuilderPanel`/`ResponseViewerPanel` pair per open tab kept alive via CSS visibility (per
-BL-4, not `@if`) so background-tab sends/subscriptions survive tab switches, and Ctrl+S / Send /
-Ctrl+P shortcut routing to the active tab. Build is clean and focused tests were added for the
-setting default, the `ApiClientOpenTab` POCO, the tab strip component, and the Ctrl+S/Ctrl+P
-command contracts.
-**Caveats (open items before Phase 3 can be considered fully done):** (a) per-tab splitter
-drag-resize is **not** wired when tabs are ON — each tab renders a static, non-draggable divider;
-only the OFF path retains working JS drag-resize. (b) Ctrl+W / Ctrl+Tab close/cycle shortcuts were
-explicitly **not** implemented — those chords are already globally bound to app-level page-tab
-navigation, and reusing them would silently override existing behaviour; this needs a maintainer
-decision (e.g. rebind to different chords) before test-plan Phase 3 ON scenario #11 can land.
+BL-4, not `@if`) so background-tab sends/subscriptions survive tab switches, per-tab splitter
+drag-resize (each open tab gets its own JS handle, initialized lazily and torn down when the tab
+closes), and Ctrl+S / Send / Ctrl+P / Ctrl+Shift+W (close active tab) / Ctrl+PageUp / Ctrl+PageDown
+(cycle tabs) shortcut routing to the active tab. Ctrl+W / Ctrl+Tab / Ctrl+Shift+Tab were **not**
+reused — see DEC-UX-8 — new chords were chosen to mirror existing browser tab conventions so no
+new mental model is required. Build is clean and focused tests were added for the setting default,
+the `ApiClientOpenTab` POCO, the tab strip component, and the Ctrl+S/Ctrl+P command contracts.
+**Caveat:** the tab-close/cycle shortcut _routing_ (`GetNextOpenTabId`, the `OnApiClientShortcut`
+cases) is verified via code-trace only — `ApiClientPage` cannot be bUnit-rendered (see below), so
+there is no automated contract test for these three cases the way there is for Ctrl+S/Ctrl+P.
+
+**Phase 4 decision:** left deferred per maintainer call — Phases 1-3 already deliver standalone
+value (tabs, iconography, the refactor foundation) and the cookie jar is a separate, security-
+sensitive workstream (session-secret handling, scrubbing across every export path) that deserves
+its own dedicated implementation pass rather than being rushed to close out this feature. Tracking
+moved to a **Future work** note below; Phase 4 checklist items remain unchecked and out of scope
+for this feature's "done" state.
 (c) `tests/SwebKit.App.Tests` cannot bUnit-render `ApiClientPage` / `ApiClientWorkspace` /
 `ApiClientRequestWorkspace` (they transitively pull in the MAUI-only `FilePicker` API via
 `RequestBuilderPanel` / `CollectionExportDialog` — a build-time reference issue, not a mocking
@@ -42,8 +49,8 @@ gap), so several ON-path scenarios are verified via code-trace only, not automat
 test-plan.md Phase 3 verification note. (d) the Aikido MCP server was unavailable in all 8
 implementation sessions for this phase — a manual Aikido full scan across all Phase 3 changed
 files is still required before merge; flag prominently, do not let it get buried.
-Next up: Phase 4 (cookie jar), gated on resolving the Phase 3 caveats above (Aikido scan at
-minimum).
+Next up: none — Phase 4 stays deferred (see decision above); remaining work before ship is the
+manual Aikido scan and the maintainer's own manual/visual smoke pass.
 
 ## Sequencing
 
@@ -90,16 +97,19 @@ minimum).
 - [x] Settings UI toggle
 - [x] Open-tabs model in `ApiClientState`
 - [x] Tab strip component + open/focus/close behaviour
-- [x] Per-tab dirty / cancellation / editor lifecycle (caveat: per-tab splitter drag-resize is
-      not wired when tabs are ON — known gap, see Quick Summary)
-- [ ] Shortcut routing to active tab (Ctrl+S / Send / Ctrl+P; Ctrl+W / Ctrl+Tab) — Ctrl+S / Send /
-      Ctrl+P routed and tested; Ctrl+W / Ctrl+Tab deferred pending a maintainer decision on chord
-      rebinding (see Quick Summary)
-- [x] Focused tests (off-path unchanged; on-path behaviours) (caveat: several on-path scenarios
-      are verified via code-trace only, not bUnit-automated, due to a test-project MAUI reference
-      limitation — see Quick Summary and test-plan.md Phase 3 verification note)
+- [x] Per-tab dirty / cancellation / editor lifecycle (per-tab splitter drag-resize now wired —
+      each open tab gets its own JS handle, lazily initialized and disposed on tab close)
+- [x] Shortcut routing to active tab (Ctrl+S / Send / Ctrl+P; close/cycle via Ctrl+Shift+W /
+      Ctrl+PageUp / Ctrl+PageDown — Ctrl+W / Ctrl+Tab / Ctrl+Shift+Tab intentionally not reused,
+      see DEC-UX-8)
+- [x] Focused tests (off-path unchanged; on-path behaviours) (caveat: several on-path scenarios,
+      including the new tab-shortcut routing, are verified via code-trace only, not bUnit-
+      automated, due to a test-project MAUI reference limitation — see Quick Summary and
+      test-plan.md Phase 3 verification note)
 
-### Phase 4 — Cookie jar (deferrable)
+### Phase 4 — Cookie jar (deferred — see Quick Summary decision)
+
+Not in scope for this feature's completion. Checklist retained for whoever picks this up next.
 
 - [ ] `IApiCookieJar` / `ApiCookieJar` over `CookieContainer`
 - [ ] Opt-in flag; execution-path integration (no global UseCookies)
@@ -110,7 +120,19 @@ minimum).
 
 ### Validation
 
-- [ ] `dotnet build` clean
-- [ ] `dotnet test` (Core + App) green
-- [ ] Aikido full scan on new/modified code
-- [ ] Docs updated (architecture `functionalities/api-client.md`)
+- [x] `dotnet build` clean (SwebKit.App, net10.0-windows, 0 errors)
+- [x] `dotnet test` (App) \u2014 all `ApiClient*` tests green (9/9). Full-suite run shows ~10 unrelated
+      failures (`RedisKeyDetail`, `ShellFoundation`/`TopBar`, `AlertMonitor`, `AksPageBatch`,
+      `ObservabilityPage`, `MessageListView`, `ServiceBusConfigForm`) that are pre-existing bUnit
+      test-runner flakiness under parallel execution \u2014 confirmed by re-running the same tests in
+      isolation, where they pass cleanly. None touch API Client code.
+- [ ] Aikido full scan on new/modified code — MCP server unavailable this session; run manually
+      before merge
+- [x] Docs updated (architecture `functionalities/api-client.md`)
+
+## Future work (not required for this feature)
+
+- Phase 4 (cookie jar) — deferred per maintainer decision; scope unchanged in `backend.md` /
+  `frontend.md` / `index.md` for whoever picks it up.
+- Automated (bUnit) coverage for `ApiClientPage`/`ApiClientWorkspace`/`ApiClientRequestWorkspace`
+  is blocked on the MAUI `FilePicker` test-project reference issue; revisit if that's resolved.

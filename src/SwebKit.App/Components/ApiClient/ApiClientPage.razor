@@ -1659,7 +1659,7 @@ StringComparison.OrdinalIgnoreCase));
     private async Task AutoSaveLoopAsync()
     {
         if (_autoSaveTimer is null) return;
-        
+
         try
         {
             while (await _autoSaveTimer.WaitForNextTickAsync())
@@ -1835,9 +1835,38 @@ StringComparison.OrdinalIgnoreCase));
                     if (_state.SelectedRequest is not null)
                         await SaveRequestAsync();
                     break;
+                // Phase 3 follow-up: request-tab close/cycle shortcuts (Ctrl+Shift+W,
+                // Ctrl+PageUp/Down — see keyboardShortcuts.js for why Ctrl+W/Ctrl+Tab aren't
+                // reused). No-op when the tabs setting is off (DEC-UX-1: zero behaviour change
+                // on the OFF path) or when there is no active tab.
+                case "TabClose":
+                    if (UserSettings.Settings.ApiClientRequestTabs && _state.ActiveTabRequestId is { } closeId)
+                        await OnTabCloseRequestedAsync(closeId);
+                    break;
+                case "TabNext":
+                    if (UserSettings.Settings.ApiClientRequestTabs && GetNextOpenTabId(1) is { } nextId)
+                        await OnTabSelectedAsync(nextId);
+                    break;
+                case "TabPrev":
+                    if (UserSettings.Settings.ApiClientRequestTabs && GetNextOpenTabId(-1) is { } prevId)
+                        await OnTabSelectedAsync(prevId);
+                    break;
             }
             await InvokeAsync(StateHasChanged); // BL-2
         });
+    }
+
+    // Mirrors MainLayout.GetNextTabId, scoped to the API Client's own open-request tabs
+    // (State.OpenTabs) instead of the app-level page tabs.
+    private string? GetNextOpenTabId(int direction)
+    {
+        var tabs = _state.OpenTabs;
+        if (tabs.Count == 0) return null;
+        var currentId = _state.ActiveTabRequestId;
+        var idx = currentId is null ? -1 : tabs.FindIndex(t => t.RequestId == currentId);
+        if (idx < 0) return tabs[0].RequestId;
+        var next = (idx + direction + tabs.Count) % tabs.Count;
+        return tabs[next].RequestId;
     }
 
     private void RegisterApiClientCommands()

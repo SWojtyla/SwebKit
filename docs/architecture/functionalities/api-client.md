@@ -19,7 +19,8 @@
 - **cURL portability** — copy selected REST/GraphQL requests as masked cURL commands and import cURL commands into the active request target collection.
 - **Variable inspector** — list request tokens with source metadata and masked/resolved values.
 - **Response examples** — save scrubbed response examples on requests; linked files persist examples only after explicit save.
-- **Keyboard shortcuts** — API Client command registrations for new request, new collection, environment manager, send, and cancellation.
+- **Keyboard shortcuts** — API Client command registrations for new request, new collection, environment manager, send, and cancellation. When request tabs are enabled: `Ctrl+Shift+W` closes the active tab, `Ctrl+PageUp`/`Ctrl+PageDown` cycle tabs (chosen to mirror browser tab conventions and avoid colliding with the app-level `Ctrl+W`/`Ctrl+Tab`/`Ctrl+Shift+Tab` page-tab shortcuts).
+- **Optional request tabs** — user setting `ApiClientRequestTabs` (default off). When enabled, a tab strip allows several requests to stay open at once, each with its own dirty state, in-flight send/cancellation, and splitter drag-resize; closing a dirty tab prompts save/discard. Off by default preserves the single-request model unchanged.
 
 ## Current Deferrals
 
@@ -28,22 +29,36 @@
 ## Core Runtime Flow
 
 ```text
-ApiClientPage
+ApiClientPage (thin host; owns ApiClientState, page-scoped)
   ├── CollectionRepository / EnvironmentRepository
   ├── LinkedCollectionRootRepository / LinkedCollectionFileService / LinkedGitService
-  ├── CollectionTree
-  │     ├── Local Collections
-  │     └── Linked Repositories
-  ├── RequestBuilderPanel
-  │     ├── Body / Params / Headers / Auth / Capture
-  │     ├── GraphQlPanel
-  │     └── WebSocketPanel
-  └── ResponseViewerPanel
-        ├── response history
-      ├── saved response examples
-        ├── GraphQL errors / subscription messages
-        └── body display cap + load-full affordance
+  ├── ApiClientToolbar
+  └── ApiClientWorkspace
+        ├── ApiClientTreePanel
+        │     ├── CollectionTree (Local Collections / Linked Repositories)
+        │     └── tree-panel splitter (JS drag)
+        ├── ApiClientManagementScreens | ApiClientGitPanel (worksheet screens)
+        └── ApiClientRequestWorkspace (request/response area)
+              ├── ApiClientOpenTabsStrip (only when ApiClientRequestTabs is on)
+              ├── RequestBuilderPanel (one per open tab when tabs are on, else one)
+              │     ├── Body / Params / Headers / Auth / Capture
+              │     ├── GraphQlPanel
+              │     └── WebSocketPanel
+              ├── ResponseViewerPanel (one per open tab when tabs are on, else one)
+              │     ├── response history
+              │     ├── saved response examples
+              │     ├── GraphQL errors / subscription messages
+              │     └── body display cap + load-full affordance
+              └── request/response splitter (JS drag; per-tab handle when tabs are on)
 ```
+
+State stays owned by `ApiClientState` (page-scoped, not a DI singleton); extracted components are
+presentational — they read `State` and raise callbacks, they do not hold page-level truth
+(`docs/features/archive/api-client/decisions.md` DEC-11; `docs/features/active/api-client-ux-refactor/decisions.md` DEC-UX-3).
+When `ApiClientRequestTabs` is on, every open tab's `RequestBuilderPanel`/`ResponseViewerPanel` pair
+stays mounted (toggled via `display:none`, never `@if`) so a background tab's in-flight send or
+subscription keeps running while another tab is active; each tab also owns its own splitter JS
+handle and `CancellationTokenSource`.
 
 ## Send Path
 
@@ -73,20 +88,22 @@ ApiClientPage
 
 ## State Persistence
 
-| State                               | Location                                   | Lifetime                                  |
-| ----------------------------------- | ------------------------------------------ | ----------------------------------------- |
-| Local collections and requests      | `AppData/collections.json`                 | Persistent                                |
-| Local environments and API UI state | `AppData/environments.json`                | Persistent                                |
-| Linked root registrations           | `AppData/api-linked-roots.json`            | Persistent, machine-local                 |
-| Linked collections and requests     | `.swebkit-api/collections/**`              | Persistent, Git-trackable                 |
-| Linked environments                 | `.swebkit-api/environments/*.swebenv.json` | Persistent, Git-trackable references only |
-| Secret values                       | Windows Credential Store or Key Vault      | Persistent outside repo files             |
-| Request history                     | `ApiClientPage._requestHistory`            | Session only                              |
-| Response examples                   | `HttpRequestEntry.ResponseExamples`        | Persistent with collection/request        |
-| WebSocket message log               | `WebSocketPanel` state                     | Session/request only                      |
-| GraphQL subscription messages       | `ApiClientPage._subscriptionMessages`      | Session/request only                      |
-| OAuth2 token cache                  | `OAuth2TokenManager` memory cache          | Session only                              |
-| Generated sample values             | request scope/preview only                 | Not persisted                             |
+| State                               | Location                                     | Lifetime                                    |
+| ----------------------------------- | -------------------------------------------- | ------------------------------------------- |
+| Local collections and requests      | `AppData/collections.json`                   | Persistent                                  |
+| Local environments and API UI state | `AppData/environments.json`                  | Persistent                                  |
+| Linked root registrations           | `AppData/api-linked-roots.json`              | Persistent, machine-local                   |
+| Linked collections and requests     | `.swebkit-api/collections/**`                | Persistent, Git-trackable                   |
+| Linked environments                 | `.swebkit-api/environments/*.swebenv.json`   | Persistent, Git-trackable references only   |
+| Secret values                       | Windows Credential Store or Key Vault        | Persistent outside repo files               |
+| Request history                     | `ApiClientPage._requestHistory`              | Session only                                |
+| Response examples                   | `HttpRequestEntry.ResponseExamples`          | Persistent with collection/request          |
+| WebSocket message log               | `WebSocketPanel` state                       | Session/request only                        |
+| GraphQL subscription messages       | `ApiClientPage._subscriptionMessages`        | Session/request only                        |
+| OAuth2 token cache                  | `OAuth2TokenManager` memory cache            | Session only                                |
+| Generated sample values             | request scope/preview only                   | Not persisted                               |
+| Open request tabs                   | `ApiClientState.OpenTabs`                    | Session only (not persisted across restart) |
+| Request tabs enabled setting        | `UserSettings.Settings.ApiClientRequestTabs` | Persistent, default off                     |
 
 ## Security and Safety Notes
 

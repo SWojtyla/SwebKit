@@ -151,6 +151,28 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
         dotNetRef.invokeMethodAsync('OnShortcut', 'ApiSaveRequest');
         return;
       }
+      // Request-tab close/cycle (Phase 3 follow-up). Ctrl+W / Ctrl+Tab / Ctrl+Shift+Tab are
+      // already global app-level page-tab shortcuts (see TabClose/TabNext/TabPrev above), so
+      // reusing them here would silently override that behaviour. Ctrl+Shift+W is unused (the
+      // page-tab close check above only matches lowercase 'w', i.e. Ctrl+W without Shift) and
+      // Ctrl+PageUp/PageDown are unused anywhere in this file — both chosen because they mirror
+      // widely-known browser tab conventions (Ctrl+Shift+W / Ctrl+PageUp/Down already close and
+      // cycle tabs in most browsers), so no new mental model is needed.
+      if (ctrl && shift && key === 'W') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiTabClose');
+        return;
+      }
+      if (ctrl && key === 'PageDown') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiTabNext');
+        return;
+      }
+      if (ctrl && key === 'PageUp') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiTabPrev');
+        return;
+      }
       if (ctrl && key === 'r' && !shift) {
         e.preventDefault();
         dotNetRef.invokeMethodAsync('OnShortcut', 'SbReplay');

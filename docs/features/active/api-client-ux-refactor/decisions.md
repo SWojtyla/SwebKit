@@ -98,3 +98,23 @@ to deliver the core value (keeping several requests open during a session). Keep
 small.
 
 **Implication:** Persisting open tabs is an explicit follow-up if requested later.
+
+---
+
+## DEC-UX-8: Request-tab close/cycle shortcuts use Ctrl+Shift+W / Ctrl+PageUp / Ctrl+PageDown
+
+**Decision:** Closing the active request tab is bound to `Ctrl+Shift+W`; cycling to the next/previous
+open request tab is bound to `Ctrl+PageDown` / `Ctrl+PageUp`. `Ctrl+W`, `Ctrl+Tab`, and
+`Ctrl+Shift+Tab` are **not** reused — they already drive app-level page-tab close/cycle globally
+(see `keyboardShortcuts.js` / `MainLayout.OnShortcut`), and overloading them would silently override
+that existing behaviour depending on which "tabs" concept the user meant.
+
+**Rationale:** The maintainer asked for shortcuts that are "fluid" and don't require memorizing a
+bespoke scheme. `Ctrl+Shift+W` and `Ctrl+PageUp`/`Ctrl+PageDown` are the same chords most mainstream
+browsers already use to close/cycle browser tabs, so users already carry the muscle memory — no new
+mental model, and no collision with any existing global chord in this app.
+
+**Implication:** These chords are dispatched globally by `keyboardShortcuts.js` (same pattern as the
+other `Api*` shortcuts) but are no-ops unless `ApiClientPage` is mounted, subscribed, and
+`ApiClientRequestTabs` is enabled with at least one open tab — preserving DEC-UX-1's off-path
+guarantee.

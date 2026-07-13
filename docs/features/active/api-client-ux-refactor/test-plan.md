@@ -49,8 +49,10 @@ underlying ON #4 / #10 (`ApiClientSaveCommandTests`, `ApiClientQuickNavCommandTe
 `RequestBuilderPanel` / `CollectionExportDialog` — a build-time reference issue, not a mocking
 gap). As a result OFF #2, OFF #3, and ON #5-#9 are verified via code-trace only (same
 verification category already accepted for Phase 2's manual-smoke caveat); ON #4 and ON #10 are
-partially covered (static contracts tested, full behavioural wiring code-traced only). ON #11 is
-not yet implementable — see status.md caveats.
+partially covered (static contracts tested, full behavioural wiring code-traced only). ON #11
+(close/cycle shortcuts) is implemented (`Ctrl+Shift+W` / `Ctrl+PageUp` / `Ctrl+PageDown` — see
+DEC-UX-8) but, like ON #5-#9, verified via code-trace only — there is no bUnit contract test for
+the `OnApiClientShortcut`/`GetNextOpenTabId` routing for the same MAUI-reference reason.
 
 ### Toggle OFF (default)
 
@@ -62,16 +64,16 @@ not yet implementable — see status.md caveats.
 
 ### Toggle ON
 
-| #   | Scenario                              | Expected                                                           |
-| --- | ------------------------------------- | ------------------------------------------------------------------ |
-| 4   | Enable setting                        | Tab strip appears above the request builder                        |
-| 5   | Open second request                   | New tab added; first tab preserved; no implicit replace            |
-| 6   | Edit tab A, switch to B, back to A    | Tab A dirty state and edits preserved                              |
-| 7   | Send in tab A, switch to B            | Tab B usable; tab A send continues; no cross-tab cancel (DEC-UX-4) |
-| 8   | Close dirty tab                       | Save/discard prompt fires                                          |
-| 9   | Close tab with active WS/subscription | Session cancelled and disposed (BL-7)                              |
-| 10  | Ctrl+S / Send / Ctrl+P under tabs     | Route to the active tab; focused shortcut test                     |
-| 11  | Ctrl+W / Ctrl+Tab                     | Close/cycle tabs (if shortcuts adopted)                            |
+| #   | Scenario                                   | Expected                                                                    |
+| --- | ------------------------------------------ | --------------------------------------------------------------------------- |
+| 4   | Enable setting                             | Tab strip appears above the request builder                                 |
+| 5   | Open second request                        | New tab added; first tab preserved; no implicit replace                     |
+| 6   | Edit tab A, switch to B, back to A         | Tab A dirty state and edits preserved                                       |
+| 7   | Send in tab A, switch to B                 | Tab B usable; tab A send continues; no cross-tab cancel (DEC-UX-4)          |
+| 8   | Close dirty tab                            | Save/discard prompt fires                                                   |
+| 9   | Close tab with active WS/subscription      | Session cancelled and disposed (BL-7)                                       |
+| 10  | Ctrl+S / Send / Ctrl+P under tabs          | Route to the active tab; focused shortcut test                              |
+| 11  | Ctrl+Shift+W / Ctrl+PageUp / Ctrl+PageDown | Close/cycle tabs (DEC-UX-8; code-trace only, see verification status above) |
 
 ---
 

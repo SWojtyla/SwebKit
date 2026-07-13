@@ -110,8 +110,9 @@ Proposed decomposition:
 - Each open tab holds its own: dirty state, in-flight send + `CancellationTokenSource`, editor
   instance lifecycle, response/result + history, subscription/WebSocket session ownership.
 - Closing a dirty tab prompts save/discard (reuse the existing dirty-switch prompt).
-- Middle-click / close button / `Ctrl+W` closes a tab; `Ctrl+Tab` cycles (confirm shortcut
-  availability against `CommandRegistry`).
+- Middle-click / close button / `Ctrl+Shift+W` closes the active tab; `Ctrl+PageUp` / `Ctrl+PageDown`
+  cycle tabs (see DEC-UX-8 for why `Ctrl+W` / `Ctrl+Tab` / `Ctrl+Shift+Tab` are not reused — those
+  chords already drive app-level page-tab navigation).
 
 ### State model
 

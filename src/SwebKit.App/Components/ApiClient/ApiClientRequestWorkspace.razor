@@ -46,7 +46,7 @@ else
         {
             var isActiveTab = tab.RequestId == State.ActiveTabRequestId;
             <div @key="tab.RequestId" class="api-client-workspace__panels" style="display:@(isActiveTab ? "flex" : "none")">
-                <div class="api-client-workspace__builder">
+                <div class="api-client-workspace__builder" @ref="_tabBuilderPanelEls[tab.RequestId]">
                     @if (isActiveTab && MissingSecretNames.Count > 0)
                     {
                         <div class="api-client-secret-warning">
@@ -62,7 +62,7 @@ else
                                          OnSubscriptionMessage="@(msg => OnTabSubscriptionMessageAsync(tab, msg))"
                                          OnSubscriptionStopped="@OnSubscriptionStopped" />
                 </div>
-                <div class="api-client-workspace__splitter"></div>
+                <div class="api-client-workspace__splitter" @ref="_tabSplitterEls[tab.RequestId]"></div>
                 <div class="api-client-workspace__response">
                     <ResponseViewerPanel Result="@State.LastResultByRequestId.GetValueOrDefault(tab.RequestId)"
                                          SubscriptionMessages="@State.SubscriptionMessagesByRequestId.GetValueOrDefault(tab.RequestId, [])"
@@ -276,6 +276,17 @@ else
     private IJSObjectReference? _splitterHandle;
     private string? _lastSplitterRequestId;
 
+    // Per-tab splitter state (Phase 3 follow-up): unlike the single-request branch above, every
+    // open tab keeps its own splitter/builder element refs and its own JS handle, initialized once
+    // per tab and left attached for the tab's lifetime (the div stays mounted, just display:none,
+    // per BL-4/BL-15 — see the per-tab render block above). Initializing while hidden is safe: JS
+    // splitter.init only attaches a mousedown listener; drag width is only read/applied while the
+    // element is actually visible and being dragged. Keyed by tab.RequestId so re-opening a tab
+    // (new ApiClientOpenTab instance, same RequestId) reuses/replaces the entry correctly.
+    private readonly Dictionary<string, ElementReference> _tabSplitterEls = [];
+    private readonly Dictionary<string, ElementReference> _tabBuilderPanelEls = [];
+    private readonly Dictionary<string, IJSObjectReference> _tabSplitterHandles = [];
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Unlike ApiClientPage (where BL-12's firstRender guard was needed because the workspace
@@ -290,11 +301,9 @@ else
         // the splitter would never re-initialize after returning from a worksheet screen until some
         // unrelated re-render happened to fire. So: no firstRender early-return in this component.
 
-        // Init the splitter whenever the panels become visible for a new request. Skipped entirely
-        // in the per-tab branch (RequestTabsEnabled && OpenTabs.Count > 0): that branch never binds
-        // _splitterEl/_builderPanelEl via @ref (each tab has its own static, non-draggable divider),
-        // so attempting to init here would target dead ElementReference values.
-        // _lastSplitterRequestId tracks which request the current JS handle was set up for.
+        // _lastSplitterRequestId tracks which request the current single-branch JS handle was set
+        // up for. When the per-tab branch is active, the single-request splitter is torn down (its
+        // divs aren't rendered/bound in that branch) and each open tab gets its own JS handle below.
         var usingTabBranch = RequestTabsEnabled && State.OpenTabs.Count > 0;
         var shouldShowSplitter = State.SelectedRequest is not null && State.WorksheetMode is null && !usingTabBranch;
         if (shouldShowSplitter && _lastSplitterRequestId != State.SelectedRequestId)
@@ -312,6 +321,37 @@ else
             await DisposeSplitterAsync();
             _lastSplitterRequestId = null;
         }
+
+        if (usingTabBranch)
+        {
+            // Init a JS splitter handle for every open tab that has bound its element refs but
+            // doesn't have one yet (new tab, or first render after enabling the setting).
+            foreach (var tab in State.OpenTabs)
+            {
+                if (_tabSplitterHandles.ContainsKey(tab.RequestId))
+                    continue;
+                if (!_tabSplitterEls.TryGetValue(tab.RequestId, out var splitterEl) ||
+                    !_tabBuilderPanelEls.TryGetValue(tab.RequestId, out var builderEl))
+                    continue;
+
+                _tabSplitterHandles[tab.RequestId] = await JS.InvokeAsync<IJSObjectReference>(
+                    "SwebKitSplitter.init",
+                    splitterEl,
+                    builderEl,
+                    new { leftPane = true, minWidth = 400, maxWidth = 1600 });
+            }
+
+            // Tear down handles for tabs that have since been closed.
+            var openIds = new HashSet<string>(State.OpenTabs.Select(t => t.RequestId), StringComparer.Ordinal);
+            foreach (var staleId in _tabSplitterHandles.Keys.Where(id => !openIds.Contains(id)).ToList())
+                await DisposeTabSplitterAsync(staleId);
+        }
+        else if (_tabSplitterHandles.Count > 0)
+        {
+            // Setting was toggled off (or all tabs closed) while this component stayed mounted.
+            foreach (var tabId in _tabSplitterHandles.Keys.ToList())
+                await DisposeTabSplitterAsync(tabId);
+        }
     }
 
     private async Task DisposeSplitterAsync()
@@ -322,10 +362,22 @@ else
         _splitterHandle = null;
     }
 
+    private async Task DisposeTabSplitterAsync(string tabId)
+    {
+        if (!_tabSplitterHandles.Remove(tabId, out var handle))
+            return;
+        try { await handle.InvokeVoidAsync("dispose"); } catch { /* ignore teardown errors */ }
+        try { await handle.DisposeAsync(); } catch { }
+        _tabSplitterEls.Remove(tabId);
+        _tabBuilderPanelEls.Remove(tabId);
+    }
+
     // ── IAsyncDisposable ───────────────────────────────────────────────────────
 
     public async ValueTask DisposeAsync()
     {
         await DisposeSplitterAsync();
+        foreach (var tabId in _tabSplitterHandles.Keys.ToList())
+            await DisposeTabSplitterAsync(tabId);
     }
 }
