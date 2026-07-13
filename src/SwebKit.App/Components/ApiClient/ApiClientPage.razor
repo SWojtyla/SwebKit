@@ -200,9 +200,8 @@
     private string? _secretNameToConfigure;
     private string _secretValueToConfigure = string.Empty;
     private string? _secretConfigError;
-    private bool _showCurlImportDialog;
-    private string _curlImportText = string.Empty;
-    private string? _curlImportError;
+
+    // Curl import/export dialog state + handlers: see ApiClientPage.Curl.cs
 
     // Phase 8 — request history (last 20 per request, in-memory only)
     private const int HistoryCap = 20;
@@ -431,13 +430,6 @@ IsLinkedCollection(_state.ActiveCollection.Id)
         _shouldFocusLinkedRootInput = true;
     }
 
-    private void OpenCurlImportDialog()
-    {
-        _curlImportText = string.Empty;
-        _curlImportError = null;
-        _showCurlImportDialog = true;
-    }
-
     private void OpenLinkedRootDialogFromMenu()
     {
         OpenLinkedRootDialog();
@@ -478,11 +470,6 @@ IsLinkedCollection(_state.ActiveCollection.Id)
         }
     }
 
-    private void OpenCurlImportDialogFromMenu()
-    {
-        OpenCurlImportDialog();
-    }
-
     private void OpenCollectionImportDialogFromMenu()
     {
         _exportDialogInitialTab = "import";
@@ -508,61 +495,6 @@ IsLinkedCollection(_state.ActiveCollection.Id)
     private async Task OpenRequestVariablesFromMenu()
     {
         await OpenVariableInspectorAsync();
-    }
-
-    private async Task ImportCurlAsync()
-    {
-        var targetCollection = GetRequestTargetCollection();
-        if (targetCollection is null) return;
-        ActivateCollection(targetCollection);
-
-        var result = WorkflowService.ImportCurl(_curlImportText);
-        if (!result.IsSuccess || result.Request is null)
-        {
-            _curlImportError = result.ErrorMessage ?? "Could not import the cURL command.";
-            return;
-        }
-
-        var request = result.Request;
-        targetCollection.Nodes.Add(new ApiCollectionNode
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Type = ApiCollectionNodeType.Request,
-            Name = request.Name,
-            Request = request,
-        });
-        _state.SelectedRequest = request;
-        _state.SelectedRequestId = request.Id;
-        _showCurlImportDialog = false;
-        _state.WorkflowMessage = "Imported cURL request.";
-        _state.WorkflowMessageIsError = false;
-
-        if (await SaveActiveCollectionAsync())
-        {
-            _state.IsDirty = false;
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task CopyCurlAsync()
-    {
-        if (_state.SelectedRequest is null || _state.ActiveCollection is null) return;
-
-        var curl = await WorkflowService.BuildCurlAsync(_state.SelectedRequest, _state.ActiveCollection, ActiveEnvironment);
-        try
-        {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", curl);
-            _state.WorkflowMessage = "Copied masked cURL command.";
-            _state.WorkflowMessageIsError = false;
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or JSException)
-        {
-            _state.WorkflowMessage = "Clipboard copy failed.";
-            _state.WorkflowMessageIsError = true;
-        }
-
-        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OpenVariableInspectorAsync()
