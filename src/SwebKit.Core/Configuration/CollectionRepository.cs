@@ -31,7 +31,7 @@ public sealed class CollectionRepository
 
         try
         {
-            var result = await AppDataFileStore.LoadAsync(AppDataPaths.CollectionsJson, Deserialize);
+            var result = await AppDataFileStore.LoadAsync(AppDataPaths.CollectionsJson, Deserialize).ConfigureAwait(false);
             _store = result.Value;
         }
         catch
@@ -44,7 +44,7 @@ public sealed class CollectionRepository
     {
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_store, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.CollectionsJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.CollectionsJson, json).ConfigureAwait(false);
     }
 
     public async Task<ApiCollection> AddCollectionAsync(string name)
@@ -57,7 +57,7 @@ public sealed class CollectionRepository
             UpdatedAt = DateTimeOffset.UtcNow,
         };
         _store.Collections.Add(collection);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
         return collection;
     }
 
@@ -68,7 +68,7 @@ public sealed class CollectionRepository
         collection.CreatedAt = collection.CreatedAt == default ? DateTimeOffset.UtcNow : collection.CreatedAt;
         collection.UpdatedAt = DateTimeOffset.UtcNow;
         _store.Collections.Add(collection);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public async Task<bool> UpdateCollectionAsync(ApiCollection updated)
@@ -78,7 +78,7 @@ public sealed class CollectionRepository
 
         updated.UpdatedAt = DateTimeOffset.UtcNow;
         _store.Collections[idx] = updated;
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
         return true;
     }
 
@@ -86,7 +86,7 @@ public sealed class CollectionRepository
     {
         var removed = _store.Collections.RemoveAll(c => c.Id == collectionId);
         if (removed == 0) return false;
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
         return true;
     }
 
@@ -109,7 +109,7 @@ public sealed class CollectionRepository
     public async Task ReplaceStoreAsync(CollectionsStore store)
     {
         _store = store;
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     private static HttpRequestEntry? FindRequestInNodes(List<ApiCollectionNode> nodes, string requestId)

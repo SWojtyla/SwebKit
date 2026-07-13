@@ -1,5 +1,6 @@
 @* Flattened + virtualized collection tree (BL-5 guard on ShouldRender) *@
 @using Microsoft.FluentUI.AspNetCore.Components
+@using Microsoft.JSInterop
 @inject IJSRuntime JS
 
 <div class="api-client collection-tree">
@@ -111,7 +112,7 @@
 
     @if (_ctxNode is not null && _ctxNode.Kind == FlatTreeNodeKind.Node)
     {
-        <div class="ctx-backdrop" @onclick="() => _ctxNode = null"></div>
+        <div class="ctx-backdrop" @onclick="CloseContextMenu"></div>
         <div class="ctx-menu" @ref="_ctxMenu"
              style="top:@(_ctxY.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))px; left:@(_ctxX.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))px;">
             @{
@@ -238,14 +239,28 @@ Icons.Regular.Size16.AddSquare();
             _prevCollections = Collections;
             _prevLinkedRoots = LinkedRoots;
             RebuildFlatTree();
+            InvalidateRender();
         }
         else if (selectionChanged)
         {
             _prevSelectedRequestId = SelectedRequestId;
+            InvalidateRender();
         }
     }
 
-    protected override bool ShouldRender() => true;
+    private bool _shouldRender = true;
+
+    protected override bool ShouldRender()
+    {
+        if (_shouldRender)
+        {
+            _shouldRender = false;
+            return true;
+        }
+        return false;
+    }
+
+    private void InvalidateRender() => _shouldRender = true;
 
     private void RebuildFlatTree()
     {
@@ -368,12 +383,14 @@ Icons.Regular.Size16.AddSquare();
         var current = _GetExpandedState(flatNode.Node.Id, flatNode.Node.IsExpanded);
         _expandedOverrides[flatNode.Node.Id] = !current;
         RebuildFlatTree();
+        InvalidateRender();
     }
 
     private void OnFilterInput(ChangeEventArgs e)
     {
         _filter = e.Value as string ?? string.Empty;
         ApplyFilter();
+        InvalidateRender();
     }
 
     private void ApplyFilter()
@@ -436,6 +453,13 @@ Icons.Regular.Size16.AddSquare();
         _ctxX = e.ClientX;
         _ctxY = e.ClientY;
         _shouldClampCtx = true;
+        InvalidateRender();
+    }
+
+    private void CloseContextMenu()
+    {
+        _ctxNode = null;
+        InvalidateRender();
     }
 
     private FlatTreeNode? _ctxNode;
@@ -456,12 +480,14 @@ Icons.Regular.Size16.AddSquare();
         _renameValue = _ctxNode.Node.Name;
         _ctxNode = null;
         _shouldFocusRename = true;
+        InvalidateRender();
     }
 
     private async Task AddSubFolderCtxAsync()
     {
         var node = _ctxNode;
         _ctxNode = null;
+        InvalidateRender();
         if (node is not null) await OnAddFolder.InvokeAsync((node.CollectionId, node.Node));
     }
 
@@ -469,6 +495,7 @@ Icons.Regular.Size16.AddSquare();
     {
         var node = _ctxNode;
         _ctxNode = null;
+        InvalidateRender();
         if (node is not null) await OnAddRequest.InvokeAsync((node.CollectionId, node.Node));
     }
 
@@ -476,6 +503,7 @@ Icons.Regular.Size16.AddSquare();
     {
         var node = _ctxNode;
         _ctxNode = null;
+        InvalidateRender();
         if (node is not null)
             await OnLinkCollectionToRepo.InvokeAsync(node.CollectionId);
     }
@@ -484,6 +512,7 @@ Icons.Regular.Size16.AddSquare();
     {
         var node = _ctxNode;
         _ctxNode = null;
+        InvalidateRender();
         if (node is null) return;
         if (node.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
             await OnDeleteCollection.InvokeAsync(node.CollectionId);
@@ -496,6 +525,7 @@ Icons.Regular.Size16.AddSquare();
         if (_renamingNodeId is null) return;
         var flatNode = _flatNodes.FirstOrDefault(n => n.Id == _renamingNodeId);
         _renamingNodeId = null;
+        InvalidateRender();
         if (flatNode is null || string.IsNullOrWhiteSpace(_renameValue)) return;
 
         if (flatNode.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
@@ -512,7 +542,7 @@ Icons.Regular.Size16.AddSquare();
     private async Task OnRenameKeyDownAsync(KeyboardEventArgs e)
     {
         if (e.Key == "Enter") await CommitRenameAsync();
-        else if (e.Key == "Escape") _renamingNodeId = null;
+        else if (e.Key == "Escape") { _renamingNodeId = null; InvalidateRender(); }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

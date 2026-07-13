@@ -38,7 +38,7 @@ public sealed class ServiceBusEvidenceSignalSource : IIncidentTimelineSignalSour
                 continue;
             }
 
-            var connection = await _bootstrapper.ConnectAsync(serviceBusNamespace, ct);
+            var connection = await _bootstrapper.ConnectAsync(serviceBusNamespace, ct).ConfigureAwait(false);
             if (connection.Client is null)
             {
                 errors.Add(connection.ConnectionError ?? $"Failed to connect to namespace {serviceBusNamespace.Alias}.");
@@ -52,7 +52,7 @@ public sealed class ServiceBusEvidenceSignalSource : IIncidentTimelineSignalSour
                     ct.ThrowIfCancellationRequested();
                     try
                     {
-                        items.AddRange(await BuildEntityItemsAsync(query, serviceBusNamespace, binding, connection.Client, ct));
+                        items.AddRange(await BuildEntityItemsAsync(query, serviceBusNamespace, binding, connection.Client, ct).ConfigureAwait(false));
                     }
                     catch (OperationCanceledException)
                     {
@@ -68,7 +68,7 @@ public sealed class ServiceBusEvidenceSignalSource : IIncidentTimelineSignalSour
             {
                 if (connection.Client is IAsyncDisposable asyncDisposable)
                 {
-                    await asyncDisposable.DisposeAsync();
+                    await asyncDisposable.DisposeAsync().ConfigureAwait(false);
                 }
             }
         }
@@ -113,12 +113,12 @@ public sealed class ServiceBusEvidenceSignalSource : IIncidentTimelineSignalSour
         var items = new List<IncidentTimelineItem>();
         var window = query.GetUtcWindow();
         var entityLabel = string.IsNullOrWhiteSpace(binding.Alias) ? binding.EntityPath : binding.Alias;
-        var stats = await client.GetEntityStatsAsync(binding.EntityPath, ct);
+        var stats = await client.GetEntityStatsAsync(binding.EntityPath, ct).ConfigureAwait(false);
 
         IReadOnlyList<SbMessage> deadLetterMessages = [];
         try
         {
-            deadLetterMessages = await client.PeekDeadLetterAsync(binding.EntityPath, 25, ct);
+            deadLetterMessages = await client.PeekDeadLetterAsync(binding.EntityPath, 25, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -164,7 +164,7 @@ public sealed class ServiceBusEvidenceSignalSource : IIncidentTimelineSignalSour
         IReadOnlyList<SbMessage> activeMessages = [];
         try
         {
-            activeMessages = await client.PeekMessagesAsync(binding.EntityPath, 25, ct);
+            activeMessages = await client.PeekMessagesAsync(binding.EntityPath, 25, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

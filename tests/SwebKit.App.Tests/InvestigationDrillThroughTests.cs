@@ -351,5 +351,11 @@ public sealed class InvestigationDrillThroughTests : TestContext
 
         public string ParseFullyQualifiedNamespace(string connectionString) =>
             throw new InvalidOperationException("Factory should not be called in this test.");
+
+        public ServiceBusConnectionDiagnostic BuildConnectionDiagnostic(string connectionString, string credentialSource) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
+
+        public ServiceBusConnectionDiagnostic BuildEntraConnectionDiagnostic(string fullyQualifiedNamespace) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
     }
 }

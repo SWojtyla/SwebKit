@@ -149,6 +149,12 @@ public sealed class ServiceBusNamespaceBootstrapperTests
 
         public string ParseFullyQualifiedNamespace(string connectionString) =>
             throw new InvalidOperationException("Factory.ParseFullyQualifiedNamespace should not be called in this test.");
+
+        public ServiceBusConnectionDiagnostic BuildConnectionDiagnostic(string connectionString, string credentialSource) =>
+            throw new InvalidOperationException("Factory.BuildConnectionDiagnostic should not be called in this test.");
+
+        public ServiceBusConnectionDiagnostic BuildEntraConnectionDiagnostic(string fullyQualifiedNamespace) =>
+            throw new InvalidOperationException("Factory.BuildEntraConnectionDiagnostic should not be called in this test.");
     }
 
     private sealed class CapturingServiceBusClientFactory : IServiceBusClientFactory
@@ -174,6 +180,18 @@ public sealed class ServiceBusNamespaceBootstrapperTests
 
         public string ParseFullyQualifiedNamespace(string connectionString) =>
             connectionString.Split(';')[0].Replace("Endpoint=sb://", string.Empty);
+
+        public ServiceBusConnectionDiagnostic BuildConnectionDiagnostic(string connectionString, string credentialSource) =>
+            new(EndpointHost: ParseFullyQualifiedNamespace(connectionString),
+                SharedAccessKeyName: "RootManageSharedAccessKey",
+                AuthMethod: "SAS key",
+                CredentialSource: credentialSource);
+
+        public ServiceBusConnectionDiagnostic BuildEntraConnectionDiagnostic(string fullyQualifiedNamespace) =>
+            new(EndpointHost: fullyQualifiedNamespace,
+                SharedAccessKeyName: null,
+                AuthMethod: "Microsoft Entra (DefaultAzureCredential)",
+                CredentialSource: "DefaultAzureCredential");
     }
 
     private sealed class FakeServiceBusClient : IServiceBusClient

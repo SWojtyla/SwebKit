@@ -1,4 +1,5 @@
 @using SwebKit.Core.Services
+@using System.Threading
 
 @page "/api-client"
 @inject IFolderPickerService FolderPicker
@@ -42,9 +43,11 @@
 
     @* ── Main split: collection tree + request workspace ── *@
     <ApiClientWorkspace State="_state" CanCreateRequest="CanCreateRequest" MissingSecretNames="MissingSecretNames"
-                        OnAddCollection="AddCollectionAsync" OnAddApiRepo="OpenLinkedRootDialog"
-                        OnRequestSelected="OnRequestSelectedAsync" OnCollectionSelected="OnCollectionSelectedAsync"
-                        OnAddFolder="OnAddFolderAsync" OnAddRequestInFolder="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
+                        RequestTabsEnabled="@UserSettings.Settings.ApiClientRequestTabs" OnAddCollection="AddCollectionAsync"
+                        OnAddApiRepo="OpenLinkedRootDialog" OnRequestSelected="OnRequestSelectedAsync"
+                        OnCollectionSelected="OnCollectionSelectedAsync" OnTabSelected="OnTabSelectedAsync"
+                        OnTabCloseRequested="OnTabCloseRequestedAsync" OnAddFolder="OnAddFolderAsync"
+                        OnAddRequestInFolder="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
                         OnDeleteNode="OnDeleteNodeAsync" OnLinkedRootSelected="OnLinkedRootSelectedAsync"
                         OnRenameCollection="OnRenameCollectionAsync" OnDeleteCollection="OnDeleteCollectionAsync"
                         OnLinkCollectionToRepo="OnLinkCollectionToRepoAsync" OnMoveNode="OnMoveNodeAsync"
@@ -76,84 +79,102 @@
     </div>
 }
 
-@* ── Add API repo dialog ── *@
-@if (_showLinkedRootDialog)
+@* ── Close dirty tab confirm dialog (Phase 3, Task 5) ── *@
+@if (_showTabCloseConfirmDialog)
 {
-    <div class="api-client-dialog-backdrop" @onclick="() => _showLinkedRootDialog = false"></div>
-    <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Add API Repository">
-        <div class="api-client-dialog__title">Add API Repository</div>
-        <div class="api-client-dialog__hint">
-            Choose a Git repository folder, or an existing .swebkit-api folder. SwebKit keeps API request files there so
-            they can be committed with that repo.
-        </div>
-        <input type="text" class="api-client-dialog__input" placeholder="Display name (optional)"
-               value="@_newLinkedRootName" @oninput="e => _newLinkedRootName = e.Value?.ToString() ?? string.Empty" />
-        <div class="api-client-dialog__path-row">
-            <input type="text" class="api-client-dialog__input" placeholder="Path to Git repo or .swebkit-api folder"
-                   value="@_newLinkedRootPath" @oninput="e => _newLinkedRootPath = e.Value?.ToString() ?? string.Empty"
-                   @ref="_newLinkedRootInput" />
-            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
-                       OnClick="PickLinkedRootFolderAsync">…</AppButton>
-        </div>
-        @if (_linkedRootError is not null)
-        {
-            <div class="api-client-dialog__error">@_linkedRootError</div>
-        }
+    <div class="api-client-dialog-backdrop" @onclick="CancelTabCloseConfirm"></div>
+    <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="Unsaved changes">
+        <div class="api-client-dialog__title">Unsaved changes</div>
+        <div class="api-client-dialog__hint">This request has unsaved changes. Save before closing the tab?</div>
         <div class="api-client-dialog__actions">
             <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
-                       Disabled="@(string.IsNullOrWhiteSpace(_newLinkedRootPath))" OnClick="ConfirmLinkedRootAsync">Add repo
-            </AppButton>
-            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
-                       OnClick="@(() => _showLinkedRootDialog = false)">Cancel</AppButton>
-        </div>
-    </div>
-}
+                       OnClick="SaveAndCloseTabAsync">Save</AppButton>
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn" OnClick="DiscardAndCloseTabAsync">
+                Discard</AppButton>
+                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn" OnClick="CancelTabCloseConfirm">
+                    Cancel</AppButton>
+                </div>
+            </div>
+        }
 
-@if (_showConfigureSecretDialog)
-{
-    <div class="api-client-dialog-backdrop" @onclick="() => _showConfigureSecretDialog = false"></div>
-    <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="Configure linked secret">
-        <div class="api-client-dialog__title">Configure Secret</div>
-        <div class="api-client-dialog__hint">@(_secretNameToConfigure ?? "Select a missing secret")</div>
-        <input type="password" class="api-client-dialog__input" placeholder="Secret value stored locally"
-               value="@_secretValueToConfigure"
-               @oninput="e => _secretValueToConfigure = e.Value?.ToString() ?? string.Empty" />
-        @if (_secretConfigError is not null)
+        @* ── Add API repo dialog ── *@
+        @if (_showLinkedRootDialog)
         {
-            <div class="api-client-dialog__error">@_secretConfigError</div>
+            <div class="api-client-dialog-backdrop" @onclick="() => _showLinkedRootDialog = false"></div>
+            <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Add API Repository">
+                <div class="api-client-dialog__title">Add API Repository</div>
+                <div class="api-client-dialog__hint">
+                    Choose a Git repository folder, or an existing .swebkit-api folder. SwebKit keeps API request files there so
+                    they can be committed with that repo.
+                </div>
+                <input type="text" class="api-client-dialog__input" placeholder="Display name (optional)"
+                       value="@_newLinkedRootName" @oninput="e => _newLinkedRootName = e.Value?.ToString() ?? string.Empty" />
+                <div class="api-client-dialog__path-row">
+                    <input type="text" class="api-client-dialog__input" placeholder="Path to Git repo or .swebkit-api folder"
+                           value="@_newLinkedRootPath" @oninput="e => _newLinkedRootPath = e.Value?.ToString() ?? string.Empty"
+                           @ref="_newLinkedRootInput" />
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                               OnClick="PickLinkedRootFolderAsync">…</AppButton>
+                </div>
+                @if (_linkedRootError is not null)
+                {
+                    <div class="api-client-dialog__error">@_linkedRootError</div>
+                }
+                <div class="api-client-dialog__actions">
+                    <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                               Disabled="@(string.IsNullOrWhiteSpace(_newLinkedRootPath))" OnClick="ConfirmLinkedRootAsync">Add repo
+                    </AppButton>
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                               OnClick="@(() => _showLinkedRootDialog = false)">Cancel</AppButton>
+                </div>
+            </div>
         }
-        <div class="api-client-dialog__actions">
-            <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
-                       Disabled="@(string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))"
-                       OnClick="SaveConfiguredSecretAsync">Save Secret</AppButton>
-            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
-                       OnClick="@(() => _showConfigureSecretDialog = false)">Cancel</AppButton>
-        </div>
-    </div>
-}
 
-@if (_showCurlImportDialog)
-{
-    <div class="api-client-dialog-backdrop" @onclick="() => _showCurlImportDialog = false"></div>
-    <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Import cURL">
-        <div class="api-client-dialog__title">Import cURL</div>
-        <div class="api-client-dialog__hint">Paste a cURL command. SwebKit will create a request in the active collection.
-        </div>
-        <textarea class="api-client-dialog__textarea" placeholder="curl https://api.example.com ..."
-                  value="@_curlImportText" @oninput="e => _curlImportText = e.Value?.ToString() ?? string.Empty"></textarea>
-        @if (_curlImportError is not null)
+        @if (_showConfigureSecretDialog)
         {
-            <div class="api-client-dialog__error">@_curlImportError</div>
+            <div class="api-client-dialog-backdrop" @onclick="() => _showConfigureSecretDialog = false"></div>
+            <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="Configure linked secret">
+                <div class="api-client-dialog__title">Configure Secret</div>
+                <div class="api-client-dialog__hint">@(_secretNameToConfigure ?? "Select a missing secret")</div>
+                <input type="password" class="api-client-dialog__input" placeholder="Secret value stored locally"
+                       value="@_secretValueToConfigure"
+                       @oninput="e => _secretValueToConfigure = e.Value?.ToString() ?? string.Empty" />
+                @if (_secretConfigError is not null)
+                {
+                    <div class="api-client-dialog__error">@_secretConfigError</div>
+                }
+                <div class="api-client-dialog__actions">
+                    <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                               Disabled="@(string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))"
+                               OnClick="SaveConfiguredSecretAsync">Save Secret</AppButton>
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                               OnClick="@(() => _showConfigureSecretDialog = false)">Cancel</AppButton>
+                </div>
+            </div>
         }
-        <div class="api-client-dialog__actions">
-            <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
-                       Disabled="@(string.IsNullOrWhiteSpace(_curlImportText) || _state.ActiveCollection is null)"
-                       OnClick="ImportCurlAsync">Import</AppButton>
-            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
-                       OnClick="@(() => _showCurlImportDialog = false)">Cancel</AppButton>
-        </div>
-    </div>
-}
+
+        @if (_showCurlImportDialog)
+        {
+            <div class="api-client-dialog-backdrop" @onclick="() => _showCurlImportDialog = false"></div>
+            <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Import cURL">
+                <div class="api-client-dialog__title">Import cURL</div>
+                <div class="api-client-dialog__hint">Paste a cURL command. SwebKit will create a request in the active collection.
+                </div>
+                <textarea class="api-client-dialog__textarea" placeholder="curl https://api.example.com ..."
+                          value="@_curlImportText" @oninput="e => _curlImportText = e.Value?.ToString() ?? string.Empty"></textarea>
+                @if (_curlImportError is not null)
+                {
+                    <div class="api-client-dialog__error">@_curlImportError</div>
+                }
+                <div class="api-client-dialog__actions">
+                    <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                               Disabled="@(string.IsNullOrWhiteSpace(_curlImportText) || _state.ActiveCollection is null)"
+                               OnClick="ImportCurlAsync">Import</AppButton>
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                               OnClick="@(() => _showCurlImportDialog = false)">Cancel</AppButton>
+                </div>
+            </div>
+        }
 
 @* ── Delete collection confirm ── *@
 <ConfirmDialog Visible="@(_pendingDeleteCollectionId is not null)" Title="Delete collection?"
@@ -161,11 +182,11 @@
                ConfirmLabel="Delete" OnConfirm="ConfirmDeleteCollectionAsync"
                OnCancel="@(() => { _pendingDeleteCollectionId = null; _pendingDeleteCollectionName = null; })" />
 
-@* ── Export / Import dialog ── *@
-<CollectionExportDialog Visible="@_showExportDialog" Collection="@_state.ActiveCollection"
-                        Environments="@_state.Environments" InitialTab="@_exportDialogInitialTab"
-                        TargetLinkedRootApiPath="@(CurrentTargetLinkedRoot?.ApiRootPath)" OnClose="@(() => _showExportDialog = false)"
-                        OnImported="@OnCollectionImportedAsync" />
+        @* ── Export / Import dialog ── *@
+        <CollectionExportDialog Visible="@_showExportDialog" Collection="@_state.ActiveCollection"
+                                Environments="@_state.Environments" InitialTab="@_exportDialogInitialTab"
+                                TargetLinkedRootApiPath="@(CurrentTargetLinkedRoot?.ApiRootPath)" OnClose="@(() => _showExportDialog = false)"
+                                OnImported="@OnCollectionImportedAsync" />
 
 @code {
     // ── Icons (Phase 1: FluentIcon vocabulary, reused across the page) ─────────
@@ -179,9 +200,8 @@
     private string? _secretNameToConfigure;
     private string _secretValueToConfigure = string.Empty;
     private string? _secretConfigError;
-    private bool _showCurlImportDialog;
-    private string _curlImportText = string.Empty;
-    private string? _curlImportError;
+
+    // Curl import/export dialog state + handlers: see ApiClientPage.Curl.cs
 
     // Phase 8 — request history (last 20 per request, in-memory only)
     private const int HistoryCap = 20;
@@ -204,6 +224,10 @@
     private ElementReference _newCollectionInput;
     private bool _shouldFocusNewCollectionInput;
 
+    // Close-dirty-tab confirm dialog state (Phase 3, Task 5)
+    private bool _showTabCloseConfirmDialog;
+    private string? _pendingCloseTabRequestId;
+
     // Add linked root dialog state
     private bool _showLinkedRootDialog;
     private string _newLinkedRootName = string.Empty;
@@ -221,7 +245,7 @@
     private string _exportDialogInitialTab = "export";
 
     // Auto-save debounce
-    private System.Timers.Timer? _autoSaveTimer;
+    private PeriodicTimer? _autoSaveTimer;
     private const int AutoSaveDebounceMs = 500;
 
     // ── Computed ──────────────────────────────────────────────────────────────
@@ -406,13 +430,6 @@ IsLinkedCollection(_state.ActiveCollection.Id)
         _shouldFocusLinkedRootInput = true;
     }
 
-    private void OpenCurlImportDialog()
-    {
-        _curlImportText = string.Empty;
-        _curlImportError = null;
-        _showCurlImportDialog = true;
-    }
-
     private void OpenLinkedRootDialogFromMenu()
     {
         OpenLinkedRootDialog();
@@ -453,11 +470,6 @@ IsLinkedCollection(_state.ActiveCollection.Id)
         }
     }
 
-    private void OpenCurlImportDialogFromMenu()
-    {
-        OpenCurlImportDialog();
-    }
-
     private void OpenCollectionImportDialogFromMenu()
     {
         _exportDialogInitialTab = "import";
@@ -483,61 +495,6 @@ IsLinkedCollection(_state.ActiveCollection.Id)
     private async Task OpenRequestVariablesFromMenu()
     {
         await OpenVariableInspectorAsync();
-    }
-
-    private async Task ImportCurlAsync()
-    {
-        var targetCollection = GetRequestTargetCollection();
-        if (targetCollection is null) return;
-        ActivateCollection(targetCollection);
-
-        var result = WorkflowService.ImportCurl(_curlImportText);
-        if (!result.IsSuccess || result.Request is null)
-        {
-            _curlImportError = result.ErrorMessage ?? "Could not import the cURL command.";
-            return;
-        }
-
-        var request = result.Request;
-        targetCollection.Nodes.Add(new ApiCollectionNode
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Type = ApiCollectionNodeType.Request,
-            Name = request.Name,
-            Request = request,
-        });
-        _state.SelectedRequest = request;
-        _state.SelectedRequestId = request.Id;
-        _showCurlImportDialog = false;
-        _state.WorkflowMessage = "Imported cURL request.";
-        _state.WorkflowMessageIsError = false;
-
-        if (await SaveActiveCollectionAsync())
-        {
-            _state.IsDirty = false;
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task CopyCurlAsync()
-    {
-        if (_state.SelectedRequest is null || _state.ActiveCollection is null) return;
-
-        var curl = await WorkflowService.BuildCurlAsync(_state.SelectedRequest, _state.ActiveCollection, ActiveEnvironment);
-        try
-        {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", curl);
-            _state.WorkflowMessage = "Copied masked cURL command.";
-            _state.WorkflowMessageIsError = false;
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or JSException)
-        {
-            _state.WorkflowMessage = "Clipboard copy failed.";
-            _state.WorkflowMessageIsError = true;
-        }
-
-        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OpenVariableInspectorAsync()
@@ -954,16 +911,44 @@ conflict.RequestId) : null;
 
     private async Task OnRequestSelectedAsync(HttpRequestEntry request)
     {
-        _state.SelectedRequest = request;
-        _state.SelectedRequestId = request.Id;
-        _state.IsDirty = _state.DirtyByRequestId.GetValueOrDefault(request.Id);
-        _state.LinkedSaveError = null;
-        _state.LinkedSaveConflict = null;
-        _state.LastResult = _state.LastResultByRequestId.GetValueOrDefault(request.Id);
-        _state.SubscriptionMessages.Clear();
-        if (_state.SubscriptionMessagesByRequestId.TryGetValue(request.Id, out var messages))
+        if (!UserSettings.Settings.ApiClientRequestTabs)
         {
-            _state.SubscriptionMessages.AddRange(messages);
+            _state.SelectedRequest = request;
+            _state.SelectedRequestId = request.Id;
+            _state.IsDirty = _state.DirtyByRequestId.GetValueOrDefault(request.Id);
+            _state.LinkedSaveError = null;
+            _state.LinkedSaveConflict = null;
+            _state.LastResult = _state.LastResultByRequestId.GetValueOrDefault(request.Id);
+            _state.SubscriptionMessages.Clear();
+            if (_state.SubscriptionMessagesByRequestId.TryGetValue(request.Id, out var messages))
+            {
+                _state.SubscriptionMessages.AddRange(messages);
+            }
+        }
+        else
+        {
+            // Phase 3, Task 4 (DEC-UX-1/DEC-UX-7): open (or focus) a tab for the selected request,
+            // then mirror the active tab's request into the existing single-request fields so
+            // RequestBuilderPanel/ResponseViewerPanel (bound via ApiClientRequestWorkspace) keep
+            // working unchanged. Per-tab isolated render state is a later task (Task 6).
+            var existingTab = _state.OpenTabs.FirstOrDefault(t => t.RequestId == request.Id);
+            if (existingTab is null)
+            {
+                _state.OpenTabs.Add(new ApiClientOpenTab { RequestId = request.Id, Request = request });
+            }
+            _state.ActiveTabRequestId = request.Id;
+
+            _state.SelectedRequest = request;
+            _state.SelectedRequestId = request.Id;
+            _state.IsDirty = _state.DirtyByRequestId.GetValueOrDefault(request.Id);
+            _state.LinkedSaveError = null;
+            _state.LinkedSaveConflict = null;
+            _state.LastResult = _state.LastResultByRequestId.GetValueOrDefault(request.Id);
+            _state.SubscriptionMessages.Clear();
+            if (_state.SubscriptionMessagesByRequestId.TryGetValue(request.Id, out var messages))
+            {
+                _state.SubscriptionMessages.AddRange(messages);
+            }
         }
 
         if (_state.ActiveCollection is not null)
@@ -973,6 +958,159 @@ conflict.RequestId) : null;
         }
 
         await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnTabSelectedAsync(string requestId)
+    {
+        // Phase 3, Task 4: focus an existing tab (raised by ApiClientOpenTabsStrip). Mirrors the
+        // tab's Request into the existing single-request fields, same as OnRequestSelectedAsync's
+        // ON branch above.
+        var tab = _state.OpenTabs.FirstOrDefault(t => t.RequestId == requestId);
+        if (tab is null)
+        {
+            await InvokeAsync(StateHasChanged); // BL-2
+            return;
+        }
+
+        _state.ActiveTabRequestId = requestId;
+        _state.SelectedRequest = tab.Request;
+        _state.SelectedRequestId = tab.RequestId;
+        _state.IsDirty = _state.DirtyByRequestId.GetValueOrDefault(tab.RequestId);
+        _state.LinkedSaveError = null;
+        _state.LinkedSaveConflict = null;
+        _state.LastResult = _state.LastResultByRequestId.GetValueOrDefault(tab.RequestId);
+        _state.SubscriptionMessages.Clear();
+        if (_state.SubscriptionMessagesByRequestId.TryGetValue(tab.RequestId, out var messages))
+        {
+            _state.SubscriptionMessages.AddRange(messages);
+        }
+
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // Phase 3, Task 5: raised by ApiClientOpenTabsStrip's close (✕) button. If the tab's request
+    // has unsaved changes (DirtyByRequestId), prompts a Save/Discard/Cancel confirm dialog before
+    // closing; otherwise closes immediately. See CloseTab for the active-tab reassignment rule.
+    private async Task OnTabCloseRequestedAsync(string requestId)
+    {
+        if (_state.DirtyByRequestId.TryGetValue(requestId, out var isDirty) && isDirty)
+        {
+            _pendingCloseTabRequestId = requestId;
+            _showTabCloseConfirmDialog = true;
+            await InvokeAsync(StateHasChanged); // BL-2
+            return;
+        }
+
+        CloseTab(requestId);
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // "Save" choice in the close-dirty-tab confirm dialog. SaveRequestAsync/SaveActiveCollectionAsync
+    // operate on _state.SelectedRequest + _state.ActiveCollection (there is no overload taking a
+    // request explicitly), so this temporarily points SelectedRequest/SelectedRequestId at the
+    // tab being closed, saves via the existing method, then restores whatever was selected before
+    // (CloseTab below reassigns it again if the closed tab was itself the active one). This is the
+    // simpler of the two options considered — an explicit-request overload of SaveActiveCollectionAsync
+    // would avoid the temporary swap but touches more call sites for no behavioural gain, since tabs
+    // in this phase are always scoped to the single ActiveCollection anyway.
+    private async Task SaveAndCloseTabAsync()
+    {
+        var requestId = _pendingCloseTabRequestId;
+        _showTabCloseConfirmDialog = false;
+        _pendingCloseTabRequestId = null;
+        if (requestId is null)
+        {
+            await InvokeAsync(StateHasChanged); // BL-2
+            return;
+        }
+
+        var tab = _state.OpenTabs.FirstOrDefault(t => t.RequestId == requestId);
+        if (tab is not null)
+        {
+            var previousSelectedRequest = _state.SelectedRequest;
+            var previousSelectedRequestId = _state.SelectedRequestId;
+
+            _state.SelectedRequest = tab.Request;
+            _state.SelectedRequestId = tab.RequestId;
+
+            await SaveRequestAsync();
+
+            _state.SelectedRequest = previousSelectedRequest;
+            _state.SelectedRequestId = previousSelectedRequestId;
+            _state.IsDirty = previousSelectedRequestId is not null
+                && _state.DirtyByRequestId.GetValueOrDefault(previousSelectedRequestId);
+        }
+
+        CloseTab(requestId);
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // "Discard" choice in the close-dirty-tab confirm dialog: closes the tab without saving.
+    private async Task DiscardAndCloseTabAsync()
+    {
+        var requestId = _pendingCloseTabRequestId;
+        _showTabCloseConfirmDialog = false;
+        _pendingCloseTabRequestId = null;
+        if (requestId is not null)
+        {
+            CloseTab(requestId);
+        }
+
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // "Cancel" choice in the close-dirty-tab confirm dialog: closes the dialog, nothing changes.
+    private async Task CancelTabCloseConfirm()
+    {
+        _showTabCloseConfirmDialog = false;
+        _pendingCloseTabRequestId = null;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    /// <summary>
+    /// Removes a tab from <see cref="ApiClientState.OpenTabs"/> and clears its dirty flag. If the
+    /// closed tab was the active one, reassigns <see cref="ApiClientState.ActiveTabRequestId"/> (and
+    /// mirrors SelectedRequest/SelectedRequestId) to the previous tab in list order, or the next
+    /// tab if the closed tab was first — or to the empty state (all null) if no tabs remain.
+    /// </summary>
+    private void CloseTab(string requestId)
+    {
+        var index = _state.OpenTabs.FindIndex(t => t.RequestId == requestId);
+        if (index < 0) return;
+
+        _state.OpenTabs.RemoveAt(index);
+        _state.DirtyByRequestId.Remove(requestId);
+
+        if (_state.ActiveTabRequestId != requestId)
+        {
+            return;
+        }
+
+        if (_state.OpenTabs.Count == 0)
+        {
+            _state.ActiveTabRequestId = null;
+            _state.SelectedRequestId = null;
+            _state.SelectedRequest = null;
+            _state.IsDirty = false;
+            _state.LastResult = null;
+            _state.SubscriptionMessages.Clear();
+            return;
+        }
+
+        var newIndex = Math.Min(index > 0 ? index - 1 : 0, _state.OpenTabs.Count - 1);
+        var newActiveTab = _state.OpenTabs[newIndex];
+        _state.ActiveTabRequestId = newActiveTab.RequestId;
+        _state.SelectedRequest = newActiveTab.Request;
+        _state.SelectedRequestId = newActiveTab.RequestId;
+        _state.IsDirty = _state.DirtyByRequestId.GetValueOrDefault(newActiveTab.RequestId);
+        _state.LinkedSaveError = null;
+        _state.LinkedSaveConflict = null;
+        _state.LastResult = _state.LastResultByRequestId.GetValueOrDefault(newActiveTab.RequestId);
+        _state.SubscriptionMessages.Clear();
+        if (_state.SubscriptionMessagesByRequestId.TryGetValue(newActiveTab.RequestId, out var messages))
+        {
+            _state.SubscriptionMessages.AddRange(messages);
+        }
     }
 
     private Task PersistLastSelectionAsync(string collectionId, string requestId)
@@ -1442,34 +1580,44 @@ StringComparison.OrdinalIgnoreCase));
 
         if (_state.AutoSave)
         {
-            _autoSaveTimer?.Stop();
-            _autoSaveTimer ??= new System.Timers.Timer(AutoSaveDebounceMs) { AutoReset = false };
-            _autoSaveTimer.Elapsed -= OnAutoSaveElapsed;
-            _autoSaveTimer.Elapsed += OnAutoSaveElapsed;
-            _autoSaveTimer.Start();
+            _autoSaveTimer?.Dispose();
+            _autoSaveTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(AutoSaveDebounceMs));
+            _ = AutoSaveLoopAsync();
         }
 
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
-    private async void OnAutoSaveElapsed(object? sender, System.Timers.ElapsedEventArgs e)
+    private async Task AutoSaveLoopAsync()
     {
-        if (_state.ActiveCollection is null || _state.SelectedRequest is null) return;
+        if (_autoSaveTimer is null) return;
+
         try
         {
-            if (await SaveActiveCollectionAsync())
+            while (await _autoSaveTimer.WaitForNextTickAsync())
             {
-                _state.IsDirty = false;
+                if (_state.ActiveCollection is null || _state.SelectedRequest is null) continue;
+                try
+                {
+                    if (await SaveActiveCollectionAsync())
+                    {
+                        _state.IsDirty = false;
+                    }
+                    await InvokeAsync(StateHasChanged); // BL-2
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Auto-save failed");
+                }
             }
-            await InvokeAsync(StateHasChanged); // BL-2
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
         {
-            Logger.LogError(ex, "Auto-save failed");
+            // Timer disposed - normal exit
         }
     }
 
-    // ── Request send ───────────────────────────────────────────────────────────
+    // ── Request send ────────────────────
 
 
 
@@ -1615,9 +1763,42 @@ StringComparison.OrdinalIgnoreCase));
                 case "EnvManager":
                     _state.WorksheetMode = _state.WorksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
                     break;
+                case "SaveRequest":
+                    if (_state.SelectedRequest is not null)
+                        await SaveRequestAsync();
+                    break;
+                // Phase 3 follow-up: request-tab close/cycle shortcuts (Ctrl+Shift+W,
+                // Ctrl+PageUp/Down — see keyboardShortcuts.js for why Ctrl+W/Ctrl+Tab aren't
+                // reused). No-op when the tabs setting is off (DEC-UX-1: zero behaviour change
+                // on the OFF path) or when there is no active tab.
+                case "TabClose":
+                    if (UserSettings.Settings.ApiClientRequestTabs && _state.ActiveTabRequestId is { } closeId)
+                        await OnTabCloseRequestedAsync(closeId);
+                    break;
+                case "TabNext":
+                    if (UserSettings.Settings.ApiClientRequestTabs && GetNextOpenTabId(1) is { } nextId)
+                        await OnTabSelectedAsync(nextId);
+                    break;
+                case "TabPrev":
+                    if (UserSettings.Settings.ApiClientRequestTabs && GetNextOpenTabId(-1) is { } prevId)
+                        await OnTabSelectedAsync(prevId);
+                    break;
             }
             await InvokeAsync(StateHasChanged); // BL-2
         });
+    }
+
+    // Mirrors MainLayout.GetNextTabId, scoped to the API Client's own open-request tabs
+    // (State.OpenTabs) instead of the app-level page tabs.
+    private string? GetNextOpenTabId(int direction)
+    {
+        var tabs = _state.OpenTabs;
+        if (tabs.Count == 0) return null;
+        var currentId = _state.ActiveTabRequestId;
+        var idx = currentId is null ? -1 : tabs.FindIndex(t => t.RequestId == currentId);
+        if (idx < 0) return tabs[0].RequestId;
+        var next = (idx + direction + tabs.Count) % tabs.Count;
+        return tabs[next].RequestId;
     }
 
     private void RegisterApiClientCommands()
@@ -1666,6 +1847,16 @@ StringComparison.OrdinalIgnoreCase));
             AreaScope = "api-client",
             Execute = () => Task.CompletedTask, // handled by global Ctrl+P → CommandPalette
         });
+        Commands.Register(new AppCommand
+        {
+            Id = "api-save-request",
+            Label = "API Client: Save Request",
+            Category = "API Client",
+            Icon = "💾",
+            Shortcut = "Ctrl+S",
+            AreaScope = "api-client",
+            Execute = async () => { if (_state.SelectedRequest is not null) await SaveRequestAsync(); },
+        });
     }
 
     // ── IAsyncDisposable ───────────────────────────────────────────────────────
@@ -1678,7 +1869,7 @@ StringComparison.OrdinalIgnoreCase));
         Commands.Unregister("api-new-collection");
         Commands.Unregister("api-env-manager");
         Commands.Unregister("api-quick-nav");
-        _autoSaveTimer?.Stop();
+        Commands.Unregister("api-save-request");
         _autoSaveTimer?.Dispose();
         return ValueTask.CompletedTask;
     }

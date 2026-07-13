@@ -173,4 +173,79 @@ public class AksConnectionBarTests : TestContext
 
         Assert.Equal(string.Empty, changedNamespace);
     }
+
+    [Fact]
+    public void AksConnectionBar_NamespacePicker_SelectedNamespaces_RenderFirst()
+    {
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, ["default", "orders", "payments"])
+            .Add(p => p.CurrentNamespace, "payments"));
+
+        cut.FindAll("input.aks-ns-search").Last().Focus();
+
+        // The pending selection ("payments") must be hoisted above the unselected namespaces,
+        // which stay in server order (default, orders).
+        var options = cut.FindAll("label.aks-ns-option-check span")
+            .Select(span => span.TextContent)
+            .ToList();
+
+        Assert.Equal(["payments", "default", "orders"], options);
+    }
+
+    [Fact]
+    public void AksConnectionBar_NamespacePicker_TogglingSelection_ReordersLive()
+    {
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, ["default", "orders", "payments"])
+            .Add(p => p.CurrentNamespace, "payments"));
+
+        cut.FindAll("input.aks-ns-search").Last().Focus();
+
+        // Toggle "default" on: pending group is now {default, payments}, ordered by server index
+        // (default=0 before payments=2); "orders" stays unselected and last.
+        cut.Find("input[aria-label='default']").Change(true);
+
+        var options = cut.FindAll("label.aks-ns-option-check span")
+            .Select(span => span.TextContent)
+            .ToList();
+
+        Assert.Equal(["default", "payments", "orders"], options);
+    }
+
+    [Fact]
+    public void AksConnectionBar_NamespacePicker_ArrowDownOnSearch_FocusesFirstOption()
+    {
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, ["default", "orders", "payments"])
+            .Add(p => p.CurrentNamespace, "orders"));
+
+        var namespaceInput = cut.FindAll("input.aks-ns-search").Last();
+        namespaceInput.Focus();
+
+        // ArrowDown from the search box moves keyboard focus into the option list
+        // via the JS focus helper (loose JSInterop records the invocation).
+        namespaceInput.KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "ArrowDown" });
+
+        var invocation = JSInterop.VerifyInvoke("SwebKit.focusNamespaceOption");
+        Assert.Equal(0, invocation.Arguments[1]);
+    }
+
+    [Fact]
+    public void AksConnectionBar_NamespacePicker_EnterOnList_AppliesSelection()
+    {
+        string? changedNamespace = null;
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, ["default", "orders", "payments"])
+            .Add(p => p.CurrentNamespace, "orders")
+            .Add(p => p.OnNamespaceChanged, value => changedNamespace = value));
+
+        cut.FindAll("input.aks-ns-search").Last().Focus();
+        cut.Find("input[aria-label='payments']").Change(true);
+
+        // Enter while focus is in the option list applies the pending selection.
+        cut.Find("div.aks-ns-list-scroll")
+            .KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "Enter" });
+
+        Assert.Equal("orders,payments", changedNamespace);
+    }
 }

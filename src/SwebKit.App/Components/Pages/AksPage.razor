@@ -282,7 +282,7 @@
                              IsProduction="@IsProduction" Confirm="Confirm" Notifications="Notifications" Events="@Events"
                              Deployments="@Deployments" Pods="@Pods" StatefulSets="@StatefulSets" ShowEvents="@ShowEvents"
                              OnShowEventsChanged="HandleToggleEventsOff" OnError="@(msg => ErrorMessage = msg)" OnDataChanged="LoadAsync"
-                             OnPanelStateChanged="StateHasChanged" OnJumpToResource="HandleJumpToResource" />
+                             OnIsOpenChanged="HandlePanelOpenChanged" OnJumpToResource="HandleJumpToResource" />
 
         </div>
     }
@@ -529,6 +529,7 @@
 
     // Detail panels component (hosts YAML viewer, Helm panel, logs, scale, etc.)
     private AksDetailPanels _detailPanels = default!;
+    private bool _isPanelOpen;
 
     // Filter state (per-tab)
     private string DeploymentFilter = string.Empty;
@@ -545,6 +546,18 @@
     private string JobFilter = string.Empty;
     private string CronJobFilter = string.Empty;
     private bool ShowCompletedPods;
+
+    // Cache for filtered collections to avoid recomputation on every render
+    private IQueryable<DeploymentInfo>? _filteredDeploymentsCache;
+    private IQueryable<StatefulSetInfo>? _filteredStatefulSetsCache;
+    private IQueryable<PodInfo>? _filteredPodsCache;
+    private string? _lastDeploymentFilter;
+    private string? _lastStatefulSetFilter;
+    private string? _lastPodFilter;
+    private bool _lastShowCompletedPods;
+    private List<DeploymentInfo>? _lastDeploymentsSource;
+    private List<StatefulSetInfo>? _lastStatefulSetsSource;
+    private List<PodInfo>? _lastPodsSource;
 
     private string ActiveFilter
     {
@@ -586,23 +599,67 @@
         }
     }
 
-    private IQueryable<DeploymentInfo> FilteredDeployments => string.IsNullOrWhiteSpace(DeploymentFilter)
-    ? Deployments.AsQueryable()
-    : Deployments.Where(d => d.Name.Contains(DeploymentFilter, StringComparison.OrdinalIgnoreCase)
-    || d.Status.Contains(DeploymentFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
+    private IQueryable<DeploymentInfo> FilteredDeployments
+    {
+        get
+        {
+            if (_filteredDeploymentsCache is null ||
+                _lastDeploymentFilter != DeploymentFilter ||
+                !ReferenceEquals(_lastDeploymentsSource, Deployments))
+            {
+                _lastDeploymentFilter = DeploymentFilter;
+                _lastDeploymentsSource = Deployments;
+                _filteredDeploymentsCache = string.IsNullOrWhiteSpace(DeploymentFilter)
+                    ? Deployments.AsQueryable()
+                    : Deployments.Where(d => d.Name.Contains(DeploymentFilter, StringComparison.OrdinalIgnoreCase)
+                        || d.Status.Contains(DeploymentFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
+            }
+            return _filteredDeploymentsCache;
+        }
+    }
 
-    private IQueryable<StatefulSetInfo> FilteredStatefulSets => string.IsNullOrWhiteSpace(StatefulSetFilter)
-    ? StatefulSets.AsQueryable()
-    : StatefulSets.Where(s => s.Name.Contains(StatefulSetFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
+    private IQueryable<StatefulSetInfo> FilteredStatefulSets
+    {
+        get
+        {
+            if (_filteredStatefulSetsCache is null ||
+                _lastStatefulSetFilter != StatefulSetFilter ||
+                !ReferenceEquals(_lastStatefulSetsSource, StatefulSets))
+            {
+                _lastStatefulSetFilter = StatefulSetFilter;
+                _lastStatefulSetsSource = StatefulSets;
+                _filteredStatefulSetsCache = string.IsNullOrWhiteSpace(StatefulSetFilter)
+                    ? StatefulSets.AsQueryable()
+                    : StatefulSets.Where(s => s.Name.Contains(StatefulSetFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
+            }
+            return _filteredStatefulSetsCache;
+        }
+    }
 
-    private IQueryable<PodInfo> FilteredPods => Pods
-    .Where(p => ShowCompletedPods || !IsCompletedPod(p))
-    .Where(p => string.IsNullOrWhiteSpace(PodFilter)
-    || p.Name.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
-    || p.Status.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
-    || p.Phase.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
-    || (p.NodeName?.Contains(PodFilter, StringComparison.OrdinalIgnoreCase) ?? false))
-    .AsQueryable();
+    private IQueryable<PodInfo> FilteredPods
+    {
+        get
+        {
+            if (_filteredPodsCache is null ||
+                _lastPodFilter != PodFilter ||
+                _lastShowCompletedPods != ShowCompletedPods ||
+                !ReferenceEquals(_lastPodsSource, Pods))
+            {
+                _lastPodFilter = PodFilter;
+                _lastShowCompletedPods = ShowCompletedPods;
+                _lastPodsSource = Pods;
+                _filteredPodsCache = Pods
+                    .Where(p => ShowCompletedPods || !IsCompletedPod(p))
+                    .Where(p => string.IsNullOrWhiteSpace(PodFilter)
+                        || p.Name.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
+                        || p.Status.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
+                        || p.Phase.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
+                        || (p.NodeName?.Contains(PodFilter, StringComparison.OrdinalIgnoreCase) ?? false))
+                    .AsQueryable();
+            }
+            return _filteredPodsCache;
+        }
+    }
 
     private int HiddenCompletedPodCount => Pods.Count(IsCompletedPod);
 
@@ -773,7 +830,9 @@ false)
         ? $"aks:{ActiveContext}:{CurrentNamespaceScope.CacheKeyPart}"
         : null;
 
-    private bool HasOpenPanel => _detailPanels?.IsOpen == true;
+    private bool HasOpenPanel => _isPanelOpen;
+
+    private void HandlePanelOpenChanged(bool isOpen) => _isPanelOpen = isOpen;
 
     private bool HasAnyPanel => HasOpenPanel || ShowEvents || ShowPortForwardSessions;
 
@@ -816,6 +875,7 @@ false)
     {
         EventBus.Subscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         EventBus.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        EventBus.Subscribe<AksShortcutEvent>(OnAksShortcut);
         Workspaces.RegisterRestoreHandler("aks", RestoreWorkspaceAsync);
         RegisterAksCommands();
     }
@@ -866,13 +926,9 @@ OnCtxRestartDeployment();
             Label = "View Logs",
             Category = "AKS",
             AreaScope = "aks",
+            Shortcut = "Alt+L",
             IsAvailable = () => SelectedDeployment is not null || SelectedPod is not null,
-            Execute = () =>
-            {
-                if (SelectedPod is not null) { CtxPod = SelectedPod; OnCtxViewPodLogs(); }
-                else if (SelectedDeployment is not null) { CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); }
-                return Task.CompletedTask;
-            }
+            Execute = () => JumpToLogsAsync()
         });
         Commands.Register(new AppCommand
         {
@@ -896,7 +952,84 @@ OnCtxRestartDeployment();
                 return Task.CompletedTask;
             }
         });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-focus-tabs",
+            Label = "Focus resource tabs",
+            Category = "AKS",
+            AreaScope = "aks",
+            Shortcut = "Alt+T",
+            Execute = FocusResourceTabsAsync
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-focus-grid",
+            Label = "Focus resource grid",
+            Category = "AKS",
+            AreaScope = "aks",
+            Shortcut = "Alt+G",
+            Execute = FocusGridAsync
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-close-detail",
+            Label = "Close detail panel",
+            Category = "AKS",
+            AreaScope = "aks",
+            Shortcut = "Alt+D",
+            IsAvailable = () => HasOpenPanel,
+            Execute = CloseDetailPanelAsync
+        });
     }
+
+    // ── AKS-scoped keyboard shortcut handlers ──────────────────────────────
+    // Dispatched from keyboardShortcuts.js → MainLayout.OnShortcut →
+    // AksShortcutEvent. Only handled while this page is mounted (subscribed in
+    // OnInitialized, unsubscribed in Dispose), so no cross-page double-handling.
+
+    private void OnAksShortcut(AksShortcutEvent e)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            switch (e.Action)
+            {
+                case "JumpLogs": await JumpToLogsAsync(); break;
+                case "FocusTabs": await FocusResourceTabsAsync(); break;
+                case "FocusGrid": await FocusGridAsync(); break;
+                case "CloseDetail": await CloseDetailPanelAsync(); break;
+            }
+            await InvokeAsync(StateHasChanged); // BL-2
+        });
+    }
+
+    private Task JumpToLogsAsync()
+    {
+        if (SelectedPod is not null) { CtxPod = SelectedPod; OnCtxViewPodLogs(); }
+        else if (SelectedDeployment is not null) { CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); }
+        return Task.CompletedTask;
+    }
+
+    private async Task FocusResourceTabsAsync()
+    {
+        try { await JS.InvokeVoidAsync("SwebKit.focusAksResourceTabs"); }
+        catch (OperationCanceledException) { throw; }
+        catch { /* focus is best-effort */ }
+    }
+
+    private async Task FocusGridAsync()
+    {
+        try { await JS.InvokeVoidAsync("SwebKit.focusAksGrid"); }
+        catch (OperationCanceledException) { throw; }
+        catch { /* focus is best-effort */ }
+    }
+
+    private async Task CloseDetailPanelAsync()
+    {
+        if (!HasOpenPanel) return;
+        _detailPanels?.ResetAllPanels();
+        await InvokeAsync(StateHasChanged);
+    }
+
 
     private void OnOpenPortForwardPanel(OpenPortForwardPanelEvent _)
     {
@@ -1314,7 +1447,16 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
     {
         if (denials.Count == 0) return null;
 
-        var byKind = denials
+        // Optional Gateway API resources (gateway.networking.k8s.io) are advanced networking, not baseline
+        // cluster access — a 403 on them must not raise the core "limited permissions" warning. Filter them
+        // out before grouping so their view simply hides/degrades. Core denials (pods, deployments, …) remain.
+        var filtered = denials
+            .Where(d => !SwebKit.Kubernetes.AksClient.KubernetesAksClient.GatewayApiDenialKinds.Contains(d.ResourceKind))
+            .ToList();
+
+        if (filtered.Count == 0) return null;
+
+        var byKind = filtered
             .GroupBy(d => d.ResourceKind, StringComparer.OrdinalIgnoreCase)
             .Select(g => $"{g.Key}: {string.Join(", ", g.Select(d => d.Namespace))}");
 
@@ -1794,7 +1936,17 @@ StringComparison.Ordinal))
             case "/": _ = FocusFilterAsync(); return;
         }
 
-        _ = HandleLetterActionAsync(e.Key);
+        // HandleLetterActionAsync (e.g. "y" → OpenYamlAsync) mutates state on child components
+        // (AksDetailPanels) that no longer self-render. Because this handler is a fire-and-forget
+        // task detached from Blazor's event dispatch, it must trigger its own render on completion —
+        // otherwise the requested panel silently never appears.
+        _ = HandleLetterActionAndRenderAsync(e.Key);
+    }
+
+    private async Task HandleLetterActionAndRenderAsync(string key)
+    {
+        await HandleLetterActionAsync(key);
+        await InvokeAsync(StateHasChanged);
     }
 
     private static T? NavigateInList<T>(IEnumerable<T> items, T? current, int delta, Func<T, string> getName) where T :
@@ -2795,9 +2947,11 @@ SelectedIngress.Namespace); break;
         cts?.Dispose();
         EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         EventBus.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        EventBus.Unsubscribe<AksShortcutEvent>(OnAksShortcut);
         Workspaces.UnregisterRestoreHandler("aks");
         foreach (var id in new[] { "aks-refresh", "aks-restart-deployment", "aks-scale-deployment",
-                                   "aks-view-logs", "aks-open-pod-shell", "aks-port-forward" })
+                                   "aks-view-logs", "aks-open-pod-shell", "aks-port-forward",
+                                   "aks-focus-tabs", "aks-focus-grid", "aks-close-detail" })
             Commands.Unregister(id);
         Selection.SetSelection("aks", null);
     }

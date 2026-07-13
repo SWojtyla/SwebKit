@@ -1,0 +1,54 @@
+/* ── Open tabs strip (Phase 3, Task 3) ──────────────────────── */
+
+.api-client-open-tabs-strip {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    overflow-x: auto;
+}
+
+.api-client-open-tabs-strip__tab {
+    display: flex;
+    align-items: center;
+    padding: 3px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.api-client-open-tabs-strip__tab--active {
+    background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+    border-color: var(--color-accent);
+}
+
+.api-client-open-tabs-strip__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.api-client-open-tabs-strip__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 6px;
+    padding: 2px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.api-client-open-tabs-strip__close:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--color-text) 10%, transparent);
+}

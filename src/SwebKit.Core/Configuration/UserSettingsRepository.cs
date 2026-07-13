@@ -10,7 +10,7 @@ public sealed class UserSettingsRepository
     private static readonly JsonSerializerOptions Options = SwebKitJsonOptions.Indented;
 
     public UserSettings Settings { get; private set; } = new();
-    
+
     public event Action? Changed;
 
     public async Task LoadAsync()
@@ -25,7 +25,7 @@ public sealed class UserSettingsRepository
 
         try
         {
-            var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.UserSettingsJson, DeserializeSettings);
+            var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.UserSettingsJson, DeserializeSettings).ConfigureAwait(false);
             Settings = loadResult.Value;
         }
         catch
@@ -38,7 +38,7 @@ public sealed class UserSettingsRepository
     {
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(Settings, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.UserSettingsJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.UserSettingsJson, json).ConfigureAwait(false);
         Changed?.Invoke();
     }
 
@@ -51,7 +51,7 @@ public sealed class UserSettingsRepository
     public async Task ImportAsync(UserSettings settings)
     {
         ReplaceSettings(settings);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     private static UserSettings DeserializeSettings(string json) =>
@@ -79,6 +79,12 @@ public sealed class UserSettings
     /// Should only be disabled in development environments. Exposed with a visible warning badge in the UI.
     /// </summary>
     public bool VerifyApiClientSsl { get; set; } = true;
+
+    /// <summary>
+    /// When <c>true</c>, enables an open-requests tab strip in the API Client. Default off, which keeps
+    /// today's single-request model.
+    /// </summary>
+    public bool ApiClientRequestTabs { get; set; } = false;
 
     /// <summary>AI agent feature configuration (user-scoped).</summary>
     public AgentConfig Agent { get; set; } = new();

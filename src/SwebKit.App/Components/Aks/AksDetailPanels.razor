@@ -379,8 +379,7 @@
                                 }
                                 else
                                 {
-                                    @foreach (var evt in _filteredEvents)
-                                    {
+                                    <Virtualize Items="@_filteredEvents" Context="evt" ItemSize="60">
                                         <div class="aks-event-item @(evt.Type == "Warning" ? "warning" : "")">
                                             <div class="aks-event-header">
                                                 @if (evt.Type == "Warning")
@@ -421,7 +420,7 @@
                                                 @evt.Message
                                             </div>
                                         </div>
-                                    }
+                                    </Virtualize>
                                 }
                             </div>
                         </div>
@@ -448,6 +447,7 @@
     [Parameter] public EventCallback<string> OnError { get; set; }
     [Parameter] public EventCallback OnDataChanged { get; set; }
     [Parameter] public EventCallback OnPanelStateChanged { get; set; }
+    [Parameter] public EventCallback<bool> OnIsOpenChanged { get; set; }
 
     // ── Child refs ──
     private AksYamlViewer _yamlViewer = default!;
@@ -1006,6 +1006,7 @@
     {
         StateHasChanged();
         _ = OnPanelStateChanged.InvokeAsync();
+        _ = OnIsOpenChanged.InvokeAsync(IsOpen);
     }
 
     private void ResetTransientPanels()

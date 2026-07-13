@@ -1,4 +1,5 @@
 @* ── Toolbar ── *@
+@inject IJSRuntime JS
 <div class="aks-toolbar">
 
     @* ── Row 1: connection + actions ── *@
@@ -49,9 +50,9 @@
                    @onfocus="OpenNsDrop" @oninput="OnNsSearchInput" readonly="@(!_nsDropOpen)" @onkeydown="OnNsKeyDown" />
             @if (_nsDropOpen)
             {
-                var filteredNamespaces = NsFiltered.ToList();
-                <div class="aks-ns-dropdown aks-ns-dropdown--multi">
-                    <div class="aks-ns-list-scroll">
+                var filteredNamespaces = OrderNamespaces(NsFiltered).ToList();
+                <div class="aks-ns-dropdown aks-ns-dropdown--multi" @ref="_nsDropdownRef">
+                    <div class="aks-ns-list-scroll" @onkeydown="OnNsListKeyDown">
                         @if (filteredNamespaces.Count == 0)
                         {
                             <div class="aks-ns-empty">No namespaces match</div>
@@ -175,6 +176,8 @@
     private bool _nsDropOpen;
     private string _nsSearchText = string.Empty;
     private HashSet<string> _pendingNamespaces = new(StringComparer.Ordinal);
+    private ElementReference _nsDropdownRef;
+    private int _nsFocusIndex = -1;
     private bool _networkMenuOpen;
     private string _lastActiveResourceType = string.Empty;
 
@@ -263,6 +266,7 @@
     {
         _nsSearchText = string.Empty;
         _pendingNamespaces = GetNamespaceScope().Namespaces.ToHashSet(StringComparer.Ordinal);
+        _nsFocusIndex = -1;
         _nsDropOpen = true;
         StateHasChanged();
     }
@@ -271,12 +275,14 @@
     {
         _nsDropOpen = false;
         _nsSearchText = string.Empty;
+        _nsFocusIndex = -1;
         StateHasChanged();
     }
 
     private void OnNsSearchInput(ChangeEventArgs e)
     {
         _nsSearchText = e.Value?.ToString() ?? string.Empty;
+        _nsFocusIndex = -1;
         StateHasChanged();
     }
 
@@ -290,7 +296,56 @@
             case "Enter":
                 _ = ApplyNamespaceSelectionAsync();
                 break;
+            case "ArrowDown":
+                // Move focus from the search input into the option list.
+                _ = MoveNsFocusAsync(1);
+                break;
         }
+    }
+
+    // Handles arrow navigation while focus is on an option checkbox. Space is
+    // left to the native checkbox toggle; Enter applies; Escape cancels.
+    private void OnNsListKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                _ = MoveNsFocusAsync(1);
+                break;
+            case "ArrowUp":
+                _ = MoveNsFocusAsync(-1);
+                break;
+            case "Enter":
+                _ = ApplyNamespaceSelectionAsync();
+                break;
+            case "Escape":
+                CloseNsDrop();
+                break;
+        }
+    }
+
+    private async Task MoveNsFocusAsync(int delta)
+    {
+        var count = OrderNamespaces(NsFiltered).Count();
+        if (count == 0)
+        {
+            return;
+        }
+
+        var next = _nsFocusIndex + delta;
+        if (next < 0)
+        {
+            next = 0;
+        }
+        else if (next >= count)
+        {
+            next = count - 1;
+        }
+
+        _nsFocusIndex = next;
+        try { await JS.InvokeVoidAsync("SwebKit.focusNamespaceOption", _nsDropdownRef, _nsFocusIndex); }
+        catch (OperationCanceledException) { throw; }
+        catch { /* focus is best-effort */ }
     }
 
     private async Task SelectNs(string ns)
@@ -334,7 +389,11 @@
         => namespaces
             .Where(ns => !string.IsNullOrWhiteSpace(ns))
             .Distinct(StringComparer.Ordinal)
-            .OrderBy(GetNamespaceSortIndex)
+            // Hoist the currently pending (in-flight) selection to the top so it is easy to
+            // review/deselect. Ordering reflects the live pending set, reordering as the user
+            // toggles. Within each group, keep a stable order (server index, then name).
+            .OrderBy(ns => _pendingNamespaces.Contains(ns) ? 0 : 1)
+            .ThenBy(GetNamespaceSortIndex)
             .ThenBy(ns => ns, StringComparer.Ordinal);
 
     private int GetNamespaceSortIndex(string ns)

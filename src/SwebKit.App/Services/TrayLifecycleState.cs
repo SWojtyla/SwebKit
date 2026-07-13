@@ -31,18 +31,24 @@ internal sealed class TrayLifecycleState
         }
     }
 
-    public bool ShouldInterceptClose
+    /// <summary>
+    /// Whether an intentional minimize should be routed to the system tray (keeping the background
+    /// alert monitor running). The window close (×) no longer routes here — it truly exits (A1/DEC-1).
+    /// Disabled once <see cref="MarkExplicitExitRequested"/> is called so a shutdown-time minimize
+    /// event cannot re-hide the window during teardown.
+    /// </summary>
+    public bool ShouldRouteMinimizeToTray
     {
         get
         {
             lock (_sync)
             {
-                return _shouldInterceptClose;
+                return _shouldRouteMinimizeToTray;
             }
         }
     }
 
-    private bool _shouldInterceptClose = true;
+    private bool _shouldRouteMinimizeToTray = true;
 
     public void MarkHiddenToTray()
     {
@@ -65,7 +71,7 @@ internal sealed class TrayLifecycleState
     {
         lock (_sync)
         {
-            _shouldInterceptClose = false;
+            _shouldRouteMinimizeToTray = false;
         }
     }
 

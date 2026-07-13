@@ -25,7 +25,7 @@ public sealed class AzureKeyVaultSecretResolver(string vaultUrl, ILogger<AzureKe
 
         try
         {
-            var response = await _client.GetSecretAsync(secretName, version: null, cancellationToken);
+            var response = await _client.GetSecretAsync(secretName, version: null, cancellationToken).ConfigureAwait(false);
             return response.Value.Value ?? string.Empty;
         }
         catch (Exception ex)

@@ -65,7 +65,7 @@ public sealed class MultiVaultKeyVaultSecretResolver : IKeyVaultSecretResolver
 
         try
         {
-            var response = await client.GetSecretAsync(secretName, version: null, cancellationToken);
+            var response = await client.GetSecretAsync(secretName, version: null, cancellationToken).ConfigureAwait(false);
             return response.Value.Value ?? string.Empty;
         }
         catch (Exception ex)

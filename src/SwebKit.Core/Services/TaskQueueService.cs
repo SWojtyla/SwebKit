@@ -66,7 +66,7 @@ public class TaskQueueService : ITaskQueue
 
     private async Task RemoveAfterDelayAsync(Guid id)
     {
-        await Task.Delay(Limits.TaskCompletionDelayMs);
+        await Task.Delay(Limits.TaskCompletionDelayMs).ConfigureAwait(false);
         lock (_lock)
             _tasks.RemoveAll(t => t.Id == id && t.Status != BackgroundTaskStatus.Running);
         TasksChanged?.Invoke();

@@ -54,9 +54,9 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
             "requests | summarize _fail=countif(success==false), _total=count() by bin(timestamp,1h) | extend Value=todouble(_fail)/todouble(max_of(1, _total)) | order by timestamp asc",
             qr, ct);
 
-        await Task.WhenAll(summaryTask, exCountTask, availTask, requestTrendTask, failureTrendTask);
+        await Task.WhenAll(summaryTask, exCountTask, availTask, requestTrendTask, failureTrendTask).ConfigureAwait(false);
 
-        var summary = summaryTask.Result;
+        var summary = await summaryTask.ConfigureAwait(false);
         long requestCount = summary is not null ? GetLong(summary, "RequestCount") : 0;
         long failedCount = summary is not null ? GetLong(summary, "FailedCount") : 0;
         double p50 = summary is not null ? GetDouble(summary, "P50") : 0;
@@ -68,10 +68,10 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
             FailureRate: failureRate,
             P50ResponseTimeMs: p50,
             P95ResponseTimeMs: p95,
-            ExceptionCount: exCountTask.Result,
-            AvailabilityPct: availTask.Result,
-            RequestTrend: requestTrendTask.Result,
-            FailureTrend: failureTrendTask.Result);
+            ExceptionCount: await exCountTask.ConfigureAwait(false),
+            AvailabilityPct: await availTask.ConfigureAwait(false),
+            RequestTrend: await requestTrendTask.ConfigureAwait(false),
+            FailureTrend: await failureTrendTask.ConfigureAwait(false));
     }
 
     // ── Failures ──────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
     public async Task<IReadOnlyList<ExceptionGroup>> GetTopExceptionsAsync(TimeRange range, int top = 20, CancellationToken ct = default)
     {
         var kql = $"exceptions | summarize Count=count(), LastSeen=max(timestamp), SampleMessage=any(innermostMessage), SampleStack=any(details[0].rawStack) by type, problemId | order by Count desc | take {top}";
-        var result = await QueryTableAsync(kql, QueryTimeRange(range), ct);
+        var result = await QueryTableAsync(kql, QueryTimeRange(range), ct).ConfigureAwait(false);
 
         return result.Select(row => new ExceptionGroup(
             ExceptionType: GetString(row, "type"),
@@ -95,7 +95,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
     {
         var escapedType = exceptionType.Replace("'", "\\'");
         var kql = $"exceptions | where type == '{escapedType}' | project timestamp, type, operationId=operation_Id, operationName=operation_Name, cloud_RoleName, severityLevel | order by timestamp desc | take 20";
-        var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct);
+        var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct).ConfigureAwait(false);
         return rows.Select(MapLogRow).ToList();
     }
 
@@ -104,7 +104,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
     public async Task<IReadOnlyList<OperationPerformance>> GetOperationPerformanceAsync(TimeRange range, CancellationToken ct = default)
     {
         var kql = "requests | summarize Count=count(), FailedCount=countif(success==false), P50=percentile(duration,50), P95=percentile(duration,95), P99=percentile(duration,99) by name | order by P95 desc | take 50";
-        var result = await QueryTableAsync(kql, QueryTimeRange(range), ct);
+        var result = await QueryTableAsync(kql, QueryTimeRange(range), ct).ConfigureAwait(false);
 
         return result.Select(row =>
         {
@@ -134,7 +134,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
                 query,
                 QueryTimeRange(range),
                 options,
-                ct);
+                ct).ConfigureAwait(false);
 
             sw.Stop();
 
@@ -162,7 +162,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
     public async Task<IReadOnlyList<AvailabilityResult>> GetAvailabilityAsync(TimeRange range, CancellationToken ct = default)
     {
         var kql = "availabilityResults | project timestamp, name, location, success, duration, message | order by timestamp desc | take 200";
-        var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct);
+        var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct).ConfigureAwait(false);
 
         return rows.Select(row => new AvailabilityResult(
             TestName: GetString(row, "name"),
@@ -189,7 +189,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
 
         try
         {
-            var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct);
+            var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct).ConfigureAwait(false);
             return rows.Select(row => new LatencyDataPoint(
                 Timestamp: GetDateTimeOffset(row, "timestamp"),
                 P50Ms: GetDouble(row, "P50"),
@@ -212,7 +212,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
 
         try
         {
-            var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct);
+            var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct).ConfigureAwait(false);
             bool truncated = rows.Count > maxDependencies;
             var entries = rows.Take(maxDependencies).Select(row =>
             {
@@ -244,7 +244,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
 
         try
         {
-            var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct);
+            var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct).ConfigureAwait(false);
             bool truncated = rows.Count > topN;
             var entries = rows.Take(topN).Select(row =>
             {
@@ -285,7 +285,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
     private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryTableAsync(
         string kql, Azure.Monitor.Query.QueryTimeRange timeRange, CancellationToken ct)
     {
-        var response = await _client.QueryResourceAsync(_resourceId, kql, timeRange, cancellationToken: ct);
+        var response = await _client.QueryResourceAsync(_resourceId, kql, timeRange, cancellationToken: ct).ConfigureAwait(false);
         if (!response.HasValue) return [];
 
         var table = response.Value.Table;
@@ -303,14 +303,14 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
     private async Task<IReadOnlyDictionary<string, object?>?> QuerySingleRowAsync(
         string kql, Azure.Monitor.Query.QueryTimeRange timeRange, CancellationToken ct)
     {
-        var rows = await QueryTableAsync(kql, timeRange, ct);
+        var rows = await QueryTableAsync(kql, timeRange, ct).ConfigureAwait(false);
         return rows.Count > 0 ? rows[0] : null;
     }
 
     private async Task<T> QuerySingleValueAsync<T>(
         string kql, Azure.Monitor.Query.QueryTimeRange timeRange, CancellationToken ct)
     {
-        var row = await QuerySingleRowAsync(kql, timeRange, ct);
+        var row = await QuerySingleRowAsync(kql, timeRange, ct).ConfigureAwait(false);
         if (row is null) return default!;
         var val = row.Values.FirstOrDefault();
         if (val is T typed) return typed;
@@ -321,7 +321,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
     private async Task<IReadOnlyList<TimeSeriesPoint>> QuerySeriesAsync(
         string kql, Azure.Monitor.Query.QueryTimeRange timeRange, CancellationToken ct)
     {
-        var rows = await QueryTableAsync(kql, timeRange, ct);
+        var rows = await QueryTableAsync(kql, timeRange, ct).ConfigureAwait(false);
         return rows
             .Select(row =>
             {

@@ -131,14 +131,14 @@ public class AppEventBus : IAppEventBus
         }
 
         if (asyncTasks.Count > 0)
-            await Task.WhenAll(asyncTasks);
+            await Task.WhenAll(asyncTasks).ConfigureAwait(false);
     }
 
     private async Task InvokeAsyncHandler<T>(Func<T, Task> handler, T @event)
     {
         try
         {
-            await handler(@event);
+            await handler(@event).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -174,3 +174,4 @@ public record ActivityEvent(string Description, string Icon, string Area, DateTi
 }
 public record FocusFilterRequestedEvent(string Area);
 public record ApiClientShortcutEvent(string Action);
+public record AksShortcutEvent(string Action);

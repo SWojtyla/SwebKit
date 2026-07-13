@@ -21,7 +21,7 @@ public sealed class AlertRuleRepository : IAlertRuleRepository
             return [];
         try
         {
-            var json = await File.ReadAllTextAsync(AppDataPaths.MonitoringAlertsJson);
+            var json = await File.ReadAllTextAsync(AppDataPaths.MonitoringAlertsJson).ConfigureAwait(false);
             _rules = JsonSerializer.Deserialize<List<MonitoringAlertRule>>(json, Options) ?? [];
             return _rules.AsReadOnly();
         }
@@ -36,28 +36,28 @@ public sealed class AlertRuleRepository : IAlertRuleRepository
         AppDataPaths.EnsureDirectoryExists();
         _rules = [.. rules];
         var json = JsonSerializer.Serialize(_rules, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.MonitoringAlertsJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.MonitoringAlertsJson, json).ConfigureAwait(false);
     }
 
     public async Task<MonitoringAlertRule?> GetByIdAsync(string id)
     {
-        var all = await GetAllAsync();
+        var all = await GetAllAsync().ConfigureAwait(false);
         return all.FirstOrDefault(r => r.Id == id);
     }
 
     public async Task UpsertAsync(MonitoringAlertRule rule)
     {
-        var all = (await GetAllAsync()).ToList();
+        var all = (await GetAllAsync().ConfigureAwait(false)).ToList();
         var idx = all.FindIndex(r => r.Id == rule.Id);
         if (idx >= 0) all[idx] = rule;
         else all.Add(rule);
-        await SaveAllAsync(all);
+        await SaveAllAsync(all).ConfigureAwait(false);
     }
 
     public async Task DeleteAsync(string id)
     {
-        var all = (await GetAllAsync()).ToList();
+        var all = (await GetAllAsync().ConfigureAwait(false)).ToList();
         all.RemoveAll(r => r.Id == id);
-        await SaveAllAsync(all);
+        await SaveAllAsync(all).ConfigureAwait(false);
     }
 }

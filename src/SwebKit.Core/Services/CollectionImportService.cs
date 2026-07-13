@@ -32,7 +32,7 @@ public sealed class CollectionImportService(
         if (importer is null)
             return new CollectionImportResult { Warnings = ["Unrecognised file format. Supported: SwebKit JSON, Postman v2.1"] };
 
-        var result = await importer.ImportAsync(payload, cancellationToken);
+        var result = await importer.ImportAsync(payload, cancellationToken).ConfigureAwait(false);
         if (result.Collections.Count == 0)
             return result;
 
@@ -43,14 +43,14 @@ public sealed class CollectionImportService(
         {
             collection.Name = ResolveNameCollision(collection.Name, existingNames);
             existingNames.Add(collection.Name);
-            await collectionRepo.AddImportedCollectionAsync(collection);
+            await collectionRepo.AddImportedCollectionAsync(collection).ConfigureAwait(false);
         }
 
         foreach (var env in result.Environments)
         {
             env.Name = ResolveNameCollision(env.Name, existingEnvNames);
             existingEnvNames.Add(env.Name);
-            await environmentRepo.AddImportedEnvironmentAsync(env);
+            await environmentRepo.AddImportedEnvironmentAsync(env).ConfigureAwait(false);
         }
 
         return result;
@@ -61,7 +61,7 @@ public sealed class CollectionImportService(
         string folderPath,
         CancellationToken cancellationToken = default)
     {
-        var result = await brunoFolderImporter.ImportFromFolderAsync(folderPath, cancellationToken);
+        var result = await brunoFolderImporter.ImportFromFolderAsync(folderPath, cancellationToken).ConfigureAwait(false);
         if (result.Collections.Count == 0)
             return result;
 
@@ -72,14 +72,14 @@ public sealed class CollectionImportService(
         {
             collection.Name = ResolveNameCollision(collection.Name, existingNames);
             existingNames.Add(collection.Name);
-            await collectionRepo.AddImportedCollectionAsync(collection);
+            await collectionRepo.AddImportedCollectionAsync(collection).ConfigureAwait(false);
         }
 
         foreach (var env in result.Environments)
         {
             env.Name = ResolveNameCollision(env.Name, existingEnvNames);
             existingEnvNames.Add(env.Name);
-            await environmentRepo.AddImportedEnvironmentAsync(env);
+            await environmentRepo.AddImportedEnvironmentAsync(env).ConfigureAwait(false);
         }
 
         return result;
@@ -94,15 +94,15 @@ public sealed class CollectionImportService(
         string apiRootPath,
         CancellationToken cancellationToken = default)
     {
-        var result = await brunoFolderImporter.ImportFromFolderAsync(folderPath, cancellationToken);
+        var result = await brunoFolderImporter.ImportFromFolderAsync(folderPath, cancellationToken).ConfigureAwait(false);
         if (result.Collections.Count == 0)
             return result;
 
         foreach (var collection in result.Collections)
-            await linkedFileService.WriteCollectionToLinkedRootAsync(apiRootPath, collection, cancellationToken);
+            await linkedFileService.WriteCollectionToLinkedRootAsync(apiRootPath, collection, cancellationToken).ConfigureAwait(false);
 
         foreach (var env in result.Environments)
-            await linkedFileService.WriteEnvironmentToLinkedRootAsync(apiRootPath, env, cancellationToken);
+            await linkedFileService.WriteEnvironmentToLinkedRootAsync(apiRootPath, env, cancellationToken).ConfigureAwait(false);
 
         return result;
     }
@@ -121,15 +121,15 @@ public sealed class CollectionImportService(
         if (importer is null)
             return new CollectionImportResult { Warnings = ["Unrecognised file format. Supported: SwebKit JSON, Postman v2.1"] };
 
-        var result = await importer.ImportAsync(payload, cancellationToken);
+        var result = await importer.ImportAsync(payload, cancellationToken).ConfigureAwait(false);
         if (result.Collections.Count == 0)
             return result;
 
         foreach (var collection in result.Collections)
-            await linkedFileService.WriteCollectionToLinkedRootAsync(apiRootPath, collection, cancellationToken);
+            await linkedFileService.WriteCollectionToLinkedRootAsync(apiRootPath, collection, cancellationToken).ConfigureAwait(false);
 
         foreach (var env in result.Environments)
-            await linkedFileService.WriteEnvironmentToLinkedRootAsync(apiRootPath, env, cancellationToken);
+            await linkedFileService.WriteEnvironmentToLinkedRootAsync(apiRootPath, env, cancellationToken).ConfigureAwait(false);
 
         return result;
     }
@@ -142,14 +142,14 @@ public sealed class CollectionImportService(
         if (!environmentImporter.CanImport(payload))
             return new EnvironmentImportResult { Warnings = ["Unrecognised environment file format."] };
 
-        var result = await environmentImporter.ImportAsync(payload, cancellationToken);
+        var result = await environmentImporter.ImportAsync(payload, cancellationToken).ConfigureAwait(false);
         var existingNames = environmentRepo.Environments.Select(e => e.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var env in result.Environments)
         {
             env.Name = ResolveNameCollision(env.Name, existingNames);
             existingNames.Add(env.Name);
-            await environmentRepo.AddImportedEnvironmentAsync(env);
+            await environmentRepo.AddImportedEnvironmentAsync(env).ConfigureAwait(false);
         }
 
         return result;

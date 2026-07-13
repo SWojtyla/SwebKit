@@ -40,7 +40,7 @@ public sealed class GraphQlSubscriptionService(
 
         // Dispose any previous WebSocket from a prior run before creating a new one
         if (_ws is not null)
-            await _ws.DisposeAsync();
+            await _ws.DisposeAsync().ConfigureAwait(false);
         _ws = webSocketFactory();
         _active = true;
 
@@ -53,25 +53,25 @@ public sealed class GraphQlSubscriptionService(
                 upgradeHeaders.Add((h.Key, substitution.Substitute(h.Value ?? string.Empty, scope)));
             }
 
-            await _ws.ConnectAsync(wsUrl, upgradeHeaders, SubProtocol, cancellationToken);
+            await _ws.ConnectAsync(wsUrl, upgradeHeaders, SubProtocol, cancellationToken).ConfigureAwait(false);
 
             // ── graphql-ws handshake ─────────────────────────────────────────
             // 1. Send connection_init
-            await _ws.SendTextAsync("""{"type":"connection_init"}""", cancellationToken);
+            await _ws.SendTextAsync("""{"type":"connection_init"}""", cancellationToken).ConfigureAwait(false);
 
             // 2. Wait for connection_ack
-            var ackMsg = await _ws.ReadAsync(cancellationToken);
+            var ackMsg = await _ws.ReadAsync(cancellationToken).ConfigureAwait(false);
             var ack = ackMsg?.Content;
             if (ack is null)
             {
-                await DeliverErrorAsync(onMessage, "Server closed the connection before sending connection_ack.");
+                await DeliverErrorAsync(onMessage, "Server closed the connection before sending connection_ack.").ConfigureAwait(false);
                 return;
             }
 
             var ackType = ParseMessageType(ack);
             if (ackType != "connection_ack")
             {
-                await DeliverErrorAsync(onMessage, $"Expected connection_ack, received: {ackType ?? "<null>"}");
+                await DeliverErrorAsync(onMessage, $"Expected connection_ack, received: {ackType ?? "<null>"}").ConfigureAwait(false);
                 return;
             }
 
@@ -94,12 +94,12 @@ public sealed class GraphQlSubscriptionService(
                 },
             });
 
-            await _ws.SendTextAsync(subscribeMsg, cancellationToken);
+            await _ws.SendTextAsync(subscribeMsg, cancellationToken).ConfigureAwait(false);
 
             // 4. Receive next/error/complete frames
             while (!cancellationToken.IsCancellationRequested)
             {
-                var frame = await _ws.ReadAsync(cancellationToken);
+                var frame = await _ws.ReadAsync(cancellationToken).ConfigureAwait(false);
                 if (frame is null) break; // connection closed
 
                 var raw = frame.Content;
@@ -110,7 +110,7 @@ public sealed class GraphQlSubscriptionService(
                     case "next":
                         var msg = ParseNextMessage(raw);
                         if (msg is not null)
-                            await onMessage(msg);
+                            await onMessage(msg).ConfigureAwait(false);
                         break;
 
                     case "error":
@@ -119,7 +119,7 @@ public sealed class GraphQlSubscriptionService(
                         {
                             Payload = raw,
                             Errors = errors,
-                        });
+                        }).ConfigureAwait(false);
                         return;
 
                     case "complete":
@@ -127,7 +127,7 @@ public sealed class GraphQlSubscriptionService(
 
                     // ping/pong — respond if needed
                     case "ping":
-                        await _ws.SendTextAsync("""{"type":"pong"}""", cancellationToken);
+                        await _ws.SendTextAsync("""{"type":"pong"}""", cancellationToken).ConfigureAwait(false);
                         break;
                 }
             }
@@ -135,7 +135,7 @@ public sealed class GraphQlSubscriptionService(
         catch (OperationCanceledException) { /* normal stop */ }
         catch (Exception ex)
         {
-            await DeliverErrorAsync(onMessage, ex.Message);
+            await DeliverErrorAsync(onMessage, ex.Message).ConfigureAwait(false);
         }
         finally
         {
@@ -153,8 +153,8 @@ public sealed class GraphQlSubscriptionService(
             {
                 // Send complete frame
                 var completeMsg = JsonSerializer.Serialize(new { id = SubscriptionId, type = "complete" });
-                await _ws.SendTextAsync(completeMsg, cancellationToken);
-                await _ws.CloseAsync(cancellationToken);
+                await _ws.SendTextAsync(completeMsg, cancellationToken).ConfigureAwait(false);
+                await _ws.CloseAsync(cancellationToken).ConfigureAwait(false);
             }
         }
         catch { /* ignore stop errors */ }
@@ -164,7 +164,7 @@ public sealed class GraphQlSubscriptionService(
     {
         _active = false;
         if (_ws is not null)
-            await _ws.DisposeAsync();
+            await _ws.DisposeAsync().ConfigureAwait(false);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

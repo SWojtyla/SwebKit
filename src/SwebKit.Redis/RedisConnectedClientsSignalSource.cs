@@ -24,13 +24,13 @@ public sealed class RedisConnectedClientsSignalSource : IAlertSignalSource
             return new AlertSignalResult(AlertSignalStatus.Skipped, "No Redis params");
 
         // Client is owned by the pool - do NOT dispose.
-        var client = await _pool.GetRedisClientAsync(p.ConnectionAlias, ct);
+        var client = await _pool.GetRedisClientAsync(p.ConnectionAlias, ct).ConfigureAwait(false);
         if (client is null)
             return new AlertSignalResult(AlertSignalStatus.Skipped, $"Redis connection '{p.ConnectionAlias}' not found");
 
         try
         {
-            var info = await client.GetServerInfoAsync(ct);
+            var info = await client.GetServerInfoAsync(ct).ConfigureAwait(false);
             var clients = info.ConnectedClients;
 
             if (clients < p.ClientCountLowerBound)

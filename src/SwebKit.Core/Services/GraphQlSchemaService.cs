@@ -55,7 +55,7 @@ public sealed class GraphQlSchemaService(
         ApiEnvironment? activeEnvironment,
         CancellationToken cancellationToken = default)
     {
-        var scope = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken);
+        var scope = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken).ConfigureAwait(false);
         var resolvedUrl = substitution.Substitute(endpointUrl, scope);
 
         try
@@ -65,10 +65,10 @@ public sealed class GraphQlSchemaService(
             using var content = new StringContent(body, Encoding.UTF8);
             content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
 
-            using var response = await client.PostAsync(resolvedUrl, content, cancellationToken);
+            using var response = await client.PostAsync(resolvedUrl, content, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
-            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
             var result = new GraphQlIntrospectionResult
             {

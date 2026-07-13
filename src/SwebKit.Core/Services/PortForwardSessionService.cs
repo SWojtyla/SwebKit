@@ -30,7 +30,7 @@ public class PortForwardSessionService : IPortForwardSessionService
         int remotePort,
         CancellationToken ct = default)
     {
-        var session = await client.StartPortForwardAsync(ns, resourceName, localPort, remotePort, ct);
+        var session = await client.StartPortForwardAsync(ns, resourceName, localPort, remotePort, ct).ConfigureAwait(false);
 
         session.OnStatusChanged = _ => NotifyChanged();
 
@@ -51,7 +51,7 @@ public class PortForwardSessionService : IPortForwardSessionService
 
         if (client is not null)
         {
-            try { await client.StopPortForwardAsync(session, ct); }
+            try { await client.StopPortForwardAsync(session, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { throw; }
             catch { /* session may already be gone */ }
         }
@@ -72,7 +72,7 @@ public class PortForwardSessionService : IPortForwardSessionService
 
         foreach (var s in snapshot)
         {
-            try { await StopAsync(s, ct); }
+            try { await StopAsync(s, ct).ConfigureAwait(false); }
             catch { /* best-effort on app exit */ }
         }
     }

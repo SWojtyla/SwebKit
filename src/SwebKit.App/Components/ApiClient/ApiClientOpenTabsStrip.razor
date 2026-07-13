@@ -1,0 +1,38 @@
+@* ── Optional request tab strip (Phase 3, Task 3/4/5) ──
+   Presentational component: renders one chip per State.OpenTabs entry, highlighting the tab
+   matching State.ActiveTabRequestId. Clicking a chip raises OnTabSelected with the tab's
+   RequestId; the page (ApiClientPage.OnTabSelectedAsync) owns the resulting state mutation
+   (DEC-UX-3). Only rendered when the ApiClientRequestTabs user setting is enabled (see
+   ApiClientRequestWorkspace.RequestTabsEnabled). Each chip also has a close (✕) button — raises
+   OnTabCloseRequested with the tab's RequestId; @onclick:stopPropagation keeps the close click
+   from also bubbling into the chip's OnTabSelected handler. *@
+
+<div class="api-client-open-tabs-strip" role="tablist" aria-label="Open requests">
+    @foreach (var tab in State.OpenTabs)
+    {
+        var isActive = tab.RequestId == State.ActiveTabRequestId;
+        var requestId = tab.RequestId;
+        <div class="@("api-client-open-tabs-strip__tab" + (isActive ? " api-client-open-tabs-strip__tab--active" : string.Empty))"
+             role="tab" aria-selected="@isActive" @onclick="@(() => OnTabSelected.InvokeAsync(requestId))">
+            <span class="api-client-open-tabs-strip__label">@(string.IsNullOrWhiteSpace(tab.Request?.Name) ? "Untitled" :
+                            tab.Request.Name)</span>
+                <button type="button" class="api-client-open-tabs-strip__close" aria-label="Close tab"
+                        @onclick="@(() => OnTabCloseRequested.InvokeAsync(requestId))" @onclick:stopPropagation="true">
+                    <FluentIcon Value="@_iconDismiss" Width="12px" />
+                </button>
+            </div>
+        }
+    </div>
+
+@code {
+    private static readonly Icon _iconDismiss = new Icons.Regular.Size12.Dismiss();
+
+    [Parameter, EditorRequired]
+    public ApiClientState State { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<string> OnTabSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnTabCloseRequested { get; set; }
+}

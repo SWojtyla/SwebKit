@@ -1,3 +1,5 @@
+@inject IJSRuntime JS
+
 <div class="redis-toolbar">
     <div class="toolbar-primary">
         <div class="field pattern-field">
@@ -23,12 +25,18 @@
     </div>
 
     <div class="selection-bar" data-has-selection="@(_selectedKeys.Count > 0 ? "true" : "false")">
+        <label class="select-all-loaded" title="Select or clear every currently loaded matching key">
+            <input type="checkbox" @ref="_selectAllRef"
+                   checked="@(HeaderSelectionState == SelectAllState.All)"
+                   disabled="@(IsLoading || KeyCount == 0)"
+                   @onchange="OnToggleSelectAllLoaded" />
+            <span>Select all loaded keys</span>
+        </label>
         <div class="selection-copy">
             <strong>@_selectedKeys.Count selected</strong>
             <span>of @KeyCount loaded matching key(s)@((HasMoreKeys && KeyCount > 0) ? ", with more matches available" : string.Empty)</span>
         </div>
         <div class="selection-actions">
-            <FluentButton @onclick="HandleSelectAllLoaded" Disabled="@(IsLoading || KeyCount == 0)">Select All Loaded</FluentButton>
             <FluentButton @onclick="ClearSelection" Disabled="@(_selectedKeys.Count == 0)">Clear</FluentButton>
             <FluentButton @onclick="OnBatchDelete" Appearance="Appearance.Accent" Disabled="@(_selectedKeys.Count == 0)">
                 Delete Selected
@@ -58,10 +66,20 @@
 
     private string _pattern = "*";
     private readonly HashSet<string> _selectedKeys = new(StringComparer.Ordinal);
+    private ElementReference _selectAllRef;
+    private bool _lastIndeterminate;
 
     public string Pattern { get => _pattern; set => _pattern = value; }
     public bool MultiSelectMode => true;
     public HashSet<string> SelectedKeys => _selectedKeys;
+
+    // Tri-state for the co-located "Select all loaded keys" header checkbox.
+    public enum SelectAllState { None, Some, All }
+
+    public SelectAllState HeaderSelectionState =>
+        KeyCount == 0 || _selectedKeys.Count == 0 ? SelectAllState.None
+        : _selectedKeys.Count >= KeyCount ? SelectAllState.All
+        : SelectAllState.Some;
 
     public void ReplaceSelection(IEnumerable<string> keys)
     {
@@ -113,7 +131,27 @@
 
     private Task HandleScan() => OnScan.InvokeAsync(_pattern);
 
-    private Task HandleSelectAllLoaded() => OnSelectAllLoaded.InvokeAsync();
+    private Task OnToggleSelectAllLoaded(ChangeEventArgs args)
+    {
+        var selected = args.Value is bool b && b;
+        if (selected)
+            return OnSelectAllLoaded.InvokeAsync();
+
+        ClearSelection();
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The `indeterminate` (some-but-not-all) state can only be set from script,
+        // so reflect it after each render whenever the tri-state changes.
+        var indeterminate = HeaderSelectionState == SelectAllState.Some;
+        if (firstRender || indeterminate != _lastIndeterminate)
+        {
+            _lastIndeterminate = indeterminate;
+            await JS.InvokeVoidAsync("SwebKit.setIndeterminate", _selectAllRef, indeterminate);
+        }
+    }
 
     private void RequestRender() => _ = InvokeAsync(StateHasChanged);
 

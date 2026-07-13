@@ -25,7 +25,7 @@ public class UiStateRepository
 
         try
         {
-            var loadResult = await AppDataFileStore.LoadAsync(filePath, DeserializeUiState);
+            var loadResult = await AppDataFileStore.LoadAsync(filePath, DeserializeUiState).ConfigureAwait(false);
             _state = loadResult.Value;
         }
         catch
@@ -38,7 +38,7 @@ public class UiStateRepository
     {
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_state, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.UiStateJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.UiStateJson, json).ConfigureAwait(false);
     }
 
     public void ReplaceState(UiState state)
@@ -49,7 +49,7 @@ public class UiStateRepository
     public async Task ImportAsync(UiState state)
     {
         ReplaceState(state);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public IReadOnlyList<SavedFilter> GetFilters(string scopeKey) =>
@@ -66,14 +66,14 @@ public class UiStateRepository
         var existing = list.FirstOrDefault(f => string.Equals(f.Name, filter.Name, StringComparison.OrdinalIgnoreCase));
         if (existing is not null) list.Remove(existing);
         list.Add(filter);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public async Task DeleteFilterAsync(string scopeKey, string filterName)
     {
         if (!_state.SavedFilters.TryGetValue(scopeKey, out var list)) return;
         list.RemoveAll(f => string.Equals(f.Name, filterName, StringComparison.OrdinalIgnoreCase));
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public MessageListPreferences GetMessageListPreferences(string scopeKey)
@@ -96,7 +96,7 @@ public class UiStateRepository
         if (string.IsNullOrWhiteSpace(scopeKey)) return;
 
         _state.MessageListPreferences[scopeKey] = ClonePreference(preference);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public DashboardPreferences GetDashboardPreferences(IEnumerable<DashboardTilePreference> defaultTiles) =>
@@ -107,7 +107,7 @@ public class UiStateRepository
         IEnumerable<DashboardTilePreference> defaultTiles)
     {
         _state.Dashboard = NormalizeDashboardPreferences(preferences, defaultTiles);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public T GetViewState<T>(string scopeKey, T defaultValue)
@@ -162,7 +162,7 @@ public class UiStateRepository
         if (string.IsNullOrWhiteSpace(scopeKey)) return;
 
         _state.ViewStates[scopeKey] = value!;
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public async Task ResetMessageListPreferencesAsync(string scopeKey)
@@ -171,7 +171,7 @@ public class UiStateRepository
 
         if (_state.MessageListPreferences.Remove(scopeKey))
         {
-            await SaveAsync();
+            await SaveAsync().ConfigureAwait(false);
         }
     }
 
@@ -475,6 +475,11 @@ public class UiState
     public bool DemoMonitoringEnabled { get; set; }
     /// <summary>Shell-local dashboard tile visibility, order, size, and per-tile settings.</summary>
     public DashboardPreferences Dashboard { get; set; } = new();
+    /// <summary>
+    /// Set once the "OS toasts appear disabled" hint has been shown, so it is not repeated on
+    /// subsequent sessions. Acts as the persisted "don't show again" flag for the diagnostic (DEC-4).
+    /// </summary>
+    public bool SuppressToastUnavailableHint { get; set; }
 }
 
 public record DashboardPreferences

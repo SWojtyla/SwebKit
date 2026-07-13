@@ -31,7 +31,7 @@ public sealed class DeploymentValidationService
 
         try
         {
-            var pods = await aksClient.GetPodsAsync(binding.Namespace, ct: ct);
+            var pods = await aksClient.GetPodsAsync(binding.Namespace, ct: ct).ConfigureAwait(false);
             var workloadPod = pods.FirstOrDefault(p =>
                 p.Name.StartsWith(binding.WorkloadName, StringComparison.OrdinalIgnoreCase)
                 && p.Phase is "Running" or "Pending");
@@ -42,7 +42,7 @@ public sealed class DeploymentValidationService
                     note: $"No pods found for workload '{binding.WorkloadName}' in namespace '{binding.Namespace}'.");
             }
 
-            var containers = await aksClient.GetContainerDetailsAsync(binding.Namespace, workloadPod.Name, ct);
+            var containers = await aksClient.GetContainerDetailsAsync(binding.Namespace, workloadPod.Name, ct).ConfigureAwait(false);
 
             var container = binding.ContainerName is not null
                 ? containers.FirstOrDefault(c => string.Equals(c.Name, binding.ContainerName, StringComparison.OrdinalIgnoreCase))

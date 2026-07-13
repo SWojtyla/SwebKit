@@ -15,7 +15,7 @@
                         @onchange="e => SelectNamespace(Guid.Parse(e.Value?.ToString() ?? string.Empty))">
                     @foreach (var ns in NamespaceStates)
                     {
-                        <option value="@ns.Namespace.Id">@ns.Namespace.Alias</option>
+                        <option @key="ns.Namespace.Id" value="@ns.Namespace.Id">@ns.Namespace.Alias</option>
                     }
                 </select>
             }
@@ -239,7 +239,6 @@
     [Parameter] public EventCallback<SbEntityLink> OnEntityLinkToggled { get; set; }
 
     private Guid _activeNsId;
-    private string _filter = string.Empty;
     private string _sortCol = "name";
     private bool _sortAsc = true;
     private bool IsLoading;
@@ -250,6 +249,16 @@
     private HashSet<string> _loadingTopics = [];
     private string? _opMessage;
     private NsState? _loadedForNs;
+    private string _filter = string.Empty;
+    
+    // Cache for expensive sort/filter operations
+    private string? _cachedFilter;
+    private string? _cachedSortCol;
+    private bool _cachedSortAsc;
+    private List<SbEntityInfo>? _cachedFilteredSortedQueues;
+    private List<SbEntityInfo>? _cachedFilteredSortedTopics;
+    private List<SbEntityInfo>? _cachedQueuesSource;
+    private List<SbEntityInfo>? _cachedTopicsSource;
     private CancellationTokenSource _statsCts = new();
     private static readonly SemaphoreSlim _statsGate = new(6, 6);
 
@@ -261,10 +270,22 @@
     {
         get
         {
-            var list = string.IsNullOrWhiteSpace(_filter)
-                ? _queues
-                : _queues.Where(q => q.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)).ToList();
-            return Sort(list);
+            if (_cachedFilteredSortedQueues is null ||
+                _cachedFilter != _filter ||
+                _cachedSortCol != _sortCol ||
+                _cachedSortAsc != _sortAsc ||
+                !ReferenceEquals(_cachedQueuesSource, _queues))
+            {
+                var list = string.IsNullOrWhiteSpace(_filter)
+                    ? _queues
+                    : _queues.Where(q => q.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)).ToList();
+                _cachedFilteredSortedQueues = Sort(list);
+                _cachedFilter = _filter;
+                _cachedSortCol = _sortCol;
+                _cachedSortAsc = _sortAsc;
+                _cachedQueuesSource = _queues;
+            }
+            return _cachedFilteredSortedQueues;
         }
     }
 
@@ -272,12 +293,25 @@
     {
         get
         {
-            var list = string.IsNullOrWhiteSpace(_filter)
-                ? _topics
-                : _topics.Where(t => t.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)).ToList();
-            return _sortCol == "name"
-                ? (_sortAsc ? list.OrderBy(t => t.Name).ToList() : list.OrderByDescending(t => t.Name).ToList())
-                : list;
+            if (_cachedFilteredSortedTopics is null ||
+                _cachedFilter != _filter ||
+                _cachedSortCol != _sortCol ||
+                _cachedSortAsc != _sortAsc ||
+                !ReferenceEquals(_cachedTopicsSource, _topics))
+            {
+                var list = string.IsNullOrWhiteSpace(_filter)
+                    ? _topics
+                    : _topics.Where(t => t.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)).ToList();
+                
+                _cachedFilteredSortedTopics = _sortCol == "name"
+                    ? (_sortAsc ? list.OrderBy(t => t.Name).ToList() : list.OrderByDescending(t => t.Name).ToList())
+                    : list;
+                _cachedFilter = _filter;
+                _cachedSortCol = _sortCol;
+                _cachedSortAsc = _sortAsc;
+                _cachedTopicsSource = _topics;
+            }
+            return _cachedFilteredSortedTopics;
         }
     }
 
@@ -317,6 +351,17 @@
         {
             _loadedForNs = ns;
             await LoadEntitiesAsync(ns);
+        }
+        // Force load if we have namespaces but nothing loaded yet (demo mode fix)
+        else if (_loadedForNs is null && NamespaceStates.Count > 0 && AppState.UseDemoData)
+        {
+            _activeNsId = NamespaceStates.First().Namespace.Id;
+            ns = ActiveNamespace;
+            if (ns?.Client is not null)
+            {
+                _loadedForNs = ns;
+                await LoadEntitiesAsync(ns);
+            }
         }
     }
 

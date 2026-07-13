@@ -37,7 +37,7 @@ public sealed class RuntimeDriftService
         try
         {
             // Find a running pod belonging to the workload by name prefix.
-            var pods = await aksClient.GetPodsAsync(binding.Namespace, ct: ct);
+            var pods = await aksClient.GetPodsAsync(binding.Namespace, ct: ct).ConfigureAwait(false);
             var workloadPod = pods.FirstOrDefault(p =>
                 p.Name.StartsWith(binding.WorkloadName, StringComparison.OrdinalIgnoreCase)
                 && p.Phase is "Running" or "Pending");
@@ -54,7 +54,7 @@ public sealed class RuntimeDriftService
             }
 
             var containers = await aksClient.GetContainerDetailsAsync(
-                binding.Namespace, workloadPod.Name, ct);
+                binding.Namespace, workloadPod.Name, ct).ConfigureAwait(false);
 
             var container = binding.ContainerName is not null
                 ? containers.FirstOrDefault(c => string.Equals(c.Name, binding.ContainerName, StringComparison.OrdinalIgnoreCase))
@@ -124,7 +124,7 @@ public sealed class RuntimeDriftService
         foreach (var comp in components.Where(c => c.InScope))
         {
             ct.ThrowIfCancellationRequested();
-            results.Add(await GetDriftAsync(comp, aksClient, ct));
+            results.Add(await GetDriftAsync(comp, aksClient, ct).ConfigureAwait(false));
         }
         return results;
     }

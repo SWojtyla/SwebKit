@@ -146,6 +146,33 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
         dotNetRef.invokeMethodAsync('OnShortcut', 'SbEditResubmit');
         return;
       }
+      if (ctrl && key === 's' && !shift) {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiSaveRequest');
+        return;
+      }
+      // Request-tab close/cycle (Phase 3 follow-up). Ctrl+W / Ctrl+Tab / Ctrl+Shift+Tab are
+      // already global app-level page-tab shortcuts (see TabClose/TabNext/TabPrev above), so
+      // reusing them here would silently override that behaviour. Ctrl+Shift+W is unused (the
+      // page-tab close check above only matches lowercase 'w', i.e. Ctrl+W without Shift) and
+      // Ctrl+PageUp/PageDown are unused anywhere in this file — both chosen because they mirror
+      // widely-known browser tab conventions (Ctrl+Shift+W / Ctrl+PageUp/Down already close and
+      // cycle tabs in most browsers), so no new mental model is needed.
+      if (ctrl && shift && key === 'W') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiTabClose');
+        return;
+      }
+      if (ctrl && key === 'PageDown') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiTabNext');
+        return;
+      }
+      if (ctrl && key === 'PageUp') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiTabPrev');
+        return;
+      }
       if (ctrl && key === 'r' && !shift) {
         e.preventDefault();
         dotNetRef.invokeMethodAsync('OnShortcut', 'SbReplay');
@@ -159,6 +186,32 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
       if (ctrl && shift && key === 'P') {
         e.preventDefault();
         dotNetRef.invokeMethodAsync('OnShortcut', 'SbPeek');
+        return;
+      }
+
+      // ── AKS scoped shortcuts ─────────────────────────────────────────────
+      // These chords are dispatched globally but only acted on by the AKS
+      // page while it is mounted (it subscribes to AksShortcutEvent and
+      // unsubscribes on dispose). Alt+letter chosen to avoid every existing
+      // global chord (Ctrl+*, F5, Escape, Ctrl+Enter, Alt+1..4, Alt+Shift+P).
+      if (alt && !ctrl && !shift && key === 'l') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'AksJumpLogs');
+        return;
+      }
+      if (alt && !ctrl && !shift && key === 't') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'AksFocusTabs');
+        return;
+      }
+      if (alt && !ctrl && !shift && key === 'g') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'AksFocusGrid');
+        return;
+      }
+      if (alt && !ctrl && !shift && key === 'd') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'AksCloseDetail');
         return;
       }
     }
@@ -233,6 +286,40 @@ window.SwebKit.focusAksFilter = function () {
 };
 
 /**
+ * Focuses the AKS resource-type tab bar (the active tab if present, else the
+ * first). From there the user can arrow / Tab between resource types.
+ */
+window.SwebKit.focusAksResourceTabs = function () {
+  const tab =
+    document.querySelector('.aks-resource-tab.active') ||
+    document.querySelector('.aks-resource-tab');
+  if (tab) tab.focus();
+};
+
+/**
+ * Focuses the AKS resource grid container (tabindex=0) so its own arrow-key
+ * navigation (row up/down) takes over.
+ */
+window.SwebKit.focusAksGrid = function () {
+  const grid = document.querySelector('.aks-table-wrap');
+  if (grid) grid.focus();
+};
+
+/**
+ * Focuses the nth namespace-option checkbox inside the given dropdown
+ * container. Used to give the namespace picker arrow-key navigation.
+ * @param {HTMLElement} container
+ * @param {number} index
+ */
+window.SwebKit.focusNamespaceOption = function (container, index) {
+  if (!container) return;
+  const items = container.querySelectorAll(
+    '.aks-ns-option-check input[type="checkbox"]',
+  );
+  if (index >= 0 && index < items.length) items[index].focus();
+};
+
+/**
  * Triggers a file download from a string of text content.
  * @param {string} filename - Suggested file name.
  * @param {string} mimeType - MIME type (e.g. "application/json").
@@ -285,6 +372,17 @@ window.SwebKit.restoreFocus = function (element) {
  */
 window.SwebKit.scrollToBottom = function (element) {
   if (element) element.scrollTop = element.scrollHeight;
+};
+
+/**
+ * Sets the tri-state `indeterminate` property on a checkbox element. This property
+ * can only be set from script (there is no HTML attribute for it), so Blazor must
+ * apply it via interop after each render to reflect a "some but not all" selection.
+ * @param {HTMLInputElement} element
+ * @param {boolean} value
+ */
+window.SwebKit.setIndeterminate = function (element, value) {
+  if (element) element.indeterminate = !!value;
 };
 
 /**

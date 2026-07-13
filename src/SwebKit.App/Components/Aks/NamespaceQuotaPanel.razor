@@ -147,8 +147,8 @@
             var quotasTask = Client.GetResourceQuotasAsync(Namespace, token);
             var limitRangesTask = Client.GetLimitRangesAsync(Namespace, token);
             await Task.WhenAll(quotasTask, limitRangesTask);
-            _quotas = quotasTask.Result;
-            _limitRanges = limitRangesTask.Result;
+            _quotas = await quotasTask;
+            _limitRanges = await limitRangesTask;
         }
         catch (OperationCanceledException)
         {

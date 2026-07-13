@@ -26,7 +26,7 @@
     {
         <div class="project-picker__toolbar">
             <input class="project-picker__search" type="search" placeholder="Filter projects…" aria-label="Filter projects"
-                   @bind="_filter" @bind:event="oninput" />
+                   @bind="Filter" @bind:event="oninput" />
             <span class="project-picker__count">@_selected.Count of @_allProjects.Count selected</span>
             <button class="project-picker__action-btn" @onclick="SelectAll">Select all</button>
             <button class="project-picker__action-btn" @onclick="ClearAll">Clear all</button>
@@ -65,6 +65,7 @@
 </div>
 
 @code {
+@implements IDisposable
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
     [Parameter] public List<string> CurrentPinned { get; set; } = [];
     [Parameter] public EventCallback<List<string>> OnConfirmed { get; set; }
@@ -77,10 +78,34 @@
     private List<AdoProject> _allProjects = [];
     private HashSet<string> _selected = [];
     private string _filter = string.Empty;
+    private string _debouncedFilter = string.Empty;
+    private System.Timers.Timer? _filterDebounceTimer;
+    private const int FilterDebounceMs = 300;
 
-    private List<AdoProject> _filtered => string.IsNullOrWhiteSpace(_filter)
+    private string Filter
+    {
+        get => _filter;
+        set
+        {
+            _filter = value;
+            if (_filterDebounceTimer is null)
+            {
+                _filterDebounceTimer = new System.Timers.Timer(FilterDebounceMs) { AutoReset = false };
+                _filterDebounceTimer.Elapsed += (_, _) => InvokeAsync(() =>
+                {
+                    _debouncedFilter = _filter;
+                    StateHasChanged();
+                });
+            }
+            _filterDebounceTimer.Stop();
+            _filterDebounceTimer.Interval = FilterDebounceMs;
+            _filterDebounceTimer.Start();
+        }
+    }
+
+    private List<AdoProject> _filtered => string.IsNullOrWhiteSpace(_debouncedFilter)
         ? _allProjects
-        : _allProjects.Where(p => p.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)).ToList();
+        : _allProjects.Where(p => p.Name.Contains(_debouncedFilter, StringComparison.OrdinalIgnoreCase)).ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -112,4 +137,6 @@
     private void SelectAll() => _selected = [.. _allProjects.Select(p => p.Name)];
     private void ClearAll() => _selected.Clear();
     private Task ConfirmAsync() => OnConfirmed.InvokeAsync([.. _selected]);
+
+    public void Dispose() => _filterDebounceTimer?.Dispose();
 }

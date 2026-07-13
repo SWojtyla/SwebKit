@@ -32,6 +32,7 @@ public class AlertMonitorServiceTests
             new NullMonitoringConnectionPool(),
             toast,
             notifications,
+            new RecordingToastDiagnosticService(),
             appState,
             NullLogger<AlertMonitorService>.Instance);
     }
@@ -105,6 +106,82 @@ public class AlertMonitorServiceTests
         await svc.DisposeAsync();
 
         Assert.NotEmpty(svc.RecentAlerts);
+    }
+
+    // ── Toast fallback (DEC-4) ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RuleFires_WhenToastUnavailable_RaisesInAppFallbackAndReportsDiagnostic()
+    {
+        var rule = new MonitoringAlertRule
+        {
+            Id = "r1",
+            Name = "Pod down",
+            Source = AlertRuleSource.AksPodHealth,
+            Enabled = true,
+            IntervalSeconds = 10,
+            CooldownMinutes = 1,
+            Severity = AlertSeverity.Warning,
+        };
+
+        var source = new AlwaysFiringSignalSource(AlertRuleSource.AksPodHealth, "pod-x: CrashLoop", "detail");
+        var repo = new TestAlertRuleRepository(rule);
+
+        var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
+        var appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), events);
+        // OS toast reports it cannot deliver — the in-app fallback + diagnostic must kick in.
+        var toast = new TestWindowsNotificationService { NextResult = ToastDeliveryResult.NotAvailable("disabled") };
+        var notifications = new RecordingNotificationService();
+        var diagnostic = new RecordingToastDiagnosticService();
+
+        var svc = new AlertMonitorService(
+            repo, [source], new NullMonitoringConnectionPool(),
+            toast, notifications, diagnostic, appState, NullLogger<AlertMonitorService>.Instance);
+
+        await svc.StartAsync();
+        await Task.Delay(200);
+        await svc.DisposeAsync();
+
+        Assert.NotEmpty(toast.ShownAlerts);                 // toast was attempted
+        Assert.True(notifications.WarningCount >= 1);       // in-app baseline still raised (never silent)
+        Assert.True(diagnostic.ReportCount >= 1);           // one-time diagnostic hint reported
+        Assert.Equal("disabled", diagnostic.LastReason);
+    }
+
+    [Fact]
+    public async Task RuleFires_WhenToastDelivered_DoesNotReportDiagnostic()
+    {
+        var rule = new MonitoringAlertRule
+        {
+            Id = "r1",
+            Name = "Pod down",
+            Source = AlertRuleSource.AksPodHealth,
+            Enabled = true,
+            IntervalSeconds = 10,
+            CooldownMinutes = 1,
+            Severity = AlertSeverity.Warning,
+        };
+
+        var source = new AlwaysFiringSignalSource(AlertRuleSource.AksPodHealth, "pod-x: CrashLoop", "detail");
+        var repo = new TestAlertRuleRepository(rule);
+
+        var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
+        var appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), events);
+        var toast = new TestWindowsNotificationService(); // default: ToastDeliveryResult.Shown()
+        var notifications = new RecordingNotificationService();
+        var diagnostic = new RecordingToastDiagnosticService();
+
+        var svc = new AlertMonitorService(
+            repo, [source], new NullMonitoringConnectionPool(),
+            toast, notifications, diagnostic, appState, NullLogger<AlertMonitorService>.Instance);
+
+        await svc.StartAsync();
+        await Task.Delay(200);
+        await svc.DisposeAsync();
+
+        Assert.NotEmpty(toast.ShownAlerts);
+        Assert.True(notifications.WarningCount >= 1);       // in-app baseline still raised
+        Assert.Equal(0, diagnostic.ReportCount);            // no diagnostic when toast succeeds
     }
 
     // ── Cooldown ──────────────────────────────────────────────────────────────
@@ -341,8 +418,26 @@ public class AlertMonitorServiceTests
     private sealed class TestWindowsNotificationService : IWindowsNotificationService
     {
         public List<AlertFiredEvent> ShownAlerts { get; } = [];
-        public void ShowPodAlert(PodHealthEvent evt) { }
-        public void ShowAlert(AlertFiredEvent evt) => ShownAlerts.Add(evt);
+        public ToastDeliveryResult NextResult { get; set; } = ToastDeliveryResult.Shown();
+        public ToastCapability Capability { get; private set; } = ToastCapability.Available();
+        public ToastCapability ProbeCapability() => Capability;
+        public ToastDeliveryResult ShowPodAlert(PodHealthEvent evt) => NextResult;
+        public ToastDeliveryResult ShowAlert(AlertFiredEvent evt)
+        {
+            ShownAlerts.Add(evt);
+            return NextResult;
+        }
+    }
+
+    private sealed class RecordingToastDiagnosticService : IToastDiagnosticService
+    {
+        public int ReportCount;
+        public string? LastReason;
+        public void ReportToastUnavailable(string? reason)
+        {
+            ReportCount++;
+            LastReason = reason;
+        }
     }
 
     private sealed class NullMonitoringConnectionPool : IMonitoringConnectionPool
@@ -364,6 +459,21 @@ public class AlertMonitorServiceTests
         public void ShowWarning(string message, string? detail = null) { }
         public void ShowError(string message, string? detail = null, Exception? ex = null) { }
         public void ShowInfo(string message, string? detail = null) { }
+        public void Dismiss(Guid id) { }
+        public void ClearAll() { }
+    }
+
+    private sealed class RecordingNotificationService : INotificationService
+    {
+        public int WarningCount;
+        public int ErrorCount;
+        public int InfoCount;
+        public IReadOnlyList<Notification> All => [];
+        public event Action? NotificationsChanged { add { } remove { } }
+        public void ShowSuccess(string message, string? detail = null) { }
+        public void ShowWarning(string message, string? detail = null) => Interlocked.Increment(ref WarningCount);
+        public void ShowError(string message, string? detail = null, Exception? ex = null) => Interlocked.Increment(ref ErrorCount);
+        public void ShowInfo(string message, string? detail = null) => Interlocked.Increment(ref InfoCount);
         public void Dismiss(Guid id) { }
         public void ClearAll() { }
     }

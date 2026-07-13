@@ -27,6 +27,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
     // Mutable state — all access must hold _lock.
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly List<PodHealthEvent> _recentEvents = [];
+    private volatile IReadOnlyList<PodHealthEvent> _recentEventsSnapshot = [];
 
     /// <summary>
     /// Canonical list of namespaces to monitor (demo + real). Synced to AksConfig when available.
@@ -80,21 +81,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
 
     public IReadOnlyList<string> MonitoredNamespaces => _monitoredNamespaces;
 
-    public IReadOnlyList<PodHealthEvent> RecentEvents
-    {
-        get
-        {
-            _lock.Wait();
-            try
-            {
-                return _recentEvents.ToList();
-            }
-            finally
-            {
-                _lock.Release();
-            }
-        }
-    }
+    public IReadOnlyList<PodHealthEvent> RecentEvents => _recentEventsSnapshot;
 
     public event Action<PodHealthEvent>? PodHealthDetected;
 
@@ -166,7 +153,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
 
         _cts = new CancellationTokenSource();
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(120));
-        _loopTask = Task.Run(() => PollingLoopAsync(_cts.Token));
+        _loopTask = PollingLoopAsync(_cts.Token);
     }
 
     public async Task StopAsync()
@@ -246,7 +233,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
             await _appState.SaveConfigAsync();
 
         if (_isMonitoring)
-            await TakeBaselineAsync(ns);
+            await TakeBaselineAsync(ns, CancellationToken.None);
     }
 
     public async Task RemoveNamespaceAsync(string ns)
@@ -425,6 +412,9 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
             var expired = _cooldowns.Where(kv => kv.Value <= now).Select(kv => kv.Key).ToList();
             foreach (var key in expired)
                 _cooldowns.Remove(key);
+
+            // Publish a lock-free snapshot of recent events for UI thread access.
+            _recentEventsSnapshot = _recentEvents.ToList().AsReadOnly();
         }
         finally
         {
@@ -457,7 +447,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         }
     }
 
-    private async Task TakeBaselineAsync(string ns)
+    private async Task TakeBaselineAsync(string ns, CancellationToken ct = default)
     {
         IAksClient? client;
         await _lock.WaitAsync();
@@ -476,7 +466,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         IReadOnlyList<PodInfo> pods;
         try
         {
-            pods = await client.GetPodsAsync(ns, null, CancellationToken.None);
+            pods = await client.GetPodsAsync(ns, null, ct);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

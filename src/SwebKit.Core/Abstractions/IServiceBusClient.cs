@@ -50,4 +50,19 @@ public interface IServiceBusClientFactory
     /// Parses the fully qualified namespace from a Service Bus connection string without creating a client.
     /// </summary>
     string ParseFullyQualifiedNamespace(string connectionString);
+
+    /// <summary>
+    /// Builds a non-secret <see cref="ServiceBusConnectionDiagnostic"/> from a connection string.
+    /// SECURITY (DEC-3): only the endpoint host and SAS key <em>name</em> are read from the parsed
+    /// properties — never the key value or the raw connection string.
+    /// </summary>
+    /// <param name="connectionString">The SAS connection string to inspect (not retained or surfaced).</param>
+    /// <param name="credentialSource">The credential-source label (secret-reference name / config key) that resolved the connection string.</param>
+    ServiceBusConnectionDiagnostic BuildConnectionDiagnostic(string connectionString, string credentialSource);
+
+    /// <summary>
+    /// Builds a non-secret <see cref="ServiceBusConnectionDiagnostic"/> for a Microsoft Entra
+    /// (DefaultAzureCredential) token-based connection.
+    /// </summary>
+    ServiceBusConnectionDiagnostic BuildEntraConnectionDiagnostic(string fullyQualifiedNamespace);
 }

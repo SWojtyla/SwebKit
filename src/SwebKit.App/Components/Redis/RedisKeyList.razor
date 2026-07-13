@@ -12,10 +12,6 @@
     else
     {
         <div class="bulk-bar">
-            <label class="checkbox-inline">
-                <input type="checkbox" checked="@AllVisibleSelected" @onchange="OnToggleAllVisible" />
-                <span>Select visible</span>
-            </label>
             <span class="count">@SelectedKeys.Count selected</span>
         </div>
 
@@ -63,7 +59,6 @@ HashSet<string>(StringComparer.Ordinal);
     [Parameter] public EventCallback<string> OnSelectKey { get; set; }
     [Parameter] public EventCallback OnLoadMore { get; set; }
     [Parameter] public EventCallback<(string key, bool selected)> OnToggleKeySelection { get; set; }
-    [Parameter] public EventCallback<bool> OnToggleAllVisibleSelection { get; set; }
     [Parameter] public EventCallback<(string Key, string Action)> OnContextMenuAction { get; set; }
 
     private ContextMenu _ctxMenu = default!;
@@ -76,14 +71,6 @@ HashSet<string>(StringComparer.Ordinal);
         if (hash == _lastRenderHash) return false;
         _lastRenderHash = hash;
         return true;
-    }
-
-    private bool AllVisibleSelected => Keys.Count > 0 && Keys.All(k => SelectedKeys.Contains(k, StringComparer.Ordinal));
-
-    private Task OnToggleAllVisible(ChangeEventArgs args)
-    {
-        var selected = args.Value is bool b && b;
-        return OnToggleAllVisibleSelection.InvokeAsync(selected);
     }
 
     private Task OnToggleSelection(string key, ChangeEventArgs args)

@@ -71,13 +71,13 @@ public sealed class PostRequestCaptureExecutor(
         // Persist mutations asynchronously (fire-and-forget errors logged, not surfaced to user)
         if (collectionDirty)
         {
-            try { await collectionRepository.UpdateCollectionAsync(collection); }
+            try { await collectionRepository.UpdateCollectionAsync(collection).ConfigureAwait(false); }
             catch (Exception ex) { logger.LogWarning(ex, "Failed to persist collection after capture"); }
         }
 
         if (environmentDirty && activeEnvironment is not null)
         {
-            try { await environmentRepository.UpdateEnvironmentAsync(activeEnvironment); }
+            try { await environmentRepository.UpdateEnvironmentAsync(activeEnvironment).ConfigureAwait(false); }
             catch (Exception ex) { logger.LogWarning(ex, "Failed to persist environment after capture"); }
         }
 

@@ -37,7 +37,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
                     ? TitleFromFileName(Path.GetFileName(Path.GetDirectoryName(apiRootPath) ?? "Linked APIs"))
                     : displayName.Trim(),
             };
-            await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken);
+            await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
         }
 
         return apiRootPath;
@@ -51,11 +51,11 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         if (!Directory.Exists(apiRootPath))
         {
             diagnostics.Add($"Linked API root not found: {apiRootPath}");
-            return BuildResult(config, apiRootPath, config.Name, [], [], [], [], diagnostics, await gitService.GetStatusAsync(config.Path, apiRootPath, cancellationToken));
+            return BuildResult(config, apiRootPath, config.Name, [], [], [], [], diagnostics, await gitService.GetStatusAsync(config.Path, apiRootPath, cancellationToken).ConfigureAwait(false));
         }
 
         var manifestPath = Path.Combine(apiRootPath, ManifestFileName);
-        var manifest = await ReadJsonOrDefaultAsync<SwebKitApiRootManifest>(manifestPath, diagnostics, cancellationToken) ?? new SwebKitApiRootManifest { Name = config.Name };
+        var manifest = await ReadJsonOrDefaultAsync<SwebKitApiRootManifest>(manifestPath, diagnostics, cancellationToken).ConfigureAwait(false) ?? new SwebKitApiRootManifest { Name = config.Name };
         var collectionsPath = Path.Combine(apiRootPath, "collections");
         var environmentsPath = Path.Combine(apiRootPath, "environments");
         var collections = new List<ApiCollection>();
@@ -67,7 +67,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         {
             foreach (var collectionDirectory in Directory.GetDirectories(collectionsPath).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
             {
-                collections.Add(await ReadCollectionAsync(collectionDirectory, requestFiles, diagnostics, cancellationToken));
+                collections.Add(await ReadCollectionAsync(collectionDirectory, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false));
             }
 
             foreach (var requestFile in Directory.GetFiles(collectionsPath, $"*{RequestFileExtension}", SearchOption.TopDirectoryOnly).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
@@ -78,7 +78,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
                     collections.Insert(0, rootCollection);
                 }
 
-                rootCollection.Nodes.Add(await ReadRequestNodeAsync(requestFile, requestFiles, diagnostics, cancellationToken));
+                rootCollection.Nodes.Add(await ReadRequestNodeAsync(requestFile, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false));
             }
         }
         else
@@ -90,7 +90,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         {
             foreach (var environmentFile in Directory.GetFiles(environmentsPath, "*.swebenv.json", SearchOption.TopDirectoryOnly).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
             {
-                var environment = await ReadEnvironmentAsync(environmentFile, diagnostics, cancellationToken);
+                var environment = await ReadEnvironmentAsync(environmentFile, diagnostics, cancellationToken).ConfigureAwait(false);
                 environments.Add(environment);
                 environmentFiles.Add(new LinkedEnvironmentFileState
                 {
@@ -100,14 +100,14 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             }
         }
 
-        var gitStatus = await gitService.GetStatusAsync(config.Path, apiRootPath, cancellationToken);
+        var gitStatus = await gitService.GetStatusAsync(config.Path, apiRootPath, cancellationToken).ConfigureAwait(false);
         return BuildResult(config, apiRootPath, string.IsNullOrWhiteSpace(manifest.Name) ? config.Name : manifest.Name, collections, environments, requestFiles, environmentFiles, diagnostics, gitStatus);
     }
 
     public async Task SaveEnvironmentAsync(string environmentFilePath, ApiEnvironment environment, CancellationToken cancellationToken = default)
     {
         var file = SwebKitEnvironmentFile.FromEnvironment(environment);
-        await WriteJsonAtomicAsync(environmentFilePath, file, cancellationToken);
+        await WriteJsonAtomicAsync(environmentFilePath, file, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<string> CreateCollectionAsync(string apiRootPath, string collectionName, CancellationToken cancellationToken = default)
@@ -124,7 +124,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         Directory.CreateDirectory(collectionDirectory);
 
         var manifest = new SwebKitCollectionManifest { Name = collectionName.Trim() };
-        await WriteJsonAtomicAsync(Path.Combine(collectionDirectory, "collection.json"), manifest, cancellationToken);
+        await WriteJsonAtomicAsync(Path.Combine(collectionDirectory, "collection.json"), manifest, cancellationToken).ConfigureAwait(false);
         return StableId(collectionDirectory);
     }
 
@@ -147,8 +147,8 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             Variables = collection.Variables,
             DefaultAuth = collection.DefaultAuth,
         };
-        await WriteJsonAtomicAsync(Path.Combine(collectionDirectory, "collection.json"), manifest, cancellationToken);
-        await WriteNodesToDirectoryAsync(collectionDirectory, collection.Nodes, cancellationToken);
+        await WriteJsonAtomicAsync(Path.Combine(collectionDirectory, "collection.json"), manifest, cancellationToken).ConfigureAwait(false);
+        await WriteNodesToDirectoryAsync(collectionDirectory, collection.Nodes, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task WriteNodesToDirectoryAsync(string directory, IEnumerable<ApiCollectionNode> nodes, CancellationToken cancellationToken)
@@ -159,22 +159,22 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             {
                 var folderDir = Path.Combine(directory, Slugify(node.Name));
                 Directory.CreateDirectory(folderDir);
-                await WriteNodesToDirectoryAsync(folderDir, node.Children, cancellationToken);
+                await WriteNodesToDirectoryAsync(folderDir, node.Children, cancellationToken).ConfigureAwait(false);
             }
             else if (node.Type == ApiCollectionNodeType.Request && node.Request is not null)
             {
                 var requestPath = Path.Combine(directory, $"{Slugify(node.Request.Name)}{RequestFileExtension}");
                 var requestFile = SwebKitRequestFile.FromRequest(node.Request, requestPath);
-                await WriteJsonAtomicAsync(requestPath, requestFile, cancellationToken);
+                await WriteJsonAtomicAsync(requestPath, requestFile, cancellationToken).ConfigureAwait(false);
 
                 if (!string.IsNullOrWhiteSpace(requestFile.Body?.JsonFile) && !string.IsNullOrWhiteSpace(node.Request.Body.RawContent))
-                    await WriteTextAtomicAsync(Path.Combine(directory, requestFile.Body.JsonFile), node.Request.Body.RawContent, cancellationToken);
+                    await WriteTextAtomicAsync(Path.Combine(directory, requestFile.Body.JsonFile), node.Request.Body.RawContent, cancellationToken).ConfigureAwait(false);
 
                 if (!string.IsNullOrWhiteSpace(requestFile.QueryFile) && !string.IsNullOrWhiteSpace(node.Request.GraphQlQuery))
-                    await WriteTextAtomicAsync(Path.Combine(directory, requestFile.QueryFile), node.Request.GraphQlQuery, cancellationToken);
+                    await WriteTextAtomicAsync(Path.Combine(directory, requestFile.QueryFile), node.Request.GraphQlQuery, cancellationToken).ConfigureAwait(false);
 
                 if (!string.IsNullOrWhiteSpace(requestFile.VariablesFile) && !string.IsNullOrWhiteSpace(node.Request.GraphQlVariables))
-                    await WriteTextAtomicAsync(Path.Combine(directory, requestFile.VariablesFile), node.Request.GraphQlVariables, cancellationToken);
+                    await WriteTextAtomicAsync(Path.Combine(directory, requestFile.VariablesFile), node.Request.GraphQlVariables, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -189,7 +189,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         Directory.CreateDirectory(environmentsPath);
         var environmentFilePath = GetUniqueEnvironmentFilePath(environmentsPath, Slugify(environment.Name));
         var file = SwebKitEnvironmentFile.FromEnvironment(environment);
-        await WriteJsonAtomicAsync(environmentFilePath, file, cancellationToken);
+        await WriteJsonAtomicAsync(environmentFilePath, file, cancellationToken).ConfigureAwait(false);
     }
 
     private static string GetUniqueEnvironmentFilePath(string environmentsPath, string slug)
@@ -218,7 +218,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
         if (!string.IsNullOrWhiteSpace(expectedContentStamp) && File.Exists(requestPath))
         {
-            var currentContentStamp = await ComputeRequestContentStampAsync(requestPath, cancellationToken);
+            var currentContentStamp = await ComputeRequestContentStampAsync(requestPath, cancellationToken).ConfigureAwait(false);
             if (!string.Equals(expectedContentStamp, currentContentStamp, StringComparison.Ordinal))
             {
                 return LinkedRequestSaveResult.Conflict(requestPath, currentContentStamp);
@@ -226,24 +226,24 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         }
 
         var requestFile = SwebKitRequestFile.FromRequest(request, requestPath);
-        await WriteJsonAtomicAsync(requestPath, requestFile, cancellationToken);
+        await WriteJsonAtomicAsync(requestPath, requestFile, cancellationToken).ConfigureAwait(false);
 
         if (!string.IsNullOrWhiteSpace(requestFile.Body?.JsonFile) && !string.IsNullOrWhiteSpace(request.Body.RawContent))
         {
-            await WriteTextAtomicAsync(Path.Combine(Path.GetDirectoryName(requestPath)!, requestFile.Body.JsonFile), request.Body.RawContent, cancellationToken);
+            await WriteTextAtomicAsync(Path.Combine(Path.GetDirectoryName(requestPath)!, requestFile.Body.JsonFile), request.Body.RawContent, cancellationToken).ConfigureAwait(false);
         }
 
         if (!string.IsNullOrWhiteSpace(requestFile.QueryFile) && !string.IsNullOrWhiteSpace(request.GraphQlQuery))
         {
-            await WriteTextAtomicAsync(Path.Combine(Path.GetDirectoryName(requestPath)!, requestFile.QueryFile), request.GraphQlQuery, cancellationToken);
+            await WriteTextAtomicAsync(Path.Combine(Path.GetDirectoryName(requestPath)!, requestFile.QueryFile), request.GraphQlQuery, cancellationToken).ConfigureAwait(false);
         }
 
         if (!string.IsNullOrWhiteSpace(requestFile.VariablesFile) && !string.IsNullOrWhiteSpace(request.GraphQlVariables))
         {
-            await WriteTextAtomicAsync(Path.Combine(Path.GetDirectoryName(requestPath)!, requestFile.VariablesFile), request.GraphQlVariables, cancellationToken);
+            await WriteTextAtomicAsync(Path.Combine(Path.GetDirectoryName(requestPath)!, requestFile.VariablesFile), request.GraphQlVariables, cancellationToken).ConfigureAwait(false);
         }
 
-        return LinkedRequestSaveResult.Success(requestPath, await ComputeRequestContentStampAsync(requestPath, cancellationToken));
+        return LinkedRequestSaveResult.Success(requestPath, await ComputeRequestContentStampAsync(requestPath, cancellationToken).ConfigureAwait(false));
     }
 
     /// <summary>
@@ -257,7 +257,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
         EnsureWithinApiRoot(apiRootPath, requestPath);
         var directory = Path.GetDirectoryName(requestPath)!;
-        foreach (var sidecar in await ReadSidecarFileNamesAsync(requestPath, cancellationToken))
+        foreach (var sidecar in await ReadSidecarFileNamesAsync(requestPath, cancellationToken).ConfigureAwait(false))
         {
             var sidecarPath = Path.Combine(directory, sidecar);
             if (File.Exists(sidecarPath) && IsWithinApiRoot(apiRootPath, sidecarPath))
@@ -370,9 +370,9 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         }
 
         var manifestPath = Path.Combine(newDirectory, "collection.json");
-        var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(manifestPath, [], cancellationToken) ?? new SwebKitCollectionManifest();
+        var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(manifestPath, [], cancellationToken).ConfigureAwait(false) ?? new SwebKitCollectionManifest();
         manifest.Name = newName.Trim();
-        await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken);
+        await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -420,7 +420,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             }
 
             var fileName = Path.GetFileName(sourcePath);
-            var sidecars = await ReadSidecarFileNamesAsync(sourcePath, cancellationToken);
+            var sidecars = await ReadSidecarFileNamesAsync(sourcePath, cancellationToken).ConfigureAwait(false);
             var destinationPath = Path.Combine(newParentDirectory, fileName);
             EnsureWithinApiRoot(apiRootPath, sourcePath);
             EnsureWithinApiRoot(apiRootPath, destinationPath);
@@ -515,7 +515,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         CancellationToken cancellationToken)
     {
         var collectionManifestPath = Path.Combine(collectionDirectory, "collection.json");
-        var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(collectionManifestPath, diagnostics, cancellationToken);
+        var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(collectionManifestPath, diagnostics, cancellationToken).ConfigureAwait(false);
         var collection = new ApiCollection
         {
             Id = StableId(collectionDirectory),
@@ -536,7 +536,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             }));
         }
 
-        collection.Nodes.AddRange(await ReadNodesAsync(collectionDirectory, requestFiles, diagnostics, cancellationToken));
+        collection.Nodes.AddRange(await ReadNodesAsync(collectionDirectory, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false));
         return collection;
     }
 
@@ -564,13 +564,13 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
                 Type = ApiCollectionNodeType.Folder,
                 Name = TitleFromFileName(Path.GetFileName(childDirectory)),
                 IsExpanded = true,
-                Children = await ReadNodesAsync(childDirectory, requestFiles, diagnostics, cancellationToken),
+                Children = await ReadNodesAsync(childDirectory, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false),
             });
         }
 
         foreach (var requestFile in Directory.GetFiles(directory, $"*{RequestFileExtension}", SearchOption.TopDirectoryOnly).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
         {
-            nodes.Add(await ReadRequestNodeAsync(requestFile, requestFiles, diagnostics, cancellationToken));
+            nodes.Add(await ReadRequestNodeAsync(requestFile, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false));
         }
 
         return nodes;
@@ -582,31 +582,31 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         List<string> diagnostics,
         CancellationToken cancellationToken)
     {
-        var dto = await ReadJsonOrDefaultAsync<SwebKitRequestFile>(requestFile, diagnostics, cancellationToken) ?? new SwebKitRequestFile();
+        var dto = await ReadJsonOrDefaultAsync<SwebKitRequestFile>(requestFile, diagnostics, cancellationToken).ConfigureAwait(false) ?? new SwebKitRequestFile();
         var requestDirectory = Path.GetDirectoryName(requestFile)!;
         var request = dto.ToRequest(requestFile);
 
         if (!string.IsNullOrWhiteSpace(dto.Body?.JsonFile))
         {
             request.Body.Mode = RequestBodyMode.Json;
-            request.Body.RawContent = await ReadSidecarAsync(requestDirectory, dto.Body.JsonFile, diagnostics, cancellationToken);
+            request.Body.RawContent = await ReadSidecarAsync(requestDirectory, dto.Body.JsonFile, diagnostics, cancellationToken).ConfigureAwait(false);
         }
 
         if (!string.IsNullOrWhiteSpace(dto.QueryFile))
         {
-            request.GraphQlQuery = await ReadSidecarAsync(requestDirectory, dto.QueryFile, diagnostics, cancellationToken);
+            request.GraphQlQuery = await ReadSidecarAsync(requestDirectory, dto.QueryFile, diagnostics, cancellationToken).ConfigureAwait(false);
         }
 
         if (!string.IsNullOrWhiteSpace(dto.VariablesFile))
         {
-            request.GraphQlVariables = await ReadSidecarAsync(requestDirectory, dto.VariablesFile, diagnostics, cancellationToken);
+            request.GraphQlVariables = await ReadSidecarAsync(requestDirectory, dto.VariablesFile, diagnostics, cancellationToken).ConfigureAwait(false);
         }
 
         requestFiles.Add(new LinkedRequestFileState
         {
             RequestId = request.Id,
             RequestFilePath = requestFile,
-            ContentStamp = await ComputeRequestContentStampAsync(requestFile, cancellationToken),
+            ContentStamp = await ComputeRequestContentStampAsync(requestFile, cancellationToken).ConfigureAwait(false),
         });
 
         return new ApiCollectionNode
@@ -620,7 +620,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
     private static async Task<ApiEnvironment> ReadEnvironmentAsync(string environmentFile, List<string> diagnostics, CancellationToken cancellationToken)
     {
-        var dto = await ReadJsonOrDefaultAsync<SwebKitEnvironmentFile>(environmentFile, diagnostics, cancellationToken) ?? new SwebKitEnvironmentFile();
+        var dto = await ReadJsonOrDefaultAsync<SwebKitEnvironmentFile>(environmentFile, diagnostics, cancellationToken).ConfigureAwait(false) ?? new SwebKitEnvironmentFile();
         return dto.ToEnvironment(environmentFile);
     }
 
@@ -633,7 +633,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
         try
         {
-            var json = await File.ReadAllTextAsync(path, cancellationToken);
+            var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
             return JsonSerializer.Deserialize<T>(json, Options);
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
@@ -648,7 +648,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         var path = Path.Combine(requestDirectory, fileName);
         try
         {
-            return File.Exists(path) ? await File.ReadAllTextAsync(path, cancellationToken) : null;
+            return File.Exists(path) ? await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false) : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -721,7 +721,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
     {
         try
         {
-            var json = await File.ReadAllTextAsync(requestPath, cancellationToken);
+            var json = await File.ReadAllTextAsync(requestPath, cancellationToken).ConfigureAwait(false);
             var requestFile = JsonSerializer.Deserialize<SwebKitRequestFile>(json, Options);
             return requestFile?.GetSidecarFiles().ToList() ?? [];
         }
@@ -734,7 +734,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
     private static async Task WriteJsonAtomicAsync<T>(string path, T value, CancellationToken cancellationToken)
     {
         var json = JsonSerializer.Serialize(value, Options);
-        await WriteTextAtomicAsync(path, json, cancellationToken);
+        await WriteTextAtomicAsync(path, json, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task WriteTextAtomicAsync(string path, string content, CancellationToken cancellationToken)
@@ -743,7 +743,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         var tempPath = $"{path}.{Guid.NewGuid():N}.tmp";
         try
         {
-            await File.WriteAllTextAsync(tempPath, content, cancellationToken);
+            await File.WriteAllTextAsync(tempPath, content, cancellationToken).ConfigureAwait(false);
             File.Move(tempPath, path, overwrite: true);
         }
         catch
@@ -756,11 +756,11 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
     private static async Task<string> ComputeRequestContentStampAsync(string requestPath, CancellationToken cancellationToken)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        await AppendFileToHashAsync(hash, requestPath, cancellationToken);
+        await AppendFileToHashAsync(hash, requestPath, cancellationToken).ConfigureAwait(false);
 
         try
         {
-            var json = await File.ReadAllTextAsync(requestPath, cancellationToken);
+            var json = await File.ReadAllTextAsync(requestPath, cancellationToken).ConfigureAwait(false);
             var requestFile = JsonSerializer.Deserialize<SwebKitRequestFile>(json, Options);
             var directory = Path.GetDirectoryName(requestPath)!;
             foreach (var sidecar in requestFile?.GetSidecarFiles() ?? [])
@@ -768,7 +768,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
                 var sidecarPath = Path.Combine(directory, sidecar);
                 if (File.Exists(sidecarPath))
                 {
-                    await AppendFileToHashAsync(hash, sidecarPath, cancellationToken);
+                    await AppendFileToHashAsync(hash, sidecarPath, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -784,7 +784,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         var pathBytes = Encoding.UTF8.GetBytes(Path.GetFileName(path));
         hash.AppendData(pathBytes);
         hash.AppendData([0]);
-        var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+        var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
         hash.AppendData(bytes);
         hash.AppendData([0]);
     }

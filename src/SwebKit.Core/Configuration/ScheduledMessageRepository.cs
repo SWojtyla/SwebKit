@@ -24,7 +24,7 @@ public class ScheduledMessageRepository
 
         try
         {
-            var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.ScheduledMessagesJson, DeserializeEntries);
+            var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.ScheduledMessagesJson, DeserializeEntries).ConfigureAwait(false);
             _entries = loadResult.Value;
         }
         catch
@@ -37,7 +37,7 @@ public class ScheduledMessageRepository
     {
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_entries, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.ScheduledMessagesJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.ScheduledMessagesJson, json).ConfigureAwait(false);
     }
 
     public void ReplaceEntries(IEnumerable<ScheduledMessageEntry>? entries)
@@ -48,19 +48,19 @@ public class ScheduledMessageRepository
     public async Task ImportAsync(IEnumerable<ScheduledMessageEntry>? entries)
     {
         ReplaceEntries(entries);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public async Task AddAsync(ScheduledMessageEntry entry)
     {
         _entries.Add(entry);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public async Task RemoveAsync(Guid id)
     {
         _entries.RemoveAll(e => e.Id == id);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public IReadOnlyList<ScheduledMessageEntry> GetByNamespace(Guid namespaceId) =>

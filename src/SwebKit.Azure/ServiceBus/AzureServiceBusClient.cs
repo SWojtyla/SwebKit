@@ -95,14 +95,14 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
     public async Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default)
     {
-        var props = await _adminClient.GetNamespacePropertiesAsync(ct);
+        var props = await _adminClient.GetNamespacePropertiesAsync(ct).ConfigureAwait(false);
         return new SbNamespaceInfo { Name = props.Value.Name, Endpoint = _client.FullyQualifiedNamespace };
     }
 
     public async Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default)
     {
         var result = new List<SbEntityInfo>();
-        await foreach (var q in _adminClient.GetQueuesAsync(ct))
+        await foreach (var q in _adminClient.GetQueuesAsync(ct).ConfigureAwait(false))
         {
             result.Add(new SbEntityInfo
             {
@@ -115,7 +115,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
         if (result.Count == 0)
         {
-            await TryAddScopedQueueAsync(result, ct);
+            await TryAddScopedQueueAsync(result, ct).ConfigureAwait(false);
         }
 
         return result;
@@ -124,7 +124,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     public async Task<IReadOnlyList<SbEntityInfo>> ListTopicsAsync(CancellationToken ct = default)
     {
         var result = new List<SbEntityInfo>();
-        await foreach (var t in _adminClient.GetTopicsAsync(ct))
+        await foreach (var t in _adminClient.GetTopicsAsync(ct).ConfigureAwait(false))
         {
             result.Add(new SbEntityInfo
             {
@@ -137,7 +137,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
         if (result.Count == 0)
         {
-            await TryAddScopedTopicAsync(result, ct);
+            await TryAddScopedTopicAsync(result, ct).ConfigureAwait(false);
         }
 
         return result;
@@ -149,7 +149,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
         try
         {
-            var q = await _adminClient.GetQueueAsync(_scopedEntityPath, ct);
+            var q = await _adminClient.GetQueueAsync(_scopedEntityPath, ct).ConfigureAwait(false);
             result.Add(new SbEntityInfo
             {
                 Name = q.Value.Name,
@@ -173,7 +173,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
         try
         {
-            var t = await _adminClient.GetTopicAsync(_scopedEntityPath, ct);
+            var t = await _adminClient.GetTopicAsync(_scopedEntityPath, ct).ConfigureAwait(false);
             result.Add(new SbEntityInfo
             {
                 Name = t.Value.Name,
@@ -195,7 +195,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     public async Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default)
     {
         var result = new List<SbEntityInfo>();
-        await foreach (var s in _adminClient.GetSubscriptionsAsync(topicName, ct))
+        await foreach (var s in _adminClient.GetSubscriptionsAsync(topicName, ct).ConfigureAwait(false))
         {
             result.Add(new SbEntityInfo
             {
@@ -215,9 +215,9 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(queueName))
             throw new ArgumentException("Queue name is required.", nameof(queueName));
 
-        var queue = await _adminClient.GetQueueAsync(queueName, ct);
+        var queue = await _adminClient.GetQueueAsync(queueName, ct).ConfigureAwait(false);
         queue.Value.Status = GetEntityStatus(enabled);
-        await _adminClient.UpdateQueueAsync(queue.Value, ct);
+        await _adminClient.UpdateQueueAsync(queue.Value, ct).ConfigureAwait(false);
     }
 
     public async Task SetTopicEnabledAsync(string topicName, bool enabled, CancellationToken ct = default)
@@ -225,9 +225,9 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(topicName))
             throw new ArgumentException("Topic name is required.", nameof(topicName));
 
-        var topic = await _adminClient.GetTopicAsync(topicName, ct);
+        var topic = await _adminClient.GetTopicAsync(topicName, ct).ConfigureAwait(false);
         topic.Value.Status = GetEntityStatus(enabled);
-        await _adminClient.UpdateTopicAsync(topic.Value, ct);
+        await _adminClient.UpdateTopicAsync(topic.Value, ct).ConfigureAwait(false);
     }
 
     public async Task SetSubscriptionEnabledAsync(string topicName, string subscriptionName, bool enabled, CancellationToken ct = default)
@@ -237,16 +237,16 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(subscriptionName))
             throw new ArgumentException("Subscription name is required.", nameof(subscriptionName));
 
-        var sub = await _adminClient.GetSubscriptionAsync(topicName, subscriptionName, ct);
+        var sub = await _adminClient.GetSubscriptionAsync(topicName, subscriptionName, ct).ConfigureAwait(false);
         sub.Value.Status = GetEntityStatus(enabled);
-        await _adminClient.UpdateSubscriptionAsync(sub.Value, ct);
+        await _adminClient.UpdateSubscriptionAsync(sub.Value, ct).ConfigureAwait(false);
     }
 
     public async Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default)
     {
         if (TryParseSubscriptionPath(entityPath, out var parsedTopic, out var parsedSubscription))
         {
-            var props = await _adminClient.GetSubscriptionRuntimePropertiesAsync(parsedTopic, parsedSubscription, ct);
+            var props = await _adminClient.GetSubscriptionRuntimePropertiesAsync(parsedTopic, parsedSubscription, ct).ConfigureAwait(false);
             return new SbEntityStats
             {
                 ActiveMessageCount = props.Value.ActiveMessageCount,
@@ -260,7 +260,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             var parts = entityPath.Split('/', 2);
             if (parts.Length == 2)
             {
-                var props = await _adminClient.GetSubscriptionRuntimePropertiesAsync(parts[0], parts[1], ct);
+                var props = await _adminClient.GetSubscriptionRuntimePropertiesAsync(parts[0], parts[1], ct).ConfigureAwait(false);
                 return new SbEntityStats
                 {
                     ActiveMessageCount = props.Value.ActiveMessageCount,
@@ -270,7 +270,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             }
         }
 
-        var queueProps = await _adminClient.GetQueueRuntimePropertiesAsync(entityPath, ct);
+        var queueProps = await _adminClient.GetQueueRuntimePropertiesAsync(entityPath, ct).ConfigureAwait(false);
         return new SbEntityStats
         {
             ActiveMessageCount = queueProps.Value.ActiveMessageCount,
@@ -285,8 +285,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     {
         await using var receiver = _client.CreateReceiver(entityPath);
         var messages = fromSequenceNumber is long seq
-            ? await receiver.PeekMessagesAsync(count, seq, ct)
-            : await receiver.PeekMessagesAsync(count, cancellationToken: ct);
+            ? await receiver.PeekMessagesAsync(count, seq, ct).ConfigureAwait(false)
+            : await receiver.PeekMessagesAsync(count, cancellationToken: ct).ConfigureAwait(false);
         return messages.Select(MapMessage).ToList();
     }
 
@@ -295,8 +295,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         var dlqPath = $"{entityPath}/$DeadLetterQueue";
         await using var receiver = _client.CreateReceiver(dlqPath);
         var messages = fromSequenceNumber is long seq
-            ? await receiver.PeekMessagesAsync(count, seq, ct)
-            : await receiver.PeekMessagesAsync(count, cancellationToken: ct);
+            ? await receiver.PeekMessagesAsync(count, seq, ct).ConfigureAwait(false)
+            : await receiver.PeekMessagesAsync(count, cancellationToken: ct).ConfigureAwait(false);
         return messages.Select(MapMessage).ToList();
     }
 
@@ -320,7 +320,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             ct.ThrowIfCancellationRequested();
 
             var receiveCount = Math.Min(MaxReceiveBatchSize, Math.Max(1, remaining.Count));
-            var received = await receiver.ReceiveMessagesAsync(receiveCount, ReceiveWaitTime, ct);
+            var received = await receiver.ReceiveMessagesAsync(receiveCount, ReceiveWaitTime, ct).ConfigureAwait(false);
             if (received.Count == 0)
             {
                 break;
@@ -332,12 +332,12 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
                 if (remaining.Remove(message.SequenceNumber))
                 {
-                    await receiver.CompleteMessageAsync(message, ct);
+                    await receiver.CompleteMessageAsync(message, ct).ConfigureAwait(false);
                     completed++;
                 }
                 else
                 {
-                    await receiver.AbandonMessageAsync(message, cancellationToken: ct);
+                    await receiver.AbandonMessageAsync(message, cancellationToken: ct).ConfigureAwait(false);
                 }
             }
         }
@@ -360,7 +360,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         {
             ct.ThrowIfCancellationRequested();
 
-            var received = await receiver.ReceiveMessagesAsync(MaxReceiveBatchSize, ReceiveWaitTime, ct);
+            var received = await receiver.ReceiveMessagesAsync(MaxReceiveBatchSize, ReceiveWaitTime, ct).ConfigureAwait(false);
             if (received.Count == 0)
             {
                 break;
@@ -369,7 +369,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             foreach (var message in received)
             {
                 ct.ThrowIfCancellationRequested();
-                await receiver.CompleteMessageAsync(message, ct);
+                await receiver.CompleteMessageAsync(message, ct).ConfigureAwait(false);
                 deleted++;
             }
         }
@@ -380,32 +380,32 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     public async Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default)
     {
         await using var sender = _client.CreateSender(entityPath);
-        await sender.SendMessageAsync(MapToSdk(message), ct);
+        await sender.SendMessageAsync(MapToSdk(message), ct).ConfigureAwait(false);
     }
 
     public async Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default)
     {
         await using var sender = _client.CreateSender(entityPath);
-        var batch = await sender.CreateMessageBatchAsync(ct);
+        var batch = await sender.CreateMessageBatchAsync(ct).ConfigureAwait(false);
         foreach (var msg in messages)
         {
             if (!batch.TryAddMessage(MapToSdk(msg)))
                 throw new InvalidOperationException("Message too large for batch.");
         }
-        await sender.SendMessagesAsync(batch, ct);
+        await sender.SendMessagesAsync(batch, ct).ConfigureAwait(false);
     }
 
     public async Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default)
     {
         await using var sender = _client.CreateSender(entityPath);
         var sdkMsg = MapToSdk(message);
-        return await sender.ScheduleMessageAsync(sdkMsg, scheduledEnqueueTime, ct);
+        return await sender.ScheduleMessageAsync(sdkMsg, scheduledEnqueueTime, ct).ConfigureAwait(false);
     }
 
     public async Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default)
     {
         await using var sender = _client.CreateSender(entityPath);
-        await sender.CancelScheduledMessageAsync(sequenceNumber, ct);
+        await sender.CancelScheduledMessageAsync(sequenceNumber, ct).ConfigureAwait(false);
     }
 
     public async Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default)
@@ -438,11 +438,11 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
                 forwarded.ApplicationProperties.Remove("DeadLetterReason");
                 forwarded.ApplicationProperties.Remove("DeadLetterErrorDescription");
                 ApplyRemapRules(forwarded, remapRules);
-                await sender.SendMessageAsync(forwarded, token);
-                await receiver.CompleteMessageAsync(message, token);
+                await sender.SendMessageAsync(forwarded, token).ConfigureAwait(false);
+                await receiver.CompleteMessageAsync(message, token).ConfigureAwait(false);
             },
             (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
-            ct);
+            ct).ConfigureAwait(false);
     }
 
     private static void ApplyRemapRules(ServiceBusMessage message, RemapRules? rules)
@@ -495,14 +495,14 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             static message => message.SequenceNumber,
             (message, token) => receiver.CompleteMessageAsync(message, token),
             (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
-            ct);
+            ct).ConfigureAwait(false);
     }
 
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {
         try
         {
-            await foreach (var _ in _adminClient.GetQueuesAsync(ct))
+            await foreach (var _ in _adminClient.GetQueuesAsync(ct).ConfigureAwait(false))
             {
                 break;
             }
@@ -570,7 +570,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     {
         try
         {
-            var runtime = await _adminClient.GetQueueRuntimePropertiesAsync(queueName, ct);
+            var runtime = await _adminClient.GetQueueRuntimePropertiesAsync(queueName, ct).ConfigureAwait(false);
             return new SbEntityStats
             {
                 ActiveMessageCount = runtime.Value.ActiveMessageCount,
@@ -595,7 +595,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     {
         try
         {
-            var runtime = await _adminClient.GetSubscriptionRuntimePropertiesAsync(topicName, subscriptionName, ct);
+            var runtime = await _adminClient.GetSubscriptionRuntimePropertiesAsync(topicName, subscriptionName, ct).ConfigureAwait(false);
             return new SbEntityStats
             {
                 ActiveMessageCount = runtime.Value.ActiveMessageCount,
@@ -647,6 +647,6 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await _client.DisposeAsync();
+        await _client.DisposeAsync().ConfigureAwait(false);
     }
 }

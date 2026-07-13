@@ -379,7 +379,7 @@ public sealed class DemoObservabilityResourceDiscovery : IObservabilityResourceD
         foreach (var r in DemoResources)
         {
             ct.ThrowIfCancellationRequested();
-            await Task.Delay(80, ct); // simulate discovery latency per subscription
+            await Task.Delay(80, ct).ConfigureAwait(false); // simulate discovery latency per subscription
             yield return r;
         }
     }

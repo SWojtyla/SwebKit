@@ -149,8 +149,7 @@ essentialsStopwatch.Elapsed.TotalMilliseconds);
         {
             await AppState.InitializeAsync();
             Tabs.RestoreTabs(UiState.State.OpenTabs);
-            RequestRender();
-            await InvokeAsync(StateHasChanged); // BL-2: dispatch on Blazor thread
+            RequestCoalescedRender();
 
             // Fire warmup in background — non-blocking, all failures are silent
             var openAreas = UiState.State.OpenTabs
@@ -205,8 +204,7 @@ essentialsStopwatch.Elapsed.TotalMilliseconds);
 
             await LoadThemeAsync();
 
-            RequestRender();
-            await InvokeAsync(StateHasChanged);
+            RequestCoalescedRender();
             Logger.LogInformation("Perf shell first render ready in {ElapsedMs} ms",
 _shellStartupStopwatch.Elapsed.TotalMilliseconds);
             PerformanceBaselineRecorder.Record(nameof(MainLayout), $"Perf shell first render ready in {_shellStartupStopwatch.Elapsed.TotalMilliseconds} ms");
@@ -234,8 +232,7 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
         await PersistThemeAsync();
         await ClearLegacyThemeStorageAsync();
 
-        RequestRender();
-        await InvokeAsync(StateHasChanged);
+        RequestCoalescedRender();
     }
 
     public string CurrentTheme => _currentTheme;
@@ -308,8 +305,8 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
         // Track manual toggles while in the API client so we don't override the user's intent on exit
         if (string.Equals(CurrentArea, "api-client", StringComparison.OrdinalIgnoreCase))
             _userToggledNavInApiClient = true;
-        RequestRender();
-        return InvokeAsync(StateHasChanged);
+        RequestCoalescedRender();
+        return Task.CompletedTask;
     }
 
     private void NavigateTo(string area)
@@ -353,8 +350,7 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
         InvokeAsync(() =>
         {
             IsCommandPaletteOpen = true;
-            RequestRender();
-            StateHasChanged();
+            RequestCoalescedRender();
         });
 
     private void RegisterDefaultCommands()
@@ -655,9 +651,16 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
             case "ApiNewRequest": Events.Publish(new ApiClientShortcutEvent("NewRequest")); break;
             case "ApiNewCollection": Events.Publish(new ApiClientShortcutEvent("NewCollection")); break;
             case "ApiEnvManager": Events.Publish(new ApiClientShortcutEvent("EnvManager")); break;
+            case "ApiSaveRequest": Events.Publish(new ApiClientShortcutEvent("SaveRequest")); break;
+            case "ApiTabClose": Events.Publish(new ApiClientShortcutEvent("TabClose")); break;
+            case "ApiTabNext": Events.Publish(new ApiClientShortcutEvent("TabNext")); break;
+            case "ApiTabPrev": Events.Publish(new ApiClientShortcutEvent("TabPrev")); break;
+            case "AksJumpLogs": Events.Publish(new AksShortcutEvent("JumpLogs")); break;
+            case "AksFocusTabs": Events.Publish(new AksShortcutEvent("FocusTabs")); break;
+            case "AksFocusGrid": Events.Publish(new AksShortcutEvent("FocusGrid")); break;
+            case "AksCloseDetail": Events.Publish(new AksShortcutEvent("CloseDetail")); break;
         }
-        RequestRender();
-        await InvokeAsync(StateHasChanged);
+        RequestCoalescedRender();
     }
 
     private string? GetNextTabId(int direction)

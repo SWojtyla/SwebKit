@@ -98,13 +98,34 @@
 @code {
     [Parameter] public EventCallback OnClose { get; set; }
 
-    private string SummaryText => Notifications.All.Count switch
+    private int _cachedSummaryNotificationsCount = -1;
+    private int _cachedSummaryHistoryCount = -1;
+    private string? _cachedSummaryText;
+
+    private string SummaryText
     {
-        > 0 when UiState.State.NotificationHistory.Count > 0 => $"{Notifications.All.Count} active, {UiState.State.NotificationHistory.Count} recent",
-        > 0 => $"{Notifications.All.Count} active notification{(Notifications.All.Count == 1 ? string.Empty : "s")}",
-        _ when UiState.State.NotificationHistory.Count > 0 => $"{UiState.State.NotificationHistory.Count} recent notification{(UiState.State.NotificationHistory.Count == 1 ? string.Empty : "s")}",
-        _ => "No recent activity yet",
-    };
+        get
+        {
+            var notificationsCount = Notifications.All.Count;
+            var historyCount = UiState.State.NotificationHistory.Count;
+            
+            if (_cachedSummaryText is null ||
+                _cachedSummaryNotificationsCount != notificationsCount ||
+                _cachedSummaryHistoryCount != historyCount)
+            {
+                _cachedSummaryText = notificationsCount switch
+                {
+                    > 0 when historyCount > 0 => $"{notificationsCount} active, {historyCount} recent",
+                    > 0 => $"{notificationsCount} active notification{(notificationsCount == 1 ? string.Empty : "s")}",
+                    _ when historyCount > 0 => $"{historyCount} recent notification{(historyCount == 1 ? string.Empty : "s")}",
+                    _ => "No recent activity yet",
+                };
+                _cachedSummaryNotificationsCount = notificationsCount;
+                _cachedSummaryHistoryCount = historyCount;
+            }
+            return _cachedSummaryText;
+        }
+    }
 
     protected override void OnInitialized()
     {

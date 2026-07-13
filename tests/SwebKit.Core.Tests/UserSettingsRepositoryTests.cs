@@ -35,4 +35,12 @@ public sealed class UserSettingsRepositoryTests
 
         Assert.Equal("light-coral-studio", reader.Settings.Theme);
     }
+
+    [Fact]
+    public void DefaultSettings_HasApiClientRequestTabsDisabled()
+    {
+        var settings = new UserSettings();
+
+        Assert.False(settings.ApiClientRequestTabs);
+    }
 }

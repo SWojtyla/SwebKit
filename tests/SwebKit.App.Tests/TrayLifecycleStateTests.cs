@@ -46,13 +46,13 @@ public class TrayLifecycleStateTests
     }
 
     [Fact]
-    public void MarkExplicitExitRequested_DisablesCloseInterception()
+    public void MarkExplicitExitRequested_DisablesMinimizeToTrayRouting()
     {
         var state = new TrayLifecycleState();
 
         state.MarkExplicitExitRequested();
 
-        Assert.False(state.ShouldInterceptClose);
+        Assert.False(state.ShouldRouteMinimizeToTray);
     }
 
     [Fact]

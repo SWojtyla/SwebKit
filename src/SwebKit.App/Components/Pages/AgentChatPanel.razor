@@ -72,8 +72,7 @@
                 </div>
             }
 
-            @foreach (var msg in _messages)
-            {
+            <Virtualize Items="@_messages" Context="msg" ItemSize="80">
                 @if (msg.IsUser)
                 {
                     <div class="agent-bubble agent-bubble--user">
@@ -101,7 +100,7 @@
                         </div>
                     </div>
                 }
-            }
+            </Virtualize>
 
             @if (_isLoading)
             {
@@ -257,7 +256,6 @@
         _messages.Add(new ChatMessage(true, text, [], TimeSpan.Zero));
         _isLoading = true;
         _currentToolName = null;
-        StateHasChanged(); // Safe: synchronous, before any await.
 
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
@@ -265,6 +263,7 @@
         {
             var reply = await Agent.SendAsync(text, _cts.Token);
             _messages.Add(new ChatMessage(false, reply.Text, reply.ToolsUsed, reply.Elapsed));
+            StateHasChanged(); // Notify UI of new assistant message
         }
         catch (OperationCanceledException)
         {

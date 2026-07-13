@@ -77,7 +77,7 @@ public sealed class VariableSubstitutionService : IVariableSubstitutionService
             foreach (var variable in kvVars)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                scope[variable.Key] = await _keyVaultResolver.GetSecretAsync(variable.CredentialKey!, variable.KeyVaultName, cancellationToken);
+                scope[variable.Key] = await _keyVaultResolver.GetSecretAsync(variable.CredentialKey!, variable.KeyVaultName, cancellationToken).ConfigureAwait(false);
             }
         }
 

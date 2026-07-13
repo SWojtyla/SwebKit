@@ -12,11 +12,11 @@ public sealed class ObservabilityExplainerService : IObservabilityExplainerServi
         IReadOnlyList<string> dimensionKeys,
         CancellationToken ct = default)
     {
-        var depHealth = await provider.GetDependencyHealthAsync(range, ct: ct);
+        var depHealth = await provider.GetDependencyHealthAsync(range, ct: ct).ConfigureAwait(false);
         var pivots = new List<DimensionBreakdown>();
         foreach (var key in dimensionKeys)
         {
-            pivots.Add(await provider.GetDimensionBreakdownAsync(range, key, ct: ct));
+            pivots.Add(await provider.GetDimensionBreakdownAsync(range, key, ct: ct).ConfigureAwait(false));
         }
         var topDep = depHealth.Entries.OrderByDescending(d => d.FailureRate).FirstOrDefault();
         var topDim = pivots.FirstOrDefault(p => p.TopEntries.Any(e => e.FailureRate > 0));
@@ -37,8 +37,8 @@ public sealed class ObservabilityExplainerService : IObservabilityExplainerServi
     {
         var beforeWindow = new TimeRange(anchor.AnchorTime - windowDuration, anchor.AnchorTime);
         var afterWindow = new TimeRange(anchor.AnchorTime, anchor.AnchorTime + windowDuration);
-        var before = await provider.GetOverviewAsync(beforeWindow, ct);
-        var after = await provider.GetOverviewAsync(afterWindow, ct);
+        var before = await provider.GetOverviewAsync(beforeWindow, ct).ConfigureAwait(false);
+        var after = await provider.GetOverviewAsync(afterWindow, ct).ConfigureAwait(false);
         var deltas = new List<MetricDelta>
         {
             MakeDelta("FailureRate", before.FailureRate, after.FailureRate),
@@ -61,7 +61,7 @@ public sealed class ObservabilityExplainerService : IObservabilityExplainerServi
     {
         if (definitions.Count == 0)
             return new SloStatusSummary([], false, false);
-        var overview = await provider.GetOverviewAsync(range, ct);
+        var overview = await provider.GetOverviewAsync(range, ct).ConfigureAwait(false);
         var entries = new List<SloStatusEntry>(definitions.Count);
         foreach (var def in definitions)
         {

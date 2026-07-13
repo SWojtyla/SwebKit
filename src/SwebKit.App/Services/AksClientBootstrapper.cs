@@ -31,7 +31,7 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
 
         if (request.UseDemoData)
         {
-            return await BuildConnectedResultAsync(_demoAksClient, request.RequestedContext, request.RequestedNamespace, request.Config, ct);
+            return await BuildConnectedResultAsync(_demoAksClient, request.RequestedContext, request.RequestedNamespace, request.Config, ct, isDemo: true);
         }
 
         if (request.Config is null)
@@ -76,13 +76,14 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
         string? requestedContext,
         string? requestedNamespace,
         AksConfig? config,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool isDemo = false)
     {
         var contexts = await TryLoadContextsAsync(client, ct);
         var activeContext = ResolveContext(contexts, requestedContext, config);
 
         var namespaces = await TryLoadNamespacesAsync(client, ct);
-        var currentNamespace = ResolveNamespace(namespaces, requestedNamespace, config);
+        var currentNamespace = ResolveNamespace(namespaces, requestedNamespace, config, isDemo);
 
         return new AksClientBootstrapResult(
             AksClientBootstrapStatus.Connected,
@@ -150,11 +151,12 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
     private static string ResolveNamespace(
         IReadOnlyList<string> namespaces,
         string? requestedNamespace,
-        AksConfig? config)
+        AksConfig? config,
+        bool isDemo = false)
     {
         var resolvedNamespace = NormalizeRequestedNamespace(requestedNamespace, config);
         var fallbackNamespace = string.IsNullOrWhiteSpace(config?.DefaultNamespace)
-            ? string.Empty
+            ? (isDemo && namespaces.Count > 0 ? namespaces[0] : string.Empty)
             : config.DefaultNamespace.Trim();
         return AksNamespaceScope.NormalizeSelection(resolvedNamespace, namespaces, fallbackNamespace);
     }

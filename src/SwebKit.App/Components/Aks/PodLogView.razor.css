@@ -182,3 +182,85 @@
     padding: 6px var(--spacing-xs);
     font-size: var(--font-size-sm);
 }
+
+/* ── C1: toolbar action clusters ── */
+.log-toolbar-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    margin-left: auto;
+}
+
+.log-btn-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.log-toolbar-sep {
+    width: 1px;
+    align-self: stretch;
+    min-height: 18px;
+    background: var(--color-border);
+    margin: 0 2px;
+}
+
+/* One-click tail button — "armed" while tailing, call-to-action when detached */
+.log-tail-btn.armed {
+    box-shadow: 0 0 0 1px var(--color-success), 0 0 6px color-mix(in srgb, var(--color-success) 55%, transparent);
+}
+
+.log-tail-btn.cta {
+    animation: log-tail-cta 1.6s ease-in-out infinite;
+}
+
+@keyframes log-tail-cta {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 45%, transparent); }
+    50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent); }
+}
+
+/* ── C1: sticky live/paused/historical status footer ── */
+.log-status-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.log-follow-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+.log-follow-live .log-follow-dot {
+    background: var(--color-success);
+    box-shadow: 0 0 4px var(--color-success);
+    animation: log-follow-pulse 1.5s ease-in-out infinite;
+}
+
+.log-follow-live .log-follow-text {
+    color: var(--color-success);
+}
+
+.log-follow-paused .log-follow-dot {
+    background: var(--color-warning);
+}
+
+.log-follow-historical .log-follow-dot {
+    background: var(--color-accent);
+}
+
+@keyframes log-follow-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}

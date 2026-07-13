@@ -395,6 +395,8 @@
 
                     state.Client = result.Client;
                     state.ConnectionError = result.ConnectionError;
+                    state.ConnectionDiagnostic = result.Diagnostic;
+                    state.IsAuthFailure = result.IsAuthFailure;
                     state.IsConnecting = false;
                     ReportConnectionState();
                     await InvokeAsync(StateHasChanged); // BL-2
