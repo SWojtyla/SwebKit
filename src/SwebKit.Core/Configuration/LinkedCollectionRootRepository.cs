@@ -28,7 +28,7 @@ public sealed class LinkedCollectionRootRepository
 
         try
         {
-            var result = await AppDataFileStore.LoadAsync(AppDataPaths.ApiLinkedRootsJson, Deserialize);
+            var result = await AppDataFileStore.LoadAsync(AppDataPaths.ApiLinkedRootsJson, Deserialize).ConfigureAwait(false);
             _store = result.Value;
         }
         catch
@@ -41,7 +41,7 @@ public sealed class LinkedCollectionRootRepository
     {
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_store, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.ApiLinkedRootsJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.ApiLinkedRootsJson, json).ConfigureAwait(false);
     }
 
     public async Task<LinkedCollectionRootConfig> AddRootAsync(string path, string? name = null)
@@ -51,7 +51,7 @@ public sealed class LinkedCollectionRootRepository
         if (existing is not null)
         {
             existing.IsEnabled = true;
-            await SaveAsync();
+            await SaveAsync().ConfigureAwait(false);
             return existing;
         }
 
@@ -65,7 +65,7 @@ public sealed class LinkedCollectionRootRepository
         };
 
         _store.Roots.Add(config);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
         return config;
     }
 
@@ -77,7 +77,7 @@ public sealed class LinkedCollectionRootRepository
             return false;
         }
 
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
         return true;
     }
 
@@ -90,7 +90,7 @@ public sealed class LinkedCollectionRootRepository
         }
 
         root.Name = name.Trim();
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
         return true;
     }
 

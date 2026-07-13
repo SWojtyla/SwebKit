@@ -17,7 +17,7 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
         ApiEnvironment? activeEnvironment,
         CancellationToken cancellationToken = default)
     {
-        var resolved = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken);
+        var resolved = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken).ConfigureAwait(false);
         var scope = BuildSafeScope(collection.Variables, activeEnvironment, resolved);
         var method = request.Method == ApiRequestMethod.GraphQl ? ApiRequestMethod.Post : request.Method;
         var url = UrlBuilder.Build(request, scope, substitution);
@@ -155,7 +155,7 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
             return [];
         }
 
-        var resolved = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken);
+        var resolved = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken).ConfigureAwait(false);
         return tokens.Select(token => InspectToken(token, collection, activeEnvironment, resolved)).ToList();
     }
 

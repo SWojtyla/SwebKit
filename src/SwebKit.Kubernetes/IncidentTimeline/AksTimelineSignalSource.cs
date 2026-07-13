@@ -26,7 +26,7 @@ public sealed class AksTimelineSignalSource : IIncidentTimelineSignalSource
                 Config: _appState.Config.AksConfig,
                 RequestedContext: query.Scope.ClusterContext,
                 RequestedNamespace: query.Scope.Namespace),
-            ct);
+            ct).ConfigureAwait(false);
 
         if (bootstrap.Status == AksClientBootstrapStatus.NotConfigured || bootstrap.Client is null)
         {
@@ -45,7 +45,7 @@ public sealed class AksTimelineSignalSource : IIncidentTimelineSignalSource
 
         var client = bootstrap.Client;
         var window = query.GetUtcWindow();
-        var pods = await ResolvePodsAsync(client, query.Scope, ct);
+        var pods = await ResolvePodsAsync(client, query.Scope, ct).ConfigureAwait(false);
         var items = new List<IncidentTimelineItem>();
         var workloadDescription = $"{query.Scope.WorkloadKind} {query.Scope.WorkloadName}";
 
@@ -112,7 +112,7 @@ public sealed class AksTimelineSignalSource : IIncidentTimelineSignalSource
         var eventMap = new Dictionary<string, KubernetesEvent>(StringComparer.OrdinalIgnoreCase);
         foreach (var involvedObjectName in involvedObjectNames)
         {
-            var events = await client.GetEventsAsync(query.Scope.Namespace, involvedObjectName, ct);
+            var events = await client.GetEventsAsync(query.Scope.Namespace, involvedObjectName, ct).ConfigureAwait(false);
             foreach (var kubernetesEvent in events)
             {
                 if (kubernetesEvent.LastTimestamp is not { } eventTime || !IsInWindow(eventTime, window))
@@ -176,16 +176,16 @@ public sealed class AksTimelineSignalSource : IIncidentTimelineSignalSource
     {
         return scope.WorkloadKind switch
         {
-            IncidentWorkloadKind.Deployment => await ResolveDeploymentPodsAsync(client, scope, ct),
-            IncidentWorkloadKind.StatefulSet => await ResolveStatefulSetPodsAsync(client, scope, ct),
-            IncidentWorkloadKind.Pod => await ResolveNamedPodAsync(client, scope, ct),
+            IncidentWorkloadKind.Deployment => await ResolveDeploymentPodsAsync(client, scope, ct).ConfigureAwait(false),
+            IncidentWorkloadKind.StatefulSet => await ResolveStatefulSetPodsAsync(client, scope, ct).ConfigureAwait(false),
+            IncidentWorkloadKind.Pod => await ResolveNamedPodAsync(client, scope, ct).ConfigureAwait(false),
             _ => [],
         };
     }
 
     private static async Task<IReadOnlyList<PodInfo>> ResolveDeploymentPodsAsync(IAksClient client, IncidentWorkloadScope scope, CancellationToken ct)
     {
-        var deployment = (await client.GetDeploymentsAsync(scope.Namespace, ct))
+        var deployment = (await client.GetDeploymentsAsync(scope.Namespace, ct).ConfigureAwait(false))
             .FirstOrDefault(item => string.Equals(item.Name, scope.WorkloadName, StringComparison.OrdinalIgnoreCase));
 
         if (deployment is null || deployment.SelectorLabels.Count == 0)
@@ -193,12 +193,12 @@ public sealed class AksTimelineSignalSource : IIncidentTimelineSignalSource
             return [];
         }
 
-        return await client.GetPodsAsync(scope.Namespace, BuildLabelSelector(deployment.SelectorLabels), ct);
+        return await client.GetPodsAsync(scope.Namespace, BuildLabelSelector(deployment.SelectorLabels), ct).ConfigureAwait(false);
     }
 
     private static async Task<IReadOnlyList<PodInfo>> ResolveStatefulSetPodsAsync(IAksClient client, IncidentWorkloadScope scope, CancellationToken ct)
     {
-        var statefulSet = (await client.GetStatefulSetsAsync(scope.Namespace, ct))
+        var statefulSet = (await client.GetStatefulSetsAsync(scope.Namespace, ct).ConfigureAwait(false))
             .FirstOrDefault(item => string.Equals(item.Name, scope.WorkloadName, StringComparison.OrdinalIgnoreCase));
 
         if (statefulSet is null || statefulSet.SelectorLabels.Count == 0)
@@ -206,12 +206,12 @@ public sealed class AksTimelineSignalSource : IIncidentTimelineSignalSource
             return [];
         }
 
-        return await client.GetPodsAsync(scope.Namespace, BuildLabelSelector(statefulSet.SelectorLabels), ct);
+        return await client.GetPodsAsync(scope.Namespace, BuildLabelSelector(statefulSet.SelectorLabels), ct).ConfigureAwait(false);
     }
 
     private static async Task<IReadOnlyList<PodInfo>> ResolveNamedPodAsync(IAksClient client, IncidentWorkloadScope scope, CancellationToken ct)
     {
-        return (await client.GetPodsAsync(scope.Namespace, ct: ct))
+        return (await client.GetPodsAsync(scope.Namespace, ct: ct).ConfigureAwait(false))
             .Where(pod => string.Equals(pod.Name, scope.WorkloadName, StringComparison.OrdinalIgnoreCase))
             .ToList();
     }

@@ -31,7 +31,7 @@ public sealed class HttpRequestExecutor(
         ApiEnvironment? activeEnvironment,
         CancellationToken cancellationToken = default)
     {
-        var scope = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken);
+        var scope = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken).ConfigureAwait(false);
 
         // Build the URL (with query params merged in)
         var url = UrlBuilder.Build(request, scope, substitution);
@@ -44,23 +44,23 @@ public sealed class HttpRequestExecutor(
 
             // Apply resolved auth (request → folder → collection chain)
             var (resolvedAuth, _) = authResolver.Resolve(request, collection);
-            await authHeaderBuilder.ApplyAsync(httpRequest, resolvedAuth, cancellationToken);
+            await authHeaderBuilder.ApplyAsync(httpRequest, resolvedAuth, cancellationToken).ConfigureAwait(false);
 
             using var response = await client.SendAsync(
                 httpRequest,
                 HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             sw.Stop();
 
-            var result = await BuildResultAsync(response, url, request.Method.ToString().ToUpperInvariant(), sw.Elapsed, cancellationToken);
+            var result = await BuildResultAsync(response, url, request.Method.ToString().ToUpperInvariant(), sw.Elapsed, cancellationToken).ConfigureAwait(false);
 
             // Parse GraphQL errors from the response body when the method is GraphQL
             if (request.Method == ApiRequestMethod.GraphQl && result.ResponseBody is not null)
                 result.GraphQlErrors = ParseGraphQlErrors(result.ResponseBody);
 
             // Apply post-request capture rules (mutates collection/environment in place)
-            var captureWarnings = await captureExecutor.ExecuteAsync(result, request, collection, activeEnvironment, cancellationToken);
+            var captureWarnings = await captureExecutor.ExecuteAsync(result, request, collection, activeEnvironment, cancellationToken).ConfigureAwait(false);
             if (captureWarnings.Count > 0)
                 result.CaptureWarnings = captureWarnings;
 
@@ -266,7 +266,7 @@ public sealed class HttpRequestExecutor(
         {
             if (isBinary)
             {
-                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
                 if (bytes.Length > HttpRequestResult.ResponseBodyMaxBytes)
                 {
                     bodyBytes = bytes[..HttpRequestResult.ResponseBodyMaxBytes];
@@ -280,9 +280,9 @@ public sealed class HttpRequestExecutor(
             }
             else
             {
-                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
                 using var limited = new LimitedStream(stream, HttpRequestResult.ResponseBodyMaxBytes);
-                body = await new StreamReader(limited, Encoding.UTF8).ReadToEndAsync(cancellationToken);
+                body = await new StreamReader(limited, Encoding.UTF8).ReadToEndAsync(cancellationToken).ConfigureAwait(false);
                 truncated = limited.WasTruncated;
             }
         }
@@ -371,7 +371,7 @@ public sealed class HttpRequestExecutor(
             if (remaining <= 0) { WasTruncated = true; return 0; }
 
             var toRead = Math.Min(count, remaining);
-            var actual = await inner.ReadAsync(buffer.AsMemory(offset, toRead), ct);
+            var actual = await inner.ReadAsync(buffer.AsMemory(offset, toRead), ct).ConfigureAwait(false);
             _read += actual;
             if (_read >= maxBytes) WasTruncated = true;
             return actual;

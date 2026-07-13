@@ -30,7 +30,7 @@ public class ReleaseRepository
 
         try
         {
-            var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.ReleasesJson, DeserializeStoreData);
+            var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.ReleasesJson, DeserializeStoreData).ConfigureAwait(false);
             var data = loadResult.Value;
             _releases = data?.Releases ?? [];
             _snapshots = data?.Snapshots ?? [];
@@ -48,7 +48,7 @@ public class ReleaseRepository
         AppDataPaths.EnsureDirectoryExists();
         var data = new ReleaseStoreData { Releases = _releases, Snapshots = _snapshots, ValidationSnapshots = _validationSnapshots };
         var json = JsonSerializer.Serialize(data, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.ReleasesJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.ReleasesJson, json).ConfigureAwait(false);
     }
 
     public void ReplaceStoreData(ReleaseStoreData? data)
@@ -61,20 +61,20 @@ public class ReleaseRepository
     public async Task ImportAsync(ReleaseStoreData? data)
     {
         ReplaceStoreData(data);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public async Task AddReleaseAsync(ReleaseRecord release)
     {
         _releases.Add(release);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public async Task UpdateReleaseAsync(ReleaseRecord release)
     {
         var index = _releases.FindIndex(r => r.Id == release.Id);
         if (index >= 0) _releases[index] = release;
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public async Task RemoveReleaseAsync(Guid id)
@@ -82,7 +82,7 @@ public class ReleaseRepository
         _releases.RemoveAll(r => r.Id == id);
         _snapshots.RemoveAll(s => s.ReleaseId == id);
         _validationSnapshots.RemoveAll(v => v.ReleaseId == id);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public ReleaseRecord? GetRelease(Guid id) =>
@@ -91,7 +91,7 @@ public class ReleaseRepository
     public async Task AddSnapshotsAsync(IEnumerable<DeploymentSnapshot> snapshots)
     {
         _snapshots.AddRange(snapshots);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public IReadOnlyList<DeploymentSnapshot> GetSnapshots(Guid releaseId) =>
@@ -100,7 +100,7 @@ public class ReleaseRepository
     public async Task AddValidationSnapshotAsync(DeploymentValidationSnapshot snapshot)
     {
         _validationSnapshots.Add(snapshot);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     /// <summary>

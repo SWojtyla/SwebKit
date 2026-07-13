@@ -33,7 +33,7 @@ public sealed class EnvironmentRepository
 
         try
         {
-            var result = await AppDataFileStore.LoadAsync(AppDataPaths.EnvironmentsJson, Deserialize);
+            var result = await AppDataFileStore.LoadAsync(AppDataPaths.EnvironmentsJson, Deserialize).ConfigureAwait(false);
             _store = result.Value;
         }
         catch
@@ -46,7 +46,7 @@ public sealed class EnvironmentRepository
     {
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_store, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.EnvironmentsJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.EnvironmentsJson, json).ConfigureAwait(false);
     }
 
     public async Task<ApiEnvironment> AddEnvironmentAsync(string name)
@@ -59,7 +59,7 @@ public sealed class EnvironmentRepository
             UpdatedAt = DateTimeOffset.UtcNow,
         };
         _store.Environments.Add(env);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
         return env;
     }
 
@@ -70,7 +70,7 @@ public sealed class EnvironmentRepository
         env.CreatedAt = env.CreatedAt == default ? DateTimeOffset.UtcNow : env.CreatedAt;
         env.UpdatedAt = DateTimeOffset.UtcNow;
         _store.Environments.Add(env);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public async Task<bool> UpdateEnvironmentAsync(ApiEnvironment updated)
@@ -80,7 +80,7 @@ public sealed class EnvironmentRepository
 
         updated.UpdatedAt = DateTimeOffset.UtcNow;
         _store.Environments[idx] = updated;
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
         return true;
     }
 
@@ -93,27 +93,27 @@ public sealed class EnvironmentRepository
         if (_store.UiState.ActiveEnvironmentId == environmentId)
             _store.UiState.ActiveEnvironmentId = null;
 
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
         return true;
     }
 
     public async Task SetActiveEnvironmentAsync(string? environmentId)
     {
         _store.UiState.ActiveEnvironmentId = environmentId;
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     public async Task SetLastSelectedRequestAsync(string collectionId, string requestId)
     {
         _store.UiState.LastSelectedRequestIdByCollection[collectionId] = requestId;
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     /// <summary>Replaces the full store, e.g. after a bundle import.</summary>
     public async Task ReplaceStoreAsync(EnvironmentsStore store)
     {
         _store = store;
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     private static EnvironmentsStore Deserialize(string json) =>

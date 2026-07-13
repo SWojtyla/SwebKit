@@ -94,34 +94,34 @@ public interface IAksClient
 
     // Multi-namespace overloads with default implementations
     async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
-        => await FanOutNamespacesAsync(namespaces, GetDeploymentsAsync, ct);
+        => await FanOutNamespacesAsync(namespaces, GetDeploymentsAsync, ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<PodInfo>> GetPodsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
-        => await FanOutNamespacesAsync(namespaces, (ns, token) => GetPodsAsync(ns, null, token), ct);
+        => await FanOutNamespacesAsync(namespaces, (ns, token) => GetPodsAsync(ns, null, token), ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
-        => await FanOutNamespacesAsync(namespaces, GetServicesAsync, ct);
+        => await FanOutNamespacesAsync(namespaces, GetServicesAsync, ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
-        => await FanOutNamespacesAsync(namespaces, GetIngressesAsync, ct);
+        => await FanOutNamespacesAsync(namespaces, GetIngressesAsync, ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
-        => await FanOutNamespacesAsync(namespaces, GetStatefulSetsAsync, ct);
+        => await FanOutNamespacesAsync(namespaces, GetStatefulSetsAsync, ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
-        => await FanOutNamespacesAsync(namespaces, GetGatewaysAsync, ct);
+        => await FanOutNamespacesAsync(namespaces, GetGatewaysAsync, ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
-        => await FanOutNamespacesAsync(namespaces, GetHttpRoutesAsync, ct);
+        => await FanOutNamespacesAsync(namespaces, GetHttpRoutesAsync, ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
-        => await FanOutNamespacesAsync(namespaces, GetCronJobsAsync, ct);
+        => await FanOutNamespacesAsync(namespaces, GetCronJobsAsync, ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<JobInfo>> GetJobsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
-        => await FanOutNamespacesAsync(namespaces, GetJobsAsync, ct);
+        => await FanOutNamespacesAsync(namespaces, GetJobsAsync, ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
-        => await FanOutNamespacesAsync(namespaces, GetHpasAsync, ct);
+        => await FanOutNamespacesAsync(namespaces, GetHpasAsync, ct).ConfigureAwait(false);
 
     private static async Task<IReadOnlyList<T>> FanOutNamespacesAsync<T>(
         IReadOnlyList<string> namespaces,
@@ -143,10 +143,10 @@ public interface IAksClient
         using var throttle = new SemaphoreSlim(Math.Min(maxNamespaceFanOut, namespaces.Count));
         var tasks = namespaces.Select(async ns =>
         {
-            await throttle.WaitAsync(ct);
+            await throttle.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                return await fetch(ns, ct);
+                return await fetch(ns, ct).ConfigureAwait(false);
             }
             catch (AksAccessDeniedException)
             {
@@ -162,7 +162,7 @@ public interface IAksClient
             }
         });
 
-        var results = await Task.WhenAll(tasks);
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
         return results.SelectMany(r => r).ToList();
     }
 

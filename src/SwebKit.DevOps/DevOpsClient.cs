@@ -120,7 +120,7 @@ public class DevOpsClient : IDevOpsClient
         try
         {
             using var request = CreateRequest(HttpMethod.Get, $"{OrgApi}/projects?api-version=7.1&$top=1");
-            using var response = await _http.SendAsync(request, ct);
+            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
             return response.IsSuccessStatusCode;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -134,7 +134,7 @@ public class DevOpsClient : IDevOpsClient
     public async Task<List<AdoProject>> GetProjectsAsync(CancellationToken ct = default)
     {
         var response = await GetFromJsonAsync<AdoListResponse<AdoProjectDto>>(
-            $"{OrgApi}/projects?api-version=7.1&$top=100", JsonOptions, ct);
+            $"{OrgApi}/projects?api-version=7.1&$top=100", JsonOptions, ct).ConfigureAwait(false);
 
         return response?.Value.Select(p => new AdoProject(
             p.Id ?? string.Empty,
@@ -149,7 +149,7 @@ public class DevOpsClient : IDevOpsClient
     public async Task<List<AdoPipeline>> GetPipelinesAsync(string project, CancellationToken ct = default)
     {
         var response = await GetFromJsonAsync<AdoListResponse<AdoPipelineDto>>(
-            $"{ProjectApi(project)}/pipelines?api-version=7.1", JsonOptions, ct);
+            $"{ProjectApi(project)}/pipelines?api-version=7.1", JsonOptions, ct).ConfigureAwait(false);
 
         return response?.Value.Select(p => new AdoPipeline(
             p.Id,
@@ -166,7 +166,7 @@ public class DevOpsClient : IDevOpsClient
         if (top.HasValue) url += $"&$top={top.Value}";
 
         var response = await GetFromJsonAsync<AdoListResponse<AdoPipelineRunDto>>(
-            url, JsonOptions, ct);
+            url, JsonOptions, ct).ConfigureAwait(false);
 
         return response?.Value.Select(MapPipelineRun).ToList() ?? [];
     }
@@ -175,10 +175,10 @@ public class DevOpsClient : IDevOpsClient
         string project, int pipelineId, int runId, CancellationToken ct = default)
     {
         var runDto = await GetFromJsonAsync<AdoPipelineRunDto>(
-            $"{ProjectApi(project)}/pipelines/{pipelineId}/runs/{runId}?api-version=7.1", JsonOptions, ct)
+            $"{ProjectApi(project)}/pipelines/{pipelineId}/runs/{runId}?api-version=7.1", JsonOptions, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"Pipeline run {runId} not found.");
 
-        var stages = await GetRunStagesAsync(project, runId, ct);
+        var stages = await GetRunStagesAsync(project, runId, ct).ConfigureAwait(false);
 
         var run = MapPipelineRun(runDto);
         return run with { Stages = stages };
@@ -201,11 +201,11 @@ public class DevOpsClient : IDevOpsClient
             HttpMethod.Post,
             $"{ProjectApi(project)}/pipelines/{pipelineId}/runs?api-version=7.1",
             body);
-        using var response = await _http.SendAsync(request, ct);
+        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
 
         response.EnsureSuccessStatusCode();
 
-        var runDto = await response.Content.ReadFromJsonAsync<AdoPipelineRunDto>(JsonOptions, ct)
+        var runDto = await response.Content.ReadFromJsonAsync<AdoPipelineRunDto>(JsonOptions, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Failed to parse pipeline run response.");
 
         return MapPipelineRun(runDto);
@@ -219,12 +219,12 @@ public class DevOpsClient : IDevOpsClient
         using var request = CreateRequest(
             HttpMethod.Get,
             $"{ProjectApi(project)}/pipelines/approvals?api-version=7.1-preview.1");
-        using var response = await _http.SendAsync(request, ct);
+        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
             return [];
 
-        var dto = await response.Content.ReadFromJsonAsync<AdoListResponse<AdoApprovalDto>>(JsonOptions, ct);
+        var dto = await response.Content.ReadFromJsonAsync<AdoListResponse<AdoApprovalDto>>(JsonOptions, ct).ConfigureAwait(false);
 
         return dto?.Value?
             .Where(a => a.Status is "pending" or "waiting" or "assigned" or "undefined")
@@ -247,7 +247,7 @@ public class DevOpsClient : IDevOpsClient
         try
         {
             var timeline = await GetFromJsonAsync<AdoTimelineDto>(
-                $"{ProjectApi(project)}/build/builds/{runId}/timeline?api-version=7.1", JsonOptions, ct);
+                $"{ProjectApi(project)}/build/builds/{runId}/timeline?api-version=7.1", JsonOptions, ct).ConfigureAwait(false);
 
             if (timeline?.Records is null) return [];
 
@@ -255,7 +255,7 @@ public class DevOpsClient : IDevOpsClient
             if (waitingStages.Count == 0) return [];
 
             if (waitingStages.Any(w => w.ApprovalId is null))
-                waitingStages = await EnrichWithApprovalsFallbackAsync(project, runId, waitingStages, ct);
+                waitingStages = await EnrichWithApprovalsFallbackAsync(project, runId, waitingStages, ct).ConfigureAwait(false);
 
             return waitingStages;
         }
@@ -331,7 +331,7 @@ public class DevOpsClient : IDevOpsClient
     {
         try
         {
-            var approvals = await GetPendingApprovalsAsync(project, ct);
+            var approvals = await GetPendingApprovalsAsync(project, ct).ConfigureAwait(false);
             if (approvals.Count == 0) return waitingStages;
 
             var approvalQueue = new Queue<AdoApproval>(approvals);
@@ -361,7 +361,7 @@ public class DevOpsClient : IDevOpsClient
             HttpMethod.Patch,
             $"{ProjectApi(project)}/pipelines/approvals?api-version=7.1-preview.1",
             body);
-        using var response = await _http.SendAsync(request, ct);
+        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 
@@ -372,7 +372,7 @@ public class DevOpsClient : IDevOpsClient
             HttpMethod.Patch,
             $"{ProjectApi(project)}/pipelines/approvals?api-version=7.1-preview.1",
             body);
-        using var response = await _http.SendAsync(request, ct);
+        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 
@@ -381,7 +381,7 @@ public class DevOpsClient : IDevOpsClient
     public async Task<List<AdoRepository>> GetRepositoriesAsync(string project, CancellationToken ct = default)
     {
         var response = await GetFromJsonAsync<AdoListResponse<AdoRepositoryDto>>(
-            $"{ProjectApi(project)}/git/repositories?api-version=7.1", JsonOptions, ct);
+            $"{ProjectApi(project)}/git/repositories?api-version=7.1", JsonOptions, ct).ConfigureAwait(false);
 
         return response?.Value.Select(r => new AdoRepository(
             r.Id ?? string.Empty,
@@ -394,7 +394,7 @@ public class DevOpsClient : IDevOpsClient
     public async Task<List<string>> GetBranchesAsync(string project, string repositoryId, CancellationToken ct = default)
     {
         var response = await GetFromJsonAsync<AdoListResponse<AdoRefDto>>(
-            $"{ProjectApi(project)}/git/repositories/{repositoryId}/refs?filter=heads/&api-version=7.1", JsonOptions, ct);
+            $"{ProjectApi(project)}/git/repositories/{repositoryId}/refs?filter=heads/&api-version=7.1", JsonOptions, ct).ConfigureAwait(false);
 
         return response?.Value
             .Select(r => (r.Name ?? string.Empty).Replace("refs/heads/", ""))
@@ -407,7 +407,7 @@ public class DevOpsClient : IDevOpsClient
     {
         // ADO lists tags via the refs endpoint with a tags/ filter
         var response = await GetFromJsonAsync<AdoListResponse<AdoRefDto>>(
-            $"{ProjectApi(project)}/git/repositories/{repositoryId}/refs?filter=tags/&api-version=7.1", JsonOptions, ct);
+            $"{ProjectApi(project)}/git/repositories/{repositoryId}/refs?filter=tags/&api-version=7.1", JsonOptions, ct).ConfigureAwait(false);
 
         return response?.Value.Select(r => new AdoTag(
             (r.Name ?? string.Empty).Replace("refs/tags/", ""),
@@ -431,11 +431,11 @@ public class DevOpsClient : IDevOpsClient
             HttpMethod.Post,
             $"{ProjectApi(project)}/git/repositories/{repositoryId}/annotatedtags?api-version=7.1",
             body);
-        using var response = await _http.SendAsync(request, ct);
+        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
 
         response.EnsureSuccessStatusCode();
 
-        var tagDto = await response.Content.ReadFromJsonAsync<AdoAnnotatedTagDto>(JsonOptions, ct)
+        var tagDto = await response.Content.ReadFromJsonAsync<AdoAnnotatedTagDto>(JsonOptions, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Failed to parse tag response.");
 
         return new AdoTag(
@@ -455,7 +455,7 @@ public class DevOpsClient : IDevOpsClient
             + "&api-version=7.1";
 
         var response = await GetFromJsonAsync<AdoListResponse<AdoCommitDto>>(
-            url, JsonOptions, ct);
+            url, JsonOptions, ct).ConfigureAwait(false);
 
         return response?.Value.Select(c => new AdoCommit(
             c.CommitId ?? string.Empty,
@@ -473,7 +473,7 @@ public class DevOpsClient : IDevOpsClient
     public async Task<List<PipelineEnvironmentStatus>> GetEnvironmentStatusAsync(
         string project, int pipelineId, int scanDepth = 5, CancellationToken ct = default)
     {
-        var runs = await GetPipelineRunsAsync(project, pipelineId, top: scanDepth, ct: ct);
+        var runs = await GetPipelineRunsAsync(project, pipelineId, top: scanDepth, ct: ct).ConfigureAwait(false);
         var envMap = new Dictionary<string, PipelineEnvironmentStatus>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var runHeader in runs)
@@ -483,7 +483,7 @@ public class DevOpsClient : IDevOpsClient
             {
                 run = runHeader.Stages.Count > 0
                     ? runHeader
-                    : await GetPipelineRunAsync(project, pipelineId, runHeader.Id, ct);
+                    : await GetPipelineRunAsync(project, pipelineId, runHeader.Id, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -496,7 +496,7 @@ public class DevOpsClient : IDevOpsClient
             {
                 try
                 {
-                    var waiting = await GetWaitingStagesAsync(project, run.Id, ct);
+                    var waiting = await GetWaitingStagesAsync(project, run.Id, ct).ConfigureAwait(false);
                     foreach (var w in waiting) waitingNames.Add(w.StageName);
                 }
                 catch (OperationCanceledException)
@@ -538,7 +538,7 @@ public class DevOpsClient : IDevOpsClient
     public async Task<List<AdoEnvironment>> GetEnvironmentsAsync(string project, CancellationToken ct = default)
     {
         var response = await GetFromJsonAsync<AdoListResponse<AdoEnvironmentDto>>(
-            $"{ProjectApi(project)}/distributedtask/environments?api-version=7.1", JsonOptions, ct);
+            $"{ProjectApi(project)}/distributedtask/environments?api-version=7.1", JsonOptions, ct).ConfigureAwait(false);
 
         return response?.Value.Select(e => new AdoEnvironment(
             e.Id,
@@ -553,7 +553,7 @@ public class DevOpsClient : IDevOpsClient
         try
         {
             var timeline = await GetFromJsonAsync<AdoTimelineDto>(
-                $"{ProjectApi(project)}/build/builds/{runId}/timeline?api-version=7.1", JsonOptions, ct);
+                $"{ProjectApi(project)}/build/builds/{runId}/timeline?api-version=7.1", JsonOptions, ct).ConfigureAwait(false);
 
             return timeline?.Records?
                 .Where(r => r.Type == "Stage")
@@ -593,9 +593,9 @@ public class DevOpsClient : IDevOpsClient
     private async Task<T?> GetFromJsonAsync<T>(string url, JsonSerializerOptions options, CancellationToken ct)
     {
         using var request = CreateRequest(HttpMethod.Get, url);
-        using var response = await _http.SendAsync(request, ct);
+        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<T>(options, ct);
+        return await response.Content.ReadFromJsonAsync<T>(options, ct).ConfigureAwait(false);
     }
 
     private static AdoPipelineRun MapPipelineRun(AdoPipelineRunDto dto)

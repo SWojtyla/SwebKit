@@ -139,13 +139,13 @@ public class DemoDevOpsClient : IDevOpsClient
 
     public async Task<List<AdoProject>> GetProjectsAsync(CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
         return [.. Projects];
     }
 
     public async Task<List<AdoPipeline>> GetPipelinesAsync(string project, CancellationToken ct = default)
     {
-        await Task.Delay(150, ct);
+        await Task.Delay(150, ct).ConfigureAwait(false);
         return PipelinesByProject.TryGetValue(project, out var pipelines)
             ? [.. pipelines]
             : [];
@@ -154,7 +154,7 @@ public class DemoDevOpsClient : IDevOpsClient
     public async Task<List<AdoPipelineRun>> GetPipelineRunsAsync(
         string project, int pipelineId, int? top = null, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
         var now = DateTimeOffset.UtcNow;
         var envs = EnvironmentsByProject.GetValueOrDefault(project) ?? [];
         var pipeline = PipelinesByProject.GetValueOrDefault(project)?
@@ -221,7 +221,7 @@ public class DemoDevOpsClient : IDevOpsClient
     public async Task<AdoPipelineRun> GetPipelineRunAsync(
         string project, int pipelineId, int runId, CancellationToken ct = default)
     {
-        var runs = await GetPipelineRunsAsync(project, pipelineId, ct: ct);
+        var runs = await GetPipelineRunsAsync(project, pipelineId, ct: ct).ConfigureAwait(false);
         return runs.FirstOrDefault(r => r.Id == runId)
             ?? throw new InvalidOperationException($"Run {runId} not found.");
     }
@@ -231,7 +231,7 @@ public class DemoDevOpsClient : IDevOpsClient
         Dictionary<string, string>? templateParameters = null,
         CancellationToken ct = default)
     {
-        await Task.Delay(500, ct);
+        await Task.Delay(500, ct).ConfigureAwait(false);
         var pipeline = PipelinesByProject.GetValueOrDefault(project)?
             .FirstOrDefault(p => p.Id == pipelineId);
         var envs = EnvironmentsByProject.GetValueOrDefault(project) ?? [];
@@ -253,7 +253,7 @@ public class DemoDevOpsClient : IDevOpsClient
 
     public async Task<List<AdoApproval>> GetPendingApprovalsAsync(string project, CancellationToken ct = default)
     {
-        await Task.Delay(150, ct);
+        await Task.Delay(150, ct).ConfigureAwait(false);
         var pipelineIds = PipelinesByProject.GetValueOrDefault(project)?
             .Select(p => p.Id).ToHashSet() ?? [];
         return _pendingApprovals.Where(a => pipelineIds.Contains(a.PipelineId)).ToList();
@@ -271,19 +271,19 @@ public class DemoDevOpsClient : IDevOpsClient
 
     public async Task ApproveAsync(string project, string approvalId, string? comment = null, CancellationToken ct = default)
     {
-        await Task.Delay(300, ct);
+        await Task.Delay(300, ct).ConfigureAwait(false);
         _pendingApprovals.RemoveAll(a => a.Id == approvalId);
     }
 
     public async Task RejectAsync(string project, string approvalId, string? comment = null, CancellationToken ct = default)
     {
-        await Task.Delay(300, ct);
+        await Task.Delay(300, ct).ConfigureAwait(false);
         _pendingApprovals.RemoveAll(a => a.Id == approvalId);
     }
 
     public async Task<List<AdoRepository>> GetRepositoriesAsync(string project, CancellationToken ct = default)
     {
-        await Task.Delay(150, ct);
+        await Task.Delay(150, ct).ConfigureAwait(false);
         return ReposByProject.TryGetValue(project, out var repos)
             ? [.. repos]
             : [];
@@ -291,13 +291,13 @@ public class DemoDevOpsClient : IDevOpsClient
 
     public async Task<List<string>> GetBranchesAsync(string project, string repositoryId, CancellationToken ct = default)
     {
-        await Task.Delay(150, ct);
+        await Task.Delay(150, ct).ConfigureAwait(false);
         return ["develop", "feature/cart-improvements", "feature/new-checkout", "hotfix/payment-fix", "main", "release/1.5.0"];
     }
 
     public async Task<List<AdoTag>> GetTagsAsync(string project, string repositoryId, CancellationToken ct = default)
     {
-        await Task.Delay(150, ct);
+        await Task.Delay(150, ct).ConfigureAwait(false);
         var repo = ReposByProject.Values.SelectMany(r => r).FirstOrDefault(r => r.Id == repositoryId);
         var name = repo?.Name ?? "unknown";
         var now = DateTimeOffset.UtcNow;
@@ -321,7 +321,7 @@ public class DemoDevOpsClient : IDevOpsClient
         string project, string repositoryId, string name, string commitSha, string message,
         CancellationToken ct = default)
     {
-        await Task.Delay(400, ct);
+        await Task.Delay(400, ct).ConfigureAwait(false);
         var tag = new AdoTag(name, commitSha, message, "You (demo)", DateTimeOffset.UtcNow);
 
         if (!_createdTags.ContainsKey(repositoryId))
@@ -334,7 +334,7 @@ public class DemoDevOpsClient : IDevOpsClient
     public async Task<List<AdoCommit>> GetCommitsAsync(
         string project, string repositoryId, string branch, int top = 20, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
         var now = DateTimeOffset.UtcNow;
         var messages = new[]
         {
@@ -365,7 +365,7 @@ public class DemoDevOpsClient : IDevOpsClient
 
     public async Task<List<AdoEnvironment>> GetEnvironmentsAsync(string project, CancellationToken ct = default)
     {
-        await Task.Delay(100, ct);
+        await Task.Delay(100, ct).ConfigureAwait(false);
         return EnvironmentsByProject.TryGetValue(project, out var envs)
             ? [.. envs]
             : [];
@@ -374,7 +374,7 @@ public class DemoDevOpsClient : IDevOpsClient
     public async Task<List<PipelineEnvironmentStatus>> GetEnvironmentStatusAsync(
         string project, int pipelineId, int scanDepth = 5, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
         var envs = EnvironmentsByProject.GetValueOrDefault(project) ?? [];
         var pipeline = PipelinesByProject.GetValueOrDefault(project)?
             .FirstOrDefault(p => p.Id == pipelineId);

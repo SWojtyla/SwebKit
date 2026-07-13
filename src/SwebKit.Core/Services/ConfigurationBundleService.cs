@@ -88,17 +88,17 @@ public sealed class ConfigurationBundleService
 
     public async Task ImportAsync(ConfigurationBundle bundle)
     {
-        await _profiles.ImportAsync(bundle.Profiles ?? new());
-        await _uiState.ImportAsync(bundle.UiState ?? new());
-        await _userSettings.ImportAsync(bundle.UserSettings ?? new());
-        await _releases.ImportAsync(bundle.Releases ?? new());
-        await _scheduledMessages.ImportAsync(bundle.ScheduledMessages ?? []);
+        await _profiles.ImportAsync(bundle.Profiles ?? new()).ConfigureAwait(false);
+        await _uiState.ImportAsync(bundle.UiState ?? new()).ConfigureAwait(false);
+        await _userSettings.ImportAsync(bundle.UserSettings ?? new()).ConfigureAwait(false);
+        await _releases.ImportAsync(bundle.Releases ?? new()).ConfigureAwait(false);
+        await _scheduledMessages.ImportAsync(bundle.ScheduledMessages ?? []).ConfigureAwait(false);
 
         // API client data — only restore when present (backward-compatible)
         if (bundle.CollectionsData is not null)
-            await _collections.ReplaceStoreAsync(bundle.CollectionsData);
+            await _collections.ReplaceStoreAsync(bundle.CollectionsData).ConfigureAwait(false);
         if (bundle.EnvironmentsData is not null)
-            await _environments.ReplaceStoreAsync(bundle.EnvironmentsData);
+            await _environments.ReplaceStoreAsync(bundle.EnvironmentsData).ConfigureAwait(false);
 
         _appState.RefreshFromImportedState();
     }

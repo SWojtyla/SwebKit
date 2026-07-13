@@ -64,12 +64,12 @@
                     <tr>
                         <td class="cdp-res-label">CPU usage</td>
                         <td class="cdp-res-val" colspan="3">@(metrics is not null ? $"{metrics.CpuCores * 1000:F0}m" :
-                                            "Metrics unavailable")</td>
+                                                                        "Metrics unavailable")</td>
                         </tr>
                         <tr>
                             <td class="cdp-res-label">Memory usage</td>
                             <td class="cdp-res-val" colspan="3">@(metrics is not null ? FormatBytes(metrics.MemoryBytes) :
-                                                        "Metrics unavailable")</td>
+                                                                                        "Metrics unavailable")</td>
                             </tr>
                         </tbody>
                     </table>
@@ -173,8 +173,8 @@
             var detailsTask = Client.GetContainerDetailsAsync(Namespace, PodName, _cts.Token);
             var metricsTask = TryGetMetricsAsync(Namespace, PodName, _cts.Token);
             await Task.WhenAll(detailsTask, metricsTask);
-            _containers = detailsTask.Result.ToList();
-            _podMetrics = metricsTask.Result;
+            _containers = (await detailsTask).ToList();
+            _podMetrics = await metricsTask;
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _error = ex.Message; }

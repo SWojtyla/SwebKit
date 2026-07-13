@@ -29,7 +29,7 @@ public sealed class ServiceBusDeadSubscriptionSignalSource : IAlertSignalSource
 
         try
         {
-            var stats = await client.GetEntityStatsAsync(p.EntityPath, ct);
+            var stats = await client.GetEntityStatsAsync(p.EntityPath, ct).ConfigureAwait(false);
             if (stats.DeadLetterMessageCount > 0 && stats.ActiveMessageCount == 0)
                 return new AlertSignalResult(
                     AlertSignalStatus.Firing,

@@ -48,7 +48,7 @@ public sealed class DevOpsReleaseTimelineSignalSource : IIncidentTimelineSignalS
         var items = new List<IncidentTimelineItem>();
         var errors = new List<string>();
 
-        await _releaseRepository.LoadAsync();
+        await _releaseRepository.LoadAsync().ConfigureAwait(false);
         var releases = _appState.UseDemoData
             ? DemoDevOpsClient.DemoReleases
             : _releaseRepository.AllReleases;
@@ -87,7 +87,7 @@ public sealed class DevOpsReleaseTimelineSignalSource : IIncidentTimelineSignalS
         {
             try
             {
-                var runs = await devOpsClient.GetPipelineRunsAsync(binding.ProjectName, binding.PipelineId, top: 10, ct: ct);
+                var runs = await devOpsClient.GetPipelineRunsAsync(binding.ProjectName, binding.PipelineId, top: 10, ct: ct).ConfigureAwait(false);
                 foreach (var run in runs)
                 {
                     var eventTime = (run.FinishedDate ?? run.CreatedDate).ToUniversalTime();
@@ -96,7 +96,7 @@ public sealed class DevOpsReleaseTimelineSignalSource : IIncidentTimelineSignalS
                         continue;
                     }
 
-                    if (!await PassesEnvironmentFilterAsync(devOpsClient, binding, run, mapping.DevOps.EnvironmentNames, ct))
+                    if (!await PassesEnvironmentFilterAsync(devOpsClient, binding, run, mapping.DevOps.EnvironmentNames, ct).ConfigureAwait(false))
                     {
                         continue;
                     }
@@ -327,7 +327,7 @@ public sealed class DevOpsReleaseTimelineSignalSource : IIncidentTimelineSignalS
         {
             try
             {
-                stages = (await devOpsClient.GetPipelineRunAsync(binding.ProjectName, binding.PipelineId, run.Id, ct)).Stages;
+                stages = (await devOpsClient.GetPipelineRunAsync(binding.ProjectName, binding.PipelineId, run.Id, ct).ConfigureAwait(false)).Stages;
             }
             catch (OperationCanceledException)
             {

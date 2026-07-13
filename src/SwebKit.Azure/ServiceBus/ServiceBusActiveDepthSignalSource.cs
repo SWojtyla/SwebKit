@@ -29,7 +29,7 @@ public sealed class ServiceBusActiveDepthSignalSource : IAlertSignalSource
 
         try
         {
-            var stats = await client.GetEntityStatsAsync(p.EntityPath, ct);
+            var stats = await client.GetEntityStatsAsync(p.EntityPath, ct).ConfigureAwait(false);
             if (stats.ActiveMessageCount > p.MessageCountThreshold)
                 return new AlertSignalResult(
                     AlertSignalStatus.Firing,

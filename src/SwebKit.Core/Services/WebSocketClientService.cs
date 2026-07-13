@@ -40,7 +40,7 @@ public sealed class WebSocketClientService : IWebSocketClientService
 
         try
         {
-            await _ws.ConnectAsync(new Uri(url), cancellationToken);
+            await _ws.ConnectAsync(new Uri(url), cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -70,14 +70,14 @@ public sealed class WebSocketClientService : IWebSocketClientService
         if (_ws is null || _ws.State != WebSocketState.Open)
             throw new InvalidOperationException("WebSocket is not connected.");
         var bytes = Encoding.UTF8.GetBytes(message);
-        await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+        await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task SendBinaryAsync(byte[] data, CancellationToken cancellationToken = default)
     {
         if (_ws is null || _ws.State != WebSocketState.Open)
             throw new InvalidOperationException("WebSocket is not connected.");
-        await _ws.SendAsync(new ArraySegment<byte>(data), WebSocketMessageType.Binary, true, cancellationToken);
+        await _ws.SendAsync(new ArraySegment<byte>(data), WebSocketMessageType.Binary, true, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<WebSocketMessage?> ReadAsync(CancellationToken cancellationToken = default)
@@ -85,7 +85,7 @@ public sealed class WebSocketClientService : IWebSocketClientService
         if (_channel is null) return null;
         try
         {
-            return await _channel.Reader.ReadAsync(cancellationToken);
+            return await _channel.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (ChannelClosedException)
         {
@@ -98,7 +98,7 @@ public sealed class WebSocketClientService : IWebSocketClientService
         if (_ws is null) return;
         if (_ws.State == WebSocketState.Open)
         {
-            await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by client", cancellationToken);
+            await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by client", cancellationToken).ConfigureAwait(false);
         }
         State = WebSocketConnectionState.Disconnected;
     }
@@ -109,7 +109,7 @@ public sealed class WebSocketClientService : IWebSocketClientService
 
         if (_receiveLoop is not null)
         {
-            try { await _receiveLoop; }
+            try { await _receiveLoop.ConfigureAwait(false); }
             catch { /* loop may throw on cancellation */ }
             _receiveLoop = null;
         }
@@ -121,7 +121,7 @@ public sealed class WebSocketClientService : IWebSocketClientService
         {
             if (_ws.State == WebSocketState.Open)
             {
-                try { await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Disposed", CancellationToken.None); }
+                try { await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Disposed", CancellationToken.None).ConfigureAwait(false); }
                 catch { /* ignore disposal close errors */ }
             }
             _ws.Dispose();
@@ -148,7 +148,7 @@ public sealed class WebSocketClientService : IWebSocketClientService
 
                 do
                 {
-                    result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                    result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken).ConfigureAwait(false);
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {

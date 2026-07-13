@@ -24,7 +24,7 @@ internal static class DeadLetterSequenceProcessor
             ct.ThrowIfCancellationRequested();
 
             var receiveCount = Math.Min(maxBatchSize, Math.Max(1, remaining.Count));
-            var received = await receiveMessagesAsync(receiveCount, receiveWaitTime, ct);
+            var received = await receiveMessagesAsync(receiveCount, receiveWaitTime, ct).ConfigureAwait(false);
             if (received.Count == 0)
             {
                 break;
@@ -36,11 +36,11 @@ internal static class DeadLetterSequenceProcessor
 
                 if (remaining.Remove(getSequenceNumber(message)))
                 {
-                    await processMatchedMessageAsync(message, ct);
+                    await processMatchedMessageAsync(message, ct).ConfigureAwait(false);
                 }
                 else
                 {
-                    await releaseUnmatchedMessageAsync(message, ct);
+                    await releaseUnmatchedMessageAsync(message, ct).ConfigureAwait(false);
                 }
             }
         }

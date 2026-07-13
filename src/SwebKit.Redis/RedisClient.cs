@@ -33,14 +33,14 @@ public sealed class RedisClient : IRedisClient
         logger ??= NullLogger<RedisClient>.Instance;
         var options = ConfigurationOptions.Parse(cacheEntry.ConnectionString);
         options.AbortOnConnectFail = false;
-        var mux = await ConnectionMultiplexer.ConnectAsync(options);
+        var mux = await ConnectionMultiplexer.ConnectAsync(options).ConfigureAwait(false);
         return new RedisClient(cacheEntry, mux, logger);
     }
 
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _db.PingAsync();
+        await _db.PingAsync().ConfigureAwait(false);
         return true;
     }
 
@@ -49,7 +49,7 @@ public sealed class RedisClient : IRedisClient
         ct.ThrowIfCancellationRequested();
 
         pageSize = Math.Max(1, pageSize);
-        var result = await _db.ExecuteAsync("SCAN", cursor, "MATCH", pattern, "COUNT", pageSize);
+        var result = await _db.ExecuteAsync("SCAN", cursor, "MATCH", pattern, "COUNT", pageSize).ConfigureAwait(false);
         var scanPage = RedisScanResponseParser.Parse(result);
 
         return new KeyScanResult
@@ -63,7 +63,7 @@ public sealed class RedisClient : IRedisClient
     public async Task<string> GetKeyTypeAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var keyType = await _db.KeyTypeAsync(key);
+        var keyType = await _db.KeyTypeAsync(key).ConfigureAwait(false);
         return ToTypeString(keyType);
     }
 
@@ -71,7 +71,7 @@ public sealed class RedisClient : IRedisClient
     {
         ct.ThrowIfCancellationRequested();
 
-        var exists = await _db.KeyExistsAsync(key);
+        var exists = await _db.KeyExistsAsync(key).ConfigureAwait(false);
         if (!exists)
         {
             return new RedisKeyInfo
@@ -81,12 +81,12 @@ public sealed class RedisClient : IRedisClient
             };
         }
 
-        var keyType = await _db.KeyTypeAsync(key);
-        var ttl = await _db.KeyTimeToLiveAsync(key);
-        var memoryBytes = await TryGetMemoryUsageAsync(key);
-        var encoding = await TryGetEncodingAsync(key);
-        var frequency = await TryGetFrequencyAsync(key);
-        var idleSeconds = await TryGetIdleSecondsAsync(key);
+        var keyType = await _db.KeyTypeAsync(key).ConfigureAwait(false);
+        var ttl = await _db.KeyTimeToLiveAsync(key).ConfigureAwait(false);
+        var memoryBytes = await TryGetMemoryUsageAsync(key).ConfigureAwait(false);
+        var encoding = await TryGetEncodingAsync(key).ConfigureAwait(false);
+        var frequency = await TryGetFrequencyAsync(key).ConfigureAwait(false);
+        var idleSeconds = await TryGetIdleSecondsAsync(key).ConfigureAwait(false);
 
         return new RedisKeyInfo
         {
@@ -103,14 +103,14 @@ public sealed class RedisClient : IRedisClient
     public async Task<string?> GetKeyValueAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var value = await _db.StringGetAsync(key);
+        var value = await _db.StringGetAsync(key).ConfigureAwait(false);
         return value.IsNull ? null : value.ToString();
     }
 
     public async Task<IReadOnlyList<RedisHashField>> GetHashFieldsAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var fields = await _db.HashGetAllAsync(key);
+        var fields = await _db.HashGetAllAsync(key).ConfigureAwait(false);
         return fields
             .Select(x => new RedisHashField
             {
@@ -123,21 +123,21 @@ public sealed class RedisClient : IRedisClient
     public async Task<IReadOnlyList<string>> GetListItemsAsync(string key, long start = 0, long stop = -1, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var values = await _db.ListRangeAsync(key, start, stop);
+        var values = await _db.ListRangeAsync(key, start, stop).ConfigureAwait(false);
         return values.Select(v => v.ToString()).ToList();
     }
 
     public async Task<IReadOnlyList<string>> GetSetMembersAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var values = await _db.SetMembersAsync(key);
+        var values = await _db.SetMembersAsync(key).ConfigureAwait(false);
         return values.Select(v => v.ToString()).ToList();
     }
 
     public async Task<IReadOnlyList<RedisSortedSetEntry>> GetSortedSetMembersAsync(string key, long start = 0, long stop = -1, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var values = await _db.SortedSetRangeByRankWithScoresAsync(key, start, stop, Order.Descending);
+        var values = await _db.SortedSetRangeByRankWithScoresAsync(key, start, stop, Order.Descending).ConfigureAwait(false);
         return values
             .Select(v => new RedisSortedSetEntry
             {
@@ -150,13 +150,13 @@ public sealed class RedisClient : IRedisClient
     public async Task SetKeyValueAsync(string key, string value, TimeSpan? expiry = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _db.StringSetAsync(key, value, expiry, When.Always);
+        await _db.StringSetAsync(key, value, expiry, When.Always).ConfigureAwait(false);
     }
 
     public async Task SetHashFieldAsync(string key, string field, string value, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _db.HashSetAsync(key, field, value);
+        await _db.HashSetAsync(key, field, value).ConfigureAwait(false);
     }
 
     public async Task DeleteKeysAsync(IReadOnlyList<string> keys, CancellationToken ct = default)
@@ -165,7 +165,7 @@ public sealed class RedisClient : IRedisClient
         if (keys.Count == 0)
             return;
 
-        await _db.KeyDeleteAsync(keys.Select(k => (RedisKey)k).ToArray());
+        await _db.KeyDeleteAsync(keys.Select(k => (RedisKey)k).ToArray()).ConfigureAwait(false);
     }
 
     public async Task<RedisImportResult> ImportAsync(IReadOnlyList<RedisImportEntry> entries, bool overwriteExisting = true, CancellationToken ct = default)
@@ -184,15 +184,15 @@ public sealed class RedisClient : IRedisClient
                 continue;
             }
 
-            if (!overwriteExisting && await _db.KeyExistsAsync(entry.Key))
+            if (!overwriteExisting && await _db.KeyExistsAsync(entry.Key).ConfigureAwait(false))
             {
                 result.SkippedCount++;
                 result.Warnings.Add($"Skipped existing Redis key '{entry.Key}'.");
                 continue;
             }
 
-            await _db.KeyDeleteAsync(entry.Key);
-            if (!await TryImportEntryAsync(entry, result.Warnings))
+            await _db.KeyDeleteAsync(entry.Key).ConfigureAwait(false);
+            if (!await TryImportEntryAsync(entry, result.Warnings).ConfigureAwait(false))
             {
                 result.SkippedCount++;
                 continue;
@@ -207,25 +207,25 @@ public sealed class RedisClient : IRedisClient
     public async Task<TimeSpan?> GetTtlAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        return await _db.KeyTimeToLiveAsync(key);
+        return await _db.KeyTimeToLiveAsync(key).ConfigureAwait(false);
     }
 
     public async Task SetTtlAsync(string key, TimeSpan ttl, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _db.KeyExpireAsync(key, ttl);
+        await _db.KeyExpireAsync(key, ttl).ConfigureAwait(false);
     }
 
     public async Task RemoveTtlAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _db.KeyPersistAsync(key);
+        await _db.KeyPersistAsync(key).ConfigureAwait(false);
     }
 
     public async Task FlushDatabaseAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _server.FlushDatabaseAsync(Math.Clamp(_cacheEntry.Database, 0, 15));
+        await _server.FlushDatabaseAsync(Math.Clamp(_cacheEntry.Database, 0, 15)).ConfigureAwait(false);
     }
 
     public Task<RedisServerInfo> GetServerInfoAsync(CancellationToken ct = default)
@@ -258,19 +258,19 @@ public sealed class RedisClient : IRedisClient
     public async Task UpdateSortedSetScoreAsync(string key, string member, double score, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _db.SortedSetAddAsync(key, member, score, SortedSetWhen.Exists);
+        await _db.SortedSetAddAsync(key, member, score, SortedSetWhen.Exists).ConfigureAwait(false);
     }
 
     public async Task RenameKeyAsync(string oldKey, string newKey, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _db.KeyRenameAsync(oldKey, newKey);
+        await _db.KeyRenameAsync(oldKey, newKey).ConfigureAwait(false);
     }
 
     public async Task DeleteHashFieldAsync(string key, string field, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _db.HashDeleteAsync(key, field);
+        await _db.HashDeleteAsync(key, field).ConfigureAwait(false);
     }
 
     public async Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default)
@@ -278,7 +278,7 @@ public sealed class RedisClient : IRedisClient
         ct.ThrowIfCancellationRequested();
 
         pageSize = Math.Max(1, pageSize);
-        var result = await _db.ExecuteAsync("SSCAN", key, cursor, "COUNT", pageSize);
+        var result = await _db.ExecuteAsync("SSCAN", key, cursor, "COUNT", pageSize).ConfigureAwait(false);
         var scanPage = RedisScanResponseParser.Parse(result);
         return new SetScanResult(scanPage.Values, scanPage.Cursor, scanPage.IsComplete);
     }
@@ -293,7 +293,7 @@ public sealed class RedisClient : IRedisClient
         switch (entry.Type.Trim().ToLowerInvariant())
         {
             case "string":
-                await _db.StringSetAsync(entry.Key, entry.StringValue ?? string.Empty, entry.Ttl, When.Always);
+                await _db.StringSetAsync(entry.Key, entry.StringValue ?? string.Empty, entry.Ttl, When.Always).ConfigureAwait(false);
                 return true;
             case "hash":
                 if (entry.HashFields.Count == 0)
@@ -302,8 +302,8 @@ public sealed class RedisClient : IRedisClient
                     return false;
                 }
 
-                await _db.HashSetAsync(entry.Key, entry.HashFields.Select(field => new HashEntry(field.Key, field.Value)).ToArray());
-                await ApplyExpiryAsync(entry.Key, entry.Ttl);
+                await _db.HashSetAsync(entry.Key, entry.HashFields.Select(field => new HashEntry(field.Key, field.Value)).ToArray()).ConfigureAwait(false);
+                await ApplyExpiryAsync(entry.Key, entry.Ttl).ConfigureAwait(false);
                 return true;
             case "list":
                 if (entry.ListItems.Count == 0)
@@ -312,8 +312,8 @@ public sealed class RedisClient : IRedisClient
                     return false;
                 }
 
-                await _db.ListRightPushAsync(entry.Key, entry.ListItems.Select(static item => (RedisValue)item).ToArray());
-                await ApplyExpiryAsync(entry.Key, entry.Ttl);
+                await _db.ListRightPushAsync(entry.Key, entry.ListItems.Select(static item => (RedisValue)item).ToArray()).ConfigureAwait(false);
+                await ApplyExpiryAsync(entry.Key, entry.Ttl).ConfigureAwait(false);
                 return true;
             case "set":
                 if (entry.SetMembers.Count == 0)
@@ -322,8 +322,8 @@ public sealed class RedisClient : IRedisClient
                     return false;
                 }
 
-                await _db.SetAddAsync(entry.Key, entry.SetMembers.Select(static member => (RedisValue)member).ToArray());
-                await ApplyExpiryAsync(entry.Key, entry.Ttl);
+                await _db.SetAddAsync(entry.Key, entry.SetMembers.Select(static member => (RedisValue)member).ToArray()).ConfigureAwait(false);
+                await ApplyExpiryAsync(entry.Key, entry.Ttl).ConfigureAwait(false);
                 return true;
             case "zset":
                 if (entry.SortedSetMembers.Count == 0)
@@ -332,8 +332,8 @@ public sealed class RedisClient : IRedisClient
                     return false;
                 }
 
-                await _db.SortedSetAddAsync(entry.Key, entry.SortedSetMembers.Select(member => new SortedSetEntry(member.Member, member.Score)).ToArray());
-                await ApplyExpiryAsync(entry.Key, entry.Ttl);
+                await _db.SortedSetAddAsync(entry.Key, entry.SortedSetMembers.Select(member => new SortedSetEntry(member.Member, member.Score)).ToArray()).ConfigureAwait(false);
+                await ApplyExpiryAsync(entry.Key, entry.Ttl).ConfigureAwait(false);
                 return true;
             default:
                 throw new InvalidOperationException($"Unsupported Redis import type '{entry.Type}'.");
@@ -348,7 +348,7 @@ public sealed class RedisClient : IRedisClient
         ct.ThrowIfCancellationRequested();
         try
         {
-            var result = await _server.ExecuteAsync("SLOWLOG", new object[] { "GET", top });
+            var result = await _server.ExecuteAsync("SLOWLOG", new object[] { "GET", top }).ConfigureAwait(false);
             var entries = ParseSlowLogEntries(result);
             return new RedisSlowLogSummary(entries, entries.Count == top, top, RedisInsightCapability.Loaded);
         }
@@ -378,7 +378,7 @@ public sealed class RedisClient : IRedisClient
         try
         {
             var channelPattern = string.IsNullOrEmpty(pattern) ? "*" : pattern;
-            var channelsResult = await _server.ExecuteAsync("PUBSUB", new object[] { "CHANNELS", channelPattern });
+            var channelsResult = await _server.ExecuteAsync("PUBSUB", new object[] { "CHANNELS", channelPattern }).ConfigureAwait(false);
 
             var allChannels = channelsResult.IsNull
                 ? []
@@ -395,7 +395,7 @@ public sealed class RedisClient : IRedisClient
             {
                 var numsubArgs = new List<object> { "NUMSUB" };
                 numsubArgs.AddRange(channels);
-                var numsubResult = await _server.ExecuteAsync("PUBSUB", numsubArgs);
+                var numsubResult = await _server.ExecuteAsync("PUBSUB", numsubArgs).ConfigureAwait(false);
                 channelInfos = ParseNumsubResult(numsubResult, channels);
             }
             else
@@ -403,7 +403,7 @@ public sealed class RedisClient : IRedisClient
                 channelInfos = [];
             }
 
-            var numpatResult = await _server.ExecuteAsync("PUBSUB", new object[] { "NUMPAT" });
+            var numpatResult = await _server.ExecuteAsync("PUBSUB", new object[] { "NUMPAT" }).ConfigureAwait(false);
             var patternCount = numpatResult.IsNull ? 0L : (long)numpatResult;
 
             return new RedisPubSubSnapshot(channelInfos, patternCount, truncated, maxChannels, RedisInsightCapability.Loaded);
@@ -428,14 +428,14 @@ public sealed class RedisClient : IRedisClient
     private Task<long?> TryGetMemoryUsageAsync(string key) =>
         TryValueAsync(async () =>
         {
-            var result = await _db.ExecuteAsync("MEMORY", "USAGE", key);
+            var result = await _db.ExecuteAsync("MEMORY", "USAGE", key).ConfigureAwait(false);
             return ParseLong(result.ToString());
         }, nameof(TryGetMemoryUsageAsync), key);
 
     private Task<string?> TryGetEncodingAsync(string key) =>
         TryAsync(async () =>
         {
-            var result = await _db.ExecuteAsync("OBJECT", "ENCODING", key);
+            var result = await _db.ExecuteAsync("OBJECT", "ENCODING", key).ConfigureAwait(false);
             var value = result.ToString();
             return string.IsNullOrWhiteSpace(value) ? null : value;
         }, nameof(TryGetEncodingAsync), key);
@@ -443,7 +443,7 @@ public sealed class RedisClient : IRedisClient
     private Task<long?> TryGetFrequencyAsync(string key) =>
         TryValueAsync(async () =>
         {
-            var result = await _db.ExecuteAsync("OBJECT", "FREQ", key);
+            var result = await _db.ExecuteAsync("OBJECT", "FREQ", key).ConfigureAwait(false);
             var parsed = ParseNullableLong(result.ToString());
             if (!parsed.HasValue)
                 throw new InvalidOperationException("Redis OBJECT FREQ did not return a numeric result.");
@@ -454,7 +454,7 @@ public sealed class RedisClient : IRedisClient
     private Task<long?> TryGetIdleSecondsAsync(string key) =>
         TryValueAsync(async () =>
         {
-            var result = await _db.ExecuteAsync("OBJECT", "IDLETIME", key);
+            var result = await _db.ExecuteAsync("OBJECT", "IDLETIME", key).ConfigureAwait(false);
             var parsed = ParseNullableLong(result.ToString());
             if (!parsed.HasValue)
                 throw new InvalidOperationException("Redis OBJECT IDLETIME did not return a numeric result.");
@@ -464,7 +464,7 @@ public sealed class RedisClient : IRedisClient
 
     private async Task<T?> TryAsync<T>(Func<Task<T?>> operation, string operationName, string key) where T : class
     {
-        try { return await operation(); }
+        try { return await operation().ConfigureAwait(false); }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Redis {Operation} failed for key {Key}", operationName, key);
@@ -474,7 +474,7 @@ public sealed class RedisClient : IRedisClient
 
     private async Task<T?> TryValueAsync<T>(Func<Task<T>> operation, string operationName, string key) where T : struct
     {
-        try { return await operation(); }
+        try { return await operation().ConfigureAwait(false); }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Redis {Operation} failed for key {Key}", operationName, key);

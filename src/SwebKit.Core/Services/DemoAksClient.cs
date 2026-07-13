@@ -107,7 +107,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(300 + Rng.Next(150), ct);
+        await Task.Delay(300 + Rng.Next(150), ct).ConfigureAwait(false);
 
         return DemoDeployments.Select(d => new DeploymentInfo
         {
@@ -132,7 +132,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<PodInfo>> GetPodsAsync(string ns, string? labelSelector = null, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
 
         var tick = Interlocked.Increment(ref _demoTick);
         return BuildDemoPods(ns, tick, labelSelector);
@@ -194,7 +194,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<KubernetesEvent>> GetEventsAsync(string ns, string? involvedObjectName = null, CancellationToken ct = default)
     {
-        await Task.Delay(150, ct);
+        await Task.Delay(150, ct).ConfigureAwait(false);
 
         var now = DateTimeOffset.UtcNow;
         var events = new List<KubernetesEvent>
@@ -250,7 +250,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
         return new List<IngressInfo>
         {
             new()
@@ -320,7 +320,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(120, ct);
+        await Task.Delay(120, ct).ConfigureAwait(false);
         return new List<ServiceInfo>
         {
             new()
@@ -382,16 +382,16 @@ public class DemoAksClient : IAksClient
 
     public async Task<IngressAnalysis> AnalyzeIngressAsync(string ns, string ingressName, CancellationToken ct = default)
     {
-        await Task.Delay(120, ct);
+        await Task.Delay(120, ct).ConfigureAwait(false);
 
-        var ingress = (await GetIngressesAsync(ns, ct)).FirstOrDefault(item =>
+        var ingress = (await GetIngressesAsync(ns, ct).ConfigureAwait(false)).FirstOrDefault(item =>
             string.Equals(item.Name, ingressName, StringComparison.Ordinal));
         if (ingress is null)
         {
             throw new InvalidOperationException($"Ingress '{ingressName}' was not found in namespace '{ns}'.");
         }
 
-        var services = (await GetServicesAsync(ns, ct)).ToDictionary(service => service.Name, StringComparer.Ordinal);
+        var services = (await GetServicesAsync(ns, ct).ConfigureAwait(false)).ToDictionary(service => service.Name, StringComparer.Ordinal);
         var pods = BuildDemoPods(ns, Math.Max(Volatile.Read(ref _demoTick), 1)).ToList();
         var backends = new List<IngressBackendAnalysis>();
 
@@ -497,7 +497,7 @@ public class DemoAksClient : IAksClient
         string workloadName,
         CancellationToken ct = default)
     {
-        await Task.Delay(120, ct);
+        await Task.Delay(120, ct).ConfigureAwait(false);
 
         var pods = BuildDemoPods(ns, Math.Max(Volatile.Read(ref _demoTick), 1)).ToList();
         var selectedPods = workloadKind.Trim().ToLowerInvariant() switch
@@ -515,7 +515,7 @@ public class DemoAksClient : IAksClient
                 : []
             : new Dictionary<string, string> { ["app"] = workloadName };
 
-        var services = (await GetServicesAsync(ns, ct))
+        var services = (await GetServicesAsync(ns, ct).ConfigureAwait(false))
             .Where(service => service.SelectorLabels.Count > 0 && selectedPods.Any(pod =>
                 service.SelectorLabels.All(selector =>
                     pod.Labels.TryGetValue(selector.Key, out var value)
@@ -524,7 +524,7 @@ public class DemoAksClient : IAksClient
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
-        var ingresses = (await GetIngressesAsync(ns, ct))
+        var ingresses = (await GetIngressesAsync(ns, ct).ConfigureAwait(false))
             .Where(ingress => ingress.Rules.Any(rule => rule.Paths.Any(path =>
                 !string.IsNullOrWhiteSpace(path.ServiceName)
                 && services.Contains(path.ServiceName, StringComparer.Ordinal))))
@@ -639,7 +639,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<GatewayClassInfo>> GetGatewayClassesAsync(CancellationToken ct = default)
     {
-        await Task.Delay(120, ct);
+        await Task.Delay(120, ct).ConfigureAwait(false);
         return new List<GatewayClassInfo>
         {
             new()
@@ -672,7 +672,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(180, ct);
+        await Task.Delay(180, ct).ConfigureAwait(false);
         return new List<GatewayInfo>
         {
             new()
@@ -738,7 +738,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(180, ct);
+        await Task.Delay(180, ct).ConfigureAwait(false);
         return new List<HttpRouteInfo>
         {
             new()
@@ -803,7 +803,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
         var now = DateTimeOffset.UtcNow;
         return new List<HelmReleaseInfo>
         {
@@ -1160,7 +1160,7 @@ public class DemoAksClient : IAksClient
         var idx = 0;
         while (!ct.IsCancellationRequested)
         {
-            await Task.Delay(800 + Rng.Next(1500), ct);
+            await Task.Delay(800 + Rng.Next(1500), ct).ConfigureAwait(false);
             var ts = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
             var line = $"{ts}  {LogLines[idx % LogLines.Length]}";
             idx++;
@@ -1195,32 +1195,32 @@ public class DemoAksClient : IAksClient
 
     public async Task RestartDeploymentAsync(string ns, string deploymentName, CancellationToken ct = default)
     {
-        await Task.Delay(500, ct); // simulate restart
+        await Task.Delay(500, ct).ConfigureAwait(false); // simulate restart
     }
 
     public async Task DeletePodAsync(string ns, string podName, CancellationToken ct = default)
     {
-        await Task.Delay(300, ct); // simulate delete
+        await Task.Delay(300, ct).ConfigureAwait(false); // simulate delete
     }
 
     public async Task DeleteIngressAsync(string ns, string name, CancellationToken ct = default)
     {
-        await Task.Delay(300, ct); // simulate delete
+        await Task.Delay(300, ct).ConfigureAwait(false); // simulate delete
     }
 
     public async Task DeleteHttpRouteAsync(string ns, string name, CancellationToken ct = default)
     {
-        await Task.Delay(300, ct); // simulate delete
+        await Task.Delay(300, ct).ConfigureAwait(false); // simulate delete
     }
 
     public async Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default)
     {
-        await Task.Delay(400, ct); // simulate scale
+        await Task.Delay(400, ct).ConfigureAwait(false); // simulate scale
     }
 
     public async Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName, CancellationToken ct = default)
     {
-        await Task.Delay(300, ct);
+        await Task.Delay(300, ct).ConfigureAwait(false);
         var now = DateTimeOffset.UtcNow;
         return new List<HelmRevisionInfo>
         {
@@ -1233,7 +1233,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
     {
-        await Task.Delay(250, ct);
+        await Task.Delay(250, ct).ConfigureAwait(false);
         return $"""
             replicaCount: 3
             image:
@@ -1268,12 +1268,12 @@ public class DemoAksClient : IAksClient
 
     public async Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)
     {
-        await Task.Delay(800, ct); // simulate rollback
+        await Task.Delay(800, ct).ConfigureAwait(false); // simulate rollback
     }
 
     public async Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
         var metrics = new List<PodMetrics>();
         foreach (var d in DemoDeployments)
         {
@@ -1307,7 +1307,7 @@ public class DemoAksClient : IAksClient
 
     public async Task ApplyResourceYamlAsync(string ns, string kind, string name, string yaml, CancellationToken ct = default)
     {
-        await Task.Delay(400, ct); // simulate apply latency
+        await Task.Delay(400, ct).ConfigureAwait(false); // simulate apply latency
         // Demo mode: store override so the next GetResourceYamlAsync call returns the edited YAML
         _yamlOverrides[$"{kind}/{ns}/{name}"] = yaml;
     }
@@ -1318,7 +1318,7 @@ public class DemoAksClient : IAksClient
         string ns, string deploymentName, LogStreamOptions opts,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var pods = (await GetPodsAsync(ns, $"app={deploymentName}", ct))
+        var pods = (await GetPodsAsync(ns, $"app={deploymentName}", ct).ConfigureAwait(false))
             .Take(3)
             .ToList();
 
@@ -1348,7 +1348,7 @@ public class DemoAksClient : IAksClient
                         PodName = pod.Name,
                         Line = line,
                         Timestamp = TryExtractLogTimestamp(line)
-                    }, linkedCts.Token);
+                    }, linkedCts.Token).ConfigureAwait(false);
                 }
             }
 
@@ -1356,7 +1356,7 @@ public class DemoAksClient : IAksClient
 
             while (!linkedCts.Token.IsCancellationRequested)
             {
-                await Task.Delay(800 + Rng.Next(1500), linkedCts.Token);
+                await Task.Delay(800 + Rng.Next(1500), linkedCts.Token).ConfigureAwait(false);
                 var ts = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
                 var line = $"{ts}  {LogLines[lineIdx % LogLines.Length]}";
                 lineIdx++;
@@ -1367,14 +1367,14 @@ public class DemoAksClient : IAksClient
                         PodName = pod.Name,
                         Line = line,
                         Timestamp = TryExtractLogTimestamp(line)
-                    }, linkedCts.Token);
+                    }, linkedCts.Token).ConfigureAwait(false);
                 }
             }
         }, linkedCts.Token)).ToList();
 
         _ = Task.WhenAll(fanOutTasks).ContinueWith(_ => channel.Writer.TryComplete(), CancellationToken.None);
 
-        await foreach (var item in channel.Reader.ReadAllAsync(ct))
+        await foreach (var item in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             yield return item;
     }
 
@@ -1388,7 +1388,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(250, ct);
+        await Task.Delay(250, ct).ConfigureAwait(false);
         return DemoStatefulSets.Select(s => new StatefulSetInfo
         {
             Name = s.Name,
@@ -1407,19 +1407,19 @@ public class DemoAksClient : IAksClient
 
     public async Task RestartStatefulSetAsync(string ns, string name, CancellationToken ct = default)
     {
-        await Task.Delay(500, ct);
+        await Task.Delay(500, ct).ConfigureAwait(false);
     }
 
     public async Task ScaleStatefulSetAsync(string ns, string name, int replicas, CancellationToken ct = default)
     {
-        await Task.Delay(400, ct);
+        await Task.Delay(400, ct).ConfigureAwait(false);
     }
 
     // ── Feature 3: ConfigMaps and Secrets ────────────────────────────────────
 
     public async Task<IReadOnlyList<ConfigMapInfo>> GetConfigMapsAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
         return new List<ConfigMapInfo>
         {
             new()
@@ -1460,7 +1460,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<SecretInfo>> GetSecretsAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
         return new List<SecretInfo>
         {
             new()
@@ -1513,7 +1513,7 @@ public class DemoAksClient : IAksClient
     public async Task<IReadOnlyList<ContainerDetail>> GetContainerDetailsAsync(
         string ns, string podName, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
 
         // Derive the deployment name from the pod name (first segment)
         var deploymentName = podName.Split('-').FirstOrDefault() ?? podName;
@@ -1583,7 +1583,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(200, ct);
+        await Task.Delay(200, ct).ConfigureAwait(false);
         return new List<HpaInfo>
         {
             new()
@@ -1656,7 +1656,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(150, ct);
+        await Task.Delay(150, ct).ConfigureAwait(false);
         var cronJobs = BuildCronJobs(ns, DateTimeOffset.UtcNow).ToList();
         lock (_jobLock)
         {
@@ -1672,7 +1672,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<JobInfo>> GetJobsAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(150, ct);
+        await Task.Delay(150, ct).ConfigureAwait(false);
 
         var allJobs = BuildBaseJobs(ns, DateTimeOffset.UtcNow)
             .Concat(GetCreatedJobsSnapshot(ns))
@@ -1693,9 +1693,9 @@ public class DemoAksClient : IAksClient
 
     public async Task<string> TriggerCronJobAsync(string ns, string cronJobName, CancellationToken ct = default)
     {
-        await Task.Delay(150, ct);
+        await Task.Delay(150, ct).ConfigureAwait(false);
 
-        var cronJob = (await GetCronJobsAsync(ns, ct)).FirstOrDefault(job =>
+        var cronJob = (await GetCronJobsAsync(ns, ct).ConfigureAwait(false)).FirstOrDefault(job =>
             string.Equals(job.Name, cronJobName, StringComparison.Ordinal));
 
         if (cronJob is null)
@@ -1720,9 +1720,9 @@ public class DemoAksClient : IAksClient
 
     public async Task<string> RerunJobAsync(string ns, string jobName, CancellationToken ct = default)
     {
-        await Task.Delay(150, ct);
+        await Task.Delay(150, ct).ConfigureAwait(false);
 
-        var sourceJob = (await GetJobsAsync(ns, ct)).FirstOrDefault(job =>
+        var sourceJob = (await GetJobsAsync(ns, ct).ConfigureAwait(false)).FirstOrDefault(job =>
             string.Equals(job.Name, jobName, StringComparison.Ordinal));
 
         if (sourceJob is null)
@@ -1747,14 +1747,14 @@ public class DemoAksClient : IAksClient
 
     public async Task SuspendCronJobAsync(string ns, string cronJobName, bool suspend, CancellationToken ct = default)
     {
-        await Task.Delay(100, ct);
+        await Task.Delay(100, ct).ConfigureAwait(false);
         lock (_jobLock)
             _cronJobSuspendOverrides[$"{ns}/{cronJobName}"] = suspend;
     }
 
     public async Task SetJobParallelismAsync(string ns, string jobName, int parallelism, CancellationToken ct = default)
     {
-        await Task.Delay(100, ct);
+        await Task.Delay(100, ct).ConfigureAwait(false);
         lock (_jobLock)
             _jobParallelismOverrides[$"{ns}/{jobName}"] = parallelism;
     }
@@ -2044,7 +2044,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<ResourceQuotaInfo>> GetResourceQuotasAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(120, ct);
+        await Task.Delay(120, ct).ConfigureAwait(false);
 
         return
         [
@@ -2085,7 +2085,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<LimitRangeInfo>> GetLimitRangesAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(100, ct);
+        await Task.Delay(100, ct).ConfigureAwait(false);
 
         return
         [
@@ -2126,7 +2126,7 @@ public class DemoAksClient : IAksClient
 
     public async Task<IReadOnlyList<PodDisruptionBudgetInfo>> GetPodDisruptionBudgetsAsync(string ns, CancellationToken ct = default)
     {
-        await Task.Delay(100, ct);
+        await Task.Delay(100, ct).ConfigureAwait(false);
 
         return
         [
@@ -2169,7 +2169,7 @@ public class DemoAksClient : IAksClient
         string workloadName,
         CancellationToken ct = default)
     {
-        await Task.Delay(120, ct);
+        await Task.Delay(120, ct).ConfigureAwait(false);
 
         var tick = Math.Max(Volatile.Read(ref _demoTick), 1);
         var allPods = BuildDemoPods(ns, tick).ToList();
@@ -2235,7 +2235,7 @@ public class DemoAksClient : IAksClient
         string workloadName,
         CancellationToken ct = default)
     {
-        await Task.Delay(100, ct);
+        await Task.Delay(100, ct).ConfigureAwait(false);
 
         return new PlacementAnalysis
         {
@@ -2268,7 +2268,7 @@ public class DemoAksClient : IAksClient
         string releaseName,
         CancellationToken ct = default)
     {
-        await Task.Delay(50, ct);
+        await Task.Delay(50, ct).ConfigureAwait(false);
 
         return new HelmDiffPreview
         {
@@ -2286,7 +2286,7 @@ public class DemoAksClient : IAksClient
         int revision,
         CancellationToken ct = default)
     {
-        await Task.Delay(50, ct);
+        await Task.Delay(50, ct).ConfigureAwait(false);
 
         return new HelmDiffPreview
         {

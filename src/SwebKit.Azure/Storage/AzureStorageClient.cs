@@ -48,7 +48,7 @@ public class AzureStorageClient : IStorageClient
 
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {
-        await foreach (var _ in _blobService.GetBlobContainersAsync(cancellationToken: ct))
+        await foreach (var _ in _blobService.GetBlobContainersAsync(cancellationToken: ct).ConfigureAwait(false))
             break;
         return true;
     }
@@ -56,7 +56,7 @@ public class AzureStorageClient : IStorageClient
     public async Task<IReadOnlyList<StorageContainerItem>> ListContainersAsync(CancellationToken ct = default)
     {
         var result = new List<StorageContainerItem>();
-        await foreach (var item in _blobService.GetBlobContainersAsync(cancellationToken: ct))
+        await foreach (var item in _blobService.GetBlobContainersAsync(cancellationToken: ct).ConfigureAwait(false))
         {
             result.Add(new StorageContainerItem(
                 Name: item.Name,
@@ -80,7 +80,7 @@ public class AzureStorageClient : IStorageClient
 
         await foreach (var page in container
             .GetBlobsByHierarchyAsync(BlobTraits.None, BlobStates.None, "/", prefix, ct)
-            .AsPages(continuationToken, pageSize))
+            .AsPages(continuationToken, pageSize).ConfigureAwait(false))
         {
             foreach (var item in page.Values)
             {
@@ -112,13 +112,13 @@ public class AzureStorageClient : IStorageClient
         CancellationToken ct = default)
     {
         var blobClient = _blobService.GetBlobContainerClient(containerName).GetBlobClient(blobName);
-        var propsResponse = await blobClient.GetPropertiesAsync(cancellationToken: ct);
+        var propsResponse = await blobClient.GetPropertiesAsync(cancellationToken: ct).ConfigureAwait(false);
         AzureBlobProperties props = propsResponse.Value;
 
         Dictionary<string, string> tags;
         try
         {
-            var tagsResponse = await blobClient.GetTagsAsync(cancellationToken: ct);
+            var tagsResponse = await blobClient.GetTagsAsync(cancellationToken: ct).ConfigureAwait(false);
             tags = new Dictionary<string, string>(tagsResponse.Value.Tags);
         }
         catch (RequestFailedException ex) when (ex.Status == 403)
@@ -151,7 +151,7 @@ public class AzureStorageClient : IStorageClient
         CancellationToken ct = default)
     {
         var blobClient = _blobService.GetBlobContainerClient(containerName).GetBlobClient(blobName);
-        var propsResponse = await blobClient.GetPropertiesAsync(cancellationToken: ct);
+        var propsResponse = await blobClient.GetPropertiesAsync(cancellationToken: ct).ConfigureAwait(false);
         AzureBlobProperties props = propsResponse.Value;
 
         if (!IsTextContentType(props.ContentType, blobName))
@@ -172,15 +172,15 @@ public class AzureStorageClient : IStorageClient
         if (wasTruncated)
         {
             var options = new BlobDownloadOptions { Range = new HttpRange(0, maxBytes) };
-            var streamResponse = await blobClient.DownloadStreamingAsync(options, ct);
+            var streamResponse = await blobClient.DownloadStreamingAsync(options, ct).ConfigureAwait(false);
             using var streamResult = streamResponse.Value;
             using var ms = new MemoryStream();
-            await streamResult.Content.CopyToAsync(ms, ct);
+            await streamResult.Content.CopyToAsync(ms, ct).ConfigureAwait(false);
             text = System.Text.Encoding.UTF8.GetString(ms.ToArray());
         }
         else
         {
-            var result = await blobClient.DownloadContentAsync(cancellationToken: ct);
+            var result = await blobClient.DownloadContentAsync(cancellationToken: ct).ConfigureAwait(false);
             text = System.Text.Encoding.UTF8.GetString(result.Value.Content.ToArray());
         }
 
@@ -222,7 +222,7 @@ public class AzureStorageClient : IStorageClient
             ProgressHandler = progress
         };
 
-        await blobClient.DownloadToAsync(destination, options, ct);
+        await blobClient.DownloadToAsync(destination, options, ct).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<BlobVersionItem>> ListBlobVersionsAsync(
@@ -232,7 +232,7 @@ public class AzureStorageClient : IStorageClient
         var result = new List<BlobVersionItem>();
 
         await foreach (var item in container.GetBlobsAsync(
-            BlobTraits.None, BlobStates.Version, blobName, ct))
+            BlobTraits.None, BlobStates.Version, blobName, ct).ConfigureAwait(false))
         {
             result.Add(new BlobVersionItem(
                 VersionId: item.VersionId ?? string.Empty,
@@ -258,7 +258,7 @@ public class AzureStorageClient : IStorageClient
     {
         try
         {
-            var response = await _blobService.GetPropertiesAsync(cancellationToken: ct);
+            var response = await _blobService.GetPropertiesAsync(cancellationToken: ct).ConfigureAwait(false);
             var props = response.Value;
             // The data-plane BlobServiceProperties (Azure.Storage.Blobs 12.x) does not expose
             // versioning enablement. Soft-delete is accurately detected via DeleteRetentionPolicy.
@@ -291,7 +291,7 @@ public class AzureStorageClient : IStorageClient
             if (!options.Overwrite)
                 azureOptions.Conditions = new BlobRequestConditions { IfNoneMatch = new ETag("*") };
 
-            await blobClient.UploadAsync(source, azureOptions, ct);
+            await blobClient.UploadAsync(source, azureOptions, ct).ConfigureAwait(false);
             return new BlobMutationResult(true, ResultBlobPath: $"{options.ContainerName}/{options.BlobName}");
         }
         catch (OperationCanceledException) { throw; }
@@ -311,10 +311,10 @@ public class AzureStorageClient : IStorageClient
 
             var destBlob = _blobService.GetBlobContainerClient(options.DestinationContainer).GetBlobClient(options.DestinationBlobName);
             if (options.Overwrite)
-                await destBlob.DeleteIfExistsAsync(cancellationToken: ct);
+                await destBlob.DeleteIfExistsAsync(cancellationToken: ct).ConfigureAwait(false);
 
-            var operation = await destBlob.StartCopyFromUriAsync(srcBlob.Uri, cancellationToken: ct);
-            await operation.WaitForCompletionAsync(ct);
+            var operation = await destBlob.StartCopyFromUriAsync(srcBlob.Uri, cancellationToken: ct).ConfigureAwait(false);
+            await operation.WaitForCompletionAsync(ct).ConfigureAwait(false);
             return new BlobMutationResult(true, ResultBlobPath: $"{options.DestinationContainer}/{options.DestinationBlobName}");
         }
         catch (OperationCanceledException) { throw; }
@@ -334,7 +334,7 @@ public class AzureStorageClient : IStorageClient
             BlobRequestConditions? conditions = ifMatchEtag is not null
                 ? new BlobRequestConditions { IfMatch = new ETag(ifMatchEtag) }
                 : null;
-            await blobClient.SetMetadataAsync(metadata, conditions, ct);
+            await blobClient.SetMetadataAsync(metadata, conditions, ct).ConfigureAwait(false);
             return new BlobMutationResult(true, ResultBlobPath: $"{containerName}/{blobName}");
         }
         catch (OperationCanceledException) { throw; }
@@ -350,18 +350,18 @@ public class AzureStorageClient : IStorageClient
     {
         var container = _blobService.GetBlobContainerClient(containerName);
 
-        var basePropsResponse = await container.GetBlobClient(blobName).WithVersion(baseVersionId).GetPropertiesAsync(cancellationToken: ct);
+        var basePropsResponse = await container.GetBlobClient(blobName).WithVersion(baseVersionId).GetPropertiesAsync(cancellationToken: ct).ConfigureAwait(false);
         var baseProps = basePropsResponse.Value;
 
         AzureBlobProperties compareProps;
         if (compareVersionId is not null)
         {
-            var r = await container.GetBlobClient(blobName).WithVersion(compareVersionId).GetPropertiesAsync(cancellationToken: ct);
+            var r = await container.GetBlobClient(blobName).WithVersion(compareVersionId).GetPropertiesAsync(cancellationToken: ct).ConfigureAwait(false);
             compareProps = r.Value;
         }
         else
         {
-            var r = await container.GetBlobClient(blobName).GetPropertiesAsync(cancellationToken: ct);
+            var r = await container.GetBlobClient(blobName).GetPropertiesAsync(cancellationToken: ct).ConfigureAwait(false);
             compareProps = r.Value;
         }
 
@@ -381,11 +381,11 @@ public class AzureStorageClient : IStorageClient
             try
             {
                 using var baseMs = new MemoryStream();
-                await DownloadBlobAsync(containerName, blobName, baseMs, null, baseVersionId, ct);
+                await DownloadBlobAsync(containerName, blobName, baseMs, null, baseVersionId, ct).ConfigureAwait(false);
                 var baseText = System.Text.Encoding.UTF8.GetString(baseMs.ToArray());
 
                 using var compareMs = new MemoryStream();
-                await DownloadBlobAsync(containerName, blobName, compareMs, null, compareVersionId, ct);
+                await DownloadBlobAsync(containerName, blobName, compareMs, null, compareVersionId, ct).ConfigureAwait(false);
                 var compareText = System.Text.Encoding.UTF8.GetString(compareMs.ToArray());
 
                 contentComparePossible = true;
@@ -422,8 +422,8 @@ public class AzureStorageClient : IStorageClient
             var versionedBlob = container.GetBlobClient(blobName).WithVersion(versionId);
             var currentBlob = container.GetBlobClient(blobName);
 
-            var operation = await currentBlob.StartCopyFromUriAsync(versionedBlob.Uri, cancellationToken: ct);
-            await operation.WaitForCompletionAsync(ct);
+            var operation = await currentBlob.StartCopyFromUriAsync(versionedBlob.Uri, cancellationToken: ct).ConfigureAwait(false);
+            await operation.WaitForCompletionAsync(ct).ConfigureAwait(false);
             return new BlobRecoveryResult(BlobRecoveryState.Restored, ResultBlobPath: $"{containerName}/{blobName}");
         }
         catch (OperationCanceledException) { throw; }
@@ -439,7 +439,7 @@ public class AzureStorageClient : IStorageClient
         try
         {
             var blobClient = _blobService.GetBlobContainerClient(containerName).GetBlobClient(blobName);
-            await blobClient.UndeleteAsync(ct);
+            await blobClient.UndeleteAsync(ct).ConfigureAwait(false);
             return new BlobRecoveryResult(BlobRecoveryState.Undeleted, ResultBlobPath: $"{containerName}/{blobName}");
         }
         catch (OperationCanceledException) { throw; }

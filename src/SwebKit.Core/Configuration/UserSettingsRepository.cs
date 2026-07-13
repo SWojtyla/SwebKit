@@ -25,7 +25,7 @@ public sealed class UserSettingsRepository
 
         try
         {
-            var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.UserSettingsJson, DeserializeSettings);
+            var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.UserSettingsJson, DeserializeSettings).ConfigureAwait(false);
             Settings = loadResult.Value;
         }
         catch
@@ -38,7 +38,7 @@ public sealed class UserSettingsRepository
     {
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(Settings, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.UserSettingsJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.UserSettingsJson, json).ConfigureAwait(false);
         Changed?.Invoke();
     }
 
@@ -51,7 +51,7 @@ public sealed class UserSettingsRepository
     public async Task ImportAsync(UserSettings settings)
     {
         ReplaceSettings(settings);
-        await SaveAsync();
+        await SaveAsync().ConfigureAwait(false);
     }
 
     private static UserSettings DeserializeSettings(string json) =>

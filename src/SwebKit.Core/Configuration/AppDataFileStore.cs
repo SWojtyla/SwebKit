@@ -20,7 +20,7 @@ internal static class AppDataFileStore
                 return new AppDataFileLoadResult<T>(
                     TargetPath: filePath,
                     SourcePath: filePath,
-                    Value: await ReadAndDeserializeAsync(filePath, deserialize),
+                    Value: await ReadAndDeserializeAsync(filePath, deserialize).ConfigureAwait(false),
                     WasRecovered: false,
                     PrimaryErrorMessage: null);
             }
@@ -36,7 +36,7 @@ internal static class AppDataFileStore
                     return new AppDataFileLoadResult<T>(
                         TargetPath: filePath,
                         SourcePath: backupPath,
-                        Value: await ReadAndDeserializeAsync(backupPath, deserialize),
+                        Value: await ReadAndDeserializeAsync(backupPath, deserialize).ConfigureAwait(false),
                         WasRecovered: true,
                         PrimaryErrorMessage: primaryEx.Message);
                 }
@@ -59,7 +59,7 @@ internal static class AppDataFileStore
             return new AppDataFileLoadResult<T>(
                 TargetPath: filePath,
                 SourcePath: backupPath,
-                Value: await ReadAndDeserializeAsync(backupPath, deserialize),
+                Value: await ReadAndDeserializeAsync(backupPath, deserialize).ConfigureAwait(false),
                 WasRecovered: true,
                 PrimaryErrorMessage: null);
         }
@@ -84,7 +84,7 @@ internal static class AppDataFileStore
 
         try
         {
-            await File.WriteAllTextAsync(tempPath, contents);
+            await File.WriteAllTextAsync(tempPath, contents).ConfigureAwait(false);
 
             if (File.Exists(filePath))
             {
@@ -106,7 +106,7 @@ internal static class AppDataFileStore
 
     private static async Task<T> ReadAndDeserializeAsync<T>(string filePath, Func<string, T> deserialize)
     {
-        var content = await File.ReadAllTextAsync(filePath);
+        var content = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
         return deserialize(content);
     }
 

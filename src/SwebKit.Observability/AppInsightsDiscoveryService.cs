@@ -18,7 +18,7 @@ public sealed class AppInsightsDiscoveryService : IObservabilityResourceDiscover
     public async IAsyncEnumerable<ObservabilityResourceInfo> DiscoverResourcesAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
-        await _lock.WaitAsync(ct);
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (_cache is not null)
@@ -33,13 +33,13 @@ public sealed class AppInsightsDiscoveryService : IObservabilityResourceDiscover
             var credential = AzureCredentialFactory.CreateDefault();
             var armClient = new ArmClient(credential);
 
-            await foreach (var subscription in armClient.GetSubscriptions().GetAllAsync(ct))
+            await foreach (var subscription in armClient.GetSubscriptions().GetAllAsync(ct).ConfigureAwait(false))
             {
                 ct.ThrowIfCancellationRequested();
                 var subId = subscription.Data.SubscriptionId;
                 var subName = subscription.Data.DisplayName ?? subId;
 
-                await foreach (var ai in subscription.GetApplicationInsightsComponentsAsync(cancellationToken: ct))
+                await foreach (var ai in subscription.GetApplicationInsightsComponentsAsync(cancellationToken: ct).ConfigureAwait(false))
                 {
                     ct.ThrowIfCancellationRequested();
 

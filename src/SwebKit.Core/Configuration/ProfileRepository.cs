@@ -35,7 +35,7 @@ public class ProfileRepository
 
         try
         {
-            var loadResult = await AppDataFileStore.LoadAsync(filePath, DeserializeProfileData);
+            var loadResult = await AppDataFileStore.LoadAsync(filePath, DeserializeProfileData).ConfigureAwait(false);
             _data = loadResult.Value;
             _lastLoadResult = loadResult.WasRecovered
                 ? ProfileLoadResult.Recovered(filePath, loadResult.SourcePath, loadResult.PrimaryErrorMessage)
@@ -58,13 +58,13 @@ public class ProfileRepository
 
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_data, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.ProfilesJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.ProfilesJson, json).ConfigureAwait(false);
         return true;
     }
 
     public async Task SaveAsync()
     {
-        if (!await TrySaveAsync())
+        if (!await TrySaveAsync().ConfigureAwait(false))
         {
             throw CreatePersistenceBlockedException();
         }
@@ -118,7 +118,7 @@ public class ProfileRepository
         _data = NormalizeProfileData(data);
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_data, Options);
-        await AppDataFileStore.SaveAsync(AppDataPaths.ProfilesJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.ProfilesJson, json).ConfigureAwait(false);
         _lastLoadResult = ProfileLoadResult.Loaded(AppDataPaths.ProfilesJson);
     }
 

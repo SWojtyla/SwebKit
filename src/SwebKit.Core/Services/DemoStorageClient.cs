@@ -296,7 +296,7 @@ public sealed class DemoStorageClient : IStorageClient
         while (written < bytes.Length)
         {
             var count = Math.Min(chunkSize, bytes.Length - written);
-            await destination.WriteAsync(bytes.AsMemory(written, count), ct);
+            await destination.WriteAsync(bytes.AsMemory(written, count), ct).ConfigureAwait(false);
             written += count;
             progress?.Report(written);
         }

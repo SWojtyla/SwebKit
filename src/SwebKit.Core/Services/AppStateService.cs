@@ -57,8 +57,8 @@ public class AppStateService
         if (IsInitialized)
             return;
 
-        ProfileLoadResult = await _profiles.LoadAsync();
-        await _uiState.LoadAsync();
+        ProfileLoadResult = await _profiles.LoadAsync().ConfigureAwait(false);
+        await _uiState.LoadAsync().ConfigureAwait(false);
         UseDemoData = _uiState.State.UseDemoData;
 
         IsInitialized = true;
@@ -70,7 +70,7 @@ public class AppStateService
     {
         UseDemoData = enabled;
         _uiState.State.UseDemoData = enabled;
-        await _uiState.SaveAsync();
+        await _uiState.SaveAsync().ConfigureAwait(false);
         DemoModeChanged?.Invoke();
     }
 
@@ -79,25 +79,25 @@ public class AppStateService
     public async Task AddServiceBusNamespaceAsync(ServiceBusNamespace ns)
     {
         _profiles.AddServiceBusNamespace(ns);
-        await TryPersistProfilesAsync();
+        await TryPersistProfilesAsync().ConfigureAwait(false);
     }
 
     public async Task RemoveServiceBusNamespaceAsync(Guid id)
     {
         _profiles.RemoveServiceBusNamespace(id);
-        await TryPersistProfilesAsync();
+        await TryPersistProfilesAsync().ConfigureAwait(false);
     }
 
     public async Task SaveMessageTemplateAsync(SbMessageTemplate template)
     {
         _profiles.SaveMessageTemplate(template);
-        await TryPersistProfilesAsync();
+        await TryPersistProfilesAsync().ConfigureAwait(false);
     }
 
     public async Task DeleteMessageTemplateAsync(Guid id)
     {
         _profiles.DeleteMessageTemplate(id);
-        await TryPersistProfilesAsync();
+        await TryPersistProfilesAsync().ConfigureAwait(false);
     }
 
     public void RefreshFromImportedState()
@@ -109,7 +109,7 @@ public class AppStateService
 
     private async Task<bool> TryPersistProfilesAsync()
     {
-        var saved = await _profiles.TrySaveAsync();
+        var saved = await _profiles.TrySaveAsync().ConfigureAwait(false);
         if (saved)
             ConfigChanged?.Invoke();
         return saved;

@@ -38,7 +38,7 @@ public sealed class AppInsightsTimelineSignalSource : IIncidentTimelineSignalSou
         }
 
         var provider = _providerFactory.Create(resourceId, _appState.UseDemoData);
-        var result = await provider.RunQueryAsync(BuildQuery(mapping.Observability, query.GetMaxItemsPerSource()), query.GetUtcWindow(), query.GetMaxItemsPerSource(), ct);
+        var result = await provider.RunQueryAsync(BuildQuery(mapping.Observability, query.GetMaxItemsPerSource()), query.GetUtcWindow(), query.GetMaxItemsPerSource(), ct).ConfigureAwait(false);
         var items = result.Rows
             .Select(row => MapRow(query, mapping.Observability, row))
             .Where(static item => item is not null)

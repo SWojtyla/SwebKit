@@ -24,7 +24,7 @@ public sealed class IncidentTimelineService : IIncidentTimelineService
         var orderLookup = requestedSources
             .Select((source, index) => new { source, index })
             .ToDictionary(static entry => entry.source, static entry => entry.index);
-        var executions = await Task.WhenAll(requestedSources.Select(source => ExecuteSourceAsync(source, query, ct)));
+        var executions = await Task.WhenAll(requestedSources.Select(source => ExecuteSourceAsync(source, query, ct))).ConfigureAwait(false);
 
         var items = executions
             .SelectMany(static execution => execution.Result.Items)
@@ -91,7 +91,7 @@ public sealed class IncidentTimelineService : IIncidentTimelineService
 
                 try
                 {
-                    rawResult = await signalSource.FetchAsync(query, timeoutCts.Token);
+                    rawResult = await signalSource.FetchAsync(query, timeoutCts.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested && timeoutCts.IsCancellationRequested)
                 {
@@ -102,7 +102,7 @@ public sealed class IncidentTimelineService : IIncidentTimelineService
             }
             else
             {
-                rawResult = await signalSource.FetchAsync(query, ct);
+                rawResult = await signalSource.FetchAsync(query, ct).ConfigureAwait(false);
             }
 
             stopwatch.Stop();
