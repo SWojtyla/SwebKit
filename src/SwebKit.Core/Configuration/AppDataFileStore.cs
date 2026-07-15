@@ -85,15 +85,7 @@ internal static class AppDataFileStore
         try
         {
             await File.WriteAllTextAsync(tempPath, contents).ConfigureAwait(false);
-
-            if (File.Exists(filePath))
-            {
-                File.Replace(tempPath, filePath, null, ignoreMetadataErrors: true);
-            }
-            else
-            {
-                File.Move(tempPath, filePath, overwrite: true);
-            }
+            await ReplaceOrMoveWithRetryAsync(tempPath, filePath).ConfigureAwait(false);
         }
         catch
         {
@@ -102,6 +94,39 @@ internal static class AppDataFileStore
         }
 
         TryRefreshBackup(filePath);
+    }
+
+    /// <summary>
+    /// Swaps the freshly-written temp file into place, retrying briefly on a transient sharing
+    /// violation. The target file can be transiently locked by another concurrent writer (e.g.
+    /// antivirus/indexer scanning, or another save in flight for the same path) — Windows surfaces
+    /// this as either <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/>
+    /// depending on the lock type. A short backoff-and-retry resolves this without surfacing a
+    /// spurious failure to the caller.
+    /// </summary>
+    private static async Task ReplaceOrMoveWithRetryAsync(string tempPath, string filePath)
+    {
+        const int maxAttempts = 8;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    File.Replace(tempPath, filePath, null, ignoreMetadataErrors: true);
+                }
+                else
+                {
+                    File.Move(tempPath, filePath, overwrite: true);
+                }
+
+                return;
+            }
+            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < maxAttempts)
+            {
+                await Task.Delay(25 * attempt).ConfigureAwait(false);
+            }
+        }
     }
 
     private static async Task<T> ReadAndDeserializeAsync<T>(string filePath, Func<string, T> deserialize)
