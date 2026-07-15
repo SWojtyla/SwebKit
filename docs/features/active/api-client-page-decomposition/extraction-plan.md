@@ -18,7 +18,7 @@ prove the pattern with the lowest risk.
   (`GetRequestTargetCollection`, `ActivateCollection`, `SaveActiveCollectionAsync`) and mutate
   `_state` directly — this is expected (DEC-PD-1) and stays as-is; only the file boundary changes.
 
-### 2. Secrets — `ApiClientPage.Secrets.cs`
+### 2. Secrets — `ApiClientPage.Secrets.cs` (done)
 
 - Fields: `_showConfigureSecretDialog`, `_secretNameToConfigure`, `_secretValueToConfigure`,
   `_secretConfigError`
@@ -27,19 +27,19 @@ prove the pattern with the lowest risk.
 - Opportunistic pure extraction candidate: secret-name resolution logic, if it turns out not to
   touch `_state` mutation (read-only lookup) — evaluate during this slice.
 
-### 3. Tab lifecycle — `ApiClientPage.Tabs.cs`
+### 3. Tab lifecycle — `ApiClientPage.Tabs.cs` (done)
 
 - Fields: `_showTabCloseConfirmDialog`, `_pendingCloseTabRequestId`
 - Methods: `RestoreSelectedRequest`, `OnTabSelectedAsync`, `OnTabCloseRequestedAsync`,
   `SaveAndCloseTabAsync`, `DiscardAndCloseTabAsync`, `CancelTabCloseConfirm`, `CloseTab`,
   `PersistLastSelectionAsync`
 
-### 4. Collection tree mutations — `ApiClientPage.Tree.cs`
+### 4. Collection tree mutations — `ApiClientPage.Tree.cs` (done)
 
 - Methods: `OnAddFolderAsync`, `OnAddRequestInFolderAsync`, `OnRenameNodeAsync`,
   `OnDeleteNodeAsync`, `OnMoveNodeAsync`
 
-### 5. Collections/environments/linked roots — `ApiClientPage.Collections.cs`
+### 5. Collections/environments/linked roots — `ApiClientPage.Collections.cs` (done)
 
 - Fields: `_showNewCollectionDialog`, `_newCollectionName`, `_newCollectionInput`,
   `_shouldFocusNewCollectionInput`, `_showLinkedRootDialog`, `_newLinkedRootName`,
@@ -58,21 +58,21 @@ prove the pattern with the lowest risk.
   `OnRenameCollectionAsync`, `OnDeleteCollectionAsync`, `ConfirmDeleteCollectionAsync`,
   `OnCollectionImportedAsync`, `OpenVariableInspectorAsync`, `OpenRequestVariablesFromMenu`
 
-### 6. Linked-repo Git save conflicts — `ApiClientPage.LinkedSave.cs`
+### 6. Linked-repo Git save conflicts — `ApiClientPage.LinkedSave.cs` (done)
 
 - Methods: `SaveRequestAsync`, `SaveActiveCollectionAsync`, `TryRunLinkedFileOperationAsync`,
   `RefreshAfterLinkedMutationAsync`, `ReloadLinkedConflictAsync`, `KeepMineLinkedConflictAsync`,
   `SaveLinkedConflictAsCopyAsync`, `OpenGitPanelAsync`, `OpenCurrentTargetGitFromMenu`,
   `IsLinkedCollection`
 
-### 7. Request lifecycle / autosave / results — `ApiClientPage.Requests.cs`
+### 7. Request lifecycle / autosave / results — `ApiClientPage.Requests.cs` (done)
 
 - Fields: `_autoSaveTimer`, `AutoSaveDebounceMs`, `HistoryCap`, `SubscriptionMessageCap`
 - Methods: `OnRequestSelectedAsync`, `OnRequestChangedAsync`, `AutoSaveLoopAsync`,
   `OnRequestResultAsync`, `OnSubscriptionMessageAsync`, `OnSubscriptionStoppedAsync`,
   `OnResendHistoryEntryAsync`, `SaveResponseExampleAsync`
 
-### 8. Shortcuts and commands — `ApiClientPage.Commands.cs`
+### 8. Shortcuts and commands — `ApiClientPage.Commands.cs` (done)
 
 - Methods: `OnApiClientShortcut`, `RegisterApiClientCommands`
 
