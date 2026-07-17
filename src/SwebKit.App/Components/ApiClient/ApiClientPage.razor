@@ -218,8 +218,28 @@
     // Close-dirty-tab confirm dialog state + handlers: see ApiClientPage.Tabs.cs
 
     // ── Computed ──────────────────────────────────────────────────────────────
-    private ApiEnvironment? ActiveEnvironment =>
-        _state.Environments.FirstOrDefault(e => e.Id == _state.ActiveEnvironmentId);
+    // Active environment resolves per active collection: a per-collection selection takes precedence
+    // over the global fallback, and a resolved environment scoped to a *different* collection is
+    // ignored (guards against stale references after switching collections).
+    private ApiEnvironment? ActiveEnvironment
+    {
+        get
+        {
+            var collectionId = _state.ActiveCollection?.Id;
+            string? envId = null;
+            if (collectionId is not null &&
+                EnvironmentRepo.UiState.ActiveEnvironmentIdByCollection.TryGetValue(collectionId, out var perCollection))
+            {
+                envId = perCollection;
+            }
+            envId ??= _state.ActiveEnvironmentId;
+
+            var env = _state.Environments.FirstOrDefault(e => e.Id == envId);
+            if (env is not null && env.CollectionId is not null && env.CollectionId != collectionId)
+                return null;
+            return env;
+        }
+    }
 
     private LinkedCollectionRootLoadResult? ActiveGitRoot =>
         _state.LinkedRootResults.FirstOrDefault(root => root.Config.Id == _state.ActiveGitRootId);

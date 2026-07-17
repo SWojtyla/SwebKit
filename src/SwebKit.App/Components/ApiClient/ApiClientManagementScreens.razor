@@ -17,7 +17,7 @@
                 Back to requests</button>
                 <span class="api-client-management-screen__title">Environments</span>
             </div>
-            <EnvironmentManagerPanel OnChanged="OnEnvironmentsChanged" />
+            <EnvironmentManagerPanel ActiveCollectionId="@State.ActiveCollection?.Id" OnChanged="OnEnvironmentsChanged" />
         </div>
     }
 else if (State.WorksheetMode == ApiClientState.WorksheetVars && State.ActiveCollection is not null)

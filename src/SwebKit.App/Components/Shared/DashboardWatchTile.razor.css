@@ -1,6 +1,11 @@
+/* Calm watch tile (Wave B). Shares the metric-tile language: quiet heading,
+   muted target line, low-chrome stat cells. The area-accent hairline is owned
+   by the parent .dashboard-watch--* wrapper on the board. */
+
 .dashboard-watch-tile {
     display: grid;
-    gap: var(--spacing-xs);
+    gap: var(--dash-tile-gap);
+    min-width: 0;
 }
 
 .dashboard-watch-tile__header,
@@ -23,36 +28,38 @@
 
 .dashboard-watch-tile__heading h3 {
     margin: 0;
-    color: var(--color-text);
-    font-size: var(--font-size-sm);
+    color: var(--dash-text);
+    font-size: var(--dash-label-size);
+    font-weight: 600;
     line-height: 1.2;
 }
 
 .dashboard-watch-tile__actions,
 .dashboard-watch-tile__refresh {
-    gap: 8px;
+    gap: var(--spacing-xs);
 }
 
-.dashboard-watch-tile__eyebrow,
+.dashboard-watch-tile__eyebrow {
+    color: var(--dash-text-muted);
+    font-size: var(--dash-eyebrow-size);
+    font-weight: 700;
+    letter-spacing: var(--dash-eyebrow-tracking);
+    text-transform: uppercase;
+}
+
 .dashboard-watch-tile__target,
 .dashboard-watch-tile__updated,
 .dashboard-watch-tile__note,
 .dashboard-watch-tile__refresh {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
+    color: var(--dash-text-muted);
+    font-size: var(--dash-meta-size);
     line-height: 1.35;
-}
-
-.dashboard-watch-tile__eyebrow {
-    font-weight: 750;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
 }
 
 .dashboard-watch-tile__target {
     margin: 0;
     overflow: hidden;
-    color: var(--color-text);
+    color: var(--dash-text);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -68,16 +75,17 @@
     gap: 1px;
     min-width: 0;
     padding: var(--spacing-xs) var(--spacing-sm);
-    border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--color-surface-2) 70%, transparent);
-    color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
+    background: var(--dash-surface-inset);
+    color: var(--dash-text-muted);
+    font-size: var(--dash-meta-size);
 }
 
 .dashboard-watch-tile__stats strong {
-    color: var(--color-text);
-    font-size: var(--font-size-md);
+    color: var(--dash-text);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
 }
 
 .dashboard-watch-tile__updated,
@@ -87,8 +95,8 @@
 }
 
 .dashboard-watch-tile__error {
-    color: var(--color-error);
-    font-size: var(--font-size-xs);
+    color: var(--dash-crit);
+    font-size: var(--dash-meta-size);
     line-height: 1.35;
 }
 
@@ -98,12 +106,17 @@
     justify-content: center;
     min-height: 26px;
     padding: 0 var(--spacing-sm);
-    border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--color-surface) 94%, var(--color-surface-2));
-    color: var(--color-text);
+    background: transparent;
+    color: var(--dash-text-muted);
     font: inherit;
-    font-size: var(--font-size-xs);
-    font-weight: 650;
+    font-size: var(--dash-meta-size);
+    font-weight: 600;
     cursor: pointer;
+    transition: color 120ms ease, background 120ms ease;
+}
+
+.dashboard-watch-tile__link:hover {
+    background: var(--dash-surface-inset);
+    color: var(--color-accent);
 }

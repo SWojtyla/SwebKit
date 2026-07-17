@@ -46,6 +46,7 @@
 - Container image and environment details — image tag with copy, resource requests/limits, env vars with ConfigMapRef resolution and SecretRef reveal.
 - HPA inline status — HPA badge on Deployment and StatefulSet rows showing current/max replicas and CPU%; detail panel summarizes autoscaler state, replica movement, metrics, and conditions.
 - HPA detail panel actions for `View YAML` and `Edit YAML`, reusing the shared AKS YAML viewer/apply workflow instead of a separate HPA-specific editor.
+- **Quick disable/enable of autoscaling** — the HPA detail panel exposes an `Enable scaling` / `Disable scaling` button that toggles autoscaling without editing YAML. For KEDA-managed HPAs it flips the owning `ScaledObject`'s native `autoscaling.keda.sh/paused` annotation; for plain HPAs it freezes replicas at the current count (`minReplicas = maxReplicas`) while stashing the original bounds in a `swebkit.io/original-hpa-bounds` annotation so re-enabling restores them exactly. In production, the toggle is gated behind the typed-name confirmation bar. Deployment/StatefulSet HPA row badges and the detail panel show a `Disabled` state (paused icon, struck-through badge), and KEDA-managed HPAs carry a `KEDA` chip.
 - Helm history, values, and rollback.
 - Helm rollback now shows inline progress while the command is running and surfaces the success toast before the follow-up grid refresh, so operators still get confirmation when refresh takes longer than the rollback itself.
 - Pod metrics retrieval where available — CPU and Memory columns always visible in the Pods grid; show "—" when metrics are unavailable.
@@ -97,6 +98,7 @@
 - **Progressive `All` history** avoids requesting the full container backlog up front. The viewer starts from a bounded tail and lets the operator pull older chunks explicitly, which keeps the hybrid UI responsive when pods emit large log volumes.
 - **Secret values are never eagerly loaded.** `SecretInfo` holds only key names. Values are fetched on demand via `GetSecretValuesAsync` and cached for the panel lifetime.
 - **HPA API versioning.** `GetHpasAsync` targets `autoscaling/v2` (K8s 1.23+) and falls back to `v1` silently on 404.
+- **Autoscaler enablement toggle.** `IAksClient.SetHpaScalingEnabledAsync(ns, hpaName, enabled)` disables/re-enables autoscaling reversibly. `KubernetesAksClient` reads the HPA to distinguish KEDA-managed from plain: a KEDA-managed HPA carries the `scaledobject.keda.sh/name` label, in which case the toggle patches the owning `ScaledObject`'s `autoscaling.keda.sh/paused` annotation (KEDA 2.9+); a plain HPA is frozen via a JSON merge patch that sets `min = max = current` and stashes `swebkit.io/original-hpa-bounds` for exact restore. `GetHpasAsync` resolves KEDA paused state with one `ScaledObject` list call per namespace, caching CRD absence (`_kedaCrdAvailable`) so clusters without KEDA don't pay a 404 on every auto-refresh; the enrichment is best-effort and never breaks plain HPA browsing. Keys live in `AksScalingAnnotations`. `DemoAksClient` models this with in-memory disabled-key state and one KEDA-managed sample HPA (`keda-hpa-order-queue-scaler`).
 - **Container detail env resolution** batches ConfigMap lookups by name — one API call per unique ConfigMap. `envFrom` bulk-import rows are shown as synthetic flag entries.
 - `KubernetesAksClient` keeps kubeconfig exec auth as the primary path for Azure-backed clusters. When SDK config construction fails specifically because the kubeconfig external auth command returns broken output or cannot start, the client rebuilds the config through the Azure credential fallback path instead of failing during exec-credential handling.
 - Helm operations are implemented through secret introspection and shelling out to `helm` for some commands.
@@ -128,6 +130,7 @@
 - `src/SwebKit.Core/Abstractions/IAksClient.cs`
 - `src/SwebKit.Core/Abstractions/IAksClientBootstrapper.cs`
 - `src/SwebKit.Core/Constants/AksBatchAnnotations.cs`
+- `src/SwebKit.Core/Constants/AksScalingAnnotations.cs`
 - `src/SwebKit.Core/Abstractions/IPortForwardSessionService.cs`
 - `src/SwebKit.Core/Models/AksModels.cs`
 - `src/SwebKit.Core/Services/PortForwardSessionService.cs`

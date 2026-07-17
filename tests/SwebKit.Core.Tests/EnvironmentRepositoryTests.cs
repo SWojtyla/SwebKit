@@ -228,6 +228,71 @@ public sealed class EnvironmentRepositoryTests
         Assert.Equal("req-second", repo.UiState.LastSelectedRequestIdByCollection["col-1"]);
     }
 
+    // ── Collection scoping ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task AddEnvironmentAsync_WithCollectionId_ScopesAndRoundTrips()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new EnvironmentRepository();
+        await repo.LoadAsync();
+
+        var scoped = await repo.AddEnvironmentAsync("DEV", "collection-1");
+        var global = await repo.AddEnvironmentAsync("Shared");
+
+        Assert.Equal("collection-1", scoped.CollectionId);
+        Assert.Null(global.CollectionId);
+
+        var reader = new EnvironmentRepository();
+        await reader.LoadAsync();
+        Assert.Equal("collection-1", reader.Environments.Single(e => e.Name == "DEV").CollectionId);
+        Assert.Null(reader.Environments.Single(e => e.Name == "Shared").CollectionId);
+    }
+
+    [Fact]
+    public async Task SetActiveEnvironmentForCollectionAsync_PersistsPerCollection()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new EnvironmentRepository();
+        await repo.LoadAsync();
+        var env = await repo.AddEnvironmentAsync("DEV", "collection-1");
+
+        await repo.SetActiveEnvironmentForCollectionAsync("collection-1", env.Id);
+
+        var reader = new EnvironmentRepository();
+        await reader.LoadAsync();
+        Assert.Equal(env.Id, reader.UiState.ActiveEnvironmentIdByCollection["collection-1"]);
+    }
+
+    [Fact]
+    public async Task SetActiveEnvironmentForCollectionAsync_WithNull_ClearsPerCollectionSelection()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new EnvironmentRepository();
+        await repo.LoadAsync();
+        var env = await repo.AddEnvironmentAsync("DEV", "collection-1");
+        await repo.SetActiveEnvironmentForCollectionAsync("collection-1", env.Id);
+
+        await repo.SetActiveEnvironmentForCollectionAsync("collection-1", null);
+
+        Assert.False(repo.UiState.ActiveEnvironmentIdByCollection.ContainsKey("collection-1"));
+    }
+
+    [Fact]
+    public async Task DeleteEnvironmentAsync_ClearsPerCollectionActiveReferences()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new EnvironmentRepository();
+        await repo.LoadAsync();
+        var env = await repo.AddEnvironmentAsync("DEV", "collection-1");
+        await repo.SetActiveEnvironmentForCollectionAsync("collection-1", env.Id);
+        await repo.SetActiveEnvironmentForCollectionAsync("collection-2", env.Id);
+
+        await repo.DeleteEnvironmentAsync(env.Id);
+
+        Assert.Empty(repo.UiState.ActiveEnvironmentIdByCollection);
+    }
+
     // ── Variables round-trip ───────────────────────────────────────────────────
 
     [Fact]

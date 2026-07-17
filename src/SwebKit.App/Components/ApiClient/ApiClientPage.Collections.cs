@@ -323,8 +323,17 @@ public partial class ApiClientPage
 
     private async Task SelectEnvAsync(string? envId)
     {
-        _state.ActiveEnvironmentId = envId;
-        await EnvironmentRepo.SetActiveEnvironmentAsync(envId);
+        var collectionId = _state.ActiveCollection?.Id;
+        if (collectionId is not null)
+        {
+            // Remember the selection for this collection; the global ActiveEnvironmentId is the fallback.
+            await EnvironmentRepo.SetActiveEnvironmentForCollectionAsync(collectionId, envId);
+        }
+        else
+        {
+            _state.ActiveEnvironmentId = envId;
+            await EnvironmentRepo.SetActiveEnvironmentAsync(envId);
+        }
         await InvokeAsync(StateHasChanged); // BL-2
     }
 

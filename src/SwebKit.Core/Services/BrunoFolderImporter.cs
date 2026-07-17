@@ -24,7 +24,13 @@ public sealed class BrunoFolderImporter
 
     /// <summary>
     /// Imports the Bruno collection rooted at <paramref name="folderPath"/>.
-    /// The folder must contain a <c>bruno.json</c> file.
+    /// <para>
+    /// If the folder is itself a collection (contains a <c>bruno.json</c>) it is imported as a
+    /// single collection. If the folder is <em>not</em> a collection but one or more of its
+    /// immediate subdirectories are, each of those is imported as its own top-level collection —
+    /// this flattens a "workspace" folder that merely groups several Bruno collections (and, as a
+    /// side effect, lets each collection's own <c>environments/</c> folder be discovered).
+    /// </para>
     /// </summary>
     public Task<CollectionImportResult> ImportFromFolderAsync(
         string folderPath,
@@ -36,6 +42,55 @@ public sealed class BrunoFolderImporter
                 Warnings = [$"Folder not found: {folderPath}"],
             });
 
+        // Multi-collection workspace: the picked folder is not a collection, but children are.
+        var isCollectionRoot = File.Exists(Path.Combine(folderPath, "bruno.json"));
+        if (!isCollectionRoot)
+        {
+            var childCollectionDirs = Directory.GetDirectories(folderPath)
+                .Where(d => File.Exists(Path.Combine(d, "bruno.json")))
+                .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (childCollectionDirs.Count > 0)
+            {
+                var collections = new List<ApiCollection>();
+                var environments = new List<ApiEnvironment>();
+                var aggregateWarnings = new List<string>();
+                var totalRequests = 0;
+                var totalCaptures = 0;
+
+                foreach (var childDir in childCollectionDirs)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var childResult = ImportSingleCollection(childDir);
+                    collections.AddRange(childResult.Collections);
+                    environments.AddRange(childResult.Environments);
+                    aggregateWarnings.AddRange(childResult.Warnings);
+                    totalRequests += childResult.RequestCount;
+                    totalCaptures += childResult.CaptureRuleCount;
+                }
+
+                return Task.FromResult(new CollectionImportResult
+                {
+                    Collections = collections,
+                    Environments = environments,
+                    RequestCount = totalRequests,
+                    CaptureRuleCount = totalCaptures,
+                    Warnings = aggregateWarnings,
+                });
+            }
+        }
+
+        return Task.FromResult(ImportSingleCollection(folderPath));
+    }
+
+    /// <summary>
+    /// Imports a single Bruno collection rooted at <paramref name="folderPath"/>. The folder is
+    /// treated as a collection whether or not it has a <c>bruno.json</c> (the manifest only supplies
+    /// the display name; the folder name is used as a fallback).
+    /// </summary>
+    private static CollectionImportResult ImportSingleCollection(string folderPath)
+    {
         var warnings = new List<string>();
 
         // Read collection name from bruno.json (fall back to folder name)
@@ -105,6 +160,8 @@ public sealed class BrunoFolderImporter
                     var envName = Path.GetFileNameWithoutExtension(envFile);
                     var content = File.ReadAllText(envFile);
                     var env = ParseEnvironmentFile(envName, content, warnings);
+                    // Bruno environments/ files are collection environments — scope them to this collection.
+                    env.CollectionId = collection.Id;
                     environments.Add(env);
                 }
                 catch (Exception ex)
@@ -114,14 +171,14 @@ public sealed class BrunoFolderImporter
             }
         }
 
-        return Task.FromResult(new CollectionImportResult
+        return new CollectionImportResult
         {
             Collections = [collection],
             Environments = environments,
             RequestCount = requestCount,
             CaptureRuleCount = captureCount,
             Warnings = warnings,
-        });
+        };
     }
 
     // ── Directory walker ──────────────────────────────────────────────────────

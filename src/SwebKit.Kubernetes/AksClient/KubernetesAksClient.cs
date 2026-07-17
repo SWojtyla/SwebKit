@@ -36,6 +36,17 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private static readonly string[] GatewayApiVersions = ["v1", "v1beta1", "v1alpha2"];
 
+    private const string KedaApiGroup = "keda.sh";
+    private const string KedaScaledObjectsPlural = "scaledobjects";
+    private static readonly string[] KedaApiVersions = ["v1alpha1"];
+
+    /// <summary>
+    /// Cached probe result for whether the KEDA <c>ScaledObject</c> CRD is served by this cluster.
+    /// <c>null</c> = not yet probed, <c>false</c> = confirmed absent (HPA reads then skip the extra
+    /// ScaledObject list to avoid a 404 on every auto-refresh), <c>true</c> = present.
+    /// </summary>
+    private bool? _kedaCrdAvailable;
+
     /// <summary>
     /// Resource kinds — as recorded in <see cref="SwebKit.Core.Abstractions.AksAccessDeniedScope"/> denial
     /// tuples (model type name minus the "Info" suffix) — that belong to the optional Gateway API

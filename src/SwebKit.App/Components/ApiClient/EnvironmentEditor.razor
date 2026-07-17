@@ -7,6 +7,17 @@
                @oninput="e => Environment.Name = e.Value?.ToString() ?? string.Empty" />
     </div>
 
+    <div class="env-editor__scope-row">
+        <label class="env-editor__scope-label">Scope</label>
+        <select class="env-editor__scope-select" @onchange="OnScopeChanged">
+            <option value="" selected="@(Environment.CollectionId is null)">Global (all collections)</option>
+            @foreach (var collection in Collections)
+            {
+                <option value="@collection.Id" selected="@(Environment.CollectionId == collection.Id)">@collection.Name</option>
+            }
+        </select>
+    </div>
+
     <div class="env-editor__vars-header">
         <span class="env-editor__col-label">KEY</span>
         <span class="env-editor__col-label">TYPE</span>
@@ -110,8 +121,15 @@
     private static readonly Icon _iconDelete = new Icons.Regular.Size16.Delete();
 
     [Parameter, EditorRequired] public ApiEnvironment Environment { get; set; } = null!;
+    [Parameter] public IReadOnlyList<ApiCollection> Collections { get; set; } = [];
     [Parameter] public EventCallback OnSaved { get; set; }
     [Parameter] public EventCallback OnCancelled { get; set; }
+
+    private void OnScopeChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        Environment.CollectionId = string.IsNullOrEmpty(value) ? null : value;
+    }
 
     private EnvironmentVariable? _openTypePickerVar;
     private EnvironmentVariable? _openVaultPickerVar;

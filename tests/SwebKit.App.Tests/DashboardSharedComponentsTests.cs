@@ -41,6 +41,34 @@ public sealed class DashboardSharedComponentsTests : TestContext
     }
 
     [Fact]
+    public void DashboardMetricTile_HealthyZeroRendersQuietAllClearCue()
+    {
+        var cut = RenderComponent<DashboardMetricTile>(ps => ps
+            .Add(component => component.AreaLabel, "AKS")
+            .Add(component => component.IsConfigured, true)
+            .Add(component => component.Data, new HealthTileData(0, "unhealthy pods", DateTimeOffset.UtcNow))
+            .Add(component => component.FallbackLabel, "unhealthy pods"));
+
+        // Zero is the calm state: no severity class, a check cue, and "All clear".
+        Assert.Contains("is-ok", cut.Markup);
+        Assert.DoesNotContain("is-attention", cut.Markup);
+        Assert.Contains("All clear", cut.Markup);
+    }
+
+    [Fact]
+    public void DashboardMetricTile_NonZeroCountFlagsAttention()
+    {
+        var cut = RenderComponent<DashboardMetricTile>(ps => ps
+            .Add(component => component.AreaLabel, "Service Bus")
+            .Add(component => component.IsConfigured, true)
+            .Add(component => component.Data, new HealthTileData(3, "dead-lettered", DateTimeOffset.UtcNow))
+            .Add(component => component.FallbackLabel, "dead-lettered"));
+
+        Assert.Contains("is-attention", cut.Markup);
+        Assert.DoesNotContain("All clear", cut.Markup);
+    }
+
+    [Fact]
     public void DashboardMetricTile_ShowsNotConfiguredState()
     {
         var cut = RenderComponent<DashboardMetricTile>(ps => ps

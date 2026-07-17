@@ -1,36 +1,41 @@
+/* Calm health tile (Wave B). Neutral surface + thin severity hairline; strong
+   color reserved for warning/error. Healthy (value 0) renders quiet with a
+   small check cue. */
+
 .health-tile {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    padding: 1rem 1.25rem;
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--dash-tile-gap);
     min-height: 100px;
-    border-left: 4px solid transparent;
-    transition: border-color 0.15s;
+    padding: var(--dash-tile-pad);
+    padding-left: calc(var(--dash-tile-pad) + var(--dash-hairline));
+    border: 1px solid var(--dash-border);
+    border-radius: var(--dash-tile-radius);
+    background: var(--dash-surface);
+    box-shadow: var(--dash-shadow);
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
-.tile-warning {
-    border-left-color: var(--warning);
+.health-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--dash-hairline);
+    background: var(--dash-accent-neutral);
+    transition: background 0.15s;
 }
 
-.tile-error {
-    border-left-color: var(--error);
-}
-
-.tile-ok {
-    border-left-color: var(--success, #22c55e);
-}
-
-.tile-unconfigured {
-    border-left-color: var(--color-border);
-}
+.tile-warning::before { background: var(--dash-warn); }
+.tile-error::before { background: var(--dash-crit); }
+.tile-ok::before { background: var(--dash-ok); }
+.tile-unconfigured::before { background: var(--dash-accent-neutral); }
 
 .health-tile-header {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: var(--spacing-xs);
 }
 
 .health-tile-icon {
@@ -39,11 +44,11 @@
 }
 
 .health-tile-title {
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: var(--dash-eyebrow-size);
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--color-text-muted);
+    letter-spacing: var(--dash-eyebrow-tracking);
+    color: var(--dash-text-muted);
 }
 
 .health-tile-body {
@@ -57,22 +62,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0.5rem 0;
+    padding: var(--spacing-sm) 0;
 }
 
 .health-tile-unconfigured {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: var(--spacing-xs);
 }
 
 .health-tile-unconfigured-text {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
+    font-size: var(--dash-meta-size);
+    color: var(--dash-text-muted);
 }
 
 .health-tile-settings-link {
-    font-size: 0.8rem;
+    font-size: var(--dash-meta-size);
     color: var(--color-accent);
     text-decoration: none;
     cursor: pointer;
@@ -85,12 +90,12 @@
 .health-tile-error-body {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    color: var(--error);
+    gap: var(--spacing-xs);
+    color: var(--dash-crit);
 }
 
 .health-tile-error-text {
-    font-size: 0.8rem;
+    font-size: var(--dash-meta-size);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -99,26 +104,38 @@
 .health-tile-metric {
     display: flex;
     align-items: baseline;
-    gap: 0.4rem;
+    gap: var(--spacing-xs);
+}
+
+.health-tile-check {
+    align-self: center;
+    color: var(--dash-ok);
+    font-size: var(--font-size-lg);
+    font-weight: 700;
 }
 
 .health-tile-value {
-    font-size: 2rem;
-    font-weight: 700;
+    font-size: var(--dash-value-size);
+    font-weight: var(--dash-value-weight);
     line-height: 1;
+    font-variant-numeric: tabular-nums;
 }
 
 .tile-warning .health-tile-value {
-    color: var(--warning);
+    color: var(--dash-warn);
+}
+
+.tile-error .health-tile-value {
+    color: var(--dash-crit);
 }
 
 .health-tile-label {
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
+    font-size: var(--dash-label-size);
+    color: var(--dash-text-muted);
 }
 
 .health-tile-updated {
-    font-size: 0.7rem;
-    color: var(--color-text-muted);
-    margin-top: 0.25rem;
+    font-size: var(--dash-meta-size);
+    color: var(--dash-text-muted);
+    margin-top: var(--spacing-xs);
 }
