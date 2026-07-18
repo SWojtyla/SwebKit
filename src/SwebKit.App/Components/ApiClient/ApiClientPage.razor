@@ -1597,6 +1597,7 @@ StringComparison.OrdinalIgnoreCase));
             while (await _autoSaveTimer.WaitForNextTickAsync())
             {
                 if (_state.ActiveCollection is null || _state.SelectedRequest is null) continue;
+                if (!_state.IsDirty) continue;
                 try
                 {
                     if (await SaveActiveCollectionAsync())

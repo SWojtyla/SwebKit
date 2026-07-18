@@ -77,6 +77,9 @@ window.SwebKitSplitter = {
     function onMouseUp() {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      splitterEl.classList.remove('active');
       // Re-enable transitions once the drag settles (DEC-5). The width is already at
       // its final value, so restoring the transition here does not animate a jump.
       paneEl.classList.remove('is-resizing');
