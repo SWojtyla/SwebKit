@@ -132,21 +132,7 @@ public sealed class AnalyzeQueueHealthTool : IAgentTool
 
             var healthSummary = ComputeHealthSummary(stats, dlMessages.Count);
 
-            var dlMessageList = dlMessages.Select(m => new
-            {
-                message_id = m.MessageId,
-                correlation_id = m.CorrelationId,
-                subject = m.Subject,
-                content_type = m.ContentType,
-                body = m.Body,
-                enqueued_at = m.EnqueuedAt.ToString("o"),
-                delivery_count = m.DeliveryCount,
-                dead_letter_reason = m.DeadLetterReason,
-                dead_letter_error = m.DeadLetterErrorDescription,
-                sequence_number = m.SequenceNumber,
-                session_id = m.SessionId,
-                application_properties = m.ApplicationProperties
-            }).ToList();
+            var dlMessageList = dlMessages.Select(ServiceBusToolProjections.Message).ToList();
 
             object statsResult = stats != null
                 ? new
@@ -200,21 +186,7 @@ public sealed class AnalyzeQueueHealthTool : IAgentTool
 
             var healthSummary = ComputeHealthSummary(stats, dlMessages.Count);
 
-            var dlMessageList = dlMessages.Select(m => new
-            {
-                message_id = m.MessageId,
-                correlation_id = m.CorrelationId,
-                subject = m.Subject,
-                content_type = m.ContentType,
-                body = m.Body,
-                enqueued_at = m.EnqueuedAt.ToString("o"),
-                delivery_count = m.DeliveryCount,
-                dead_letter_reason = m.DeadLetterReason,
-                dead_letter_error = m.DeadLetterErrorDescription,
-                sequence_number = m.SequenceNumber,
-                session_id = m.SessionId,
-                application_properties = m.ApplicationProperties
-            }).ToList();
+            var dlMessageList = dlMessages.Select(ServiceBusToolProjections.Message).ToList();
 
             object statsResult = stats != null
                 ? new

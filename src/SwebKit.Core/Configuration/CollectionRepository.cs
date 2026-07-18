@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
@@ -8,7 +9,7 @@ namespace SwebKit.Core.Configuration;
 /// Persists and loads the full collections store (<c>collections.json</c>).
 /// Uses the atomic-write + <c>.bak</c> recovery pattern shared by all SwebKit repositories.
 /// </summary>
-public sealed class CollectionRepository
+public sealed class CollectionRepository(ILogger<CollectionRepository>? logger = null)
 {
     private static readonly JsonSerializerOptions Options = new(SwebKitJsonOptions.Indented)
     {
@@ -34,8 +35,9 @@ public sealed class CollectionRepository
             var result = await AppDataFileStore.LoadAsync(AppDataPaths.CollectionsJson, Deserialize).ConfigureAwait(false);
             _store = result.Value;
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Failed to load collections from '{File}'; falling back to an empty store.", AppDataPaths.CollectionsJson);
             _store = new CollectionsStore();
         }
     }

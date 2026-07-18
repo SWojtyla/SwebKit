@@ -123,8 +123,26 @@ public partial class KubernetesAksClient
         return Task.CompletedTask;
     }
 
+    // Kubernetes object names are DNS-1123 labels/subdomains: lowercase alphanumerics, '-' and
+    // '.' only. Enforcing this before the values reach an interactive shell command line closes
+    // any command-injection avenue (e.g. a hostile pod/namespace/container name containing shell
+    // metacharacters such as '&' or '|' being launched via cmd.exe / wt.exe with UseShellExecute).
+    private static readonly Regex KubernetesNamePattern =
+        new("^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$", RegexOptions.Compiled);
+
+    private static string ValidateKubernetesName(string value, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 253 || !KubernetesNamePattern.IsMatch(value))
+            throw new ArgumentException($"Invalid Kubernetes {paramName} name: '{value}'.", paramName);
+        return value;
+    }
+
     public Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default)
     {
+        ValidateKubernetesName(ns, nameof(ns));
+        ValidateKubernetesName(podName, nameof(podName));
+        ValidateKubernetesName(container, nameof(container));
+
         var kubeconfigArgs = BuildKubeconfigArgs();
         var args = $"exec -it {podName} -n {ns} -c {container}{kubeconfigArgs} -- /bin/sh";
         try

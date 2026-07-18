@@ -363,8 +363,9 @@ public sealed class RedisClient : IRedisClient
         {
             return new RedisSlowLogSummary([], false, top, RedisInsightCapability.PermissionLimited);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Redis SLOWLOG GET failed; reporting the slow log as unavailable.");
             return new RedisSlowLogSummary([], false, top, RedisInsightCapability.Failed);
         }
     }
@@ -419,8 +420,9 @@ public sealed class RedisClient : IRedisClient
         {
             return new RedisPubSubSnapshot([], 0, false, maxChannels, RedisInsightCapability.PermissionLimited);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Redis PUBSUB introspection failed; reporting the pub/sub snapshot as unavailable.");
             return new RedisPubSubSnapshot([], 0, false, maxChannels, RedisInsightCapability.Failed);
         }
     }

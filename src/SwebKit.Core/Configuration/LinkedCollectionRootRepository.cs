@@ -1,11 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
 namespace SwebKit.Core.Configuration;
 
-public sealed class LinkedCollectionRootRepository
+public sealed class LinkedCollectionRootRepository(ILogger<LinkedCollectionRootRepository>? logger = null)
 {
     private static readonly JsonSerializerOptions Options = new(SwebKitJsonOptions.Indented)
     {
@@ -31,8 +32,9 @@ public sealed class LinkedCollectionRootRepository
             var result = await AppDataFileStore.LoadAsync(AppDataPaths.ApiLinkedRootsJson, Deserialize).ConfigureAwait(false);
             _store = result.Value;
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Failed to load linked collection roots from '{File}'; falling back to an empty store.", AppDataPaths.ApiLinkedRootsJson);
             _store = new LinkedCollectionRootStore();
         }
     }
