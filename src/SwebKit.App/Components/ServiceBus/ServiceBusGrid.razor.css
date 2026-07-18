@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════
    Service Bus Grid — full-width entity overview
-   Columns: [glyph] [name 1fr] [active 64px] [dlq 64px] [sched 64px] [actions auto]
+   Columns: [glyph] [name 1fr] [active 64px] [dlq 64px] [sched 64px] [actions 36px]
    ═══════════════════════════════════════════════════════════ */
 
 .sbg {
@@ -152,7 +152,7 @@
 .sbg-cols {
     flex-shrink: 0;
     display: grid;
-    grid-template-columns: 28px 1fr 52px 52px 52px 160px;
+    grid-template-columns: 28px 1fr 64px 64px 64px 36px;
     align-items: center;
     padding: 5px 12px;
     border-bottom: 2px solid var(--color-border);
@@ -206,9 +206,8 @@
 
 .sbg-panel:last-child { border-right: none; }
 
-/* Sticky column headers per panel */
+/* Sticky column headers per panel — now lives inside .sbg-panel-rows */
 .sbg-cols-sticky {
-    flex-shrink: 0;
     position: sticky;
     top: 0;
     z-index: 1;
@@ -266,7 +265,7 @@
 
 .sbg-row {
     display: grid;
-    grid-template-columns: 28px 1fr 52px 52px 52px 160px;
+    grid-template-columns: 28px 1fr 64px 64px 64px 36px;
     align-items: center;
     padding: 6px 12px;
     border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
@@ -315,50 +314,75 @@
     line-height: 1.35;
 }
 
-/* Count cells */
-.sbg-col-count {
+/* Count cells.
+   NOTE: count cells are emitted by the RenderCount RenderFragment (manual
+   RenderTreeBuilder), which does NOT receive the CSS-isolation scope attribute.
+   Every rule therefore needs a ::deep twin (matched via the scoped .sbg-row parent). */
+.sbg-col-count,
+::deep .sbg-col-count {
+    display: block;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
     text-align: right;
     padding-right: 8px;
     font-weight: 500;
+    min-width: 0;
+    border: none;
+    color: inherit;
+    width: 100%;
+    background: transparent;
 }
 
-.sbg-count-active { color: var(--color-success); }
-.sbg-count-dlq    { color: var(--color-error); }
-.sbg-count-sched  { color: var(--color-warning, #fb8c00); }
-.sbg-count-muted  { color: var(--color-text-faint); }
-.sbg-count-zero   { color: var(--color-text-faint); font-weight: 400; }
+/* Clickable count cells: strip the app-button pill (centered inline-flex,
+   min-height 28px, 1px border, bold font) so the number right-aligns on the exact
+   same edge as the column header. */
+.sbg-col-count.app-button,
+::deep .sbg-col-count.app-button {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    min-height: 0;
+    border: none;
+    padding: 3px 8px 3px 2px;
+    text-align: right;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    border-radius: var(--radius-sm);
+}
+
+.sbg-count-active,
+::deep .sbg-count-active { color: var(--color-success); }
+::deep .sbg-col-count.sbg-count-active.app-button--ghost { color: var(--color-success); }
+::deep .sbg-col-count.sbg-count-active.app-button--ghost:hover:not(:disabled) { color: var(--color-success); background: rgba(16, 124, 16, 0.08); }
+
+.sbg-count-dlq,
+::deep .sbg-count-dlq { color: var(--color-error); }
+::deep .sbg-col-count.sbg-count-dlq.app-button--ghost { color: var(--color-error); }
+::deep .sbg-col-count.sbg-count-dlq.app-button--ghost:hover:not(:disabled) { color: var(--color-error); background: rgba(229, 57, 53, 0.08); }
+
+.sbg-count-sched,
+::deep .sbg-count-sched { color: var(--color-warning, #fb8c00); }
+.sbg-count-muted,
+::deep .sbg-count-muted { color: var(--color-text-faint); }
+.sbg-count-zero,
+::deep .sbg-count-zero { color: var(--color-text-faint); font-weight: 400; }
 
 @keyframes sbg-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
-.sbg-loading-dot { animation: sbg-pulse 1.4s ease-in-out infinite; color: var(--color-text-faint); }
+.sbg-loading-dot,
+::deep .sbg-loading-dot { animation: sbg-pulse 1.4s ease-in-out infinite; color: var(--color-text-faint); }
 
 /* Row action buttons */
 .sbg-col-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    justify-content: flex-end;
+    gap: 3px;
     flex-shrink: 0;
-    padding-left: 8px;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
-.sbg-act {
-    padding: 3px 10px; font-size: 11px; font-weight: 600;
-    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
-    background: var(--color-surface-2); color: var(--color-text-muted);
-    cursor: pointer; white-space: nowrap; line-height: 1.4;
-    transition: border-color 0.1s, background 0.1s, color 0.1s;
-}
-.sbg-act:hover { border-color: var(--color-accent); background: var(--color-accent-subtle); color: var(--color-accent); }
-.sbg-act:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
-
-.sbg-act-open:hover { border-color: var(--color-accent); background: var(--color-accent-subtle); color: var(--color-accent); }
-
-.sbg-act-dlq:hover, .sbg-act-dlq-hot {
-    border-color: color-mix(in srgb, var(--color-error) 55%, var(--color-border));
-    background: rgba(229,57,53,0.08); color: var(--color-error);
-}
-
-.sbg-act-pin { border-radius: 999px; }
-.sbg-act-pin:hover { border-color: var(--color-accent); background: var(--color-accent-subtle); color: var(--color-accent); }
-.sbg-act-pin.pinned { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-solid-foreground, white); }
+.sbg-col-actions .app-icon-button { margin: 0; flex-shrink: 0; }

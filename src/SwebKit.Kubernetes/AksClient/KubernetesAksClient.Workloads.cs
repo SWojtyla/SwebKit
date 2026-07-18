@@ -277,29 +277,21 @@ public partial class KubernetesAksClient
     {
         return await WithAuthRetryAsync(async () =>
         {
+            List<HpaInfo> hpas;
             try
             {
                 var result = await _client.AutoscalingV2.ListNamespacedHorizontalPodAutoscalerAsync(ns, cancellationToken: ct).ConfigureAwait(false);
-                return result.Items.Select(MapHpaV2).ToList();
+                hpas = result.Items.Select(MapHpaV2).ToList();
             }
             catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
             {
                 // Fall back to autoscaling/v1 on older clusters
                 var result = await _client.AutoscalingV1.ListNamespacedHorizontalPodAutoscalerAsync(ns, cancellationToken: ct).ConfigureAwait(false);
-                return result.Items.Select(hpa => new HpaInfo
-                {
-                    Name = hpa.Metadata.Name,
-                    Namespace = hpa.Metadata.NamespaceProperty ?? ns,
-                    TargetKind = hpa.Spec?.ScaleTargetRef?.Kind ?? "Deployment",
-                    TargetName = hpa.Spec?.ScaleTargetRef?.Name ?? string.Empty,
-                    MinReplicas = hpa.Spec?.MinReplicas ?? 1,
-                    MaxReplicas = hpa.Spec?.MaxReplicas ?? 1,
-                    CurrentReplicas = hpa.Status?.CurrentReplicas ?? 0,
-                    DesiredReplicas = hpa.Status?.DesiredReplicas ?? 0,
-                    CurrentCpuUtilizationPercent = hpa.Status?.CurrentCPUUtilizationPercentage,
-                    TargetCpuUtilizationPercent = hpa.Spec?.TargetCPUUtilizationPercentage
-                }).ToList();
+                hpas = result.Items.Select(MapHpaV1).ToList();
             }
+
+            await ApplyKedaScalingStateAsync(ns, hpas, ct).ConfigureAwait(false);
+            return (IReadOnlyList<HpaInfo>)hpas;
         }).ConfigureAwait(false);
     }
 
@@ -311,7 +303,7 @@ public partial class KubernetesAksClient
         var cpuTarget = hpa.Spec?.Metrics
             ?.FirstOrDefault(m => m.Type == "Resource" && m.Resource?.Name == "cpu");
 
-        return new HpaInfo
+        var info = new HpaInfo
         {
             Name = hpa.Metadata.Name,
             Namespace = ns,
@@ -342,6 +334,282 @@ public partial class KubernetesAksClient
                 Message = c.Message
             }).ToList() ?? []
         };
+
+        ApplyScalingMetadata(info, hpa.Metadata);
+        return info;
+    }
+
+    private static HpaInfo MapHpaV1(V1HorizontalPodAutoscaler hpa)
+    {
+        var info = new HpaInfo
+        {
+            Name = hpa.Metadata.Name,
+            Namespace = hpa.Metadata.NamespaceProperty ?? string.Empty,
+            TargetKind = hpa.Spec?.ScaleTargetRef?.Kind ?? "Deployment",
+            TargetName = hpa.Spec?.ScaleTargetRef?.Name ?? string.Empty,
+            MinReplicas = hpa.Spec?.MinReplicas ?? 1,
+            MaxReplicas = hpa.Spec?.MaxReplicas ?? 1,
+            CurrentReplicas = hpa.Status?.CurrentReplicas ?? 0,
+            DesiredReplicas = hpa.Status?.DesiredReplicas ?? 0,
+            CurrentCpuUtilizationPercent = hpa.Status?.CurrentCPUUtilizationPercentage,
+            TargetCpuUtilizationPercent = hpa.Spec?.TargetCPUUtilizationPercentage
+        };
+
+        ApplyScalingMetadata(info, hpa.Metadata);
+        return info;
+    }
+
+    /// <summary>
+    /// Attaches KEDA-ownership and disabled-state hints that can be read straight from the HPA's own
+    /// metadata (zero extra API calls). The KEDA <em>paused</em> state lives on the ScaledObject, not
+    /// the HPA, and is resolved separately in <see cref="ApplyKedaScalingStateAsync"/>.
+    /// </summary>
+    private static void ApplyScalingMetadata(HpaInfo info, V1ObjectMeta? meta)
+    {
+        if (meta?.Labels is { } labels
+            && labels.TryGetValue(AksScalingAnnotations.KedaScaledObjectNameLabel, out var scaledObject)
+            && !string.IsNullOrWhiteSpace(scaledObject))
+        {
+            info.IsKedaManaged = true;
+            info.ScaledObjectName = scaledObject;
+        }
+
+        // Plain-HPA freeze marker. (KEDA-managed HPAs carry no such marker — their paused state is
+        // read from the owning ScaledObject instead.)
+        if (!info.IsKedaManaged
+            && meta?.Annotations is { } annotations
+            && annotations.TryGetValue(AksScalingAnnotations.ScalingDisabled, out var flag)
+            && string.Equals(flag, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            info.IsScalingDisabled = true;
+        }
+    }
+
+    /// <summary>
+    /// For any KEDA-managed HPAs in <paramref name="hpas"/>, resolves their disabled (paused) state
+    /// from the owning ScaledObjects with a single list call per namespace. Failures here are
+    /// deliberately swallowed — enriching paused state must never break plain HPA browsing.
+    /// </summary>
+    private async Task ApplyKedaScalingStateAsync(string ns, List<HpaInfo> hpas, CancellationToken ct)
+    {
+        if (_kedaCrdAvailable == false)
+            return;
+        if (!hpas.Any(h => h.IsKedaManaged))
+            return;
+
+        object? raw;
+        try
+        {
+            raw = await _client.CustomObjects.ListNamespacedCustomObjectAsync(
+                KedaApiGroup, KedaApiVersions[0], ns, KedaScaledObjectsPlural, cancellationToken: ct).ConfigureAwait(false);
+            _kedaCrdAvailable = true;
+        }
+        catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+        {
+            // KEDA CRD isn't installed on this cluster — remember so we skip the extra call next time.
+            _kedaCrdAvailable = false;
+            return;
+        }
+        catch (k8s.Autorest.HttpOperationException)
+        {
+            // Forbidden or transient — leave paused state unknown for this pass without failing the load.
+            return;
+        }
+
+        var pausedByName = ParseScaledObjectPausedMap(raw);
+        foreach (var hpa in hpas)
+        {
+            if (hpa is { IsKedaManaged: true, ScaledObjectName: { } name }
+                && pausedByName.TryGetValue(name, out var isPaused))
+            {
+                hpa.IsScalingDisabled = isPaused;
+            }
+        }
+    }
+
+    private static Dictionary<string, bool> ParseScaledObjectPausedMap(object? raw)
+    {
+        var map = new Dictionary<string, bool>(StringComparer.Ordinal);
+        if (raw is null)
+            return map;
+
+        var json = JsonSerializer.Serialize(raw);
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+            return map;
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (!item.TryGetProperty("metadata", out var meta)
+                || !meta.TryGetProperty("name", out var nameEl)
+                || nameEl.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var paused = false;
+            if (meta.TryGetProperty("annotations", out var ann)
+                && ann.ValueKind == JsonValueKind.Object
+                && ann.TryGetProperty(AksScalingAnnotations.KedaPaused, out var pausedEl)
+                && pausedEl.ValueKind == JsonValueKind.String)
+            {
+                paused = string.Equals(pausedEl.GetString(), "true", StringComparison.OrdinalIgnoreCase);
+            }
+
+            map[nameEl.GetString()!] = paused;
+        }
+
+        return map;
+    }
+
+    public async Task SetHpaScalingEnabledAsync(string ns, string hpaName, bool enabled, CancellationToken ct = default)
+    {
+        await WithAuthRetryAsync(async () =>
+        {
+            var (v2, v1) = await ReadHpaAsync(ns, hpaName, ct).ConfigureAwait(false);
+
+            var labels = v2?.Metadata?.Labels ?? v1?.Metadata?.Labels;
+            var annotations = v2?.Metadata?.Annotations ?? v1?.Metadata?.Annotations;
+
+            // KEDA-managed HPA: toggle the ScaledObject's native pause annotation.
+            if (labels is not null
+                && labels.TryGetValue(AksScalingAnnotations.KedaScaledObjectNameLabel, out var scaledObjectName)
+                && !string.IsNullOrWhiteSpace(scaledObjectName))
+            {
+                await SetKedaPausedAsync(ns, scaledObjectName, paused: !enabled, ct).ConfigureAwait(false);
+                return;
+            }
+
+            // Plain HPA: freeze at current replicas (disable) or restore the stashed bounds (enable).
+            var minReplicas = v2?.Spec?.MinReplicas ?? v1?.Spec?.MinReplicas ?? 1;
+            var maxReplicas = v2?.Spec?.MaxReplicas ?? v1?.Spec?.MaxReplicas ?? 1;
+            var currentReplicas = v2?.Status?.CurrentReplicas ?? v1?.Status?.CurrentReplicas ?? 0;
+
+            string patchJson;
+            if (!enabled)
+            {
+                var freeze = currentReplicas > 0 ? currentReplicas : Math.Max(maxReplicas, 1);
+                patchJson = JsonSerializer.Serialize(new
+                {
+                    metadata = new
+                    {
+                        annotations = new Dictionary<string, string?>
+                        {
+                            [AksScalingAnnotations.ScalingDisabled] = "true",
+                            [AksScalingAnnotations.OriginalBounds] = $"{minReplicas}/{maxReplicas}"
+                        }
+                    },
+                    spec = new { minReplicas = freeze, maxReplicas = freeze }
+                });
+            }
+            else
+            {
+                var (restoreMin, restoreMax) = ParseOriginalBounds(annotations, minReplicas, maxReplicas);
+                patchJson = JsonSerializer.Serialize(new
+                {
+                    // Null values in a JSON merge patch remove the annotation keys.
+                    metadata = new
+                    {
+                        annotations = new Dictionary<string, string?>
+                        {
+                            [AksScalingAnnotations.ScalingDisabled] = null,
+                            [AksScalingAnnotations.OriginalBounds] = null
+                        }
+                    },
+                    spec = new { minReplicas = restoreMin, maxReplicas = restoreMax }
+                });
+            }
+
+            var patch = new V1Patch(patchJson, V1Patch.PatchType.MergePatch);
+            if (v2 is not null)
+            {
+                await _client.AutoscalingV2.PatchNamespacedHorizontalPodAutoscalerAsync(
+                    patch, hpaName, ns, cancellationToken: ct).ConfigureAwait(false);
+            }
+            else
+            {
+                await _client.AutoscalingV1.PatchNamespacedHorizontalPodAutoscalerAsync(
+                    patch, hpaName, ns, cancellationToken: ct).ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reads an HPA preferring <c>autoscaling/v2</c>, falling back to <c>v1</c> when v2 is unavailable.
+    /// Returns exactly one of the two typed objects (the other is <c>null</c>).
+    /// </summary>
+    private async Task<(V2HorizontalPodAutoscaler? V2, V1HorizontalPodAutoscaler? V1)> ReadHpaAsync(
+        string ns, string name, CancellationToken ct)
+    {
+        try
+        {
+            var v2 = await _client.AutoscalingV2.ReadNamespacedHorizontalPodAutoscalerAsync(name, ns, cancellationToken: ct).ConfigureAwait(false);
+            return (v2, null);
+        }
+        catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+        {
+            var v1 = await _client.AutoscalingV1.ReadNamespacedHorizontalPodAutoscalerAsync(name, ns, cancellationToken: ct).ConfigureAwait(false);
+            return (null, v1);
+        }
+    }
+
+    private async Task SetKedaPausedAsync(string ns, string scaledObjectName, bool paused, CancellationToken ct)
+    {
+        var patchJson = JsonSerializer.Serialize(new
+        {
+            metadata = new
+            {
+                annotations = new Dictionary<string, string>
+                {
+                    [AksScalingAnnotations.KedaPaused] = paused ? "true" : "false"
+                }
+            }
+        });
+        var patch = new V1Patch(patchJson, V1Patch.PatchType.MergePatch);
+
+        foreach (var version in KedaApiVersions)
+        {
+            try
+            {
+                await _client.CustomObjects.PatchNamespacedCustomObjectAsync(
+                    patch, KedaApiGroup, version, ns, KedaScaledObjectsPlural, scaledObjectName, cancellationToken: ct).ConfigureAwait(false);
+                _kedaCrdAvailable = true;
+                return;
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+                // Try the next served API version, if any.
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"KEDA ScaledObject '{scaledObjectName}' was not found in namespace '{ns}'.");
+    }
+
+    /// <summary>
+    /// Parses the SwebKit "{min}/{max}" bounds stash written when a plain HPA was frozen. Falls back to
+    /// the HPA's current bounds when the stash is missing or malformed (e.g. the HPA was disabled
+    /// outside SwebKit) so re-enabling still produces a valid, non-frozen HPA where possible.
+    /// </summary>
+    private static (int Min, int Max) ParseOriginalBounds(
+        IDictionary<string, string>? annotations, int fallbackMin, int fallbackMax)
+    {
+        if (annotations is not null
+            && annotations.TryGetValue(AksScalingAnnotations.OriginalBounds, out var raw)
+            && !string.IsNullOrWhiteSpace(raw))
+        {
+            var parts = raw.Split('/', 2);
+            if (parts.Length == 2
+                && int.TryParse(parts[0], out var min)
+                && int.TryParse(parts[1], out var max)
+                && min >= 1 && max >= min)
+            {
+                return (min, max);
+            }
+        }
+
+        var safeMin = fallbackMin >= 1 ? fallbackMin : 1;
+        return (safeMin, Math.Max(fallbackMax, safeMin));
     }
 
     internal static double ParseCpuToMillicores(string cpu)

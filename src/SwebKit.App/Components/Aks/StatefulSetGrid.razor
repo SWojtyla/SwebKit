@@ -39,9 +39,10 @@
             }
             @if (ssHpa is not null)
             {
-                <button class="aks-hpa-badge @(ssHpa.CurrentReplicas == ssHpa.DesiredReplicas ? "" : "hpa-scaling")"
+                <button class="aks-hpa-badge @HpaBadgeClass(ssHpa)"
+                        title="@(ssHpa.IsScalingDisabled ? "Autoscaling disabled" : null)"
                         @onclick="() => OnOpenHpa.InvokeAsync(ssHpa)" @onclick:stopPropagation>
-                    <span class="hpa-icon">⇅</span>
+                    <span class="hpa-icon">@(ssHpa.IsScalingDisabled ? "⏸" : "⇅")</span>
                     <span class="hpa-replicas">@ssHpa.CurrentReplicas / @ssHpa.MaxReplicas</span>
                     @if (ssHpa.CurrentCpuUtilizationPercent.HasValue)
                     {
@@ -74,6 +75,12 @@ Enumerable.Empty<StatefulSetInfo>().AsQueryable();
     [Parameter] public EventCallback<HpaInfo> OnOpenHpa { get; set; }
     [Parameter] public EventCallback<StatefulSetInfo> OnOpenNetworkAnalysis { get; set; }
     [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+
+    private static string HpaBadgeClass(HpaInfo hpa)
+    {
+        if (hpa.IsScalingDisabled) return "hpa-disabled";
+        return hpa.CurrentReplicas == hpa.DesiredReplicas ? "" : "hpa-scaling";
+    }
 
     private static string StatefulSetRowClass(StatefulSetInfo ss, StatefulSetInfo? selected)
     {

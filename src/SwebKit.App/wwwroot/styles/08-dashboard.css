@@ -1,0 +1,77 @@
+/*
+   SwebKit CSS layer: dashboard design tokens (Wave B — dashboard-redesign)
+
+   Calm, minimal dashboard language. One display size for values, one label
+   size, one meta size; a muted neutral surface; area color used only as a thin
+   accent cue; severity (warn/crit) the only strong color; a single subtle
+   elevation token instead of border chrome.
+
+   Tokens are declared on :root so they inherit into the CSS-isolated tile
+   components (DashboardMetricTile / DashboardWatchTile / HealthTile) without any
+   parent-page style reaching into them (DEC-DR-3). They reference the existing
+   theme tokens, so they resolve correctly in every light/dark theme.
+*/
+
+:root {
+    /* rhythm — generous whitespace, taller tiles */
+    --dash-board-gap: var(--spacing-lg);
+    --dash-tile-pad: var(--spacing-lg);
+    --dash-tile-pad-tight: var(--spacing-md);
+    --dash-tile-radius: var(--radius-md);
+    --dash-tile-gap: var(--spacing-sm);
+
+    /* surface & elevation — one subtle shadow, hairline border only */
+    --dash-surface: var(--color-surface);
+    --dash-surface-inset: color-mix(in srgb, var(--color-surface-2) 70%, transparent);
+    --dash-border: var(--color-border);
+    --dash-border-strong: color-mix(in srgb, var(--color-border) 90%, var(--color-text-muted));
+    --dash-shadow: var(--shadow-sm);
+    --dash-hairline: 3px;
+
+    /* typography-first hierarchy — three sizes total */
+    --dash-value-size: clamp(1.7rem, 2.8vw, 2.35rem);
+    --dash-value-weight: 600;
+    --dash-label-size: var(--font-size-md);
+    --dash-meta-size: var(--font-size-sm);
+    --dash-eyebrow-size: var(--font-size-xs);
+    --dash-eyebrow-tracking: 0.06em;
+
+    /* text roles */
+    --dash-text: var(--color-text);
+    --dash-text-muted: var(--color-text-muted);
+    --dash-text-faint: var(--color-text-faint);
+
+    /* severity — the only strong color on the board */
+    --dash-warn: var(--color-warning);
+    --dash-crit: var(--color-error);
+    --dash-ok: var(--color-success);
+
+    /* area accent cues (hairline / icon tint only, never a fill) */
+    --dash-accent-workspace: var(--color-nav-dashboard);
+    --dash-accent-servicebus: var(--color-nav-servicebus);
+    --dash-accent-aks: var(--color-nav-aks);
+    --dash-accent-redis: var(--color-nav-redis);
+    --dash-accent-pipelines: var(--color-nav-pipelines);
+    --dash-accent-neutral: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+}
+
+/* Dark mode enhancements for better contrast and readability */
+[data-theme='dark'],
+.app-shell:not([data-theme]) {
+    --dash-surface: #1a1a28;
+    --dash-surface-inset: rgba(255, 255, 255, 0.05);
+    --dash-border: #3a3a4a;
+    --dash-border-strong: #5a5a6a;
+    --dash-hairline: 3px;
+    --dash-accent-neutral: rgba(144, 144, 168, 0.6);
+}
+
+/* Light mode enhancements */
+[data-theme='light'] {
+    --dash-surface: #ffffff;
+    --dash-surface-inset: rgba(0, 0, 0, 0.04);
+    --dash-border: #e0e0e8;
+    --dash-border-strong: #b0b0b8;
+    --dash-hairline: 3px;
+    --dash-accent-neutral: rgba(100, 100, 120, 0.5);
+}

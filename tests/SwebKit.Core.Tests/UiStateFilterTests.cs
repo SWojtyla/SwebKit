@@ -366,8 +366,11 @@ public class UiStateFilterTests
     }
 
     [Fact]
-    public async Task DashboardPreferences_LegacyTilesMigrateIntoGeneratedDefaultView()
+    public async Task DashboardPreferences_LegacyPayload_CleanResetsTilesToDefaults()
     {
+        // A pre-redesign payload (schema < 3) must load without crashing and reset tile
+        // visibility/order/size to the new defaults — no migration of the old command-center
+        // layout (DEC-DR-2). The persisted dead-letters "hidden/small" is discarded.
         using var _ = new AppDataSandbox();
 
         var json =
@@ -391,13 +394,70 @@ public class UiStateFilterTests
 
         var preferences = repo.GetDashboardPreferences(DefaultDashboardTiles());
 
-        Assert.Equal(2, preferences.SchemaVersion);
+        Assert.Equal(DashboardPreferences.CurrentSchemaVersion, preferences.SchemaVersion);
         Assert.Single(preferences.Views);
         Assert.Equal("Default view", preferences.Views[0].Title);
         Assert.Equal(preferences.Views[0].Id, preferences.ActiveViewId);
-        Assert.Equal(preferences.Views[0].Tiles.Select(static tile => tile.TileId), preferences.Tiles.Select(static tile => tile.TileId));
-        Assert.False(preferences.Views[0].Tiles[0].IsVisible);
-        Assert.Equal("1x1", preferences.Views[0].Tiles[0].Size);
+
+        // Tiles are the fresh defaults, in default order — not the legacy persisted values.
+        Assert.Equal(
+            DefaultDashboardTiles().Select(static tile => tile.TileId),
+            preferences.Views[0].Tiles.Select(static tile => tile.TileId));
+        var deadLetters = preferences.Views[0].Tiles.Single(static tile => tile.TileId == "service-bus.dead-letters");
+        Assert.True(deadLetters.IsVisible);   // reset to default, ignoring persisted isVisible:false
+        Assert.Equal("1x1", deadLetters.Size); // reset to default, ignoring persisted "small"
+    }
+
+    [Fact]
+    public async Task DashboardPreferences_LegacyPayload_PreservesSavedViewsButResetsTheirTiles()
+    {
+        // Clean reset preserves view identity (id/title/filters) across a schema upgrade while
+        // re-seeding each view's tiles from the defaults (test-plan C3).
+        using var _ = new AppDataSandbox();
+
+        var json =
+            """
+            {
+                "dashboard": {
+                    "schemaVersion": 2,
+                    "activeViewId": "focus",
+                    "views": [
+                        {
+                            "id": "default",
+                            "title": "Default view",
+                            "isDefault": true,
+                            "tiles": [ { "tileId": "shell.open-tabs", "isVisible": true, "size": "4x2" } ]
+                        },
+                        {
+                            "id": "focus",
+                            "title": "Attention only",
+                            "tiles": [ { "tileId": "legacy.removed-tile", "isVisible": true, "size": "small" } ],
+                            "filters": { "area": "service-bus", "severity": "attention" }
+                        }
+                    ]
+                }
+            }
+            """;
+
+        AppDataPaths.EnsureDirectoryExists();
+        await File.WriteAllTextAsync(AppDataPaths.UiStateJson, json);
+
+        var repo = new UiStateRepository();
+        await repo.LoadAsync();
+
+        var preferences = repo.GetDashboardPreferences(DefaultDashboardTiles());
+
+        Assert.Equal(DashboardPreferences.CurrentSchemaVersion, preferences.SchemaVersion);
+        Assert.Equal(2, preferences.Views.Count);
+        Assert.Equal("focus", preferences.ActiveViewId); // active view honored
+
+        var focus = preferences.Views.Single(static view => view.Id == "focus");
+        Assert.Equal("Attention only", focus.Title);            // title preserved
+        Assert.Equal("service-bus", focus.Filters.Area);        // filters preserved
+        Assert.Equal("attention", focus.Filters.Severity);
+        Assert.Equal(                                           // tiles reset to defaults
+            DefaultDashboardTiles().Select(static tile => tile.TileId),
+            focus.Tiles.Select(static tile => tile.TileId));
     }
 
     [Fact]

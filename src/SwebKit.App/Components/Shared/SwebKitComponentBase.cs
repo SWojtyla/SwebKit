@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using SwebKit.Core.Configuration;
 
 namespace SwebKit.App.Components.Shared;
 
@@ -7,20 +8,100 @@ namespace SwebKit.App.Components.Shared;
 /// - IsLoading / ErrorMessage state with BL-2-safe StateHasChanged dispatch
 /// - RunAsync helper that enforces CS-2 (OperationCanceledException re-throw)
 ///   and BL-2 (InvokeAsync after await)
+/// - Configurable render coalescing with debounce support
+/// - Performance metrics tracking for render optimization
 /// </summary>
-public abstract class SwebKitComponentBase : ComponentBase
+public abstract class SwebKitComponentBase : ComponentBase, IDisposable
 {
     private bool _needsRender = true;
     private bool _renderPending; // coalescing gate
+    private CancellationTokenSource? _renderCts;
+    private RenderCoalescingOptions? _coalescingOptions;
 
-    protected bool IsLoading { get; private set; }
-    protected string? ErrorMessage { get; private set; }
+    protected bool IsLoading { get; set; }
+    protected string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Performance metrics for render coalescing effectiveness.
+    /// </summary>
+    protected record RenderMetrics(int RequestedCount, int ExecutedCount, int CoalescedCount)
+    {
+        public double CoalescingRatio => RequestedCount > 0 ? (double)CoalescedCount / RequestedCount : 0;
+    }
+
+    private int _renderRequestedCount;
+    private int _renderExecutedCount;
+    private int _renderCoalescedCount;
+
+    /// <summary>
+    /// Gets the current render metrics. Override to integrate with telemetry systems.
+    /// </summary>
+    protected virtual RenderMetrics GetRenderMetrics() => new(_renderRequestedCount, _renderExecutedCount, _renderCoalescedCount);
+
+    /// <summary>
+    /// Logs render metrics for telemetry and performance monitoring.
+    /// Override to integrate with logging/telemetry systems.
+    /// </summary>
+    protected virtual void LogMetrics()
+    {
+        var metrics = GetRenderMetrics();
+        if (metrics.RequestedCount > 0 && metrics.CoalescingRatio < 0.1)
+        {
+            // Warning: Low coalescing effectiveness may indicate suboptimal debounce tuning
+            Console.WriteLine($"[RenderMetrics] {GetType().Name}: Coalescing ratio {metrics.CoalescingRatio:P2} ({metrics.CoalescedCount}/{metrics.RequestedCount} coalesced)");
+        }
+    }
+
+    /// <summary>
+    /// Sets the render coalescing configuration options.
+    /// Call from component initialization or dependency injection.
+    /// </summary>
+    protected void SetCoalescingOptions(RenderCoalescingOptions options)
+    {
+        _coalescingOptions = options;
+    }
+
+    /// <summary>
+    /// Gets the debounce window for render coalescing. Override for component-specific tuning.
+    /// Uses configured value if available, otherwise returns default 75ms.
+    /// </summary>
+    protected virtual TimeSpan GetCoalescingDebounce()
+    {
+        var componentType = GetType().Name;
+        if (_coalescingOptions?.ComponentOverrides.TryGetValue(componentType, out var overrideMs) == true)
+        {
+            return TimeSpan.FromMilliseconds(overrideMs);
+        }
+        return TimeSpan.FromMilliseconds(_coalescingOptions?.DefaultDebounceMs ?? 75);
+    }
 
     protected override bool ShouldRender()
     {
         if (!_needsRender) return false;
         _needsRender = false;
+        _renderExecutedCount++;
         return true;
+    }
+
+    /// <summary>
+    /// Ensures parameter changes pushed down from a parent component always result in a render.
+    /// Without this, the <see cref="ShouldRender"/> gate (which defaults to closed after the first
+    /// render) would silently swallow parent-driven updates unless the component happened to call
+    /// <see cref="RequestRender"/> itself. Subclasses overriding <c>OnParametersSet</c> or
+    /// <c>OnParametersSetAsync</c> are unaffected since this runs independently in the lifecycle.
+    /// </summary>
+    protected override void OnParametersSet() => RequestRender();
+
+    /// <summary>
+    /// Shadows <see cref="ComponentBase.StateHasChanged"/> to also open the
+    /// <see cref="ShouldRender"/> gate. Without this, direct StateHasChanged()
+    /// calls in derived classes (e.g. event handlers) are silently suppressed
+    /// because _needsRender remains false after the previous render.
+    /// </summary>
+    protected new void StateHasChanged()
+    {
+        _needsRender = true;
+        base.StateHasChanged();
     }
 
     /// <summary>
@@ -30,20 +111,49 @@ public abstract class SwebKitComponentBase : ComponentBase
     protected void RequestRender() => _needsRender = true;
 
     /// <summary>
+    /// Marks the component as needing a render and asynchronously requests a UI update.
+    /// Use in async methods instead of <c>await InvokeAsync(StateHasChanged)</c>.
+    /// </summary>
+    protected async Task RequestRenderAsync()
+    {
+        _needsRender = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
     /// Coalesces rapid event-driven re-render requests into a single Blazor render cycle.
     /// Safe to call from any thread (uses InvokeAsync internally).
     /// Sets the ShouldRender gate so the queued render is not suppressed.
+    /// Uses configurable debounce window via GetCoalescingDebounce().
     /// Use in event callback handlers instead of raw InvokeAsync(StateHasChanged).
     /// </summary>
     protected void RequestCoalescedRender()
     {
+        _renderRequestedCount++;
         _needsRender = true;
-        if (_renderPending) return;
-        _renderPending = true;
-        _ = InvokeAsync(() =>
+        if (_renderPending)
         {
-            _renderPending = false;
-            StateHasChanged();
+            _renderCoalescedCount++;
+            return;
+        }
+        _renderPending = true;
+
+        _renderCts ??= new CancellationTokenSource();
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await Task.Delay(GetCoalescingDebounce(), _renderCts.Token);
+                if (!_renderCts.Token.IsCancellationRequested)
+                {
+                    _renderPending = false;
+                    StateHasChanged();
+                }
+            }
+            catch (OperationCanceledException) when (_renderCts?.Token.IsCancellationRequested == true)
+            {
+                // Render was cancelled, expected during disposal
+            }
         });
     }
 
@@ -116,5 +226,15 @@ public abstract class SwebKitComponentBase : ComponentBase
     {
         ErrorMessage = null;
         _needsRender = true;
+    }
+
+    /// <summary>
+    /// Cancels pending renders and cleans up resources.
+    /// </summary>
+    public virtual void Dispose()
+    {
+        _renderCts?.Cancel();
+        _renderCts?.Dispose();
+        _renderCts = null;
     }
 }

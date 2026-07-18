@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <!--
+            SwebKit.App.Tests.csproj cannot ProjectReference the MAUI-targeted SwebKit.App head
+            project (multi-platform workload constraints), so it instead source-links a curated
+            subset of SwebKit.App's .razor/.cs files directly into the test assembly via
+            <RazorComponent>/<Compile Include> items (see memories/repo/editing-notes.md). That
+            means the actual SwebKit.App component code physically lives inside
+            SwebKit.App.Tests.dll — and coverlet excludes the test assembly from coverage by
+            default, so none of it was ever measured. IncludeTestAssembly=true fixes that.
+          -->
+          <IncludeTestAssembly>true</IncludeTestAssembly>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

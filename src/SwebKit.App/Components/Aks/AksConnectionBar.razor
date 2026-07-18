@@ -50,7 +50,10 @@
                    @onfocus="OpenNsDrop" @oninput="OnNsSearchInput" readonly="@(!_nsDropOpen)" @onkeydown="OnNsKeyDown" />
             @if (_nsDropOpen)
             {
-                var filteredNamespaces = OrderNamespaces(NsFiltered).ToList();
+                // Order is frozen while the dropdown is open (see RefreshNsDisplayOrder): toggling a
+                // checkbox must not reorder rows, otherwise the clicked row jumps and — combined with
+                // element reuse — the checked state can smear onto a neighbouring namespace.
+                var filteredNamespaces = _nsDisplayOrder;
                 <div class="aks-ns-dropdown aks-ns-dropdown--multi" @ref="_nsDropdownRef">
                     <div class="aks-ns-list-scroll" @onkeydown="OnNsListKeyDown">
                         @if (filteredNamespaces.Count == 0)
@@ -63,7 +66,10 @@
                             {
                                 var nsLocal = ns;
                                 var checkedNamespace = IsPendingNamespace(nsLocal);
-                                <label class="aks-ns-option aks-ns-option-check @(checkedNamespace ? "current" : "")">
+                                // @key ties each row (and its checkbox) to the namespace identity, so
+                                // Blazor never reuses one namespace's checkbox DOM node for another when
+                                // the filtered set changes.
+                                <label @key="nsLocal" class="aks-ns-option aks-ns-option-check @(checkedNamespace ? "current" : "")">
                                     <input type="checkbox" checked="@checkedNamespace"
                                            @onchange="e => TogglePendingNamespace(nsLocal, e.Value is true)" aria-label="@nsLocal" />
                                     <span>@nsLocal</span>
@@ -176,6 +182,9 @@
     private bool _nsDropOpen;
     private string _nsSearchText = string.Empty;
     private HashSet<string> _pendingNamespaces = new(StringComparer.Ordinal);
+    // Frozen display order for the open dropdown. Recomputed only when the dropdown opens and when
+    // the filter text changes — never on a checkbox toggle — so selecting/deselecting never bumps rows.
+    private List<string> _nsDisplayOrder = [];
     private ElementReference _nsDropdownRef;
     private int _nsFocusIndex = -1;
     private bool _networkMenuOpen;
@@ -268,8 +277,16 @@
         _pendingNamespaces = GetNamespaceScope().Namespaces.ToHashSet(StringComparer.Ordinal);
         _nsFocusIndex = -1;
         _nsDropOpen = true;
+        RefreshNsDisplayOrder();
         StateHasChanged();
     }
+
+    // Snapshots the display order (selected-first, then server order) for the currently filtered
+    // namespaces. Called on open and on filter change only, so toggling checkboxes leaves rows in
+    // place. Any namespace matching the filter that is not yet in the frozen order is appended, so
+    // newly-matching rows still appear without reshuffling the existing ones.
+    private void RefreshNsDisplayOrder()
+        => _nsDisplayOrder = OrderNamespaces(NsFiltered).ToList();
 
     private void CloseNsDrop()
     {
@@ -283,6 +300,7 @@
     {
         _nsSearchText = e.Value?.ToString() ?? string.Empty;
         _nsFocusIndex = -1;
+        RefreshNsDisplayOrder();
         StateHasChanged();
     }
 
@@ -326,7 +344,7 @@
 
     private async Task MoveNsFocusAsync(int delta)
     {
-        var count = OrderNamespaces(NsFiltered).Count();
+        var count = _nsDisplayOrder.Count;
         if (count == 0)
         {
             return;

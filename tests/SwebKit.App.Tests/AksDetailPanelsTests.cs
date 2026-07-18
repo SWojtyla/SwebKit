@@ -111,6 +111,42 @@ public class AksDetailPanelsTests : TestContext
     }
 
     [Fact]
+    public async Task AksDetailPanels_ToggleHpaScaling_DisablesThenOffersEnable()
+    {
+        var notifications = Services.GetRequiredService<INotificationService>();
+        var cut = RenderComponent<AksDetailPanels>(ps => ps
+            .Add(p => p.Client, new DemoAksClient())
+            .Add(p => p.Namespace, "default")
+            .Add(p => p.Notifications, notifications));
+
+        // Name/namespace match a demo HPA so the post-toggle refresh re-reads the flipped state.
+        var hpa = new HpaInfo
+        {
+            Name = "payment-gateway-hpa",
+            Namespace = "default",
+            TargetKind = "Deployment",
+            TargetName = "payment-gateway",
+            MinReplicas = 2,
+            MaxReplicas = 5,
+            CurrentReplicas = 3,
+            DesiredReplicas = 3
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.ShowHpaDetail(hpa));
+        cut.WaitForAssertion(() => Assert.Contains("Disable scaling", cut.Markup, StringComparison.Ordinal));
+
+        var toggle = cut.FindAll("fluent-button")
+            .First(b => b.TextContent.Contains("Disable scaling", StringComparison.Ordinal));
+        await cut.InvokeAsync(() => toggle.Click());
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Enable scaling", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Disabled", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task AksDetailPanels_ShowNetworkPolicyAnalysis_RendersNetworkPanel()
     {
         var cut = RenderComponent<AksDetailPanels>(ps => ps

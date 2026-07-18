@@ -39,6 +39,33 @@ public class HpaPanelTests : TestContext
         Assert.Contains("max 10", cut.Markup, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void HpaPanel_RendersDisabledStateForFrozenPlainHpa()
+    {
+        var hpa = CreateHpa();
+        hpa.IsScalingDisabled = true;
+        hpa.CurrentReplicas = 3;
+
+        var cut = RenderComponent<HpaPanel>(ps => ps.Add(p => p.Hpa, hpa));
+
+        Assert.Contains("Disabled", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("frozen at 3 replicas", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HpaPanel_RendersKedaChipAndPausedCopy()
+    {
+        var hpa = CreateHpa();
+        hpa.IsKedaManaged = true;
+        hpa.ScaledObjectName = "sign-engine-scaler";
+        hpa.IsScalingDisabled = true;
+
+        var cut = RenderComponent<HpaPanel>(ps => ps.Add(p => p.Hpa, hpa));
+
+        Assert.Contains("KEDA", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("KEDA autoscaling is paused", cut.Markup, StringComparison.Ordinal);
+    }
+
     private static HpaInfo CreateHpa() => new()
     {
         Name = "sign-engine",

@@ -13,6 +13,10 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 {
     public const string RootFolderName = ".swebkit-api";
     public const string ManifestFileName = "swebkit.json";
+    public const string CollectionManifestFileName = "collection.json";
+    public const string FolderManifestFileName = "folder.json";
+    public const string EnvironmentsFolderName = "environments";
+    public const string EnvironmentFileExtension = ".swebenv.json";
     public const string RequestFileExtension = ".swebreq.json";
 
     private static readonly JsonSerializerOptions Options = new(SwebKitJsonOptions.Indented)
@@ -67,7 +71,13 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         {
             foreach (var collectionDirectory in Directory.GetDirectories(collectionsPath).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
             {
-                collections.Add(await ReadCollectionAsync(collectionDirectory, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false));
+                var collection = await ReadCollectionAsync(collectionDirectory, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false);
+                collections.Add(collection);
+
+                // Collection-scoped environments live under the collection's own `environments/` folder.
+                await ReadEnvironmentsFromFolderAsync(
+                    Path.Combine(collectionDirectory, EnvironmentsFolderName), collection.Id,
+                    environments, environmentFiles, diagnostics, cancellationToken).ConfigureAwait(false);
             }
 
             foreach (var requestFile in Directory.GetFiles(collectionsPath, $"*{RequestFileExtension}", SearchOption.TopDirectoryOnly).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
@@ -86,19 +96,8 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             diagnostics.Add($"Collections folder not found: {collectionsPath}");
         }
 
-        if (Directory.Exists(environmentsPath))
-        {
-            foreach (var environmentFile in Directory.GetFiles(environmentsPath, "*.swebenv.json", SearchOption.TopDirectoryOnly).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
-            {
-                var environment = await ReadEnvironmentAsync(environmentFile, diagnostics, cancellationToken).ConfigureAwait(false);
-                environments.Add(environment);
-                environmentFiles.Add(new LinkedEnvironmentFileState
-                {
-                    EnvironmentId = environment.Id,
-                    EnvironmentFilePath = environmentFile,
-                });
-            }
-        }
+        // Root-level environments are global (no collection scope).
+        await ReadEnvironmentsFromFolderAsync(environmentsPath, null, environments, environmentFiles, diagnostics, cancellationToken).ConfigureAwait(false);
 
         var gitStatus = await gitService.GetStatusAsync(config.Path, apiRootPath, cancellationToken).ConfigureAwait(false);
         return BuildResult(config, apiRootPath, string.IsNullOrWhiteSpace(manifest.Name) ? config.Name : manifest.Name, collections, environments, requestFiles, environmentFiles, diagnostics, gitStatus);
@@ -124,7 +123,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         Directory.CreateDirectory(collectionDirectory);
 
         var manifest = new SwebKitCollectionManifest { Name = collectionName.Trim() };
-        await WriteJsonAtomicAsync(Path.Combine(collectionDirectory, "collection.json"), manifest, cancellationToken).ConfigureAwait(false);
+        await WriteJsonAtomicAsync(Path.Combine(collectionDirectory, CollectionManifestFileName), manifest, cancellationToken).ConfigureAwait(false);
         return StableId(collectionDirectory);
     }
 
@@ -133,7 +132,8 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
     /// requests) into a linked-root's collections folder. Used when importing an external
     /// collection (Bruno, Postman, SwebKit JSON) directly into a linked repo.
     /// </summary>
-    public async Task WriteCollectionToLinkedRootAsync(string apiRootPath, ApiCollection collection, CancellationToken cancellationToken = default)
+    /// <summary>Returns the on-disk directory the collection was written to (under <c>collections/</c>).</summary>
+    public async Task<string> WriteCollectionToLinkedRootAsync(string apiRootPath, ApiCollection collection, CancellationToken cancellationToken = default)
     {
         var collectionsPath = Path.Combine(apiRootPath, "collections");
         Directory.CreateDirectory(collectionsPath);
@@ -141,29 +141,43 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         var collectionDirectory = GetUniqueCollectionDirectory(collectionsPath, Slugify(collection.Name));
         Directory.CreateDirectory(collectionDirectory);
 
+        // Write nodes first so we can capture the on-disk order (folder/file base names) and persist
+        // it in the collection manifest — this preserves the imported ordering across reloads.
+        var childOrder = await WriteNodesToDirectoryAsync(collectionDirectory, collection.Nodes, cancellationToken).ConfigureAwait(false);
+
         var manifest = new SwebKitCollectionManifest
         {
             Name = collection.Name.Trim(),
             Variables = collection.Variables,
             DefaultAuth = collection.DefaultAuth,
+            ChildOrder = childOrder,
         };
-        await WriteJsonAtomicAsync(Path.Combine(collectionDirectory, "collection.json"), manifest, cancellationToken).ConfigureAwait(false);
-        await WriteNodesToDirectoryAsync(collectionDirectory, collection.Nodes, cancellationToken).ConfigureAwait(false);
+        await WriteJsonAtomicAsync(Path.Combine(collectionDirectory, CollectionManifestFileName), manifest, cancellationToken).ConfigureAwait(false);
+        return collectionDirectory;
     }
 
-    private static async Task WriteNodesToDirectoryAsync(string directory, IEnumerable<ApiCollectionNode> nodes, CancellationToken cancellationToken)
+    /// <summary>
+    /// Writes the given nodes into <paramref name="directory"/> and returns the ordered list of the
+    /// on-disk base names created (folder directory names and request file names). Each folder also
+    /// gets a <see cref="FolderManifestFileName"/> capturing its own children's order.
+    /// </summary>
+    private static async Task<List<string>> WriteNodesToDirectoryAsync(string directory, IEnumerable<ApiCollectionNode> nodes, CancellationToken cancellationToken)
     {
+        var order = new List<string>();
+
         foreach (var node in nodes)
         {
             if (node.Type == ApiCollectionNodeType.Folder)
             {
-                var folderDir = Path.Combine(directory, Slugify(node.Name));
+                var folderDir = GetUniqueCollectionDirectory(directory, Slugify(node.Name));
                 Directory.CreateDirectory(folderDir);
-                await WriteNodesToDirectoryAsync(folderDir, node.Children, cancellationToken).ConfigureAwait(false);
+                var folderChildOrder = await WriteNodesToDirectoryAsync(folderDir, node.Children, cancellationToken).ConfigureAwait(false);
+                await WriteJsonAtomicAsync(Path.Combine(folderDir, FolderManifestFileName), new SwebKitFolderManifest { ChildOrder = folderChildOrder }, cancellationToken).ConfigureAwait(false);
+                order.Add(Path.GetFileName(folderDir));
             }
             else if (node.Type == ApiCollectionNodeType.Request && node.Request is not null)
             {
-                var requestPath = Path.Combine(directory, $"{Slugify(node.Request.Name)}{RequestFileExtension}");
+                var requestPath = GetUniqueRequestFilePath(directory, Slugify(node.Request.Name));
                 var requestFile = SwebKitRequestFile.FromRequest(node.Request, requestPath);
                 await WriteJsonAtomicAsync(requestPath, requestFile, cancellationToken).ConfigureAwait(false);
 
@@ -175,18 +189,52 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
                 if (!string.IsNullOrWhiteSpace(requestFile.VariablesFile) && !string.IsNullOrWhiteSpace(node.Request.GraphQlVariables))
                     await WriteTextAtomicAsync(Path.Combine(directory, requestFile.VariablesFile), node.Request.GraphQlVariables, cancellationToken).ConfigureAwait(false);
+
+                order.Add(Path.GetFileName(requestPath));
             }
+        }
+
+        return order;
+    }
+
+    private static string GetUniqueRequestFilePath(string directory, string slug)
+    {
+        var candidate = Path.Combine(directory, $"{slug}{RequestFileExtension}");
+        if (!File.Exists(candidate))
+            return candidate;
+
+        for (var index = 2; ; index++)
+        {
+            candidate = Path.Combine(directory, $"{slug}-{index}{RequestFileExtension}");
+            if (!File.Exists(candidate))
+                return candidate;
         }
     }
 
     /// <summary>
-    /// Writes an environment into a linked-root's environments folder. Used when importing
-    /// an external collection directly into a linked repo.
+    /// Writes a global environment into the linked root's top-level <c>environments/</c> folder.
+    /// Used when importing an external collection directly into a linked repo.
     /// </summary>
     public async Task WriteEnvironmentToLinkedRootAsync(string apiRootPath, ApiEnvironment environment, CancellationToken cancellationToken = default)
     {
-        var environmentsPath = Path.Combine(apiRootPath, "environments");
+        var environmentsPath = Path.Combine(apiRootPath, EnvironmentsFolderName);
+        await WriteEnvironmentToFolderAsync(apiRootPath, environmentsPath, environment, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Writes a collection-scoped environment into the given collection directory's
+    /// <c>environments/</c> subfolder. The scope is encoded by the file's location on disk.
+    /// </summary>
+    public async Task WriteEnvironmentToCollectionAsync(string apiRootPath, string collectionDirectory, ApiEnvironment environment, CancellationToken cancellationToken = default)
+    {
+        var environmentsPath = Path.Combine(collectionDirectory, EnvironmentsFolderName);
+        await WriteEnvironmentToFolderAsync(apiRootPath, environmentsPath, environment, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task WriteEnvironmentToFolderAsync(string apiRootPath, string environmentsPath, ApiEnvironment environment, CancellationToken cancellationToken)
+    {
         Directory.CreateDirectory(environmentsPath);
+        EnsureWithinApiRoot(apiRootPath, environmentsPath);
         var environmentFilePath = GetUniqueEnvironmentFilePath(environmentsPath, Slugify(environment.Name));
         var file = SwebKitEnvironmentFile.FromEnvironment(environment);
         await WriteJsonAtomicAsync(environmentFilePath, file, cancellationToken).ConfigureAwait(false);
@@ -194,13 +242,13 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
     private static string GetUniqueEnvironmentFilePath(string environmentsPath, string slug)
     {
-        var candidate = Path.Combine(environmentsPath, $"{slug}.swebenv.json");
+        var candidate = Path.Combine(environmentsPath, $"{slug}{EnvironmentFileExtension}");
         if (!File.Exists(candidate))
             return candidate;
 
         for (var index = 2; ; index++)
         {
-            candidate = Path.Combine(environmentsPath, $"{slug}-{index}.swebenv.json");
+            candidate = Path.Combine(environmentsPath, $"{slug}-{index}{EnvironmentFileExtension}");
             if (!File.Exists(candidate))
                 return candidate;
         }
@@ -313,7 +361,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
     /// <summary>
     /// Renames a folder in a linked collection by moving its directory to a new slugified name.
     /// </summary>
-    public Task RenameFolderAsync(string apiRootPath, ApiCollection collection, string folderId, string newName, CancellationToken cancellationToken = default)
+    public async Task RenameFolderAsync(string apiRootPath, ApiCollection collection, string folderId, string newName, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(newName))
@@ -332,9 +380,54 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             EnsureWithinApiRoot(apiRootPath, folderDirectory);
             EnsureWithinApiRoot(apiRootPath, newDirectory);
             Directory.Move(folderDirectory, newDirectory);
-        }
 
-        return Task.CompletedTask;
+            // Keep the folder's position in its parent's persisted order (base name changed).
+            await RenameChildOrderEntryAsync(apiRootPath, collectionDirectory, parentDirectory, Path.GetFileName(folderDirectory), Path.GetFileName(newDirectory), cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Replaces a single entry in a parent's persisted <c>ChildOrder</c> when a child's on-disk base
+    /// name changes (e.g. a folder rename), preserving its position among its siblings.
+    /// </summary>
+    private static async Task RenameChildOrderEntryAsync(
+        string apiRootPath,
+        string collectionDirectory,
+        string parentDirectory,
+        string oldBaseName,
+        string newBaseName,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(oldBaseName, newBaseName, StringComparison.Ordinal))
+            return;
+
+        if (string.Equals(parentDirectory, collectionDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            var manifestPath = Path.Combine(collectionDirectory, CollectionManifestFileName);
+            var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(manifestPath, [], cancellationToken).ConfigureAwait(false);
+            if (manifest is null || !TryReplaceOrderEntry(manifest.ChildOrder, oldBaseName, newBaseName))
+                return;
+            EnsureWithinApiRoot(apiRootPath, manifestPath);
+            await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            var manifestPath = Path.Combine(parentDirectory, FolderManifestFileName);
+            var manifest = await ReadJsonOrDefaultAsync<SwebKitFolderManifest>(manifestPath, [], cancellationToken).ConfigureAwait(false);
+            if (manifest is null || !TryReplaceOrderEntry(manifest.ChildOrder, oldBaseName, newBaseName))
+                return;
+            EnsureWithinApiRoot(apiRootPath, manifestPath);
+            await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static bool TryReplaceOrderEntry(List<string> order, string oldBaseName, string newBaseName)
+    {
+        var index = order.FindIndex(x => string.Equals(x, oldBaseName, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+            return false;
+        order[index] = newBaseName;
+        return true;
     }
 
     /// <summary>
@@ -369,7 +462,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             Directory.Move(collectionDirectory, newDirectory);
         }
 
-        var manifestPath = Path.Combine(newDirectory, "collection.json");
+        var manifestPath = Path.Combine(newDirectory, CollectionManifestFileName);
         var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(manifestPath, [], cancellationToken).ConfigureAwait(false) ?? new SwebKitCollectionManifest();
         manifest.Name = newName.Trim();
         await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
@@ -377,8 +470,11 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
     /// <summary>
     /// Moves a request or folder node to a new parent within the same linked collection (used for
-    /// drag-and-drop reorder/reparent). Moving within the same parent directory is a no-op on disk
-    /// because sibling order is not persisted — directories are always enumerated alphabetically.
+    /// drag-and-drop reorder/reparent). Cross-parent moves relocate the file/directory on disk;
+    /// same-parent moves are pure reorders. In both cases the destination parent's sibling order is
+    /// persisted (as a <c>ChildOrder</c> list of on-disk base names) so the arrangement survives
+    /// reloads — <paramref name="newParentFolder"/>'s in-memory <c>Children</c> (or the collection's
+    /// top-level nodes) must already reflect the intended post-move order.
     /// </summary>
     public async Task MoveNodeAsync(string apiRootPath, ApiCollection collection, ApiCollectionNode node, ApiCollectionNode? newParentFolder, CancellationToken cancellationToken = default)
     {
@@ -387,6 +483,8 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             ? collectionDirectory
             : FindFolderDirectory(collectionDirectory, newParentFolder.Id)
                 ?? throw new DirectoryNotFoundException($"Could not locate the linked target folder on disk (id: {newParentFolder.Id}).");
+
+        string movedBaseName;
 
         if (node.Type == ApiCollectionNodeType.Folder)
         {
@@ -400,13 +498,16 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
             if (string.Equals(Path.GetDirectoryName(sourceDirectory), newParentDirectory, StringComparison.OrdinalIgnoreCase))
             {
-                return; // same-parent reorder — sibling order isn't persisted on disk
+                movedBaseName = Path.GetFileName(sourceDirectory); // same-parent reorder — no physical move
             }
-
-            var destinationDirectory = GetUniqueCollectionDirectory(newParentDirectory, Path.GetFileName(sourceDirectory));
-            EnsureWithinApiRoot(apiRootPath, sourceDirectory);
-            EnsureWithinApiRoot(apiRootPath, destinationDirectory);
-            Directory.Move(sourceDirectory, destinationDirectory);
+            else
+            {
+                var destinationDirectory = GetUniqueCollectionDirectory(newParentDirectory, Path.GetFileName(sourceDirectory));
+                EnsureWithinApiRoot(apiRootPath, sourceDirectory);
+                EnsureWithinApiRoot(apiRootPath, destinationDirectory);
+                Directory.Move(sourceDirectory, destinationDirectory);
+                movedBaseName = Path.GetFileName(destinationDirectory);
+            }
         }
         else if (node.Request is not null)
         {
@@ -416,25 +517,92 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             var sourceDirectory = Path.GetDirectoryName(sourcePath)!;
             if (string.Equals(sourceDirectory, newParentDirectory, StringComparison.OrdinalIgnoreCase))
             {
-                return; // same-parent reorder — sibling order isn't persisted on disk
+                movedBaseName = Path.GetFileName(sourcePath); // same-parent reorder — no physical move
             }
-
-            var fileName = Path.GetFileName(sourcePath);
-            var sidecars = await ReadSidecarFileNamesAsync(sourcePath, cancellationToken).ConfigureAwait(false);
-            var destinationPath = Path.Combine(newParentDirectory, fileName);
-            EnsureWithinApiRoot(apiRootPath, sourcePath);
-            EnsureWithinApiRoot(apiRootPath, destinationPath);
-            File.Move(sourcePath, destinationPath);
-
-            foreach (var sidecar in sidecars)
+            else
             {
-                var sidecarPath = Path.Combine(sourceDirectory, sidecar);
-                var sidecarDestination = Path.Combine(newParentDirectory, sidecar);
-                if (File.Exists(sidecarPath) && IsWithinApiRoot(apiRootPath, sidecarPath) && IsWithinApiRoot(apiRootPath, sidecarDestination))
+                var fileName = Path.GetFileName(sourcePath);
+                var sidecars = await ReadSidecarFileNamesAsync(sourcePath, cancellationToken).ConfigureAwait(false);
+                var destinationPath = Path.Combine(newParentDirectory, fileName);
+                EnsureWithinApiRoot(apiRootPath, sourcePath);
+                EnsureWithinApiRoot(apiRootPath, destinationPath);
+                File.Move(sourcePath, destinationPath);
+
+                foreach (var sidecar in sidecars)
                 {
-                    File.Move(sidecarPath, sidecarDestination);
+                    var sidecarPath = Path.Combine(sourceDirectory, sidecar);
+                    var sidecarDestination = Path.Combine(newParentDirectory, sidecar);
+                    if (File.Exists(sidecarPath) && IsWithinApiRoot(apiRootPath, sidecarPath) && IsWithinApiRoot(apiRootPath, sidecarDestination))
+                    {
+                        File.Move(sidecarPath, sidecarDestination);
+                    }
                 }
+
+                movedBaseName = Path.GetFileName(destinationPath);
             }
+        }
+        else
+        {
+            return;
+        }
+
+        // Persist the destination parent's sibling order from the (already-updated) in-memory tree.
+        var orderedChildren = newParentFolder?.Children ?? collection.Nodes;
+        await PersistChildOrderAsync(apiRootPath, collectionDirectory, newParentDirectory, node, movedBaseName, orderedChildren, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Persists the explicit sibling order for <paramref name="parentDirectory"/> by resolving each
+    /// in-memory child to its on-disk base name. The just-moved node is resolved via
+    /// <paramref name="movedBaseName"/> (its <see cref="StableId"/> may have changed with the move);
+    /// every other child is located by its unchanged id. The order is written to the collection
+    /// manifest when the parent is the collection root, otherwise to the folder's <c>folder.json</c>.
+    /// </summary>
+    private static async Task PersistChildOrderAsync(
+        string apiRootPath,
+        string collectionDirectory,
+        string parentDirectory,
+        ApiCollectionNode movedNode,
+        string movedBaseName,
+        IReadOnlyList<ApiCollectionNode> orderedChildren,
+        CancellationToken cancellationToken)
+    {
+        var order = new List<string>();
+        foreach (var child in orderedChildren)
+        {
+            string? baseName;
+            if (ReferenceEquals(child, movedNode) || child.Id == movedNode.Id)
+            {
+                baseName = movedBaseName;
+            }
+            else if (child.Type == ApiCollectionNodeType.Folder)
+            {
+                baseName = FindFolderDirectory(collectionDirectory, child.Id) is { } dir ? Path.GetFileName(dir) : null;
+            }
+            else
+            {
+                baseName = FindRequestFile(collectionDirectory, child.Id) is { } file ? Path.GetFileName(file) : null;
+            }
+
+            if (!string.IsNullOrEmpty(baseName))
+                order.Add(baseName);
+        }
+
+        if (string.Equals(parentDirectory, collectionDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            var manifestPath = Path.Combine(collectionDirectory, CollectionManifestFileName);
+            var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(manifestPath, [], cancellationToken).ConfigureAwait(false) ?? new SwebKitCollectionManifest();
+            manifest.ChildOrder = order;
+            EnsureWithinApiRoot(apiRootPath, manifestPath);
+            await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            var manifestPath = Path.Combine(parentDirectory, FolderManifestFileName);
+            var manifest = await ReadJsonOrDefaultAsync<SwebKitFolderManifest>(manifestPath, [], cancellationToken).ConfigureAwait(false) ?? new SwebKitFolderManifest();
+            manifest.ChildOrder = order;
+            EnsureWithinApiRoot(apiRootPath, manifestPath);
+            await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -514,7 +682,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         List<string> diagnostics,
         CancellationToken cancellationToken)
     {
-        var collectionManifestPath = Path.Combine(collectionDirectory, "collection.json");
+        var collectionManifestPath = Path.Combine(collectionDirectory, CollectionManifestFileName);
         var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(collectionManifestPath, diagnostics, cancellationToken).ConfigureAwait(false);
         var collection = new ApiCollection
         {
@@ -536,7 +704,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             }));
         }
 
-        collection.Nodes.AddRange(await ReadNodesAsync(collectionDirectory, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false));
+        collection.Nodes.AddRange(await ReadNodesAsync(collectionDirectory, manifest?.ChildOrder, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false));
         return collection;
     }
 
@@ -550,30 +718,67 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
     private static async Task<List<ApiCollectionNode>> ReadNodesAsync(
         string directory,
+        IReadOnlyList<string>? childOrder,
         List<LinkedRequestFileState> requestFiles,
         List<string> diagnostics,
         CancellationToken cancellationToken)
     {
-        var nodes = new List<ApiCollectionNode>();
+        // Track each node's on-disk base name so we can apply the persisted sibling order below.
+        var entries = new List<(ApiCollectionNode Node, string BaseName)>();
 
-        foreach (var childDirectory in Directory.GetDirectories(directory).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
+        foreach (var childDirectory in Directory.GetDirectories(directory))
         {
-            nodes.Add(new ApiCollectionNode
+            // The `environments/` folder holds collection-scoped environment files, not request nodes.
+            if (string.Equals(Path.GetFileName(childDirectory), EnvironmentsFolderName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var folderManifest = await ReadJsonOrDefaultAsync<SwebKitFolderManifest>(Path.Combine(childDirectory, FolderManifestFileName), diagnostics, cancellationToken).ConfigureAwait(false);
+            entries.Add((new ApiCollectionNode
             {
                 Id = StableId(childDirectory),
                 Type = ApiCollectionNodeType.Folder,
                 Name = TitleFromFileName(Path.GetFileName(childDirectory)),
                 IsExpanded = true,
-                Children = await ReadNodesAsync(childDirectory, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false),
-            });
+                Children = await ReadNodesAsync(childDirectory, folderManifest?.ChildOrder, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false),
+            }, Path.GetFileName(childDirectory)));
         }
 
-        foreach (var requestFile in Directory.GetFiles(directory, $"*{RequestFileExtension}", SearchOption.TopDirectoryOnly).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
+        foreach (var requestFile in Directory.GetFiles(directory, $"*{RequestFileExtension}", SearchOption.TopDirectoryOnly))
         {
-            nodes.Add(await ReadRequestNodeAsync(requestFile, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false));
+            entries.Add((await ReadRequestNodeAsync(requestFile, requestFiles, diagnostics, cancellationToken).ConfigureAwait(false), Path.GetFileName(requestFile)));
         }
 
-        return nodes;
+        return OrderNodes(entries, childOrder);
+    }
+
+    /// <summary>
+    /// Orders sibling nodes by the persisted <paramref name="childOrder"/> (a list of on-disk base
+    /// names). Nodes not present in the order — and the case where no order is persisted at all —
+    /// fall back to the legacy layout: folders first, then requests, each alphabetical.
+    /// </summary>
+    private static List<ApiCollectionNode> OrderNodes(
+        List<(ApiCollectionNode Node, string BaseName)> entries,
+        IReadOnlyList<string>? childOrder)
+    {
+        if (childOrder is null || childOrder.Count == 0)
+        {
+            return entries
+                .OrderBy(e => e.Node.Type == ApiCollectionNodeType.Folder ? 0 : 1)
+                .ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase)
+                .Select(e => e.Node)
+                .ToList();
+        }
+
+        var orderIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < childOrder.Count; i++)
+            orderIndex.TryAdd(childOrder[i], i);
+
+        return entries
+            .OrderBy(e => orderIndex.TryGetValue(e.BaseName, out var index) ? index : int.MaxValue)
+            .ThenBy(e => e.Node.Type == ApiCollectionNodeType.Folder ? 0 : 1)
+            .ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase)
+            .Select(e => e.Node)
+            .ToList();
     }
 
     private static async Task<ApiCollectionNode> ReadRequestNodeAsync(
@@ -622,6 +827,35 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
     {
         var dto = await ReadJsonOrDefaultAsync<SwebKitEnvironmentFile>(environmentFile, diagnostics, cancellationToken).ConfigureAwait(false) ?? new SwebKitEnvironmentFile();
         return dto.ToEnvironment(environmentFile);
+    }
+
+    /// <summary>
+    /// Reads all <c>*.swebenv.json</c> files from <paramref name="environmentsFolder"/>, scoping each
+    /// to <paramref name="collectionId"/> (<c>null</c> for global root-level environments), and appends
+    /// them (plus their file states) to the supplied lists.
+    /// </summary>
+    private static async Task ReadEnvironmentsFromFolderAsync(
+        string environmentsFolder,
+        string? collectionId,
+        List<ApiEnvironment> environments,
+        List<LinkedEnvironmentFileState> environmentFiles,
+        List<string> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(environmentsFolder))
+            return;
+
+        foreach (var environmentFile in Directory.GetFiles(environmentsFolder, $"*{EnvironmentFileExtension}", SearchOption.TopDirectoryOnly).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
+        {
+            var environment = await ReadEnvironmentAsync(environmentFile, diagnostics, cancellationToken).ConfigureAwait(false);
+            environment.CollectionId = collectionId;
+            environments.Add(environment);
+            environmentFiles.Add(new LinkedEnvironmentFileState
+            {
+                EnvironmentId = environment.Id,
+                EnvironmentFilePath = environmentFile,
+            });
+        }
     }
 
     private static async Task<T?> ReadJsonOrDefaultAsync<T>(string path, List<string> diagnostics, CancellationToken cancellationToken)

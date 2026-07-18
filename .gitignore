@@ -31,5 +31,9 @@ Thumbs.db
 artifacts/copilot-build/
 artifacts/copilot-obj/
 
+# Code coverage report output (dotnet test --collect:"XPlat Code Coverage")
+artifacts/coverage/
+artifacts/coverage*/
+
 # MSIX build output
 src/SwebKit.App/AppPackages/

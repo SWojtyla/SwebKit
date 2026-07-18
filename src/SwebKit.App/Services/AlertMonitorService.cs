@@ -9,9 +9,10 @@ public sealed class AlertMonitorService : IAlertMonitorService
 {
     private const int RingBufferCapacity = 200;
     private const int MaxConcurrentEvaluations = 4;
-    private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan DefaultTickInterval = TimeSpan.FromSeconds(10);
     private const double MaxBackoffSeconds = 600; // 10 minutes
 
+    private readonly TimeSpan _tickInterval;
     private readonly IAlertRuleRepository _repository;
     private readonly IReadOnlyDictionary<AlertRuleSource, IAlertSignalSource> _sources;
     private readonly IMonitoringConnectionPool _pool;
@@ -61,7 +62,8 @@ public sealed class AlertMonitorService : IAlertMonitorService
         INotificationService notifications,
         IToastDiagnosticService toastDiagnostic,
         AppStateService appState,
-        ILogger<AlertMonitorService> logger)
+        ILogger<AlertMonitorService> logger,
+        TimeSpan? tickInterval = null)
     {
         _repository = repository;
         _sources = sources.ToDictionary(s => s.Source);
@@ -71,6 +73,7 @@ public sealed class AlertMonitorService : IAlertMonitorService
         _toastDiagnostic = toastDiagnostic;
         _appState = appState;
         _logger = logger;
+        _tickInterval = tickInterval ?? DefaultTickInterval;
         _appState.Initialized += OnAppInitialized;
     }
 
@@ -84,7 +87,7 @@ public sealed class AlertMonitorService : IAlertMonitorService
         _rules = [.. await _repository.GetAllAsync()];
         _isMonitoring = true;
         _cts = new CancellationTokenSource();
-        _timer = new PeriodicTimer(TickInterval);
+        _timer = new PeriodicTimer(_tickInterval);
         _loopTask = PollingLoopAsync(_cts.Token);
     }
 

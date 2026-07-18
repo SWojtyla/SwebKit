@@ -4,6 +4,10 @@
     <div class="aks-hpa-detail">
         <div class="aks-hpa-status-strip">
             <span class="aks-hpa-state aks-hpa-state--@StatusClass">@StatusText</span>
+            @if (Hpa.IsKedaManaged)
+            {
+                <span class="aks-hpa-keda-chip" title="Managed by KEDA ScaledObject @Hpa.ScaledObjectName">KEDA</span>
+            }
             <span class="aks-hpa-status-copy">@StatusDetail</span>
             <span class="aks-hpa-status-meta">@Hpa.Namespace / @Hpa.Name</span>
         </div>
@@ -104,18 +108,23 @@
 @code {
     [Parameter, EditorRequired] public HpaInfo Hpa { get; set; } = default!;
 
-    private string StatusText => HasCondition("ScalingActive", "False")
-        ? "Inactive"
-        : Hpa.CurrentReplicas != Hpa.DesiredReplicas
-            ? "Scaling"
-            : HasCondition("ScalingLimited", "True")
-                ? "Limited"
-                : "Stable";
+    private string StatusText => Hpa.IsScalingDisabled
+        ? "Disabled"
+        : HasCondition("ScalingActive", "False")
+            ? "Inactive"
+            : Hpa.CurrentReplicas != Hpa.DesiredReplicas
+                ? "Scaling"
+                : HasCondition("ScalingLimited", "True")
+                    ? "Limited"
+                    : "Stable";
 
     private string StatusClass => StatusText.ToLowerInvariant();
 
     private string StatusDetail => StatusText switch
     {
+        "Disabled" => Hpa.IsKedaManaged
+            ? "KEDA autoscaling is paused"
+            : $"Autoscaling frozen at {Hpa.CurrentReplicas} replica{(Hpa.CurrentReplicas == 1 ? "" : "s")}",
         "Inactive" => FirstConditionDetail("ScalingActive") ?? "Autoscaling is not active",
         "Scaling" => $"Moving from {Hpa.CurrentReplicas} to {Hpa.DesiredReplicas} replicas",
         "Limited" => FirstConditionDetail("ScalingLimited") ?? "Replica bounds are limiting scale",

@@ -353,11 +353,12 @@
 
     private void Close() => OnClose.InvokeAsync();
 
-    private async Task CloseAndRefresh()
-    {
-        await OnImported.InvokeAsync();
-        await OnClose.InvokeAsync();
-    }
+    private Task CloseAndRefresh()
+        // The collection tree was already refreshed via OnImported at the end of
+        // ImportAsync. Re-running it here re-scans the (potentially large) linked
+        // repo and its git status a second time, which blocks the dialog from
+        // closing on big imports. Just close — the tree is already up to date.
+        => OnClose.InvokeAsync();
 
     private void OnBackdropClick() => OnClose.InvokeAsync();
 }

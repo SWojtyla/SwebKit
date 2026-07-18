@@ -70,7 +70,6 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\RoutePageHeader.razor" Link="Components\Shared\RoutePageHeader.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ErrorCallout.razor" Link="Components\Shared\ErrorCallout.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\EmptyState.razor" Link="Components\Shared\EmptyState.razor" />
-        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\DashboardOverviewStrip.razor" Link="Components\Shared\DashboardOverviewStrip.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\DashboardMetricTile.razor" Link="Components\Shared\DashboardMetricTile.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\DashboardWatchTile.razor" Link="Components\Shared\DashboardWatchTile.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ContextMenu.razor" Link="Components\Shared\ContextMenu.razor" />
@@ -84,8 +83,11 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessAreaCard.razor" Link="Components\Shared\ConfigurationReadinessAreaCard.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ApiClient\PostRequestCaptureBuilder.razor" Link="Components\ApiClient\PostRequestCaptureBuilder.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ApiClient\ApiClientOpenTabsStrip.razor" Link="Components\ApiClient\ApiClientOpenTabsStrip.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ApiClient\KeyValueGrid.razor" Link="Components\ApiClient\KeyValueGrid.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ApiClient\BasicAuthForm.razor" Link="Components\ApiClient\BasicAuthForm.razor" />
         <Compile Include="..\..\src\SwebKit.App\Components\ApiClient\ApiClientOpenTab.cs" Link="Components\ApiClient\ApiClientOpenTab.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SwebKitComponentBase.cs" Link="Components\Shared\SwebKitComponentBase.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Shared\SwebKitComponentAsyncBase.cs" Link="Components\Shared\SwebKitComponentAsyncBase.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\DashboardTileModels.cs" Link="Components\Shared\DashboardTileModels.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SelectionService.cs" Link="Components\Shared\SelectionService.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\AutoRefreshController.cs" Link="Components\Shared\AutoRefreshController.cs" />

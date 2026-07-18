@@ -277,6 +277,7 @@ public class ComponentTests : TestContext
         Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
         Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
+        Services.AddSingleton(new UserSettingsRepository());
 
         var cut = RenderComponent<TopBar>();
         cut.Find("button.cmd-palette-btn").Click();
@@ -291,6 +292,9 @@ public class ComponentTests : TestContext
 
         Services.AddSingleton<ICredentialStore>(new InMemoryCredentialStore());
         Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance)));
+        Services.AddSingleton<IMonitoringConnectionPool>(new NullMonitoringConnectionPool());
+        Services.AddSingleton<IServiceBusNamespaceBootstrapper>(
+            new ServiceBusNamespaceBootstrapper(new InMemoryCredentialStore(), new NullServiceBusClientFactory()));
 
         var cut = RenderComponent<ServiceBusConfigForm>(ps => ps
             .Add(p => p.Environment, env));
@@ -325,6 +329,35 @@ public class ComponentTests : TestContext
         public void Delete(string key) => _secrets.Remove(key);
         public IReadOnlyList<string> ListKeys(string prefix = "") =>
             _secrets.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    private sealed class NullMonitoringConnectionPool : IMonitoringConnectionPool
+    {
+        public IAksClient? GetAksClient() => null;
+        public IAksClient? GetAksClient(string? context) => null;
+        public IServiceBusClient? GetServiceBusClient(string alias) => null;
+        public ValueTask<IRedisClient?> GetRedisClientAsync(string displayName, CancellationToken ct = default) => default;
+        public void InvalidateStaleConnections() { }
+        public void EvictServiceBusClient(string alias) { }
+        public ValueTask DisposeAsync() => default;
+    }
+
+    private sealed class NullServiceBusClientFactory : IServiceBusClientFactory
+    {
+        public IServiceBusClient Create(string connectionString, SbTransportType transportType = SbTransportType.Amqp) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
+
+        public IServiceBusClient CreateWithEntra(string fullyQualifiedNamespace, SbTransportType transportType = SbTransportType.Amqp) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
+
+        public string ParseFullyQualifiedNamespace(string connectionString) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
+
+        public ServiceBusConnectionDiagnostic BuildConnectionDiagnostic(string connectionString, string credentialSource) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
+
+        public ServiceBusConnectionDiagnostic BuildEntraConnectionDiagnostic(string fullyQualifiedNamespace) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
     }
 
     private sealed class FakeStorageClientFactory : IStorageClientFactory

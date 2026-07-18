@@ -146,12 +146,29 @@
                 </button>
             </TriggerContent>
             <ChildContent>
-                <button type="button" class="ctx-item @(State.ActiveEnvironmentId is null ? "ctx-item--active" : "")"
+                <button type="button" class="ctx-item @(ActiveEnvironment is null ? "ctx-item--active" : "")"
                         @onclick="() => HandleSelectEnvironmentAsync(null)">— None —</button>
-                @foreach (var env in State.Environments)
+                @{
+                    var collectionScoped = State.Environments.Where(e => e.CollectionId is not null && e.CollectionId == State.ActiveCollection?.Id).ToList();
+                    var globalScoped = State.Environments.Where(e => e.CollectionId is null).ToList();
+                }
+                @if (collectionScoped.Count > 0)
                 {
-                    <button type="button" class="ctx-item @(env.Id == State.ActiveEnvironmentId ? "ctx-item--active" : "")"
-                            @onclick="() => HandleSelectEnvironmentAsync(env.Id)">@env.Name</button>
+                    <div class="api-client-env-picker__group">@(State.ActiveCollection?.Name ?? "Collection")</div>
+                    @foreach (var env in collectionScoped)
+                    {
+                        <button type="button" class="ctx-item @(env.Id == ActiveEnvironment?.Id ? "ctx-item--active" : "")"
+                                @onclick="() => HandleSelectEnvironmentAsync(env.Id)">@env.Name</button>
+                    }
+                }
+                @if (globalScoped.Count > 0)
+                {
+                    <div class="api-client-env-picker__group">Global</div>
+                    @foreach (var env in globalScoped)
+                    {
+                        <button type="button" class="ctx-item @(env.Id == ActiveEnvironment?.Id ? "ctx-item--active" : "")"
+                                @onclick="() => HandleSelectEnvironmentAsync(env.Id)">@env.Name</button>
+                    }
                 }
             </ChildContent>
         </AppDropdown>
