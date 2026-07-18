@@ -49,6 +49,7 @@ public sealed class ShellFoundationTests : TestContext
         Services.AddSingleton<IPortForwardSessionService>(new PortForwardSessionService(_events));
         Services.AddSingleton(new CommandRegistry(_uiState));
         Services.AddSingleton(new AppStateService(new ProfileRepository(), _uiState, _events));
+        Services.AddSingleton(new UserSettingsRepository());
         Services.AddScoped<OperatorWorkspaceService>();
     }
 

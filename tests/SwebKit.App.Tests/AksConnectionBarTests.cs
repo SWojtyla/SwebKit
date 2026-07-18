@@ -193,7 +193,7 @@ public class AksConnectionBarTests : TestContext
     }
 
     [Fact]
-    public void AksConnectionBar_NamespacePicker_TogglingSelection_ReordersLive()
+    public void AksConnectionBar_NamespacePicker_TogglingSelection_DoesNotReorderRows()
     {
         var cut = RenderComponent<AksConnectionBar>(ps => ps
             .Add(p => p.Namespaces, ["default", "orders", "payments"])
@@ -201,15 +201,59 @@ public class AksConnectionBarTests : TestContext
 
         cut.FindAll("input.aks-ns-search").Last().Focus();
 
-        // Toggle "default" on: pending group is now {default, payments}, ordered by server index
-        // (default=0 before payments=2); "orders" stays unselected and last.
+        // Order is frozen when the dropdown opens: [payments (selected), default, orders].
+        // Toggling "default" on must NOT bump it to the top — rows stay put so the clicked
+        // checkbox does not jump and its checked state cannot smear onto a neighbour.
         cut.Find("input[aria-label='default']").Change(true);
 
         var options = cut.FindAll("label.aks-ns-option-check span")
             .Select(span => span.TextContent)
             .ToList();
 
-        Assert.Equal(["default", "payments", "orders"], options);
+        Assert.Equal(["payments", "default", "orders"], options);
+    }
+
+    [Fact]
+    public void AksConnectionBar_NamespacePicker_OptionRowsAreKeyedByNamespace()
+    {
+        // Each option carries the namespace as a stable identity hint so Blazor never reuses one
+        // namespace's checkbox DOM node for another when the filtered set changes.
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, ["briocomm", "briocomp"])
+            .Add(p => p.CurrentNamespace, string.Empty));
+
+        cut.FindAll("input.aks-ns-search").Last().Focus();
+
+        var checkboxes = cut.FindAll("label.aks-ns-option-check input[type=checkbox]");
+        Assert.Equal(2, checkboxes.Count);
+        // The two similarly-named namespaces render as two distinct, addressable checkboxes.
+        Assert.NotNull(cut.Find("input[aria-label='briocomm']"));
+        Assert.NotNull(cut.Find("input[aria-label='briocomp']"));
+    }
+
+    [Fact]
+    public void AksConnectionBar_NamespacePicker_FilterThenSelect_SelectsOnlyThatNamespace()
+    {
+        // Reproduces the reported bug: with a similar prefix ("briocomm" vs "briocomp"), filtering
+        // to one and selecting it must apply exactly that namespace, not both.
+        string? changedNamespace = null;
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, ["briocomm", "briocomp", "egor"])
+            .Add(p => p.CurrentNamespace, string.Empty)
+            .Add(p => p.OnNamespaceChanged, value => changedNamespace = value));
+
+        var search = cut.FindAll("input.aks-ns-search").Last();
+        search.Focus();
+        search.Input("briocomp");
+
+        // Only the matching namespace is offered, and selecting it applies only that one.
+        var options = cut.FindAll("label.aks-ns-option-check span").Select(s => s.TextContent).ToList();
+        Assert.Equal(["briocomp"], options);
+
+        cut.Find("input[aria-label='briocomp']").Change(true);
+        cut.Find("button.aks-ns-apply").Click();
+
+        Assert.Equal("briocomp", changedNamespace);
     }
 
     [Fact]

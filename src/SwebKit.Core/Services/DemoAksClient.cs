@@ -21,6 +21,9 @@ public class DemoAksClient : IAksClient
     private readonly Dictionary<string, List<JobInfo>> _createdJobsByNamespace = new(StringComparer.Ordinal);
     private readonly Dictionary<string, bool> _cronJobSuspendOverrides = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _jobParallelismOverrides = new(StringComparer.Ordinal);
+    // Keys ("{ns}/{hpaName}") whose autoscaling the operator has disabled this session.
+    private readonly HashSet<string> _disabledHpaKeys = new(StringComparer.Ordinal);
+    private readonly Lock _scalingLock = new();
     private int _jobSequence;
 
     // Demo tick counter — increments every call to GetPodsAsync.
@@ -1584,7 +1587,7 @@ public class DemoAksClient : IAksClient
     public async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default)
     {
         await Task.Delay(200, ct).ConfigureAwait(false);
-        return new List<HpaInfo>
+        var hpas = new List<HpaInfo>
         {
             new()
             {
@@ -1637,10 +1640,13 @@ public class DemoAksClient : IAksClient
             },
             new()
             {
-                Name = "order-queue-hpa", Namespace = ns,
+                // KEDA-managed HPA — the generated HPA carries the ScaledObject-name label, so it is
+                // disabled through the ScaledObject's pause annotation rather than by freezing the HPA.
+                Name = "keda-hpa-order-queue-scaler", Namespace = ns,
                 TargetKind = "StatefulSet", TargetName = "order-queue",
                 MinReplicas = 2, MaxReplicas = 6, CurrentReplicas = 3, DesiredReplicas = 3,
                 CurrentCpuUtilizationPercent = 55, TargetCpuUtilizationPercent = 70,
+                IsKedaManaged = true, ScaledObjectName = "order-queue-scaler",
                 Metrics =
                 [
                     new HpaMetricStatus { Name = "cpu", Type = "Resource", CurrentValue = 55, TargetValue = 70 }
@@ -1652,6 +1658,33 @@ public class DemoAksClient : IAksClient
                 ]
             }
         };
+
+        lock (_scalingLock)
+        {
+            foreach (var hpa in hpas)
+            {
+                if (_disabledHpaKeys.Contains($"{hpa.Namespace}/{hpa.Name}"))
+                {
+                    hpa.IsScalingDisabled = true;
+                }
+            }
+        }
+
+        return hpas;
+    }
+
+    public Task SetHpaScalingEnabledAsync(string ns, string hpaName, bool enabled, CancellationToken ct = default)
+    {
+        var key = $"{ns}/{hpaName}";
+        lock (_scalingLock)
+        {
+            if (enabled)
+                _disabledHpaKeys.Remove(key);
+            else
+                _disabledHpaKeys.Add(key);
+        }
+
+        return Task.CompletedTask;
     }
 
     public async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default)

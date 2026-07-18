@@ -70,6 +70,18 @@ public interface IAksClient
 
     // ── Feature 5: HPA ───────────────────────────────────────────────────────
     Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default);
+
+    /// <summary>
+    /// Enables or disables autoscaling for a single HPA quickly and reversibly.
+    /// For a KEDA-managed HPA this toggles the native <c>autoscaling.keda.sh/paused</c> annotation on
+    /// the owning <c>ScaledObject</c>. For a plain HPA it freezes replicas at the current count
+    /// (<c>minReplicas = maxReplicas</c>) while stashing the original bounds in an annotation, so a
+    /// later enable restores them exactly. Implementations that cannot toggle scaling should throw
+    /// <see cref="NotSupportedException"/>.
+    /// </summary>
+    Task SetHpaScalingEnabledAsync(string ns, string hpaName, bool enabled, CancellationToken ct = default)
+        => Task.FromException(
+            new NotSupportedException("This AKS client does not support toggling HPA autoscaling."));
     // ── Jobs and CronJobs ───────────────────────────────────────────────────────
     Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<JobInfo>> GetJobsAsync(string ns, CancellationToken ct = default)

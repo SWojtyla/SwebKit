@@ -66,23 +66,48 @@ public sealed class CollectionImportService(
             return result;
 
         var existingNames = collectionRepo.Collections.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var existingEnvNames = environmentRepo.Environments.Select(e => e.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // AddImportedCollectionAsync assigns a fresh collection Id, so remember the importer's
+        // temporary Id → persisted Id mapping to re-point each environment's CollectionId scope.
+        var collectionIdRemap = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var collection in result.Collections)
         {
+            var temporaryId = collection.Id;
             collection.Name = ResolveNameCollision(collection.Name, existingNames);
             existingNames.Add(collection.Name);
             await collectionRepo.AddImportedCollectionAsync(collection).ConfigureAwait(false);
+            collectionIdRemap[temporaryId] = collection.Id;
         }
+
+        // Environment names are deduped per scope (per collection, or the global bucket), so two
+        // collections may each keep an environment called "DEV".
+        var existingEnvNamesByScope = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var env in environmentRepo.Environments)
+            ScopeNameSet(existingEnvNamesByScope, env.CollectionId).Add(env.Name);
 
         foreach (var env in result.Environments)
         {
-            env.Name = ResolveNameCollision(env.Name, existingEnvNames);
-            existingEnvNames.Add(env.Name);
+            if (env.CollectionId is not null && collectionIdRemap.TryGetValue(env.CollectionId, out var persistedId))
+                env.CollectionId = persistedId;
+
+            var scopeNames = ScopeNameSet(existingEnvNamesByScope, env.CollectionId);
+            env.Name = ResolveNameCollision(env.Name, scopeNames);
+            scopeNames.Add(env.Name);
             await environmentRepo.AddImportedEnvironmentAsync(env).ConfigureAwait(false);
         }
 
         return result;
+    }
+
+    private static HashSet<string> ScopeNameSet(Dictionary<string, HashSet<string>> byScope, string? collectionId)
+    {
+        var key = collectionId ?? string.Empty;
+        if (!byScope.TryGetValue(key, out var set))
+        {
+            set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            byScope[key] = set;
+        }
+        return set;
     }
 
     /// <summary>
@@ -98,13 +123,31 @@ public sealed class CollectionImportService(
         if (result.Collections.Count == 0)
             return result;
 
+        await WriteImportToLinkedRootAsync(apiRootPath, result, cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
+    /// <summary>
+    /// Writes each imported collection into the linked root, then routes environments to disk by scope:
+    /// an environment whose <see cref="ApiEnvironment.CollectionId"/> matches a written collection is
+    /// stored under that collection's <c>environments/</c> folder; unscoped ones go to the root.
+    /// </summary>
+    private async Task WriteImportToLinkedRootAsync(string apiRootPath, CollectionImportResult result, CancellationToken cancellationToken)
+    {
+        var collectionDirectoriesById = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var collection in result.Collections)
-            await linkedFileService.WriteCollectionToLinkedRootAsync(apiRootPath, collection, cancellationToken).ConfigureAwait(false);
+        {
+            var directory = await linkedFileService.WriteCollectionToLinkedRootAsync(apiRootPath, collection, cancellationToken).ConfigureAwait(false);
+            collectionDirectoriesById[collection.Id] = directory;
+        }
 
         foreach (var env in result.Environments)
-            await linkedFileService.WriteEnvironmentToLinkedRootAsync(apiRootPath, env, cancellationToken).ConfigureAwait(false);
-
-        return result;
+        {
+            if (env.CollectionId is not null && collectionDirectoriesById.TryGetValue(env.CollectionId, out var collectionDirectory))
+                await linkedFileService.WriteEnvironmentToCollectionAsync(apiRootPath, collectionDirectory, env, cancellationToken).ConfigureAwait(false);
+            else
+                await linkedFileService.WriteEnvironmentToLinkedRootAsync(apiRootPath, env, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -125,12 +168,7 @@ public sealed class CollectionImportService(
         if (result.Collections.Count == 0)
             return result;
 
-        foreach (var collection in result.Collections)
-            await linkedFileService.WriteCollectionToLinkedRootAsync(apiRootPath, collection, cancellationToken).ConfigureAwait(false);
-
-        foreach (var env in result.Environments)
-            await linkedFileService.WriteEnvironmentToLinkedRootAsync(apiRootPath, env, cancellationToken).ConfigureAwait(false);
-
+        await WriteImportToLinkedRootAsync(apiRootPath, result, cancellationToken).ConfigureAwait(false);
         return result;
     }
 

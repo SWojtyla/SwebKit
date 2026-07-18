@@ -51,12 +51,13 @@ public sealed class EnvironmentRepository(ILogger<EnvironmentRepository>? logger
         await AppDataFileStore.SaveAsync(AppDataPaths.EnvironmentsJson, json).ConfigureAwait(false);
     }
 
-    public async Task<ApiEnvironment> AddEnvironmentAsync(string name)
+    public async Task<ApiEnvironment> AddEnvironmentAsync(string name, string? collectionId = null)
     {
         var env = new ApiEnvironment
         {
             Id = Guid.NewGuid().ToString("N"),
             Name = name,
+            CollectionId = collectionId,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
@@ -91,9 +92,17 @@ public sealed class EnvironmentRepository(ILogger<EnvironmentRepository>? logger
         var removed = _store.Environments.RemoveAll(e => e.Id == environmentId);
         if (removed == 0) return false;
 
-        // Clear active env reference if the deleted env was active
+        // Clear active env reference if the deleted env was active — global and per-collection.
         if (_store.UiState.ActiveEnvironmentId == environmentId)
             _store.UiState.ActiveEnvironmentId = null;
+
+        foreach (var collectionId in _store.UiState.ActiveEnvironmentIdByCollection
+                     .Where(pair => pair.Value == environmentId)
+                     .Select(pair => pair.Key)
+                     .ToList())
+        {
+            _store.UiState.ActiveEnvironmentIdByCollection.Remove(collectionId);
+        }
 
         await SaveAsync().ConfigureAwait(false);
         return true;
@@ -102,6 +111,21 @@ public sealed class EnvironmentRepository(ILogger<EnvironmentRepository>? logger
     public async Task SetActiveEnvironmentAsync(string? environmentId)
     {
         _store.UiState.ActiveEnvironmentId = environmentId;
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sets the active environment for a specific collection. <paramref name="environmentId"/> may be
+    /// a collection-scoped or a global environment; <c>null</c> clears the per-collection selection
+    /// (falling back to the global <see cref="ApiClientUiState.ActiveEnvironmentId"/>).
+    /// </summary>
+    public async Task SetActiveEnvironmentForCollectionAsync(string collectionId, string? environmentId)
+    {
+        if (string.IsNullOrEmpty(environmentId))
+            _store.UiState.ActiveEnvironmentIdByCollection.Remove(collectionId);
+        else
+            _store.UiState.ActiveEnvironmentIdByCollection[collectionId] = environmentId;
+
         await SaveAsync().ConfigureAwait(false);
     }
 

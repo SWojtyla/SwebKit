@@ -1,5 +1,6 @@
 @* EnvironmentManagerPanel — lists environments, hosts inline EnvironmentEditor *@
 @inject EnvironmentRepository EnvironmentRepo
+@inject CollectionRepository CollectionRepo
 @inject ILogger<EnvironmentManagerPanel> Logger
 
 <div class="env-manager">
@@ -43,7 +44,7 @@
     @if (_editingEnv is not null)
     {
         <div class="env-manager__editor">
-            <EnvironmentEditor Environment="@_editingEnv" OnSaved="@OnEditorSavedAsync" OnCancelled="@OnEditorCancelled" />
+            <EnvironmentEditor Environment="@_editingEnv" Collections="@_collections" OnSaved="@OnEditorSavedAsync" OnCancelled="@OnEditorCancelled" />
         </div>
     }
 </div>
@@ -51,7 +52,11 @@
 @code {
     [Parameter] public EventCallback OnChanged { get; set; }
 
+    /// <summary>ID of the active collection — new environments default to this scope when it is a local collection.</summary>
+    [Parameter] public string? ActiveCollectionId { get; set; }
+
     private List<ApiEnvironment> _environments = [];
+    private List<ApiCollection> _collections = [];
     private string? _editingId;
     private ApiEnvironment? _editingEnv;
 
@@ -64,6 +69,8 @@
     {
         await EnvironmentRepo.LoadAsync();
         _environments = EnvironmentRepo.Environments.ToList();
+        // Scope selector lists local collections (this panel manages local environments).
+        _collections = CollectionRepo.Collections.ToList();
     }
 
     private void EditEnvironment(string id)
@@ -76,6 +83,7 @@
         {
             Id = env.Id,
             Name = env.Name,
+            CollectionId = env.CollectionId,
             Variables = env.Variables.Select(v => new EnvironmentVariable
             {
                 Key = v.Key,
@@ -93,7 +101,9 @@
 
     private async Task AddEnvironmentAsync()
     {
-        var env = await EnvironmentRepo.AddEnvironmentAsync("New Environment");
+        // Default new environments to the active collection when it is a local collection, else global.
+        var defaultScope = _collections.Any(c => c.Id == ActiveCollectionId) ? ActiveCollectionId : null;
+        var env = await EnvironmentRepo.AddEnvironmentAsync("New Environment", defaultScope);
         await LoadAsync();
         EditEnvironment(env.Id);
         await InvokeAsync(StateHasChanged); // BL-2

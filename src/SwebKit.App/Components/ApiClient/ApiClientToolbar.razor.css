@@ -244,3 +244,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+.api-client-env-picker__group,
+.api-client-toolbar ::deep .api-client-env-picker__group {
+    padding: 4px 10px 2px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+}

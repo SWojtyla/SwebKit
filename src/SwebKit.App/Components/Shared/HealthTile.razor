@@ -32,6 +32,10 @@
         else
         {
             <div class="health-tile-metric">
+                @if (Data.Value == 0)
+                {
+                    <span class="health-tile-check" aria-hidden="true">✓</span>
+                }
                 <span class="health-tile-value">@Data.Value</span>
                 <span class="health-tile-label">@Data.Label</span>
             </div>

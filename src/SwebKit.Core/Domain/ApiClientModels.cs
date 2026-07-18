@@ -211,6 +211,13 @@ public sealed class ApiEnvironment
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    /// <summary>
+    /// ID of the collection this environment is scoped to, or <c>null</c> for a global environment
+    /// available to every collection. For local storage this is persisted in <c>environments.json</c>;
+    /// for linked repos it is derived from the environment file's location on disk (root vs a
+    /// collection's <c>environments/</c> folder) and not stored inside the file.
+    /// </summary>
+    public string? CollectionId { get; set; }
     public List<EnvironmentVariable> Variables { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
@@ -328,8 +335,14 @@ public enum CaptureSource
 /// </summary>
 public sealed class ApiClientUiState
 {
-    /// <summary>ID of the currently active environment. <c>null</c> means "no environment / collection variables only".</summary>
+    /// <summary>
+    /// ID of the currently active environment. <c>null</c> means "no environment / collection variables only".
+    /// Used as the global fallback when a collection has no per-collection selection in
+    /// <see cref="ActiveEnvironmentIdByCollection"/>.
+    /// </summary>
     public string? ActiveEnvironmentId { get; set; }
+    /// <summary>Active environment ID, keyed by collection ID. Takes precedence over <see cref="ActiveEnvironmentId"/>.</summary>
+    public Dictionary<string, string> ActiveEnvironmentIdByCollection { get; set; } = [];
     /// <summary>Last request selected, keyed by collection ID.</summary>
     public Dictionary<string, string> LastSelectedRequestIdByCollection { get; set; } = [];
 }

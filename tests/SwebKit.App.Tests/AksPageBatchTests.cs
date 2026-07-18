@@ -461,8 +461,14 @@ public sealed class AksPageBatchTests : TestContext
 
         cut.WaitForAssertion(() => Assert.Contains("order-api", cut.Markup, StringComparison.Ordinal));
 
-        Assert.Single(cut.FindAll("button.aks-analysis-btn"));
-        cut.Find("button.aks-analysis-btn").Click();
+        // DeploymentGrid/StatefulSetGrid/PodGrid/IngressGrid all share the "aks-analysis-btn" class and
+        // are kept mounted simultaneously (BL-4 perf decision — see docs/pitfalls/blazor-maui.md):
+        // only the active tab's wrapper div lacks the `hidden` attribute, so scope the lookup to that.
+        var visibleAnalysisButtons = cut.FindAll("button.aks-analysis-btn")
+            .Where(button => button.Closest("[hidden]") is null)
+            .ToList();
+        Assert.Single(visibleAnalysisButtons);
+        visibleAnalysisButtons[0].Click();
 
         cut.WaitForAssertion(() =>
             Assert.Contains(client.NetworkPolicyAnalysisCalls,

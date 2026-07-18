@@ -55,9 +55,10 @@
             }
             @if (depHpa is not null)
             {
-                <button class="aks-hpa-badge @(depHpa.CurrentReplicas == depHpa.DesiredReplicas ? "" : "hpa-scaling")"
+                <button class="aks-hpa-badge @HpaBadgeClass(depHpa)"
+                        title="@(depHpa.IsScalingDisabled ? "Autoscaling disabled" : null)"
                         @onclick="() => OnOpenHpa.InvokeAsync(depHpa)" @onclick:stopPropagation>
-                    <span class="hpa-icon">⇅</span>
+                    <span class="hpa-icon">@(depHpa.IsScalingDisabled ? "⏸" : "⇅")</span>
                     <span class="hpa-replicas">@depHpa.CurrentReplicas / @depHpa.MaxReplicas</span>
                     @if (depHpa.CurrentCpuUtilizationPercent.HasValue)
                     {
@@ -90,6 +91,12 @@ Enumerable.Empty<DeploymentInfo>().AsQueryable();
     [Parameter] public EventCallback<HpaInfo> OnOpenHpa { get; set; }
     [Parameter] public EventCallback<DeploymentInfo> OnOpenNetworkAnalysis { get; set; }
     [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+
+    private static string HpaBadgeClass(HpaInfo hpa)
+    {
+        if (hpa.IsScalingDisabled) return "hpa-disabled";
+        return hpa.CurrentReplicas == hpa.DesiredReplicas ? "" : "hpa-scaling";
+    }
 
     private static string DeploymentRowClass(DeploymentInfo d, DeploymentInfo? selected)
     {

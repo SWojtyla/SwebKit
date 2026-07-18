@@ -1,24 +1,25 @@
 # Claude Code Instructions
 
-The full workflow is defined in `.github/copilot-instructions.md`. Read it first — everything below is Claude-specific context only.
+The canonical documentation entry point is `docs/README.md`. Read it first for the repository structure, feature model, and reading order — everything below is Claude-specific context.
 
 ## Read first
 
-1. `.github/copilot-instructions.md` — authoritative workflow rules, feature model, skills, and guardrails
-2. `ai-setup/ways-of-working/ai-workflow.md` — repository structure and feature execution flow
-3. `ai-setup/ways-of-working/definition-of-done.md` — conditions a task must meet before it is done
-4. Relevant files in `docs/pitfalls/` — check before making non-trivial changes
+1. `docs/README.md` — canonical docs entry point (structure, canonical sources, traceability rules)
+2. `docs/features/README.md` — feature catalog and order
+3. Relevant files in `docs/pitfalls/` — check before making non-trivial changes
+4. `docs/security/aikido-mcp-scan.md` — run Aikido security scans on new/modified code
 
 ## Where things live
 
 | What                 | Where                                   |
 | -------------------- | --------------------------------------- |
+| Docs entry point     | `docs/README.md`                        |
+| Feature catalog      | `docs/features/README.md`               |
 | Active feature plans | `docs/features/active/<feature-name>/`  |
 | Archived features    | `docs/features/archive/<feature-name>/` |
 | Architecture         | `docs/architecture/`                    |
-| Process rules        | `ai-setup/ways-of-working/`             |
 | Pitfalls             | `docs/pitfalls/`                        |
-| Feature templates    | `ai-setup/templates/`                   |
+| Security scanning    | `docs/security/aikido-mcp-scan.md`      |
 
 **Never write plans, feature docs, or decisions outside the repository.** Everything belongs under `docs/`.
 

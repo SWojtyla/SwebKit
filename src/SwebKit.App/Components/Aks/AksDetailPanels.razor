@@ -183,6 +183,10 @@
                                 <span class="aks-detail-subtitle">@_hpaDetailTarget.TargetKind @_hpaDetailTarget.TargetName</span>
                             </span>
                             <span class="aks-detail-header-spacer"></span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="ToggleHpaScalingAsync" Disabled="@_hpaScalingBusy"
+                                          Title="@(_hpaDetailTarget.IsScalingDisabled ? "Re-enable autoscaling" : "Disable autoscaling (freeze current replicas)")">
+                                @(_hpaDetailTarget.IsScalingDisabled ? "Enable scaling" : "Disable scaling")
+                            </FluentButton>
                             <FluentButton Appearance="Appearance.Stealth" @onclick="RefreshHpaDetailAsync" Title="Refresh HPA data">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.ArrowClockwise())" Width="16px" />
                             </FluentButton>
@@ -528,6 +532,7 @@
     private ConfigMapInfo? _configMapDetailTarget;
     private SecretInfo? _secretDetailTarget;
     private HpaInfo? _hpaDetailTarget;
+    private bool _hpaScalingBusy;
     private IngressAnalysisTarget? _ingressAnalysisTarget;
     private NetworkPolicyAnalysisTarget? _networkPolicyAnalysisTarget;
     private NamespaceQuotaTarget? _namespaceQuotaTarget;
@@ -943,6 +948,54 @@
         }
 
         return OpenYamlAsync("HPA", _hpaDetailTarget.Name, editMode, _hpaDetailTarget.Namespace);
+    }
+
+    private async Task ToggleHpaScalingAsync()
+    {
+        if (Client is null || _hpaDetailTarget is null || _hpaScalingBusy)
+            return;
+
+        var target = _hpaDetailTarget;
+        var enable = target.IsScalingDisabled;
+        var action = enable ? "enable" : "disable";
+
+        if (IsProduction)
+        {
+            var confirmed = await Confirm.ShowAsync(
+                $"{(enable ? "Re-enable" : "Disable")} autoscaling for \"{target.Name}\" in production?",
+                target.Name,
+                requireTypedName: true);
+            if (!confirmed) return;
+        }
+
+        _hpaScalingBusy = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await Client.SetHpaScalingEnabledAsync(target.Namespace, target.Name, enable);
+            await RefreshHpaDetailAsync();
+            await OnDataChanged.InvokeAsync();
+            Notifications.ShowSuccess(
+                enable ? "Autoscaling enabled" : "Autoscaling disabled",
+                target.IsKedaManaged
+                    ? $"KEDA scaling {(enable ? "resumed" : "paused")} for {target.TargetKind} {target.TargetName}"
+                    : $"{target.Name} autoscaling {(enable ? "re-enabled" : "frozen at current replicas")}");
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (NotSupportedException ex)
+        {
+            Notifications.ShowError($"Cannot {action} autoscaling", ex.Message);
+        }
+        catch (Exception ex)
+        {
+            await OnError.InvokeAsync(ex.Message);
+            Notifications.ShowError($"Failed to {action} autoscaling", ex: ex);
+        }
+        finally
+        {
+            _hpaScalingBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task RefreshHpaDetailAsync()

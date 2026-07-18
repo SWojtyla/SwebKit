@@ -22,6 +22,31 @@
     padding: 5px 8px;
 }
 
+.env-editor__scope-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.env-editor__scope-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+}
+
+.env-editor__scope-select {
+    flex: 1;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 12px;
+    padding: 4px 8px;
+}
+
 .env-editor__vars-header {
     display: grid;
     grid-template-columns: 20px 1fr 110px 1fr 24px;

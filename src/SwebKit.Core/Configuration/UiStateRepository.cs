@@ -249,6 +249,10 @@ public class UiStateRepository(ILogger<UiStateRepository>? logger = null)
             return CloneDashboardPreferences(preferences ?? new DashboardPreferences());
         }
 
+        // Payloads written before the redesign (schema < 3) get a clean reset: tile
+        // visibility/order/size and layout flags are re-seeded from the new defaults. Views
+        // themselves are preserved (id/title/filters), never dropped (DEC-DR-2).
+        var isLegacyDashboard = (preferences?.SchemaVersion ?? 0) < DashboardPreferences.CurrentSchemaVersion;
         var knownIds = defaults.Select(static tile => tile.TileId).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var normalizedViews = new List<DashboardViewPreference>();
         var seenViewIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -263,9 +267,13 @@ public class UiStateRepository(ILogger<UiStateRepository>? logger = null)
                     Id = viewId,
                     Title = NormalizeDashboardViewTitle(view.Title, normalizedViews.Count),
                     IsDefault = view.IsDefault,
-                    Tiles = NormalizeDashboardTiles(view.Tiles, defaults, knownIds),
+                    Tiles = isLegacyDashboard
+                        ? defaults.Select(CloneDashboardTilePreference).ToList()
+                        : NormalizeDashboardTiles(view.Tiles, defaults, knownIds),
                     Filters = NormalizeDashboardViewFilters(view.Filters),
-                    Layout = NormalizeDashboardViewLayout(view.Layout)
+                    Layout = isLegacyDashboard
+                        ? new DashboardViewLayoutPreference()
+                        : NormalizeDashboardViewLayout(view.Layout)
                 });
             }
         }
@@ -277,7 +285,9 @@ public class UiStateRepository(ILogger<UiStateRepository>? logger = null)
                 Id = "default",
                 Title = "Default view",
                 IsDefault = true,
-                Tiles = NormalizeDashboardTiles(preferences?.Tiles, defaults, knownIds),
+                Tiles = isLegacyDashboard
+                    ? defaults.Select(CloneDashboardTilePreference).ToList()
+                    : NormalizeDashboardTiles(preferences?.Tiles, defaults, knownIds),
                 Filters = new DashboardViewFilterPreference(),
                 Layout = new DashboardViewLayoutPreference()
             });
@@ -289,7 +299,9 @@ public class UiStateRepository(ILogger<UiStateRepository>? logger = null)
             ? preferences!.ActiveViewId.Trim()
             : defaultViewId;
 
-        if (preferences?.Tiles is { Count: > 0 })
+        // The legacy flat root tile list is only honored for current-schema payloads; on a
+        // clean reset it is intentionally discarded so the active view keeps the new defaults.
+        if (!isLegacyDashboard && preferences?.Tiles is { Count: > 0 })
         {
             var activeIndex = normalizedViews.FindIndex(view => string.Equals(view.Id, activeViewId, StringComparison.OrdinalIgnoreCase));
             if (activeIndex >= 0)
@@ -309,7 +321,7 @@ public class UiStateRepository(ILogger<UiStateRepository>? logger = null)
 
         return new DashboardPreferences
         {
-            SchemaVersion = preferences?.SchemaVersion >= 2 ? preferences.SchemaVersion : 2,
+            SchemaVersion = DashboardPreferences.CurrentSchemaVersion,
             ActiveViewId = activeView.Id,
             Views = normalizedViews,
             // Keep the active view mirrored at the root for callers that still read/write the legacy flat tile list.
@@ -367,7 +379,7 @@ public class UiStateRepository(ILogger<UiStateRepository>? logger = null)
 
     private static DashboardPreferences CloneDashboardPreferences(DashboardPreferences preferences) => new()
     {
-        SchemaVersion = preferences.SchemaVersion <= 0 ? 2 : preferences.SchemaVersion,
+        SchemaVersion = preferences.SchemaVersion <= 0 ? DashboardPreferences.CurrentSchemaVersion : preferences.SchemaVersion,
         ActiveViewId = preferences.ActiveViewId?.Trim() ?? string.Empty,
         Views = preferences.Views?.Select(CloneDashboardViewPreference).ToList() ?? [],
         Tiles = preferences.Tiles?.Select(CloneDashboardTilePreference).ToList() ?? []
@@ -486,7 +498,15 @@ public class UiState
 
 public record DashboardPreferences
 {
-    public int SchemaVersion { get; init; } = 2;
+    /// <summary>
+    /// Bumped to 3 for the calm/minimal dashboard redesign. Persisted payloads at a lower
+    /// version are treated as legacy: their tile visibility/order/size and layout flags are
+    /// reset to the new defaults on load (clean reset, DEC-DR-2). Saved views are preserved
+    /// (id/title/filters kept, tiles re-seeded).
+    /// </summary>
+    public const int CurrentSchemaVersion = 3;
+
+    public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     public string ActiveViewId { get; init; } = string.Empty;
     public List<DashboardViewPreference> Views { get; init; } = [];
     public List<DashboardTilePreference> Tiles { get; init; } = [];

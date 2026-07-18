@@ -196,18 +196,12 @@
     // ── State ─────────────────────────────────────────────────────────────────
     // Page-scoped state container (DEC-UX-3): not DI-registered, one instance per page.
     private readonly ApiClientState _state = new();
-    private bool _showConfigureSecretDialog;
-    private string? _secretNameToConfigure;
-    private string _secretValueToConfigure = string.Empty;
-    private string? _secretConfigError;
 
     // Curl import/export dialog state + handlers: see ApiClientPage.Curl.cs
+    // Secret configuration dialog state + handlers: see ApiClientPage.Secrets.cs
 
-    // Phase 8 — request history (last 20 per request, in-memory only)
-    private const int HistoryCap = 20;
-
-    // Phase 5 — subscription state (capped at 1 000; oldest entry dropped when full)
-    private const int SubscriptionMessageCap = 1_000;
+    // Request history cap, subscription state cap, auto-save debounce state + handlers: see
+    // ApiClientPage.Requests.cs
 
     // Worksheet mode constants — aliases of ApiClientState's public consts (single source of
     // truth, Phase 2 Task 5), kept as page-local const so existing unqualified call sites below
@@ -218,39 +212,34 @@
     private const string WorksheetGit = ApiClientState.WorksheetGit;
     private const string WorksheetVariables = ApiClientState.WorksheetVariables;
 
-    // New-collection dialog state
-    private bool _showNewCollectionDialog;
-    private string _newCollectionName = string.Empty;
-    private ElementReference _newCollectionInput;
-    private bool _shouldFocusNewCollectionInput;
+    // New-collection / linked-root / delete-collection / export dialog state + handlers: see
+    // ApiClientPage.Collections.cs
 
-    // Close-dirty-tab confirm dialog state (Phase 3, Task 5)
-    private bool _showTabCloseConfirmDialog;
-    private string? _pendingCloseTabRequestId;
-
-    // Add linked root dialog state
-    private bool _showLinkedRootDialog;
-    private string _newLinkedRootName = string.Empty;
-    private string _newLinkedRootPath = string.Empty;
-    private string? _linkedRootError;
-    private ElementReference _newLinkedRootInput;
-    private bool _shouldFocusLinkedRootInput;
-
-    // Delete-collection confirm state
-    private string? _pendingDeleteCollectionId;
-    private string? _pendingDeleteCollectionName;
-
-    // Export / import dialog
-    private bool _showExportDialog;
-    private string _exportDialogInitialTab = "export";
-
-    // Auto-save debounce
-    private PeriodicTimer? _autoSaveTimer;
-    private const int AutoSaveDebounceMs = 500;
+    // Close-dirty-tab confirm dialog state + handlers: see ApiClientPage.Tabs.cs
 
     // ── Computed ──────────────────────────────────────────────────────────────
-    private ApiEnvironment? ActiveEnvironment =>
-        _state.Environments.FirstOrDefault(e => e.Id == _state.ActiveEnvironmentId);
+    // Active environment resolves per active collection: a per-collection selection takes precedence
+    // over the global fallback, and a resolved environment scoped to a *different* collection is
+    // ignored (guards against stale references after switching collections).
+    private ApiEnvironment? ActiveEnvironment
+    {
+        get
+        {
+            var collectionId = _state.ActiveCollection?.Id;
+            string? envId = null;
+            if (collectionId is not null &&
+                EnvironmentRepo.UiState.ActiveEnvironmentIdByCollection.TryGetValue(collectionId, out var perCollection))
+            {
+                envId = perCollection;
+            }
+            envId ??= _state.ActiveEnvironmentId;
+
+            var env = _state.Environments.FirstOrDefault(e => e.Id == envId);
+            if (env is not null && env.CollectionId is not null && env.CollectionId != collectionId)
+                return null;
+            return env;
+        }
+    }
 
     private LinkedCollectionRootLoadResult? ActiveGitRoot =>
         _state.LinkedRootResults.FirstOrDefault(root => root.Config.Id == _state.ActiveGitRootId);
@@ -280,12 +269,6 @@ null);
 
     private bool IsVariableMenuActive => _state.WorksheetMode is WorksheetVars or WorksheetVariables;
 
-    private IReadOnlyList<string> MissingSecretNames =>
-        _state.SelectedRequest is not null && _state.ActiveCollection is not null &&
-IsLinkedCollection(_state.ActiveCollection.Id)
-            ? GetMissingSecretNames(_state.SelectedRequest, ActiveEnvironment)
-            : [];
-
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
@@ -312,30 +295,7 @@ IsLinkedCollection(_state.ActiveCollection.Id)
         _state.LoadingCollections = false;
     }
 
-    private async Task LoadCollectionsAsync()
-    {
-        try
-        {
-            await CollectionRepo.LoadAsync();
-            _state.Collections = BuildCombinedCollections();
-
-            _state.ActiveCollection = _state.Collections.FirstOrDefault();
-
-            // Restore last selected request for the active collection
-            if (_state.ActiveCollection is not null &&
-                EnvironmentRepo.UiState.LastSelectedRequestIdByCollection
-                    .TryGetValue(_state.ActiveCollection.Id, out var lastId))
-            {
-                RestoreSelectedRequest(lastId);
-            }
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load collections");
-            _state.Collections = [];
-        }
-    }
+    // LoadCollectionsAsync: see ApiClientPage.Collections.cs
 
     private async void OnDemoModeChanged()
     {
@@ -346,250 +306,23 @@ IsLinkedCollection(_state.ActiveCollection.Id)
         });
     }
 
-    private async Task LoadLinkedRootsAsync()
-    {
-        try
-        {
-            await LinkedRootRepo.LoadAsync();
-            _state.LinkedRootResults.Clear();
-            var linkedCollections = new List<ApiCollection>();
+    // LoadLinkedRootsAsync, LoadEnvironmentsAsync: see ApiClientPage.Collections.cs
 
-            foreach (var root in LinkedRootRepo.Roots.Where(static r => r.IsEnabled))
-            {
-                var result = await LinkedFileService.LoadRootAsync(root);
-                _state.LinkedRootResults.Add(result);
-                linkedCollections.AddRange(result.Collections);
-            }
-
-            _state.Collections = BuildCombinedCollections();
-            _state.Environments = BuildCombinedEnvironments();
-            _state.LinkedRootInfos = _state.LinkedRootResults.Select(result => new LinkedCollectionTreeInfo
-            {
-                Id = result.Config.Id,
-                Name = result.DisplayName,
-                Path = result.ApiRootPath,
-                Branch = result.GitStatus.Branch,
-                ChangedFileCount = result.GitStatus.ChangedFileCount,
-                IsGitRepository = result.GitStatus.IsGitRepository,
-                IsValid = result.IsValid,
-                CollectionIds = result.Collections.Select(c => c.Id).ToList(),
-            }).ToList();
-
-            _state.ActiveCollection ??= _state.Collections.FirstOrDefault();
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load linked collection roots");
-            _state.LinkedRootInfos = [];
-        }
-    }
-
-    private async Task LoadEnvironmentsAsync()
-    {
-        try
-        {
-            await EnvironmentRepo.LoadAsync();
-            _state.Environments = BuildCombinedEnvironments();
-            _state.ActiveEnvironmentId = EnvironmentRepo.UiState.ActiveEnvironmentId;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load environments");
-            _state.Environments = [];
-        }
-    }
-
-    private void RestoreSelectedRequest(string requestId)
-    {
-        if (_state.ActiveCollection is null) return;
-        var (_, request) = CollectionRepo.FindRequest(requestId);
-        if (request is not null)
-        {
-            _state.SelectedRequestId = requestId;
-            _state.SelectedRequest = request;
-        }
-    }
+    // RestoreSelectedRequest: see ApiClientPage.Tabs.cs
 
     // ── Toolbar actions ───────────────────────────────────────────────────────
 
-    private void OpenNewCollectionDialog()
-    {
-        _newCollectionName = string.Empty;
-        _showNewCollectionDialog = true;
-        _shouldFocusNewCollectionInput = true;
-    }
+    // OpenCurrentTargetGitFromMenu: see ApiClientPage.LinkedSave.cs
 
-    private void OpenLinkedRootDialog()
-    {
-        _newLinkedRootName = string.Empty;
-        _newLinkedRootPath = string.Empty;
-        _linkedRootError = null;
-        _showLinkedRootDialog = true;
-        _shouldFocusLinkedRootInput = true;
-    }
+    // OpenCollectionImportDialogFromMenu, OpenCollectionExportDialogFromMenu,
+    // OpenCollectionVariablesFromMenu, ToggleEnvsWorksheet, OpenRequestVariablesFromMenu,
+    // OpenVariableInspectorAsync, ConfirmLinkedRootAsync, RemoveLinkedRootAsync: see
+    // ApiClientPage.Collections.cs
 
-    private void OpenLinkedRootDialogFromMenu()
-    {
-        OpenLinkedRootDialog();
-    }
+    // OpenGitPanelAsync: see ApiClientPage.LinkedSave.cs
 
-    private void OnLinkCollectionToRepoAsync(string collectionId)
-    {
-        var collection = _state.Collections.FirstOrDefault(c => c.Id == collectionId);
-        _newLinkedRootName = collection?.Name ?? string.Empty;
-        _newLinkedRootPath = string.Empty;
-        _linkedRootError = null;
-        _showLinkedRootDialog = true;
-        _shouldFocusLinkedRootInput = true;
-    }
-
-    private async Task PickLinkedRootFolderAsync()
-    {
-        try
-        {
-            var path = await FolderPicker.PickFolderAsync("Select Git repository or API folder");
-            if (path is null) return;
-            _newLinkedRootPath = path;
-            await InvokeAsync(StateHasChanged); // BL-2
-        }
-        catch (OperationCanceledException) { }
-    }
-
-    private void OpenLinkedRootManagementFromMenu()
-    {
-        _state.WorksheetMode = _state.WorksheetMode == WorksheetLinkedRoots ? null : WorksheetLinkedRoots;
-    }
-
-    private async Task OpenCurrentTargetGitFromMenu()
-    {
-        if (CurrentTargetLinkedRoot is { } linkedRoot)
-        {
-            await OpenGitPanelAsync(linkedRoot.Config.Id);
-        }
-    }
-
-    private void OpenCollectionImportDialogFromMenu()
-    {
-        _exportDialogInitialTab = "import";
-        _showExportDialog = true;
-    }
-
-    private void OpenCollectionExportDialogFromMenu()
-    {
-        _exportDialogInitialTab = "export";
-        _showExportDialog = true;
-    }
-
-    private void OpenCollectionVariablesFromMenu()
-    {
-        _state.WorksheetMode = _state.WorksheetMode == WorksheetVars ? null : WorksheetVars;
-    }
-
-    private void ToggleEnvsWorksheet()
-    {
-        _state.WorksheetMode = _state.WorksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
-    }
-
-    private async Task OpenRequestVariablesFromMenu()
-    {
-        await OpenVariableInspectorAsync();
-    }
-
-    private async Task OpenVariableInspectorAsync()
-    {
-        _state.WorksheetMode = _state.WorksheetMode == WorksheetVariables ? null : WorksheetVariables;
-        if (_state.WorksheetMode != WorksheetVariables || _state.SelectedRequest is null || _state.ActiveCollection is null)
-        {
-            return;
-        }
-
-        _state.VariableInspectorLoading = true;
-        await InvokeAsync(StateHasChanged);
-        _state.VariableInspectionItems = await WorkflowService.InspectVariablesAsync(_state.SelectedRequest,
-_state.ActiveCollection, ActiveEnvironment);
-        _state.VariableInspectorLoading = false;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task ConfirmLinkedRootAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_newLinkedRootPath)) return;
-
-        try
-        {
-            var path = _newLinkedRootPath.Trim();
-            var name = string.IsNullOrWhiteSpace(_newLinkedRootName) ? null : _newLinkedRootName.Trim();
-            await LinkedFileService.EnsureRootAsync(path, name ?? string.Empty);
-            await LinkedRootRepo.AddRootAsync(path, name);
-            await LoadLinkedRootsAsync();
-            _showLinkedRootDialog = false;
-            await InvokeAsync(StateHasChanged);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        {
-            _linkedRootError = ex.Message;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    private async Task RemoveLinkedRootAsync(string rootId)
-    {
-        await LinkedRootRepo.RemoveRootAsync(rootId);
-        if (_state.ActiveGitRootId == rootId)
-            _state.ActiveGitRootId = null;
-        await LoadLinkedRootsAsync();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private Task OpenGitPanelAsync(string rootId)
-    {
-        _state.ActiveGitRootId = rootId;
-        _state.GitMessage = null;
-        _state.GitMessageIsError = false;
-        _state.WorksheetMode = WorksheetGit;
-        return Task.CompletedTask;
-    }
-
-    private async Task ConfirmNewCollectionAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_newCollectionName)) return;
-        var collection = await CreateCollectionForCurrentTargetAsync(_newCollectionName.Trim());
-        _state.ActiveCollection = collection;
-        _showNewCollectionDialog = false;
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task OnNewCollectionKeyDownAsync(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await ConfirmNewCollectionAsync();
-        else if (e.Key == "Escape") _showNewCollectionDialog = false;
-    }
-
-    private async Task AddCollectionAsync()
-    {
-        var collection = await CreateCollectionForCurrentTargetAsync("New Collection");
-        _state.ActiveCollection = collection;
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task<ApiCollection> CreateCollectionForCurrentTargetAsync(string name)
-    {
-        if (ActiveLinkedRoot is not null)
-        {
-            var rootId = ActiveLinkedRoot.Config.Id;
-            var collectionId = await LinkedFileService.CreateCollectionAsync(ActiveLinkedRoot.ApiRootPath, name);
-            await LoadLinkedRootsAsync();
-            _state.ActiveLinkedRootId = rootId;
-            return _state.Collections.First(collection => collection.Id == collectionId);
-        }
-
-        var collection = await CollectionRepo.AddCollectionAsync(name);
-        _state.Collections = BuildCombinedCollections();
-        _state.ActiveLinkedRootId = null;
-        return collection;
-    }
+    // ConfirmNewCollectionAsync, OnNewCollectionKeyDownAsync, AddCollectionAsync,
+    // CreateCollectionForCurrentTargetAsync: see ApiClientPage.Collections.cs
 
     private ApiCollection? GetRequestTargetCollection()
     {
@@ -604,774 +337,29 @@ _state.ActiveCollection, ActiveEnvironment);
             : null;
     }
 
-    private void ActivateCollection(ApiCollection collection)
-    {
-        _state.ActiveCollection = collection;
-        _state.ActiveLinkedRootId = FindLinkedRootForCollection(collection.Id)?.Config.Id;
-        _state.LinkedSaveConflict = null;
-        _state.LinkedSaveError = null;
-    }
+    // ActivateCollection, AddRequestAsync, SelectEnvAsync, OnEnvironmentsChangedAsync,
+    // OnCollVarEditorSavedAsync: see ApiClientPage.Collections.cs
 
-    private async Task AddRequestAsync()
-    {
-        var targetCollection = GetRequestTargetCollection();
-        if (targetCollection is null) return;
-        ActivateCollection(targetCollection);
-
-        var request = new HttpRequestEntry
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Name = "New Request",
-            Method = ApiRequestMethod.Get,
-            Url = string.Empty,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
-        };
-
-        targetCollection.Nodes.Add(new ApiCollectionNode
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Type = ApiCollectionNodeType.Request,
-            Name = request.Name,
-            Request = request,
-        });
-
-        _state.SelectedRequestId = request.Id;
-        _state.SelectedRequest = request;
-        await SaveActiveCollectionAsync();
-        _state.IsDirty = false;
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task SelectEnvAsync(string? envId)
-    {
-        _state.ActiveEnvironmentId = envId;
-        await EnvironmentRepo.SetActiveEnvironmentAsync(envId);
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task OnEnvironmentsChangedAsync()
-    {
-        _state.Environments = BuildCombinedEnvironments();
-        _state.WorksheetMode = null;
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private void OpenConfigureSecretDialog()
-    {
-        _secretNameToConfigure = MissingSecretNames.FirstOrDefault();
-        _secretValueToConfigure = string.Empty;
-        _secretConfigError = null;
-        _showConfigureSecretDialog = true;
-    }
-
-    private async Task SaveConfiguredSecretAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))
-            return;
-
-        if (ActiveEnvironment is null)
-        {
-            _secretConfigError = "Select a linked environment before configuring this secret.";
-            return;
-        }
-
-        var linkedEnv = FindLinkedRootForEnvironment(ActiveEnvironment.Id);
-        if (linkedEnv is null)
-        {
-            _secretConfigError = "Select a linked environment before configuring this secret.";
-            return;
-        }
-
-        var (linkedRoot, linkedEnvironmentFile) = linkedEnv.Value;
-
-        var variableKey = $"secret:{_secretNameToConfigure}";
-        var variable = ActiveEnvironment.Variables.FirstOrDefault(v => string.Equals(v.Key, variableKey,
-StringComparison.OrdinalIgnoreCase));
-        if (variable is null)
-        {
-            variable = new EnvironmentVariable
-            {
-                Key = variableKey,
-                IsEnabled = true,
-                SecretSource = EnvironmentVariableSecretSource.WindowsCredentialStore,
-                CredentialKey = $"swebkit/linked/{linkedRoot.Config.Id}/{ActiveEnvironment.Name}/{_secretNameToConfigure}",
-            };
-            ActiveEnvironment.Variables.Add(variable);
-        }
-
-        if (string.IsNullOrWhiteSpace(variable.CredentialKey))
-        {
-            variable.CredentialKey = $"swebkit/linked/{linkedRoot.Config.Id}/{ActiveEnvironment.Name}/{_secretNameToConfigure}";
-        }
-
-        variable.SecretSource = EnvironmentVariableSecretSource.WindowsCredentialStore;
-        CredentialStore.Save(variable.CredentialKey, _secretValueToConfigure);
-        await LinkedFileService.SaveEnvironmentAsync(linkedEnvironmentFile.EnvironmentFilePath, ActiveEnvironment);
-        await LoadLinkedRootsAsync();
-        _showConfigureSecretDialog = false;
-        _secretValueToConfigure = string.Empty;
-        _secretConfigError = null;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task OnCollVarEditorSavedAsync()
-    {
-        _state.ScopeVersion++; // Force RequestBuilderPanel to rebuild resolved scope
-        _state.WorksheetMode = null;
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task SaveRequestAsync()
-    {
-        if (_state.ActiveCollection is null || _state.SelectedRequest is null) return;
-        if (await SaveActiveCollectionAsync())
-        {
-            _state.IsDirty = false;
-        }
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task<bool> SaveActiveCollectionAsync(bool forceLinkedOverwrite = false)
-    {
-        if (_state.ActiveCollection is null || _state.SelectedRequest is null) return false;
-
-        var linkedRoot = FindLinkedRootForCollection(_state.ActiveCollection.Id);
-        if (linkedRoot is not null)
-        {
-            var savedRequestId = _state.SelectedRequest.Id;
-            var expectedStamp = forceLinkedOverwrite ? null : FindLinkedRequestFileState(savedRequestId)?.ContentStamp;
-            var saveResult = await LinkedFileService.SaveRequestAsync(linkedRoot.ApiRootPath, _state.ActiveCollection,
-_state.SelectedRequest,
-expectedStamp);
-            if (!saveResult.IsSuccess)
-            {
-                if (saveResult.HasConflict)
-                {
-                    _state.LinkedSaveConflict = new ApiClientPage.LinkedSaveConflict(
-                        linkedRoot.Config.Id,
-                        _state.ActiveCollection.Id,
-                        savedRequestId,
-                        saveResult.RequestFilePath,
-                        saveResult.ErrorMessage ?? "The linked request changed on disk.");
-                    _state.LinkedSaveError = null;
-                }
-                else
-                {
-                    _state.LinkedSaveError = saveResult.ErrorMessage;
-                    _state.LinkedSaveConflict = null;
-                }
-
-                return false;
-            }
-
-            _state.LinkedSaveError = null;
-            _state.LinkedSaveConflict = null;
-            await LoadLinkedRootsAsync();
-            var refreshed = _state.Collections.FirstOrDefault(collection => collection.Id == _state.ActiveCollection.Id);
-            _state.ActiveCollection = refreshed ?? _state.ActiveCollection;
-            _state.SelectedRequest = FindRequestInNodes(_state.ActiveCollection.Nodes, savedRequestId);
-            _state.SelectedRequestId = _state.SelectedRequest?.Id;
-            _state.DirtyByRequestId[savedRequestId] = false;
-            return true;
-        }
-
-        await CollectionRepo.UpdateCollectionAsync(_state.ActiveCollection);
-        _state.Collections = BuildCombinedCollections();
-        _state.LinkedSaveError = null;
-        _state.LinkedSaveConflict = null;
-        if (_state.SelectedRequestId is not null)
-        {
-            _state.DirtyByRequestId[_state.SelectedRequestId] = false;
-        }
-        return true;
-    }
-
-    /// <summary>
-    /// Runs a structural linked-collection filesystem operation (delete/create/rename/move) and
-    /// surfaces any failure via <see cref="ApiClientState.LinkedSaveError"/> instead of silently no-op'ing.
-    /// </summary>
-    private async Task<bool> TryRunLinkedFileOperationAsync(Func<Task> operation)
-    {
-        try
-        {
-            await operation();
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or
-ArgumentException)
-        {
-            _state.LinkedSaveError = ex.Message;
-            await InvokeAsync(StateHasChanged);
-            return false;
-        }
-
-        _state.LinkedSaveError = null;
-        return true;
-    }
-
-    /// <summary>
-    /// Reloads linked roots from disk after a successful structural mutation and re-points
-    /// <see cref="ApiClientState.ActiveCollection"/> at the freshly-parsed collection (same refresh pattern as
-    /// <see cref="SaveActiveCollectionAsync"/>).
-    /// </summary>
-    private async Task RefreshAfterLinkedMutationAsync(string collectionId)
-    {
-        await LoadLinkedRootsAsync();
-        var refreshed = _state.Collections.FirstOrDefault(collection => collection.Id == collectionId);
-        if (refreshed is not null)
-        {
-            _state.ActiveCollection = refreshed;
-        }
-    }
-
-    private async Task ReloadLinkedConflictAsync()
-    {
-        if (_state.LinkedSaveConflict is null) return;
-
-        var conflict = _state.LinkedSaveConflict;
-        await LoadLinkedRootsAsync();
-        _state.ActiveLinkedRootId = conflict.RootId;
-        _state.ActiveCollection = _state.Collections.FirstOrDefault(collection => collection.Id == conflict.CollectionId);
-        _state.SelectedRequest = _state.ActiveCollection is not null ? FindRequestInNodes(_state.ActiveCollection.Nodes,
-conflict.RequestId) : null;
-        _state.SelectedRequestId = _state.SelectedRequest?.Id;
-        _state.LinkedSaveConflict = null;
-        _state.LinkedSaveError = null;
-        _state.IsDirty = false;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task KeepMineLinkedConflictAsync()
-    {
-        if (_state.LinkedSaveConflict is null || _state.ActiveCollection is null || _state.SelectedRequest is null) return;
-
-        if (await SaveActiveCollectionAsync(forceLinkedOverwrite: true))
-        {
-            _state.IsDirty = false;
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task SaveLinkedConflictAsCopyAsync()
-    {
-        if (_state.LinkedSaveConflict is null || _state.ActiveCollection is null || _state.SelectedRequest is null) return;
-
-        var copy = CloneRequestAsCopy(_state.SelectedRequest);
-        _state.ActiveCollection.Nodes.Add(new ApiCollectionNode
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Type = ApiCollectionNodeType.Request,
-            Name = copy.Name,
-            Request = copy,
-        });
-        _state.SelectedRequest = copy;
-        _state.SelectedRequestId = copy.Id;
-
-        if (await SaveActiveCollectionAsync(forceLinkedOverwrite: true))
-        {
-            _state.IsDirty = false;
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
+    // SaveRequestAsync, SaveActiveCollectionAsync, TryRunLinkedFileOperationAsync,
+    // RefreshAfterLinkedMutationAsync, ReloadLinkedConflictAsync, KeepMineLinkedConflictAsync,
+    // SaveLinkedConflictAsCopyAsync: see ApiClientPage.LinkedSave.cs
 
     // ── Tree callbacks ─────────────────────────────────────────────────────────
 
-    private Task OnCollectionSelectedAsync(string collectionId)
-    {
-        var collection = _state.Collections.FirstOrDefault(c => c.Id == collectionId);
-        if (collection is not null && !ReferenceEquals(collection, _state.ActiveCollection))
-        {
-            ActivateCollection(collection);
-            _state.SelectedRequest = null;
-            _state.SelectedRequestId = null;
-            _state.LastResult = null;
-            _state.SubscriptionMessages.Clear();
-            _state.IsDirty = false;
-            StateHasChanged();
-        }
-        return Task.CompletedTask;
-    }
+    // OnCollectionSelectedAsync, OnLinkedRootSelectedAsync: see ApiClientPage.Collections.cs
 
-    private Task OnLinkedRootSelectedAsync(string rootId)
-    {
-        _state.ActiveLinkedRootId = rootId;
-        _state.ActiveCollection = null;
-        _state.SelectedRequest = null;
-        _state.SelectedRequestId = null;
-        _state.LastResult = null;
-        _state.IsDirty = false;
-        _state.LinkedSaveError = null;
-        _state.LinkedSaveConflict = null;
-        StateHasChanged();
-        return Task.CompletedTask;
-    }
+    // OnRequestSelectedAsync: see ApiClientPage.Requests.cs
 
-    private async Task OnRequestSelectedAsync(HttpRequestEntry request)
-    {
-        if (!UserSettings.Settings.ApiClientRequestTabs)
-        {
-            _state.SelectedRequest = request;
-            _state.SelectedRequestId = request.Id;
-            _state.IsDirty = _state.DirtyByRequestId.GetValueOrDefault(request.Id);
-            _state.LinkedSaveError = null;
-            _state.LinkedSaveConflict = null;
-            _state.LastResult = _state.LastResultByRequestId.GetValueOrDefault(request.Id);
-            _state.SubscriptionMessages.Clear();
-            if (_state.SubscriptionMessagesByRequestId.TryGetValue(request.Id, out var messages))
-            {
-                _state.SubscriptionMessages.AddRange(messages);
-            }
-        }
-        else
-        {
-            // Phase 3, Task 4 (DEC-UX-1/DEC-UX-7): open (or focus) a tab for the selected request,
-            // then mirror the active tab's request into the existing single-request fields so
-            // RequestBuilderPanel/ResponseViewerPanel (bound via ApiClientRequestWorkspace) keep
-            // working unchanged. Per-tab isolated render state is a later task (Task 6).
-            var existingTab = _state.OpenTabs.FirstOrDefault(t => t.RequestId == request.Id);
-            if (existingTab is null)
-            {
-                _state.OpenTabs.Add(new ApiClientOpenTab { RequestId = request.Id, Request = request });
-            }
-            _state.ActiveTabRequestId = request.Id;
+    // OnTabSelectedAsync, OnTabCloseRequestedAsync, SaveAndCloseTabAsync, DiscardAndCloseTabAsync,
+    // CancelTabCloseConfirm, CloseTab, PersistLastSelectionAsync: see ApiClientPage.Tabs.cs
 
-            _state.SelectedRequest = request;
-            _state.SelectedRequestId = request.Id;
-            _state.IsDirty = _state.DirtyByRequestId.GetValueOrDefault(request.Id);
-            _state.LinkedSaveError = null;
-            _state.LinkedSaveConflict = null;
-            _state.LastResult = _state.LastResultByRequestId.GetValueOrDefault(request.Id);
-            _state.SubscriptionMessages.Clear();
-            if (_state.SubscriptionMessagesByRequestId.TryGetValue(request.Id, out var messages))
-            {
-                _state.SubscriptionMessages.AddRange(messages);
-            }
-        }
+    // OnAddFolderAsync, OnAddRequestInFolderAsync, OnRenameNodeAsync, OnDeleteNodeAsync: see
+    // ApiClientPage.Tree.cs
 
-        if (_state.ActiveCollection is not null)
-        {
-            // Fire-and-forget persistence of last selection; non-blocking
-            _ = PersistLastSelectionAsync(_state.ActiveCollection.Id, request.Id);
-        }
+    // OnRenameCollectionAsync, OnDeleteCollectionAsync, ConfirmDeleteCollectionAsync: see
+    // ApiClientPage.Collections.cs
 
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task OnTabSelectedAsync(string requestId)
-    {
-        // Phase 3, Task 4: focus an existing tab (raised by ApiClientOpenTabsStrip). Mirrors the
-        // tab's Request into the existing single-request fields, same as OnRequestSelectedAsync's
-        // ON branch above.
-        var tab = _state.OpenTabs.FirstOrDefault(t => t.RequestId == requestId);
-        if (tab is null)
-        {
-            await InvokeAsync(StateHasChanged); // BL-2
-            return;
-        }
-
-        _state.ActiveTabRequestId = requestId;
-        _state.SelectedRequest = tab.Request;
-        _state.SelectedRequestId = tab.RequestId;
-        _state.IsDirty = _state.DirtyByRequestId.GetValueOrDefault(tab.RequestId);
-        _state.LinkedSaveError = null;
-        _state.LinkedSaveConflict = null;
-        _state.LastResult = _state.LastResultByRequestId.GetValueOrDefault(tab.RequestId);
-        _state.SubscriptionMessages.Clear();
-        if (_state.SubscriptionMessagesByRequestId.TryGetValue(tab.RequestId, out var messages))
-        {
-            _state.SubscriptionMessages.AddRange(messages);
-        }
-
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    // Phase 3, Task 5: raised by ApiClientOpenTabsStrip's close (✕) button. If the tab's request
-    // has unsaved changes (DirtyByRequestId), prompts a Save/Discard/Cancel confirm dialog before
-    // closing; otherwise closes immediately. See CloseTab for the active-tab reassignment rule.
-    private async Task OnTabCloseRequestedAsync(string requestId)
-    {
-        if (_state.DirtyByRequestId.TryGetValue(requestId, out var isDirty) && isDirty)
-        {
-            _pendingCloseTabRequestId = requestId;
-            _showTabCloseConfirmDialog = true;
-            await InvokeAsync(StateHasChanged); // BL-2
-            return;
-        }
-
-        CloseTab(requestId);
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    // "Save" choice in the close-dirty-tab confirm dialog. SaveRequestAsync/SaveActiveCollectionAsync
-    // operate on _state.SelectedRequest + _state.ActiveCollection (there is no overload taking a
-    // request explicitly), so this temporarily points SelectedRequest/SelectedRequestId at the
-    // tab being closed, saves via the existing method, then restores whatever was selected before
-    // (CloseTab below reassigns it again if the closed tab was itself the active one). This is the
-    // simpler of the two options considered — an explicit-request overload of SaveActiveCollectionAsync
-    // would avoid the temporary swap but touches more call sites for no behavioural gain, since tabs
-    // in this phase are always scoped to the single ActiveCollection anyway.
-    private async Task SaveAndCloseTabAsync()
-    {
-        var requestId = _pendingCloseTabRequestId;
-        _showTabCloseConfirmDialog = false;
-        _pendingCloseTabRequestId = null;
-        if (requestId is null)
-        {
-            await InvokeAsync(StateHasChanged); // BL-2
-            return;
-        }
-
-        var tab = _state.OpenTabs.FirstOrDefault(t => t.RequestId == requestId);
-        if (tab is not null)
-        {
-            var previousSelectedRequest = _state.SelectedRequest;
-            var previousSelectedRequestId = _state.SelectedRequestId;
-
-            _state.SelectedRequest = tab.Request;
-            _state.SelectedRequestId = tab.RequestId;
-
-            await SaveRequestAsync();
-
-            _state.SelectedRequest = previousSelectedRequest;
-            _state.SelectedRequestId = previousSelectedRequestId;
-            _state.IsDirty = previousSelectedRequestId is not null
-                && _state.DirtyByRequestId.GetValueOrDefault(previousSelectedRequestId);
-        }
-
-        CloseTab(requestId);
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    // "Discard" choice in the close-dirty-tab confirm dialog: closes the tab without saving.
-    private async Task DiscardAndCloseTabAsync()
-    {
-        var requestId = _pendingCloseTabRequestId;
-        _showTabCloseConfirmDialog = false;
-        _pendingCloseTabRequestId = null;
-        if (requestId is not null)
-        {
-            CloseTab(requestId);
-        }
-
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    // "Cancel" choice in the close-dirty-tab confirm dialog: closes the dialog, nothing changes.
-    private async Task CancelTabCloseConfirm()
-    {
-        _showTabCloseConfirmDialog = false;
-        _pendingCloseTabRequestId = null;
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    /// <summary>
-    /// Removes a tab from <see cref="ApiClientState.OpenTabs"/> and clears its dirty flag. If the
-    /// closed tab was the active one, reassigns <see cref="ApiClientState.ActiveTabRequestId"/> (and
-    /// mirrors SelectedRequest/SelectedRequestId) to the previous tab in list order, or the next
-    /// tab if the closed tab was first — or to the empty state (all null) if no tabs remain.
-    /// </summary>
-    private void CloseTab(string requestId)
-    {
-        var index = _state.OpenTabs.FindIndex(t => t.RequestId == requestId);
-        if (index < 0) return;
-
-        _state.OpenTabs.RemoveAt(index);
-        _state.DirtyByRequestId.Remove(requestId);
-
-        if (_state.ActiveTabRequestId != requestId)
-        {
-            return;
-        }
-
-        if (_state.OpenTabs.Count == 0)
-        {
-            _state.ActiveTabRequestId = null;
-            _state.SelectedRequestId = null;
-            _state.SelectedRequest = null;
-            _state.IsDirty = false;
-            _state.LastResult = null;
-            _state.SubscriptionMessages.Clear();
-            return;
-        }
-
-        var newIndex = Math.Min(index > 0 ? index - 1 : 0, _state.OpenTabs.Count - 1);
-        var newActiveTab = _state.OpenTabs[newIndex];
-        _state.ActiveTabRequestId = newActiveTab.RequestId;
-        _state.SelectedRequest = newActiveTab.Request;
-        _state.SelectedRequestId = newActiveTab.RequestId;
-        _state.IsDirty = _state.DirtyByRequestId.GetValueOrDefault(newActiveTab.RequestId);
-        _state.LinkedSaveError = null;
-        _state.LinkedSaveConflict = null;
-        _state.LastResult = _state.LastResultByRequestId.GetValueOrDefault(newActiveTab.RequestId);
-        _state.SubscriptionMessages.Clear();
-        if (_state.SubscriptionMessagesByRequestId.TryGetValue(newActiveTab.RequestId, out var messages))
-        {
-            _state.SubscriptionMessages.AddRange(messages);
-        }
-    }
-
-    private Task PersistLastSelectionAsync(string collectionId, string requestId)
-    {
-        return EnvironmentRepo.SetLastSelectedRequestAsync(collectionId, requestId);
-    }
-
-    private async Task OnAddFolderAsync((string CollectionId, ApiCollectionNode ParentNode) args)
-    {
-        var collection = _state.Collections.FirstOrDefault(c => c.Id == args.CollectionId);
-        if (collection is null)
-            return;
-
-        var folder = new ApiCollectionNode
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Type = ApiCollectionNodeType.Folder,
-            Name = "New Folder",
-            IsExpanded = true,
-        };
-
-        ActivateCollection(collection);
-        var isRoot = args.ParentNode.Id.StartsWith("__col__", StringComparison.Ordinal);
-        if (isRoot)
-            collection.Nodes.Add(folder);
-        else
-            AddNodeToParent(collection.Nodes, args.ParentNode.Id, folder);
-
-        var linkedRoot = FindLinkedRootForCollection(collection.Id);
-        if (linkedRoot is not null)
-        {
-            if (!await TryRunLinkedFileOperationAsync(() =>
-                LinkedFileService.CreateFolderAsync(linkedRoot.ApiRootPath, collection, isRoot ? null : args.ParentNode, folder.Name)))
-            {
-                return;
-            }
-
-            await RefreshAfterLinkedMutationAsync(collection.Id);
-        }
-        else
-        {
-            await CollectionRepo.UpdateCollectionAsync(collection);
-            _state.Collections = BuildCombinedCollections();
-        }
-
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task OnAddRequestInFolderAsync((string CollectionId, ApiCollectionNode ParentNode) args)
-    {
-        var collection = _state.Collections.FirstOrDefault(c => c.Id == args.CollectionId);
-        if (collection is null) return;
-        ActivateCollection(collection);
-
-        var request = new HttpRequestEntry
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Name = "New Request",
-            Method = ApiRequestMethod.Get,
-            Url = string.Empty,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
-        };
-
-        var node = new ApiCollectionNode
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Type = ApiCollectionNodeType.Request,
-            Name = request.Name,
-            Request = request,
-        };
-
-        if (args.ParentNode.Id.StartsWith("__col__", StringComparison.Ordinal))
-            collection.Nodes.Add(node);
-        else
-            AddNodeToParent(collection.Nodes, args.ParentNode.Id, node);
-        _state.SelectedRequestId = request.Id;
-        _state.SelectedRequest = request;
-        await SaveActiveCollectionAsync();
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task OnRenameNodeAsync((ApiCollectionNode Node, string NewName) args)
-    {
-        if (_state.ActiveCollection is null) return;
-
-        RenameNodeInTree(_state.ActiveCollection.Nodes, args.Node.Id, args.NewName);
-        if (args.Node.Request is not null)
-            args.Node.Request.Name = args.NewName;
-        _state.SelectedRequest = args.Node.Request ?? _state.SelectedRequest;
-
-        var linkedRoot = FindLinkedRootForCollection(_state.ActiveCollection.Id);
-        if (linkedRoot is not null && args.Node.Request is not null)
-        {
-            await SaveActiveCollectionAsync();
-        }
-        else if (linkedRoot is not null)
-        {
-            if (!await TryRunLinkedFileOperationAsync(() =>
-                LinkedFileService.RenameFolderAsync(linkedRoot.ApiRootPath, _state.ActiveCollection, args.Node.Id, args.NewName)))
-            {
-                return;
-            }
-
-            await RefreshAfterLinkedMutationAsync(_state.ActiveCollection.Id);
-        }
-        else
-        {
-            await CollectionRepo.UpdateCollectionAsync(_state.ActiveCollection);
-            _state.Collections = BuildCombinedCollections();
-        }
-
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task OnDeleteNodeAsync(ApiCollectionNode node)
-    {
-        if (_state.ActiveCollection is null) return;
-
-        var collection = _state.ActiveCollection;
-        var linkedRoot = FindLinkedRootForCollection(collection.Id);
-        if (linkedRoot is not null)
-        {
-            var operation = node.Type == ApiCollectionNodeType.Folder
-                ? () => LinkedFileService.DeleteFolderAsync(linkedRoot.ApiRootPath, collection, node.Id)
-                : node.Request is not null
-                    ? () => LinkedFileService.DeleteRequestAsync(linkedRoot.ApiRootPath, collection, node.Request.Id)
-                    : (Func<Task>?)null;
-
-            if (operation is null) return;
-            if (!await TryRunLinkedFileOperationAsync(operation)) return;
-        }
-
-        RemoveNodeFromTree(collection.Nodes, node.Id);
-
-        if (_state.SelectedRequestId is not null &&
-            (node.Request?.Id == _state.SelectedRequestId ||
-             ContainsRequest(node.Children, _state.SelectedRequestId)))
-        {
-            _state.SelectedRequest = null;
-            _state.SelectedRequestId = null;
-            _state.IsDirty = false;
-        }
-
-        if (linkedRoot is not null)
-        {
-            await RefreshAfterLinkedMutationAsync(collection.Id);
-        }
-        else
-        {
-            await CollectionRepo.UpdateCollectionAsync(collection);
-            _state.Collections = BuildCombinedCollections();
-        }
-
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task OnRenameCollectionAsync((string CollectionId, string NewName) args)
-    {
-        var collection = _state.Collections.FirstOrDefault(c => c.Id == args.CollectionId);
-        if (collection is null) return;
-
-        var linkedRoot = FindLinkedRootForCollection(collection.Id);
-        if (linkedRoot is not null)
-        {
-            if (!await TryRunLinkedFileOperationAsync(() =>
-                LinkedFileService.RenameCollectionDirectoryAsync(linkedRoot.ApiRootPath, collection, args.NewName)))
-            {
-                return;
-            }
-
-            await RefreshAfterLinkedMutationAsync(collection.Id);
-        }
-        else
-        {
-            collection.Name = args.NewName;
-            await CollectionRepo.UpdateCollectionAsync(collection);
-            _state.Collections = BuildCombinedCollections();
-        }
-
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private Task OnDeleteCollectionAsync(string collectionId)
-    {
-        var collection = _state.Collections.FirstOrDefault(c => c.Id == collectionId);
-        _pendingDeleteCollectionId = collectionId;
-        _pendingDeleteCollectionName = collection?.Name ?? "this collection";
-        return Task.CompletedTask;
-    }
-
-    private async Task ConfirmDeleteCollectionAsync()
-    {
-        if (_pendingDeleteCollectionId is null) return;
-        var id = _pendingDeleteCollectionId;
-        var collection = _state.Collections.FirstOrDefault(c => c.Id == id);
-        _pendingDeleteCollectionId = null;
-        _pendingDeleteCollectionName = null;
-
-        var linkedRoot = collection is not null ? FindLinkedRootForCollection(collection.Id) : null;
-        if (linkedRoot is not null && collection is not null)
-        {
-            if (!await TryRunLinkedFileOperationAsync(() =>
-                LinkedFileService.DeleteCollectionDirectoryAsync(linkedRoot.ApiRootPath, collection)))
-            {
-                return;
-            }
-
-            await LoadLinkedRootsAsync();
-        }
-        else
-        {
-            await CollectionRepo.DeleteCollectionAsync(id);
-            _state.Collections = BuildCombinedCollections();
-        }
-
-        if (_state.ActiveCollection?.Id == id)
-        {
-            _state.ActiveCollection = _state.Collections.FirstOrDefault();
-            _state.SelectedRequest = null;
-            _state.SelectedRequestId = null;
-            _state.IsDirty = false;
-        }
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    /// <summary>
-    /// Drag-and-drop reorder/reparent. Restricted to moves within the same collection — the
-    /// dragged node and its new parent must both belong to <paramref name="args"/>.CollectionId.
-    /// </summary>
-    private async Task OnMoveNodeAsync((string CollectionId, ApiCollectionNode DraggedNode, ApiCollectionNode? NewParent,
-int? NewIndex) args)
-    {
-        var collection = _state.Collections.FirstOrDefault(c => c.Id == args.CollectionId);
-        if (collection is null) return;
-        if (args.NewParent is not null && args.DraggedNode.Id == args.NewParent.Id) return;
-
-        ActivateCollection(collection);
-
-        if (!RemoveNodeFromTree(collection.Nodes, args.DraggedNode.Id)) return;
-        InsertNodeAtParent(collection.Nodes, args.NewParent?.Id, args.DraggedNode, args.NewIndex);
-
-        var linkedRoot = FindLinkedRootForCollection(collection.Id);
-        if (linkedRoot is not null)
-        {
-            if (!await TryRunLinkedFileOperationAsync(() =>
-                LinkedFileService.MoveNodeAsync(linkedRoot.ApiRootPath, collection, args.DraggedNode, args.NewParent)))
-            {
-                return;
-            }
-
-            await RefreshAfterLinkedMutationAsync(collection.Id);
-        }
-        else
-        {
-            await CollectionRepo.UpdateCollectionAsync(collection);
-            _state.Collections = BuildCombinedCollections();
-        }
-
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
+    // OnMoveNodeAsync: see ApiClientPage.Tree.cs
 
     // ── Tree helpers ───────────────────────────────────────────────────────────
 
@@ -1498,55 +486,7 @@ index)
         return copy;
     }
 
-    private bool IsLinkedCollection(string collectionId) =>
-        _state.LinkedRootResults.Any(root => root.Collections.Any(collection => collection.Id == collectionId));
-
-    private IReadOnlyList<string> GetMissingSecretNames(HttpRequestEntry request, ApiEnvironment? activeEnvironment)
-    {
-        var allSecretNames = ExtractSecretNames(request);
-        if (allSecretNames.Count == 0)
-            return [];
-
-        if (activeEnvironment is null)
-            return allSecretNames;
-
-        return allSecretNames.Where(name => !IsSecretConfigured(activeEnvironment, name)).ToList();
-    }
-
-    private bool IsSecretConfigured(ApiEnvironment activeEnvironment, string secretName)
-    {
-        var variable = activeEnvironment.Variables.FirstOrDefault(v => string.Equals(v.Key, $"secret:{secretName}",
-StringComparison.OrdinalIgnoreCase));
-        if (variable is null || !variable.IsEnabled)
-            return false;
-
-        if (variable.SecretSource == EnvironmentVariableSecretSource.AzureKeyVault)
-            return !string.IsNullOrWhiteSpace(variable.CredentialKey);
-
-        return !string.IsNullOrWhiteSpace(variable.CredentialKey) && CredentialStore.Get(variable.CredentialKey) is not null;
-    }
-
-    private static IReadOnlyList<string> ExtractSecretNames(HttpRequestEntry request)
-    {
-        var values = new List<string?>
-        {
-            request.Url,
-            request.Body.RawContent,
-            request.GraphQlQuery,
-            request.GraphQlVariables,
-        };
-        values.AddRange(request.Headers.Select(header => header.Value));
-        values.AddRange(request.QueryParams.Select(param => param.Value));
-
-        return values
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .SelectMany(static value => System.Text.RegularExpressions.Regex.Matches(value!,
-"\\{\\{secret:([^}]+)\\}\\}").Select(match => match.Groups[1].Value.Trim()))
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
+    // IsLinkedCollection: see ApiClientPage.LinkedSave.cs
 
     private static string GetMethodLabel(ApiRequestMethod method) => method switch
     {
@@ -1564,59 +504,7 @@ StringComparison.OrdinalIgnoreCase));
 
     // ── Request change + auto-save ─────────────────────────────────────────────
 
-    private async Task OnRequestChangedAsync()
-    {
-        _state.IsDirty = true;
-        _state.LinkedSaveError = null;
-
-        if (_state.SelectedRequestId is not null)
-        {
-            _state.DirtyByRequestId[_state.SelectedRequestId] = true;
-        }
-
-        // Sync ApiCollectionNode.Name from the live request name so the tree view reflects renames
-        if (_state.SelectedRequest is not null && _state.ActiveCollection is not null)
-            SyncNodeName(_state.ActiveCollection.Nodes, _state.SelectedRequest.Id, _state.SelectedRequest.Name);
-
-        if (_state.AutoSave)
-        {
-            _autoSaveTimer?.Dispose();
-            _autoSaveTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(AutoSaveDebounceMs));
-            _ = AutoSaveLoopAsync();
-        }
-
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private async Task AutoSaveLoopAsync()
-    {
-        if (_autoSaveTimer is null) return;
-
-        try
-        {
-            while (await _autoSaveTimer.WaitForNextTickAsync())
-            {
-                if (_state.ActiveCollection is null || _state.SelectedRequest is null) continue;
-                if (!_state.IsDirty) continue;
-                try
-                {
-                    if (await SaveActiveCollectionAsync())
-                    {
-                        _state.IsDirty = false;
-                    }
-                    await InvokeAsync(StateHasChanged); // BL-2
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex, "Auto-save failed");
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Timer disposed - normal exit
-        }
-    }
+    // OnRequestChangedAsync, AutoSaveLoopAsync: see ApiClientPage.Requests.cs
 
     // ── Request send ────────────────────
 
@@ -1624,108 +512,16 @@ StringComparison.OrdinalIgnoreCase));
 
     // ── Request result ─────────────────────────────────────────────────────────
 
-    private async Task OnRequestResultAsync(HttpRequestResult result)
-    {
-        // Clear any previous subscription messages when a normal request completes
-        _state.SubscriptionMessages.Clear();
-        _state.LastResult = result;
-
-        // Record in history for the active request
-        if (_state.SelectedRequest is not null)
-        {
-            _state.LastResultByRequestId[_state.SelectedRequest.Id] = result;
-            if (!_state.RequestHistory.TryGetValue(_state.SelectedRequest.Id, out var hist))
-            {
-                hist = [];
-                _state.RequestHistory[_state.SelectedRequest.Id] = hist;
-            }
-            // Prepend so newest is first; cap at HistoryCap
-            hist.Insert(0, result);
-            if (hist.Count > HistoryCap)
-                hist.RemoveAt(hist.Count - 1);
-        }
-
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
+    // OnRequestResultAsync: see ApiClientPage.Requests.cs
 
     // ── Subscription callbacks ─────────────────────────────────────────────────
 
-    private async Task OnSubscriptionMessageAsync(GraphQlSubscriptionMessage msg)
-    {
-        // Clear the last HTTP result when subscription starts
-        if (_state.SubscriptionMessages.Count == 0)
-            _state.LastResult = null;
-
-        // Drop oldest when cap reached to prevent unbounded memory growth
-        if (_state.SubscriptionMessages.Count >= SubscriptionMessageCap)
-            _state.SubscriptionMessages.RemoveAt(0);
-
-        _state.SubscriptionMessages.Add(msg);
-        if (_state.SelectedRequestId is not null)
-        {
-            if (!_state.SubscriptionMessagesByRequestId.TryGetValue(_state.SelectedRequestId, out var messages))
-            {
-                messages = [];
-                _state.SubscriptionMessagesByRequestId[_state.SelectedRequestId] = messages;
-            }
-
-            if (messages.Count >= SubscriptionMessageCap)
-            {
-                messages.RemoveAt(0);
-            }
-
-            messages.Add(msg);
-        }
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private Task OnSubscriptionStoppedAsync()
-    {
-        // Nothing extra; the subscription message list persists until the next send
-        return Task.CompletedTask;
-    }
-
-    private Task OnResendHistoryEntryAsync(HttpRequestResult entry)
-    {
-        // Load the historical result back into the viewer — does not re-execute the request
-        _state.LastResult = entry;
-        _state.SubscriptionMessages.Clear();
-        return InvokeAsync(StateHasChanged);
-    }
-
-    private async Task SaveResponseExampleAsync(HttpRequestResult result)
-    {
-        if (_state.SelectedRequest is null || _state.ActiveCollection is null) return;
-
-        var example = WorkflowService.CreateResponseExample(
-            result,
-            string.Empty,
-            ActiveEnvironment?.Name);
-        _state.SelectedRequest.ResponseExamples.Insert(0, example);
-        if (await SaveActiveCollectionAsync())
-        {
-            _state.WorkflowMessage = "Saved response example.";
-            _state.WorkflowMessageIsError = false;
-        }
-        else
-        {
-            _state.WorkflowMessage = "Response example needs conflict resolution before it can be saved.";
-            _state.WorkflowMessageIsError = true;
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
+    // OnSubscriptionMessageAsync, OnSubscriptionStoppedAsync, OnResendHistoryEntryAsync,
+    // SaveResponseExampleAsync: see ApiClientPage.Requests.cs
 
     // ── Export / Import ────────────────────────────────────────────────────────
 
-    private async Task OnCollectionImportedAsync()
-    {
-        // Reload collections and environments from disk after a successful import
-        await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
-        await LoadLinkedRootsAsync();
-        _state.LoadingCollections = false;
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
+    // OnCollectionImportedAsync: see ApiClientPage.Collections.cs
 
     // ── Dialog input focus ──────────────────────────────────────────────────────
 
@@ -1748,117 +544,8 @@ StringComparison.OrdinalIgnoreCase));
 
     // ── Keyboard shortcut event handler ─────────────────────────────────────────
 
-    private void OnApiClientShortcut(ApiClientShortcutEvent e)
-    {
-        _ = InvokeAsync(async () =>
-        {
-            switch (e.Action)
-            {
-                case "NewRequest":
-                    if (_state.ActiveCollection is not null)
-                        await AddRequestAsync();
-                    break;
-                case "NewCollection":
-                    OpenNewCollectionDialog();
-                    break;
-                case "EnvManager":
-                    _state.WorksheetMode = _state.WorksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
-                    break;
-                case "SaveRequest":
-                    if (_state.SelectedRequest is not null)
-                        await SaveRequestAsync();
-                    break;
-                // Phase 3 follow-up: request-tab close/cycle shortcuts (Ctrl+Shift+W,
-                // Ctrl+PageUp/Down — see keyboardShortcuts.js for why Ctrl+W/Ctrl+Tab aren't
-                // reused). No-op when the tabs setting is off (DEC-UX-1: zero behaviour change
-                // on the OFF path) or when there is no active tab.
-                case "TabClose":
-                    if (UserSettings.Settings.ApiClientRequestTabs && _state.ActiveTabRequestId is { } closeId)
-                        await OnTabCloseRequestedAsync(closeId);
-                    break;
-                case "TabNext":
-                    if (UserSettings.Settings.ApiClientRequestTabs && GetNextOpenTabId(1) is { } nextId)
-                        await OnTabSelectedAsync(nextId);
-                    break;
-                case "TabPrev":
-                    if (UserSettings.Settings.ApiClientRequestTabs && GetNextOpenTabId(-1) is { } prevId)
-                        await OnTabSelectedAsync(prevId);
-                    break;
-            }
-            await InvokeAsync(StateHasChanged); // BL-2
-        });
-    }
-
-    // Mirrors MainLayout.GetNextTabId, scoped to the API Client's own open-request tabs
-    // (State.OpenTabs) instead of the app-level page tabs.
-    private string? GetNextOpenTabId(int direction)
-    {
-        var tabs = _state.OpenTabs;
-        if (tabs.Count == 0) return null;
-        var currentId = _state.ActiveTabRequestId;
-        var idx = currentId is null ? -1 : tabs.FindIndex(t => t.RequestId == currentId);
-        if (idx < 0) return tabs[0].RequestId;
-        var next = (idx + direction + tabs.Count) % tabs.Count;
-        return tabs[next].RequestId;
-    }
-
-    private void RegisterApiClientCommands()
-    {
-        Commands.Register(new AppCommand
-        {
-            Id = "api-new-request",
-            Label = "API Client: New Request",
-            Category = "API Client",
-            Icon = "＋",
-            Shortcut = "Ctrl+N",
-            AreaScope = "api-client",
-            Execute = async () => { if (_state.ActiveCollection is not null) await AddRequestAsync(); },
-        });
-        Commands.Register(new AppCommand
-        {
-            Id = "api-new-collection",
-            Label = "API Client: New Collection",
-            Category = "API Client",
-            Icon = "📦",
-            Shortcut = "Ctrl+Shift+N",
-            AreaScope = "api-client",
-            Execute = () => { OpenNewCollectionDialog(); return Task.CompletedTask; },
-        });
-        Commands.Register(new AppCommand
-        {
-            Id = "api-env-manager",
-            Label = "API Client: Manage Environments",
-            Category = "API Client",
-            Icon = "🌍",
-            Shortcut = "Ctrl+E",
-            AreaScope = "api-client",
-            Execute = () =>
-            {
-                _state.WorksheetMode = _state.WorksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
-                return InvokeAsync(StateHasChanged);
-            },
-        });
-        Commands.Register(new AppCommand
-        {
-            Id = "api-quick-nav",
-            Label = "API Client: Quick Nav (Request Picker)",
-            Category = "API Client",
-            Icon = "⌕",
-            Shortcut = "Ctrl+P",
-            AreaScope = "api-client",
-            Execute = () => Task.CompletedTask, // handled by global Ctrl+P → CommandPalette
-        });
-        Commands.Register(new AppCommand
-        {
-            Id = "api-save-request",
-            Label = "API Client: Save Request",
-            Category = "API Client",
-            Icon = "💾",
-            Shortcut = "Ctrl+S",
-            AreaScope = "api-client",
-            Execute = async () => { if (_state.SelectedRequest is not null) await SaveRequestAsync(); },
-        });
-    }
+    // OnApiClientShortcut, GetNextOpenTabId, RegisterApiClientCommands: see
+    // ApiClientPage.Commands.cs
 
     // ── IAsyncDisposable ───────────────────────────────────────────────────────
 

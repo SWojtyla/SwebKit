@@ -19,7 +19,8 @@ public class AlertMonitorServiceTests
         out TestWindowsNotificationService toast,
         out TestNotificationService notifications,
         IAlertRuleRepository? repository = null,
-        IAlertSignalSource[]? sources = null)
+        IAlertSignalSource[]? sources = null,
+        TimeSpan? tickInterval = null)
     {
         var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
         appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), events);
@@ -34,7 +35,8 @@ public class AlertMonitorServiceTests
             notifications,
             new RecordingToastDiagnosticService(),
             appState,
-            NullLogger<AlertMonitorService>.Instance);
+            NullLogger<AlertMonitorService>.Instance,
+            tickInterval);
     }
 
     // ── RecentAlerts ──────────────────────────────────────────────────────────
@@ -288,15 +290,13 @@ public class AlertMonitorServiceTests
         var repo = new TestAlertRuleRepository();
         var source = new AlwaysFiringSignalSource(AlertRuleSource.AksPodHealth);
         var fired = new List<AlertFiredEvent>();
-        var svc = BuildService(out _, out _, out _, repo, [source]);
+        var svc = BuildService(out _, out _, out _, repo, [source], tickInterval: TimeSpan.FromMilliseconds(50));
         svc.AlertFired += evt => fired.Add(evt);
 
         await svc.StartAsync();
-        await Task.Delay(50); // initial tick — no rules, nothing fires
+        await Task.Delay(20); // initial tick — no rules, nothing fires
 
-        // Add a rule and reload — the next natural 10 s tick will pick it up.
-        // But since the service starts immediately after reload, the due-time is reset to "now",
-        // so the very next PeriodicTimer tick (≤10 s) will fire the rule.
+        // Add a rule and reload — the next tick (every 50 ms in this test) will pick it up.
         repo.Add(new MonitoringAlertRule
         {
             Id = "r1",
@@ -306,7 +306,7 @@ public class AlertMonitorServiceTests
             CooldownMinutes = 60,
         });
         await svc.ReloadRulesAsync();
-        await Task.Delay(250); // wait for the next 10-second timer tick
+        await Task.Delay(250); // wait for the next 50 ms timer tick
 
         await svc.DisposeAsync();
         Assert.NotEmpty(fired);

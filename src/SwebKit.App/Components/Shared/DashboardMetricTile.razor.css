@@ -1,27 +1,42 @@
+/* Calm KPI metric tile (Wave B). Typography-first: one value size, one label
+   size, one meta size. Neutral surface, thin area-accent hairline, severity
+   color only when the count is non-zero. */
+
 .dashboard-metric-tile {
     position: relative;
     display: grid;
-    gap: var(--spacing-xs);
+    gap: var(--dash-tile-gap);
+    align-content: start;
     min-width: 0;
-    padding: var(--spacing-md);
-    border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--color-surface) 96%, white);
+    height: 100%;
+    padding: var(--dash-tile-pad);
+    padding-left: calc(var(--dash-tile-pad) + var(--dash-hairline));
+    border: 1px solid var(--dash-border);
+    border-radius: var(--dash-tile-radius);
+    background: var(--dash-surface);
+    box-shadow: var(--dash-shadow);
+    box-sizing: border-box;
     overflow: hidden;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
+.dashboard-metric-tile:hover {
+    border-color: var(--dash-border-strong);
+}
+
+/* Area accent — thin left hairline cue only, never a fill. */
 .dashboard-metric-tile::before {
     content: "";
     position: absolute;
     inset: 0 auto 0 0;
-    width: 3px;
-    background: color-mix(in srgb, var(--color-accent) 42%, transparent);
+    width: var(--dash-hairline);
+    background: var(--dash-accent-neutral);
 }
 
-.dashboard-metric-tile--service-bus::before { background: var(--color-nav-servicebus); }
-.dashboard-metric-tile--aks::before { background: var(--color-nav-aks); }
-.dashboard-metric-tile--redis::before { background: var(--color-nav-redis); }
-.dashboard-metric-tile--pipelines::before { background: var(--color-nav-pipelines); }
+.dashboard-metric-tile--service-bus::before { background: var(--dash-accent-servicebus); }
+.dashboard-metric-tile--aks::before { background: var(--dash-accent-aks); }
+.dashboard-metric-tile--redis::before { background: var(--dash-accent-redis); }
+.dashboard-metric-tile--pipelines::before { background: var(--dash-accent-pipelines); }
 
 .dashboard-metric-tile__header,
 .dashboard-metric-tile__actions,
@@ -37,36 +52,49 @@
 
 .dashboard-metric-tile__actions,
 .dashboard-metric-tile__refresh {
-    gap: 8px;
-}
-
-.dashboard-metric-tile__eyebrow,
-.dashboard-metric-tile__message,
-.dashboard-metric-tile__refresh,
-.dashboard-metric-tile__metric span {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
+    gap: var(--spacing-xs);
 }
 
 .dashboard-metric-tile__eyebrow {
-    font-weight: 800;
-    letter-spacing: 0.05em;
+    color: var(--dash-text-muted);
+    font-size: var(--dash-eyebrow-size);
+    font-weight: 700;
+    letter-spacing: var(--dash-eyebrow-tracking);
     text-transform: uppercase;
+}
+
+.dashboard-metric-tile__refresh,
+.dashboard-metric-tile__message {
+    color: var(--dash-text-muted);
+    font-size: var(--dash-meta-size);
 }
 
 .dashboard-metric-tile__link {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 28px;
-    padding: 0 10px;
-    border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+    min-height: 26px;
+    padding: 0 var(--spacing-sm);
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--color-surface-2) 70%, var(--color-surface));
-    color: var(--color-text);
-    font-size: var(--font-size-xs);
-    font-weight: 700;
+    color: var(--dash-text-muted);
+    font-size: var(--dash-meta-size);
+    font-weight: 600;
     text-decoration: none;
+    transition: color 120ms ease, background 120ms ease;
+}
+
+.dashboard-metric-tile__link:hover {
+    background: var(--dash-surface-inset);
+    color: var(--color-accent);
+}
+
+/* Dark mode specific enhancements */
+[data-theme='dark'] .dashboard-metric-tile__link:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='light'] .dashboard-metric-tile__link:hover {
+    background: rgba(0, 0, 0, 0.06);
 }
 
 .dashboard-metric-tile__metric {
@@ -76,9 +104,30 @@
 }
 
 .dashboard-metric-tile__metric strong {
-    color: var(--color-text);
-    font-size: clamp(1.35rem, 2.6vw, 2rem);
+    color: var(--dash-text);
+    font-size: var(--dash-value-size);
+    font-weight: var(--dash-value-weight);
     line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-metric-tile__metric span {
+    color: var(--dash-text-muted);
+    font-size: var(--dash-label-size);
+}
+
+/* Severity is the only strong color: warm the value when it needs attention. */
+.dashboard-metric-tile__metric.is-attention strong {
+    color: var(--dash-warn);
+}
+
+/* Dark mode specific enhancements for attention state */
+[data-theme='dark'] .dashboard-metric-tile__metric.is-attention strong {
+    color: #ffb74d;
+}
+
+[data-theme='light'] .dashboard-metric-tile__metric.is-attention strong {
+    color: #e65100;
 }
 
 .dashboard-metric-tile__message {
@@ -86,6 +135,17 @@
     line-height: 1.35;
 }
 
+.dashboard-metric-tile__message--ok {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dashboard-metric-tile__check {
+    color: var(--dash-ok);
+    font-weight: 700;
+}
+
 .dashboard-metric-tile__message--error {
-    color: var(--color-error);
+    color: var(--dash-crit);
 }

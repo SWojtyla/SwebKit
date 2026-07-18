@@ -150,4 +150,26 @@ public sealed class SwebKitCollectionManifest
     public List<CollectionVariable> Variables { get; set; } = [];
     public Dictionary<string, VariableGeneratorDefinition> GeneratedVariables { get; set; } = new(StringComparer.Ordinal);
     public AuthConfig? DefaultAuth { get; set; }
+
+    /// <summary>
+    /// Explicit sibling order for the collection's top-level nodes, expressed as on-disk base names
+    /// (folder directory names and request file names). Populated on import and on drag-and-drop
+    /// reorder; consumed when reading the collection back so manual ordering survives round-trips.
+    /// Empty means "no explicit order" — fall back to folders-first, alphabetical.
+    /// </summary>
+    public List<string> ChildOrder { get; set; } = [];
+}
+
+/// <summary>
+/// Per-folder metadata sidecar (<c>folder.json</c>) for a linked collection. Currently stores only
+/// the explicit child ordering; mirrors <see cref="SwebKitCollectionManifest.ChildOrder"/> but for a
+/// nested folder rather than the collection root.
+/// </summary>
+public sealed class SwebKitFolderManifest
+{
+    /// <summary>
+    /// Explicit sibling order for this folder's children, as on-disk base names (folder directory
+    /// names and request file names). Empty means "no explicit order".
+    /// </summary>
+    public List<string> ChildOrder { get; set; } = [];
 }

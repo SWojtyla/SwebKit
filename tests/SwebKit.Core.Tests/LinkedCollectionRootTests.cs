@@ -707,6 +707,164 @@ public sealed class LinkedCollectionRootTests : IDisposable
         Assert.Equal("https://github.com/example/project/compare/feature%2Ftest?expand=1", url);
     }
 
+    // ── Sibling ordering persistence (drag-and-drop reorder) ───────────────────
+
+    [Fact]
+    public async Task WriteThenLoad_PreservesTopLevelNodeOrder()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collection = new ApiCollection
+        {
+            Id = "c1",
+            Name = "Ordered",
+            Nodes =
+            [
+                Request("Beta"),
+                Folder("Zeta"),
+                Request("Alpha"),
+            ],
+        };
+
+        await _fileService.WriteCollectionToLinkedRootAsync(apiRoot, collection);
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+
+        var loaded = Assert.Single(result.Collections);
+        // Import order is preserved verbatim — not re-sorted folders-first / alphabetical.
+        Assert.Equal(new[] { "Beta", "Zeta", "Alpha" }, loaded.Nodes.Select(n => n.Name));
+    }
+
+    [Fact]
+    public async Task MoveNodeAsync_SameParentReorder_PersistsAcrossReload()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collection = new ApiCollection
+        {
+            Id = "c1",
+            Name = "Ordered",
+            Nodes = [Request("Alpha"), Request("Beta"), Request("Gamma")],
+        };
+        await _fileService.WriteCollectionToLinkedRootAsync(apiRoot, collection);
+
+        var loaded = Assert.Single((await _fileService.LoadRootAsync(Config())).Collections);
+        var gamma = loaded.Nodes.Single(n => n.Name == "Gamma");
+
+        // Mimic the page: reorder the in-memory tree first, then persist the move.
+        loaded.Nodes.Remove(gamma);
+        loaded.Nodes.Insert(0, gamma);
+        await _fileService.MoveNodeAsync(apiRoot, loaded, gamma, newParentFolder: null);
+
+        var reloaded = Assert.Single((await _fileService.LoadRootAsync(Config())).Collections);
+        Assert.Equal(new[] { "Gamma", "Alpha", "Beta" }, reloaded.Nodes.Select(n => n.Name));
+    }
+
+    [Fact]
+    public async Task MoveNodeAsync_CrossParentReorder_PersistsDestinationOrder()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collection = new ApiCollection
+        {
+            Id = "c1",
+            Name = "Ordered",
+            Nodes =
+            [
+                Request("Loose"),
+                Folder("Bucket", Request("First"), Request("Second")),
+            ],
+        };
+        await _fileService.WriteCollectionToLinkedRootAsync(apiRoot, collection);
+
+        var loaded = Assert.Single((await _fileService.LoadRootAsync(Config())).Collections);
+        var loose = loaded.Nodes.Single(n => n.Name == "Loose");
+        var bucket = loaded.Nodes.Single(n => n.Name == "Bucket");
+
+        // Move "Loose" into "Bucket" and place it between First and Second.
+        loaded.Nodes.Remove(loose);
+        bucket.Children.Insert(1, loose);
+        await _fileService.MoveNodeAsync(apiRoot, loaded, loose, bucket);
+
+        var reloaded = Assert.Single((await _fileService.LoadRootAsync(Config())).Collections);
+        var reloadedBucket = reloaded.Nodes.Single(n => n.Name == "Bucket");
+        Assert.Equal(new[] { "First", "Loose", "Second" }, reloadedBucket.Children.Select(n => n.Name));
+    }
+
+    [Fact]
+    public async Task RenameFolderAsync_KeepsPositionInPersistedOrder()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collection = new ApiCollection
+        {
+            Id = "c1",
+            Name = "Ordered",
+            Nodes = [Folder("Aardvark", Request("Ping")), Folder("Beluga", Request("Pong"))],
+        };
+        await _fileService.WriteCollectionToLinkedRootAsync(apiRoot, collection);
+
+        var loaded = Assert.Single((await _fileService.LoadRootAsync(Config())).Collections);
+        var aardvark = loaded.Nodes.Single(n => n.Name == "Aardvark");
+        await _fileService.RenameFolderAsync(apiRoot, loaded, aardvark.Id, "Zebra");
+
+        var reloaded = Assert.Single((await _fileService.LoadRootAsync(Config())).Collections);
+        // "Zebra" keeps Aardvark's first slot rather than jumping to the end alphabetically.
+        Assert.Equal(new[] { "Zebra", "Beluga" }, reloaded.Nodes.Select(n => n.Name));
+    }
+
+    // ── Collection-scoped environments (linked repo) ───────────────────────────
+
+    [Fact]
+    public async Task WriteEnvironmentToCollection_LoadsScopedToThatCollection()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collection = new ApiCollection { Id = "c1", Name = "Orders", Nodes = [Request("List")] };
+        var collectionDir = await _fileService.WriteCollectionToLinkedRootAsync(apiRoot, collection);
+
+        var scoped = new ApiEnvironment { Id = "e1", Name = "DEV", Variables = [new EnvironmentVariable { Key = "BASE", Value = "x", IsEnabled = true }] };
+        var global = new ApiEnvironment { Id = "e2", Name = "Shared", Variables = [] };
+        await _fileService.WriteEnvironmentToCollectionAsync(apiRoot, collectionDir, scoped);
+        await _fileService.WriteEnvironmentToLinkedRootAsync(apiRoot, global);
+
+        var result = await _fileService.LoadRootAsync(Config());
+        var loadedCollection = Assert.Single(result.Collections);
+
+        var dev = Assert.Single(result.Environments, e => e.Name == "DEV");
+        Assert.Equal(loadedCollection.Id, dev.CollectionId);
+        var shared = Assert.Single(result.Environments, e => e.Name == "Shared");
+        Assert.Null(shared.CollectionId);
+
+        // The environments/ subfolder must not appear as a request folder node in the collection tree.
+        Assert.DoesNotContain(loadedCollection.Nodes, n => n.Type == ApiCollectionNodeType.Folder && n.Name == "Environments");
+    }
+
+    [Fact]
+    public async Task WriteEnvironmentToCollection_StoresUnderCollectionEnvironmentsFolder()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collection = new ApiCollection { Id = "c1", Name = "Orders", Nodes = [Request("List")] };
+        var collectionDir = await _fileService.WriteCollectionToLinkedRootAsync(apiRoot, collection);
+
+        await _fileService.WriteEnvironmentToCollectionAsync(apiRoot, collectionDir,
+            new ApiEnvironment { Id = "e1", Name = "DEV", Variables = [] });
+
+        Assert.True(File.Exists(Path.Combine(collectionDir, "environments", "dev.swebenv.json")));
+    }
+
+    private LinkedCollectionRootConfig Config() => new() { Id = "r1", Name = "Project APIs", Path = _root };
+
+    private static ApiCollectionNode Request(string name) => new()
+    {
+        Id = name,
+        Type = ApiCollectionNodeType.Request,
+        Name = name,
+        Request = new HttpRequestEntry { Id = name, Name = name, Method = ApiRequestMethod.Get, Url = $"/{name}" },
+    };
+
+    private static ApiCollectionNode Folder(string name, params ApiCollectionNode[] children) => new()
+    {
+        Id = name,
+        Type = ApiCollectionNodeType.Folder,
+        Name = name,
+        Children = [.. children],
+    };
+
     public void Dispose()
     {
         try

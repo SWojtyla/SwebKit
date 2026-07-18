@@ -300,6 +300,18 @@ public class HpaInfo
     public int? TargetCpuUtilizationPercent { get; set; }
     public List<HpaMetricStatus> Metrics { get; set; } = [];
     public List<HpaCondition> Conditions { get; set; } = [];
+
+    /// <summary>True when this HPA was generated and is owned by a KEDA <c>ScaledObject</c>
+    /// (detected via the <c>scaledobject.keda.sh/name</c> label). KEDA-managed HPAs are disabled
+    /// through the ScaledObject's pause annotation rather than by editing the HPA directly.</summary>
+    public bool IsKedaManaged { get; set; }
+
+    /// <summary>Name of the owning KEDA <c>ScaledObject</c> when <see cref="IsKedaManaged"/> is true.</summary>
+    public string? ScaledObjectName { get; set; }
+
+    /// <summary>True when autoscaling is currently disabled — either a KEDA ScaledObject paused via
+    /// <c>autoscaling.keda.sh/paused</c>, or a plain HPA frozen (min = max) by SwebKit.</summary>
+    public bool IsScalingDisabled { get; set; }
 }
 
 public class HpaMetricStatus

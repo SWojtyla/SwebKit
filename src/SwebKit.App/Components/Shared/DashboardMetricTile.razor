@@ -33,7 +33,7 @@
     }
     else
     {
-        <div class="dashboard-metric-tile__metric">
+        <div class="dashboard-metric-tile__metric @(NeedsAttention ? "is-attention" : "is-ok")">
             <strong>@Data.Value</strong>
             <span>@(string.IsNullOrWhiteSpace(Data.Label) ? FallbackLabel : Data.Label)</span>
         </div>
@@ -45,9 +45,16 @@
                 <span>Refreshing...</span>
             </div>
         }
-        else
+        else if (NeedsAttention)
         {
             <p class="dashboard-metric-tile__message">Updated @RelativeTime(Data.LastUpdated)</p>
+        }
+        else
+        {
+            <p class="dashboard-metric-tile__message dashboard-metric-tile__message--ok">
+                <span class="dashboard-metric-tile__check" aria-hidden="true">✓</span>
+                All clear · @RelativeTime(Data.LastUpdated)
+            </p>
         }
     }
 </section>
@@ -64,6 +71,12 @@
     [Parameter] public string FallbackLabel { get; set; } = string.Empty;
     [Parameter] public bool IsLoading { get; set; }
     [Parameter] public string CssClass { get; set; } = string.Empty;
+
+    /// <summary>
+    /// A KPI needs attention when it reports a non-zero count (dead letters, unhealthy pods,
+    /// expiring keys, pending approvals). Zero is the calm, healthy state.
+    /// </summary>
+    private bool NeedsAttention => (Data?.Value ?? 0) > 0;
 
     protected override void OnParametersSet()
     {

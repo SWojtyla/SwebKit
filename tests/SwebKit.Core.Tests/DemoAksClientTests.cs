@@ -488,6 +488,43 @@ public class DemoAksClientTests
     }
 
     [Fact]
+    public async Task GetHpasAsync_MarksKedaManagedHpaWithScaledObjectName()
+    {
+        var hpas = await _client.GetHpasAsync("default");
+
+        var keda = Assert.Single(hpas, h => h.IsKedaManaged);
+        Assert.False(string.IsNullOrWhiteSpace(keda.ScaledObjectName));
+        Assert.All(hpas, h => Assert.False(h.IsScalingDisabled));
+    }
+
+    [Fact]
+    public async Task SetHpaScalingEnabledAsync_TogglesDisabledStateAcrossReads()
+    {
+        var hpa = (await _client.GetHpasAsync("default")).First();
+
+        await _client.SetHpaScalingEnabledAsync("default", hpa.Name, enabled: false);
+        var afterDisable = (await _client.GetHpasAsync("default")).First(h => h.Name == hpa.Name);
+        Assert.True(afterDisable.IsScalingDisabled);
+
+        await _client.SetHpaScalingEnabledAsync("default", hpa.Name, enabled: true);
+        var afterEnable = (await _client.GetHpasAsync("default")).First(h => h.Name == hpa.Name);
+        Assert.False(afterEnable.IsScalingDisabled);
+    }
+
+    [Fact]
+    public async Task SetHpaScalingEnabledAsync_DisableIsScopedToTargetHpa()
+    {
+        var hpas = (await _client.GetHpasAsync("default")).ToList();
+        var target = hpas[0];
+
+        await _client.SetHpaScalingEnabledAsync("default", target.Name, enabled: false);
+
+        var reread = (await _client.GetHpasAsync("default")).ToList();
+        Assert.True(reread.Single(h => h.Name == target.Name).IsScalingDisabled);
+        Assert.All(reread.Where(h => h.Name != target.Name), h => Assert.False(h.IsScalingDisabled));
+    }
+
+    [Fact]
     public async Task StreamDeploymentLogsAsync_EmitsLinesWithPodName()
     {
         var lines = new List<AggregatedLogLine>();

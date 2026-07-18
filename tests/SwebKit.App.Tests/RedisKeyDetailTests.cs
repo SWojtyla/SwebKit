@@ -41,7 +41,7 @@ public class RedisKeyDetailTests : TestContext
 
         Assert.EndsWith("tail-token", value, StringComparison.Ordinal);
         Assert.Equal(longValue, value);
-        Assert.Contains("Copy Value", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Copy value", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -58,8 +58,10 @@ public class RedisKeyDetailTests : TestContext
             })
             .Add(component => component.StringValue, rawJson));
 
-        cut.FindAll("fluent-button")
-            .First(button => button.TextContent.Contains("Copy Value", StringComparison.Ordinal))
+        // AppIconButton renders a plain <button> whose Label is exposed via aria-label/title, not
+        // visible TextContent (there is no <fluent-button> here and no rendered "Copy value" text).
+        cut.FindAll("button")
+            .First(button => button.GetAttribute("aria-label") == "Copy value")
             .Click();
 
         var invocation = JSInterop.VerifyInvoke("navigator.clipboard.writeText");
