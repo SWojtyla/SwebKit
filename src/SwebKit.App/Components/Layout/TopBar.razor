@@ -473,7 +473,7 @@ ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
         }
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
         Notifications.NotificationsChanged -= OnNotificationsChanged;
         AppState.DemoModeChanged -= OnDemoModeChanged;
@@ -481,5 +481,6 @@ ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
         Workspaces.Changed -= OnWorkspaceChanged;
         UserSettings.Changed -= OnUserSettingsChanged;
         _logoEasterEggTimer?.Dispose();
+        base.Dispose();
     }
 }

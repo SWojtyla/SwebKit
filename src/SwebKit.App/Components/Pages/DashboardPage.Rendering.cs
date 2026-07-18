@@ -32,11 +32,8 @@ public partial class DashboardPage
         IReadOnlyList<DashboardServiceBusNamespaceOption> ServiceBusNamespaces,
         string PageClass);
 
-    private static readonly TimeSpan RenderCoalescingWindow = TimeSpan.FromMilliseconds(75);
-
-    private readonly Lock _renderStateLock = new();
     private bool _renderStateDirty = true;
-    private bool _renderQueued;
+    private readonly Lock _renderStateLock = new();
     private DashboardRenderState _renderState = new(
         new DashboardViewPreference
         {
@@ -134,43 +131,12 @@ public partial class DashboardPage
 
         if (immediate)
         {
+            RequestRender();
             _ = InvokeAsync(StateHasChanged);
             return;
         }
 
-        _ = QueueRenderAsync();
-    }
-
-    private async Task QueueRenderAsync()
-    {
-        lock (_renderStateLock)
-        {
-            if (_renderQueued)
-            {
-                return;
-            }
-
-            _renderQueued = true;
-        }
-
-        try
-        {
-            await Task.Delay(RenderCoalescingWindow, _cts.Token);
-            if (!_cts.IsCancellationRequested)
-            {
-                await InvokeAsync(StateHasChanged);
-            }
-        }
-        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
-        {
-        }
-        finally
-        {
-            lock (_renderStateLock)
-            {
-                _renderQueued = false;
-            }
-        }
+        RequestCoalescedRender();
     }
 
     private void OnAppStateInitialized()

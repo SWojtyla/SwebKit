@@ -1,4 +1,5 @@
 @page "/service-bus"
+@inherits SwebKit.App.Components.Shared.SwebKitComponentBase
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
 @inject IAppEventBus Events
@@ -6,7 +7,6 @@
 @inject ScheduledMessageRepository ScheduledRepo
 @inject UiStateRepository UiState
 @inject IConnectionStateService ConnectionState
-@implements IDisposable
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
@@ -849,7 +849,7 @@ entityPath;
         _ = InvokeAsync(LoadNamespacesAsync);
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
         _cts.Cancel();
         _cts.Dispose();
@@ -861,6 +861,7 @@ entityPath;
         Selection.SetSelection("service-bus", null);
         foreach (var ns in _namespaceStates)
             if (ns.Client is IAsyncDisposable d) _ = d.DisposeAsync().AsTask();
+        base.Dispose();
     }
 
     private void LaunchInvestigationFromServiceBus()

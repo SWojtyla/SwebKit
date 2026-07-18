@@ -1,4 +1,4 @@
-@implements IAsyncDisposable
+@inherits SwebKit.App.Components.Shared.SwebKitComponentAsyncBase
 @inject AppStateService AppState
 
 <div class="sbg">
@@ -88,27 +88,27 @@
                 @if (hasQueues)
                 {
                     <div class="sbg-panel">
-                        <div class="sbg-cols sbg-cols-sticky" role="row">
-                            <span class="sbg-col-glyph"></span>
-                            <button type="button" class="sbg-col-name sbg-sort-btn @(SortColClass("name"))"
-                                    @onclick='() => SetSort("name")' title="Sort by name">
-                                Queues (@fq.Count) @SortArrow("name")
-                            </button>
-                            <button type="button" class="sbg-col-count sbg-sort-btn @(SortColClass("active"))"
-                                    @onclick='() => SetSort("active")' title="Sort by active count">
-                                A @SortArrow("active")
-                            </button>
-                            <button type="button" class="sbg-col-count sbg-sort-btn @(SortColClass("dlq"))"
-                                    @onclick='() => SetSort("dlq")' title="Sort by dead-letter count">
-                                DLQ @SortArrow("dlq")
-                            </button>
-                            <button type="button" class="sbg-col-count sbg-sort-btn @(SortColClass("sched"))"
-                                    @onclick='() => SetSort("sched")' title="Sort by scheduled count">
-                                Sch @SortArrow("sched")
-                            </button>
-                            <span class="sbg-col-actions"></span>
-                        </div>
                         <div class="sbg-panel-rows" role="table" aria-label="Queues">
+                            <div class="sbg-cols sbg-cols-sticky" role="row">
+                                <span class="sbg-col-glyph"></span>
+                                <button type="button" class="sbg-col-name sbg-sort-btn @(SortColClass("name"))"
+                                        @onclick='() => SetSort("name")' title="Sort by name">
+                                    Queues (@fq.Count) @SortArrow("name")
+                                </button>
+                                <button type="button" class="sbg-col-count sbg-sort-btn @(SortColClass("active"))"
+                                        @onclick='() => SetSort("active")' title="Sort by active count">
+                                    A @SortArrow("active")
+                                </button>
+                                <button type="button" class="sbg-col-count sbg-sort-btn @(SortColClass("dlq"))"
+                                        @onclick='() => SetSort("dlq")' title="Sort by dead-letter count">
+                                    DLQ @SortArrow("dlq")
+                                </button>
+                                <button type="button" class="sbg-col-count sbg-sort-btn @(SortColClass("sched"))"
+                                        @onclick='() => SetSort("sched")' title="Sort by scheduled count">
+                                    Sch @SortArrow("sched")
+                                </button>
+                                <span class="sbg-col-actions"></span>
+                            </div>
                             @foreach (var q in fq)
                             {
                                 var isPinned = IsEntityLinked(active.Namespace.Id, q.EntityPath);
@@ -117,22 +117,13 @@
                                     <span class="sbg-col-glyph sbg-glyph-q"
                                           title="@(q.IsDisabled ? "Queue (disabled)" : "Queue")">Q</span>
                                     <span class="sbg-col-name sbg-entity-name" title="@q.Name">@q.Name</span>
-                                    @RenderCount(q.Stats?.ActiveMessageCount, "sbg-col-count sbg-count-active")
-                                    @RenderCount(q.Stats?.DeadLetterMessageCount, "sbg-col-count sbg-count-dlq")
-                                    @RenderCount(q.Stats?.ScheduledMessageCount, "sbg-col-count sbg-count-sched")
+                                    @RenderCount(q.Stats?.ActiveMessageCount, "sbg-count-active", active, q, false)
+                                    @RenderCount(q.Stats?.DeadLetterMessageCount, "sbg-count-dlq", active, q, true)
+                                    @RenderCount(q.Stats?.ScheduledMessageCount, "sbg-count-sched")
                                     <div class="sbg-col-actions">
-                                        <button type="button" class="sbg-act sbg-act-open" title="Open active messages for '@q.Name'"
-                                                @onclick="() => OpenEntity(active, q, false)">
-                                            ▷ Active
-                                        </button>
-                                        <button type="button"
-                                                class="sbg-act sbg-act-dlq @(q.Stats?.DeadLetterMessageCount > 0 ? "sbg-act-dlq-hot" : "")"
-                                                title="@(q.Stats?.DeadLetterMessageCount == 0 ? "0 dead letters. Sébastien would be proud. 🥳" : $"Open dead-letter queue for '{q.Name}'")"
-                                                @onclick="() => OpenEntity(active, q, true)">
-                                            ⚠ DLQ
-                                        </button>
-                                        <button type="button" class="sbg-act sbg-act-pin @(isPinned ? "pinned" : "")"
+                                        <button type="button" class="app-icon-button app-icon-button--small @(isPinned ? "app-icon-button--primary" : "app-icon-button--ghost")"
                                                 title="@(isPinned ? "Unpin from dashboard" : "Pin to dashboard")"
+                                                @onclick:stopPropagation="true"
                                                 @onclick="() => ToggleLink(active.Namespace.Id, q)">
                                             @(isPinned ? "★" : "☆")
                                         </button>
@@ -146,18 +137,18 @@
                 @if (hasTopics)
                 {
                     <div class="sbg-panel">
-                        <div class="sbg-cols sbg-cols-sticky" role="row">
-                            <span class="sbg-col-glyph"></span>
-                            <button type="button" class="sbg-col-name sbg-sort-btn @(SortColClass("name"))"
-                                    @onclick='() => SetSort("name")' title="Sort by topics name">
-                                Topics (@ft.Count) @SortArrow("name")
-                            </button>
-                            <span class="sbg-col-count sbg-col-hdr">A</span>
-                            <span class="sbg-col-count sbg-col-hdr">DLQ</span>
-                            <span class="sbg-col-count sbg-col-hdr">Sch</span>
-                            <span class="sbg-col-actions"></span>
-                        </div>
                         <div class="sbg-panel-rows" role="table" aria-label="Topics">
+                            <div class="sbg-cols sbg-cols-sticky" role="row">
+                                <span class="sbg-col-glyph"></span>
+                                <button type="button" class="sbg-col-name sbg-sort-btn @(SortColClass("name"))"
+                                        @onclick='() => SetSort("name")' title="Sort by topics name">
+                                    Topics (@ft.Count) @SortArrow("name")
+                                </button>
+                                <span class="sbg-col-count sbg-col-hdr">A</span>
+                                <span class="sbg-col-count sbg-col-hdr">DLQ</span>
+                                <span class="sbg-col-count sbg-col-hdr">Sch</span>
+                                <span class="sbg-col-actions"></span>
+                            </div>
                             @foreach (var t in ft)
                             {
                                 var isExpanded = _expandedTopics.Contains(t.Name);
@@ -191,21 +182,13 @@
                                                 <span class="sbg-col-glyph sbg-glyph-s"
                                                       title="@(s.IsDisabled ? "Subscription (disabled)" : "Subscription")">S</span>
                                                 <span class="sbg-col-name sbg-entity-name" title="@s.Name">@s.Name</span>
-                                                @RenderCount(s.Stats?.ActiveMessageCount, "sbg-col-count sbg-count-active")
-                                                @RenderCount(s.Stats?.DeadLetterMessageCount, "sbg-col-count sbg-count-dlq")
+                                                @RenderCount(s.Stats?.ActiveMessageCount, "sbg-count-active", active, s, false)
+                                                @RenderCount(s.Stats?.DeadLetterMessageCount, "sbg-count-dlq", active, s, true)
                                                 <span class="sbg-col-count sbg-count-muted">–</span>
                                                 <div class="sbg-col-actions">
-                                                    <button type="button" class="sbg-act sbg-act-open" title="Open active messages for '@s.Name'"
-                                                            @onclick="() => OpenEntity(active, s, false)">
-                                                        ▷ Active
-                                                    </button>
-                                                    <button type="button"
-                                                            class="sbg-act sbg-act-dlq @(s.Stats?.DeadLetterMessageCount > 0 ? "sbg-act-dlq-hot" : "")"
-                                                            title="Open dead-letter queue for '@s.Name'" @onclick="() => OpenEntity(active, s, true)">
-                                                        ⚠ DLQ
-                                                    </button>
-                                                    <button type="button" class="sbg-act sbg-act-pin @(sPinned ? "pinned" : "")"
+                                                    <button type="button" class="app-icon-button app-icon-button--small @(sPinned ? "app-icon-button--primary" : "app-icon-button--ghost")"
                                                             title="@(sPinned ? "Unpin from dashboard" : "Pin to dashboard")"
+                                                            @onclick:stopPropagation="true"
                                                             @onclick="() => ToggleLink(active.Namespace.Id, s)">
                                                         @(sPinned ? "★" : "☆")
                                                     </button>
@@ -241,7 +224,6 @@
     private Guid _activeNsId;
     private string _sortCol = "name";
     private bool _sortAsc = true;
-    private bool IsLoading;
     private List<SbEntityInfo> _queues = [];
     private List<SbEntityInfo> _topics = [];
     private Dictionary<string, List<SbEntityInfo>> _subscriptions = [];
@@ -335,6 +317,7 @@
     {
         if (_sortCol == col) _sortAsc = !_sortAsc;
         else { _sortCol = col; _sortAsc = col != "dlq" && col != "active"; }
+        RequestRender();
     }
 
     private string SortColClass(string col) => _sortCol == col ? "sbg-sort-active" : "";
@@ -372,6 +355,7 @@
         _queues = []; _topics = [];
         _subscriptions.Clear(); _expandedTopics.Clear();
         _loadedForNs = null;
+        RequestRender();
     }
 
     private async Task RefreshAsync()
@@ -390,11 +374,11 @@
 
         IsLoading = true;
         _queues = []; _topics = [];
-        await InvokeAsync(StateHasChanged);
+        await RequestRenderAsync();
         try
         {
             _queues = (await ns.Client.ListQueuesAsync(ct)).ToList();
-            await InvokeAsync(StateHasChanged);
+            await RequestRenderAsync();
             _topics = (await ns.Client.ListTopicsAsync(ct)).ToList();
         }
         catch (OperationCanceledException) { return; }
@@ -404,7 +388,7 @@
                 ? " (Needs Manage rights.)" : "";
             _opMessage = $"Failed to load: {ex.Message}{hint}";
         }
-        finally { IsLoading = false; await InvokeAsync(StateHasChanged); }
+        finally { IsLoading = false; await RequestRenderAsync(); }
 
         _ = LoadStatsAsync(ns.Client, _queues, ct);
     }
@@ -421,7 +405,7 @@
                 {
                     if (ct.IsCancellationRequested) return;
                     entity.Stats = await client.GetEntityStatsAsync(entity.EntityPath, ct);
-                    if (!ct.IsCancellationRequested) await InvokeAsync(StateHasChanged);
+                    if (!ct.IsCancellationRequested) RequestCoalescedRender();
                 }
                 catch (OperationCanceledException) { }
                 catch { entity.Stats = new SbEntityStats(); }
@@ -436,20 +420,20 @@
         if (_expandedTopics.Contains(topic.Name))
         {
             _expandedTopics.Remove(topic.Name);
-            await InvokeAsync(StateHasChanged);
+            await RequestRenderAsync();
             return;
         }
         _expandedTopics.Add(topic.Name);
         if (!_subscriptions.ContainsKey(topic.Name) && ns.Client is not null)
         {
             _loadingTopics.Add(topic.Name);
-            await InvokeAsync(StateHasChanged);
+            await RequestRenderAsync();
             try
             {
                 var subs = (await ns.Client.ListSubscriptionsAsync(topic.Name, _statsCts.Token)).ToList();
                 _subscriptions[topic.Name] = subs;
                 _loadingTopics.Remove(topic.Name);
-                await InvokeAsync(StateHasChanged);
+                await RequestRenderAsync();
                 _ = LoadStatsAsync(ns.Client, subs, _statsCts.Token);
             }
             catch (OperationCanceledException) { _loadingTopics.Remove(topic.Name); }
@@ -457,10 +441,10 @@
             {
                 _loadingTopics.Remove(topic.Name);
                 _opMessage = $"Failed to load subscriptions: {ex.Message}";
-                await InvokeAsync(StateHasChanged);
+                await RequestRenderAsync();
             }
         }
-        else await InvokeAsync(StateHasChanged);
+        else await RequestRenderAsync();
     }
 
     private Task OpenEntity(NsState ns, SbEntityInfo entity, bool isDlq) =>
@@ -472,22 +456,34 @@
     private Task ToggleLink(Guid nsId, SbEntityInfo entity) =>
         OnEntityLinkToggled.InvokeAsync(new SbEntityLink { NamespaceId = nsId, EntityPath = entity.EntityPath });
 
-    private RenderFragment RenderCount(long? count, string cssClass) => builder =>
+    private RenderFragment RenderCount(long? count, string cssClass, NsState? ns = null, SbEntityInfo? entity = null, bool isDlq = false) => builder =>
     {
-        builder.OpenElement(0, "span");
-        builder.AddAttribute(1, "class", cssClass);
+        if (ns is not null && entity is not null)
+        {
+            builder.OpenElement(0, "button");
+            builder.AddAttribute(1, "type", "button");
+            builder.AddAttribute(2, "class", $"sbg-col-count app-button app-button--small app-button--ghost {cssClass}");
+            builder.AddAttribute(3, "title", isDlq ? $"Open dead-letter messages for '{entity.Name}'" : $"Open active messages for '{entity.Name}'");
+            builder.AddAttribute(4, "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, _ => OpenEntity(ns, entity, isDlq)));
+            builder.AddEventStopPropagationAttribute(5, "onclick", true);
+        }
+        else
+        {
+            builder.OpenElement(0, "span");
+            builder.AddAttribute(1, "class", $"sbg-col-count {cssClass}");
+        }
         if (count is null)
         {
-            builder.OpenElement(2, "span"); builder.AddAttribute(3, "class", "sbg-loading-dot"); builder.AddContent(4, "·");
+            builder.OpenElement(6, "span"); builder.AddAttribute(7, "class", "sbg-loading-dot"); builder.AddContent(8, "·");
             builder.CloseElement();
         }
         else if (count > 0)
         {
-            builder.AddContent(5, count.Value.ToString());
+            builder.AddContent(9, count.Value.ToString());
         }
         else
         {
-            builder.OpenElement(6, "span"); builder.AddAttribute(7, "class", "sbg-count-zero"); builder.AddContent(8, "–");
+            builder.OpenElement(10, "span"); builder.AddAttribute(11, "class", "sbg-count-zero"); builder.AddContent(12, "–");
             builder.CloseElement();
         }
         builder.CloseElement();
@@ -500,9 +496,10 @@
         _statsCts = new CancellationTokenSource();
     }
 
-    public async ValueTask DisposeAsync()
+    public override async ValueTask DisposeAsync()
     {
         try { await _statsCts.CancelAsync(); } catch { }
         _statsCts.Dispose();
+        await base.DisposeAsync();
     }
 }

@@ -87,6 +87,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ApiClient\BasicAuthForm.razor" Link="Components\ApiClient\BasicAuthForm.razor" />
         <Compile Include="..\..\src\SwebKit.App\Components\ApiClient\ApiClientOpenTab.cs" Link="Components\ApiClient\ApiClientOpenTab.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SwebKitComponentBase.cs" Link="Components\Shared\SwebKitComponentBase.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Shared\SwebKitComponentAsyncBase.cs" Link="Components\Shared\SwebKitComponentAsyncBase.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\DashboardTileModels.cs" Link="Components\Shared\DashboardTileModels.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SelectionService.cs" Link="Components\Shared\SelectionService.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\AutoRefreshController.cs" Link="Components\Shared\AutoRefreshController.cs" />

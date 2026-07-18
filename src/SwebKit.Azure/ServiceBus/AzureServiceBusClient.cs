@@ -22,75 +22,43 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     private readonly ILogger<AzureServiceBusClient> _logger;
 
     /// <summary>Creates a client from a raw connection string.</summary>
-    public AzureServiceBusClient(string connectionString)
-        : this(connectionString, NullLogger<AzureServiceBusClient>.Instance) { }
-
-    /// <summary>Creates a client from a raw connection string.</summary>
-    public AzureServiceBusClient(string connectionString, ILogger<AzureServiceBusClient> logger)
+    public AzureServiceBusClient(string connectionString, ILogger<AzureServiceBusClient>? logger = null)
         : this(connectionString, options: null, logger) { }
 
     /// <summary>Creates a client from a raw connection string, with an optional data-plane transport override.</summary>
-    public AzureServiceBusClient(string connectionString, ServiceBusClientOptions? options)
-        : this(connectionString, options, NullLogger<AzureServiceBusClient>.Instance) { }
-
-    /// <summary>Creates a client from a raw connection string, with an optional data-plane transport override.</summary>
-    public AzureServiceBusClient(string connectionString, ServiceBusClientOptions? options, ILogger<AzureServiceBusClient> logger)
+    public AzureServiceBusClient(string connectionString, ServiceBusClientOptions? options, ILogger<AzureServiceBusClient>? logger = null)
     {
-        _logger = logger;
-        var props = ServiceBusConnectionStringProperties.Parse(connectionString);
-        _scopedEntityPath = string.IsNullOrWhiteSpace(props.EntityPath) ? null : props.EntityPath;
-        _client = options is null ? new ServiceBusClient(connectionString) : new ServiceBusClient(connectionString, options);
-        // Admin/management operations always use HTTPS regardless of data-plane transport — no options needed.
-        _adminClient = new ServiceBusAdministrationClient(connectionString);
+        _logger = logger ?? NullLogger<AzureServiceBusClient>.Instance;
+        _scopedEntityPath = ServiceBusClientConnectionFactory.GetScopedEntityPath(connectionString);
+        _client = options is null
+            ? ServiceBusClientConnectionFactory.CreateClient(connectionString, ServiceBusTransportType.AmqpTcp)
+            : ServiceBusClientConnectionFactory.CreateClient(connectionString, options.TransportType);
+        _adminClient = ServiceBusClientConnectionFactory.CreateAdminClient(connectionString);
     }
 
     /// <summary>Creates a client authenticated via Microsoft Entra ID.</summary>
-    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential)
-        : this(fullyQualifiedNamespace, credential, NullLogger<AzureServiceBusClient>.Instance) { }
-
-    /// <summary>Creates a client authenticated via Microsoft Entra ID.</summary>
-    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential, ILogger<AzureServiceBusClient> logger)
+    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential, ILogger<AzureServiceBusClient>? logger = null)
         : this(fullyQualifiedNamespace, credential, options: null, logger) { }
 
     /// <summary>Creates a client authenticated via Microsoft Entra ID, with an optional data-plane transport override.</summary>
-    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential, ServiceBusClientOptions? options)
-        : this(fullyQualifiedNamespace, credential, options, NullLogger<AzureServiceBusClient>.Instance) { }
-
-    /// <summary>Creates a client authenticated via Microsoft Entra ID, with an optional data-plane transport override.</summary>
-    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential, ServiceBusClientOptions? options, ILogger<AzureServiceBusClient> logger)
+    public AzureServiceBusClient(string fullyQualifiedNamespace, TokenCredential credential, ServiceBusClientOptions? options, ILogger<AzureServiceBusClient>? logger = null)
     {
-        _logger = logger;
+        _logger = logger ?? NullLogger<AzureServiceBusClient>.Instance;
         _scopedEntityPath = null;
-        _client = options is null
-            ? new ServiceBusClient(fullyQualifiedNamespace, credential)
-            : new ServiceBusClient(fullyQualifiedNamespace, credential, options);
-        // Admin/management operations always use HTTPS regardless of data-plane transport — no options needed.
-        _adminClient = new ServiceBusAdministrationClient(fullyQualifiedNamespace, credential);
+        _client = ServiceBusClientConnectionFactory.CreateClient(fullyQualifiedNamespace, credential, options?.TransportType ?? ServiceBusTransportType.AmqpTcp);
+        _adminClient = ServiceBusClientConnectionFactory.CreateAdminClient(fullyQualifiedNamespace, credential);
     }
 
     /// <summary>Legacy constructor retained for backward-compatibility with config-based setup.</summary>
-    public AzureServiceBusClient(ServiceBusConfig config, ICredentialStore credentialStore, ILogger<AzureServiceBusClient> logger)
+    public AzureServiceBusClient(ServiceBusConfig config, ICredentialStore credentialStore, ILogger<AzureServiceBusClient>? logger = null)
     {
-        _logger = logger;
-        var fqns = config.FullyQualifiedNamespace;
-        var options = new ServiceBusClientOptions { TransportType = ServiceBusClientFactory.MapTransportType(config.TransportType) };
-
-        if (config.AuthMode == SbAuthMode.ConnectionString && config.CredentialRef is not null)
-        {
-            var connStr = credentialStore.Get(config.CredentialRef)
-                ?? throw new InvalidOperationException($"Credential '{config.CredentialRef}' not found.");
-            var props = ServiceBusConnectionStringProperties.Parse(connStr);
-            _scopedEntityPath = string.IsNullOrWhiteSpace(props.EntityPath) ? null : props.EntityPath;
-            _client = new ServiceBusClient(connStr, options);
-            _adminClient = new ServiceBusAdministrationClient(connStr);
-        }
-        else
-        {
-            // See AzureCredentialFactory for why EnvironmentCredential is excluded.
-            var credential = AzureCredentialFactory.CreateDefault();
-            _client = new ServiceBusClient(fqns, credential, options);
-            _adminClient = new ServiceBusAdministrationClient(fqns, credential);
-        }
+        _logger = logger ?? NullLogger<AzureServiceBusClient>.Instance;
+        var (client, adminClient, _) = ServiceBusClientConnectionFactory.CreateFromConfig(config, credentialStore);
+        _client = client;
+        _adminClient = adminClient;
+        _scopedEntityPath = config.AuthMode == SbAuthMode.ConnectionString && config.CredentialRef is not null
+            ? ServiceBusClientConnectionFactory.GetScopedEntityPath(credentialStore.Get(config.CredentialRef) ?? string.Empty)
+            : null;
     }
 
     public async Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default)
@@ -157,7 +125,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
                 IsDisabled = IsEntityDisabled(q.Value.Status)
             });
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
@@ -182,7 +150,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
                 IsDisabled = IsEntityDisabled(t.Value.Status)
             });
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }

@@ -1,3 +1,4 @@
+using SwebKit.Azure.ServiceBus;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
@@ -139,7 +140,7 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
         {
             if (client is IAsyncDisposable d3) await d3.DisposeAsync();
 
-            var isAuthFailure = IsAuthenticationFailure(ex);
+            var isAuthFailure = ServiceBusExceptionClassifier.IsAuthenticationFailure(ex);
             var source = diagnostic?.CredentialSource;
             var message = isAuthFailure
                 ? $"Authentication/authorization failed for credential '{source ?? ns.CredentialKey}'. {ex.Message}"
@@ -151,24 +152,5 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
                 Diagnostic: diagnostic,
                 IsAuthFailure: isAuthFailure);
         }
-    }
-
-    /// <summary>
-    /// Classifies whether an exception represents a credential/authorization problem (as opposed to a
-    /// generic transport error) by walking the inner-exception chain. Used to phrase the error as a
-    /// credential issue with the (non-secret) source label.
-    /// </summary>
-    private static bool IsAuthenticationFailure(Exception ex)
-    {
-        for (Exception? e = ex; e is not null; e = e.InnerException)
-        {
-            if (e is UnauthorizedAccessException)
-                return true;
-            // Service Bus management calls surface auth denials as an HTTP 401/403 RequestFailedException.
-            if (e is global::Azure.RequestFailedException rfe && rfe.Status is 401 or 403)
-                return true;
-        }
-
-        return false;
     }
 }

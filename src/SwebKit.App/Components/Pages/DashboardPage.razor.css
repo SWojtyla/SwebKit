@@ -17,6 +17,15 @@
 .dashboard-page--compact { gap: var(--spacing-md); }
 .dashboard-page--comfortable { gap: var(--spacing-xl); }
 
+/* Dark mode specific page background */
+[data-theme='dark'] .dashboard-page {
+    background: #0f0f1a;
+}
+
+[data-theme='light'] .dashboard-page {
+    background: #f5f5f8;
+}
+
 /* ── Compact header controls ─────────────────────────────────────────────── */
 .dashboard-view-switch {
     display: inline-flex;
@@ -125,6 +134,33 @@
     font-size: var(--dash-eyebrow-size);
 }
 
+/* Dark mode specific button enhancements */
+[data-theme='dark'] .dashboard-action-button,
+[data-theme='dark'] .dashboard-add-button,
+[data-theme='dark'] .dashboard-size-button {
+    background: #252535;
+    border-color: #5a5a6a;
+}
+
+[data-theme='dark'] .dashboard-action-button:hover,
+[data-theme='dark'] .dashboard-add-button:hover,
+[data-theme='dark'] .dashboard-size-button:hover {
+    background: #2c2c3e;
+}
+
+[data-theme='light'] .dashboard-action-button,
+[data-theme='light'] .dashboard-add-button,
+[data-theme='light'] .dashboard-size-button {
+    background: #ffffff;
+    border-color: #b0b0b8;
+}
+
+[data-theme='light'] .dashboard-action-button:hover,
+[data-theme='light'] .dashboard-add-button:hover,
+[data-theme='light'] .dashboard-size-button:hover {
+    background: #f5f5f8;
+}
+
 /* ── Fields ──────────────────────────────────────────────────────────────── */
 .dashboard-field,
 .dashboard-page ::deep .dashboard-field {
@@ -138,6 +174,12 @@
     color: var(--dash-text);
     font: inherit;
     box-sizing: border-box;
+    transition: border-color 150ms ease, background 150ms ease;
+}
+
+.dashboard-field:focus {
+    border-color: var(--color-accent);
+    outline: none;
 }
 
 .dashboard-field-label {
@@ -147,6 +189,27 @@
     color: var(--dash-text-muted);
     font-size: var(--dash-eyebrow-size);
     font-weight: 600;
+}
+
+/* Dark mode specific field enhancements */
+[data-theme='dark'] .dashboard-field {
+    background: #252535;
+    border-color: #5a5a6a;
+}
+
+[data-theme='dark'] .dashboard-field:focus {
+    background: #2c2c3e;
+    border-color: #4f8fe0;
+}
+
+[data-theme='light'] .dashboard-field {
+    background: #f5f5f8;
+    border-color: #b0b0b8;
+}
+
+[data-theme='light'] .dashboard-field:focus {
+    background: #ffffff;
+    border-color: #0078d4;
 }
 
 /* ── Builder panel ───────────────────────────────────────────────────────── */
@@ -160,6 +223,11 @@
     border-radius: var(--dash-tile-radius);
     background: var(--dash-surface);
     box-shadow: var(--dash-shadow);
+    transition: border-color 150ms ease;
+}
+
+.dashboard-builder:hover {
+    border-color: var(--dash-border-strong);
 }
 
 .dashboard-builder__group {
@@ -216,6 +284,25 @@
     gap: var(--spacing-xs);
 }
 
+/* Dark mode specific builder enhancements */
+[data-theme='dark'] .dashboard-builder {
+    background: #1a1a28;
+    border-color: #3a3a4a;
+}
+
+[data-theme='dark'] .dashboard-builder:hover {
+    border-color: #5a5a6a;
+}
+
+[data-theme='light'] .dashboard-builder {
+    background: #ffffff;
+    border-color: #e0e0e8;
+}
+
+[data-theme='light'] .dashboard-builder:hover {
+    border-color: #b0b0b8;
+}
+
 .dashboard-view-editor {
     display: grid;
     gap: var(--spacing-sm);
@@ -239,6 +326,12 @@
     border-left: var(--dash-hairline) solid var(--dash-accent-neutral);
     border-radius: var(--dash-tile-radius);
     background: var(--color-surface);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.dashboard-template-card:hover {
+    border-color: var(--dash-border-strong);
+    box-shadow: var(--shadow-md);
 }
 
 .dashboard-template-card--service-bus { border-left-color: var(--dash-accent-servicebus); }
@@ -271,6 +364,25 @@
     color: var(--dash-text-muted);
     font-size: var(--dash-meta-size);
     line-height: 1.4;
+}
+
+/* Dark mode specific template card enhancements */
+[data-theme='dark'] .dashboard-template-card {
+    background: #1a1a28;
+    border-color: #3a3a4a;
+}
+
+[data-theme='dark'] .dashboard-template-card:hover {
+    border-color: #5a5a6a;
+}
+
+[data-theme='light'] .dashboard-template-card {
+    background: #ffffff;
+    border-color: #e0e0e8;
+}
+
+[data-theme='light'] .dashboard-template-card:hover {
+    border-color: #b0b0b8;
 }
 
 /* ── Size picker ─────────────────────────────────────────────────────────── */
@@ -460,6 +572,11 @@
     box-shadow: var(--dash-shadow);
     box-sizing: border-box;
     overflow: hidden;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.dashboard-panel:hover {
+    border-color: var(--dash-border-strong);
 }
 
 .dashboard-panel::before {
@@ -475,6 +592,25 @@
 .dashboard-panel--aks-events::before,
 .dashboard-watch--aks::before { background: var(--dash-accent-aks); }
 .dashboard-watch--service-bus::before { background: var(--dash-accent-servicebus); }
+
+/* Dark mode specific panel enhancements */
+[data-theme='dark'] .dashboard-panel {
+    background: #1a1a28;
+    border-color: #3a3a4a;
+}
+
+[data-theme='dark'] .dashboard-panel:hover {
+    border-color: #5a5a6a;
+}
+
+[data-theme='light'] .dashboard-panel {
+    background: #ffffff;
+    border-color: #e0e0e8;
+}
+
+[data-theme='light'] .dashboard-panel:hover {
+    border-color: #b0b0b8;
+}
 
 .dashboard-panel__header {
     display: flex;
@@ -572,6 +708,35 @@
     height: 22px;
     border-radius: var(--radius-sm);
     background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+}
+
+/* Dark mode specific chip enhancements */
+[data-theme='dark'] .pinned-chip,
+[data-theme='dark'] .resource-row,
+[data-theme='dark'] .open-tab-chip {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: #3a3a4a;
+}
+
+[data-theme='dark'] .pinned-chip:hover,
+[data-theme='dark'] .resource-row:hover,
+[data-theme='dark'] .open-tab-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #5a5a6a;
+}
+
+[data-theme='light'] .pinned-chip,
+[data-theme='light'] .resource-row,
+[data-theme='light'] .open-tab-chip {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: #e0e0e8;
+}
+
+[data-theme='light'] .pinned-chip:hover,
+[data-theme='light'] .resource-row:hover,
+[data-theme='light'] .open-tab-chip:hover {
+    background: rgba(0, 0, 0, 0.06);
+    border-color: #b0b0b8;
 }
 
 .resource-row-main {

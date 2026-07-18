@@ -20,26 +20,12 @@ public sealed class ServiceBusClientFactory : IServiceBusClientFactory
         ServiceBusConnectionStringProperties.Parse(connectionString).FullyQualifiedNamespace;
 
     /// <inheritdoc />
-    public ServiceBusConnectionDiagnostic BuildConnectionDiagnostic(string connectionString, string credentialSource)
-    {
-        // SECURITY (DEC-3): read ONLY non-secret identifiers from the parsed properties.
-        // Never read props.SharedAccessKey (the secret value) and never retain the raw connection string.
-        var props = ServiceBusConnectionStringProperties.Parse(connectionString);
-        var keyName = string.IsNullOrWhiteSpace(props.SharedAccessKeyName) ? null : props.SharedAccessKeyName;
-
-        return new ServiceBusConnectionDiagnostic(
-            EndpointHost: props.FullyQualifiedNamespace,
-            SharedAccessKeyName: keyName,
-            AuthMethod: "SAS key",
-            CredentialSource: string.IsNullOrWhiteSpace(credentialSource) ? "(unnamed credential)" : credentialSource);
-    }
+    public ServiceBusConnectionDiagnostic BuildConnectionDiagnostic(string connectionString, string credentialSource) =>
+        ServiceBusClientConnectionFactory.BuildConnectionDiagnostic(connectionString, credentialSource);
 
     /// <inheritdoc />
     public ServiceBusConnectionDiagnostic BuildEntraConnectionDiagnostic(string fullyQualifiedNamespace) =>
-        new(EndpointHost: fullyQualifiedNamespace,
-            SharedAccessKeyName: null,
-            AuthMethod: "Microsoft Entra (DefaultAzureCredential)",
-            CredentialSource: "DefaultAzureCredential");
+        ServiceBusClientConnectionFactory.BuildEntraConnectionDiagnostic(fullyQualifiedNamespace);
 
     private static ServiceBusClientOptions BuildOptions(SbTransportType transportType) =>
         new() { TransportType = MapTransportType(transportType) };

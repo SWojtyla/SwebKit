@@ -1,5 +1,6 @@
 @page "/"
 @page "/dashboard"
+@inherits SwebKit.App.Components.Shared.SwebKitComponentBase
 @inject AppStateService AppState
 @inject IDevOpsClientFactory DevOpsClientFactory
 @inject IServiceBusClientFactory SbClientFactory
@@ -15,7 +16,6 @@
 @inject SwebKit.Core.Services.DemoAksClient DemoAksClient
 @inject SwebKit.Core.Services.DemoRedisClient DemoRedisClient
 @inject OperatorWorkspaceService Workspaces
-@implements IDisposable
 
 @{
     var renderState = GetRenderState();
@@ -713,7 +713,7 @@
         return Task.CompletedTask;
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
         AppState.Initialized -= OnAppStateInitialized;
         Events.Unsubscribe<ActivityEvent>(OnActivityReceived);
@@ -724,5 +724,6 @@
         _cts.Dispose();
         _healthRefreshGate.Dispose();
         _refreshTimer?.Dispose();
+        base.Dispose();
     }
 }
