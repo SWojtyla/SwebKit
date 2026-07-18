@@ -1,10 +1,11 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
 namespace SwebKit.Core.Configuration;
 
-public class UiStateRepository
+public class UiStateRepository(ILogger<UiStateRepository>? logger = null)
 {
     private static readonly JsonSerializerOptions Options = SwebKitJsonOptions.Indented;
 
@@ -28,8 +29,9 @@ public class UiStateRepository
             var loadResult = await AppDataFileStore.LoadAsync(filePath, DeserializeUiState).ConfigureAwait(false);
             _state = loadResult.Value;
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Failed to load UI state from '{File}'; falling back to defaults.", filePath);
             _state = new UiState();
         }
     }

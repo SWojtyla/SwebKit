@@ -1,10 +1,11 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Models;
 using SwebKit.Core.Serialization;
 
 namespace SwebKit.Core.Configuration;
 
-public class ReleaseRepository
+public class ReleaseRepository(ILogger<ReleaseRepository>? logger = null)
 {
     private static readonly JsonSerializerOptions Options = SwebKitJsonOptions.Indented;
 
@@ -36,8 +37,9 @@ public class ReleaseRepository
             _snapshots = data?.Snapshots ?? [];
             _validationSnapshots = data?.ValidationSnapshots ?? [];
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Failed to load releases from '{File}'; falling back to empty release data.", AppDataPaths.ReleasesJson);
             _releases = [];
             _snapshots = [];
         }

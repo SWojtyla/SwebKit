@@ -1,9 +1,10 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Models;
 
 namespace SwebKit.Core.Configuration;
 
-public class ScheduledMessageRepository
+public class ScheduledMessageRepository(ILogger<ScheduledMessageRepository>? logger = null)
 {
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -27,8 +28,9 @@ public class ScheduledMessageRepository
             var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.ScheduledMessagesJson, DeserializeEntries).ConfigureAwait(false);
             _entries = loadResult.Value;
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Failed to load scheduled messages from '{File}'; falling back to an empty list.", AppDataPaths.ScheduledMessagesJson);
             _entries = [];
         }
     }
