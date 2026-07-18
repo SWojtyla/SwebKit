@@ -140,8 +140,11 @@
     private static int _mermaidIdCounter;
 
     // Shared pipeline with common extensions (tables, autolinks, strikethrough, task lists, etc.).
+    // DisableHtml() strips raw/inline HTML so model- or data-derived content rendered as a
+    // MarkupString inside the BlazorWebView cannot inject <script> or other active markup (XSS).
     private static readonly MarkdownPipeline _markdownPipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
+        .DisableHtml()
         .Build();
 
     private readonly List<ChatMessage> _messages = [];
