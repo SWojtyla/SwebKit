@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
@@ -8,7 +9,7 @@ namespace SwebKit.Core.Configuration;
 /// Persists and loads environments and API client UI state (<c>environments.json</c>).
 /// Uses the atomic-write + <c>.bak</c> recovery pattern shared by all SwebKit repositories.
 /// </summary>
-public sealed class EnvironmentRepository
+public sealed class EnvironmentRepository(ILogger<EnvironmentRepository>? logger = null)
 {
     private static readonly JsonSerializerOptions Options = new(SwebKitJsonOptions.Indented)
     {
@@ -36,8 +37,9 @@ public sealed class EnvironmentRepository
             var result = await AppDataFileStore.LoadAsync(AppDataPaths.EnvironmentsJson, Deserialize).ConfigureAwait(false);
             _store = result.Value;
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Failed to load environments from '{File}'; falling back to an empty store.", AppDataPaths.EnvironmentsJson);
             _store = new EnvironmentsStore();
         }
     }

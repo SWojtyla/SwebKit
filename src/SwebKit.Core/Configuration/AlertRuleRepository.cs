@@ -1,11 +1,12 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
 using SwebKit.Core.Serialization;
 
 namespace SwebKit.Core.Configuration;
 
-public sealed class AlertRuleRepository : IAlertRuleRepository
+public sealed class AlertRuleRepository(ILogger<AlertRuleRepository>? logger = null) : IAlertRuleRepository
 {
     private static readonly JsonSerializerOptions Options = new(SwebKitJsonOptions.Indented)
     {
@@ -25,8 +26,9 @@ public sealed class AlertRuleRepository : IAlertRuleRepository
             _rules = JsonSerializer.Deserialize<List<MonitoringAlertRule>>(json, Options) ?? [];
             return _rules.AsReadOnly();
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Failed to load monitoring alert rules from '{File}'; falling back to an empty list.", AppDataPaths.MonitoringAlertsJson);
             return [];
         }
     }

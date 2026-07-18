@@ -1,11 +1,12 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Diagnostics;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
 namespace SwebKit.Core.Configuration;
 
-public sealed class UserSettingsRepository
+public sealed class UserSettingsRepository(ILogger<UserSettingsRepository>? logger = null)
 {
     private static readonly JsonSerializerOptions Options = SwebKitJsonOptions.Indented;
 
@@ -28,8 +29,9 @@ public sealed class UserSettingsRepository
             var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.UserSettingsJson, DeserializeSettings).ConfigureAwait(false);
             Settings = loadResult.Value;
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Failed to load user settings from '{File}'; falling back to defaults.", AppDataPaths.UserSettingsJson);
             Settings = new UserSettings();
         }
     }

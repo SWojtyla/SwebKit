@@ -809,7 +809,12 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {
         try { await _client.CoreV1.ListNamespaceAsync(cancellationToken: ct).ConfigureAwait(false); return true; }
-        catch { return false; }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "AKS connection test failed.");
+            return false;
+        }
     }
 
     public async Task RestartDeploymentAsync(string ns, string deploymentName, CancellationToken ct = default)
@@ -959,8 +964,9 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
 
                 return json;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogDebug(ex, "Failed to decode Helm release values; returning a placeholder.");
                 return "# Unable to decode release values";
             }
         }).ConfigureAwait(false);
@@ -1224,7 +1230,10 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 if (!string.IsNullOrWhiteSpace(accessToken.Token))
                     return accessToken.Token;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Azure credential token acquisition failed for scope {Scope}; trying the next scope.", scope);
+            }
         }
 
         return null;
@@ -1280,9 +1289,10 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 return metrics;
             }
             catch (k8s.Autorest.HttpOperationException) { throw; }
-            catch
+            catch (Exception ex)
             {
                 // Metrics API not installed or unavailable — return empty list
+                _logger.LogDebug(ex, "Pod metrics unavailable for namespace {Namespace} (metrics-server may not be installed).", ns);
                 return [];
             }
         }).ConfigureAwait(false);
