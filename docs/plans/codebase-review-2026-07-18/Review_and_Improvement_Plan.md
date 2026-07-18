@@ -1,13 +1,14 @@
 # SwebKit Codebase Review & Improvement Plan
 
 > Scope: code quality, architecture, performance, security, reliability, and engineering-experience improvements.
-> Method: static review of `SWojtyla/SwebKit` (≈96k source LOC, ≈33k test LOC) on a Linux environment without the .NET 10 SDK, so no build/test verification was performed. Recommendations should be validated with `dotnet build` and `dotnet test` before merging.
+> Method: static review of `SWojtyla/SwebKit` (≈86k source LOC, ≈29k test LOC). Verified against current `main` as of 2026-07-18. .NET 10 is the target framework and is intentionally chosen — this plan does **not** recommend downgrading.
+> **Revised**: original plan by Devin corrected for inaccuracies and updated to reflect work already merged in PR #27.
 
 ---
 
 ## 1. Executive summary
 
-SwebKit is a large .NET MAUI Blazor Hybrid operator workspace. The project shows strong architectural intent (domain-driven `SwebKit.Core`, integration-per-project, DI, abstractions, atomic persistence, custom file logging, warmup/caching, demo mode) and a mature pitfalls/rules culture. However, the codebase is in an **active state of consolidation**: the UI layer has grown into a monolith, several infrastructure details leak into the app layer, and there are still broad exception handlers, preview-framework risk, and missing engineering tooling. The biggest ROI improvements are (1) shrinking and decoupling the UI, (2) hardening command/exec security, (3) moving from .NET 10 preview to a stable LTS runtime, and (4) introducing CI + static analysis.
+SwebKit is a large .NET MAUI Blazor Hybrid operator workspace targeting .NET 10. The project shows strong architectural intent (domain-driven `SwebKit.Core`, integration-per-project, DI, abstractions, atomic persistence, custom file logging, warmup/caching, demo mode) and a mature pitfalls/rules culture. The codebase is in an **active state of consolidation**: PR #27 already decomposed `DashboardPage` (2,960→710 LOC) and `ApiClientPage` (1,947→529 LOC) via partial classes, adopted `SwebKitComponentBase` in 6 components, and removed implementation namespace leaks from `.razor` files. Remaining work: (1) decompose `AksPage` and other large pages, (2) harden command/exec security, (3) introduce CI + static analysis, (4) clean up exception handling, (5) add engineering tooling (`.editorconfig`, CPM, `global.json`).
 
 ---
 
@@ -15,44 +16,56 @@ SwebKit is a large .NET MAUI Blazor Hybrid operator workspace. The project shows
 
 ### 2.1 The `SwebKit.App` UI layer is a monolith
 
-- `src/SwebKit.App` contains **60,993 of 96,991 source LOC** (63%).
-- The largest `.razor` files are:
-  - `DashboardPage.razor` — 2,960 lines
-  - `AksPage.razor` — 2,957 lines
-  - `ApiClientPage.razor` — 1,947 lines
-  - `MessageListView.razor` — 1,816 lines
-  - `RedisPage.razor` — 1,450 lines
-  - `ObservabilityLogs.razor` — 1,256 lines
+- `src/SwebKit.App` contains **54,586 of 86,385 source LOC** (63%).
+- **Already decomposed** (PR #27):
+  - `DashboardPage.razor` — 710 lines (was 2,960; split into `.Builder.cs`, `.CustomTiles.cs`, `.Health.cs`, `.Preferences.cs`, `.Rendering.cs`)
+  - `ApiClientPage.razor` — 529 lines (was 1,947; split into `.Collections.cs`, `.Commands.cs`, `.Curl.cs`, `.LinkedSave.cs`, `.Requests.cs`, `.Secrets.cs`, `.Tabs.cs`, `.Tree.cs`)
+- **Still needing decomposition**:
+  - `AksPage.razor` — 2,653 lines
+  - `MessageListView.razor` — 1,613 lines
+  - `RedisPage.razor` — 1,262 lines
+  - `ObservabilityLogs.razor` — 1,120 lines
+  - `AksDetailPanels.razor` — 1,036 lines
+  - `MultiPodLogView.razor` — 833 lines
+  - `ServiceBusPage.razor` — 831 lines
 
-These pages mix routing, layout, dialogs, state machines, business rules, async orchestration, and component rendering. Even though `ApiClientPage` was recently split into partial-class files (`ApiClientPage.Curl.cs`, etc.), the comment in that file explicitly states the goal was *organization, not isolation* — the partials still mutate page-owned `_state` directly.
+The partial-class decomposition used for `DashboardPage` and `ApiClientPage` improved file size but **did not reduce coupling** — the partials still share one class and mutate page-owned state directly. For `AksPage` and remaining large pages, a different approach is needed.
 
 **Recommendations**
-- Extract small, parameter-driven components (e.g., `AksToolbar`, `AksResourceGrid`, `AksDetailHost`) and move their state out of the page.
+- For `AksPage`: extract **child components** with `[Parameter]` binding (e.g., `AksToolbar`, `AksResourceGrid`, `AksDetailHost`) rather than more partial classes. Move state logic into a page-specific `AksPageState` record and an `AksPageOrchestrator` service.
+- For `MessageListView`: extract `MessagePeekPanel`, `MessageColumnChooser`, `MessageAutoRefreshToggle` as separate components.
 - Introduce page-level state objects / ViewModels in `SwebKit.Core` or `SwebKit.App/Services` so pages only bind and dispatch.
-- For very large pages, consider a small `*PageState` record plus a `*PageOrchestrator` service that owns loading, selection, and command logic.
-- Stop using partial classes as the primary decomposition technique; partials are fine for file size, but they share one class and therefore do not reduce coupling.
+- **Do not** use partial classes as the primary decomposition technique for remaining pages. Partials are acceptable for organizing an already-small page, but they do not reduce coupling or improve testability.
 
-### 2.2 `SwebKitComponentBase` is under-used and its `ShouldRender` gate is risky
+### 2.2 `SwebKitComponentBase` adoption is growing but incomplete
 
-`SwebKitComponentBase` exists in `src/SwebKit.App/Components/Shared/SwebKitComponentBase.cs` and provides `RunAsync`, `RequestCoalescedRender`, and a `ShouldRender` gate that only renders when `_needsRender` is true. Only `TopBar.razor` and `StatusBar.razor` inherit from it. Many other components call `StateHasChanged()` / `InvokeAsync(StateHasChanged)` directly without setting `_needsRender`, which means a base-class render gate could suppress necessary re-renders if adoption is broadened.
+`SwebKitComponentBase` provides `RunAsync`, `RequestCoalescedRender`, a `ShouldRender` gate, and now shadows `StateHasChanged()` to open the gate automatically. `OnParametersSet` is also overridden to call `RequestRender()`, ensuring parent-driven parameter changes always render. An `SwebKitComponentAsyncBase` variant exists for `IAsyncDisposable` components.
+
+**Currently adopted by 6 components**: `TopBar.razor`, `StatusBar.razor`, `DashboardPage.razor`, `ServiceBusPage.razor`, `ServiceBusGrid.razor` (async variant), `CollectionTree.razor`.
+
+**Not yet adopted**: `AksPage.razor`, `RedisPage.razor`, `ObservabilityLogs.razor`, `MessageListView.razor`, and ~40+ other components that still call `StateHasChanged()` / `InvokeAsync(StateHasChanged)` directly.
+
+Current counts: **159 direct `StateHasChanged()` calls** in `.razor` files, **429 `InvokeAsync(StateHasChanged)` calls** across all `src/`.
 
 **Recommendations**
-- Make `SwebKitComponentBase` the default base for all app components and rename direct `StateHasChanged()` calls to `RequestRender()` / `RequestCoalescedRender()`.
-- Audit `SwebKitComponentBase.ShouldRender()`; if it stays, ensure it never suppresses renders triggered by legitimate parameter or event changes.
+- Continue adopting `SwebKitComponentBase` incrementally per feature area. The `ShouldRender` gate is now safe thanks to the `StateHasChanged()` shadow and `OnParametersSet` override.
+- Replace direct `StateHasChanged()` calls with `RequestRender()` / `RequestCoalescedRender()` as components are migrated.
+- For streaming components (logs, metrics), use `RequestCoalescedRender()` with the debounce window.
 
 ### 2.3 Broad exception handling is still common
 
-A scan found **245 `catch (Exception ...)` blocks** in `src/`. Most log and return a fallback value, which is acceptable for optional telemetry, but several are too broad:
+A scan found **39 `catch (Exception ...)` blocks** in `src/`. Most log and return a fallback value, which is acceptable for optional telemetry, but several are too broad:
 
-- `WindowsCredentialStore.cs` — every `Save/Get/Delete/ListKeys` swallows all exceptions silently.
-- `AppDataFileStore.TryDelete` and `TryRefreshBackup` swallow `Exception` with no logging.
-- `KubernetesAksClient.TryApplyAzureCredentialFallback` has `catch { }` with only a comment.
-- `ConnectionWarmupService` swallows network/auth failures during background warmup with empty `catch (Exception)` blocks (lines 91-94, 120-123, 146-149).
-- `HttpRequestExecutor.BuildResultAsync` has `catch { /* Swallow body read errors */ }`.
-- `BrunoFolderImporter` and `PostmanCollectionExportImport` wrap file I/O in `catch (Exception)` and convert to warnings — this is good, but should be `catch (IOException)`.
+- `WindowsCredentialStore.cs` — `Save` has `catch { }` on line 13, `Get` has `catch { return null; }` on line 26, `Delete` has `catch { }` on line 39, `ListKeys` has `catch { return []; }` on line 53. All silent, no logging.
+- `ConnectionWarmupService.cs` — `WarmAksAsync`, `WarmRedisEntryAsync`, `WarmServiceBusNamespaceAsync` all have `catch (Exception) { // silently discard }` blocks (lines 91, 120, 146). Network/auth failures are not logged.
+- `HttpRequestExecutor.cs` — `BuildResultAsync` has bare `catch { /* Swallow body read errors */ }` on line 290. GraphQL variable parsing has `catch { }` on line 177. Error parsing has `catch { return null; }` on line 237.
+- `DevOpsClient.cs` — `catch { continue; }` on line 492 (only bare `catch {}` remaining in the codebase).
 
 **Recommendations**
-- Replace bare `catch (Exception)` with specific exception types where possible, and at minimum log at `Debug`/`Warning` level.
+- Replace bare `catch` / `catch (Exception)` with specific exception types where possible, and at minimum log at `Debug`/`Warning` level.
+- For `WindowsCredentialStore`: log at `Warning` without the secret value. Distinguish "not found" (expected) from "access denied" / "vault error" (unexpected).
+- For `ConnectionWarmupService`: log warmup failures at `Warning` and surface a connection health indicator.
+- For `HttpRequestExecutor`: catch `IOException` / `HttpRequestException` specifically for body read errors.
 - For integration clients, distinguish *transient* vs *permanent* failures so callers can decide whether to retry, show a user message, or degrade gracefully.
 - Never swallow `Exception` silently in credential/crypto code; at least emit an obfuscated log entry.
 
@@ -71,12 +84,13 @@ A scan found **245 `catch (Exception ...)` blocks** in `src/`. Most log and retu
 
 - No `.editorconfig` file.
 - No `Directory.Build.props` / `Directory.Build.targets` for common settings (nullable, implicit usings, warnings-as-errors, package version centralization).
-- No solution file (`.sln`), which makes `dotnet build` at the repo root impossible and complicates IDE onboarding.
+- **Solution file exists**: `SwebKit.slnx` (XML-based solution format, supported by .NET 9+). `dotnet build SwebKit.slnx` works from repo root.
 
 **Recommendations**
-- Add `SwebKit.sln`.
 - Add a root `.editorconfig` and `Directory.Build.props`.
 - Turn on `TreatWarningsAsErrors` or at least `WarningsAsErrors` for nullable/reference warnings and a curated set of analyzers.
+- Add `global.json` to pin the .NET 10 SDK version.
+- Add `Directory.Packages.props` for Central Package Management (see §6.2).
 
 ---
 
@@ -87,24 +101,21 @@ A scan found **245 `catch (Exception ...)` blocks** in `src/`. Most log and retu
 `SwebKit.Core` holds abstractions, domain models, repositories, and shared services. `SwebKit.Azure`, `SwebKit.Kubernetes`, `SwebKit.Redis`, `SwebKit.DevOps`, and `SwebKit.Observability` are concrete integration projects. This is clean on paper.
 
 **Leaks found**
-- `SwebKit.App` has direct project references to **all** implementation projects, and several components import implementation namespaces:
-  - `Components/Storage/BlobDetailPane.razor`: `@using SwebKit.Azure.Storage`
-  - `Components/Redis/RedisKeyDetail.razor`, `RedisNamespaceTreeNode.razor`, `RedisKeyList.razor`: `@using SwebKit.Redis`
-  - `Components/Pages/AksConfigForm.razor`: `@using SwebKit.Kubernetes.AksClient`
-- `SwebKit.Agent.PocConsole/Program.cs` also directly uses `SwebKit.Kubernetes.AksClient`.
-- `MauiProgram.cs` (303 LOC) is both the DI composition root and a registry of concrete integration types; it does not use an `IHostBuilder`-style modular registration pattern.
+- ~~`SwebKit.App` components import implementation namespaces via `@using`~~ — **Fixed in PR #27**. No `@using SwebKit.Kubernetes.*`, `@using SwebKit.Redis`, or `@using SwebKit.Azure.Storage` found in `.razor` files anymore.
+- `SwebKit.Agent.PocConsole/Program.cs` still directly uses `SwebKit.Kubernetes.AksClient`.
+- `MauiProgram.cs` (273 LOC) is both the DI composition root and a registry of concrete integration types; it does not use an `IHostBuilder`-style modular registration pattern.
 
 **Recommendations**
-- Create a `SwebKit.Composition` (or `SwebKit.Host`) project that owns all cross-project DI registration. `SwebKit.App` should only reference `SwebKit.Core` and `SwebKit.Composition`.
-- Components should consume only `SwebKit.Core.Abstractions` / `SwebKit.Core.Models`; remove direct `@using` of implementation namespaces from `.razor` files.
-- Add architecture tests (e.g., with `NetArchTest`) that enforce "`SwebKit.App` does not depend on `SwebKit.*` implementation namespaces."
+- ~~Create a `SwebKit.Composition` project~~ — **Not recommended**: adds a new project for DI registration that standard MAUI apps keep in `MauiProgram.cs`. Instead, split registration into extension methods (see §3.2).
+- Components should consume only `SwebKit.Core.Abstractions` / `SwebKit.Core.Models`; the `@using` leaks are already fixed.
+- Add architecture tests (e.g., with `NetArchTest`) that enforce "`SwebKit.App` does not depend on `SwebKit.*` implementation namespaces" to prevent regression.
 
 ### 3.2 `MauiProgram.cs` is too large and knows too much
 
-It currently contains all service registration, crash handlers, logging provider setup, warmup wiring, and conditional platform registrations. This is a single point of failure and makes unit testing the composition root impossible.
+It currently contains all service registration, crash handlers, logging provider setup, warmup wiring, and conditional platform registrations (273 LOC). This is a single point of failure and makes unit testing the composition root impossible.
 
 **Recommendations**
-- Split registration into feature modules:
+- Split registration into feature-module extension methods (no new project needed):
   - `AddSwebKitCore(this IServiceCollection)`
   - `AddSwebKitAzure(this IServiceCollection)`
   - `AddSwebKitKubernetes(this IServiceCollection)`
@@ -112,6 +123,7 @@ It currently contains all service registration, crash handlers, logging provider
   - `AddSwebKitObservability(this IServiceCollection)`
   - `AddSwebKitDevOps(this IServiceCollection)`
   - `AddSwebKitRedis(this IServiceCollection)`
+- Keep these as `static partial class SwebKitServiceCollectionExtensions` files under `src/SwebKit.App/Hosting/`.
 - Move crash-handler wiring and logging provider construction into a `SwebKit.App/Hosting/AppBootstrap.cs` class.
 
 ### 3.3 Demo clients are large and live in `Core`
@@ -147,11 +159,12 @@ This violates single-responsibility and is hard to test.
 
 ### 3.5 `DefaultAzureCredential` is constructed directly in `KubernetesAksClient`
 
-`docs/pitfalls/azure-sdk.md` (AZ-4) mandates using `AzureCredentialFactory.CreateDefault()` for every Entra ID client, but `KubernetesAksClient.cs` constructs `new DefaultAzureCredential(AzureCredentialOptions)` at lines 244 and 1227. This is the exact anti-pattern the project documents.
+`docs/pitfalls/azure-sdk.md` (AZ-4) mandates using `AzureCredentialFactory.CreateDefault()` for every Entra ID client, but `KubernetesAksClient.cs` constructs `new DefaultAzureCredential(AzureCredentialOptions)` at lines 255 and 1238. This is the exact anti-pattern the project documents.
 
 **Recommendations**
-- Replace both call sites with `AzureCredentialFactory.CreateDefault()` or extend the factory to accept an options predicate.
+- Replace both call sites with `AzureCredentialFactory.CreateDefault(AzureCredentialOptions)` or extend the factory to accept an options predicate.
 - Add an analyzer or test that bans `new DefaultAzureCredential` outside `AzureCredentialFactory`.
+- **Priority**: high — this violates the project's own documented rules.
 
 ---
 
@@ -159,13 +172,10 @@ This violates single-responsibility and is hard to test.
 
 ### 4.1 `StateHasChanged` is called very frequently and inconsistently
 
-A scan found:
-- **304 `await InvokeAsync(StateHasChanged);`** calls
-- **many direct `StateHasChanged()` calls** across `AksPage.razor`, `ServiceBusPage.razor`, `RedisPage.razor`, etc.
-- `SwebKitComponentBase` coalescing is available but only used by `TopBar` and `StatusBar`.
+Current counts: **159 direct `StateHasChanged()` calls** in `.razor` files, **429 `InvokeAsync(StateHasChanged)` calls** across all `src/`. `SwebKitComponentBase` coalescing is available but only adopted by 6 components.
 
 **Recommendations**
-- Replace direct per-event `StateHasChanged()` calls with coalesced batch updates.
+- Replace direct per-event `StateHasChanged()` calls with coalesced batch updates as components are migrated to `SwebKitComponentBase`.
 - For streaming scenarios (logs, metrics), buffer N lines or use a short flush timer rather than rendering per line.
 - Adopt `SwebKitComponentBase` across all components and use `RequestCoalescedRender()`.
 
@@ -179,7 +189,7 @@ A scan found:
 
 ### 4.3 `MessageListView` and grid pages may re-render whole datasets
 
-`MessageListView.razor` is 1,816 LOC and includes column chooser, custom property columns, density toggles, peek count, auto-refresh, etc. Every `PeekCount` change or auto-refresh tick likely triggers a full `StateHasChanged` and re-renders the entire list.
+`MessageListView.razor` is 1,613 LOC and includes column chooser, custom property columns, density toggles, peek count, auto-refresh, etc. Every `PeekCount` change or auto-refresh tick likely triggers a full `StateHasChanged` and re-renders the entire list.
 
 **Recommendations**
 - Use `Virtualize` for large message grids if not already present.
@@ -273,18 +283,19 @@ This is intentional for self-signed dev APIs, but the combination of arbitrary U
 
 ## 6. Dependencies & build tooling
 
-### 6.1 Project targets .NET 10 preview
+### 6.1 Pin .NET 10 SDK and stabilize package versions
 
-All projects target `net10.0` and reference `Microsoft.*` packages with `10.0.x` / `10.6.x` versions. .NET 10 is not released as a stable LTS, and MAUI 10.0.70 is a preview. This is risky for a production desktop app.
+All projects target `net10.0` and reference `Microsoft.*` packages with `10.0.x` / `10.6.x` versions. .NET 10 is the latest version and is intentionally chosen. The MAUI app targets `net10.0-windows10.0.19041.0` with `MauiVersion` `10.0.70`.
 
 **Recommendations**
-- Pin to .NET 8 (or 9 when stable) and MAUI 8.x / 9.x unless a .NET 10 feature is strictly required.
-- Add a `global.json` to pin the SDK version.
+- Add a `global.json` to pin the .NET 10 SDK version for reproducible builds.
 - Add a `NuGet.config` with trusted feeds and disable floating package restores from public wildcard sources.
+- Do **not** downgrade to .NET 8 — .NET 10 is the target and provides the latest MAUI features.
+- Consider adding `Directory.Build.props` with `<EnableNETAnalyzers>true</EnableNETAnalyzers>` and `<AnalysisLevel>latest-Recommended</AnalysisLevel>`.
 
 ### 6.2 Floating package versions
 
-`SwebKit.Core.csproj` references:
+`SwebKit.Core.csproj` and `SwebKit.Azure.csproj` reference:
 
 - `<PackageReference Include="JsonPath.Net" Version="0.*" />`
 - `<PackageReference Include="Bogus" Version="35.*" />`
@@ -348,57 +359,73 @@ There is no `.editorconfig`, no `stylecop`, no `NetArchTest`, no `Meziantou.Anal
 
 ### Immediate (this sprint)
 
-1. **Harden `kubectl` / shell invocation**
+1. **Add engineering tooling: `.editorconfig`, `Directory.Build.props`, `global.json`, `Directory.Packages.props`**
+   - Pin .NET 10 SDK version; enable analyzers; centralize package versions.
+   - Convert all floating `*` versions to exact pins.
+2. **Add CI pipeline**
+   - Build, test, vulnerability scan, format check. See §6.3.
+   - This should be early — it locks in quality for all subsequent work.
+3. **Harden `kubectl` / shell invocation**
    - Convert `KubernetesAksClient` to use `ArgumentList` and fix flag ordering.
    - Add resource-name validation tests and shell-metacharacter rejection tests.
-2. **Replace direct `DefaultAzureCredential` in Kubernetes**
-   - Use `AzureCredentialFactory` (or extend it) at the two call sites.
-3. **Add solution, `.editorconfig`, `Directory.Build.props`, and `global.json`**
-   - Pin SDK and package versions; enable analyzers.
-4. **Stop swallowing exceptions silently in critical paths**
-   - `WindowsCredentialStore`, `ConnectionWarmupService`, `TryApplyAzureCredentialFallback`, `AppDataFileStore` cleanup.
+4. **Replace direct `DefaultAzureCredential` in Kubernetes**
+   - Use `AzureCredentialFactory` (or extend it) at the two call sites (lines 255, 1238).
+5. **Stop swallowing exceptions silently in critical paths**
+   - `WindowsCredentialStore`, `ConnectionWarmupService`, `HttpRequestExecutor`, `DevOpsClient`.
 
 ### Short term (next 2-4 weeks)
 
-5. **Begin UI decomposition**
-   - Start with `AksPage.razor` or `DashboardPage.razor`:
-     - Extract toolbar, filter bar, resource grid, detail panel host.
-     - Move state logic into a page-specific service.
-   - Migrate all components to inherit `SwebKitComponentBase` and use coalesced render.
-6. **Move demo clients out of `Core` / simplify**
-   - Relocate to integration projects or replace with data-driven fakes.
-7. **Split `MauiProgram` into feature registration modules**
-   - Move DI wiring to `SwebKit.Composition`.
-8. **Add CI pipeline**
-   - Build, test, vulnerability scan, format check.
+6. **Decompose `AksPage.razor` (2,653 LOC)**
+   - Extract **child components** with `[Parameter]` binding, not more partial classes.
+   - Move state logic into a page-specific `AksPageState` + `AksPageOrchestrator` service.
+   - Target: `AksPage.razor` below 800 LOC.
+7. **Continue `SwebKitComponentBase` adoption**
+   - Migrate remaining components incrementally per feature area.
+   - Replace direct `StateHasChanged()` with `RequestCoalescedRender()`.
+8. **Coalesce high-frequency renders in streaming components**
+   - `PodLogView`, `MultiPodLogView`, `MessageListView`, `ObservabilityLogs`.
+   - Use `Channel<T>` + `PeriodicTimer` batch-flush pattern.
+9. **Split `MauiProgram` into feature registration modules**
+   - Extension methods under `src/SwebKit.App/Hosting/` (no new project).
+10. **Fix `App.OnProcessExit` fire-and-forget cleanup**
+    - Block with `StopAllAsync().Wait(TimeSpan.FromSeconds(5))`.
 
 ### Medium term (1-3 months)
 
-9. **Downgrade/pin runtime and packages to a stable .NET LTS**
-   - Unless .NET 10 is required, move to .NET 8 and stable MAUI packages.
-10. **Refactor `KubernetesAksClient` into focused services**
-    - `KubernetesApiClient`, `KubectlProcessRunner`, `HelmRunner`, `AksTokenProvider`.
-11. **Improve API client security boundaries**
+11. **Refactor `KubernetesAksClient` into focused services**
+    - `KubernetesApiClient` (SDK), `KubectlProcessRunner` (CLI), `HelmRunner`, `AksTokenProvider`.
+12. **Decompose remaining large pages**
+    - `MessageListView` (1,613), `RedisPage` (1,262), `ObservabilityLogs` (1,120), `AksDetailPanels` (1,036).
+13. **Improve API client security boundaries**
     - URL allow-lists, per-environment SSL settings, HTTPS enforcement for OAuth.
-12. **Add architecture tests and broader static analysis**
-    - `NetArchTest`, `EnableNETAnalyzers`, Aikido/CodeQL integration.
+14. **Add architecture tests and broader static analysis**
+    - `NetArchTest`, `EnableNETAnalyzers`, CodeQL/Dependabot integration.
+15. **Move demo clients out of `Core`**
+    - Relocate to integration projects or replace with data-driven fakes.
 
 ### Strategic / ongoing
 
-13. **Reduce `SwebKit.App` LOC share from 63% to <50%**
+16. **Reduce `SwebKit.App` LOC share from 63% to <50%**
     - Through componentization, ViewModels, and moving logic into `Core`/integration services.
-14. **Investigate and remove dead/legacy code**
-    - `PodHealthMonitorService`, `SwebKit.Agent.PocConsole`, duplicated alert signal sources, etc.
-15. **Performance baselining**
+17. **Investigate and remove dead/legacy code**
+    - `PodHealthMonitorService`, `SwebKit.Agent.PocConsole`, duplicated alert signal sources.
+18. **Performance baselining**
     - Startup time, render time on large grids, memory usage during log streaming, port-forward cleanup.
+
+### Not recommended (rejected items)
+
+- ~~Downgrade to .NET 8~~ — .NET 10 is the latest version and is intentionally chosen.
+- ~~Create `SwebKit.Composition` project~~ — adds unnecessary indirection. Use extension methods in `SwebKit.App/Hosting/` instead.
+- ~~Use partial classes as primary decomposition for `AksPage`~~ — partials don't reduce coupling. Use child components + state services instead.
 
 ---
 
 ## 9. Caveats
 
-- This review is based on static code inspection only. `dotnet build` / `dotnet test` could not be run because the .NET SDK is not installed in this Linux environment. Some recommendations may need adjustment after compile/test feedback.
-- The project is under active development; some of the issues above (e.g., partial-class decomposition) may already be on the roadmap. Cross-check against active feature docs in `docs/features/active/` before picking up work.
+- This review was originally generated by Devin via static code inspection. It has been revised and verified against the current `main` branch (as of 2026-07-18, PR #27 merged).
+- LOC counts and file references are accurate as of that commit. Cross-check before starting work.
+- The project is under active development; some issues may already be addressed by the time you read this. Cross-check against active feature docs in `docs/features/active/` before picking up work.
 
 ---
 
-*Generated by Devin on 2026-07-18.*
+*Originally generated by Devin on 2026-07-18. Revised by Cascade on 2026-07-18.*

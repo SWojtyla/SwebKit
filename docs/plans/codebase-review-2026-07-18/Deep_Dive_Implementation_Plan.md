@@ -2,33 +2,29 @@
 
 > Concrete, phase-by-phase improvements for `SWojtyla/SwebKit`. Each phase lists the exact files to change, the expected code shape, and acceptance criteria. Phases are ordered to minimize risk: tooling and security first, then reliability, then UI decomposition, then long-term architecture.
 >
-> **Caveat:** This plan is based on static inspection. Run `dotnet build` and `dotnet test` after each phase.
+> **Revised**: original plan by Devin corrected for inaccuracies and updated to reflect work already merged in PR #27. .NET 10 is the target — no downgrade.
+> **Caveat:** Run `dotnet build` and `dotnet test` after each phase.
 
 ---
 
 ## Phase 0 — Engineering hygiene (foundation for everything)
 
-### 0.1 Add a solution file and central build configuration
+### 0.1 Add central build configuration
 
 **Files to create / modify**
-- `SwebKit.sln` (new)
 - `.editorconfig` (new, root)
 - `Directory.Build.props` (new, root)
 - `global.json` (new, root)
 - `NuGet.config` (new, root)
 - `Directory.Packages.props` (new, root)
 
+**Note**: `SwebKit.slnx` already exists — no solution file creation needed.
+
 **Concrete changes**
-1. Create the solution:
-   ```bash
-   dotnet new sln -n SwebKit
-   dotnet sln add src/SwebKit.Core/SwebKit.Core.csproj src/SwebKit.App/SwebKit.App.csproj ...
-   ```
-2. Add `Directory.Build.props`:
+1. Add `Directory.Build.props` (do **not** set TargetFramework here — the MAUI app needs a platform-specific TFM):
    ```xml
    <Project>
      <PropertyGroup>
-       <TargetFramework>net8.0</TargetFramework>
        <ImplicitUsings>enable</ImplicitUsings>
        <Nullable>enable</Nullable>
        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -38,24 +34,25 @@
      </PropertyGroup>
    </Project>
    ```
-   Remove per-project `<TargetFramework>`, `<Nullable>`, `<ImplicitUsings>` duplicates.
-3. Add `global.json` pinning the SDK:
+   Remove per-project `<Nullable>`, `<ImplicitUsings>` duplicates where they match the defaults. Keep per-project `<TargetFramework>` since the MAUI app uses `net10.0-windows10.0.19041.0`.
+2. Add `global.json` pinning the .NET 10 SDK:
    ```json
    {
-     "sdk": { "version": "8.0.303", "rollForward": "latestPatch" }
+     "sdk": { "version": "10.0.100-preview.3.25201.16", "rollForward": "latestPatch" }
    }
    ```
-4. Add `Directory.Packages.props` and convert every `Version="*"` / floating reference to an exact version. Example:
+   (Use the exact SDK version installed on the dev machine. Run `dotnet --version` to find it.)
+3. Add `Directory.Packages.props` and convert every `Version="*"` / floating reference to an exact version. Example:
    ```xml
    <PackageVersion Include="Azure.Storage.Blobs" Version="12.21.2" />
    <PackageVersion Include="JsonPath.Net" Version="0.8.5" />
    <PackageVersion Include="Bogus" Version="35.5.8" />
    <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.6.0" />
    ```
-5. Change all `<PackageReference Include="X" Version="Y" />` to `<PackageReference Include="X" />`.
+4. Change all `<PackageReference Include="X" Version="Y" />` to `<PackageReference Include="X" />`.
 
 **Acceptance criteria**
-- `dotnet build SwebKit.sln` succeeds from repo root.
+- `dotnet build SwebKit.slnx` succeeds from repo root.
 - `dotnet list package --vulnerable` no longer warns on high-severity packages.
 - `dotnet format --verify-no-changes` passes (or produces only intentional exceptions).
 
@@ -83,7 +80,7 @@ public void App_Components_Should_Not_Depend_On_Implementation_Projects()
 
 **Acceptance criteria**
 - Test project builds.
-- Architecture test fails until the direct `@using` leaks in `AksConfigForm.razor`, `RedisKeyDetail.razor`, etc., are removed.
+- Architecture test passes (the `@using` leaks were already fixed in PR #27; the test prevents regression).
 
 ---
 
@@ -188,7 +185,7 @@ public void App_Components_Should_Not_Depend_On_Implementation_Projects()
 ### 1.2 Centralize Azure credential creation in `KubernetesAksClient`
 
 **Files to modify**
-- `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs` (lines 244 and 1227)
+- `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs` (lines 255 and 1238)
 - `src/SwebKit.Core/Services/AzureCredentialFactory.cs`
 
 **Concrete changes**
@@ -374,67 +371,55 @@ For `StreamPodLogsAsync`, do not call `StateHasChanged` per line; buffer lines a
 
 ## Phase 3 — UI decomposition (biggest maintainability win)
 
-### 3.1 Apply the API Client extraction pattern to `AksPage`
+### 3.1 Decompose `AksPage.razor` using child components + state service
 
-`AksPage.razor` is 2,957 LOC. The `api-client-page-decomposition` feature already defines a successful slicing pattern. Apply the same pattern to AKS.
+`AksPage.razor` is 2,653 LOC. Unlike `DashboardPage` and `ApiClientPage` (which were decomposed via partial classes in PR #27), `AksPage` should use **child components with `[Parameter]` binding** and a **page state service** to actually reduce coupling and improve testability.
 
 **Files to create**
-- `src/SwebKit.App/Components/Pages/AksPage.Bootstrap.cs`
-- `src/SwebKit.App/Components/Pages/AksPage.Resources.cs`
-- `src/SwebKit.App/Components/Pages/AksPage.DetailPanels.cs`
-- `src/SwebKit.App/Components/Pages/AksPage.PortForward.cs`
-- `src/SwebKit.App/Components/Pages/AksPage.ContextMenu.cs`
-- `src/SwebKit.App/Components/Pages/AksPage.Shortcuts.cs`
+- `src/SwebKit.App/Components/Pages/AksPageState.cs` (new — page state record)
+- `src/SwebKit.App/Services/AksPageOrchestrator.cs` (new — owns loading, selection, command logic)
+- `src/SwebKit.App/Components/Aks/AksToolbar.razor` (new — filter bar, resource type selector)
+- `src/SwebKit.App/Components/Aks/AksResourceGrid.razor` (new — grid with `[Parameter] Data`)
+- `src/SwebKit.App/Components/Aks/AksDetailHost.razor` (new — detail panel host)
+- `src/SwebKit.App/Components/Aks/AksPortForwardDialog.razor` (new — port-forward dialog)
 
-**Concrete slicing**
-- **Bootstrap** — `BootstrapAndLoadAsync`, `CanReuseWarmBootstrapResult`, `SyncFromEnvironment`, `NormalizeDefaultNamespace`, bootstrap `CancellationTokenSource` handling.
-- **Resources** — `LoadAsync`, `Load*Async` methods, filters (`ActiveFilter`, `FilteredDeployments`, etc.), `ActiveResourceType` switching.
-- **Detail panels** — `OpenYamlAsync`, `OpenLogsAsync`, `OpenShellAsync`, `OpenPortForwardDialogAsync`, `ScaleDeploymentAsync`, `RestartDeploymentAsync`, `Delete*Async` and all `_pending*` dialog fields.
-- **Port-forward** — `StartPortForwardAsync`, `StopPortForwardAsync`, `PinnedPortForwards` interactions.
-- **Context menu** — `OnTableContextMenu`, `ShowContextMenuFor*`, `OnCtx*` methods.
-- **Shortcuts** — `HandleGridKeyDown`, `JumpToLogsAsync`, command registrations.
+**Concrete approach**
+1. Create `AksPageState` record holding all UI state:
+   ```csharp
+   public sealed record AksPageState(
+       string CurrentNamespace,
+       string ActiveResourceType,
+       string ActiveFilter,
+       IReadOnlyList<Deployment> Deployments,
+       IReadOnlyList<Pod> Pods,
+       // ... other resource collections
+       bool IsLoading,
+       string? ErrorMessage);
+   ```
+2. Create `AksPageOrchestrator` service that owns all business logic:
+   ```csharp
+   public sealed class AksPageOrchestrator(IAksClient client, ILogger<AksPageOrchestrator> logger)
+   {
+       public async Task<AksPageState> LoadAsync(AksPageState current, CancellationToken ct);
+       public async Task<AksPageState> ScaleDeploymentAsync(AksPageState state, string name, int replicas, CancellationToken ct);
+       public async Task<AksPageState> RestartDeploymentAsync(AksPageState state, string name, CancellationToken ct);
+       // ... other commands
+   }
+   ```
+3. Extract child components with `[Parameter]` binding:
+   ```razor
+   <AksToolbar Filter="@State.ActiveFilter" Resource="@State.ActiveResourceType"
+              OnFilterChanged="@OnFilterChanged" OnResourceChanged="@OnResourceChanged" />
+   <AksResourceGrid Data="@filteredResources" OnRowClick="@OnResourceSelected" />
+   <AksDetailHost Selected="@selectedResource" OnOpenLogs="@OpenLogsAsync" />
+   ```
+4. `AksPage.razor` becomes a thin shell: markup, `@inject`, state binding, and delegation to `AksPageOrchestrator`.
 
-What stays in `AksPage.razor`:
-- Markup and `@inject`.
-- The page state object `AksPageState` (create a new `AksPageState.cs` record/class).
-- `OnParametersSet` orchestration only.
-
-**Concrete first slice: `AksPage.Bootstrap.cs`**
-```csharp
-namespace SwebKit.App.Components.Pages;
-
-public partial class AksPage
-{
-    private CancellationTokenSource _bootstrapCts = new();
-    private AksBootstrapSignature? _lastBootstrapSignature;
-
-    protected override void OnParametersSet()
-    {
-        var config = AppState.Config.AksConfig;
-        var signature = new AksBootstrapSignature(
-            ClientOverride,
-            AppState.UseDemoData,
-            config?.KubeconfigPath,
-            config?.KubeconfigContext,
-            NormalizeDefaultNamespace(config));
-
-        if (_lastBootstrapSignature == signature) { _ = Workspaces.ApplyPendingRestoreAsync("aks"); return; }
-
-        _lastBootstrapSignature = signature;
-        SyncFromEnvironment();
-        IsLoading = true;
-        _ = BootstrapAndLoadAsync(ActiveContext, CurrentNamespace);
-    }
-
-    private async Task BootstrapAndLoadAsync(string requestedContext, string requestedNamespace)
-    {
-        // existing logic, but contained in this file
-    }
-}
-```
+**What NOT to do**: Do not create more `AksPage.*.cs` partial-class files. Partials share one class and do not reduce coupling. The `DashboardPage` and `ApiClientPage` partial-class decomposition improved file size but not testability.
 
 **Acceptance criteria**
 - `AksPage.razor` drops below 800 LOC.
+- `AksPageOrchestrator` is unit-testable without bUnit.
 - `dotnet build` and bUnit tests still pass.
 - No behavioral change (verify manually: open AKS page, switch context, open logs, scale deployment).
 
@@ -442,7 +427,7 @@ public partial class AksPage
 
 **Files to create / modify**
 - `src/SwebKit.App/Services/AksResourceFilterService.cs` (new)
-- `src/SwebKit.App/Components/Pages/AksPage.Resources.cs`
+- `src/SwebKit.App/Services/AksPageOrchestrator.cs` (from Phase 3.1)
 
 **Concrete changes**
 Replace the twelve separate filter fields and computed `IQueryable<T>` properties with a generic filter state:
@@ -460,61 +445,17 @@ This removes the `DeploymentFilter`, `PodFilter`, etc., duplication and makes fi
 - Filter behavior unchanged.
 - New unit tests cover filtering and caching.
 
-### 3.3 Decompose `DashboardPage.razor`
+### 3.3 ~~Decompose `DashboardPage.razor`~~ — Already done in PR #27
 
-**Files to create**
-- `src/SwebKit.App/Components/Pages/DashboardPage.ViewState.cs`
-- `src/SwebKit.App/Components/Pages/DashboardPage.Tiles.cs`
-- `src/SwebKit.App/Components/Pages/DashboardPage.Filters.cs`
-- `src/SwebKit.App/Components/Pages/DashboardPage.Helpers.cs`
+`DashboardPage.razor` was decomposed from 2,960 to 710 LOC via partial classes (`.Builder.cs`, `.CustomTiles.cs`, `.Health.cs`, `.Preferences.cs`, `.Rendering.cs`). It also already inherits `SwebKitComponentBase`.
 
-**Concrete changes**
-Move:
-- `GetRenderState()`, `GetAttentionCount()`, `Get*Label()` helpers into `DashboardPage.ViewState.cs`.
-- Tile rendering / refresh logic into `DashboardPage.Tiles.cs`.
-- View, area, severity, time-window filter handlers into `DashboardPage.Filters.cs`.
-- Static helpers (`NormalizeCssToken`, `GetAreaIcon`, `RelativeTime`) into `DashboardPage.Helpers.cs` or a shared `DashboardFormatting` static class.
+**Future improvement**: If testability becomes a concern, consider extracting a `DashboardPageOrchestrator` service (same pattern as proposed for `AksPage` in §3.1) to move business logic out of the partial classes.
 
-**Acceptance criteria**
-- `DashboardPage.razor` below 800 LOC.
-- Dashboard renders the same tiles and filters.
+### 3.4 ~~Continue API Client extraction~~ — Already done in PR #27
 
-### 3.4 Continue and extend the API Client extraction plan
+`ApiClientPage.razor` was decomposed from 1,947 to 529 LOC via partial classes (`.Collections.cs`, `.Commands.cs`, `.Curl.cs`, `.LinkedSave.cs`, `.Requests.cs`, `.Secrets.cs`, `.Tabs.cs`, `.Tree.cs`).
 
-The active plan is in `docs/features/active/api-client-page-decomposition/extraction-plan.md`. Do not replace it; continue it.
-
-**Next concrete step**: finish Slice 2 (Secrets) and Slice 3 (Tabs), then move to extracting the request lifecycle into a real service.
-
-**Files to create / modify**
-- `src/SwebKit.App/Components/Pages/ApiClientPage.Secrets.cs`
-- `src/SwebKit.App/Components/Pages/ApiClientPage.Tabs.cs`
-- `src/SwebKit.Core/Services/ApiClientRequestLifecycleService.cs` (new)
-
-**Concrete changes for request lifecycle service**
-Move the following out of `ApiClientPage` into a service:
-- `OnRequestSelectedAsync`
-- `OnRequestChangedAsync`
-- `AutoSaveLoopAsync`
-- `OnRequestResultAsync`
-- `OnSubscriptionMessageAsync` / `OnSubscriptionStoppedAsync`
-- `SaveResponseExampleAsync`
-
-The service takes `ApiClientState` and the required repositories/executors as parameters:
-```csharp
-public sealed class ApiClientRequestLifecycleService(
-    IHttpRequestExecutor executor,
-    IVariableSubstitutionService substitution,
-    IWebSocketClientService webSocketClient)
-{
-    public async Task ExecuteRequestAsync(ApiClientState state, CancellationToken ct);
-    public async Task AutoSaveAsync(ApiClientState state, CancellationToken ct);
-    public void CancelActiveRequest(ApiClientState state);
-}
-```
-
-**Acceptance criteria**
-- `ApiClientPage.razor` below 1,000 LOC.
-- The existing extraction-plan status file is updated.
+**Future improvement**: If testability becomes a concern, extract the request lifecycle into an `ApiClientRequestLifecycleService` as originally proposed. The partials currently mutate page-owned state directly.
 
 ---
 
@@ -552,18 +493,11 @@ Each extension lives in its own partial class file under `Hosting/`.
 - `MauiProgram.cs` below 80 lines.
 - `dotnet build` succeeds and the app still starts.
 
-### 4.2 Remove direct implementation namespace imports from `.razor` files
+### 4.2 ~~Remove direct implementation namespace imports from `.razor` files~~ — Already done in PR #27
 
-**Files to modify**
-- `src/SwebKit.App/Components/Pages/AksConfigForm.razor` — replace `@using SwebKit.Kubernetes.AksClient` with `SwebKit.Core.Models` / `SwebKit.Core.Abstractions` if needed.
-- `src/SwebKit.App/Components/Storage/BlobDetailPane.razor` — remove `@using SwebKit.Azure.Storage`.
-- `src/SwebKit.App/Components/Redis/RedisKeyDetail.razor`, `RedisNamespaceTreeNode.razor`, `RedisKeyList.razor` — remove `@using SwebKit.Redis`.
+The `@using SwebKit.Kubernetes.AksClient`, `@using SwebKit.Redis`, and `@using SwebKit.Azure.Storage` imports were removed from `.razor` files in PR #27. No action needed.
 
-**Concrete changes**
-If these imports are not actually used by the markup, delete them. If extension methods are needed, move them to `SwebKit.Core` extension classes.
-
-**Acceptance criteria**
-- Architecture test from Phase 0 passes.
+**Recommendation**: Add the architecture test from Phase 0.2 to prevent regression.
 
 ### 4.3 Move demo clients out of `SwebKit.Core`
 
@@ -699,36 +633,18 @@ internal static class PerformanceBaselineRecorder
 
 ## Phase 6 — Runtime & dependency stabilization
 
-### 6.1 Migrate from .NET 10 preview to .NET 8 LTS
+### 6.1 Pin .NET 10 SDK and stabilize packages
 
 **Files to modify**
-- All `.csproj` files
-- `Directory.Build.props`
-- `global.json`
-- `MauiVersion` in `SwebKit.App.csproj`
-
-**Concrete changes**
-1. Set `TargetFramework` to `net8.0` (or `net8.0-windows10.0.19041.0` for the MAUI app).
-2. Pin `MauiVersion` to `8.0.70` or latest stable 8.x.
-3. Update package references:
-   - `Microsoft.Extensions.*` from `10.0.x`/`10.6.x` to `8.0.x`.
-   - `Microsoft.NET.Test.Sdk` from `18.6.0` to `17.x`.
-   - `xUnit` unify all test projects to `2.9.x`.
-4. Check `Microsoft.FluentUI.AspNetCore.Components` 4.14.2 for .NET 8 compatibility; if not, use 4.10.x for .NET 8.
-
-**Acceptance criteria**
-- `dotnet --version` reports 8.0.x.
-- `dotnet build` and `dotnet test` pass.
-- App launches on Windows.
-
-### 6.2 Centralize and pin all package versions
-
-**Files to modify**
-- `Directory.Packages.props`
+- `global.json` (created in Phase 0.1)
+- `Directory.Packages.props` (created in Phase 0.1)
 - All `*.csproj` `PackageReference` entries
 
 **Concrete changes**
-Remove floating `*` versions and exact duplicates. Add a CI check:
+.NET 10 is the target framework and is intentionally chosen. Do **not** downgrade.
+1. Ensure `global.json` pins the exact .NET 10 SDK version.
+2. Ensure all floating `*` versions are replaced with exact pins via `Directory.Packages.props`.
+3. Add a CI check for floating versions:
 ```yaml
 - name: Check for floating versions
   run: |
@@ -736,8 +652,10 @@ Remove floating `*` versions and exact duplicates. Add a CI check:
 ```
 
 **Acceptance criteria**
+- `dotnet --version` reports the pinned .NET 10 SDK.
 - No `Version="*"` or `Version="0.*"` in repo.
 - `dotnet list package --vulnerable` is clean of high/critical issues.
+- `dotnet build SwebKit.slnx` and `dotnet test` pass.
 
 ---
 
@@ -759,9 +677,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
-        with: { dotnet-version: '8.0.x' }
-      - run: dotnet restore SwebKit.sln
-      - run: dotnet build SwebKit.sln --no-restore
+        with: { dotnet-version: '10.0.x' }
+      - run: dotnet restore SwebKit.slnx
+      - run: dotnet build SwebKit.slnx --no-restore
       - run: dotnet test SwebKit.Core.Tests/SwebKit.Core.Tests.csproj --no-build
       - run: dotnet test SwebKit.Azure.Tests/SwebKit.Azure.Tests.csproj --no-build
       - run: dotnet test SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj --no-build
@@ -772,9 +690,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
-        with: { dotnet-version: '8.0.x' }
+        with: { dotnet-version: '10.0.x' }
       - run: dotnet workload install maui
-      - run: dotnet build src/SwebKit.App/SwebKit.App.csproj -f net8.0-windows10.0.19041.0
+      - run: dotnet build src/SwebKit.App/SwebKit.App.csproj -f net10.0-windows10.0.19041.0
 ```
 
 **Acceptance criteria**
@@ -836,15 +754,27 @@ public void AksPage_Renders_Without_Calling_StateHasChanged_In_Loop()
 
 | Order | Phase | Why first |
 |-------|-------|-----------|
-| 1 | **0.1** (solution, build props, global.json, CPM) | Everything else depends on a reproducible build. |
-| 2 | **6.1** (downgrade to .NET 8) | Stabilizes the foundation before deeper refactors. |
+| 1 | **0.1** (build props, global.json, CPM) | Everything else depends on a reproducible build. |
+| 2 | **7.1** (CI pipeline) | Locks in quality early — every subsequent change is verified. |
 | 3 | **1.1** and **1.2** (kubectl security + Azure credentials) | High-impact security fixes; small surface area. |
 | 4 | **2.x** (exception hygiene, port-forward cleanup) | Improves reliability with small, safe changes. |
-| 5 | **3.1** and **3.3** (AksPage / DashboardPage slicing) | Largest maintainability win; do incrementally. |
-| 6 | **4.x** (MauiProgram modularization, demo client move) | Makes the codebase scalable. |
-| 7 | **5.x** (render coalescing, async startup tracing) | Performance after structure is cleaner. |
-| 8 | **7.x** (CI, architecture tests, new unit tests) | Locks in quality. |
+| 5 | **3.1** (AksPage child-component decomposition) | Largest maintainability win; use child components + state service, not partials. |
+| 6 | **5.2** and **5.3** (log buffering, async startup tracing) | Quick performance wins; independent of architecture changes. |
+| 7 | **4.1** (MauiProgram modularization) | Makes the codebase scalable. |
+| 8 | **5.1** (SwebKitComponentBase adoption) | Broader render coalescing after structure is cleaner. |
+| 9 | **4.3** (demo client move) | Reduces Core coupling; lower urgency. |
+| 10 | **7.2** and **7.3** (new unit tests) | Locks in refactoring quality. |
+
+**Already completed** (PR #27):
+- ~~3.3~~ DashboardPage decomposition (2,960→710 LOC)
+- ~~3.4~~ ApiClientPage decomposition (1,947→529 LOC)
+- ~~4.2~~ Implementation namespace `@using` leaks removed
+
+**Rejected**:
+- ~~6.1 (downgrade to .NET 8)~~ — .NET 10 is the latest version and is intentionally chosen.
+- ~~SwebKit.Composition project~~ — adds unnecessary indirection. Use extension methods instead.
+- ~~Partial-class decomposition for AksPage~~ — use child components + state service instead.
 
 ---
 
-*Generated by Devin on 2026-07-18.*
+*Originally generated by Devin on 2026-07-18. Revised by Cascade on 2026-07-18.*
