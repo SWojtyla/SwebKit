@@ -4,51 +4,27 @@ using SwebKit.Core.Models;
 
 namespace SwebKit.Redis;
 
-public sealed class RedisMemorySignalSource : IAlertSignalSource
+public sealed class RedisMemorySignalSource : RedisSignalSourceBase
 {
-    private readonly IMonitoringConnectionPool _pool;
-    private readonly ILogger<RedisMemorySignalSource> _logger;
-
-    public AlertRuleSource Source => AlertRuleSource.RedisMemoryUsage;
+    public override AlertRuleSource Source => AlertRuleSource.RedisMemoryUsage;
 
     public RedisMemorySignalSource(IMonitoringConnectionPool pool, ILogger<RedisMemorySignalSource> logger)
+        : base(pool, logger)
     {
-        _pool = pool;
-        _logger = logger;
     }
 
-    public async Task<AlertSignalResult> EvaluateAsync(MonitoringAlertRule rule, CancellationToken ct)
+    protected override AlertSignalResult Evaluate(RedisAlertParams p, RedisServerInfo info)
     {
-        var p = rule.RedisAlertParams;
-        if (p is null)
-            return new AlertSignalResult(AlertSignalStatus.Skipped, "No Redis params");
+        if (info.MaxMemoryBytes <= 0)
+            return new AlertSignalResult(AlertSignalStatus.Ok); // unlimited - skip
 
-        // Client is owned by the pool - do NOT dispose.
-        var client = await _pool.GetRedisClientAsync(p.ConnectionAlias, ct).ConfigureAwait(false);
-        if (client is null)
-            return new AlertSignalResult(AlertSignalStatus.Skipped, $"Redis connection '{p.ConnectionAlias}' not found");
+        var usedPct = (double)info.UsedMemoryBytes / info.MaxMemoryBytes * 100.0;
+        if (usedPct >= p.MemoryUsageThresholdPercent)
+            return new AlertSignalResult(
+                AlertSignalStatus.Firing,
+                $"Redis memory: {usedPct:F1}% used (threshold {p.MemoryUsageThresholdPercent:F0}%)",
+                $"Used: {info.UsedMemoryBytes / 1_048_576} MB / {info.MaxMemoryBytes / 1_048_576} MB");
 
-        try
-        {
-            var info = await client.GetServerInfoAsync(ct).ConfigureAwait(false);
-
-            if (info.MaxMemoryBytes <= 0)
-                return new AlertSignalResult(AlertSignalStatus.Ok); // unlimited - skip
-
-            var usedPct = (double)info.UsedMemoryBytes / info.MaxMemoryBytes * 100.0;
-            if (usedPct >= p.MemoryUsageThresholdPercent)
-                return new AlertSignalResult(
-                    AlertSignalStatus.Firing,
-                    $"Redis memory: {usedPct:F1}% used (threshold {p.MemoryUsageThresholdPercent:F0}%)",
-                    $"Used: {info.UsedMemoryBytes / 1_048_576} MB / {info.MaxMemoryBytes / 1_048_576} MB");
-
-            return new AlertSignalResult(AlertSignalStatus.Ok);
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "RedisMemorySignalSource error for rule {RuleId}", rule.Id);
-            return new AlertSignalResult(AlertSignalStatus.Error, ex.Message);
-        }
+        return new AlertSignalResult(AlertSignalStatus.Ok);
     }
 }
