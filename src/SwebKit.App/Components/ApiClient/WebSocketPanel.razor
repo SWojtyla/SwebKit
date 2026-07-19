@@ -1,5 +1,5 @@
 @using Microsoft.JSInterop
-@implements IAsyncDisposable
+@inherits SwebKit.App.Components.Shared.SwebKitComponentAsyncBase
 
 <div class="ws-panel">
 
@@ -286,7 +286,7 @@
                 if (msg is null) break; // connection closed
 
                 _messages.Add(msg);
-                await InvokeAsync(StateHasChanged); // BL-2 (BL-8: could batch, but WS traffic is low)
+                RequestCoalescedRender(); // PERF2-8: batch rapid WS messages into a single render
             }
         }
         catch (OperationCanceledException) { /* normal */ }
@@ -423,7 +423,7 @@
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public override async ValueTask DisposeAsync()
     {
         _readLoopCts?.Cancel();
         _readLoopCts?.Dispose();
@@ -432,6 +432,7 @@
             try { await _readLoop; } catch { }
         }
         await WsService.DisposeAsync();
+        await base.DisposeAsync();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 @using SwebKit.Core.Constants
 @inject IJSRuntime JS
 @inject INotificationService Notify
-@implements IAsyncDisposable
+@inherits SwebKit.App.Components.Shared.SwebKitComponentAsyncBase
 
 <div class="log-viewer">
     <div class="log-toolbar">
@@ -934,7 +934,7 @@
         : name;
     }
 
-    public async ValueTask DisposeAsync()
+    public override async ValueTask DisposeAsync()
     {
         // PERF2-4: Thread-safe CTS teardown
         var cts = Interlocked.Exchange(ref _cts, null);
@@ -950,5 +950,7 @@
             catch (OperationCanceledException) { }
             catch (TimeoutException) { }
         }
+
+        await base.DisposeAsync();
     }
 }
