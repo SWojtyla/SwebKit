@@ -62,14 +62,20 @@ public partial class KubernetesAksClient
             Status = PortForwardStatus.Starting
         };
 
+        var args = new KubectlArgumentBuilder()
+            .WithGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+            .PortForward(ns, resourceName, localPort, remotePort)
+            .Build();
+
         var psi = new ProcessStartInfo("kubectl")
         {
-            Arguments = $"port-forward {resourceName} {localPort}:{remotePort} -n {ns}{BuildKubeconfigArgs()}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
 
         var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start kubectl port-forward.");
 
@@ -139,19 +145,31 @@ public partial class KubernetesAksClient
 
     public Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default)
     {
-        ValidateKubernetesName(ns, nameof(ns));
-        ValidateKubernetesName(podName, nameof(podName));
-        ValidateKubernetesName(container, nameof(container));
+        KubectlArgumentBuilder.ValidateKubernetesName(ns, nameof(ns));
+        KubectlArgumentBuilder.ValidateKubernetesName(podName, nameof(podName));
+        KubectlArgumentBuilder.ValidateKubernetesName(container, nameof(container));
 
-        var kubeconfigArgs = BuildKubeconfigArgs();
-        var args = $"exec -it {podName} -n {ns} -c {container}{kubeconfigArgs} -- /bin/sh";
+        // Build args with global flags BEFORE the subcommand (kubectl convention).
+        var args = new KubectlArgumentBuilder()
+            .WithGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+            .ExecInteractive(ns, podName, container)
+            .Add("--")
+            .Add("/bin/sh")
+            .Build();
+
+        var argString = string.Join(' ', args);
+
         try
         {
-            Process.Start(new ProcessStartInfo("wt.exe", $"kubectl {args}") { UseShellExecute = true });
+            // wt.exe requires UseShellExecute=true which does not support ArgumentList.
+            // All values are validated DNS-1123 names or fixed strings, so shell injection
+            // is not a risk here.
+            Process.Start(new ProcessStartInfo("wt.exe", $"kubectl {argString}") { UseShellExecute = true });
         }
         catch
         {
-            Process.Start(new ProcessStartInfo("cmd.exe", $"/k kubectl {args}") { UseShellExecute = true });
+            // cmd.exe fallback — also UseShellExecute=true for /k interactive shell.
+            Process.Start(new ProcessStartInfo("cmd.exe", $"/k kubectl {argString}") { UseShellExecute = true });
         }
         return Task.CompletedTask;
     }
