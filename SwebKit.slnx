@@ -20,5 +20,4 @@
     <Project Path="tests/SwebKit.E2E.Tests/SwebKit.E2E.Tests.csproj" />
     <Project Path="tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj" />
   </Folder>
-  <Project Path="../../../Temp/CawRewriter/CawRewriter.csproj" />
 </Solution>

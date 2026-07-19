@@ -168,7 +168,8 @@ public sealed class MessageComposerTests : TestContext
         cut.Find("[data-testid='composer-body-input']").Change("{\"orderId\":42}");
         cut.Find("[data-testid='open-save-template-button']").Click();
         cut.Find("[data-testid='save-template-name-input']").Change("Order Template");
-        cut.Find("[data-testid='save-template-confirm-button']").Click();
+        await cut.Find("[data-testid='save-template-confirm-button']")
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
         cut.WaitForAssertion(() =>
         {
@@ -177,7 +178,6 @@ public sealed class MessageComposerTests : TestContext
             Assert.Equal("{\"orderId\":42}", template.Body);
         });
 
-        await Task.CompletedTask;
     }
 
     [Fact]

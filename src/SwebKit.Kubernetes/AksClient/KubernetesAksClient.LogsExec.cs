@@ -157,20 +157,7 @@ public partial class KubernetesAksClient
             .Add("/bin/sh")
             .Build();
 
-        var argString = string.Join(' ', args);
-
-        try
-        {
-            // wt.exe requires UseShellExecute=true which does not support ArgumentList.
-            // All values are validated DNS-1123 names or fixed strings, so shell injection
-            // is not a risk here.
-            Process.Start(new ProcessStartInfo("wt.exe", $"kubectl {argString}") { UseShellExecute = true });
-        }
-        catch
-        {
-            // cmd.exe fallback — also UseShellExecute=true for /k interactive shell.
-            Process.Start(new ProcessStartInfo("cmd.exe", $"/k kubectl {argString}") { UseShellExecute = true });
-        }
+        KubectlShellLauncher.Launch(args);
         return Task.CompletedTask;
     }
 

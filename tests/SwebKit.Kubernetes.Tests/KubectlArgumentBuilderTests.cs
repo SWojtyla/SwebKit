@@ -1,4 +1,7 @@
 using SwebKit.Kubernetes.AksClient;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace SwebKit.Kubernetes.Tests;
 
@@ -195,5 +198,38 @@ public class KubectlArgumentBuilderTests
                     "apply", "-f", "/tmp/manifest.yaml", "--namespace", "ns",
                     "--token", "tok123" },
             args);
+    }
+
+    [Fact]
+    public void WindowsTerminalStartInfo_PreservesArgumentsWithoutShellConcatenation()
+    {
+        string[] args = ["--kubeconfig", @"C:\cluster configs\prod & whoami", "--context", "prod"];
+
+        var startInfo = KubectlShellLauncher.CreateWindowsTerminalStartInfo(args);
+
+        Assert.False(startInfo.UseShellExecute);
+        Assert.Equal("wt.exe", startInfo.FileName);
+        Assert.Equal(new[] { "kubectl.exe", "--kubeconfig", @"C:\cluster configs\prod & whoami", "--context", "prod" }, startInfo.ArgumentList);
+        Assert.Empty(startInfo.Arguments);
+    }
+
+    [Fact]
+    public void PowerShellStartInfo_EncodesAllDynamicArguments()
+    {
+        const string hostilePath = @"C:\cluster configs\prod & whoami";
+        string[] args = ["--kubeconfig", hostilePath, "--context", "prod; Write-Host injected"];
+
+        var startInfo = KubectlShellLauncher.CreatePowerShellStartInfo(args);
+
+        Assert.True(startInfo.UseShellExecute);
+        Assert.DoesNotContain(hostilePath, startInfo.Arguments, StringComparison.Ordinal);
+        Assert.DoesNotContain("Write-Host injected", startInfo.Arguments, StringComparison.Ordinal);
+
+        var encodedCommand = startInfo.Arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries)[^1];
+        var script = Encoding.Unicode.GetString(Convert.FromBase64String(encodedCommand));
+        var payload = Regex.Match(script, "FromBase64String\\('(?<payload>[A-Za-z0-9+/=]+)'\\)").Groups["payload"].Value;
+        var decodedArgs = JsonSerializer.Deserialize<string[]>(Encoding.UTF8.GetString(Convert.FromBase64String(payload)));
+
+        Assert.Equal(args, decodedArgs);
     }
 }
