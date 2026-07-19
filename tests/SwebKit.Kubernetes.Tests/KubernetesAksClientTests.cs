@@ -865,13 +865,25 @@ users:
                 ]);
         }
 
+        var unixPayload = $"{{\"apiVersion\":\"client.authentication.k8s.io/v1beta1\",\"kind\":\"ExecCredential\",\"status\":{{\"token\":\"{token}\"}}}}";
+        if (OperatingSystem.IsLinux())
+        {
+            return string.Join(
+                "\n",
+                [
+                    "      command: /bin/echo",
+                    "      args:",
+                    $"      - '{unixPayload.Replace("\"", "\\\"", StringComparison.Ordinal)}'"
+                ]);
+        }
+
         return string.Join(
             "\n",
             [
-                "      command: /bin/sh",
+                "      command: /usr/bin/printf",
                 "      args:",
-                "      - -c",
-                $"      - printf '%s' '{{\"apiVersion\":\"client.authentication.k8s.io/v1beta1\",\"kind\":\"ExecCredential\",\"status\":{{\"token\":\"{token}\"}}}}'"
+                "      - '\"%s\"'",
+                $"      - '{unixPayload.Replace("\"", "\\\"", StringComparison.Ordinal)}'"
             ]);
     }
 
