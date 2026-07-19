@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -252,7 +253,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         {
             try
             {
-                var credential = new DefaultAzureCredential(AzureCredentialOptions);
+                var credential = AzureCredentialFactory.CreateDefault(AzureCredentialOptions);
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 var accessToken = credential.GetToken(new TokenRequestContext([scope]), cts.Token);
                 if (!string.IsNullOrWhiteSpace(accessToken.Token))
@@ -1235,7 +1236,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         {
             try
             {
-                var credential = new DefaultAzureCredential(AzureCredentialOptions);
+                var credential = AzureCredentialFactory.CreateDefault(AzureCredentialOptions);
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 var accessToken = credential.GetToken(new TokenRequestContext([scope]), cts.Token);
                 if (!string.IsNullOrWhiteSpace(accessToken.Token))

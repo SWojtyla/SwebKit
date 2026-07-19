@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -18,7 +19,8 @@ public sealed class ConnectionWarmupService(
     IAksWarmupCache aksCache,
     IRedisWarmupCache redisCache,
     IServiceBusNamespaceBootstrapper sbBootstrapper,
-    IServiceBusWarmupCache sbCache) : IConnectionWarmupService
+    IServiceBusWarmupCache sbCache,
+    ILogger<ConnectionWarmupService>? logger = null) : IConnectionWarmupService
 {
     private const int PerAreaTimeoutSeconds = 10;
 
@@ -86,11 +88,11 @@ public sealed class ConnectionWarmupService(
         }
         catch (OperationCanceledException)
         {
-            // Timeout or app-level cancellation — silently discard
+            // Timeout or app-level cancellation — expected
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Network, auth, or config error — silently discard
+            logger?.LogWarning(ex, "AKS warmup failed");
         }
     }
 
@@ -115,11 +117,11 @@ public sealed class ConnectionWarmupService(
         }
         catch (OperationCanceledException)
         {
-            // Silently discard
+            // Timeout or app-level cancellation — expected
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Silently discard
+            logger?.LogWarning(ex, "Redis warmup failed for cache {CacheId}", entry.Id);
         }
     }
 
@@ -141,11 +143,11 @@ public sealed class ConnectionWarmupService(
         }
         catch (OperationCanceledException)
         {
-            // Timeout or app-level cancellation — silently discard
+            // Timeout or app-level cancellation — expected
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Network, auth, or config error — silently discard
+            logger?.LogWarning(ex, "Service Bus warmup failed for namespace {NamespaceId}", ns.Id);
         }
     }
 }

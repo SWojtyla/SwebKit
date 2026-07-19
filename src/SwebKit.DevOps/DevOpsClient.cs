@@ -489,7 +489,7 @@ public class DevOpsClient : IDevOpsClient
             {
                 throw;
             }
-            catch { continue; }
+            catch (Exception ex) { _logger.LogDebug(ex, "Failed to process a pipeline run entry; skipping"); continue; }
 
             var waitingNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (run.State != "completed")

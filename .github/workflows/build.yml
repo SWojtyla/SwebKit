@@ -1,0 +1,84 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  core:
+    name: Core Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          include-prerelease: true
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build non-MAUI projects
+        run: |
+          dotnet build src/SwebKit.Core/SwebKit.Core.csproj --no-restore
+          dotnet build src/SwebKit.Azure/SwebKit.Azure.csproj --no-restore
+          dotnet build src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj --no-restore
+          dotnet build src/SwebKit.Redis/SwebKit.Redis.csproj --no-restore
+          dotnet build src/SwebKit.DevOps/SwebKit.DevOps.csproj --no-restore
+          dotnet build src/SwebKit.Observability/SwebKit.Observability.csproj --no-restore
+          dotnet build src/SwebKit.Agents/SwebKit.Agents.csproj --no-restore
+
+      - name: Test Core
+        run: dotnet test tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj --no-restore --verbosity normal
+
+      - name: Test Azure
+        run: dotnet test tests/SwebKit.Azure.Tests/SwebKit.Azure.Tests.csproj --no-restore --verbosity normal
+
+      - name: Test Kubernetes
+        run: dotnet test tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj --no-restore --verbosity normal
+
+      - name: Test DevOps
+        run: dotnet test tests/SwebKit.DevOps.Tests/SwebKit.DevOps.Tests.csproj --no-restore --verbosity normal
+
+      - name: Test Agents
+        run: dotnet test tests/SwebKit.Agents.Tests/SwebKit.Agents.Tests.csproj --no-restore --verbosity normal
+
+      - name: Check for floating package versions
+        run: |
+          if grep -r 'Version="\*' src tests --include='*.csproj'; then
+            echo "Found floating package versions — use Directory.Packages.props instead"
+            exit 1
+          fi
+
+      - name: Vulnerability scan
+        run: dotnet list src/SwebKit.Core/SwebKit.Core.csproj package --vulnerable --include-transitive
+        continue-on-error: true
+
+  maui:
+    name: MAUI Build (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          include-prerelease: true
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui
+
+      - name: Restore MAUI app
+        run: dotnet restore src/SwebKit.App/SwebKit.App.csproj
+
+      - name: Build MAUI app
+        run: dotnet build src/SwebKit.App/SwebKit.App.csproj -f net10.0-windows10.0.19041.0 --no-restore
+
+      - name: Build App.Tests
+        run: dotnet build tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj
+
+      - name: Test App
+        run: dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj --no-build --verbosity normal

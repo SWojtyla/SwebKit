@@ -174,7 +174,7 @@ public sealed class HttpRequestExecutor(
         if (!string.IsNullOrWhiteSpace(variablesRaw))
         {
             try { variables = JsonNode.Parse(variablesRaw); }
-            catch { /* invalid JSON — omit variables */ }
+            catch (System.Text.Json.JsonException) { /* invalid JSON — omit variables */ }
         }
 
         var operationName = string.IsNullOrWhiteSpace(request.GraphQlSelectedOperation)
@@ -234,7 +234,7 @@ public sealed class HttpRequestExecutor(
 
             return errors.Count > 0 ? errors : null;
         }
-        catch
+        catch (System.Text.Json.JsonException)
         {
             return null;
         }
@@ -287,7 +287,7 @@ public sealed class HttpRequestExecutor(
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch
+        catch (IOException)
         {
             // Swallow body read errors — return whatever we have
         }
