@@ -117,6 +117,11 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\IncidentTimelineConfigForm.razor" Link="Components\Pages\IncidentTimelineConfigForm.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusPage.razor" Link="Components\Pages\ServiceBusPage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor" Link="Components\Pages\AksPage.razor" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor.Core.cs" Link="Components\Pages\AksPage.razor.Core.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor.Filters.cs" Link="Components\Pages\AksPage.razor.Filters.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor.Lifecycle.cs" Link="Components\Pages\AksPage.razor.Lifecycle.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor.Selection.cs" Link="Components\Pages\AksPage.razor.Selection.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor.ContextMenuActions.cs" Link="Components\Pages\AksPage.razor.ContextMenuActions.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\IncidentTimelinePage.razor" Link="Components\Pages\IncidentTimelinePage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\StoragePage.razor" Link="Components\Pages\StoragePage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ServiceBusNamespacePanel.razor" Link="Components\ServiceBus\ServiceBusNamespacePanel.razor" />
