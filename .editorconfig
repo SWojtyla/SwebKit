@@ -29,6 +29,37 @@ dotnet_diagnostic.CA1873.severity = suggestion
 # would churn the entire component tree for a non-issue.
 dotnet_diagnostic.CA1716.severity = none
 
+# CA1305 (IFormatProvider) matters most for libraries that round-trip data across
+# cultures. SwebKit is a single-user desktop tool: numeric/date formatting is either
+# for display (where CurrentCulture is correct and implicit) or for internal keys
+# (where the values are ASCII-invariant). Mechanically injecting InvariantCulture
+# everywhere would risk *introducing* display bugs, so this stays off in app code.
+dotnet_diagnostic.CA1305.severity = none
+
+# CA1859 (use concrete types instead of interfaces for performance) is a micro-perf
+# rule that trades API generality for devirtualization gains irrelevant at this app's
+# call volumes. Not worth degrading interface-based seams throughout the codebase.
+dotnet_diagnostic.CA1859.severity = none
+
+# CA1720 (identifier contains a type name, e.g. a param named 'obj') and CA1711
+# (reserved suffixes like 'Collection'/'Ex') are naming-taste rules. Renaming public
+# surface to satisfy them is pure churn with no correctness or clarity benefit here.
+dotnet_diagnostic.CA1720.severity = none
+dotnet_diagnostic.CA1711.severity = none
+
+# CA1822 (mark members as static) fights this codebase's DI-based design: service
+# methods are intentionally instance members so they can be registered, injected, and
+# mocked in tests, even when a given method's current body happens not to touch instance
+# state. Auto-applying it turns public service methods static, which breaks the injection
+# seam and every caller. The perf gain is negligible for a desktop app. Left off by design.
+dotnet_diagnostic.CA1822.severity = none
+
+# CA1068 (CancellationToken should be the last parameter) flags IServiceBusClient's
+# PeekMessagesAsync/PeekDeadLetterAsync, whose trailing 'long? fromSequenceNumber = null'
+# was added deliberately for "load more" paging. Reordering would churn ~25 call sites and
+# test doubles across every project to satisfy a convention on an internal interface. Off.
+dotnet_diagnostic.CA1068.severity = none
+
 # Test projects prioritize readability of arrange/assert code over the
 # micro-perf and globalization rules that matter in shipping code. Relax those
 # here; correctness rules stay at warning.

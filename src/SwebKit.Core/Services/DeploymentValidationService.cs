@@ -46,7 +46,7 @@ public sealed class DeploymentValidationService
 
             var container = binding.ContainerName is not null
                 ? containers.FirstOrDefault(c => string.Equals(c.Name, binding.ContainerName, StringComparison.OrdinalIgnoreCase))
-                : containers.FirstOrDefault();
+                : containers.Count > 0 ? containers[0] : null;
 
             if (container is null)
             {

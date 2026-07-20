@@ -304,7 +304,8 @@ public sealed class BrunoFolderImporter
             var meta = ParseKeyValues(metaLines);
             meta.TryGetValue("name", out name);
             meta.TryGetValue("type", out type);
-            if (meta.TryGetValue("seq", out var seqStr)) int.TryParse(seqStr, out seq);
+            // Discard the parse result: on failure seq intentionally stays at its default of 0.
+            if (meta.TryGetValue("seq", out var seqStr)) _ = int.TryParse(seqStr, out seq);
         }
 
         if (string.IsNullOrWhiteSpace(name)) return (null, 0);
@@ -624,7 +625,7 @@ public sealed class BrunoFolderImporter
         {
             var trimmed = lines[i].Trim();
 
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//") || trimmed.StartsWith('#'))
+            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('#'))
             {
                 i++;
                 continue;
@@ -695,7 +696,7 @@ public sealed class BrunoFolderImporter
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//")) continue;
+            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//", StringComparison.Ordinal)) continue;
 
             var colonIdx = trimmed.IndexOf(':');
             if (colonIdx <= 0) continue;

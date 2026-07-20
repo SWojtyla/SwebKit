@@ -49,7 +49,7 @@ public class WindowsCredentialStore(ILogger<WindowsCredentialStore>? logger = nu
             var vault = new PasswordVault();
             var all = vault.RetrieveAll();
             return all
-                .Where(c => c.Resource.StartsWith(ResourcePrefix) && c.UserName.StartsWith(prefix))
+                .Where(c => c.Resource.StartsWith(ResourcePrefix, StringComparison.Ordinal) && c.UserName.StartsWith(prefix, StringComparison.Ordinal))
                 .Select(c => c.UserName)
                 .ToList();
         }

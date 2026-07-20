@@ -41,6 +41,8 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     private const string KedaScaledObjectsPlural = "scaledobjects";
     private static readonly string[] KedaApiVersions = ["v1alpha1"];
 
+    private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
+
     /// <summary>
     /// Cached probe result for whether the KEDA <c>ScaledObject</c> CRD is served by this cluster.
     /// <c>null</c> = not yet probed, <c>false</c> = confirmed absent (HPA reads then skip the extra
@@ -824,6 +826,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
             }
             _portForwardProcesses.Clear();
         }
+        GC.SuppressFinalize(this);
         return ValueTask.CompletedTask;
     }
 
@@ -981,7 +984,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 // Extract the "config" field which contains the user-supplied values
                 using var doc = System.Text.Json.JsonDocument.Parse(json);
                 if (doc.RootElement.TryGetProperty("config", out var config))
-                    return System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                    return System.Text.Json.JsonSerializer.Serialize(config, IndentedJsonOptions);
 
                 return json;
             }
@@ -1554,7 +1557,7 @@ internal static class AksAzureAuthHelpers
                 if (string.IsNullOrWhiteSpace(valueLine))
                     continue;
 
-                if (valueLine.StartsWith("-"))
+                if (valueLine.StartsWith('-'))
                     valueLine = valueLine[1..].Trim();
 
                 if (!valueLine.StartsWith("--", StringComparison.OrdinalIgnoreCase))

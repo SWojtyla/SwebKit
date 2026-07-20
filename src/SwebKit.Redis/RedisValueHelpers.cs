@@ -4,6 +4,8 @@ namespace SwebKit.Redis;
 
 public static class RedisValueHelpers
 {
+    private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
+
     public static string MaskConnectionString(string? connectionString)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -41,7 +43,7 @@ public static class RedisValueHelpers
         try
         {
             using var doc = JsonDocument.Parse(trimmed);
-            return JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
+            return JsonSerializer.Serialize(doc.RootElement, IndentedJsonOptions);
         }
         catch
         {

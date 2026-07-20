@@ -450,7 +450,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
     private async Task TakeBaselineAsync(string ns, CancellationToken ct = default)
     {
         IAksClient? client;
-        await _lock.WaitAsync();
+        await _lock.WaitAsync(ct);
         try
         {
             client = GetOrCreateClient();
@@ -475,7 +475,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
             return;
         }
 
-        await _lock.WaitAsync();
+        await _lock.WaitAsync(ct);
         try
         {
             _namespaceSnapshots[ns] = pods.ToDictionary(
@@ -515,7 +515,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
                 return _aksClient;
 
             if (_aksClient is IAsyncDisposable d1)
-                _ = d1.DisposeAsync();
+                _ = d1.DisposeAsync().AsTask();
 
             _aksClient = new DemoAksClient();
             _lastWasDemo = true;
@@ -534,7 +534,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
 
         // Context changed, switched from demo, or first creation — dispose old client.
         if (_aksClient is IAsyncDisposable d2)
-            _ = d2.DisposeAsync();
+            _ = d2.DisposeAsync().AsTask();
 
         _aksClient = new KubernetesAksClient(aksConfig.KubeconfigContext, aksConfig.KubeconfigPath);
         _lastKubeconfigContext = currentContext;

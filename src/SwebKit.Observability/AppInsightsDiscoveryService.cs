@@ -10,7 +10,7 @@ namespace SwebKit.Observability;
 /// Discovers Application Insights components across all accessible Azure subscriptions.
 /// Uses DefaultAzureCredential. Results are cached for the lifetime of the service.
 /// </summary>
-public sealed class AppInsightsDiscoveryService : IObservabilityResourceDiscovery
+public sealed class AppInsightsDiscoveryService : IObservabilityResourceDiscovery, IDisposable
 {
     private List<ObservabilityResourceInfo>? _cache;
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -64,4 +64,10 @@ public sealed class AppInsightsDiscoveryService : IObservabilityResourceDiscover
 
     /// <summary>Clears the in-memory cache so the next call re-scans Azure.</summary>
     public void InvalidateCache() => _cache = null;
+
+    public void Dispose()
+    {
+        _lock.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

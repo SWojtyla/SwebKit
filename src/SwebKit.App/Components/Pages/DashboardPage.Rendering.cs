@@ -9,7 +9,7 @@ namespace SwebKit.App.Components.Pages;
 public partial class DashboardPage
 {
     // ── Activity feed ───────────────────────────────────────────────────────────────
-    private record ActivityRecord(string Description, string Icon, string Area, DateTimeOffset OccurredAt);
+    private sealed record ActivityRecord(string Description, string Icon, string Area, DateTimeOffset OccurredAt);
     private readonly List<ActivityRecord> _activities = [];
 
     // ── Pinned entities ─────────────────────────────────────────────────────────────

@@ -30,7 +30,8 @@ public partial class DashboardPage
 
     private void InitializeBuilderDefaults()
     {
-        var serviceBusNamespace = GetServiceBusNamespaceOptions().FirstOrDefault();
+        var namespaceOptions = GetServiceBusNamespaceOptions();
+        var serviceBusNamespace = namespaceOptions.Count > 0 ? namespaceOptions[0] : null;
         if (string.IsNullOrWhiteSpace(_newServiceBusNamespaceId) && serviceBusNamespace is not null)
         {
             _newServiceBusNamespaceId = serviceBusNamespace.Id;

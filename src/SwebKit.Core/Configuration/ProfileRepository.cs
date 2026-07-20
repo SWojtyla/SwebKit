@@ -369,7 +369,7 @@ public class ProfileRepository
             case EntityType.Subscription:
                 var namespaceMatch = namespaces.FirstOrDefault(candidate =>
                     string.Equals(candidate.Alias, favoriteEntity.ParentName, StringComparison.OrdinalIgnoreCase))
-                    ?? namespaces.FirstOrDefault();
+                    ?? (namespaces.Count > 0 ? namespaces[0] : null);
 
                 if (namespaceMatch is null)
                 {

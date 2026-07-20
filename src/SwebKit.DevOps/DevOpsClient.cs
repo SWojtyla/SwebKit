@@ -603,7 +603,7 @@ public class DevOpsClient : IDevOpsClient
         var sourceBranch = dto.Resources?.Repositories?.GetValueOrDefault("self")?.RefName
             ?? string.Empty;
 
-        if (sourceBranch.StartsWith("refs/heads/"))
+        if (sourceBranch.StartsWith("refs/heads/", StringComparison.Ordinal))
             sourceBranch = sourceBranch["refs/heads/".Length..];
 
         return new AdoPipelineRun(

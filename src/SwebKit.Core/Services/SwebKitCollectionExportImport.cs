@@ -54,7 +54,7 @@ public sealed class SwebKitCollectionImporter : ICollectionImporter
         try
         {
             var json = Encoding.UTF8.GetString(payload).TrimStart();
-            if (!json.StartsWith("{", StringComparison.Ordinal)) return false;
+            if (!json.StartsWith('{')) return false;
             using var doc = JsonDocument.Parse(json);
             // SwebKit bundles always have both "schemaVersion" and "collection" at the root
             return doc.RootElement.TryGetProperty("schemaVersion", out _) &&

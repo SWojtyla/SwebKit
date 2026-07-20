@@ -9,19 +9,19 @@ namespace SwebKit.DevOps;
 
 // ── Generic wrapper ──
 
-internal record AdoListResponse<T>(
+internal sealed record AdoListResponse<T>(
     [property: JsonPropertyName("count")] int Count,
     [property: JsonPropertyName("value")] List<T> Value);
 
 // ── Pipelines ──
 
-internal record AdoPipelineDto(
+internal sealed record AdoPipelineDto(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("folder")] string? Folder,
     [property: JsonPropertyName("url")] string? Url);
 
-internal record AdoPipelineRunDto(
+internal sealed record AdoPipelineRunDto(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("pipeline")] AdoPipelineRefDto? Pipeline,
     [property: JsonPropertyName("name")] string? Name,
@@ -32,28 +32,28 @@ internal record AdoPipelineRunDto(
     [property: JsonPropertyName("resources")] AdoRunResourcesDto? Resources,
     [property: JsonPropertyName("_links")] AdoLinksDto? Links);
 
-internal record AdoPipelineRefDto(
+internal sealed record AdoPipelineRefDto(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string? Name);
 
-internal record AdoRunResourcesDto(
+internal sealed record AdoRunResourcesDto(
     [property: JsonPropertyName("repositories")] Dictionary<string, AdoRunRepoDto>? Repositories);
 
-internal record AdoRunRepoDto(
+internal sealed record AdoRunRepoDto(
     [property: JsonPropertyName("refName")] string? RefName);
 
-internal record AdoLinksDto(
+internal sealed record AdoLinksDto(
     [property: JsonPropertyName("web")] AdoLinkRefDto? Web);
 
-internal record AdoLinkRefDto(
+internal sealed record AdoLinkRefDto(
     [property: JsonPropertyName("href")] string? Href);
 
 // ── Build timeline (for stage info) ──
 
-internal record AdoTimelineDto(
+internal sealed record AdoTimelineDto(
     [property: JsonPropertyName("records")] List<AdoTimelineRecordDto>? Records);
 
-internal record AdoTimelineRecordDto(
+internal sealed record AdoTimelineRecordDto(
     [property: JsonPropertyName("id")] string? Id,
     [property: JsonPropertyName("parentId")] string? ParentId,
     [property: JsonPropertyName("name")] string? Name,
@@ -65,7 +65,7 @@ internal record AdoTimelineRecordDto(
 
 // ── Approvals ──
 
-internal record AdoApprovalDto(
+internal sealed record AdoApprovalDto(
     [property: JsonPropertyName("id")] string? Id,
     [property: JsonPropertyName("status")] string? Status,
     [property: JsonPropertyName("createdOn")] DateTimeOffset CreatedOn,
@@ -73,88 +73,88 @@ internal record AdoApprovalDto(
     [property: JsonPropertyName("steps")] List<AdoApprovalStepDto>? Steps,
     [property: JsonPropertyName("_links")] AdoLinksDto? Links);
 
-internal record AdoApprovalPipelineDto(
+internal sealed record AdoApprovalPipelineDto(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string? Name);
 
-internal record AdoApprovalStepDto(
+internal sealed record AdoApprovalStepDto(
     [property: JsonPropertyName("status")] string? Status,
     [property: JsonPropertyName("assignedApprover")] AdoIdentityDto? AssignedApprover);
 
-internal record AdoIdentityDto(
+internal sealed record AdoIdentityDto(
     [property: JsonPropertyName("displayName")] string? DisplayName,
     [property: JsonPropertyName("uniqueName")] string? UniqueName);
 
 // ── Git ──
 
-internal record AdoRepositoryDto(
+internal sealed record AdoRepositoryDto(
     [property: JsonPropertyName("id")] string? Id,
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("defaultBranch")] string? DefaultBranch,
     [property: JsonPropertyName("webUrl")] string? WebUrl);
 
-internal record AdoAnnotatedTagDto(
+internal sealed record AdoAnnotatedTagDto(
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("objectId")] string? ObjectId,
     [property: JsonPropertyName("message")] string? Message,
     [property: JsonPropertyName("taggedBy")] AdoTagPersonDto? TaggedBy,
     [property: JsonPropertyName("taggedObject")] AdoTaggedObjectDto? TaggedObject);
 
-internal record AdoTagPersonDto(
+internal sealed record AdoTagPersonDto(
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("date")] DateTimeOffset? Date);
 
-internal record AdoTaggedObjectDto(
+internal sealed record AdoTaggedObjectDto(
     [property: JsonPropertyName("objectId")] string? ObjectId);
 
-internal record AdoCommitDto(
+internal sealed record AdoCommitDto(
     [property: JsonPropertyName("commitId")] string? CommitId,
     [property: JsonPropertyName("comment")] string? Comment,
     [property: JsonPropertyName("author")] AdoCommitAuthorDto? Author);
 
-internal record AdoCommitAuthorDto(
+internal sealed record AdoCommitAuthorDto(
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("date")] DateTimeOffset Date);
 
-internal record AdoAnnotatedTagCreateDto(
+internal sealed record AdoAnnotatedTagCreateDto(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("taggedObject")] AdoTaggedObjectDto TaggedObject,
     [property: JsonPropertyName("message")] string Message);
 
 // ── Git refs (for listing tags) ──
 
-internal record AdoRefDto(
+internal sealed record AdoRefDto(
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("objectId")] string? ObjectId,
     [property: JsonPropertyName("creator")] AdoIdentityDto? Creator);
 
 // ── Environments ──
 
-internal record AdoEnvironmentDto(
+internal sealed record AdoEnvironmentDto(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string? Name);
 
 // ── Pipeline run trigger ──
 
-internal record AdoPipelineRunTriggerDto(
+internal sealed record AdoPipelineRunTriggerDto(
     [property: JsonPropertyName("resources")] AdoTriggerResourcesDto Resources,
     [property: JsonPropertyName("templateParameters")] Dictionary<string, string>? TemplateParameters);
 
-internal record AdoTriggerResourcesDto(
+internal sealed record AdoTriggerResourcesDto(
     [property: JsonPropertyName("repositories")] Dictionary<string, AdoTriggerRepoDto> Repositories);
 
-internal record AdoTriggerRepoDto(
+internal sealed record AdoTriggerRepoDto(
     [property: JsonPropertyName("refName")] string RefName);
 
 // ── Approval patch ──
 
-internal record AdoApprovalPatchDto(
+internal sealed record AdoApprovalPatchDto(
     [property: JsonPropertyName("approvalId")] string ApprovalId,
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("comment")] string? Comment);
 
 // ── Projects (for connection test) ──
 
-internal record AdoProjectDto(
+internal sealed record AdoProjectDto(
     [property: JsonPropertyName("id")] string? Id,
     [property: JsonPropertyName("name")] string? Name);

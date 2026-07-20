@@ -189,8 +189,8 @@ public sealed class DemoStorageClient : IStorageClient
 
         return Task.FromResult(new StorageBlobContent(
             containerName, blobName, content,
-            blobName.EndsWith(".json") ? "application/json"
-                : blobName.EndsWith(".csv") ? "text/csv"
+            blobName.EndsWith(".json", StringComparison.Ordinal) ? "application/json"
+                : blobName.EndsWith(".csv", StringComparison.Ordinal) ? "text/csv"
                 : "text/plain",
             bytes, false, isBinary));
     }

@@ -110,7 +110,7 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
                     break;
 
                 default:
-                    if (!token.StartsWith("-", StringComparison.Ordinal) && LooksLikeUrl(token))
+                    if (!token.StartsWith('-') && LooksLikeUrl(token))
                     {
                         url = token;
                     }

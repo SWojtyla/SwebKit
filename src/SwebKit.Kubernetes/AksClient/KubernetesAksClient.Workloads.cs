@@ -625,11 +625,11 @@ public partial class KubernetesAksClient
 
     internal static long ParseMemoryToBytes(string mem)
     {
-        if (mem.EndsWith("Ki"))
+        if (mem.EndsWith("Ki", StringComparison.Ordinal))
             return long.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var ki) ? ki * 1024 : 0;
-        if (mem.EndsWith("Mi"))
+        if (mem.EndsWith("Mi", StringComparison.Ordinal))
             return long.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var mi) ? mi * 1024 * 1024 : 0;
-        if (mem.EndsWith("Gi"))
+        if (mem.EndsWith("Gi", StringComparison.Ordinal))
             return long.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var gi) ? gi * 1024 * 1024 * 1024 : 0;
         return long.TryParse(mem, NumberStyles.Any, CultureInfo.InvariantCulture, out var bytes) ? bytes : 0;
     }

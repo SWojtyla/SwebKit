@@ -616,5 +616,6 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _client.DisposeAsync().ConfigureAwait(false);
+        GC.SuppressFinalize(this);
     }
 }

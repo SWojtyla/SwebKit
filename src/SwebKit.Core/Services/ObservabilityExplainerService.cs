@@ -70,7 +70,7 @@ public sealed class ObservabilityExplainerService : IObservabilityExplainerServi
                 SloMetric.FailureRate => overview.FailureRate,
                 SloMetric.P95ResponseTimeMs => overview.P95ResponseTimeMs,
                 SloMetric.AvailabilityPct => overview.AvailabilityPct,
-                _ => throw new ArgumentOutOfRangeException(nameof(def.Metric)),
+                _ => throw new ArgumentOutOfRangeException(nameof(definitions), def.Metric, "Unsupported SLO metric."),
             };
             entries.Add(new SloStatusEntry(def, current, EvaluateSloState(def, current)));
         }
@@ -126,7 +126,7 @@ public sealed class ObservabilityExplainerService : IObservabilityExplainerServi
                     return current < warnAt ? SloState.AtRisk : SloState.Met;
                 }
             default:
-                throw new ArgumentOutOfRangeException(nameof(def.Metric));
+                throw new ArgumentOutOfRangeException(nameof(def), def.Metric, "Unsupported SLO metric.");
         }
     }
 }

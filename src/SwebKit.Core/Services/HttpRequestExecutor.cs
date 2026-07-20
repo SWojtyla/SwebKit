@@ -365,13 +365,13 @@ public sealed class HttpRequestExecutor(
             return actual;
         }
 
-        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct)
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
         {
             var remaining = maxBytes - _read;
             if (remaining <= 0) { WasTruncated = true; return 0; }
 
-            var toRead = Math.Min(count, remaining);
-            var actual = await inner.ReadAsync(buffer.AsMemory(offset, toRead), ct).ConfigureAwait(false);
+            var toRead = Math.Min(buffer.Length, remaining);
+            var actual = await inner.ReadAsync(buffer[..toRead], ct).ConfigureAwait(false);
             _read += actual;
             if (_read >= maxBytes) WasTruncated = true;
             return actual;
