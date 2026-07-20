@@ -214,6 +214,29 @@ public class AksConnectionBarTests : TestContext
     }
 
     [Fact]
+    public void AksConnectionBar_NamespacePicker_NamespacesArrivingWhileOpen_AreShown()
+    {
+        // Reproduces the reported regression: the picker is opened before the AKS client has
+        // finished listing namespaces (or right after a context switch resets the list), and the
+        // real list then arrives via a parameter update while the dropdown stays open. The frozen
+        // display order must resync instead of staying stuck on the empty snapshot forever.
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, new List<string>())
+            .Add(p => p.CurrentNamespace, string.Empty));
+
+        cut.FindAll("input.aks-ns-search").Last().Focus();
+        Assert.Contains("No namespaces match", cut.Markup);
+
+        cut.SetParametersAndRender(ps => ps.Add(p => p.Namespaces, ["default", "orders", "payments"]));
+
+        var options = cut.FindAll("label.aks-ns-option-check span")
+            .Select(span => span.TextContent)
+            .ToList();
+
+        Assert.Equal(["default", "orders", "payments"], options);
+    }
+
+    [Fact]
     public void AksConnectionBar_NamespacePicker_OptionRowsAreKeyedByNamespace()
     {
         // Each option carries the namespace as a stable identity hint so Blazor never reuses one

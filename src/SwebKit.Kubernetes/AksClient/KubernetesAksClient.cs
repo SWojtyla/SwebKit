@@ -209,14 +209,13 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         var hasExplicitKubeconfig = !string.IsNullOrWhiteSpace(kubeconfigPath);
         var hasExplicitContext = !string.IsNullOrWhiteSpace(kubeconfigContext);
 
-        if (!hasExplicitKubeconfig && !hasExplicitContext)
-            return KubernetesClientConfiguration.BuildDefaultConfig();
-
         try
         {
-            return KubernetesClientConfiguration.BuildConfigFromConfigFile(
-                hasExplicitKubeconfig ? kubeconfigPath : null,
-                hasExplicitContext ? kubeconfigContext : null);
+            return hasExplicitKubeconfig || hasExplicitContext
+                ? KubernetesClientConfiguration.BuildConfigFromConfigFile(
+                    hasExplicitKubeconfig ? kubeconfigPath : null,
+                    hasExplicitContext ? kubeconfigContext : null)
+                : KubernetesClientConfiguration.BuildDefaultConfig();
         }
         catch (Exception ex)
         {

@@ -52,6 +52,11 @@ public partial class AksPage
     private bool IsLoading;
     private string? ErrorMessage;
     private string? PermissionWarning;
+    // Set when the namespace picker came back empty because listing namespaces was RBAC-denied
+    // (see AksClientBootstrapResult.NamespacesWarning), not because the cluster has none. Kept
+    // separate from PermissionWarning because it's produced during bootstrap, before LoadAsync's
+    // per-resource AksAccessDeniedScope exists to merge into.
+    private string? _namespaceListWarning;
     private CancellationTokenSource _cts = new();
 
     // Detail panels component (hosts YAML viewer, Helm panel, logs, scale, etc.)
@@ -429,6 +434,7 @@ OnCtxRestartDeployment();
                     Namespaces = warm.Namespaces.ToList();
                     ActiveContext = warm.ActiveContext;
                     CurrentNamespace = warm.CurrentNamespace;
+                    _namespaceListWarning = warm.NamespacesWarning;
                     AksWarmupCache.Invalidate(); // consume once
                     await LoadAsync();
                     ConnectionState.SetConnected("aks");
@@ -455,6 +461,7 @@ OnCtxRestartDeployment();
             Namespaces = result.Namespaces.ToList();
             ActiveContext = result.ActiveContext;
             CurrentNamespace = result.CurrentNamespace;
+            _namespaceListWarning = result.NamespacesWarning;
 
             switch (result.Status)
             {
@@ -494,7 +501,10 @@ OnCtxRestartDeployment();
                 Namespaces,
                 ActiveContext,
                 CurrentNamespace,
-                null));
+                null)
+            {
+                NamespacesWarning = _namespaceListWarning
+            });
         }
 
         var bootstrapCts = Interlocked.Exchange(ref _bootstrapCts, null!);

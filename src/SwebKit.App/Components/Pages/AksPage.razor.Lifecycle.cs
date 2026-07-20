@@ -272,7 +272,12 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
                 await InvokeAsync(StateHasChanged);
             }
 
-            PermissionWarning = BuildPermissionWarning(accessScope.Denials);
+            var resourceWarning = BuildPermissionWarning(accessScope.Denials);
+            PermissionWarning = _namespaceListWarning is null
+                ? resourceWarning
+                : resourceWarning is null
+                    ? _namespaceListWarning
+                    : $"{_namespaceListWarning} {resourceWarning}";
         }
         catch (OperationCanceledException) { return; } // CS-2: cancelled — new load takes over
         catch (Exception ex) { ErrorMessage = ex.Message; }

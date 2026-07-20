@@ -131,6 +131,31 @@ public sealed class AksClientBootstrapperTests
         Assert.Equal("/kube/config", factory.CreatedPaths.Single());
     }
 
+    [Fact]
+    public async Task BootstrapAsync_WhenListingNamespacesIsAccessDenied_ReturnsEmptyNamespacesWithWarning()
+    {
+        // Having a RoleBinding scoped to specific namespaces (e.g. "dev-briocomp") does not grant the
+        // cluster-wide "list namespaces" permission — that 403 must not look identical to "this
+        // cluster genuinely has no namespaces" in the returned result.
+        var client = new RecordingAksClient(
+            contexts: [new KubeContextInfo { Name = "ctx-a", IsCurrent = true }],
+            namespaces: [],
+            namespacesException: new AksAccessDeniedException("namespaces is forbidden", new InvalidOperationException()));
+        var bootstrapper = MakeBootstrapper();
+
+        var result = await bootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+            client,
+            UseDemoData: false,
+            Config: new AksConfig(),
+            RequestedContext: null,
+            RequestedNamespace: null));
+
+        Assert.Equal(AksClientBootstrapStatus.Connected, result.Status);
+        Assert.Empty(result.Namespaces);
+        Assert.NotNull(result.NamespacesWarning);
+        Assert.Contains("access denied", result.NamespacesWarning, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static AksClientBootstrapper MakeBootstrapper() =>
         new(new RecordingFactory(), new DemoAksClient(), NullLogger<AksClientBootstrapper>.Instance);
 
@@ -154,11 +179,16 @@ public sealed class AksClientBootstrapperTests
     {
         private readonly IReadOnlyList<KubeContextInfo> _contexts;
         private readonly IReadOnlyList<string> _namespaces;
+        private readonly Exception? _namespacesException;
 
-        public RecordingAksClient(IReadOnlyList<KubeContextInfo> contexts, IReadOnlyList<string> namespaces)
+        public RecordingAksClient(
+            IReadOnlyList<KubeContextInfo> contexts,
+            IReadOnlyList<string> namespaces,
+            Exception? namespacesException = null)
         {
             _contexts = contexts;
             _namespaces = namespaces;
+            _namespacesException = namespacesException;
         }
 
         public Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<DeploymentInfo>>([]);
@@ -179,7 +209,10 @@ public sealed class AksClientBootstrapperTests
         public Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<GatewayInfo>>([]);
         public Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<HttpRouteInfo>>([]);
         public Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<HelmReleaseInfo>>([]);
-        public Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default) => Task.FromResult(_namespaces);
+        public Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default) =>
+            _namespacesException is not null
+                ? Task.FromException<IReadOnlyList<string>>(_namespacesException)
+                : Task.FromResult(_namespaces);
         public Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default) => Task.FromResult(_contexts);
         public Task<string> GetResourceYamlAsync(string ns, string kind, string name, CancellationToken ct = default) => Task.FromResult(string.Empty);
         public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
