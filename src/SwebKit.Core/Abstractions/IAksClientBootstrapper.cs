@@ -29,7 +29,16 @@ public sealed record AksClientBootstrapResult(
     IReadOnlyList<string> Namespaces,
     string ActiveContext,
     string CurrentNamespace,
-    string? ErrorMessage);
+    string? ErrorMessage)
+{
+    /// <summary>
+    /// Set when <see cref="Namespaces"/> came back empty because listing namespaces was denied by
+    /// RBAC (<see cref="AksAccessDeniedException"/>), rather than because the cluster genuinely has
+    /// none. Having access to specific namespaces does not imply the cluster-wide "list namespaces"
+    /// permission, so this case must not look identical to "no namespaces exist" in the UI.
+    /// </summary>
+    public string? NamespacesWarning { get; init; }
+}
 
 public interface IAksClientFactory
 {

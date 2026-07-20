@@ -82,7 +82,7 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
         var contexts = await TryLoadContextsAsync(client, ct);
         var activeContext = ResolveContext(contexts, requestedContext, config);
 
-        var namespaces = await TryLoadNamespacesAsync(client, ct);
+        var (namespaces, namespacesWarning) = await TryLoadNamespacesAsync(client, ct);
         var currentNamespace = ResolveNamespace(namespaces, requestedNamespace, config, isDemo);
 
         return new AksClientBootstrapResult(
@@ -92,7 +92,10 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
             namespaces,
             activeContext,
             currentNamespace,
-            ErrorMessage: null);
+            ErrorMessage: null)
+        {
+            NamespacesWarning = namespacesWarning
+        };
     }
 
     private async Task<IReadOnlyList<KubeContextInfo>> TryLoadContextsAsync(IAksClient client, CancellationToken ct)
@@ -112,20 +115,29 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
         }
     }
 
-    private async Task<IReadOnlyList<string>> TryLoadNamespacesAsync(IAksClient client, CancellationToken ct)
+    private async Task<(IReadOnlyList<string> Namespaces, string? Warning)> TryLoadNamespacesAsync(IAksClient client, CancellationToken ct)
     {
         try
         {
-            return (await client.GetNamespacesAsync(ct)).ToList();
+            return ((await client.GetNamespacesAsync(ct)).ToList(), null);
         }
         catch (OperationCanceledException)
         {
             throw;
         }
+        catch (AksAccessDeniedException ex)
+        {
+            // Having a RoleBinding scoped to specific namespaces does not grant the cluster-wide
+            // "list namespaces" permission, so this 403 is a common, expected RBAC shape rather than
+            // an actual absence of namespaces — surface it distinctly instead of silently returning
+            // an empty list indistinguishable from "this cluster has no namespaces".
+            _logger.LogWarning(ex, "Access denied listing AKS namespaces during bootstrap");
+            return ([], "Cannot list namespaces in this cluster (access denied). You may still have access to specific namespaces directly — ask your cluster administrator about a ClusterRole granting `list` on `namespaces`.");
+        }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to load AKS namespaces during bootstrap");
-            return [];
+            return ([], null);
         }
     }
 

@@ -189,6 +189,11 @@
     private int _nsFocusIndex = -1;
     private bool _networkMenuOpen;
     private string _lastActiveResourceType = string.Empty;
+    // Last Namespaces snapshot seen in OnParametersSet, so a genuine change to the available
+    // namespaces (e.g. the initial async load completing, or a context switch) can refresh the
+    // frozen dropdown order even while it stays open — without refreshing on every unrelated
+    // parent re-render, which would undo the anti-reorder freeze during checkbox toggling.
+    private List<string> _lastKnownNamespaces = [];
 
     protected override void OnParametersSet()
     {
@@ -196,6 +201,13 @@
         {
             _networkMenuOpen = IsNetworkResourceType(ActiveResourceType);
             _lastActiveResourceType = ActiveResourceType;
+        }
+
+        var namespacesChanged = !Namespaces.SequenceEqual(_lastKnownNamespaces, StringComparer.Ordinal);
+        _lastKnownNamespaces = Namespaces;
+        if (_nsDropOpen && namespacesChanged)
+        {
+            RefreshNsDisplayOrder();
         }
     }
 
