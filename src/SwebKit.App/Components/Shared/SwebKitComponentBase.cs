@@ -236,5 +236,6 @@ public abstract class SwebKitComponentBase : ComponentBase, IDisposable
         _renderCts?.Cancel();
         _renderCts?.Dispose();
         _renderCts = null;
+        GC.SuppressFinalize(this);
     }
 }

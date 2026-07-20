@@ -15,6 +15,7 @@ public abstract class SwebKitComponentAsyncBase : SwebKitComponentBase, IAsyncDi
     /// </summary>
     public virtual async ValueTask DisposeAsync()
     {
+        GC.SuppressFinalize(this);
         Dispose();
         await ValueTask.CompletedTask;
     }

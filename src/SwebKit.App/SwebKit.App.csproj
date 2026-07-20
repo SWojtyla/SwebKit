@@ -53,7 +53,7 @@
         <!-- MSIX packaging with self-signed certificate for local install -->
         <WindowsPackagePublisherName>CN=SwebKit</WindowsPackagePublisherName>
         <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
-        <PackageCertificateThumbprint>B119AD610C7004ABAA695D68E09EF54D0275140A</PackageCertificateThumbprint>
+        <PackageCertificateThumbprint>E91D181A375BC3257496303D70871DDE5E75657F</PackageCertificateThumbprint>
 
         <!-- <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>

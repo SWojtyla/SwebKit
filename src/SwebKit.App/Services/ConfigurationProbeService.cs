@@ -16,7 +16,7 @@ public sealed class ConfigurationProbeService(
     IObservabilityResourceDiscovery observabilityDiscovery,
     IObservabilityProviderFactory observabilityProviderFactory,
     ICredentialStore credentialStore,
-    ILogger<ConfigurationProbeService> logger) : IConfigurationProbeService
+    ILogger<ConfigurationProbeService> logger) : IConfigurationProbeService, IDisposable
 {
     private const string ServiceBusSection = "servicebus";
     private const string AksSection = "aks";
@@ -386,7 +386,7 @@ public sealed class ConfigurationProbeService(
         && !string.IsNullOrWhiteSpace(config.PatCredentialKey)
         && HasCredential(config.PatCredentialKey);
 
-    private bool CanProbeStorage(IReadOnlyList<StorageConfig> accounts) =>
+    private bool CanProbeStorage(List<StorageConfig> accounts) =>
         accounts.Count > 0 && accounts.All(account => account.UseAad
             ? !string.IsNullOrWhiteSpace(account.AccountName)
             : HasCredential(account.ConnectionStringRef));
@@ -482,4 +482,10 @@ public sealed class ConfigurationProbeService(
     }
 
     private sealed record ProbeAttempt(string Label, bool Success, string? Detail);
+
+    public void Dispose()
+    {
+        _runLock.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

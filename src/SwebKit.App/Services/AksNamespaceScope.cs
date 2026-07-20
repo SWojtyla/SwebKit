@@ -2,7 +2,7 @@ namespace SwebKit.App.Services;
 
 public enum AksNamespaceScopeMode
 {
-    Single,
+    SingleNamespace,
     Selected,
     All
 }
@@ -15,7 +15,7 @@ public sealed record AksNamespaceScope(AksNamespaceScopeMode Mode, IReadOnlyList
 
     public bool IsMulti => IsAll || Namespaces.Count > 1;
 
-    public string Primary => Namespaces.FirstOrDefault() ?? string.Empty;
+    public string Primary => Namespaces.Count > 0 ? Namespaces[0] : string.Empty;
 
     public string SelectionToken => IsAll
         ? AllNamespacesToken
@@ -62,7 +62,7 @@ public sealed record AksNamespaceScope(AksNamespaceScopeMode Mode, IReadOnlyList
     public static AksNamespaceScope FromNamespaces(IEnumerable<string> namespaces)
     {
         var selected = NormalizeNamespaces(namespaces).ToList();
-        return new(selected.Count > 1 ? AksNamespaceScopeMode.Selected : AksNamespaceScopeMode.Single, selected);
+        return new(selected.Count > 1 ? AksNamespaceScopeMode.Selected : AksNamespaceScopeMode.SingleNamespace, selected);
     }
 
     public static IReadOnlyList<string> ParseSelection(string? selection)
@@ -85,7 +85,7 @@ public sealed record AksNamespaceScope(AksNamespaceScopeMode Mode, IReadOnlyList
             .Select(ns => ns.Trim())
             .Distinct(StringComparer.Ordinal);
 
-    private static List<string> ResolveFallback(IReadOnlyList<string> availableNamespaces, string fallbackNamespace)
+    private static List<string> ResolveFallback(List<string> availableNamespaces, string fallbackNamespace)
     {
         if (!string.IsNullOrWhiteSpace(fallbackNamespace))
         {

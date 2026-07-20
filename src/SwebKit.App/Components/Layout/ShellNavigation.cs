@@ -154,7 +154,7 @@ public static class ShellNavigation
         new ShellNavGroup("Configuration", [Settings], true),
     ];
 
-    private static readonly IReadOnlyDictionary<string, ShellNavEntry> EntriesByArea =
+    private static readonly Dictionary<string, ShellNavEntry> EntriesByArea =
         Items.ToDictionary(item => item.Area, StringComparer.OrdinalIgnoreCase);
 
     private static readonly IReadOnlyDictionary<string, ShellNavEntry> EntriesBySegment = BuildEntriesBySegment();
@@ -199,7 +199,7 @@ public static class ShellNavigation
             isProduction,
             isDemoMode);
 
-    private static IReadOnlyDictionary<string, ShellNavEntry> BuildEntriesBySegment()
+    private static Dictionary<string, ShellNavEntry> BuildEntriesBySegment()
     {
         var lookup = new Dictionary<string, ShellNavEntry>(StringComparer.OrdinalIgnoreCase)
         {

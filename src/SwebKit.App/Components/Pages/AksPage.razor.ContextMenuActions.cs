@@ -14,7 +14,7 @@ public partial class AksPage
 {
     // ── Context menu show helpers ──
 
-    private void OnTableContextMenu(MouseEventArgs e)
+    private static void OnTableContextMenu(MouseEventArgs e)
     {
         // Suppress browser context menu on the table area (handled per-row below)
     }
@@ -137,7 +137,7 @@ public partial class AksPage
         CloseAllMenus();
         if (deployment is null) return;
         _detailPanels?.CloseYaml();
-        var pod = Pods.FirstOrDefault(p => p.Namespace == deployment.Namespace && p.Name.StartsWith(deployment.Name));
+        var pod = Pods.FirstOrDefault(p => p.Namespace == deployment.Namespace && p.Name.StartsWith(deployment.Name, StringComparison.Ordinal));
         if (pod is not null) _detailPanels?.ShowPodLogs(pod.Name, pod.Containers, pod.Namespace);
     }
 
@@ -591,8 +591,8 @@ public partial class AksPage
         var d = CtxDeployment;
         CloseAllMenus();
         if (d is null) return;
-        var pod = Pods.FirstOrDefault(p => p.Namespace == d.Namespace && p.Name.StartsWith(d.Name) && p.Ready)
-        ?? Pods.FirstOrDefault(p => p.Namespace == d.Namespace && p.Name.StartsWith(d.Name));
+        var pod = Pods.FirstOrDefault(p => p.Namespace == d.Namespace && p.Name.StartsWith(d.Name, StringComparison.Ordinal) && p.Ready)
+        ?? Pods.FirstOrDefault(p => p.Namespace == d.Namespace && p.Name.StartsWith(d.Name, StringComparison.Ordinal));
         if (pod is null) return;
         _detailPanels.ShowContainerDetails(pod.Name, pod.Namespace);
     }
@@ -727,7 +727,7 @@ public partial class AksPage
         var helm = CtxHelm;
         CloseAllMenus();
         if (helm is null) return;
-        _detailPanels?.CloseYaml();
+        _detailPanels.CloseYaml();
         await _detailPanels.ShowHelmRollbackAsync(helm.Name);
     }
 

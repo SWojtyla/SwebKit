@@ -14,7 +14,7 @@ public sealed class AlertMonitorService : IAlertMonitorService
 
     private readonly TimeSpan _tickInterval;
     private readonly IAlertRuleRepository _repository;
-    private readonly IReadOnlyDictionary<AlertRuleSource, IAlertSignalSource> _sources;
+    private readonly Dictionary<AlertRuleSource, IAlertSignalSource> _sources;
     private readonly IMonitoringConnectionPool _pool;
     private readonly IWindowsNotificationService _toast;
     private readonly INotificationService _notifications;

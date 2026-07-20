@@ -18,6 +18,7 @@ public class FileLoggerProviderTests : IDisposable
     {
         if (Directory.Exists(_tempDirectory))
             Directory.Delete(_tempDirectory, recursive: true);
+        GC.SuppressFinalize(this);
     }
 
     private FileLoggerProvider CreateProvider() => new(() => _settings, _tempDirectory);

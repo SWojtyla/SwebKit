@@ -84,8 +84,8 @@ public partial class AksPage
     private string ActiveContext = string.Empty;
     private string ActiveResourceType = "Deployments";
     private bool _suppressWorkspaceRecent;
-    private bool ShowEvents = false;
-    private bool ShowPortForwardSessions = false;
+    private bool ShowEvents;
+    private bool ShowPortForwardSessions;
     private bool _preventGridKey;
     private CancellationTokenSource _bootstrapCts = new();
     private AksBootstrapSignature? _lastBootstrapSignature;
@@ -512,5 +512,6 @@ OnCtxRestartDeployment();
                                    "aks-focus-tabs", "aks-focus-grid", "aks-close-detail" })
             Commands.Unregister(id);
         Selection.SetSelection("aks", null);
+        GC.SuppressFinalize(this);
     }
 }

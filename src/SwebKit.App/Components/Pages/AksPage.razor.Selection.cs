@@ -643,7 +643,7 @@ SelectedConfigMap.Namespace); break;
                     case "y":
                         await _detailPanels.OpenYamlAsync("Ingress", SelectedIngress.Name, targetNamespace:
 SelectedIngress.Namespace); break;
-                    case "Enter": CtxIngress = SelectedIngress; OnCtxOpenIngressUrl(); break;
+                    case "Enter": CtxIngress = SelectedIngress; await OnCtxOpenIngressUrl(); break;
                 }
                 break;
 

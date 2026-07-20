@@ -8,6 +8,7 @@ using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
+using SwebKit.Agent.PocConsole;
 
 // ─────────────────────────────────────────────
 //  SwebKit AI Agent — Phase 0 PoC Console
@@ -222,7 +223,7 @@ static List<ToolDefinition> BuildToolDefinitions(
                 description = "The Kubernetes namespace. Defaults to 'default' if omitted."
             }
         },
-        required = new[] { "pod_name" }
+        required = PodNameRequired
     }).RootElement;
 
     var listNsSchema = JsonSerializer.SerializeToDocument(new
@@ -270,39 +271,49 @@ static IServiceProvider BuildServiceProvider()
     return services.BuildServiceProvider();
 }
 
+// ─── Constant arrays hoisted out of tool-definition builders (CA1861) ──────────
+
+partial class Program
+{
+    private static readonly string[] PodNameRequired = ["pod_name"];
+}
+
 // ─── Credential Store ─────────────────────────────────────────────────────────
 
-public sealed class SimpleConsoleCredentialStore : ICredentialStore
+namespace SwebKit.Agent.PocConsole
 {
-    private const string EnvVar = "MISTRAL_API_KEY";
-    private const string StoreKey = "SwebKit-Agent:Mistral-ApiKey";
-
-    public string? Get(string key)
+    public sealed class SimpleConsoleCredentialStore : ICredentialStore
     {
-        // Canonical env var first
-        var value = Environment.GetEnvironmentVariable(EnvVar);
-        if (!string.IsNullOrEmpty(value)) return value;
+        private const string EnvVar = "MISTRAL_API_KEY";
+        private const string StoreKey = "SwebKit-Agent:Mistral-ApiKey";
 
-        // Fallback: exact env var name used as key
-        value = Environment.GetEnvironmentVariable(key);
-        if (!string.IsNullOrEmpty(value)) return value;
-
-        // Interactive fallback for API key only
-        if (key == StoreKey || key.Contains("Mistral-ApiKey"))
+        public string? Get(string key)
         {
-            Console.Write("Enter Mistral API key: ");
-            var entered = Console.ReadLine();
-            if (!string.IsNullOrEmpty(entered))
+            // Canonical env var first
+            var value = Environment.GetEnvironmentVariable(EnvVar);
+            if (!string.IsNullOrEmpty(value)) return value;
+
+            // Fallback: exact env var name used as key
+            value = Environment.GetEnvironmentVariable(key);
+            if (!string.IsNullOrEmpty(value)) return value;
+
+            // Interactive fallback for API key only
+            if (key == StoreKey || key.Contains("Mistral-ApiKey"))
             {
-                Environment.SetEnvironmentVariable(EnvVar, entered);
-                return entered;
+                Console.Write("Enter Mistral API key: ");
+                var entered = Console.ReadLine();
+                if (!string.IsNullOrEmpty(entered))
+                {
+                    Environment.SetEnvironmentVariable(EnvVar, entered);
+                    return entered;
+                }
             }
+
+            return null;
         }
 
-        return null;
+        public void Save(string key, string secret) => Environment.SetEnvironmentVariable(key, secret);
+        public void Delete(string key) => Environment.SetEnvironmentVariable(key, null);
+        public IReadOnlyList<string> ListKeys(string prefix = "") => [];
     }
-
-    public void Save(string key, string secret) => Environment.SetEnvironmentVariable(key, secret);
-    public void Delete(string key) => Environment.SetEnvironmentVariable(key, null);
-    public IReadOnlyList<string> ListKeys(string prefix = "") => [];
 }
