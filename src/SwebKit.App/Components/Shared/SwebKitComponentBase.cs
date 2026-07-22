@@ -147,13 +147,26 @@ public abstract class SwebKitComponentBase : ComponentBase, IDisposable
         {
             try
             {
+                // Leading edge: render immediately so a single event is reflected without waiting on
+                // the debounce timer. That timer's continuation can be starved past a caller's
+                // deadline on constrained/CI hardware (small thread pool, many components running
+                // PeriodicTimers), which previously dropped event-driven renders. Rendering here
+                // also means _needsRender is cleared, so an isolated request costs one render.
+                StateHasChanged();
+
+                // Trailing edge: coalesce any further requests that arrive during the debounce
+                // window into a single follow-up render, preserving the burst-coalescing behavior.
                 await Task.Delay(GetCoalescingDebounce(), cts.Token);
                 _renderPending = false;
-                StateHasChanged();
+                if (_needsRender)
+                {
+                    StateHasChanged();
+                }
             }
             catch (OperationCanceledException)
             {
-                // Render was cancelled, expected during disposal
+                // Render was cancelled, expected during disposal.
+                _renderPending = false;
             }
         });
     }
