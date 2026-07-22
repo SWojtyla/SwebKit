@@ -6,6 +6,16 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <!-- bunit.web 1.40.0 (latest) is compiled against AngleSharp 1.2.0, which carries
+             GHSA-pgww-w46g-26qg (mXSS, patched in 1.5.0). Pinning AngleSharp forward breaks
+             bunit at runtime (MissingMethodException on IHtmlCollection.get_Item) since no
+             bunit release yet targets the patched API shape. Suppressed for this test project
+             only: it renders trusted, test-authored HTML, never untrusted input. Revisit once
+             bunit.web ships an AngleSharp 1.5.x-compatible release. -->
+        <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-pgww-w46g-26qg" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="Blazor-ApexCharts" />
         <PackageReference Include="BlazorMonaco" />
         <PackageReference Include="bunit.web" />
@@ -64,6 +74,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SegmentedControl.razor" Link="Components\Shared\SegmentedControl.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\StatusBadge.razor" Link="Components\Shared\StatusBadge.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\LoadingSpinner.razor" Link="Components\Shared\LoadingSpinner.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SidePanel.razor" Link="Components\Shared\SidePanel.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PageHeader.razor" Link="Components\Shared\PageHeader.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\RoutePageHeader.razor" Link="Components\Shared\RoutePageHeader.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ErrorCallout.razor" Link="Components\Shared\ErrorCallout.razor" />
