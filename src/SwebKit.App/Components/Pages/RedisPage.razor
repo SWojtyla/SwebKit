@@ -314,14 +314,15 @@
 
     private (long SessionVersion, CancellationToken Token) BeginNewScanSession()
     {
-        _scanSessionVersion++;
+        var newVersion = Interlocked.Increment(ref _scanSessionVersion);
         _cts.Cancel();
         _cts.Dispose();
         _cts = new CancellationTokenSource();
-        return (_scanSessionVersion, _cts.Token);
+        return (newVersion, _cts.Token);
     }
 
-    private bool IsCurrentScanSession(long sessionVersion) => sessionVersion == _scanSessionVersion;
+    private bool IsCurrentScanSession(long sessionVersion) =>
+        sessionVersion == Interlocked.Read(ref _scanSessionVersion);
 
     private Task StartFreshScanAsync()
     {
@@ -335,7 +336,7 @@
         return ConnectAndScanAsync(sessionVersion, token);
     }
 
-    protected override async Task OnParametersSetAsync()
+    protected override void OnParametersSet()
     {
         // Initialize separator from config
         CurrentSeparator = CurrentRedisConfig?.NamespaceSeparator ?? "-";
@@ -352,14 +353,16 @@
         if (string.Equals(_loadedCacheId, SelectedCacheId, StringComparison.Ordinal))
             return;
 
-        _loadedCacheId = SelectedCacheId; // Set guard BEFORE await (BL-3)
+        _loadedCacheId = SelectedCacheId; // Set guard BEFORE starting async work (BL-3)
 
         // Reset insights when cache changes
         _slowLog = null;
         _hotKeys = null;
         _pubSub = null;
 
-        await StartReconnectAndScanAsync();
+        // Start the connection/scan on a background task so the first render (and UI thread)
+        // is never blocked by Redis client creation or network setup.
+        _ = StartReconnectAndScanAsync();
     }
 
     private async Task ConnectAndScanAsync(long scanSession, CancellationToken ct = default)
@@ -412,7 +415,7 @@
 
     private async Task ConnectAsync(long scanSession, CancellationToken ct)
     {
-        DisposeClient();
+        await InvokeAsync(DisposeClient);
         IRedisClient? nextClient = null;
 
         try
@@ -424,9 +427,12 @@
                 if (!IsCurrentScanSession(scanSession))
                     return;
 
-                Client = nextClient;
-                nextClient = null;
-                ConnectionState.SetConnected("redis");
+                await InvokeAsync(() =>
+                {
+                    Client = nextClient;
+                    nextClient = null;
+                    ConnectionState.SetConnected("redis");
+                });
                 return;
             }
 
@@ -434,7 +440,9 @@
             if (entry is null || string.IsNullOrWhiteSpace(entry.ConnectionString))
             {
                 if (IsCurrentScanSession(scanSession))
-                    ConnectionState.SetNotConfigured("redis");
+                {
+                    await InvokeAsync(() => ConnectionState.SetNotConfigured("redis"));
+                }
                 return;
             }
 
@@ -444,21 +452,39 @@
             {
                 if (!IsCurrentScanSession(scanSession))
                     return;
-                Client = warm;
-                ConnectionState.SetConnected("redis");
+                await InvokeAsync(() =>
+                {
+                    Client = warm;
+                    ConnectionState.SetConnected("redis");
+                });
                 return;
             }
 
-            nextClient = await SwebKit.Redis.RedisClient.CreateAsync(entry);
-            ct.ThrowIfCancellationRequested();
-            await nextClient.TestConnectionAsync(ct);
+            // PERF: Run client creation and the first ping on a thread-pool thread so the UI
+            // stays responsive while the StackExchange.Redis connection is established.
+            var createdClient = await Task.Run(() => SwebKit.Redis.RedisClient.CreateAsync(entry), ct);
             ct.ThrowIfCancellationRequested();
             if (!IsCurrentScanSession(scanSession))
+            {
+                createdClient.Dispose();
                 return;
+            }
 
-            Client = nextClient;
-            nextClient = null;
-            ConnectionState.SetConnected("redis");
+            await Task.Run(() => createdClient.TestConnectionAsync(ct), ct);
+            ct.ThrowIfCancellationRequested();
+            if (!IsCurrentScanSession(scanSession))
+            {
+                createdClient.Dispose();
+                return;
+            }
+
+            nextClient = createdClient;
+            await InvokeAsync(() =>
+            {
+                Client = nextClient;
+                nextClient = null;
+                ConnectionState.SetConnected("redis");
+            });
         }
         catch (OperationCanceledException)
         {
@@ -466,16 +492,16 @@
         }
         catch (Exception ex)
         {
-            if (!IsCurrentScanSession(scanSession))
-                return;
-
-            ErrorMessage = ex.Message;
-            DisposeClient();
-            ConnectionState.SetError("redis", ex.Message);
-        }
-        finally
-        {
             nextClient?.Dispose();
+            if (IsCurrentScanSession(scanSession))
+            {
+                await InvokeAsync(() =>
+                {
+                    ErrorMessage = ex.Message;
+                    DisposeClient();
+                    ConnectionState.SetError("redis", ex.Message);
+                });
+            }
         }
     }
 
@@ -1131,7 +1157,7 @@ default)
 
     // ── Cache switching ──
 
-    private async Task HandleCacheChanged(string newCacheId)
+    private Task HandleCacheChanged(string newCacheId)
     {
         SelectedCacheId = newCacheId;
         _loadedCacheId = newCacheId;
@@ -1139,7 +1165,9 @@ default)
         if (config is not null)
             config.ActiveCacheId = SelectedCacheId;
 
-        await StartReconnectAndScanAsync();
+        // Hand the background reconnect/scan back to the caller without awaiting so the UI
+        // thread is never blocked while the Redis client connects.
+        return StartReconnectAndScanAsync();
     }
 
     private async Task HandleCacheNameChanged(string name)

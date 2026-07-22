@@ -48,9 +48,11 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
 
         try
         {
-            var client = _factory.Create(
+            // UI freeze root-cause: k8s client construction parses kubeconfig and acquires tokens
+            // before any await. Offload it to the thread pool so the Blazor UI thread stays fluid.
+            var client = await Task.Run(() => _factory.Create(
                 string.IsNullOrWhiteSpace(request.RequestedContext) ? null : request.RequestedContext,
-                string.IsNullOrWhiteSpace(request.Config.KubeconfigPath) ? null : request.Config.KubeconfigPath);
+                string.IsNullOrWhiteSpace(request.Config.KubeconfigPath) ? null : request.Config.KubeconfigPath), ct);
 
             return await BuildConnectedResultAsync(client, request.RequestedContext, request.RequestedNamespace, request.Config, ct);
         }

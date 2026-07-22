@@ -35,7 +35,11 @@
     </RoutePageHeader>
 </div>
 
-@if (_storageAccounts.Count == 0)
+@if (_isLoading && _storageAccounts.Count == 0)
+{
+    <LoadingSpinner Message="Loading storage accounts…" />
+}
+else if (_storageAccounts.Count == 0)
 {
     <div class="storage-not-configured">
         <EmptyState Icon="📦" Title="Storage is not configured"
@@ -62,7 +66,11 @@ else
         </div>
     }
 
-    @if (_storageClient is null)
+    @if (_isLoading && _storageClient is null)
+    {
+        <LoadingSpinner Message="Connecting to storage account…" />
+    }
+    else if (_storageClient is null)
     {
         <div class="storage-not-configured">
             <EmptyState Icon="🚫" Title="Selected storage account is unavailable"
@@ -164,6 +172,7 @@ else
     private string? _mutationMessage;
     private bool _mutationSuccess;
     private IReadOnlyList<string> _containerNames = [];
+    private bool _isLoading;
     private bool _disposed;
     private int _detailPaneWidth;
 
@@ -180,7 +189,8 @@ else
         _detailPaneWidth = NormalizeDetailPaneWidth(UiState.GetViewState(DetailPaneWidthStateKey, DefaultDetailPaneWidth));
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Workspaces.RegisterRestoreHandler("storage", RestoreWorkspaceAsync);
-        RebuildClient();
+        _isLoading = true;
+        _ = RebuildClientAsync();
         RegisterStorageCommands();
         _ = Workspaces.ApplyPendingRestoreAsync("storage");
     }
@@ -193,12 +203,7 @@ else
             Label = "Refresh Blobs",
             Category = "Storage",
             AreaScope = "storage",
-            Execute = () =>
-            {
-                RebuildClient();
-                InvokeAsync(StateHasChanged);
-                return Task.CompletedTask;
-            }
+            Execute = () => RebuildClientAsync()
         });
         Commands.Register(new AppCommand
         {
@@ -238,47 +243,62 @@ else
             return;
         }
 
-        RebuildClient();
-        _ = InvokeAsync(StateHasChanged);
+        _ = RebuildClientAsync();
     }
 
-    private void RebuildClient()
+    private async Task RebuildClientAsync()
     {
         _storageClient = null;
-
-        if (AppState.UseDemoData)
-        {
-            _storageAccounts = [DemoStorage.Config];
-            _selectedAccountId = DemoStorage.Config.Id;
-            _storageClient = DemoStorage;
-            ConnectionState.SetConnected("storage");
-            _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
-            return;
-        }
-
-        _storageAccounts = AppState.Config.StorageAccounts;
-        if (_storageAccounts.Count == 0)
-        {
-            ConnectionState.SetNotConfigured("storage");
-            Workspaces.ClearCurrentSnapshot("storage");
-            return;
-        }
-
-        var selected = _storageAccounts.FirstOrDefault(a => a.Id == _selectedAccountId)
-                       ?? _storageAccounts[0];
-        _selectedAccountId = selected.Id;
+        _isLoading = true;
+        await InvokeAsync(StateHasChanged);
 
         try
         {
-            _storageClient = StorageFactory.Create(selected);
-            ConnectionState.SetConnected("storage");
-        }
-        catch (Exception ex)
-        {
-            ConnectionState.SetError("storage", ex.Message);
-        }
+            if (AppState.UseDemoData)
+            {
+                _storageAccounts = [DemoStorage.Config];
+                _selectedAccountId = DemoStorage.Config.Id;
+                _storageClient = DemoStorage;
+                ConnectionState.SetConnected("storage");
+                _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
+                return;
+            }
 
-        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
+            _storageAccounts = AppState.Config.StorageAccounts;
+            if (_storageAccounts.Count == 0)
+            {
+                ConnectionState.SetNotConfigured("storage");
+                Workspaces.ClearCurrentSnapshot("storage");
+                return;
+            }
+
+            var selected = _storageAccounts.FirstOrDefault(a => a.Id == _selectedAccountId)
+                           ?? _storageAccounts[0];
+            _selectedAccountId = selected.Id;
+
+            try
+            {
+                // Create the Azure Storage client off the UI thread; BlobServiceClient construction
+                // can trigger synchronous credential resolution, so this keeps navigation fluid.
+                var client = await Task.Run(() => StorageFactory.Create(selected));
+                await InvokeAsync(() =>
+                {
+                    _storageClient = client;
+                    ConnectionState.SetConnected("storage");
+                });
+            }
+            catch (Exception ex)
+            {
+                await InvokeAsync(() => ConnectionState.SetError("storage", ex.Message));
+            }
+
+            _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task OnAccountChangedAsync(string? value)
@@ -286,9 +306,8 @@ else
         _selectedAccountId = value;
         _selectedContainer = null;
         _selectedBlob = null;
-        RebuildClient();
+        await RebuildClientAsync();
         await PublishWorkspaceSnapshotAsync(recordRecent: false);
-        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnContainerSelectedAsync(string? container)
@@ -399,7 +418,7 @@ else
         _selectedAccountId = snapshot.RestoreState.TryGetValue("accountId", out var accountId)
             ? accountId
             : _selectedAccountId;
-        RebuildClient();
+        await RebuildClientAsync();
 
         _selectedContainer = snapshot.RestoreState.TryGetValue("container", out var container)
             && !string.IsNullOrWhiteSpace(container)

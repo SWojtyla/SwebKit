@@ -1,0 +1,34 @@
+@* Render children once the panel becomes active, then keep the DOM alive and hidden when inactive.
+   This avoids mounting every resource grid on first page load while still preserving tab state. *@
+
+@if (_hasRendered || IsActive)
+{
+    <div class="lazy-panel" hidden="@(!IsActive)">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsActive { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _hasRendered;
+
+    protected override void OnParametersSet()
+    {
+        if (IsActive)
+        {
+            _hasRendered = true;
+        }
+    }
+
+    protected override bool ShouldRender()
+    {
+        if (_hasRendered && !IsActive)
+        {
+            return false;
+        }
+
+        return base.ShouldRender();
+    }
+}

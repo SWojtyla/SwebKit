@@ -98,25 +98,25 @@
                        tears down and rebuilds its JS-side virtualization observers, which caused the app to
                        become unresponsive when switching tabs quickly. All datasets are already loaded by
                        LoadAsync, so keeping the grids mounted costs no extra network/data work. *@
-                    <div hidden="@(ActiveResourceType != "Deployments")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "Deployments")">
                         <DeploymentGrid FilteredItems="@FilteredDeployments" Hpas="@Hpas"
                                         IsMultiNamespace="@IsMultiNamespace" SelectedDeployment="@SelectedDeployment"
                                         OnContextMenu="@((args) => ShowDeploymentMenu(args.Item1, args.Item2))"
                                         OnSelectRow="@SelectDeployment" OnOpenHpa="@OpenHpaDetail"
                                         OnOpenNetworkAnalysis="@OpenDeploymentNetworkAnalysis"
                                         OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "StatefulSets")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "StatefulSets")">
                         <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas"
                                          IsMultiNamespace="@IsMultiNamespace" SelectedStatefulSet="@SelectedStatefulSet"
                                          OnSelectRow="@SelectStatefulSet"
                                          OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))"
                                          OnOpenHpa="@OpenHpaDetail" OnOpenNetworkAnalysis="@OpenStatefulSetNetworkAnalysis"
                                          OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "ConfigMaps")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "ConfigMaps")">
                         @if (IsMultiNamespace && ConfigMaps.Count == 0 && !IsLoading)
                         {
                             <div class="aks-mns-notice">
@@ -131,9 +131,9 @@
                                            SelectedConfigMap="@SelectedConfigMap" OnSelectRow="@SelectConfigMap"
                                            OnContextMenu="@((args) => ShowConfigMapMenu(args.Item1, args.Item2))" />
                         }
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "Secrets")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "Secrets")">
                         @if (IsMultiNamespace && Secrets.Count == 0 && !IsLoading)
                         {
                             <div class="aks-mns-notice">
@@ -148,70 +148,70 @@
                                         SelectedSecret="@SelectedSecret" OnSelectRow="@SelectSecret"
                                         OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
                         }
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "Pods")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "Pods")">
                         <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
                                  IsMultiNamespace="@IsMultiNamespace" SelectedPod="@SelectedPod"
                                  CpuCeiling="@(AppState.Config.AksConfig?.CpuBarCeilingMillicores ?? 500)"
                                  MemoryCeiling="@(AppState.Config.AksConfig?.MemoryBarCeilingMi ?? 512)" OnSelectRow="@SelectPod"
                                  OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
                                  OnOpenNetworkAnalysis="@OpenPodNetworkAnalysis" OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "Services")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "Services")">
                         <ServiceGrid FilteredItems="@FilteredServices" IsMultiNamespace="@IsMultiNamespace"
                                      SelectedService="@SelectedService" OnSelectRow="@SelectService"
                                      OnContextMenu="@((args) => ShowServiceMenu(args.Item1, args.Item2))"
                                      OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "Ingresses")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "Ingresses")">
                         <IngressGrid FilteredItems="@FilteredIngresses" SelectedIngress="@SelectedIngress"
                                      OnSelectRow="@SelectIngress"
                                      OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
                                      OnOpenAnalysis="@OpenIngressAnalysis" OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "GatewayClasses")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "GatewayClasses")">
                         <GatewayClassGrid FilteredItems="@FilteredGatewayClasses"
                                           SelectedGatewayClass="@SelectedGatewayClass" OnSelectRow="@SelectGatewayClass"
                                           OnContextMenu="@((args) => ShowGatewayClassMenu(args.Item1, args.Item2))" />
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "Gateways")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "Gateways")">
                         <GatewayGrid FilteredItems="@FilteredGateways" IsMultiNamespace="@IsMultiNamespace"
                                      SelectedGateway="@SelectedGateway" OnSelectRow="@SelectGateway"
                                      OnContextMenu="@((args) => ShowGatewayMenu(args.Item1, args.Item2))"
                                      OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "HTTPRoutes")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "HTTPRoutes")">
                         <HttpRouteGrid FilteredItems="@FilteredHttpRoutes" IsMultiNamespace="@IsMultiNamespace"
                                        SelectedHttpRoute="@SelectedHttpRoute" OnSelectRow="@SelectHttpRoute"
                                        OnContextMenu="@((args) => ShowHttpRouteMenu(args.Item1, args.Item2))"
                                        OnNamespaceClick="@HandleNamespaceJumpAsync" OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "Helm")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "Helm")">
                         <HelmGrid FilteredItems="@FilteredHelmReleases" SelectedHelm="@SelectedHelmRelease"
                                   OnSelectRow="@SelectHelmRelease"
                                   OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "Jobs")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "Jobs")">
                         <JobGrid FilteredItems="@FilteredJobs" IsMultiNamespace="@IsMultiNamespace"
                                  SelectedJob="@SelectedJob" OnSelectRow="@SelectJob"
                                  OnContextMenu="@((args) => ShowJobMenu(args.Item1, args.Item2))"
                                  OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                    </div>
+                    </LazyPanel>
 
-                    <div hidden="@(ActiveResourceType != "CronJobs")">
+                    <LazyPanel IsActive="@(ActiveResourceType == "CronJobs")">
                         <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
                                      SelectedCronJob="@SelectedCronJob" OnSelectRow="@SelectCronJob"
                                      OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
                                      OnNamespaceClick="@HandleNamespaceJumpAsync" />
-                    </div>
+                    </LazyPanel>
                 </div>
 
                 @* ── Keyboard hint bar ── *@

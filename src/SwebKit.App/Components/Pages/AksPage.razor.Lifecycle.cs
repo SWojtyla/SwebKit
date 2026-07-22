@@ -126,7 +126,10 @@ public partial class AksPage
         oldCts?.Dispose();
         var ct = newCts.Token;
 
-        IsLoading = cached is null; ErrorMessage = null; StateHasChanged();
+        // Always show the loading state while fetching fresh data, even when we render a stale
+        // cache snapshot immediately. This gives the user a clear, consistent indicator that
+        // background work is in progress.
+        IsLoading = true; ErrorMessage = null; StateHasChanged();
         try
         {
             // PERF-7: Incremental rendering — each dataset renders as it completes

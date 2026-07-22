@@ -29,7 +29,11 @@
         </RoutePageHeader>
     </div>
 
-    @if (!_openTabs.Any())
+    @if (_isInitializing && _namespaceStates.Count == 0)
+    {
+        <LoadingSpinner Message="Loading Service Bus namespaces…" />
+    }
+    else if (!_openTabs.Any())
     {
         <!-- VIEW A: Full-width entity grid -->
         <div class="sb-grid-view">
@@ -182,6 +186,7 @@
     private bool _isNamespacePaneCollapsed;
     private bool _isDetailDrawerOverlay;
     private bool _paletteOpen;
+    private bool _isInitializing;
     private CancellationTokenSource _cts = new();
 
     private const string NamespacePaneStateKey = "service-bus:namespace-pane-collapsed";
@@ -277,15 +282,13 @@
     private IReadOnlyList<SbEntityLink> CurrentLinkedEntities =>
     AppState.Config.ServiceBusEntityLinks;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         Events.Subscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         RegisterSbCommands();
-        await ScheduledRepo.LoadAsync();
-        await LoadNamespacesAsync();
         Workspaces.RegisterRestoreHandler("service-bus", RestoreWorkspaceAsync);
-        await Workspaces.ApplyPendingRestoreAsync("service-bus");
+        _isInitializing = true;
     }
 
     private void RegisterSbCommands()
@@ -332,7 +335,28 @@
     {
         if (!firstRender) return;
         _isNamespacePaneCollapsed = UiState.GetViewState(NamespacePaneStateKey, defaultValue: false);
-        await InvokeAsync(StateHasChanged);
+        // Initialize on the first render so the page shell is visible immediately while the
+        // namespaces connect in the background.
+        _ = InitializeAsync();
+    }
+
+    private async Task InitializeAsync()
+    {
+        try
+        {
+            await ScheduledRepo.LoadAsync();
+            await LoadNamespacesAsync();
+            await Workspaces.ApplyPendingRestoreAsync("service-bus");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            _isInitializing = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task LoadNamespacesAsync()
@@ -366,6 +390,9 @@
             })
             .ToList();
 
+        // Once the structural state is built, drop the full-page initializing flag so the
+        // user sees the namespace list and per-namespace loading indicators immediately.
+        _isInitializing = false;
         await InvokeAsync(StateHasChanged);
 
         // Connect each namespace independently — render as each completes

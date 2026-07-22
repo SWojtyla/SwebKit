@@ -71,13 +71,31 @@
         ? "page-header-action-btn monitoring-toggle-btn monitoring-toggle-btn--active"
         : "page-header-action-btn monitoring-toggle-btn";
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         Monitor.AlertFired += OnAlertFired;
         Monitor.EvaluationCompleted += OnEvaluationCompleted;
-        _rules = [.. await RuleRepository.GetAllAsync()];
-        _history = [.. Monitor.RecentAlerts];
-        _isLoading = false;
+        _isLoading = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _ = LoadRulesAsync();
+    }
+
+    private async Task LoadRulesAsync()
+    {
+        try
+        {
+            _rules = [.. await RuleRepository.GetAllAsync()];
+            _history = [.. Monitor.RecentAlerts];
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async void OnAlertFired(AlertFiredEvent evt)
