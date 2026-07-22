@@ -19,13 +19,27 @@ namespace SwebKit.App.Tests;
 [Collection("AppDataSerial")]
 public sealed class IncidentTimelinePageTests : TestContext
 {
+    private const string AppDataRootOverrideVariable = "SWEBKIT_APPDATA_ROOT";
+
     private readonly AppStateService _appState;
     private readonly AppEventBus _eventBus;
     private readonly FakeAksBootstrapper _aksBootstrapper;
     private readonly QueueIncidentTimelineService _timelineService;
+    private readonly string? _originalAppDataRoot;
+    private readonly string _tempAppDataRoot;
 
     public IncidentTimelinePageTests()
     {
+        // Redirect the process-wide app-data root to a private temp dir before anything reads or
+        // writes it. The page kicks off a fire-and-forget load that persists a workspace snapshot
+        // via UiStateRepository.SaveAsync; without isolation every test in this class shares the
+        // real %APPDATA%\SwebKit file, so concurrent/leftover saves contend (SaveAsync retries for
+        // up to ~700ms on a locked file), which perturbs render timing and makes interactions flaky.
+        _originalAppDataRoot = Environment.GetEnvironmentVariable(AppDataRootOverrideVariable);
+        _tempAppDataRoot = Path.Combine(Path.GetTempPath(), "SwebKit.AppTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempAppDataRoot);
+        Environment.SetEnvironmentVariable(AppDataRootOverrideVariable, _tempAppDataRoot);
+
         JSInterop.Mode = JSRuntimeMode.Loose;
         var uiState = new UiStateRepository();
 
@@ -78,6 +92,28 @@ public sealed class IncidentTimelinePageTests : TestContext
         Services.AddScoped<OperatorWorkspaceService>();
     }
 
+    protected override void Dispose(bool disposing)
+    {
+        // Dispose the renderer/components first (cancels the page's load token) so any in-flight
+        // fire-and-forget save settles against this test's temp root, then restore and clean up.
+        base.Dispose(disposing);
+
+        if (disposing)
+        {
+            Environment.SetEnvironmentVariable(AppDataRootOverrideVariable, _originalAppDataRoot);
+            try
+            {
+                if (Directory.Exists(_tempAppDataRoot))
+                    Directory.Delete(_tempAppDataRoot, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A late fire-and-forget save may still hold a file handle; leave the temp dir for
+                // the OS to reclaim rather than failing the test class on cleanup.
+            }
+        }
+    }
+
     [Fact]
     public void InitialLoad_RendersEvidenceList_AndDetailPanel()
     {
@@ -127,6 +163,7 @@ public sealed class IncidentTimelinePageTests : TestContext
         var cut = RenderComponent<IncidentTimelinePageComponent>();
 
         cut.WaitForAssertion(() => Assert.Contains("First evidence", cut.Markup));
+        WaitForRefreshIdle(cut);
         cut.Find("[data-testid='incident-row-second-item']").Click();
 
         cut.WaitForAssertion(() =>
@@ -152,6 +189,7 @@ public sealed class IncidentTimelinePageTests : TestContext
         var cut = RenderComponent<IncidentTimelinePageComponent>();
 
         cut.WaitForAssertion(() => Assert.Contains("Initial evidence", cut.Markup));
+        WaitForRefreshIdle(cut);
         cut.Find("[data-testid='incident-source-service-bus']").Click();
         cut.Find("[data-testid='incident-refresh-button']").Click();
 
@@ -171,6 +209,7 @@ public sealed class IncidentTimelinePageTests : TestContext
         var cut = RenderComponent<IncidentTimelinePageComponent>();
 
         cut.WaitForAssertion(() => Assert.Contains("Initial evidence", cut.Markup));
+        WaitForRefreshIdle(cut);
 
         var serviceBusToggle = cut.Find("[data-testid='incident-source-service-bus']");
         Assert.Contains("On", serviceBusToggle.TextContent, StringComparison.OrdinalIgnoreCase);
@@ -243,6 +282,7 @@ public sealed class IncidentTimelinePageTests : TestContext
             Assert.Contains("Mapping guidance", cut.Markup);
             Assert.Contains("Open Incident Timeline settings", cut.Markup);
         });
+        WaitForRefreshIdle(cut);
 
         cut.Find("[data-testid='incident-mapping-settings-button']").Click();
 
@@ -302,6 +342,7 @@ public sealed class IncidentTimelinePageTests : TestContext
         var cut = RenderComponent<IncidentTimelinePageComponent>();
 
         cut.WaitForAssertion(() => Assert.Contains("Initial evidence", cut.Markup));
+        WaitForRefreshIdle(cut);
 
         cut.Find("[data-testid='incident-workload-input']").Input("older-api");
         cut.Find("[data-testid='incident-refresh-button']").Click();
@@ -323,6 +364,18 @@ public sealed class IncidentTimelinePageTests : TestContext
         Assert.Equal("older-api", _timelineService.Queries[1].Scope.WorkloadName);
         Assert.Equal("latest-api", _timelineService.Queries[2].Scope.WorkloadName);
     }
+
+    // Gate interactions on the initial load fully settling. The page renders the loaded
+    // evidence while still flagged as loading, then re-renders once the workspace snapshot's
+    // async disk save (UiStateRepository.SaveAsync) completes. Interacting before that second
+    // render races it: a re-render landing between Find and Click invalidates the captured
+    // event-handler id (UnknownEventHandlerIdException) or drops the toggle so the query keeps
+    // the pre-toggle sources. The refresh button label drops "again" only once loading clears.
+    private static void WaitForRefreshIdle(IRenderedComponent<IncidentTimelinePageComponent> cut) =>
+        cut.WaitForAssertion(() => Assert.DoesNotContain(
+            "again",
+            cut.Find("[data-testid='incident-refresh-button']").TextContent,
+            StringComparison.OrdinalIgnoreCase));
 
     private static AksClientBootstrapResult CreateBootstrapResult() => new(
         AksClientBootstrapStatus.Connected,
