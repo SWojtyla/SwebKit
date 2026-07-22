@@ -14,7 +14,13 @@
                 @onclick="() => State.WorksheetMode = ApiClientState.WorksheetLinkedRoots">← Back to API repos</button>
         <span class="api-client-management-screen__title">Git — @ActiveGitRoot?.DisplayName</span>
     </div>
-    @if (ActiveGitRoot is not null)
+    @if (_isLoading)
+    {
+        <div class="api-client-git-panel__loading">
+            <LoadingSpinner Message="Loading Git branches…" />
+        </div>
+    }
+    else if (ActiveGitRoot is not null)
     {
         <div class="api-client-git-panel">
             <div class="api-client-git-panel__scroll">
@@ -192,12 +198,38 @@
     [Parameter]
     public EventCallback OnRefreshLinkedRoots { get; set; }
 
+    private bool _isLoading = true;
+
     private LinkedCollectionRootLoadResult? ActiveGitRoot =>
         State.LinkedRootResults.FirstOrDefault(root => root.Config.Id == State.ActiveGitRootId);
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await RefreshGitBranchesAsync();
+        _ = InitializeAsync();
+    }
+
+    private async Task InitializeAsync()
+    {
+        _isLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await RefreshGitBranchesAsync();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception)
+        {
+            // Ignore branch-load failures; the panel will simply leave the lists empty.
+            State.GitBranches = [];
+            State.GitRemoteUrl = null;
+            State.GitCompareUrl = null;
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task CreateGitBranchAsync()

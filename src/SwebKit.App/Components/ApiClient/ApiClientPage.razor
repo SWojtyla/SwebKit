@@ -197,6 +197,9 @@
     // Page-scoped state container (DEC-UX-3): not DI-registered, one instance per page.
     private readonly ApiClientState _state = new();
 
+    // Ensures only one background initialization/reload runs at a time.
+    private readonly SemaphoreSlim _initLock = new(1, 1);
+
     // Curl import/export dialog state + handlers: see ApiClientPage.Curl.cs
     // Secret configuration dialog state + handlers: see ApiClientPage.Secrets.cs
 
@@ -271,7 +274,7 @@ null);
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         _state.AutoSave = UserSettings.Settings.AutoSaveRequests;
 
@@ -288,22 +291,62 @@ null);
         // Subscribe to demo mode changes to show/hide demo collections
         AppState.DemoModeChanged += OnDemoModeChanged;
 
-        // Load local collections/environments first, then merge linked roots into the collection list.
-        await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
-        await LoadLinkedRootsAsync();
+        // Render the page immediately with the loading indicator, then load data in the
+        // background so the UI stays fluid when disk/Git I/O is slow.
+        _ = InitializeAsync();
+    }
 
-        _state.LoadingCollections = false;
+    private async Task InitializeAsync()
+    {
+        await _initLock.WaitAsync();
+        try
+        {
+            _state.LoadingCollections = true;
+            await InvokeAsync(StateHasChanged);
+
+            // Load local collections/environments first, then merge linked roots into the collection list.
+            await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
+            await LoadLinkedRootsAsync();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to initialize API client");
+        }
+        finally
+        {
+            _state.LoadingCollections = false;
+            await InvokeAsync(StateHasChanged);
+            _initLock.Release();
+        }
     }
 
     // LoadCollectionsAsync: see ApiClientPage.Collections.cs
 
-    private async void OnDemoModeChanged()
+    private void OnDemoModeChanged() => _ = OnDemoModeChangedAsync();
+
+    private async Task OnDemoModeChangedAsync()
     {
-        await InvokeAsync(async () =>
+        await _initLock.WaitAsync();
+        try
         {
+            _state.LoadingCollections = true;
+            await InvokeAsync(StateHasChanged);
+
             await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
             await LoadLinkedRootsAsync();
-        });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to reload API client collections after demo mode change");
+        }
+        finally
+        {
+            _state.LoadingCollections = false;
+            await InvokeAsync(StateHasChanged);
+            _initLock.Release();
+        }
     }
 
     // LoadLinkedRootsAsync, LoadEnvironmentsAsync: see ApiClientPage.Collections.cs
@@ -559,6 +602,7 @@ index)
         Commands.Unregister("api-quick-nav");
         Commands.Unregister("api-save-request");
         _autoSaveTimer?.Dispose();
+        _initLock.Dispose();
         return ValueTask.CompletedTask;
     }
 
