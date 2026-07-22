@@ -600,37 +600,37 @@
     background: #9a4e00;
 }
 
-.appearance-pilot-card--portima {
+.appearance-pilot-card--moss-amber {
     border-radius: 6px;
     background: linear-gradient(135deg, rgba(30, 96, 56, 0.08) 0%, rgba(240, 192, 0, 0.06) 100%), #ffffff;
     border-color: #aacab2;
     color: #0e2a18;
 }
 
-.appearance-pilot-card--portima .appearance-pilot-card__eyebrow {
+.appearance-pilot-card--moss-amber .appearance-pilot-card__eyebrow {
     color: #3a6048;
 }
 
-.appearance-pilot-card--portima .appearance-pilot-card__title {
+.appearance-pilot-card--moss-amber .appearance-pilot-card__title {
     color: #0e2a18;
 }
 
-.appearance-pilot-card--portima .appearance-pilot-card__body,
-.appearance-pilot-card--portima .appearance-pilot-card__coverage {
+.appearance-pilot-card--moss-amber .appearance-pilot-card__body,
+.appearance-pilot-card--moss-amber .appearance-pilot-card__coverage {
     color: #3a6048;
 }
 
-.appearance-pilot-card--portima .appearance-pilot-card__swatch--chrome {
+.appearance-pilot-card--moss-amber .appearance-pilot-card__swatch--chrome {
     background: #1e6038;
     border-color: #175030;
 }
 
-.appearance-pilot-card--portima .appearance-pilot-card__swatch--surface {
+.appearance-pilot-card--moss-amber .appearance-pilot-card__swatch--surface {
     background: #ffffff;
     border-color: #aacab2;
 }
 
-.appearance-pilot-card--portima .appearance-pilot-card__swatch--accent {
+.appearance-pilot-card--moss-amber .appearance-pilot-card__swatch--accent {
     background: #f0c000;
 }
 

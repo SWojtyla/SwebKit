@@ -16,6 +16,7 @@ public class DailyFileWriterTests : IDisposable
     {
         if (Directory.Exists(_tempDirectory))
             Directory.Delete(_tempDirectory, recursive: true);
+        GC.SuppressFinalize(this);
     }
 
     private static LogEntry MakeEntry(string feature, LogLevel level = LogLevel.Information, string message = "hello") =>

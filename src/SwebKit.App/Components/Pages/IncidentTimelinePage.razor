@@ -583,6 +583,14 @@ string.IsNullOrWhiteSpace(_currentNamespace))
                 ConnectionState.SetConnected("incident-timeline");
             }
 
+            // Settle the loading flag and render the loaded evidence now, while still on the Blazor
+            // dispatcher. The snapshot publish below persists to disk asynchronously (SaveAsync uses
+            // ConfigureAwait(false)); clearing _isLoading only in the finally would push this render
+            // past that await, posting a late off-dispatcher re-render that rebuilds the tree after
+            // the UI is already correct — enough to race an in-flight user interaction.
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+
             await PublishWorkspaceSnapshotAsync(recordRecent: true);
         }
         catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
@@ -605,7 +613,10 @@ string.IsNullOrWhiteSpace(_currentNamespace))
         }
         finally
         {
-            if (requestVersion == _requestVersion)
+            // Safety net for the cancellation/error paths that leave _isLoading set; the success
+            // path already settled and rendered above, so guarding on _isLoading avoids a redundant
+            // late render there.
+            if (requestVersion == _requestVersion && _isLoading)
             {
                 _isLoading = false;
                 await InvokeAsync(StateHasChanged);

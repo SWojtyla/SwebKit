@@ -40,10 +40,15 @@ public class DemoAksClient : IAksClient
         var key = $"{deploymentName}/{replicaIndex}";
         if (!PodSuffixes.TryGetValue(key, out var s))
         {
-            // Deterministic hash so suffix is identical across DemoAksClient instances.
-            var hash = System.Security.Cryptography.MD5.HashData(
-                System.Text.Encoding.UTF8.GetBytes(key));
-            s = Convert.ToHexString(hash)[..8].ToLowerInvariant();
+            // Deterministic, non-cryptographic hash (FNV-1a) so the suffix is identical
+            // across DemoAksClient instances. This only labels fake demo pods, so a fast
+            // stable hash is all that's needed — no security or collision guarantees required.
+            uint hash = 2166136261;
+            foreach (var b in System.Text.Encoding.UTF8.GetBytes(key))
+            {
+                hash = (hash ^ b) * 16777619;
+            }
+            s = hash.ToString("x8", System.Globalization.CultureInfo.InvariantCulture);
             PodSuffixes[key] = s;
         }
         return s;

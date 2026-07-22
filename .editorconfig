@@ -1,0 +1,72 @@
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{json,xml,yml,yaml,csproj,props,targets,slnx}]
+indent_size = 2
+
+[*.{razor,cs}]
+dotnet_diagnostic.CA1707.severity = suggestion
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.IDE0090.severity = suggestion
+
+# LoggerMessage source-gen delegates (CA1848) and the paired "don't evaluate
+# expensive log arguments" guard (CA1873) are micro-optimizations aimed at
+# high-throughput server logging. SwebKit is a low-log-volume desktop app, so
+# the readability cost of hand-rolling LoggerMessage partials outweighs the
+# benefit. Kept visible as suggestions rather than silenced outright.
+dotnet_diagnostic.CA1848.severity = suggestion
+dotnet_diagnostic.CA1873.severity = suggestion
+
+# CA1716 flags the 'Shared' namespace segment because it collides with a VB.NET
+# reserved word. SwebKit ships no VB, and renaming SwebKit.App.Components.Shared
+# would churn the entire component tree for a non-issue.
+dotnet_diagnostic.CA1716.severity = none
+
+# CA1305 (IFormatProvider) matters most for libraries that round-trip data across
+# cultures. SwebKit is a single-user desktop tool: numeric/date formatting is either
+# for display (where CurrentCulture is correct and implicit) or for internal keys
+# (where the values are ASCII-invariant). Mechanically injecting InvariantCulture
+# everywhere would risk *introducing* display bugs, so this stays off in app code.
+dotnet_diagnostic.CA1305.severity = none
+
+# CA1859 (use concrete types instead of interfaces for performance) is a micro-perf
+# rule that trades API generality for devirtualization gains irrelevant at this app's
+# call volumes. Not worth degrading interface-based seams throughout the codebase.
+dotnet_diagnostic.CA1859.severity = none
+
+# CA1720 (identifier contains a type name, e.g. a param named 'obj') and CA1711
+# (reserved suffixes like 'Collection'/'Ex') are naming-taste rules. Renaming public
+# surface to satisfy them is pure churn with no correctness or clarity benefit here.
+dotnet_diagnostic.CA1720.severity = none
+dotnet_diagnostic.CA1711.severity = none
+
+# CA1822 (mark members as static) fights this codebase's DI-based design: service
+# methods are intentionally instance members so they can be registered, injected, and
+# mocked in tests, even when a given method's current body happens not to touch instance
+# state. Auto-applying it turns public service methods static, which breaks the injection
+# seam and every caller. The perf gain is negligible for a desktop app. Left off by design.
+dotnet_diagnostic.CA1822.severity = none
+
+# CA1068 (CancellationToken should be the last parameter) flags IServiceBusClient's
+# PeekMessagesAsync/PeekDeadLetterAsync, whose trailing 'long? fromSequenceNumber = null'
+# was added deliberately for "load more" paging. Reordering would churn ~25 call sites and
+# test doubles across every project to satisfy a convention on an internal interface. Off.
+dotnet_diagnostic.CA1068.severity = none
+
+# Test projects prioritize readability of arrange/assert code over the
+# micro-perf and globalization rules that matter in shipping code. Relax those
+# here; correctness rules stay at warning.
+[tests/**.{cs,razor}]
+dotnet_diagnostic.CA1305.severity = none   # IFormatProvider — test data is invariant
+dotnet_diagnostic.CA1310.severity = none   # StringComparison — test data is invariant
+dotnet_diagnostic.CA1826.severity = none   # LINQ vs indexer on small fixtures
+dotnet_diagnostic.CA1859.severity = none   # concrete types for perf
+dotnet_diagnostic.CA1861.severity = none   # static readonly arrays in inline test data
+dotnet_diagnostic.CA1711.severity = none   # xUnit *Collection fixture class naming

@@ -138,21 +138,35 @@ public abstract class SwebKitComponentBase : ComponentBase, IDisposable
         }
         _renderPending = true;
 
-        _renderCts ??= new CancellationTokenSource();
+        // Capture into a local so this continuation never re-reads the mutable _renderCts field:
+        // Dispose() runs Cancel() -> Dispose() -> field = null on the UI thread, and touching the
+        // field again here would race that sequence (ObjectDisposedException surfacing from inside
+        // the exception filter, which then goes unobserved since this task is fire-and-forget).
+        var cts = _renderCts ??= new CancellationTokenSource();
         _ = InvokeAsync(async () =>
         {
             try
             {
-                await Task.Delay(GetCoalescingDebounce(), _renderCts.Token);
-                if (!_renderCts.Token.IsCancellationRequested)
+                // Leading edge: render immediately so a single event is reflected without waiting on
+                // the debounce timer. That timer's continuation can be starved past a caller's
+                // deadline on constrained/CI hardware (small thread pool, many components running
+                // PeriodicTimers), which previously dropped event-driven renders. Rendering here
+                // also means _needsRender is cleared, so an isolated request costs one render.
+                StateHasChanged();
+
+                // Trailing edge: coalesce any further requests that arrive during the debounce
+                // window into a single follow-up render, preserving the burst-coalescing behavior.
+                await Task.Delay(GetCoalescingDebounce(), cts.Token);
+                _renderPending = false;
+                if (_needsRender)
                 {
-                    _renderPending = false;
                     StateHasChanged();
                 }
             }
-            catch (OperationCanceledException) when (_renderCts?.Token.IsCancellationRequested == true)
+            catch (OperationCanceledException)
             {
-                // Render was cancelled, expected during disposal
+                // Render was cancelled, expected during disposal.
+                _renderPending = false;
             }
         });
     }
@@ -236,5 +250,6 @@ public abstract class SwebKitComponentBase : ComponentBase, IDisposable
         _renderCts?.Cancel();
         _renderCts?.Dispose();
         _renderCts = null;
+        GC.SuppressFinalize(this);
     }
 }

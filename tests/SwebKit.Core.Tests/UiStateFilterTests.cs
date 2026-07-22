@@ -499,7 +499,7 @@ public class UiStateFilterTests
         await reader.LoadAsync();
 
         var preferences = reader.GetDashboardPreferences(DefaultDashboardTiles());
-        var activeView = Assert.Single(preferences.Views.Where(static view => view.Id == "focus"));
+        var activeView = Assert.Single(preferences.Views, static view => view.Id == "focus");
 
         Assert.Equal("focus", preferences.ActiveViewId);
         Assert.Equal(2, preferences.Views.Count);

@@ -1,11 +1,11 @@
 @page "/redis"
 @using SwebKit.Core.Services
+@inherits SwebKit.App.Components.Shared.SwebKitComponentBase
 @inject AppStateService AppState
 @inject INotificationService Notifications
 @inject IConnectionStateService ConnectionState
 @inject IAppEventBus Events
 @inject IRedisWarmupCache RedisWarmupCache
-@implements IDisposable
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
@@ -141,8 +141,6 @@
     private IRedisClient? Client;
     private RedisToolbar? _toolbar;
     private static readonly HashSet<string> _emptySelectedKeys = [];
-    private bool IsLoading;
-    private string? ErrorMessage;
     private CancellationTokenSource _cts = new();
 
     private sealed record RedisPageSnapshot(
@@ -1436,7 +1434,7 @@ default)
         Client = null;
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
         _cts.Cancel();
         _cts.Dispose();
@@ -1447,5 +1445,6 @@ default)
         foreach (var id in new[] { "redis-scan", "redis-refresh-key", "redis-delete-key" })
             Commands.Unregister(id);
         Selection.SetSelection("redis", null);
+        base.Dispose();
     }
 }

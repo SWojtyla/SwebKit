@@ -22,8 +22,16 @@ public static class AzureCredentialFactory
 {
     /// <summary>Creates the app-wide default Entra ID credential.</summary>
     public static TokenCredential CreateDefault() =>
-        new DefaultAzureCredential(new DefaultAzureCredentialOptions
+        CreateDefault(new DefaultAzureCredentialOptions
         {
             ExcludeEnvironmentCredential = true
         });
+
+    /// <summary>
+    /// Creates an Entra ID credential with the specified options.
+    /// Use this overload when a caller needs different exclusion settings
+    /// (e.g., KubernetesAksClient excludes WorkloadIdentityCredential).
+    /// </summary>
+    public static TokenCredential CreateDefault(DefaultAzureCredentialOptions options) =>
+        new DefaultAzureCredential(options);
 }

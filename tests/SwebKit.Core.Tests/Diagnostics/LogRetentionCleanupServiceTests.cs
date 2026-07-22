@@ -16,6 +16,7 @@ public class LogRetentionCleanupServiceTests : IDisposable
     {
         if (Directory.Exists(_tempDirectory))
             Directory.Delete(_tempDirectory, recursive: true);
+        GC.SuppressFinalize(this);
     }
 
     private string CreateFile(string feature, DateOnly date)

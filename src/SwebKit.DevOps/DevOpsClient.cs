@@ -489,7 +489,7 @@ public class DevOpsClient : IDevOpsClient
             {
                 throw;
             }
-            catch { continue; }
+            catch (Exception ex) { _logger.LogDebug(ex, "Failed to process a pipeline run entry; skipping"); continue; }
 
             var waitingNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (run.State != "completed")
@@ -603,7 +603,7 @@ public class DevOpsClient : IDevOpsClient
         var sourceBranch = dto.Resources?.Repositories?.GetValueOrDefault("self")?.RefName
             ?? string.Empty;
 
-        if (sourceBranch.StartsWith("refs/heads/"))
+        if (sourceBranch.StartsWith("refs/heads/", StringComparison.Ordinal))
             sourceBranch = sourceBranch["refs/heads/".Length..];
 
         return new AdoPipelineRun(

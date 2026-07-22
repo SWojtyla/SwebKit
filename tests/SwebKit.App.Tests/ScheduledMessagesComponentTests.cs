@@ -112,8 +112,8 @@ public sealed class ScheduledMessagesComponentTests : TestContext
             .Add(p => p.NamespaceId, ns)
             .Add(p => p.EntityPath, "orders"));
 
-        Assert.Contains("111", cut.Markup);
-        Assert.DoesNotContain("222", cut.Markup);
+        var renderedEntities = cut.FindAll(".sched-entity").Select(element => element.TextContent).ToArray();
+        Assert.Equal(["orders"], renderedEntities);
     }
 
     [Fact]

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -39,6 +40,8 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     private const string KedaApiGroup = "keda.sh";
     private const string KedaScaledObjectsPlural = "scaledobjects";
     private static readonly string[] KedaApiVersions = ["v1alpha1"];
+
+    private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
 
     /// <summary>
     /// Cached probe result for whether the KEDA <c>ScaledObject</c> CRD is served by this cluster.
@@ -251,7 +254,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         {
             try
             {
-                var credential = new DefaultAzureCredential(AzureCredentialOptions);
+                var credential = AzureCredentialFactory.CreateDefault(AzureCredentialOptions);
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 var accessToken = credential.GetToken(new TokenRequestContext([scope]), cts.Token);
                 if (!string.IsNullOrWhiteSpace(accessToken.Token))
@@ -739,16 +742,20 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private async Task<string> GetHelmManifestAsync(string ns, string releaseName, CancellationToken ct)
     {
-        var args = $"get manifest {releaseName} --namespace {ns}{BuildHelmKubeconfigArgs()}";
+        var helmArgs = new KubectlArgumentBuilder()
+            .WithHelmGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+            .Add("get").Add("manifest").Add(releaseName)
+            .Add("--namespace").Add(ns)
+            .Build();
 
         var psi = new ProcessStartInfo("helm")
         {
-            Arguments = args,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        foreach (var a in helmArgs) psi.ArgumentList.Add(a);
 
         Process process;
         try
@@ -773,14 +780,20 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 var token = TryAcquireFreshAzureToken();
                 if (token is not null)
                 {
+                    var retryArgs = new KubectlArgumentBuilder()
+                        .WithHelmGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+                        .Add("get").Add("manifest").Add(releaseName)
+                        .Add("--namespace").Add(ns)
+                        .Add("--kube-token").Add(token)
+                        .Build();
                     var retryPsi = new ProcessStartInfo("helm")
                     {
-                        Arguments = $"get manifest {releaseName} --namespace {ns}{BuildHelmKubeconfigArgs()} --kube-token {token}",
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
+                    foreach (var a in retryArgs) retryPsi.ArgumentList.Add(a);
 
                     var retryProcess = Process.Start(retryPsi)
                         ?? throw new InvalidOperationException("Failed to start helm process.");
@@ -813,6 +826,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
             }
             _portForwardProcesses.Clear();
         }
+        GC.SuppressFinalize(this);
         return ValueTask.CompletedTask;
     }
 
@@ -970,7 +984,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 // Extract the "config" field which contains the user-supplied values
                 using var doc = System.Text.Json.JsonDocument.Parse(json);
                 if (doc.RootElement.TryGetProperty("config", out var config))
-                    return System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                    return System.Text.Json.JsonSerializer.Serialize(config, IndentedJsonOptions);
 
                 return json;
             }
@@ -984,14 +998,20 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public async Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)
     {
+        var helmArgs = new KubectlArgumentBuilder()
+            .WithHelmGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+            .Add("rollback").Add(releaseName).Add(targetRevision.ToString())
+            .Add("--namespace").Add(ns).Add("--wait")
+            .Build();
+
         var psi = new ProcessStartInfo("helm")
         {
-            Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait{BuildHelmKubeconfigArgs()}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        foreach (var a in helmArgs) psi.ArgumentList.Add(a);
 
         Process process;
         try
@@ -1016,14 +1036,20 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 var token = TryAcquireFreshAzureToken();
                 if (token is not null)
                 {
+                    var retryArgs = new KubectlArgumentBuilder()
+                        .WithHelmGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+                        .Add("rollback").Add(releaseName).Add(targetRevision.ToString())
+                        .Add("--namespace").Add(ns).Add("--wait")
+                        .Add("--kube-token").Add(token)
+                        .Build();
                     var retryPsi = new ProcessStartInfo("helm")
                     {
-                        Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait{BuildHelmKubeconfigArgs()} --kube-token {token}",
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
+                    foreach (var a in retryArgs) retryPsi.ArgumentList.Add(a);
 
                     var retryProcess = Process.Start(retryPsi)
                         ?? throw new InvalidOperationException("Failed to start helm process. Ensure 'helm' is on PATH.");
@@ -1118,12 +1144,23 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         // --dry-run=server sends the manifest through the API server's full validation and
         // admission chain (schema checks, webhooks, etc.) without persisting anything —
         // a much stronger check than local YAML parsing.
-        return await RunKubectlProcessAsync($"apply -f \"{tempFile}\" --namespace {ns} --dry-run=server{BuildKubeconfigArgs()}", ct).ConfigureAwait(false);
+        return await RunKubectlProcessAsync(
+            new KubectlArgumentBuilder()
+                .WithGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+                .Apply(tempFile, ns)
+                .DryRunServer()
+                .Build(),
+            ct).ConfigureAwait(false);
     }
 
     private async Task<(int ExitCode, string Stderr)> RunKubectlApplyAsync(string tempFile, string ns, CancellationToken ct)
     {
-        return await RunKubectlProcessAsync($"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()}", ct).ConfigureAwait(false);
+        return await RunKubectlProcessAsync(
+            new KubectlArgumentBuilder()
+                .WithGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+                .Apply(tempFile, ns)
+                .Build(),
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1137,16 +1174,17 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     /// could keep running in the background and still apply the change moments later, leaving
     /// the user unsure whether their save actually went through.
     /// </summary>
-    private async Task<(int ExitCode, string Stderr)> RunKubectlProcessAsync(string arguments, CancellationToken ct)
+    private async Task<(int ExitCode, string Stderr)> RunKubectlProcessAsync(IReadOnlyList<string> arguments, CancellationToken ct)
     {
         var psi = new ProcessStartInfo("kubectl")
         {
-            Arguments = arguments,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        foreach (var arg in arguments)
+            psi.ArgumentList.Add(arg);
 
         using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
@@ -1181,7 +1219,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
             lock (outputLock) { captured = output.ToString().Trim(); }
             _logger.LogWarning(
                 "kubectl was cancelled (caller-side timeout) running 'kubectl {Arguments}'. Captured output before cancellation: {Output}",
-                arguments, string.IsNullOrEmpty(captured) ? "(none)" : captured);
+                string.Join(' ', arguments), string.IsNullOrEmpty(captured) ? "(none)" : captured);
             throw new TimeoutException(string.IsNullOrEmpty(captured)
                 ? "kubectl produced no output before it was cancelled — it may be stuck waiting on cluster/network connectivity or an interactive credential prompt (e.g. kubelogin device-code sign-in) that never surfaced."
                 : $"kubectl was cancelled after producing this output:\n{captured}");
@@ -1214,7 +1252,13 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private async Task<(int ExitCode, string Stderr)> RunKubectlApplyWithTokenAsync(string tempFile, string ns, string token, CancellationToken ct)
     {
-        return await RunKubectlProcessAsync($"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()} --token {token}", ct).ConfigureAwait(false);
+        return await RunKubectlProcessAsync(
+            new KubectlArgumentBuilder()
+                .WithGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+                .Apply(tempFile, ns)
+                .WithToken(token)
+                .Build(),
+            ct).ConfigureAwait(false);
     }
 
     private string? TryAcquireFreshAzureToken()
@@ -1234,7 +1278,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         {
             try
             {
-                var credential = new DefaultAzureCredential(AzureCredentialOptions);
+                var credential = AzureCredentialFactory.CreateDefault(AzureCredentialOptions);
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 var accessToken = credential.GetToken(new TokenRequestContext([scope]), cts.Token);
                 if (!string.IsNullOrWhiteSpace(accessToken.Token))
@@ -1513,7 +1557,7 @@ internal static class AksAzureAuthHelpers
                 if (string.IsNullOrWhiteSpace(valueLine))
                     continue;
 
-                if (valueLine.StartsWith("-"))
+                if (valueLine.StartsWith('-'))
                     valueLine = valueLine[1..].Trim();
 
                 if (!valueLine.StartsWith("--", StringComparison.OrdinalIgnoreCase))

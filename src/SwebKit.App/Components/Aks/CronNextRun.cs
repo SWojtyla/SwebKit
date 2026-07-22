@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace SwebKit.App.Components.Aks;
 
@@ -72,7 +73,7 @@ internal static class CronNextRun
                 var slashParts = part.Split('/');
                 if (slashParts.Length != 2) return false;
                 if (!int.TryParse(slashParts[1], out int step) || step <= 0) return false;
-                int start = slashParts[0] == "*" ? min : int.Parse(slashParts[0]);
+                int start = slashParts[0] == "*" ? min : int.Parse(slashParts[0], CultureInfo.InvariantCulture);
                 for (int v = start; v <= max; v += step)
                     if (v == value) return true;
             }

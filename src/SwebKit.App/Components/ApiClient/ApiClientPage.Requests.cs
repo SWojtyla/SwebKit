@@ -183,7 +183,7 @@ public partial class ApiClientPage
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
-    private Task OnSubscriptionStoppedAsync()
+    private static Task OnSubscriptionStoppedAsync()
     {
         // Nothing extra; the subscription message list persists until the next send
         return Task.CompletedTask;

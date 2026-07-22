@@ -2,22 +2,30 @@
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <RootNamespace>SwebKit.App</RootNamespace>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
-        <PackageReference Include="BlazorMonaco" Version="3.5.0" />
-        <PackageReference Include="bunit.web" Version="1.40.0" />
-        <PackageReference Include="coverlet.collector" Version="10.0.1" />
-        <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.14.3" />
-        <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" Version="4.14.3" />
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
-        <PackageReference Include="xunit" Version="2.9.3" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
-        <PackageReference Include="YamlDotNet" Version="18.1.0" />
+        <!-- bunit.web 1.40.0 (latest) is compiled against AngleSharp 1.2.0, which carries
+             GHSA-pgww-w46g-26qg (mXSS, patched in 1.5.0). Pinning AngleSharp forward breaks
+             bunit at runtime (MissingMethodException on IHtmlCollection.get_Item) since no
+             bunit release yet targets the patched API shape. Suppressed for this test project
+             only: it renders trusted, test-authored HTML, never untrusted input. Revisit once
+             bunit.web ships an AngleSharp 1.5.x-compatible release. -->
+        <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-pgww-w46g-26qg" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Blazor-ApexCharts" />
+        <PackageReference Include="BlazorMonaco" />
+        <PackageReference Include="bunit.web" />
+        <PackageReference Include="coverlet.collector" />
+        <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" />
+        <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="xunit" />
+        <PackageReference Include="xunit.runner.visualstudio" />
+        <PackageReference Include="YamlDotNet" />
     </ItemGroup>
 
     <ItemGroup>
@@ -66,6 +74,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SegmentedControl.razor" Link="Components\Shared\SegmentedControl.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\StatusBadge.razor" Link="Components\Shared\StatusBadge.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\LoadingSpinner.razor" Link="Components\Shared\LoadingSpinner.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SidePanel.razor" Link="Components\Shared\SidePanel.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PageHeader.razor" Link="Components\Shared\PageHeader.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\RoutePageHeader.razor" Link="Components\Shared\RoutePageHeader.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ErrorCallout.razor" Link="Components\Shared\ErrorCallout.razor" />
@@ -119,6 +128,11 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\IncidentTimelineConfigForm.razor" Link="Components\Pages\IncidentTimelineConfigForm.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusPage.razor" Link="Components\Pages\ServiceBusPage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor" Link="Components\Pages\AksPage.razor" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor.Core.cs" Link="Components\Pages\AksPage.razor.Core.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor.Filters.cs" Link="Components\Pages\AksPage.razor.Filters.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor.Lifecycle.cs" Link="Components\Pages\AksPage.razor.Lifecycle.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor.Selection.cs" Link="Components\Pages\AksPage.razor.Selection.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor.ContextMenuActions.cs" Link="Components\Pages\AksPage.razor.ContextMenuActions.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\IncidentTimelinePage.razor" Link="Components\Pages\IncidentTimelinePage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\StoragePage.razor" Link="Components\Pages\StoragePage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ServiceBusNamespacePanel.razor" Link="Components\ServiceBus\ServiceBusNamespacePanel.razor" />

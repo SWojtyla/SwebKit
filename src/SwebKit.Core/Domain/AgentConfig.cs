@@ -9,7 +9,7 @@ namespace SwebKit.Core.Domain;
 public sealed class AgentConfig
 {
     /// <summary>Show the AI Agent section in the navigation. Default false until the user configures an API key.</summary>
-    public bool IsEnabled { get; set; } = false;
+    public bool IsEnabled { get; set; }
 
     /// <summary>
     /// Override the Mistral model for this user.

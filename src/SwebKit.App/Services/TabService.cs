@@ -91,7 +91,11 @@ public class TabService : IDisposable
         ScheduleSave();
     }
 
-    public void Dispose() => _saveTimer?.Dispose();
+    public void Dispose()
+    {
+        _saveTimer?.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     private void ScheduleSave()
     {

@@ -254,7 +254,7 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
             if (aksCfg is null || _overrideClients.Count > 0)
             {
                 foreach (var (_, oc) in _overrideClients)
-                    if (oc is IAsyncDisposable od) _ = od.DisposeAsync();
+                    if (oc is IAsyncDisposable od) _ = od.DisposeAsync().AsTask();
                 _overrideClients.Clear();
             }
 
@@ -318,7 +318,7 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
     private void DisposeAksClientLocked()
     {
         if (!_aksIsDemo && _aksClient is IAsyncDisposable d)
-            _ = d.DisposeAsync(); // fire-and-forget; we're replacing the client
+            _ = d.DisposeAsync().AsTask(); // fire-and-forget; we're replacing the client
 
         _aksClient = null;
         _aksContext = null;

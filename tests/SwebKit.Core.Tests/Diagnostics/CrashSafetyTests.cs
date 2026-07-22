@@ -21,6 +21,7 @@ public class CrashSafetyTests : IDisposable
     {
         if (Directory.Exists(_tempDirectory))
             Directory.Delete(_tempDirectory, recursive: true);
+        GC.SuppressFinalize(this);
     }
 
     private FileLoggerProvider CreateProvider() => new(() => _settings, _tempDirectory);
@@ -56,7 +57,7 @@ public class CrashSafetyTests : IDisposable
     public void EmergencyWriteAndFlush_DoesNotRequireProviderDisposeToPersist()
     {
         using var provider = CreateProvider();
-        var entry = LogEntry.ForCrash(new Exception("no dispose needed"), isTerminating: false);
+        var entry = LogEntry.ForCrash(new InvalidOperationException("no dispose needed"), isTerminating: false);
 
         provider.EmergencyWriteAndFlush(entry);
 
@@ -138,7 +139,7 @@ public class CrashSafetyTests : IDisposable
             logger.LogInformation("filler entry {Index}", i);
         }
 
-        var crashEntry = LogEntry.ForCrash(new Exception("stalled drain"), isTerminating: true);
+        var crashEntry = LogEntry.ForCrash(new InvalidOperationException("stalled drain"), isTerminating: true);
         provider.EmergencyWriteAndFlush(crashEntry);
 
         var today = DateOnly.FromDateTime(DateTime.Now);

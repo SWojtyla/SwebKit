@@ -74,7 +74,7 @@ public sealed class UserSettings
     public bool WarmupConnectionsOnStartup { get; set; } = true;
     public Dictionary<string, List<PinnedPortForwardEntry>> PinnedPortForwards { get; set; } = [];
     /// <summary>When true, request edits are persisted automatically after a 500 ms debounce.</summary>
-    public bool AutoSaveRequests { get; set; } = false;
+    public bool AutoSaveRequests { get; set; }
 
     /// <summary>
     /// When <c>false</c>, SSL certificate verification is skipped for the API client HTTP requests.
@@ -86,7 +86,7 @@ public sealed class UserSettings
     /// When <c>true</c>, enables an open-requests tab strip in the API Client. Default off, which keeps
     /// today's single-request model.
     /// </summary>
-    public bool ApiClientRequestTabs { get; set; } = false;
+    public bool ApiClientRequestTabs { get; set; }
 
     /// <summary>AI agent feature configuration (user-scoped).</summary>
     public AgentConfig Agent { get; set; } = new();

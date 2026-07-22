@@ -1,26 +1,8 @@
-using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Microsoft.FluentUI.AspNetCore.Components;
-using SwebKit.App.Platforms.Windows;
+using SwebKit.App.Hosting;
 using SwebKit.App.Services;
-using SwebKit.Azure.ServiceBus;
-using SwebKit.Azure.Storage;
-using SwebKit.Azure.ServiceBus.IncidentTimeline;
-using SwebKit.Azure;
-using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
-using SwebKit.Core.Diagnostics;
-using SwebKit.Core.Services;
-using SwebKit.DevOps;
-using SwebKit.DevOps.IncidentTimeline;
-using SwebKit.Kubernetes.AksClient;
-using SwebKit.Kubernetes.IncidentTimeline;
-using SwebKit.Agents;
-using SwebKit.Agents.Tools;
-using SwebKit.Observability;
-using SwebKit.Observability.IncidentTimeline;
-using SwebKit.Redis;
-using SelectionContext = SwebKit.App.Services.SelectionContext;
 
 namespace SwebKit.App;
 
@@ -41,19 +23,7 @@ public static class MauiProgram
         // before any other startup work that could itself throw/log during construction.
         // See docs/features/active/structured-file-logging/backend.md "Crash-Safe Emergency Path" / "Startup Wiring".
         var userSettingsRepository = new UserSettingsRepository();
-        var fileLoggerProvider = new FileLoggerProvider(() => userSettingsRepository.Settings.Logging, AppDataPaths.LogsDirectory);
-
-        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-        {
-            var ex = e.ExceptionObject as Exception;
-            fileLoggerProvider.EmergencyWriteAndFlush(LogEntry.ForCrash(ex, e.IsTerminating));
-        };
-
-        TaskScheduler.UnobservedTaskException += (_, e) =>
-        {
-            fileLoggerProvider.EmergencyWriteAndFlush(LogEntry.ForCrash(e.Exception, isTerminating: false));
-            e.SetObserved();
-        };
+        var fileLoggerProvider = AppBootstrap.ConfigureCrashHandlers(userSettingsRepository);
 
         builder.Services.AddMauiBlazorWebView();
         builder.Services.AddFluentUIComponents();
@@ -65,215 +35,17 @@ public static class MauiProgram
 #endif
         builder.Logging.AddProvider(fileLoggerProvider);
 
-        // Core infrastructure
-        builder.Services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
-        builder.Services.AddSingleton<IAppEventBus, AppEventBus>();
-        builder.Services.AddSingleton<ITaskQueue, TaskQueueService>();
-        builder.Services.AddSingleton<ProfileRepository>();
-        builder.Services.AddSingleton<UiStateRepository>();
-        builder.Services.AddSingleton(userSettingsRepository);
-        builder.Services.AddSingleton<ILogRetentionCleanupService>(_ => new LogRetentionCleanupService(AppDataPaths.LogsDirectory));
-        builder.Services.AddSingleton<PinnedPortForwardService>();
-        builder.Services.AddSingleton<ScheduledMessageRepository>();
-        builder.Services.AddSingleton<AppStateService>();
-        builder.Services.AddSingleton<ConfigurationBundleService>();
-        builder.Services.AddSingleton<CollectionRepository>();
-        builder.Services.AddSingleton<EnvironmentRepository>();
-        builder.Services.AddSingleton<LinkedCollectionRootRepository>();
-        builder.Services.AddSingleton<IConfigurationHealthService, ConfigurationHealthService>();
-        builder.Services.AddSingleton<IConfigurationProbeService, ConfigurationProbeService>();
-
-        // App UI services
-        builder.Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
-        builder.Services.AddSingleton<TabService>();
-        builder.Services.AddSingleton<CommandRegistry>();
-        builder.Services.AddScoped<OperatorWorkspaceService>();
-        builder.Services.AddSingleton<INotificationService, NotificationService>();
-        builder.Services.AddSingleton<IToastDiagnosticService, ToastDiagnosticService>();
-        builder.Services.AddSingleton<IAksClientBootstrapper, AksClientBootstrapper>();
-        builder.Services.AddSingleton<IShellErrorPresenter, ShellErrorPresenter>();
-        builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
-        builder.Services.AddSingleton<ISelectionContext, SelectionContext>();
-        builder.Services.AddSingleton<IServiceBusNamespaceBootstrapper, ServiceBusNamespaceBootstrapper>();
-        builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
-        builder.Services.AddSingleton<IAksClientFactory, AksClientFactory>();
-        builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
-        builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
-        builder.Services.AddSingleton<IOperatorResourceSearchProvider, ServiceBusResourceSearchProvider>();
-        builder.Services.AddSingleton<IOperatorResourceSearchProvider, AksResourceSearchProvider>();
-        builder.Services.AddSingleton<IOperatorResourceSearchProvider, StorageResourceSearchProvider>();
-        builder.Services.AddSingleton<IOperatorResourceSearchProvider, RedisResourceSearchProvider>();
-        builder.Services.AddSingleton<IOperatorResourceSearchProvider, ObservabilityResourceSearchProvider>();
-        builder.Services.AddSingleton<IOperatorResourceSearchProvider, IncidentTimelineSearchProvider>();
-        builder.Services.AddSingleton<TrayLifecycleState>();
-
-#if WINDOWS
-        builder.Services.AddSingleton<IWindowsNotificationService, WindowsToastNotificationService>();
-        builder.Services.AddSingleton<ITrayLifecycleService, WindowsTrayLifecycleService>();
-        builder.Services.AddSingleton<IFolderPickerService, WindowsFolderPickerService>();
-#else
-        builder.Services.AddSingleton<IWindowsNotificationService, NullWindowsNotificationService>();
-        builder.Services.AddSingleton<ITrayLifecycleService, NullTrayLifecycleService>();
-#endif
-
-        // Alert Monitor (replaces PodHealthMonitorService)
-        builder.Services.AddSingleton<IMonitoringConnectionPool, MonitoringConnectionPool>();
-        builder.Services.AddSingleton<IAlertRuleRepository, AlertRuleRepository>();
-        builder.Services.AddSingleton<IAlertSignalSource, AksPodHealthSignalSource>();
-        builder.Services.AddSingleton<IAlertSignalSource, AksPodRestartRateSignalSource>();
-        builder.Services.AddSingleton<IAlertSignalSource, AksNamespaceHealthScoreSignalSource>();
-        builder.Services.AddSingleton<IAlertSignalSource, ServiceBusDlqSignalSource>();
-        builder.Services.AddSingleton<IAlertSignalSource, ServiceBusActiveDepthSignalSource>();
-        builder.Services.AddSingleton<IAlertSignalSource, ServiceBusDeadSubscriptionSignalSource>();
-        builder.Services.AddSingleton<IAlertSignalSource, RedisMemorySignalSource>();
-        builder.Services.AddSingleton<IAlertSignalSource, RedisConnectedClientsSignalSource>();
-        builder.Services.AddSingleton<IAlertMonitorService, AlertMonitorService>();
-        builder.Services.AddSingleton<MonitoringMigrationService>();
-        // Null stub retains DashboardPage + legacy AKS sub-component DI compatibility
-        builder.Services.AddSingleton<IPodHealthMonitorService, NullPodHealthMonitorService>();
-
-        // Demo clients (singletons; pages select real vs. demo based on AppStateService.UseDemoData)
-        builder.Services.AddSingleton<DemoAksClient>();
-        builder.Services.AddSingleton(new DemoRedisClient(0));
-        builder.Services.AddSingleton<DemoStorageClient>();
-
-        // Observability — real resource discovery (singleton for caching); providers are created per-resource by the factory seam
-        builder.Services.AddSingleton<IObservabilityResourceDiscovery, AppInsightsDiscoveryService>();
-        builder.Services.AddSingleton<IObservabilityProviderFactory, ObservabilityProviderFactory>();
-        builder.Services.AddSingleton<IGuidedKqlCompiler, GuidedKqlCompiler>();
-        builder.Services.AddSingleton<IObservabilityExplainerService, ObservabilityExplainerService>();
-
-        // DevOps / Releases
-        builder.Services.AddTransient<DevOpsAuthHandler>();
-        builder.Services.AddHttpClient("AzureDevOps")
-            .AddHttpMessageHandler<DevOpsAuthHandler>()
-            .AddStandardResilienceHandler(options =>
-            {
-                options.Retry.MaxRetryAttempts = 3;
-                options.Retry.Delay = TimeSpan.FromSeconds(1);
-            });
-        builder.Services.AddSingleton<IDevOpsClientFactory, DevOpsClientFactory>();
-        builder.Services.AddSingleton<DemoDevOpsClient>();
-        builder.Services.AddSingleton<ReleaseRepository>();
-        builder.Services.AddSingleton<PageDataCache>();
-        builder.Services.AddSingleton<IIncidentTimelineSignalSource, AksTimelineSignalSource>();
-        builder.Services.AddSingleton<IIncidentTimelineSignalSource, AppInsightsTimelineSignalSource>();
-        builder.Services.AddSingleton<IIncidentTimelineSignalSource, ServiceBusEvidenceSignalSource>();
-        builder.Services.AddSingleton<IIncidentTimelineSignalSource, DevOpsReleaseTimelineSignalSource>();
-        builder.Services.AddSingleton<IIncidentTimelineService, IncidentTimelineService>();
-        builder.Services.AddSingleton<IIncidentInvestigationSeedResolver, IncidentInvestigationSeedResolver>();
-        builder.Services.AddSingleton<IIncidentSnapshotExporter, IncidentSnapshotExporter>();
-        builder.Services.AddSingleton<IIncidentMappingProposalGenerator, IncidentMappingProposalGenerator>();
-        builder.Services.AddScoped<IncidentInvestigationLauncher>();
-
-        // Deployment assurance
-        builder.Services.AddSingleton<ApprovalAgingPolicy>();
-        builder.Services.AddSingleton<PipelineFailureClassifier>();
-        builder.Services.AddSingleton<RuntimeDriftService>();
-        builder.Services.AddSingleton<DeploymentValidationService>();
-
-        // API Client — variable substitution and HTTP execution
-        builder.Services.AddSingleton<IVariableGeneratorService, VariableGeneratorService>();
-        builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
-        builder.Services.AddSingleton<IVariablePreviewService, VariablePreviewService>();
-        builder.Services.AddSingleton<ApiClientWorkflowService>();
-        builder.Services.AddSingleton<IRequestBodyFormatter, RequestBodyFormatter>();
-        builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
-        builder.Services.AddSingleton<IKeyVaultSecretResolver>(sp =>
-        {
-            var config = sp.GetRequiredService<AppStateService>().Config;
-
-            // Multi-vault takes precedence; fall back to legacy single KeyVaultUrl for existing configs.
-            if (config.KeyVaults.Count > 0)
-                return new MultiVaultKeyVaultSecretResolver(
-                    config.KeyVaults,
-                    sp.GetRequiredService<ILogger<MultiVaultKeyVaultSecretResolver>>());
-
-#pragma warning disable CS0618 // KeyVaultUrl obsolete — backward-compat path
-            if (!string.IsNullOrWhiteSpace(config.KeyVaultUrl))
-                return new AzureKeyVaultSecretResolver(
-                    config.KeyVaultUrl,
-                    sp.GetRequiredService<ILogger<AzureKeyVaultSecretResolver>>());
-#pragma warning restore CS0618
-
-            return new NoopKeyVaultSecretResolver();
-        });
-        builder.Services.AddTransient<IHttpRequestExecutor, HttpRequestExecutor>();
-        builder.Services.AddSingleton<IOAuth2TokenManager, OAuth2TokenManager>();
-        builder.Services.AddSingleton<IAuthHeaderBuilder, AuthHeaderBuilder>();
-        builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();
-        builder.Services.AddSingleton<IGraphQlSchemaService, GraphQlSchemaService>();
-        builder.Services.AddTransient<IWebSocketClientService, WebSocketClientService>();
-        builder.Services.AddTransient<Func<IWebSocketClientService>>(sp =>
-            () => sp.GetRequiredService<IWebSocketClientService>());
-        builder.Services.AddTransient<IGraphQlSubscriptionService, GraphQlSubscriptionService>();
-        builder.Services.AddSingleton<LinkedGitService>();
-        builder.Services.AddSingleton<LinkedCollectionFileService>();
-
-        // API Client — export/import
-        builder.Services.AddSingleton<SwebKitCollectionExporter>();
-        builder.Services.AddSingleton<SwebKitCollectionImporter>();
-        builder.Services.AddSingleton<SwebKitEnvironmentImporter>();
-        builder.Services.AddSingleton<PostmanCollectionExporter>();
-        builder.Services.AddSingleton<PostmanCollectionImporter>();
-        builder.Services.AddSingleton<BrunoCollectionExporter>();
-        builder.Services.AddSingleton<BrunoFolderImporter>();
-        builder.Services.AddSingleton<CollectionImportService>();
-        builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
-            .ConfigurePrimaryHttpMessageHandler(sp =>
-            {
-                var settings = sp.GetRequiredService<UserSettingsRepository>().Settings;
-                return new HttpClientHandler
-                {
-                    AllowAutoRedirect = true,
-                    ServerCertificateCustomValidationCallback =
-                        settings.VerifyApiClientSsl
-                            ? null
-                            : (_, _, _, _) => true,
-                };
-            });
-
-        // Connection warmup
-        builder.Services.AddSingleton<IAksWarmupCache, AksWarmupCache>();
-        builder.Services.AddSingleton<IRedisWarmupCache, RedisWarmupCache>();
-        builder.Services.AddSingleton<IServiceBusWarmupCache, ServiceBusWarmupCache>();
-        builder.Services.AddSingleton<IConnectionWarmupService, ConnectionWarmupService>();
-        builder.Services.AddSingleton<RedisOpsInsightsAggregator>();
-
-        // AI Agent - Phase 1
-        builder.Services.AddSingleton<MistralConfig>(sp =>
-        {
-            var store = sp.GetRequiredService<ICredentialStore>();
-            return new MistralConfig
-            {
-                ApiKey = store.Get("SwebKit-Agent:Mistral-ApiKey") ?? string.Empty
-            };
-        });
-        builder.Services.AddSingleton<IMistralClient, MistralHttpClient>();
-
-        // Agent infrastructure
-        builder.Services.AddSingleton<IAgentContextBuilder, AgentContextBuilder>();
-
-        // Tools — registered as IAgentTool so AgentToolRegistry receives them all via IEnumerable<IAgentTool>
-        // Kubernetes Tools
-        builder.Services.AddSingleton<IAgentTool, GetPodStatusTool>();
-        builder.Services.AddSingleton<IAgentTool, ListNamespacesTool>();
-        builder.Services.AddSingleton<IAgentTool, ListPodsTool>();
-        builder.Services.AddSingleton<IAgentTool, GetPodLogsTool>();
-        builder.Services.AddSingleton<IAgentTool, GetPodEventsTool>();
-        builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
-
-        // Service Bus Tools
-        builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
-        builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
-        builder.Services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
-
-        // Observability Tools
-        builder.Services.AddSingleton<IAgentTool, QueryLogsTool>();
-        builder.Services.AddSingleton<IAgentTool, GetMetricsTool>();
-
-        builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
-        builder.Services.AddSingleton<IAgentChatService, AgentChatService>();
+        // Feature module registration
+        builder.Services.AddSwebKitCore(userSettingsRepository);
+        builder.Services.AddSwebKitAppServices();
+        builder.Services.AddSwebKitAlerts();
+        builder.Services.AddSwebKitDemoClients();
+        builder.Services.AddSwebKitObservability();
+        builder.Services.AddSwebKitDevOps();
+        builder.Services.AddSwebKitIncidentTimeline();
+        builder.Services.AddSwebKitApiClient();
+        builder.Services.AddSwebKitConnectionWarmup();
+        builder.Services.AddSwebKitAgents();
 
         var app = builder.Build();
 
@@ -284,7 +56,7 @@ public static class MauiProgram
         {
             try
             {
-                var retentionCleanup = app.Services.GetRequiredService<ILogRetentionCleanupService>();
+                var retentionCleanup = app.Services.GetRequiredService<Core.Diagnostics.ILogRetentionCleanupService>();
                 await retentionCleanup.RunAsync();
             }
             catch (OperationCanceledException)

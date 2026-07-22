@@ -52,7 +52,7 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
         return states;
     }
 
-    private static IReadOnlyList<ServiceBusNamespaceBootstrapState> BuildDemoStates()
+    private static List<ServiceBusNamespaceBootstrapState> BuildDemoStates()
     {
         var states = new List<ServiceBusNamespaceBootstrapState>();
         states.Add(new ServiceBusNamespaceBootstrapState(

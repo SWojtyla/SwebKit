@@ -96,15 +96,15 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
-        <PackageReference Include="BlazorMonaco" Version="3.5.0" />
-        <PackageReference Include="Markdig" Version="0.38.0" />
-        <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.14.3" />
-        <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" Version="4.14.3" />
-        <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.9" />
-        <PackageReference Include="YamlDotNet" Version="18.1.0" />
+        <PackageReference Include="Blazor-ApexCharts" />
+        <PackageReference Include="BlazorMonaco" />
+        <PackageReference Include="Markdig" />
+        <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" />
+        <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" />
+        <PackageReference Include="Microsoft.Maui.Controls" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+        <PackageReference Include="YamlDotNet" />
     </ItemGroup>
 
     <ItemGroup>

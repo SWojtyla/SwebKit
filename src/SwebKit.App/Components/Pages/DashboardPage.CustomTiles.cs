@@ -55,9 +55,10 @@ new(StringComparer.OrdinalIgnoreCase);
             return;
         }
 
-        var namespaceOption = GetServiceBusNamespaceOptions()
+        var namespaceOptions = GetServiceBusNamespaceOptions();
+        var namespaceOption = namespaceOptions
             .FirstOrDefault(option => string.Equals(option.Id, _newServiceBusNamespaceId, StringComparison.OrdinalIgnoreCase))
-            ?? GetServiceBusNamespaceOptions().FirstOrDefault();
+            ?? (namespaceOptions.Count > 0 ? namespaceOptions[0] : null);
         var entityPath = _newServiceBusEntityPath.Trim();
         if (namespaceOption is null || string.IsNullOrWhiteSpace(entityPath))
         {

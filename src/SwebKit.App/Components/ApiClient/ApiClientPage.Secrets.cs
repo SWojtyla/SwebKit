@@ -28,7 +28,7 @@ public partial class ApiClientPage
 
     private void OpenConfigureSecretDialog()
     {
-        _secretNameToConfigure = MissingSecretNames.FirstOrDefault();
+        _secretNameToConfigure = MissingSecretNames.Count > 0 ? MissingSecretNames[0] : null;
         _secretValueToConfigure = string.Empty;
         _secretConfigError = null;
         _showConfigureSecretDialog = true;
@@ -109,7 +109,7 @@ public partial class ApiClientPage
         return !string.IsNullOrWhiteSpace(variable.CredentialKey) && CredentialStore.Get(variable.CredentialKey) is not null;
     }
 
-    private static IReadOnlyList<string> ExtractSecretNames(HttpRequestEntry request)
+    private static List<string> ExtractSecretNames(HttpRequestEntry request)
     {
         var values = new List<string?>
         {

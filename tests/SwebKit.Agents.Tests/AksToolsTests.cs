@@ -56,7 +56,7 @@ public class AksToolsTests
         var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
-        var namespaces = doc.RootElement.GetProperty("namespaces").EnumerateArray().Select(e => e.GetString()).ToArray();
+        var namespaces = doc.RootElement.GetProperty("namespaces").EnumerateArray().Select(e => e.GetString()!).ToArray();
         Assert.Equal(["default", "kube-system"], namespaces);
     }
 

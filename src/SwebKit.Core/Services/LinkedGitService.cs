@@ -432,8 +432,8 @@ public sealed class LinkedGitService
     private static bool IsSafeBranchName(string branchName) =>
         !string.IsNullOrWhiteSpace(branchName) &&
         !branchName.Contains("..", StringComparison.Ordinal) &&
-        !branchName.EndsWith(".", StringComparison.Ordinal) &&
-        !branchName.EndsWith("/", StringComparison.Ordinal) &&
+        !branchName.EndsWith('.') &&
+        !branchName.EndsWith('/') &&
         BranchNameRegex.IsMatch(branchName);
 
     private static bool IsUnderApiRoot(string path, string relativeApiRoot) =>

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SwebKit.Agents.Tools;
 using Xunit;
 
@@ -19,7 +20,7 @@ public class AgentToolsTests
         var result = AgentToolSchema.Parse(validJson);
 
         // Assert
-        Assert.NotNull(result);
+        Assert.Equal(JsonValueKind.Object, result.ValueKind);
         Assert.Equal("object", result.GetProperty("type").GetString());
     }
 
