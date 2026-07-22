@@ -977,10 +977,10 @@
     --color-code-special2: #8b0066;
 }
 
-/* ── Light theme: Portima ── */
-/* Brand palette: forest green #1e6038 / #2e7a4c, amber-gold #f0c000 / #e8b600, white surfaces */
+/* ── Light theme: Moss Amber ── */
+/* Palette: forest green #1e6038 / #2e7a4c, amber-gold #f0c000 / #e8b600, white surfaces */
 /* Green: shell chrome, accent, nav active states. Gold + white: all tinted neutral surfaces. */
-[data-theme='light-portima'] {
+[data-theme='light-moss-amber'] {
     --control-color-scheme: light;
     --overlay-backdrop: rgba(10, 34, 18, 0.24);
     --overlay-backdrop-strong: rgba(10, 34, 18, 0.34);
@@ -1091,8 +1091,8 @@
     --aks-cell-accent-border: rgba(200, 155, 0, 0.30);
     --color-solid-foreground: #ffffff;
     /* Gold used as highlight color in the top bar / accent elements */
-    --color-portima-gold: #f0c000;
-    --color-portima-gold-hover: #d4aa00;
+    --color-amber: #f0c000;
+    --color-amber-hover: #d4aa00;
     --color-code-key:      #0d4a28;
     --color-code-string:   #8b1010;
     --color-code-keyword:  #00008b;
