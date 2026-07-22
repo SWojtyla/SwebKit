@@ -187,6 +187,7 @@
     private bool _isDetailDrawerOverlay;
     private bool _paletteOpen;
     private bool _isInitializing;
+    private bool _disposed;
     private CancellationTokenSource _cts = new();
 
     private const string NamespacePaneStateKey = "service-bus:namespace-pane-collapsed";
@@ -361,10 +362,15 @@
 
     private async Task LoadNamespacesAsync()
     {
-        // Cancel any in-flight connections from a previous load
-        await _cts.CancelAsync();
-        _cts.Dispose();
-        _cts = new CancellationTokenSource();
+        if (_disposed)
+            return;
+
+        // Cancel any in-flight connections from a previous load, swapping the source safely so
+        // overlapping calls (initial render + refresh) do not fight over a disposed token source.
+        var previousCts = System.Threading.Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+        try { await previousCts.CancelAsync(); } catch (ObjectDisposedException) { }
+        try { previousCts.Dispose(); } catch (ObjectDisposedException) { }
+
         var ct = _cts.Token;
 
         // PERF-8: Build all states immediately so the UI shows namespace list with loading indicators
@@ -878,8 +884,10 @@ entityPath;
 
     public override void Dispose()
     {
-        _cts.Cancel();
-        _cts.Dispose();
+        _disposed = true;
+        var cts = System.Threading.Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+        try { cts.Cancel(); } catch (ObjectDisposedException) { }
+        try { cts.Dispose(); } catch (ObjectDisposedException) { }
         Events.Unsubscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
         Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Workspaces.UnregisterRestoreHandler("service-bus");

@@ -119,6 +119,7 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
             }
 
             var ok = await client.TestConnectionAsync(ct);
+            ct.ThrowIfCancellationRequested();
             if (!ok)
             {
                 if (client is IAsyncDisposable d) await d.DisposeAsync();
@@ -128,6 +129,7 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
                     Diagnostic: diagnostic);
             }
 
+            ct.ThrowIfCancellationRequested();
             return new ServiceBusNamespaceConnectionResult(client, ConnectionError: null, Diagnostic: diagnostic);
         }
         catch (OperationCanceledException)
@@ -138,7 +140,15 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
         }
         catch (Exception ex)
         {
-            if (client is IAsyncDisposable d3) await d3.DisposeAsync();
+            // Defensive: Azure.Identity can wrap a caller-side cancellation as an AuthenticationFailedException.
+            // Treat that as cancellation so callers don't surface a misleading generic connection error.
+            if (ServiceBusExceptionClassifier.IsCancellation(ex, ct))
+            {
+                if (client is IAsyncDisposable d3) await d3.DisposeAsync();
+                throw new OperationCanceledException("Service Bus connection was cancelled.", ex);
+            }
+
+            if (client is IAsyncDisposable d4) await d4.DisposeAsync();
 
             var isAuthFailure = ServiceBusExceptionClassifier.IsAuthenticationFailure(ex);
             var source = diagnostic?.CredentialSource;

@@ -1,4 +1,5 @@
 using Azure;
+using Azure.Identity;
 
 namespace SwebKit.Azure.ServiceBus;
 
@@ -16,6 +17,9 @@ public static class ServiceBusExceptionClassifier
     {
         for (Exception? e = ex; e is not null; e = e.InnerException)
         {
+            if (e is AuthenticationFailedException)
+                return true;
+
             if (e is UnauthorizedAccessException)
                 return true;
 
@@ -27,9 +31,20 @@ public static class ServiceBusExceptionClassifier
     }
 
     /// <summary>
-    /// Returns true when the exception is an <see cref="OperationCanceledException"/> that should be re-thrown
-    /// without further processing.
+    /// Returns true when the exception is, or wraps, an <see cref="OperationCanceledException"/>
+    /// or the supplied token has been canceled.
     /// </summary>
-    public static bool IsCancellation(OperationCanceledException ex, CancellationToken ct) =>
-        ex is OperationCanceledException && ct.IsCancellationRequested;
+    public static bool IsCancellation(Exception ex, CancellationToken ct) =>
+        ct.IsCancellationRequested || ContainsOperationCanceledException(ex);
+
+    private static bool ContainsOperationCanceledException(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is OperationCanceledException)
+                return true;
+        }
+
+        return false;
+    }
 }
