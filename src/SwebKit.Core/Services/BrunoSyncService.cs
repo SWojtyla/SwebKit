@@ -17,7 +17,7 @@ public sealed class BrunoSyncService
     /// Writes (or creates) the .bru file for the given request in the Bruno folder.
     /// Returns <c>null</c> on success, an error message on failure.
     /// </summary>
-    public Task<string?> SyncRequestSaveAsync(
+    public async Task<string?> SyncRequestSaveAsync(
         string brunoFolderPath,
         ApiCollection collection,
         HttpRequestEntry request,
@@ -26,64 +26,69 @@ public sealed class BrunoSyncService
         try
         {
             if (!Directory.Exists(brunoFolderPath))
-                return Task.FromResult<string?>($"Bruno sync folder not found: {brunoFolderPath}");
+                return $"Bruno sync folder not found: {brunoFolderPath}";
 
             cancellationToken.ThrowIfCancellationRequested();
 
             var bruContent = BrunoCollectionExporter.BuildBruFile(request);
 
-            // Try to find an existing .bru file for this request (by meta name)
-            var existingFile = FindBruFileByMetaName(brunoFolderPath, request.Name);
+            // Prefer the request's own folder; only fall back to a tree-wide match when the
+            // resolved folder has no file (folder names don't always map 1:1 to on-disk dirs).
+            var existingFile = await FindExistingBruFileAsync(
+                brunoFolderPath, collection, request, request.Name, cancellationToken).ConfigureAwait(false);
             if (existingFile is not null)
             {
-                File.WriteAllText(existingFile, bruContent);
+                await File.WriteAllTextAsync(existingFile, bruContent, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                // Create a new .bru file in the expected location based on the collection tree
+                // Create a new .bru file in the expected location based on the collection tree.
                 var expectedFolderPath = ResolveBrunoFolderPath(brunoFolderPath, collection, request.Id);
                 Directory.CreateDirectory(expectedFolderPath);
                 var filePath = GetUniqueBruFilePath(expectedFolderPath, request.Name);
-                File.WriteAllText(filePath, bruContent);
+                await File.WriteAllTextAsync(filePath, bruContent, cancellationToken).ConfigureAwait(false);
             }
 
-            return Task.FromResult<string?>(null);
+            return null;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            return Task.FromResult<string?>(ex.Message);
+            return ex.Message;
         }
     }
 
     /// <summary>
-    /// Deletes the .bru file for the given request from the Bruno folder.
+    /// Deletes the .bru file for the given request from the Bruno folder. The request must still
+    /// be present in <paramref name="collection"/>'s node tree so its folder can be resolved.
     /// Returns <c>null</c> on success (or if the file was not found), an error message on failure.
     /// </summary>
-    public Task<string?> SyncRequestDeleteAsync(
+    public async Task<string?> SyncRequestDeleteAsync(
         string brunoFolderPath,
-        string requestName,
+        ApiCollection collection,
+        HttpRequestEntry request,
         CancellationToken cancellationToken = default)
     {
         try
         {
             if (!Directory.Exists(brunoFolderPath))
-                return Task.FromResult<string?>($"Bruno sync folder not found: {brunoFolderPath}");
+                return $"Bruno sync folder not found: {brunoFolderPath}";
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var existingFile = FindBruFileByMetaName(brunoFolderPath, requestName);
+            var existingFile = await FindExistingBruFileAsync(
+                brunoFolderPath, collection, request, request.Name, cancellationToken).ConfigureAwait(false);
             if (existingFile is not null)
             {
                 File.Delete(existingFile);
             }
 
-            return Task.FromResult<string?>(null);
+            return null;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            return Task.FromResult<string?>(ex.Message);
+            return ex.Message;
         }
     }
 
@@ -92,7 +97,7 @@ public sealed class BrunoSyncService
     /// Updates the meta name inside the file and renames the file on disk.
     /// Returns <c>null</c> on success, an error message on failure.
     /// </summary>
-    public Task<string?> SyncRequestRenameAsync(
+    public async Task<string?> SyncRequestRenameAsync(
         string brunoFolderPath,
         ApiCollection collection,
         HttpRequestEntry request,
@@ -102,18 +107,21 @@ public sealed class BrunoSyncService
         try
         {
             if (!Directory.Exists(brunoFolderPath))
-                return Task.FromResult<string?>($"Bruno sync folder not found: {brunoFolderPath}");
+                return $"Bruno sync folder not found: {brunoFolderPath}";
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var existingFile = FindBruFileByMetaName(brunoFolderPath, oldName);
+            // Match on the OLD name (the file on disk still carries it), scoped to the request's folder.
+            var existingFile = await FindExistingBruFileAsync(
+                brunoFolderPath, collection, request, oldName, cancellationToken).ConfigureAwait(false);
+            var bruContent = BrunoCollectionExporter.BuildBruFile(request);
+
             if (existingFile is not null)
             {
-                // Rewrite content with the new name
-                var bruContent = BrunoCollectionExporter.BuildBruFile(request);
-                File.WriteAllText(existingFile, bruContent);
+                // Rewrite content with the new name.
+                await File.WriteAllTextAsync(existingFile, bruContent, cancellationToken).ConfigureAwait(false);
 
-                // Rename the file to match the new name
+                // Rename the file to match the new name.
                 var dir = Path.GetDirectoryName(existingFile)!;
                 var newFilePath = GetUniqueBruFilePath(dir, request.Name);
                 if (!string.Equals(existingFile, newFilePath, StringComparison.OrdinalIgnoreCase))
@@ -123,37 +131,87 @@ public sealed class BrunoSyncService
             }
             else
             {
-                // File not found by old name — create it with the new name
+                // File not found by old name — create it with the new name.
                 var expectedFolderPath = ResolveBrunoFolderPath(brunoFolderPath, collection, request.Id);
                 Directory.CreateDirectory(expectedFolderPath);
-                var bruContent = BrunoCollectionExporter.BuildBruFile(request);
                 var filePath = GetUniqueBruFilePath(expectedFolderPath, request.Name);
-                File.WriteAllText(filePath, bruContent);
+                await File.WriteAllTextAsync(filePath, bruContent, cancellationToken).ConfigureAwait(false);
             }
 
-            return Task.FromResult<string?>(null);
+            return null;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            return Task.FromResult<string?>(ex.Message);
+            return ex.Message;
         }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Searches the Bruno folder tree for a .bru file whose <c>meta { name: }</c> matches
-    /// <paramref name="requestName"/>. Skips meta/collection/folder .bru files and ignored dirs.
+    /// Locates the on-disk .bru file for a request. Prefers a match inside the request's resolved
+    /// folder — this disambiguates requests that share a name across different folders, so a
+    /// save/rename/delete never touches a same-named request elsewhere in the tree. Falls back to
+    /// a tree-wide search only when the resolved folder holds no match, because a folder node's
+    /// name can diverge from its on-disk directory name (Bruno <c>folder.bru</c> display names).
     /// </summary>
-    private static string? FindBruFileByMetaName(string brunoFolderPath, string requestName)
+    private static async Task<string?> FindExistingBruFileAsync(
+        string brunoFolderPath,
+        ApiCollection collection,
+        HttpRequestEntry request,
+        string matchName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(requestName))
+        if (string.IsNullOrWhiteSpace(matchName))
             return null;
 
+        var resolvedFolder = ResolveBrunoFolderPath(brunoFolderPath, collection, request.Id);
+        var scoped = await FindBruFileByMetaNameInDirectoryAsync(resolvedFolder, matchName, cancellationToken)
+            .ConfigureAwait(false);
+        if (scoped is not null)
+            return scoped;
+
+        return await FindBruFileByMetaNameAsync(brunoFolderPath, matchName, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Searches only the direct .bru files of <paramref name="directory"/> (non-recursive) for one
+    /// whose <c>meta { name: }</c> matches <paramref name="requestName"/>.
+    /// </summary>
+    private static async Task<string?> FindBruFileByMetaNameInDirectoryAsync(
+        string directory, string requestName, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(directory))
+            return null;
+
+        string[] files;
+        try { files = Directory.GetFiles(directory, "*.bru"); }
+        catch (UnauthorizedAccessException) { return null; }
+        catch (DirectoryNotFoundException) { return null; }
+
+        foreach (var file in files)
+        {
+            if (IsStructuralBruFile(Path.GetFileName(file)))
+                continue;
+            var metaName = await ExtractMetaNameAsync(file, cancellationToken).ConfigureAwait(false);
+            if (string.Equals(metaName, requestName, StringComparison.Ordinal))
+                return file;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Searches the whole Bruno folder tree for the first .bru file whose <c>meta { name: }</c>
+    /// matches <paramref name="requestName"/>. Skips meta/collection/folder .bru files and ignored dirs.
+    /// </summary>
+    private static async Task<string?> FindBruFileByMetaNameAsync(
+        string brunoFolderPath, string requestName, CancellationToken cancellationToken)
+    {
         foreach (var file in EnumerateBruFiles(brunoFolderPath))
         {
-            var metaName = ExtractMetaName(file);
+            var metaName = await ExtractMetaNameAsync(file, cancellationToken).ConfigureAwait(false);
             if (string.Equals(metaName, requestName, StringComparison.Ordinal))
                 return file;
         }
@@ -173,10 +231,7 @@ public sealed class BrunoSyncService
 
         foreach (var file in files)
         {
-            var fileName = Path.GetFileName(file);
-            if (string.Equals(fileName, "meta.bru", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(fileName, "collection.bru", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(fileName, "folder.bru", StringComparison.OrdinalIgnoreCase))
+            if (IsStructuralBruFile(Path.GetFileName(file)))
                 continue;
             yield return file;
         }
@@ -196,34 +251,42 @@ public sealed class BrunoSyncService
     }
 
     /// <summary>
-    /// Extracts the <c>name</c> value from the <c>meta { }</c> block of a .bru file.
+    /// True for Bruno structural files (folder/collection metadata) that never represent a request.
     /// </summary>
-    private static string? ExtractMetaName(string bruFilePath)
+    private static bool IsStructuralBruFile(string fileName) =>
+        string.Equals(fileName, "meta.bru", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fileName, "collection.bru", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fileName, "folder.bru", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Extracts the <c>name</c> value from the <c>meta { }</c> block of a .bru file. Reads only far
+    /// enough to leave the meta block, so a large request body never gets loaded into memory.
+    /// </summary>
+    private static async Task<string?> ExtractMetaNameAsync(string bruFilePath, CancellationToken cancellationToken)
     {
         try
         {
-            var content = File.ReadAllText(bruFilePath);
-            var lines = content.ReplaceLineEndings("\n").Split('\n');
+            using var reader = new StreamReader(bruFilePath);
             var inMeta = false;
-            foreach (var line in lines)
+            string? line;
+            while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
             {
                 var trimmed = line.Trim();
-                if (trimmed.StartsWith("meta {", StringComparison.OrdinalIgnoreCase) ||
-                    trimmed == "meta {")
+                if (!inMeta)
                 {
-                    inMeta = true;
+                    if (trimmed.StartsWith("meta {", StringComparison.OrdinalIgnoreCase) || trimmed == "meta {")
+                        inMeta = true;
                     continue;
                 }
-                if (inMeta)
-                {
-                    if (trimmed.StartsWith('}'))
-                        break;
-                    if (trimmed.StartsWith("name:", StringComparison.OrdinalIgnoreCase))
-                        return trimmed["name:".Length..].Trim();
-                }
+
+                if (trimmed.StartsWith('}'))
+                    break;
+                if (trimmed.StartsWith("name:", StringComparison.OrdinalIgnoreCase))
+                    return trimmed["name:".Length..].Trim();
             }
         }
-        catch { }
+        catch (OperationCanceledException) { throw; }
+        catch { /* unreadable file — treat as no match */ }
         return null;
     }
 
@@ -279,6 +342,8 @@ public sealed class BrunoSyncService
         }
     }
 
+    private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
+
     private static string Sanitize(string name) =>
-        string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        string.Concat(name.Select(c => InvalidFileNameChars.Contains(c) ? '_' : c));
 }

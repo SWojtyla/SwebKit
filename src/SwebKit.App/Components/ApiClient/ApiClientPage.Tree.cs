@@ -157,7 +157,7 @@ public partial class ApiClientPage
                 linkedRoot.Config is { BrunoSyncEnabled: true, BrunoSyncFolderPath: not null and not "" } brunoConfig)
             {
                 var syncError = await BrunoSync.SyncRequestDeleteAsync(
-                    brunoConfig.BrunoSyncFolderPath, node.Request.Name);
+                    brunoConfig.BrunoSyncFolderPath, collection, node.Request);
                 if (syncError is not null)
                     _state.BrunoSyncWarning = $"Bruno sync: {syncError}";
             }

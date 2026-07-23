@@ -240,24 +240,18 @@ public partial class ApiClientPage
             var brunoFolder = string.IsNullOrWhiteSpace(_newLinkedRootBrunoFolder) ? null : _newLinkedRootBrunoFolder.Trim();
 
             var apiRootPath = await LinkedFileService.EnsureRootAsync(path, name ?? string.Empty);
-            await LinkedRootRepo.AddRootAsync(path, name);
+            var addedRoot = await LinkedRootRepo.AddRootAsync(path, name);
 
-            // If a Bruno folder was specified, import it into the linked root and enable sync
+            // If a Bruno folder was specified, import it and enable sync on the config *before*
+            // loading, so the loaded state (and the toolbar's sync toggle) reflect it immediately.
             if (brunoFolder is not null)
             {
                 await ImportService.ImportBrunoFolderToLinkedRootAsync(brunoFolder, apiRootPath);
+                await LinkedRootRepo.UpdateBrunoSyncSettingsAsync(addedRoot.Id, brunoFolder, enabled: true);
             }
 
             await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
             await LoadLinkedRootsAsync();
-
-            // Enable Bruno sync after the root is loaded so we can find its config ID
-            if (brunoFolder is not null)
-            {
-                var addedRoot = _state.LinkedRootResults.LastOrDefault(r => r.Config.Path == path);
-                if (addedRoot is not null)
-                    await LinkedRootRepo.UpdateBrunoSyncSettingsAsync(addedRoot.Config.Id, brunoFolder, enabled: true);
-            }
             _showLinkedRootDialog = false;
             await InvokeAsync(StateHasChanged);
         }
