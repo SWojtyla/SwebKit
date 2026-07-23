@@ -11,7 +11,13 @@
         </button>
     </div>
 
-    @if (_environments.Count == 0)
+    @if (_isLoading)
+    {
+        <div class="env-manager__loading">
+            <LoadingSpinner Message="Loading environments…" />
+        </div>
+    }
+    else if (_environments.Count == 0)
     {
         <div class="env-manager__empty">
             <p class="env-manager__empty-text">No environments yet.</p>
@@ -59,18 +65,36 @@
     private List<ApiCollection> _collections = [];
     private string? _editingId;
     private ApiEnvironment? _editingEnv;
+    private bool _isLoading = true;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadAsync();
+        _ = LoadAsync();
     }
 
     private async Task LoadAsync()
     {
-        await EnvironmentRepo.LoadAsync();
-        _environments = EnvironmentRepo.Environments.ToList();
-        // Scope selector lists local collections (this panel manages local environments).
-        _collections = CollectionRepo.Collections.ToList();
+        _isLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await EnvironmentRepo.LoadAsync();
+            _environments = EnvironmentRepo.Environments.ToList();
+            // Scope selector lists local collections (this panel manages local environments).
+            _collections = CollectionRepo.Collections.ToList();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load environments");
+            _environments = [];
+            _collections = [];
+        }
+        finally
+        {
+            await InvokeAsync(() => { _isLoading = false; StateHasChanged(); });
+        }
     }
 
     private void EditEnvironment(string id)

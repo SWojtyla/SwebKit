@@ -372,7 +372,7 @@ OnCtxRestartDeployment();
         _ = InvokeAsync(LoadAsync);
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnInitializedAsync()
     {
         var config = AppState.Config.AksConfig;
         var signature = new AksBootstrapSignature(
@@ -392,9 +392,18 @@ OnCtxRestartDeployment();
 
         _lastBootstrapSignature = signature;
         SyncFromEnvironment();
-        IsLoading = true; // show loading shell on the initial render, before async bootstrap runs
-        // Fire-and-forget so the UI renders immediately with loading state
-        _ = BootstrapAndLoadAsync(ActiveContext, CurrentNamespace);
+
+        // PERF: The AksClientBootstrapper offloads expensive k8s client creation (kubeconfig
+        // parsing, token retrieval, file I/O) to a thread-pool thread, so the UI thread stays
+        // responsive. BootstrapAndLoadAsync renders the loading shell before it yields.
+        try
+        {
+            await BootstrapAndLoadAsync(ActiveContext, CurrentNamespace);
+        }
+        catch (OperationCanceledException)
+        {
+            // Component disposed or bootstrap superseded — no-op.
+        }
     }
 
     private void SyncFromEnvironment()
@@ -420,7 +429,7 @@ OnCtxRestartDeployment();
         await InvokeAsync(StateHasChanged);
         try
         {
-            // Check warm-client cache first
+            // Check warm-client cache first (cheap; safe to read on UI thread)
             if (!AppState.UseDemoData)
             {
                 var warm = AksWarmupCache.TryGet();
@@ -429,22 +438,17 @@ OnCtxRestartDeployment();
                     && warm.Client is not null
                     && CanReuseWarmBootstrapResult(warm, requestedContext, requestedNamespace))
                 {
-                    Client = warm.Client;
-                    Contexts = warm.Contexts.ToList();
-                    Namespaces = warm.Namespaces.ToList();
-                    ActiveContext = warm.ActiveContext;
-                    CurrentNamespace = warm.CurrentNamespace;
-                    _namespaceListWarning = warm.NamespacesWarning;
+                    var warmResult = warm;
                     AksWarmupCache.Invalidate(); // consume once
-                    await LoadAsync();
-                    ConnectionState.SetConnected("aks");
-                    await Workspaces.ApplyPendingRestoreAsync("aks");
-                    IsLoading = false;
-                    await InvokeAsync(StateHasChanged);
+                    await ApplyBootstrapResultAndLoadAsync(warmResult, ct);
                     return;
                 }
             }
 
+            // The bootstrapper offloads expensive k8s client creation (kubeconfig parsing,
+            // token retrieval, file I/O) to a thread-pool thread internally. The await here
+            // yields only for that real work, while fake bootstrappers in tests complete
+            // synchronously so bUnit can wait for initialization.
             var result = await AksBootstrapper.BootstrapAsync(
                 new AksClientBootstrapRequest(
                     ClientOverride,
@@ -456,6 +460,19 @@ OnCtxRestartDeployment();
 
             ct.ThrowIfCancellationRequested();
 
+            await ApplyBootstrapResultAndLoadAsync(result, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+    }
+
+    private async Task ApplyBootstrapResultAndLoadAsync(AksClientBootstrapResult result, CancellationToken ct)
+    {
+        // Apply result on the UI thread so downstream renders and component refs are safe.
+        await InvokeAsync(() =>
+        {
             Client = result.Client;
             Contexts = result.Contexts.ToList();
             Namespaces = result.Namespaces.ToList();
@@ -468,24 +485,27 @@ OnCtxRestartDeployment();
                 case AksClientBootstrapStatus.NotConfigured:
                     ConnectionState.SetNotConfigured("aks");
                     IsLoading = false;
-                    await InvokeAsync(StateHasChanged);
+                    StateHasChanged();
                     return;
                 case AksClientBootstrapStatus.Error:
                     ErrorMessage = result.ErrorMessage;
                     ConnectionState.SetError("aks", result.ErrorMessage ?? "AKS bootstrap failed.");
                     IsLoading = false;
-                    await InvokeAsync(StateHasChanged);
+                    StateHasChanged();
                     return;
             }
 
-            await LoadAsync();
-            ConnectionState.SetConnected("aks");
-            await Workspaces.ApplyPendingRestoreAsync("aks");
-        }
-        catch (OperationCanceledException)
+            StateHasChanged();
+        });
+
+        if (result.Status != AksClientBootstrapStatus.Connected)
         {
             return;
         }
+
+        await LoadAsync();
+        ConnectionState.SetConnected("aks");
+        await Workspaces.ApplyPendingRestoreAsync("aks");
     }
 
     public void Dispose()

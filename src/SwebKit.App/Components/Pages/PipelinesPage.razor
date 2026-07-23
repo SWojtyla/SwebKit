@@ -50,7 +50,11 @@
 
         <ReworkBanner FeatureName="Pipelines" />
 
-        @if (!IsConfigured)
+        @if (_isInitializing)
+        {
+            <LoadingSpinner Message="Loading DevOps configuration…" />
+        }
+        else if (!IsConfigured)
         {
             <div class="pipelines-empty-state-wrap">
                 <EmptyState Icon="🚀" Title="Azure DevOps is not configured"
@@ -232,6 +236,7 @@
     private int _pendingApprovalCount;
     private bool _showProjectPicker;
     private bool _hasValidDevOpsConfig = true;
+    private bool _isInitializing;
     private List<string> _demoPinnedProjects = [];
     private CancellationTokenSource _cts = new();
     private IDevOpsClient? _realClient;
@@ -287,7 +292,20 @@
         && AppState.UseDemoData
         && ReleaseRepo.GetRelease(_selectedRelease.Id) is null;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
+    {
+        Events.Subscribe<RefreshRequestedEvent>(OnRefresh);
+        RegisterCommands();
+        _isInitializing = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _ = InitializeAsync();
+    }
+
+    private async Task InitializeAsync()
     {
         // PERF-9: Load AppState and release repo in parallel
         var loadTask = Task.WhenAll(
@@ -299,43 +317,46 @@
         try
         {
             await loadTask.WaitAsync(_cts.Token);
-        }
-        catch (OperationCanceledException) { return; } // CS-2
 
-        if (!AppState.UseDemoData && IsConfigured)
-        {
-            var config = AppState.Config.DevOpsConfig;
-            if (config is not null)
+            if (!AppState.UseDemoData && IsConfigured)
             {
-                try
+                var config = AppState.Config.DevOpsConfig;
+                if (config is not null)
                 {
-                    _realClient = DevOpsClientFactory.Create(config);
-                }
-                catch (InvalidOperationException)
-                {
-                    _hasValidDevOpsConfig = false;
-                    _realClient = null;
+                    try
+                    {
+                        // PERF: Create the DevOps client off the UI thread so the page renders immediately.
+                        _realClient = await Task.Run(() => DevOpsClientFactory.Create(config));
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        _hasValidDevOpsConfig = false;
+                        _realClient = null;
+                    }
                 }
             }
-        }
 
-        if (IsConfigured)
-        {
-            _selectedRelease = EffectiveReleases.OrderByDescending(r => r.CreatedAt).FirstOrDefault();
-            ConnectionState.SetConnected("pipelines");
-            // Show project picker when no projects are pinned (real mode only)
-            _showProjectPicker = !AppState.UseDemoData && PinnedProjects.Count == 0;
+            if (IsConfigured)
+            {
+                _selectedRelease = EffectiveReleases.OrderByDescending(r => r.CreatedAt).FirstOrDefault();
+                ConnectionState.SetConnected("pipelines");
+                // Show project picker when no projects are pinned (real mode only)
+                _showProjectPicker = !AppState.UseDemoData && PinnedProjects.Count == 0;
+            }
+            else
+            {
+                ConnectionState.SetNotConfigured("pipelines");
+            }
         }
-        else
+        catch (OperationCanceledException)
         {
-            ConnectionState.SetNotConfigured("pipelines");
+            // CS-2: cancelled — component is being disposed or replaced by a new init.
         }
-    }
-
-    protected override void OnInitialized()
-    {
-        Events.Subscribe<RefreshRequestedEvent>(OnRefresh);
-        RegisterCommands();
+        finally
+        {
+            _isInitializing = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private void RegisterCommands()

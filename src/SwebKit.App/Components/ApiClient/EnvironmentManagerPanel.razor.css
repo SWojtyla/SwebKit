@@ -129,3 +129,12 @@
     overflow: hidden;
     border-top: 1px solid var(--color-border);
 }
+
+.env-manager__loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    padding: 16px;
+}

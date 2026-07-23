@@ -29,7 +29,11 @@
         </RoutePageHeader>
     </div>
 
-    @if (!_openTabs.Any())
+    @if (_isInitializing && _namespaceStates.Count == 0)
+    {
+        <LoadingSpinner Message="Loading Service Bus namespaces…" />
+    }
+    else if (!_openTabs.Any())
     {
         <!-- VIEW A: Full-width entity grid -->
         <div class="sb-grid-view">
@@ -182,6 +186,8 @@
     private bool _isNamespacePaneCollapsed;
     private bool _isDetailDrawerOverlay;
     private bool _paletteOpen;
+    private bool _isInitializing;
+    private bool _disposed;
     private CancellationTokenSource _cts = new();
 
     private const string NamespacePaneStateKey = "service-bus:namespace-pane-collapsed";
@@ -277,15 +283,13 @@
     private IReadOnlyList<SbEntityLink> CurrentLinkedEntities =>
     AppState.Config.ServiceBusEntityLinks;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         Events.Subscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         RegisterSbCommands();
-        await ScheduledRepo.LoadAsync();
-        await LoadNamespacesAsync();
         Workspaces.RegisterRestoreHandler("service-bus", RestoreWorkspaceAsync);
-        await Workspaces.ApplyPendingRestoreAsync("service-bus");
+        _isInitializing = true;
     }
 
     private void RegisterSbCommands()
@@ -332,15 +336,41 @@
     {
         if (!firstRender) return;
         _isNamespacePaneCollapsed = UiState.GetViewState(NamespacePaneStateKey, defaultValue: false);
-        await InvokeAsync(StateHasChanged);
+        // Initialize on the first render so the page shell is visible immediately while the
+        // namespaces connect in the background.
+        _ = InitializeAsync();
+    }
+
+    private async Task InitializeAsync()
+    {
+        try
+        {
+            await ScheduledRepo.LoadAsync();
+            await LoadNamespacesAsync();
+            await Workspaces.ApplyPendingRestoreAsync("service-bus");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            _isInitializing = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task LoadNamespacesAsync()
     {
-        // Cancel any in-flight connections from a previous load
-        await _cts.CancelAsync();
-        _cts.Dispose();
-        _cts = new CancellationTokenSource();
+        if (_disposed)
+            return;
+
+        // Cancel any in-flight connections from a previous load, swapping the source safely so
+        // overlapping calls (initial render + refresh) do not fight over a disposed token source.
+        var previousCts = System.Threading.Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+        try { await previousCts.CancelAsync(); } catch (ObjectDisposedException) { }
+        try { previousCts.Dispose(); } catch (ObjectDisposedException) { }
+
         var ct = _cts.Token;
 
         // PERF-8: Build all states immediately so the UI shows namespace list with loading indicators
@@ -366,6 +396,9 @@
             })
             .ToList();
 
+        // Once the structural state is built, drop the full-page initializing flag so the
+        // user sees the namespace list and per-namespace loading indicators immediately.
+        _isInitializing = false;
         await InvokeAsync(StateHasChanged);
 
         // Connect each namespace independently — render as each completes
@@ -404,6 +437,7 @@
                 catch (OperationCanceledException)
                 {
                     state.IsConnecting = false;
+                    state.ConnectionError = null;
                 }
             });
 
@@ -488,6 +522,7 @@
         catch (OperationCanceledException)
         {
             state.IsConnecting = false;
+            state.ConnectionError = null;
         }
     }
 
@@ -851,8 +886,10 @@ entityPath;
 
     public override void Dispose()
     {
-        _cts.Cancel();
-        _cts.Dispose();
+        _disposed = true;
+        var cts = System.Threading.Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+        try { cts.Cancel(); } catch (ObjectDisposedException) { }
+        try { cts.Dispose(); } catch (ObjectDisposedException) { }
         Events.Unsubscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
         Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Workspaces.UnregisterRestoreHandler("service-bus");

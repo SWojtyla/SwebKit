@@ -42,7 +42,9 @@ public sealed class ServiceBusNamespaceBootstrapperTests
         Assert.True(states[0].ShouldConnect);
         Assert.Null(states[0].ConnectionError);
         Assert.False(states[0].IsDemo);
-        Assert.False(states[1].ShouldConnect);
+        // A previously-failed namespace should still be retried on load/refresh; the cached error
+        // is surfaced as a transient hint while the fresh connection attempt runs.
+        Assert.True(states[1].ShouldConnect);
         Assert.Equal("Access denied", states[1].ConnectionError);
         Assert.DoesNotContain(states, state => state.IsDemo);
     }
@@ -126,6 +128,67 @@ public sealed class ServiceBusNamespaceBootstrapperTests
         Assert.Equal(SbTransportType.AmqpWebSockets, factory.LastTransportType);
     }
 
+    [Fact]
+    public async Task ConnectAsync_AuthenticationFailure_ReturnsAuthErrorMessage()
+    {
+        var store = new FakeCredentialStore { CredentialValue = "Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc=" };
+        var fakeClient = new AuthFailingServiceBusClient();
+        var factory = new CapturingServiceBusClientFactory(fakeClient);
+        var bootstrapper = new ServiceBusNamespaceBootstrapper(store, factory);
+
+        var result = await bootstrapper.ConnectAsync(new ServiceBusNamespace
+        {
+            Alias = "orders-live",
+            FullyQualifiedNamespace = "orders-live.servicebus.windows.net",
+            CredentialKey = "orders-key"
+        });
+
+        Assert.Null(result.Client);
+        Assert.Contains("Authentication/authorization failed", result.ConnectionError);
+        Assert.True(result.IsAuthFailure);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_CancellationWrappedInException_ThrowsOperationCanceledException()
+    {
+        // Regression: Azure.Identity can surface a caller-side cancellation as an AuthenticationFailedException
+        // wrapping an OperationCanceledException. The bootstrapper must rethrow OperationCanceledException
+        // instead of surfacing a generic "Connection test failed" error.
+        var store = new FakeCredentialStore { CredentialValue = "Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc=" };
+        var fakeClient = new CancellingServiceBusClient();
+        var factory = new CapturingServiceBusClientFactory(fakeClient);
+        var bootstrapper = new ServiceBusNamespaceBootstrapper(store, factory);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => bootstrapper.ConnectAsync(new ServiceBusNamespace
+        {
+            Alias = "orders-live",
+            FullyQualifiedNamespace = "orders-live.servicebus.windows.net",
+            CredentialKey = "orders-key"
+        }, cts.Token));
+    }
+
+    [Fact]
+    public async Task ConnectAsync_CancellationWrappedInException_Entra_ThrowsOperationCanceledException()
+    {
+        var store = new FakeCredentialStore();
+        var fakeClient = new CancellingServiceBusClient();
+        var factory = new CapturingServiceBusClientFactory(fakeClient);
+        var bootstrapper = new ServiceBusNamespaceBootstrapper(store, factory);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => bootstrapper.ConnectAsync(new ServiceBusNamespace
+        {
+            Alias = "orders-live",
+            FullyQualifiedNamespace = "orders-live.servicebus.windows.net",
+            AuthMode = SbAuthMode.DefaultAzureCredential
+        }, cts.Token));
+    }
+
     private sealed class FakeCredentialStore : ICredentialStore
     {
         public string? CredentialValue { get; set; }
@@ -194,7 +257,7 @@ public sealed class ServiceBusNamespaceBootstrapperTests
                 CredentialSource: "DefaultAzureCredential");
     }
 
-    private sealed class FakeServiceBusClient : IServiceBusClient
+    private class FakeServiceBusClient : IServiceBusClient
     {
         public Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default) => Task.FromResult(new SbNamespaceInfo { Name = "test", Endpoint = "test.servicebus.windows.net" });
         public Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbEntityInfo>>([]);
@@ -214,6 +277,21 @@ public sealed class ServiceBusNamespaceBootstrapperTests
         public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) => Task.CompletedTask;
         public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default) => Task.CompletedTask;
         public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
+        public virtual Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
+    }
+
+    private sealed class CancellingServiceBusClient : FakeServiceBusClient
+    {
+        // Simulates Azure.Identity surfacing a caller-side cancellation as an auth exception
+        // that wraps an OperationCanceledException.
+        public override Task<bool> TestConnectionAsync(CancellationToken ct = default) =>
+            throw new InvalidOperationException("Azure.Identity.AuthenticationFailedException", new OperationCanceledException());
+    }
+
+    private sealed class AuthFailingServiceBusClient : FakeServiceBusClient
+    {
+        // Simulates an auth/authorization failure surfaced by Azure.Identity or the Service Bus SDK.
+        public override Task<bool> TestConnectionAsync(CancellationToken ct = default) =>
+            throw new UnauthorizedAccessException("Access denied");
     }
 }

@@ -40,4 +40,43 @@ public static class AppDataPaths
     {
         Directory.CreateDirectory(Root);
     }
+
+    /// <summary>
+    /// Best-effort removal of orphaned temp files left behind by interrupted atomic saves
+    /// (e.g. process killed mid-write). Covers both app-created <c>*.tmp</c> files and
+    /// Windows Reserved Files (<c>*~RF*.TMP</c>). Only deletes files older than 1 hour
+    /// to avoid touching in-progress writes. Never throws.
+    /// </summary>
+    public static void CleanupOrphanedTempFiles()
+    {
+        try
+        {
+            if (!Directory.Exists(Root))
+                return;
+
+            var cutoff = DateTime.Now.AddHours(-1);
+
+            foreach (var file in Directory.EnumerateFiles(Root, "*.tmp", SearchOption.TopDirectoryOnly))
+            {
+                TryDeleteIfOlderThan(file, cutoff);
+            }
+        }
+        catch
+        {
+            // Best-effort — must never throw.
+        }
+    }
+
+    private static void TryDeleteIfOlderThan(string file, DateTime cutoff)
+    {
+        try
+        {
+            if (File.GetLastWriteTime(file) < cutoff)
+                File.Delete(file);
+        }
+        catch
+        {
+            // File might be locked or in use — skip it.
+        }
+    }
 }

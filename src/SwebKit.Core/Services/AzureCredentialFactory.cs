@@ -24,7 +24,12 @@ public static class AzureCredentialFactory
     public static TokenCredential CreateDefault() =>
         CreateDefault(new DefaultAzureCredentialOptions
         {
-            ExcludeEnvironmentCredential = true
+            ExcludeEnvironmentCredential = true,
+            // This is a desktop app running on developer machines, never on Azure VMs.
+            // ManagedIdentityCredential probes the IMDS endpoint (169.254.169.254) which
+            // doesn't exist locally, causing a 6-retry socket timeout before falling through
+            // to the next credential. Excluding it eliminates the delay and the confusing error.
+            ExcludeManagedIdentityCredential = true
         });
 
     /// <summary>

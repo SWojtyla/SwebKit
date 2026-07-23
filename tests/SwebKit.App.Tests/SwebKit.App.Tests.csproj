@@ -74,6 +74,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SegmentedControl.razor" Link="Components\Shared\SegmentedControl.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\StatusBadge.razor" Link="Components\Shared\StatusBadge.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\LoadingSpinner.razor" Link="Components\Shared\LoadingSpinner.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\LazyPanel.razor" Link="Components\Shared\LazyPanel.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SidePanel.razor" Link="Components\Shared\SidePanel.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PageHeader.razor" Link="Components\Shared\PageHeader.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\RoutePageHeader.razor" Link="Components\Shared\RoutePageHeader.razor" />

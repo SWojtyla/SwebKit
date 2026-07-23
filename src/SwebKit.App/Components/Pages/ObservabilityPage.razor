@@ -111,7 +111,11 @@
     </TrailingContent>
 </PageToolbar>
 
-@if (_provider is null)
+@if (_isInitializing && _provider is null)
+{
+    <LoadingSpinner Message="Loading observability resource…" />
+}
+else if (_provider is null)
 {
     <div class="obs-empty-state-wrap">
         <EmptyState Icon="📊" Title="No resource selected"
@@ -237,6 +241,7 @@ else
     private PeriodicTimer? _autoRefreshTimer;
     private CancellationTokenSource? _autoRefreshCts;
     private DateTimeOffset? _lastRefreshedAt;
+    private bool _isInitializing;
 
     // Timezone offset (OBS-8) — minutes ahead of UTC
     private int _tzOffsetMinutes;
@@ -257,14 +262,13 @@ else
             ? new DemoObservabilityResourceDiscovery()
             : RealDiscovery;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         AppState.DemoModeChanged += OnDemoModeChanged;
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         RegisterObsCommands();
         Workspaces.RegisterRestoreHandler("observability", RestoreWorkspaceAsync);
-        await TryRestoreLastResourceAsync();
-        await Workspaces.ApplyPendingRestoreAsync("observability");
+        _isInitializing = true;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -272,9 +276,23 @@ else
         if (firstRender)
         {
             _tzOffsetMinutes = await JS.InvokeAsync<int>("SwebKit.getBrowserTimezoneOffset");
+            // Initialize after the shell has rendered so the user sees the loading spinner immediately.
+            _ = InitializeAsync();
+        }
+    }
+
+    private async Task InitializeAsync()
+    {
+        try
+        {
+            await TryRestoreLastResourceAsync();
+            await Workspaces.ApplyPendingRestoreAsync("observability");
+        }
+        finally
+        {
+            _isInitializing = false;
             await InvokeAsync(StateHasChanged);
         }
-
     }
 
     private void RegisterObsCommands()
@@ -358,25 +376,34 @@ else
     private async Task ActivateResourceAsync(ObservabilityResourceInfo resource, bool persist)
     {
         _selectedResource = resource;
-        _provider = CreateProvider(resource.ResourceId);
-        ConnectionState.SetConnected("observability");
         _explainerSummary = null;
-        _anchors = ObservabilityExplainerService.GetDeploymentAnchors(ReleaseRepo);
         _deploymentComparison = null;
         _sloStatus = null;
 
-        if (persist)
+        // PERF: Construct the Azure provider off the UI thread; DefaultAzureCredential/LogsQueryClient
+        // setup can otherwise freeze the shell while the credential chain is resolved.
+        var provider = await Task.Run(() => CreateProvider(resource.ResourceId));
+
+        await InvokeAsync(async () =>
         {
-            var config = EnsureConfig();
-            config.SelectedResourceId = resource.ResourceId;
-            config.SelectedResourceName = resource.Name;
-            await AppState.SaveConfigAsync();
-        }
+            _provider = provider;
+            ConnectionState.SetConnected("observability");
+            _anchors = ObservabilityExplainerService.GetDeploymentAnchors(ReleaseRepo);
+
+            if (persist)
+            {
+                var config = EnsureConfig();
+                config.SelectedResourceId = resource.ResourceId;
+                config.SelectedResourceName = resource.Name;
+                await AppState.SaveConfigAsync();
+            }
+
+            await PublishWorkspaceSnapshotAsync(recordRecent: persist);
+            _ = LoadExplainerAsync();
+            _ = LoadSloStatusAsync();
+        });
 
         await InvokeAsync(StateHasChanged);
-        await PublishWorkspaceSnapshotAsync(recordRecent: persist);
-        _ = LoadExplainerAsync();
-        _ = LoadSloStatusAsync();
     }
 
     private async Task LoadExplainerAsync()

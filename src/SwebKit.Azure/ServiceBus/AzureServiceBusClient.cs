@@ -483,6 +483,20 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         }
         catch (Exception ex)
         {
+            // Azure.Identity can surface a caller-side cancellation as an AuthenticationFailedException
+            // that wraps an OperationCanceledException. Treat that as cancellation, not a connection failure.
+            if (ServiceBusExceptionClassifier.IsCancellation(ex, ct))
+            {
+                throw new OperationCanceledException("Service Bus connection test was cancelled.", ex);
+            }
+
+            // Auth/authorization failures should be surfaced with their real message, not swallowed as a
+            // generic "Connection test failed" result. Other failures continue to return false.
+            if (ServiceBusExceptionClassifier.IsAuthenticationFailure(ex))
+            {
+                throw;
+            }
+
             _logger.LogWarning(ex, "Service Bus connection test failed for namespace {Namespace}", _client.FullyQualifiedNamespace);
             return false;
         }

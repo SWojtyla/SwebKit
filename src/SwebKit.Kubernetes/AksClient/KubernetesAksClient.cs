@@ -834,6 +834,12 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     {
         try { await _client.CoreV1.ListNamespaceAsync(cancellationToken: ct).ConfigureAwait(false); return true; }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) when (ct.IsCancellationRequested)
+        {
+            // Cancellation can be surfaced as an HttpRequestException or other wrapper (e.g. from
+            // Azure.Identity/kubelogin). Treat a canceled token as cancellation, not a connection failure.
+            throw new OperationCanceledException("AKS connection test was cancelled.", ex);
+        }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "AKS connection test failed.");
