@@ -7,6 +7,9 @@
 @inject EnvironmentRepository EnvironmentRepo
 @inject LinkedCollectionRootRepository LinkedRootRepo
 @inject LinkedCollectionFileService LinkedFileService
+@inject BrunoSyncService BrunoSync
+@inject CollectionImportService ImportService
+@inject BrunoCollectionExporter BrunoExporter
 @inject ApiClientWorkflowService WorkflowService
 @inject ICredentialStore CredentialStore
 @inject UserSettingsRepository UserSettings
@@ -34,7 +37,10 @@
                       OnSaveLinkedConflictAsCopy="SaveLinkedConflictAsCopyAsync" OnCopyCurl="CopyCurlAsync"
                       OnOpenCollectionVariables="OpenCollectionVariablesFromMenu"
                       OnOpenRequestVariables="OpenRequestVariablesFromMenu" OnToggleEnvsWorksheet="ToggleEnvsWorksheet"
-                      OnSelectEnvironment="SelectEnvAsync" />
+                      OnSelectEnvironment="SelectEnvAsync"
+                      BrunoSyncAvailable="@(CurrentTargetLinkedRoot?.Config.BrunoSyncFolderPath is not null)"
+                      BrunoSyncEnabled="@(CurrentTargetLinkedRoot?.Config.BrunoSyncEnabled ?? false)"
+                      OnToggleBrunoSync="ToggleBrunoSyncAsync" />
 
     @* ── Main split: collection tree + request workspace ── *@
     <ApiClientWorkspace State="_state" CanCreateRequest="CanCreateRequest" MissingSecretNames="MissingSecretNames"
@@ -46,6 +52,7 @@
                         OnDeleteNode="OnDeleteNodeAsync" OnLinkedRootSelected="OnLinkedRootSelectedAsync"
                         OnRenameCollection="OnRenameCollectionAsync" OnDeleteCollection="OnDeleteCollectionAsync"
                         OnLinkCollectionToRepo="OnLinkCollectionToRepoAsync" OnMoveNode="OnMoveNodeAsync"
+                        OnReimportFromBruno="ReimportFromBrunoAsync" OnExportToBrunoFolder="ExportToBrunoFolderAsync"
                         OnEnvironmentsChanged="OnEnvironmentsChangedAsync" OnCollectionVariablesSaved="OnCollVarEditorSavedAsync"
                         OnRefreshLinkedRoots="LoadLinkedRootsAsync" OnOpenGitPanel="OpenGitPanelAsync"
                         OnRemoveLinkedRoot="RemoveLinkedRootAsync" OnAddRequest="AddRequestAsync"
@@ -54,6 +61,15 @@
                         OnResendHistoryEntry="OnResendHistoryEntryAsync" OnSaveResponseExample="SaveResponseExampleAsync"
                         OnConfigureSecret="OpenConfigureSecretDialog" />
 </div>
+
+@if (_state.BrunoSyncWarning is not null)
+{
+    <div class="api-client-bruno-sync-warning">
+        <span>@_state.BrunoSyncWarning</span>
+        <button type="button" class="api-client-bruno-sync-warning__dismiss"
+                @onclick="() => _state.BrunoSyncWarning = null">×</button>
+    </div>
+}
 
 @* ── New collection dialog ── *@
 @if (_showNewCollectionDialog)
@@ -100,7 +116,7 @@
                 <div class="api-client-dialog__title">Add API Repository</div>
                 <div class="api-client-dialog__hint">
                     Choose a Git repository folder, or an existing .swebkit-api folder. SwebKit keeps API request files there so
-                    they can be committed with that repo.
+                    they can be committed with that repo. Optionally specify a Bruno collection folder to import and keep in sync.
                 </div>
                 <input type="text" class="api-client-dialog__input" placeholder="Display name (optional)"
                        value="@_newLinkedRootName" @oninput="e => _newLinkedRootName = e.Value?.ToString() ?? string.Empty" />
@@ -110,6 +126,12 @@
                            @ref="_newLinkedRootInput" />
                     <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
                                OnClick="PickLinkedRootFolderAsync">…</AppButton>
+                </div>
+                <div class="api-client-dialog__path-row">
+                    <input type="text" class="api-client-dialog__input" placeholder="Bruno collection folder (optional — import & sync)"
+                           value="@_newLinkedRootBrunoFolder" @oninput="e => _newLinkedRootBrunoFolder = e.Value?.ToString() ?? string.Empty" />
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                               OnClick="PickBrunoFolderAsync">…</AppButton>
                 </div>
                 @if (_linkedRootError is not null)
                 {
@@ -181,7 +203,7 @@
         <CollectionExportDialog Visible="@_showExportDialog" Collection="@_state.ActiveCollection"
                                 Environments="@_state.Environments" InitialTab="@_exportDialogInitialTab"
                                 TargetLinkedRootApiPath="@(CurrentTargetLinkedRoot?.ApiRootPath)" OnClose="@(() => _showExportDialog = false)"
-                                OnImported="@OnCollectionImportedAsync" />
+                                OnImported="@OnCollectionImportedAsync" OnBrunoFolderImported="@OnBrunoFolderImportedAsync" />
 
 @code {
     // ── Icons (Phase 1: FluentIcon vocabulary, reused across the page) ─────────

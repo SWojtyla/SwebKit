@@ -111,7 +111,7 @@
         </Virtualize>
     </div>
 
-    @if (_ctxNode is not null && _ctxNode.Kind == FlatTreeNodeKind.Node)
+    @if (_ctxNode is not null && _ctxNode.Kind != FlatTreeNodeKind.Group)
     {
         <div class="ctx-backdrop" @onclick="CloseContextMenu"></div>
         <div class="ctx-menu" @ref="_ctxMenu"
@@ -119,46 +119,77 @@
             @{
                 var isCollRoot = _ctxNode.Node.Id.StartsWith("__col__", StringComparison.Ordinal);
                 var isFolder = _ctxNode.Node.Type == ApiCollectionNodeType.Folder;
+                var isLinkedRoot = _ctxNode.Kind == FlatTreeNodeKind.LinkedRoot;
+                var linkedRootForCollection = isCollRoot ? GetLinkedRootForCollection(_ctxNode.CollectionId) : null;
+                var hasBrunoSync = linkedRootForCollection?.BrunoSyncFolderPath is not null;
             }
-            @if (isFolder)
+            @if (isLinkedRoot)
             {
-                <button class="ctx-item" @onclick="AddSubFolderCtxAsync">
+                <button class="ctx-item destructive" @onclick="RemoveLinkedRootCtxAsync">
                     <span class="ctx-item-icon" aria-hidden="true">
-                        <FluentIcon Value="@_iconAddFolder" Width="12px" />
+                        <FluentIcon Value="@_iconDelete" Width="12px" />
                     </span>
-                    <span>New sub-folder</span>
+                    <span>Remove linked repo</span>
                 </button>
-                <button class="ctx-item" @onclick="AddRequestCtxAsync">
+            }
+            else
+            {
+                @if (isFolder)
+                {
+                    <button class="ctx-item" @onclick="AddSubFolderCtxAsync">
+                        <span class="ctx-item-icon" aria-hidden="true">
+                            <FluentIcon Value="@_iconAddFolder" Width="12px" />
+                        </span>
+                        <span>New sub-folder</span>
+                    </button>
+                    <button class="ctx-item" @onclick="AddRequestCtxAsync">
+                        <span class="ctx-item-icon" aria-hidden="true">
+                            <FluentIcon Value="@_iconAddRequest" Width="12px" />
+                        </span>
+                        <span>New request here</span>
+                    </button>
+                    <div class="ctx-separator"></div>
+                }
+                @if (isCollRoot && !IsLinkedCollection(_ctxNode.CollectionId))
+                {
+                    <button class="ctx-item" @onclick="LinkToRepoCtxAsync">
+                        <span class="ctx-item-icon" aria-hidden="true">
+                            <FluentIcon Value="@_iconLinked" Width="12px" />
+                        </span>
+                        <span>Link to Git repo…</span>
+                    </button>
+                    <div class="ctx-separator"></div>
+                }
+                @if (isCollRoot && hasBrunoSync)
+                {
+                    <button class="ctx-item" @onclick="ReimportFromBrunoCtxAsync">
+                        <span class="ctx-item-icon" aria-hidden="true">
+                            <FluentIcon Value="@_iconSync" Width="12px" />
+                        </span>
+                        <span>Re-import from Bruno</span>
+                    </button>
+                    <button class="ctx-item" @onclick="ExportToBrunoFolderCtxAsync">
+                        <span class="ctx-item-icon" aria-hidden="true">
+                            <FluentIcon Value="@_iconExport" Width="12px" />
+                        </span>
+                        <span>Export to Bruno folder</span>
+                    </button>
+                    <div class="ctx-separator"></div>
+                }
+                <button class="ctx-item" @onclick="BeginRenameCtx">
                     <span class="ctx-item-icon" aria-hidden="true">
-                        <FluentIcon Value="@_iconAddRequest" Width="12px" />
+                        <FluentIcon Value="@_iconRename" Width="12px" />
                     </span>
-                    <span>New request here</span>
+                    <span>@(isCollRoot ? "Rename collection" : "Rename")</span>
                 </button>
                 <div class="ctx-separator"></div>
-            }
-            @if (isCollRoot && !IsLinkedCollection(_ctxNode.CollectionId))
-            {
-                <button class="ctx-item" @onclick="LinkToRepoCtxAsync">
+                <button class="ctx-item destructive" @onclick="DeleteNodeCtxAsync">
                     <span class="ctx-item-icon" aria-hidden="true">
-                        <FluentIcon Value="@_iconLinked" Width="12px" />
+                        <FluentIcon Value="@_iconDelete" Width="12px" />
                     </span>
-                    <span>Link to Git repo…</span>
+                    <span>@(isCollRoot ? "Delete collection" : "Delete")</span>
                 </button>
-                <div class="ctx-separator"></div>
             }
-            <button class="ctx-item" @onclick="BeginRenameCtx">
-                <span class="ctx-item-icon" aria-hidden="true">
-                    <FluentIcon Value="@_iconRename" Width="12px" />
-                </span>
-                <span>@(isCollRoot ? "Rename collection" : "Rename")</span>
-            </button>
-            <div class="ctx-separator"></div>
-            <button class="ctx-item destructive" @onclick="DeleteNodeCtxAsync">
-                <span class="ctx-item-icon" aria-hidden="true">
-                    <FluentIcon Value="@_iconDelete" Width="12px" />
-                </span>
-                <span>@(isCollRoot ? "Delete collection" : "Delete")</span>
-            </button>
         </div>
     }
 
@@ -180,6 +211,9 @@
     [Parameter] public EventCallback<(string CollectionId, string NewName)> OnRenameCollection { get; set; }
     [Parameter] public EventCallback<string> OnDeleteCollection { get; set; }
     [Parameter] public EventCallback<string> OnLinkCollectionToRepo { get; set; }
+    [Parameter] public EventCallback<string> OnReimportFromBruno { get; set; }
+    [Parameter] public EventCallback<string> OnExportToBrunoFolder { get; set; }
+    [Parameter] public EventCallback<string> OnRemoveLinkedRoot { get; set; }
     [Parameter]
     public EventCallback<(string CollectionId, ApiCollectionNode DraggedNode, ApiCollectionNode? NewParent, int?
 NewIndex)> OnMoveNode
@@ -201,6 +235,8 @@ Icons.Regular.Size16.AddSquare();
     private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconAddRequest = new Icons.Regular.Size16.Add();
     private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconRename = new Icons.Regular.Size16.Edit();
     private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconDelete = new Icons.Regular.Size16.Delete();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconSync = new Icons.Regular.Size16.ArrowSync();
+    private static readonly Microsoft.FluentUI.AspNetCore.Components.Icon _iconExport = new Icons.Regular.Size16.ArrowUp();
 
     private enum FlatTreeNodeKind
     {
@@ -431,7 +467,7 @@ Icons.Regular.Size16.AddSquare();
 
     private void ShowContextMenu(MouseEventArgs e, FlatTreeNode node)
     {
-        if (node.Kind != FlatTreeNodeKind.Node)
+        if (node.Kind == FlatTreeNodeKind.Group)
         {
             return;
         }
@@ -505,6 +541,33 @@ Icons.Regular.Size16.AddSquare();
             await OnDeleteCollection.InvokeAsync(node.CollectionId);
         else
             await OnDeleteNode.InvokeAsync(node.Node);
+    }
+
+    private async Task ReimportFromBrunoCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        RequestRender();
+        if (node is not null)
+            await OnReimportFromBruno.InvokeAsync(node.CollectionId);
+    }
+
+    private async Task ExportToBrunoFolderCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        RequestRender();
+        if (node is not null)
+            await OnExportToBrunoFolder.InvokeAsync(node.CollectionId);
+    }
+
+    private async Task RemoveLinkedRootCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        RequestRender();
+        if (node?.LinkedRoot is not null)
+            await OnRemoveLinkedRoot.InvokeAsync(node.LinkedRoot.Id);
     }
 
     private async Task CommitRenameAsync()
@@ -910,4 +973,7 @@ Icons.Regular.Size16.AddSquare();
 
     private bool IsLinkedCollection(string collectionId) =>
         LinkedRoots.Any(root => root.CollectionIds.Contains(collectionId));
+
+    private LinkedCollectionTreeInfo? GetLinkedRootForCollection(string collectionId) =>
+        LinkedRoots.FirstOrDefault(root => root.CollectionIds.Contains(collectionId));
 }

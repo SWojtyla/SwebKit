@@ -46,6 +46,7 @@ public partial class ApiClientPage
     private async Task<bool> SaveActiveCollectionAsync(bool forceLinkedOverwrite = false)
     {
         if (_state.ActiveCollection is null || _state.SelectedRequest is null) return false;
+        _state.BrunoSyncWarning = null;
 
         var linkedRoot = FindLinkedRootForCollection(_state.ActiveCollection.Id);
         if (linkedRoot is not null)
@@ -78,6 +79,16 @@ public partial class ApiClientPage
 
             _state.LinkedSaveError = null;
             _state.LinkedSaveConflict = null;
+
+            // Best-effort Bruno sync: write the .bru file back to the original Bruno folder.
+            if (linkedRoot.Config is { BrunoSyncEnabled: true, BrunoSyncFolderPath: not null and not "" } brunoConfig)
+            {
+                var syncError = await BrunoSync.SyncRequestSaveAsync(
+                    brunoConfig.BrunoSyncFolderPath, _state.ActiveCollection, _state.SelectedRequest);
+                if (syncError is not null)
+                    _state.BrunoSyncWarning = $"Bruno sync: {syncError}";
+            }
+
             await LoadLinkedRootsAsync();
             var refreshed = _state.Collections.FirstOrDefault(collection => collection.Id == _state.ActiveCollection.Id);
             _state.ActiveCollection = refreshed ?? _state.ActiveCollection;

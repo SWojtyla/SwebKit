@@ -182,6 +182,11 @@
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnImported { get; set; }
     /// <summary>
+    /// Fires after a successful Bruno folder import into a linked root, passing the Bruno folder
+    /// path so the parent can enable Bruno sync on the linked root config.
+    /// </summary>
+    [Parameter] public EventCallback<string> OnBrunoFolderImported { get; set; }
+    /// <summary>
     /// When set, imported collections are written directly into this linked repo root
     /// (as .swebreq.json files on disk) instead of local SwebKit storage.
     /// </summary>
@@ -334,6 +339,10 @@
                 _importSummary = collResult;
             else if (collResult is not null && collResult.Collections.Count == 0)
                 _importError = string.Join("; ", collResult.Warnings.DefaultIfEmpty("No collections found."));
+
+            // Notify parent of Bruno folder path for sync setup when importing into a linked root.
+            if (_importBrunoFolderPath is not null && TargetLinkedRootApiPath is not null && _importSummary is not null)
+                await OnBrunoFolderImported.InvokeAsync(_importBrunoFolderPath);
 
             await OnImported.InvokeAsync();
         }

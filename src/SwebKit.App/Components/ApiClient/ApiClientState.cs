@@ -45,6 +45,7 @@ public sealed class ApiClientState
     public bool AutoSave { get; set; }
     public string? LinkedSaveError { get; set; }
     internal ApiClientPage.LinkedSaveConflict? LinkedSaveConflict { get; set; }
+    public string? BrunoSyncWarning { get; set; }
     public string? ActiveLinkedRootId { get; set; }
     public string? WorkflowMessage { get; set; }
     public bool WorkflowMessageIsError { get; set; }

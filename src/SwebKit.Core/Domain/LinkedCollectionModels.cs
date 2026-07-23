@@ -89,6 +89,7 @@ public sealed class LinkedCollectionTreeInfo
     public bool IsGitRepository { get; init; }
     public bool IsValid { get; init; } = true;
     public IReadOnlyList<string> CollectionIds { get; init; } = [];
+    public string? BrunoSyncFolderPath { get; init; }
 }
 
 public sealed class LinkedGitChangedFile
