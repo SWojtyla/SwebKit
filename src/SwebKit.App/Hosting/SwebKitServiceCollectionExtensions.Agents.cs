@@ -26,20 +26,12 @@ public static partial class SwebKitServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers AI agent infrastructure: Mistral client, agent context builder,
+    /// Registers AI agent infrastructure: model client, agent context builder,
     /// all agent tools, tool registry, and chat service.
     /// </summary>
     public static IServiceCollection AddSwebKitAgents(this IServiceCollection services)
     {
-        services.AddSingleton<MistralConfig>(sp =>
-        {
-            var store = sp.GetRequiredService<ICredentialStore>();
-            return new MistralConfig
-            {
-                ApiKey = store.Get("SwebKit-Agent:Mistral-ApiKey") ?? string.Empty
-            };
-        });
-        services.AddSingleton<IMistralClient, MistralHttpClient>();
+        services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
 
         services.AddSingleton<IAgentContextBuilder, AgentContextBuilder>();
 

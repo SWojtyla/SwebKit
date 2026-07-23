@@ -2,18 +2,12 @@ using System.Text.Json;
 
 namespace SwebKit.Agents;
 
+/// <summary>
+/// Legacy interface kept for backward compatibility. Use <see cref="IAgentModelClient"/> instead.
+/// </summary>
+[Obsolete("Replaced by IAgentModelClient. Will be removed in a future version.")]
 public interface IMistralClient
 {
-    /// <summary>
-    /// Sends a user message and runs the full agentic loop: if Mistral requests
-    /// tool calls, <paramref name="toolExecutor"/> is invoked for each, and the
-    /// results are sent back to Mistral before returning the final text response.
-    /// </summary>
-    /// <param name="history">
-    /// Optional mutable list of prior conversation messages (role/content pairs).
-    /// When provided, prior turns are included in the request and the new user +
-    /// assistant messages are appended to it so the next call carries full context.
-    /// </param>
     Task<string> ChatAsync(
         string systemPrompt,
         string userMessage,

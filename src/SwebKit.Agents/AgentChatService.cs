@@ -6,7 +6,7 @@ namespace SwebKit.Agents;
 
 /// <summary>
 /// Default implementation of <see cref="IAgentChatService"/>.
-/// Wraps <see cref="IMistralClient"/> with a persistent <see cref="ConversationSession"/>
+/// Wraps <see cref="IAgentModelClient"/> with a persistent <see cref="ConversationSession"/>
 /// and builds a context-aware system prompt from the current workspace configuration.
 /// </summary>
 public sealed class AgentChatService : IAgentChatService
@@ -29,27 +29,24 @@ public sealed class AgentChatService : IAgentChatService
         - If you are unsure, say so rather than guessing.
         """;
 
-    private readonly IMistralClient _mistral;
+    private readonly IAgentModelClient _modelClient;
     private readonly IAgentToolRegistry _registry;
     private readonly AppStateService _appState;
     private readonly UserSettingsRepository _settings;
-    private readonly MistralConfig _mistralConfig;
     private readonly IAgentContextBuilder _contextBuilder;
-    private readonly ConversationSession _session;
+    private ConversationSession _session;
 
     public AgentChatService(
-        IMistralClient mistral,
+        IAgentModelClient modelClient,
         IAgentToolRegistry registry,
         AppStateService appState,
         UserSettingsRepository settings,
-        MistralConfig mistralConfig,
         IAgentContextBuilder contextBuilder)
     {
-        _mistral = mistral;
+        _modelClient = modelClient;
         _registry = registry;
         _appState = appState;
         _settings = settings;
-        _mistralConfig = mistralConfig;
         _contextBuilder = contextBuilder;
 
         var maxMessages = _settings.Settings.Agent.MaxHistoryMessages;
@@ -70,14 +67,21 @@ public sealed class AgentChatService : IAgentChatService
         var systemPrompt = BuildSystemPrompt();
         var tools = _registry.GetDefinitions();
 
-        var history = _session.Messages as List<object>
-            ?? new List<object>(_session.Messages);
+        // Record the user message in history before sending
+        _session.Add(new AgentMessage { Role = "user", Content = userMessage });
 
-        var reply = await _mistral.ChatAsync(
-            systemPrompt,
-            userMessage,
-            tools,
-            history,
+        var request = new AgentModelRequest
+        {
+            SystemPrompt = systemPrompt,
+            UserMessage = userMessage,
+            Tools = tools,
+            History = _session.Messages.Take(^1).ToList(), // all except the user message we just added
+            Temperature = _settings.Settings.Agent.GetActiveProfile()?.Temperature ?? 0.7,
+            MaxTokens = _settings.Settings.Agent.GetActiveProfile()?.MaxTokens ?? 2048,
+        };
+
+        var result = await _modelClient.ChatAsync(
+            request,
             async (toolName, args, toolCt) =>
             {
                 toolsUsed.Add(toolName);
@@ -85,11 +89,16 @@ public sealed class AgentChatService : IAgentChatService
             },
             ct);
 
+        // Record the assistant response and any intermediate messages in history
+        // The client handles the agentic loop internally; we only get the final text.
+        // We add the final assistant message to history.
+        _session.Add(new AgentMessage { Role = "assistant", Content = result.Text });
+
         sw.Stop();
 
         return new AgentChatReply
         {
-            Text = reply,
+            Text = result.Text,
             ToolsUsed = toolsUsed,
             Elapsed = sw.Elapsed
         };

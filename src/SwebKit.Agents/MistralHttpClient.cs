@@ -5,6 +5,7 @@ using SwebKit.Core.Abstractions;
 
 namespace SwebKit.Agents;
 
+[Obsolete("Replaced by OpenAiCompatibleAgentClient. Will be removed in a future version.")]
 public sealed class MistralHttpClient : IMistralClient
 {
     private readonly HttpClient _httpClient;

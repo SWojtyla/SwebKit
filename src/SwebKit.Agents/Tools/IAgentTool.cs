@@ -16,7 +16,7 @@ public interface IAgentTool
     Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct);
 }
 
-/// <summary>Helpers for building JSON parameter schemas passed to Mistral.</summary>
+/// <summary>Helpers for building JSON parameter schemas passed to the LLM.</summary>
 public static class AgentToolSchema
 {
     /// <summary>

@@ -63,6 +63,7 @@ public sealed class UserSettingsRepository(ILogger<UserSettingsRepository>? logg
     {
         settings.Theme ??= string.Empty;
         settings.Agent ??= new AgentConfig();
+        settings.Agent.Migrate();
         settings.Logging ??= new LoggingSettings();
         return settings;
     }

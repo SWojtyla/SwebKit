@@ -1,17 +1,16 @@
 namespace SwebKit.Agents;
 
 /// <summary>
-/// Holds the conversation message history for a single chat session with the Mistral agent.
+/// Holds the conversation message history for a single chat session with the LLM agent.
 /// Enforces a configurable maximum size by trimming the oldest user/assistant exchange pairs.
 /// </summary>
 /// <remarks>
-/// The <see cref="Messages"/> list stores raw Mistral message objects (anonymous records or
-/// <c>Dictionary&lt;string, object&gt;</c>) and is passed directly to
-/// <see cref="IMistralClient.ChatAsync"/>.
+/// The <see cref="Messages"/> list stores typed <see cref="AgentMessage"/> objects and is
+/// passed to <see cref="IAgentModelClient.ChatAsync"/> via <see cref="AgentModelRequest.History"/>.
 /// </remarks>
 public sealed class ConversationSession
 {
-    private readonly List<object> _messages = [];
+    private readonly List<AgentMessage> _messages = [];
     private int _maxMessages;
 
     public ConversationSession(int maxMessages = 20)
@@ -36,13 +35,13 @@ public sealed class ConversationSession
     public bool IsNearLimit => _maxMessages > 0 && _messages.Count >= (int)(_maxMessages * 0.75);
 
     /// <summary>Read-only view of the current history, suitable for passing to ChatAsync.</summary>
-    public IReadOnlyList<object> Messages => _messages;
+    public IReadOnlyList<AgentMessage> Messages => _messages;
 
     /// <summary>
     /// Appends a message to history, then trims the oldest user/assistant exchange pair
     /// when the count exceeds <see cref="MaxMessages"/>.
     /// </summary>
-    public void Add(object message)
+    public void Add(AgentMessage message)
     {
         _messages.Add(message);
         TrimIfNeeded();

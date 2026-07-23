@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace SwebKit.Agents;
 
 /// <summary>
-/// Represents a single assistant reply returned to the UI after a full Mistral round-trip.
+/// Represents a single assistant reply returned to the UI after a full LLM round-trip.
 /// </summary>
 public sealed class AgentChatReply
 {
@@ -20,7 +20,7 @@ public sealed class AgentChatReply
 
 /// <summary>
 /// Provides a high-level chat interface with conversation history management on top of
-/// <see cref="IMistralClient"/>.  Maintains a single <see cref="ConversationSession"/>
+/// <see cref="IAgentModelClient"/>.  Maintains a single <see cref="ConversationSession"/>
 /// that persists for the lifetime of the service.
 /// </summary>
 public interface IAgentChatService

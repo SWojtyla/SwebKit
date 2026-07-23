@@ -9,7 +9,7 @@ public interface IAgentContextBuilder
 {
     /// <summary>
     /// Builds a context string that describes the current workspace configuration.
-    /// This is injected into the system prompt sent to Mistral.
+    /// This is injected into the system prompt sent to the LLM.
     /// </summary>
     string BuildContext(AppStateService appState);
 }
