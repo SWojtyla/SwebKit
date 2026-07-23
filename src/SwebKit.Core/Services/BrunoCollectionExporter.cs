@@ -49,6 +49,66 @@ public sealed class BrunoCollectionExporter : ICollectionExporter
         return Task.FromResult(ms.ToArray());
     }
 
+    /// <summary>
+    /// Exports a collection to a folder on disk, writing one <c>.bru</c> file per request,
+    /// mirroring the Bruno collection format. Folder hierarchy is represented as subdirectories.
+    /// Unlike <see cref="ExportAsync"/>, this writes directly to the filesystem instead of a ZIP.
+    /// </summary>
+    public Task ExportToFolderAsync(
+        ApiCollection collection,
+        IReadOnlyList<ApiEnvironment> environments,
+        string targetFolderPath,
+        CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(targetFolderPath);
+
+        // Write bruno.json manifest
+        var manifest = $$"""
+            {
+              "version": "1",
+              "name": "{{JsonEscape(collection.Name)}}",
+              "type": "collection"
+            }
+            """;
+        File.WriteAllText(Path.Combine(targetFolderPath, "bruno.json"), manifest);
+
+        // Write each request recursively to disk
+        WriteNodesToFolder(targetFolderPath, collection.Nodes);
+
+        // Write environments
+        var envFolder = Path.Combine(targetFolderPath, "environments");
+        if (environments.Count > 0)
+        {
+            Directory.CreateDirectory(envFolder);
+            foreach (var env in environments)
+            {
+                var envContent = BuildEnvFile(env);
+                File.WriteAllText(Path.Combine(envFolder, Sanitize(env.Name) + ".bru"), envContent);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static void WriteNodesToFolder(string folderPath, List<ApiCollectionNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Type == ApiCollectionNodeType.Folder)
+            {
+                var subDir = Path.Combine(folderPath, Sanitize(node.Name));
+                Directory.CreateDirectory(subDir);
+                File.WriteAllText(Path.Combine(subDir, "meta.bru"), $"meta {{\n  name: {node.Name}\n  seq: 1\n}}\n");
+                WriteNodesToFolder(subDir, node.Children);
+            }
+            else if (node.Type == ApiCollectionNodeType.Request && node.Request is not null)
+            {
+                var content = BuildBruFile(node.Request);
+                File.WriteAllText(Path.Combine(folderPath, Sanitize(node.Request.Name) + ".bru"), content);
+            }
+        }
+    }
+
     private static void WriteNodes(ZipArchive zip, List<ApiCollectionNode> nodes, string pathPrefix)
     {
         foreach (var node in nodes)
@@ -68,7 +128,7 @@ public sealed class BrunoCollectionExporter : ICollectionExporter
         }
     }
 
-    private static string BuildBruFile(HttpRequestEntry req)
+    internal static string BuildBruFile(HttpRequestEntry req)
     {
         var sb = new StringBuilder();
 

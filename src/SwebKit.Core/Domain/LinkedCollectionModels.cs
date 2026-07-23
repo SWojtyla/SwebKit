@@ -13,6 +13,18 @@ public sealed class LinkedCollectionRootConfig
     public string Path { get; set; } = string.Empty;
     public bool IsEnabled { get; set; } = true;
     public DateTimeOffset AddedAt { get; set; }
+
+    /// <summary>
+    /// When set, the linked root is associated with a Bruno collection folder on disk.
+    /// SwebKit writes .bru file changes back to this folder on save (best-effort sync).
+    /// </summary>
+    public string? BrunoSyncFolderPath { get; set; }
+
+    /// <summary>
+    /// Controls whether .bru write-back is active for this linked root.
+    /// Enabled by default when a Bruno folder is imported.
+    /// </summary>
+    public bool BrunoSyncEnabled { get; set; } = true;
 }
 
 public sealed class LinkedCollectionRootLoadResult

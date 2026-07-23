@@ -634,6 +634,76 @@
     background: #f0c000;
 }
 
+.appearance-pilot-card--obsidian-emerald {
+    border-radius: 3px;
+    background: #0d1410;
+    border-color: #2a3e32;
+    color: #e8f5ee;
+}
+
+.appearance-pilot-card--obsidian-emerald .appearance-pilot-card__eyebrow {
+    color: #7a9a8a;
+    letter-spacing: 0.10em;
+}
+
+.appearance-pilot-card--obsidian-emerald .appearance-pilot-card__title {
+    color: #e8f5ee;
+    font-family: 'Aptos', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+}
+
+.appearance-pilot-card--obsidian-emerald .appearance-pilot-card__body,
+.appearance-pilot-card--obsidian-emerald .appearance-pilot-card__coverage {
+    color: #7a9a8a;
+}
+
+.appearance-pilot-card--obsidian-emerald .appearance-pilot-card__swatch--chrome {
+    background: #0a0f0c;
+    border-color: #1f2e26;
+}
+
+.appearance-pilot-card--obsidian-emerald .appearance-pilot-card__swatch--surface {
+    background: #131c16;
+    border-color: #2a3e32;
+}
+
+.appearance-pilot-card--obsidian-emerald .appearance-pilot-card__swatch--accent {
+    background: #10b981;
+}
+
+.appearance-pilot-card--arctic-glacier {
+    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.05) 0%, rgba(255, 255, 255, 0) 60%), #ffffff;
+    border-color: #bfdbf0;
+    color: #0c2340;
+}
+
+.appearance-pilot-card--arctic-glacier .appearance-pilot-card__eyebrow {
+    color: #4a6a8a;
+}
+
+.appearance-pilot-card--arctic-glacier .appearance-pilot-card__title {
+    color: #0c2340;
+}
+
+.appearance-pilot-card--arctic-glacier .appearance-pilot-card__body,
+.appearance-pilot-card--arctic-glacier .appearance-pilot-card__coverage {
+    color: #4a6a8a;
+}
+
+.appearance-pilot-card--arctic-glacier .appearance-pilot-card__swatch--chrome {
+    background: linear-gradient(180deg, #e0f2fe 0%, #d6ecf7 100%);
+    border-color: #bfdbf0;
+}
+
+.appearance-pilot-card--arctic-glacier .appearance-pilot-card__swatch--surface {
+    background: #ffffff;
+    border-color: #bfdbf0;
+}
+
+.appearance-pilot-card--arctic-glacier .appearance-pilot-card__swatch--accent {
+    background: #0ea5e9;
+}
+
 .form-field {
     display: flex;
     flex-direction: column;

@@ -13,6 +13,7 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     private bool _hasRendered;
+    private bool _wasActiveOnLastRender;
 
     protected override void OnParametersSet()
     {
@@ -22,13 +23,11 @@
         }
     }
 
-    protected override bool ShouldRender()
-    {
-        if (_hasRendered && !IsActive)
-        {
-            return false;
-        }
+    protected override bool ShouldRender() =>
+        IsActive || IsActive != _wasActiveOnLastRender || !_hasRendered;
 
-        return base.ShouldRender();
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _wasActiveOnLastRender = IsActive;
     }
 }
