@@ -33,10 +33,13 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
         {
             if (cachedSnapshots.TryGetValue(ns.Id, out var snapshot))
             {
+                // Always attempt to reconnect real namespaces on load/refresh; a previous failure may
+                // have been transient or the user may have fixed credentials. Cache the last error
+                // only so the UI can show a quick hint while the fresh connection attempt runs.
                 return new ServiceBusNamespaceBootstrapState(
                     Namespace: ns,
                     Client: null,
-                    ShouldConnect: snapshot.WasConnected,
+                    ShouldConnect: true,
                     ConnectionError: snapshot.WasConnected ? null : snapshot.Error,
                     IsDemo: false);
             }

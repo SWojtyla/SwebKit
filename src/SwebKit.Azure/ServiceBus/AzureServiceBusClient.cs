@@ -490,6 +490,13 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
                 throw new OperationCanceledException("Service Bus connection test was cancelled.", ex);
             }
 
+            // Auth/authorization failures should be surfaced with their real message, not swallowed as a
+            // generic "Connection test failed" result. Other failures continue to return false.
+            if (ServiceBusExceptionClassifier.IsAuthenticationFailure(ex))
+            {
+                throw;
+            }
+
             _logger.LogWarning(ex, "Service Bus connection test failed for namespace {Namespace}", _client.FullyQualifiedNamespace);
             return false;
         }

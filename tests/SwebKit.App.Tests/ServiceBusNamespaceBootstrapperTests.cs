@@ -42,7 +42,9 @@ public sealed class ServiceBusNamespaceBootstrapperTests
         Assert.True(states[0].ShouldConnect);
         Assert.Null(states[0].ConnectionError);
         Assert.False(states[0].IsDemo);
-        Assert.False(states[1].ShouldConnect);
+        // A previously-failed namespace should still be retried on load/refresh; the cached error
+        // is surfaced as a transient hint while the fresh connection attempt runs.
+        Assert.True(states[1].ShouldConnect);
         Assert.Equal("Access denied", states[1].ConnectionError);
         Assert.DoesNotContain(states, state => state.IsDemo);
     }
@@ -124,6 +126,26 @@ public sealed class ServiceBusNamespaceBootstrapperTests
         });
 
         Assert.Equal(SbTransportType.AmqpWebSockets, factory.LastTransportType);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_AuthenticationFailure_ReturnsAuthErrorMessage()
+    {
+        var store = new FakeCredentialStore { CredentialValue = "Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc=" };
+        var fakeClient = new AuthFailingServiceBusClient();
+        var factory = new CapturingServiceBusClientFactory(fakeClient);
+        var bootstrapper = new ServiceBusNamespaceBootstrapper(store, factory);
+
+        var result = await bootstrapper.ConnectAsync(new ServiceBusNamespace
+        {
+            Alias = "orders-live",
+            FullyQualifiedNamespace = "orders-live.servicebus.windows.net",
+            CredentialKey = "orders-key"
+        });
+
+        Assert.Null(result.Client);
+        Assert.Contains("Authentication/authorization failed", result.ConnectionError);
+        Assert.True(result.IsAuthFailure);
     }
 
     [Fact]
@@ -264,5 +286,12 @@ public sealed class ServiceBusNamespaceBootstrapperTests
         // that wraps an OperationCanceledException.
         public override Task<bool> TestConnectionAsync(CancellationToken ct = default) =>
             throw new InvalidOperationException("Azure.Identity.AuthenticationFailedException", new OperationCanceledException());
+    }
+
+    private sealed class AuthFailingServiceBusClient : FakeServiceBusClient
+    {
+        // Simulates an auth/authorization failure surfaced by Azure.Identity or the Service Bus SDK.
+        public override Task<bool> TestConnectionAsync(CancellationToken ct = default) =>
+            throw new UnauthorizedAccessException("Access denied");
     }
 }
