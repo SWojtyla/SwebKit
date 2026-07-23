@@ -3,6 +3,7 @@ using Microsoft.FluentUI.AspNetCore.Components;
 using SwebKit.App.Hosting;
 using SwebKit.App.Services;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Diagnostics;
 
 namespace SwebKit.App;
 
@@ -19,6 +20,10 @@ public static class MauiProgram
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
             });
 
+        // Clean up orphaned temp files from interrupted atomic saves (e.g. previous process
+        // killed mid-write). Best-effort, never throws, only touches files older than 1 hour.
+        AppDataPaths.CleanupOrphanedTempFiles();
+
         // Structured file logging + crash handlers — constructed and wired as early as possible,
         // before any other startup work that could itself throw/log during construction.
         // See docs/features/active/structured-file-logging/backend.md "Crash-Safe Emergency Path" / "Startup Wiring".
@@ -34,6 +39,11 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
         builder.Logging.AddProvider(fileLoggerProvider);
+        // The FileLoggerProvider does its own level filtering based on user settings
+        // (LoggingSettings.MinimumLevel). Without this filter, the factory's default minimum
+        // level (Warning in release builds) silently blocks Information/Debug entries the user
+        // explicitly enabled — and no log files are ever created.
+        builder.Logging.AddFilter<FileLoggerProvider>(_ => true);
 
         // Feature module registration
         builder.Services.AddSwebKitCore(userSettingsRepository);
