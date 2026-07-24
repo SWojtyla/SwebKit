@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SwebKit.Sidecar</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\SwebKit.Core\SwebKit.Core.csproj" />
+    <ProjectReference Include="..\src\SwebKit.Azure\SwebKit.Azure.csproj" />
+    <ProjectReference Include="..\src\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />
+    <ProjectReference Include="..\src\SwebKit.Redis\SwebKit.Redis.csproj" />
+    <ProjectReference Include="..\src\SwebKit.Agents\SwebKit.Agents.csproj" />
+    <ProjectReference Include="..\src\SwebKit.Observability\SwebKit.Observability.csproj" />
+    <ProjectReference Include="..\src\SwebKit.DevOps\SwebKit.DevOps.csproj" />
+  </ItemGroup>
+
+</Project>
