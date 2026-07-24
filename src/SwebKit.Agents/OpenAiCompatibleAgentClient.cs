@@ -44,10 +44,10 @@ public sealed class OpenAiCompatibleAgentClient : IAgentModelClient
         var toolDefs = BuildToolDefs(request.Tools);
         var messages = BuildMessages(request.SystemPrompt, request.History, request.UserMessage);
         var maxRounds = request.MaxToolRounds > 0 ? request.MaxToolRounds : 5;
-        var seenToolCalls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         for (var round = 0; round < maxRounds; round++)
         {
+            var seenToolCalls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var payload = JsonSerializer.Serialize(new
             {
                 model,
@@ -159,8 +159,7 @@ public sealed class OpenAiCompatibleAgentClient : IAgentModelClient
 
         if (profile.RequiresApiKey && string.IsNullOrEmpty(apiKey))
             throw new InvalidOperationException(
-                $"API key not found for profile '{profile.DisplayName}'. " +
-                $"Expected credential store key: '{profile.CredentialKey}'.");
+                $"API key not found for profile '{profile.DisplayName}'. Check the credential store configuration.");
 
         var baseUrl = NormalizeBaseUrl(profile.BaseUrl);
         var timeout = profile.TimeoutSeconds > 0
@@ -181,9 +180,10 @@ public sealed class OpenAiCompatibleAgentClient : IAgentModelClient
         url = url.TrimEnd('/');
 
         // Avoid double /v1 — if the URL already ends with /v1, keep it as-is.
-        // Only append /v1 if it's missing and the URL doesn't already contain it.
+        // Only append /v1 if it's missing and the URL doesn't already contain a version segment.
         if (!url.EndsWith("/v1", StringComparison.OrdinalIgnoreCase) &&
-            !url.Contains("/v1/", StringComparison.OrdinalIgnoreCase))
+            !url.Contains("/v1/", StringComparison.OrdinalIgnoreCase) &&
+            !url.Contains("/v2", StringComparison.OrdinalIgnoreCase))
         {
             url += "/v1";
         }
@@ -223,7 +223,11 @@ public sealed class OpenAiCompatibleAgentClient : IAgentModelClient
     internal static AgentModelResponse ParseResponse(string responseJson)
     {
         using var doc = JsonDocument.Parse(responseJson);
-        var choice = doc.RootElement.GetProperty("choices")[0];
+        var choices = doc.RootElement.GetProperty("choices");
+        if (choices.GetArrayLength() == 0)
+            throw new InvalidOperationException("LLM API returned an empty choices array. The provider may be rate-limiting or experiencing an internal error.");
+
+        var choice = choices[0];
         var message = choice.GetProperty("message");
 
         var finishReasonStr = choice.TryGetProperty("finish_reason", out var fr) ? fr.GetString() : null;

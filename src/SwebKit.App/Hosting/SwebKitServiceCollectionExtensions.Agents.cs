@@ -43,6 +43,9 @@ public static partial class SwebKitServiceCollectionExtensions
         // API Client agent service
         services.AddSingleton<IApiClientAgentService, ApiClientAgentService>();
 
+        // Action applier for confirmed action execution
+        services.AddSingleton<AgentActionApplier>();
+
         // Tools — registered as IAgentTool so AgentToolRegistry receives them all via IEnumerable<IAgentTool>
         // Kubernetes Tools
         services.AddSingleton<IAgentTool, GetPodStatusTool>();

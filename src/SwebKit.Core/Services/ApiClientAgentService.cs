@@ -32,10 +32,10 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         _logger = logger;
     }
 
-    public Task<IReadOnlyList<ApiRequestSummary>> SearchRequestsAsync(string? query = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ApiRequestSummary>> SearchRequestsAsync(string? query = null, CancellationToken ct = default)
     {
         var results = new List<ApiRequestSummary>();
-        var allCollections = GetAllCollections();
+        var allCollections = await GetAllCollectionsAsync(ct);
 
         foreach (var (collection, origin, linkedRootId) in allCollections)
         {
@@ -52,24 +52,24 @@ public sealed class ApiClientAgentService : IApiClientAgentService
                 .ToList();
         }
 
-        return Task.FromResult<IReadOnlyList<ApiRequestSummary>>(results);
+        return results;
     }
 
-    public Task<ApiRequestSnapshot?> GetRequestAsync(string requestId, CancellationToken ct = default)
+    public async Task<ApiRequestSnapshot?> GetRequestAsync(string requestId, CancellationToken ct = default)
     {
-        var allCollections = GetAllCollections();
+        var allCollections = await GetAllCollectionsAsync(ct);
 
         foreach (var (collection, origin, linkedRootId) in allCollections)
         {
             var (node, folderPath) = FindRequestNode(collection.Nodes, requestId, "");
             if (node?.Request is not null)
             {
-                return Task.FromResult<ApiRequestSnapshot?>(BuildSnapshot(
-                    node.Request, collection, origin, linkedRootId, folderPath));
+                return BuildSnapshot(
+                    node.Request, collection, origin, linkedRootId, folderPath);
             }
         }
 
-        return Task.FromResult<ApiRequestSnapshot?>(null);
+        return null;
     }
 
     public async Task<ApiClientMutationResult> CreateRequestAsync(
@@ -80,7 +80,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         string url,
         CancellationToken ct = default)
     {
-        var (collection, origin, linkedRootId) = FindCollection(collectionId);
+        var (collection, origin, linkedRootId) = await FindCollectionAsync(collectionId, ct);
         if (collection is null)
             return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Collection '{collectionId}' not found." };
 
@@ -138,7 +138,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         string? url = null,
         CancellationToken ct = default)
     {
-        var (collection, origin, linkedRootId) = FindCollectionByRequest(requestId);
+        var (collection, origin, linkedRootId) = await FindCollectionByRequestAsync(requestId, ct);
         if (collection is null)
             return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Request '{requestId}' not found." };
 
@@ -165,7 +165,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
 
     public async Task<ApiClientMutationResult> DuplicateRequestAsync(string requestId, CancellationToken ct = default)
     {
-        var (collection, origin, linkedRootId) = FindCollectionByRequest(requestId);
+        var (collection, origin, linkedRootId) = await FindCollectionByRequestAsync(requestId, ct);
         if (collection is null)
             return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Request '{requestId}' not found." };
 
@@ -237,13 +237,22 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         int? newIndex,
         CancellationToken ct = default)
     {
-        var (collection, origin, linkedRootId) = FindCollectionByRequest(requestId);
+        var (collection, origin, linkedRootId) = await FindCollectionByRequestAsync(requestId, ct);
         if (collection is null)
             return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Request '{requestId}' not found." };
 
         var (node, currentFolderPath) = FindRequestNode(collection.Nodes, requestId, "");
         if (node is null)
             return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Request '{requestId}' not found." };
+
+        // Validate target folder BEFORE removing from current location
+        ApiCollectionNode? targetFolder = null;
+        if (!string.IsNullOrEmpty(targetFolderPath))
+        {
+            targetFolder = FindFolder(collection.Nodes, targetFolderPath);
+            if (targetFolder is null)
+                return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Target folder '{targetFolderPath}' not found." };
+        }
 
         // Remove from current location
         if (string.IsNullOrEmpty(currentFolderPath))
@@ -255,7 +264,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         }
 
         // Insert at target
-        if (string.IsNullOrEmpty(targetFolderPath))
+        if (targetFolder is null)
         {
             if (newIndex is int idx && idx >= 0 && idx <= collection.Nodes.Count)
                 collection.Nodes.Insert(idx, node);
@@ -264,10 +273,6 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         }
         else
         {
-            var targetFolder = FindFolder(collection.Nodes, targetFolderPath);
-            if (targetFolder is null)
-                return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Target folder '{targetFolderPath}' not found." };
-
             if (newIndex is int idx && idx >= 0 && idx <= targetFolder.Children.Count)
                 targetFolder.Children.Insert(idx, node);
             else
@@ -292,7 +297,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         string newName,
         CancellationToken ct = default)
     {
-        var (collection, origin, linkedRootId) = FindCollection(collectionId);
+        var (collection, origin, linkedRootId) = await FindCollectionAsync(collectionId, ct);
         if (collection is null)
             return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Collection '{collectionId}' not found." };
 
@@ -315,7 +320,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
 
     public async Task<ApiClientMutationResult> DeleteRequestAsync(string requestId, CancellationToken ct = default)
     {
-        var (collection, origin, linkedRootId) = FindCollectionByRequest(requestId);
+        var (collection, origin, linkedRootId) = await FindCollectionByRequestAsync(requestId, ct);
         if (collection is null)
             return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Request '{requestId}' not found." };
 
@@ -348,7 +353,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         string folderPath,
         CancellationToken ct = default)
     {
-        var (collection, origin, linkedRootId) = FindCollection(collectionId);
+        var (collection, origin, linkedRootId) = await FindCollectionAsync(collectionId, ct);
         if (collection is null)
             return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Collection '{collectionId}' not found." };
 
@@ -371,17 +376,17 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         return new ApiClientMutationResult { IsSuccess = true, CollectionId = collectionId };
     }
 
-    public Task<IReadOnlyList<(string Id, string Name, string Origin, string? LinkedRootId)>> GetCollectionsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<(string Id, string Name, string Origin, string? LinkedRootId)>> GetCollectionsAsync(CancellationToken ct = default)
     {
-        var result = GetAllCollections()
+        var result = (await GetAllCollectionsAsync(ct))
             .Select(c => (c.Collection.Id, c.Collection.Name, c.Origin, c.LinkedRootId))
             .ToList();
-        return Task.FromResult<IReadOnlyList<(string, string, string, string?)>>(result);
+        return result;
     }
 
     // ── Helpers ──
 
-    private List<(ApiCollection Collection, string Origin, string? LinkedRootId)> GetAllCollections()
+    private async Task<List<(ApiCollection Collection, string Origin, string? LinkedRootId)>> GetAllCollectionsAsync(CancellationToken ct = default)
     {
         var list = new List<(ApiCollection, string, string?)>();
 
@@ -392,7 +397,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         // Linked collections
         foreach (var root in _linkedRootRepo.Roots.Where(r => r.IsEnabled))
         {
-            var loaded = _linkedFileService.LoadRootAsync(root, CancellationToken.None).GetAwaiter().GetResult();
+            var loaded = await _linkedFileService.LoadRootAsync(root, ct);
             foreach (var c in loaded.Collections)
                 list.Add((c, "linked", root.Id));
         }
@@ -400,9 +405,9 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         return list;
     }
 
-    private (ApiCollection? Collection, string Origin, string? LinkedRootId) FindCollection(string collectionId)
+    private async Task<(ApiCollection? Collection, string Origin, string? LinkedRootId)> FindCollectionAsync(string collectionId, CancellationToken ct)
     {
-        foreach (var (collection, origin, linkedRootId) in GetAllCollections())
+        foreach (var (collection, origin, linkedRootId) in await GetAllCollectionsAsync(ct))
         {
             if (collection.Id == collectionId)
                 return (collection, origin, linkedRootId);
@@ -410,9 +415,9 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         return (null, "", null);
     }
 
-    private (ApiCollection? Collection, string Origin, string? LinkedRootId) FindCollectionByRequest(string requestId)
+    private async Task<(ApiCollection? Collection, string Origin, string? LinkedRootId)> FindCollectionByRequestAsync(string requestId, CancellationToken ct)
     {
-        foreach (var (collection, origin, linkedRootId) in GetAllCollections())
+        foreach (var (collection, origin, linkedRootId) in await GetAllCollectionsAsync(ct))
         {
             var (node, _) = FindRequestNode(collection.Nodes, requestId, "");
             if (node is not null)
@@ -443,16 +448,17 @@ public sealed class ApiClientAgentService : IApiClientAgentService
     private static ApiCollectionNode? FindFolder(List<ApiCollectionNode> nodes, string folderPath)
     {
         var parts = folderPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        ApiCollectionNode? currentFolder = null;
         var current = nodes;
 
         foreach (var part in parts)
         {
-            var folder = current.FirstOrDefault(n => n.Type == ApiCollectionNodeType.Folder && n.Name == part);
-            if (folder is null) return null;
-            current = folder.Children;
+            currentFolder = current.FirstOrDefault(n => n.Type == ApiCollectionNodeType.Folder && n.Name == part);
+            if (currentFolder is null) return null;
+            current = currentFolder.Children;
         }
 
-        return current != nodes ? current.FirstOrDefault() : null;
+        return currentFolder;
     }
 
     private static bool RemoveNode(List<ApiCollectionNode> nodes, ApiCollectionNode target)
@@ -539,8 +545,9 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         if (string.IsNullOrEmpty(value)) return value;
         var lower = key.ToLowerInvariant();
         if (lower.Contains("authorization") || lower.Contains("api-key") || lower.Contains("apikey") ||
-            lower.Contains("token") || lower.Contains("secret") || lower.Contains("password") ||
-            lower.Contains("credential"))
+            lower.Contains("x-api-key") || lower.Contains("token") || lower.Contains("secret") ||
+            lower.Contains("password") || lower.Contains("credential") ||
+            lower.Contains("cookie") || lower.Contains("set-cookie"))
             return "***";
         return value;
     }
@@ -564,24 +571,24 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         var root = _linkedRootRepo.Roots.FirstOrDefault(r => r.Id == linkedRootId);
         if (root is null) return;
 
-        var apiRootPath = _linkedFileService.LoadRootAsync(root, CancellationToken.None).GetAwaiter().GetResult().ApiRootPath;
+        var loaded = await _linkedFileService.LoadRootAsync(root, ct);
+        var apiRootPath = loaded.ApiRootPath;
 
-        // Save all requests in the collection
-        foreach (var node in collection.Nodes)
+        // Recursively save all requests in the collection
+        SaveNodesRecursive(apiRootPath, collection, collection.Nodes, ct);
+    }
+
+    private void SaveNodesRecursive(string apiRootPath, ApiCollection collection, List<ApiCollectionNode> nodes, CancellationToken ct)
+    {
+        foreach (var node in nodes)
         {
             if (node.Type == ApiCollectionNodeType.Request && node.Request is not null)
             {
-                await _linkedFileService.SaveRequestAsync(apiRootPath, collection, node.Request, null, ct);
+                _linkedFileService.SaveRequestAsync(apiRootPath, collection, node.Request, null, ct).GetAwaiter().GetResult();
             }
             else if (node.Type == ApiCollectionNodeType.Folder)
             {
-                foreach (var child in node.Children)
-                {
-                    if (child.Type == ApiCollectionNodeType.Request && child.Request is not null)
-                    {
-                        await _linkedFileService.SaveRequestAsync(apiRootPath, collection, child.Request, null, ct);
-                    }
-                }
+                SaveNodesRecursive(apiRootPath, collection, node.Children, ct);
             }
         }
     }

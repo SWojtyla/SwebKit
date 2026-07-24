@@ -33,6 +33,11 @@ public enum AgentActionRisk
 /// </summary>
 public sealed class PendingAgentAction
 {
+    private readonly object _stateLock = new();
+    private bool _isConfirmed;
+    private bool _isRejected;
+    private bool _isApplied;
+
     public required string Id { get; init; }
     public required AgentActionType Type { get; init; }
     public required string Summary { get; init; }
@@ -43,13 +48,13 @@ public sealed class PendingAgentAction
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset ExpiresAt { get; init; } = DateTimeOffset.UtcNow.AddMinutes(5);
     public bool IsExpired => DateTimeOffset.UtcNow > ExpiresAt;
-    public bool IsConfirmed { get; private set; }
-    public bool IsRejected { get; private set; }
-    public bool IsApplied { get; private set; }
+    public bool IsConfirmed { get { lock (_stateLock) return _isConfirmed; } }
+    public bool IsRejected { get { lock (_stateLock) return _isRejected; } }
+    public bool IsApplied { get { lock (_stateLock) return _isApplied; } }
 
-    public void Confirm() { IsConfirmed = true; }
-    public void Reject() { IsRejected = true; }
-    public void MarkApplied() { IsApplied = true; }
+    public void Confirm() { lock (_stateLock) _isConfirmed = true; }
+    public void Reject() { lock (_stateLock) _isRejected = true; }
+    public void MarkApplied() { lock (_stateLock) _isApplied = true; }
 }
 
 /// <summary>

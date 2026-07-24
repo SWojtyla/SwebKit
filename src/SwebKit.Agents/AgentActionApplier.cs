@@ -24,13 +24,17 @@ public sealed class AgentActionApplier
     }
 
     /// <summary>
-    /// Applies a confirmed action. Validates freshness, executes once, and returns the result.
+    /// Applies a confirmed action. Validates confirmation, freshness, executes once, and returns the result.
+    /// The action must have been explicitly confirmed via <see cref="PendingAgentAction.Confirm"/> before calling this.
     /// </summary>
     public async Task<AgentActionResult> ApplyAsync(string actionId, CancellationToken ct = default)
     {
         var action = _coordinator.GetAction(actionId);
         if (action is null)
             return new AgentActionResult { IsSuccess = false, ErrorMessage = "Action not found or expired." };
+
+        if (!action.IsConfirmed)
+            return new AgentActionResult { IsSuccess = false, ErrorMessage = "Action has not been confirmed by the user." };
 
         if (action.IsApplied)
             return new AgentActionResult { IsSuccess = false, ErrorMessage = "Action already applied." };
@@ -45,11 +49,11 @@ public sealed class AgentActionApplier
         {
             var result = action.Type switch
             {
-                AgentActionType.CreateRequest => await ApplyCreateAsync(action, ct),
-                AgentActionType.UpdateRequest => await ApplyUpdateAsync(action, ct),
+                AgentActionType.CreateRequest => ApplyCreate(action),
+                AgentActionType.UpdateRequest => ApplyUpdate(action),
                 AgentActionType.DeleteRequest => await ApplyDeleteAsync(action, ct),
-                AgentActionType.DuplicateRequest => await ApplyDuplicateAsync(action, ct),
-                AgentActionType.MoveRequest => await ApplyMoveAsync(action, ct),
+                AgentActionType.DuplicateRequest => ApplyDuplicate(action),
+                AgentActionType.MoveRequest => ApplyMove(action),
                 AgentActionType.ExecuteHttpRequest => await ApplyExecuteHttpAsync(action, ct),
                 _ => new AgentActionResult { IsSuccess = false, ErrorMessage = $"Unknown action type: {action.Type}" }
             };
@@ -65,11 +69,8 @@ public sealed class AgentActionApplier
         }
     }
 
-    private async Task<AgentActionResult> ApplyCreateAsync(PendingAgentAction action, CancellationToken ct)
+    private static AgentActionResult ApplyCreate(PendingAgentAction action)
     {
-        // For create, the action stores the parameters in the preview text
-        // In a real implementation, we'd store structured params on PendingAgentAction
-        // For now, this is a placeholder that demonstrates the flow
         return new AgentActionResult
         {
             IsSuccess = false,
@@ -77,7 +78,7 @@ public sealed class AgentActionApplier
         };
     }
 
-    private async Task<AgentActionResult> ApplyUpdateAsync(PendingAgentAction action, CancellationToken ct)
+    private static AgentActionResult ApplyUpdate(PendingAgentAction action)
     {
         return new AgentActionResult
         {
@@ -88,15 +89,17 @@ public sealed class AgentActionApplier
 
     private async Task<AgentActionResult> ApplyDeleteAsync(PendingAgentAction action, CancellationToken ct)
     {
-        // Extract request ID from target — in production, store structured params
+        var requestId = ExtractRequestIdFromTarget(action.Target);
+        var result = await _apiClient.DeleteRequestAsync(requestId, ct);
         return new AgentActionResult
         {
-            IsSuccess = false,
-            ErrorMessage = "Delete action application requires structured parameters. Use IApiClientAgentService.DeleteRequestAsync directly."
+            IsSuccess = result.IsSuccess,
+            ErrorMessage = result.ErrorMessage,
+            ResultSummary = result.IsSuccess ? $"Deleted request '{requestId}'" : null
         };
     }
 
-    private async Task<AgentActionResult> ApplyDuplicateAsync(PendingAgentAction action, CancellationToken ct)
+    private static AgentActionResult ApplyDuplicate(PendingAgentAction action)
     {
         return new AgentActionResult
         {
@@ -105,7 +108,7 @@ public sealed class AgentActionApplier
         };
     }
 
-    private async Task<AgentActionResult> ApplyMoveAsync(PendingAgentAction action, CancellationToken ct)
+    private static AgentActionResult ApplyMove(PendingAgentAction action)
     {
         return new AgentActionResult
         {
@@ -116,13 +119,10 @@ public sealed class AgentActionApplier
 
     private async Task<AgentActionResult> ApplyExecuteHttpAsync(PendingAgentAction action, CancellationToken ct)
     {
-        // For HTTP execution, we need to resolve the request and execute it
-        // The action stores the request ID in the target field
-        // In production, we'd store structured params on PendingAgentAction
+        var requestId = ExtractRequestIdFromTarget(action.Target);
 
         // Re-fetch the request to validate freshness
-        var snapshot = await _apiClient.GetRequestAsync(
-            ExtractRequestIdFromTarget(action.Target), ct);
+        var snapshot = await _apiClient.GetRequestAsync(requestId, ct);
 
         if (snapshot is null)
             return new AgentActionResult { IsSuccess = false, ErrorMessage = "Request not found." };
