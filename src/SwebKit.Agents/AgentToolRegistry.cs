@@ -23,7 +23,10 @@ public sealed class AgentToolRegistry : IAgentToolRegistry
             {
                 Name = t.Name,
                 Description = t.Description,
-                ParametersSchema = t.ParametersSchema
+                ParametersSchema = t.ParametersSchema,
+                Kind = t.Kind,
+                Risk = t.Risk,
+                RequiredCapability = t.RequiredCapability
             })
             .ToList();
     }

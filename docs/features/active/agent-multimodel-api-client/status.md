@@ -8,7 +8,7 @@
 |---|-----------|--------|
 | 1 | Configuration/profils + client neutre + migration + tests | Done |
 | 2 | Détection de capacités et UI LM Studio | Done |
-| 3 | Historique typé, contexte actif et fiabilité de boucle | Partial (typed session done, loop/context pending) |
+| 3 | Historique typé, contexte actif et fiabilité de boucle | Done |
 | 4 | Extraction du service API Client et synchronisation UI | Pending |
 | 5 | Infrastructure proposal/diff/confirmation | Pending |
 | 6 | Outils CRUD REST locaux, puis linked roots | Pending |
@@ -65,6 +65,28 @@ All items done:
 - [x] Multi-provider settings UI (`AgentConfigForm.razor`)
 - [x] Build verification and fix compilation errors
 - [x] Register `AgentCapabilityTester` in DI
+
+### What was done (session 2025-07-24, Phase 3)
+
+**Phase 3 — Orchestrator improvements**
+- Added `ToolKind` (Read/Mutate) and `ToolRisk` (None/Low/High) enums to `IAgentTool`.
+- Added default interface members: `Kind`, `Risk`, `RequiredCapability` on `IAgentTool`.
+- Enriched `ToolDefinition` with `Kind`, `Risk`, `RequiredCapability` fields.
+- Updated `AgentToolRegistry` to propagate metadata into `ToolDefinition`.
+- Rewrote `AgentChatService` with:
+  - Structured system prompt in sections (role, context, tool policy, confirmation policy, limits, format).
+  - Capability-based tool filtering (chat-only mode disables tools).
+  - Step tracking: `AgentChatStep` records for each tool call/result.
+  - Status reporting: `AgentStatus` enum (Thinking, ReadingContext, PreparingChange, AwaitingConfirmation, Applying, Done, Failed).
+  - Error handling with `AgentStatus.Failed`.
+- Added `AgentChatStep`, `AgentActionSummary`, `AgentStatus` types to `IAgentChatService.cs`.
+- Enriched `AgentChatReply` with `Steps`, `PendingActions`, `Status`.
+- Updated `AgentChatPanel.razor`:
+  - `ChatMessage` record includes `Status` and `Steps`.
+  - Steps display with tool call/result icons and timing.
+  - Failed status indicator.
+- Created `ToolMetadataTests` (4 tests: defaults, mutation override, interface defaults, override).
+- All 108 tests pass, all projects build.
 
 ### Key files created
 
