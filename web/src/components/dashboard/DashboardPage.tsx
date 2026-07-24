@@ -9,14 +9,18 @@ import {
   Settings,
   CheckCircle2,
   XCircle,
+  FlaskConical,
 } from "lucide-react";
-import { useHealth, useProfile } from "@/lib/hooks";
+import { useHealth, useProfile, useDemoMode, useToggleDemoMode } from "@/lib/hooks";
 
 export function DashboardPage() {
   const { data: health } = useHealth();
   const { data: profile } = useProfile();
+  const { data: demoMode } = useDemoMode();
+  const toggleDemo = useToggleDemoMode();
 
   const sidecarOk = health?.status === "ok";
+  const isDemo = demoMode?.isDemoMode ?? false;
 
   const services = [
     {
@@ -66,19 +70,35 @@ export function DashboardPage() {
         Developer Swiss army knife for Azure
       </p>
 
-      {/* Sidecar status */}
-      <div className="mt-6 flex items-center gap-2 rounded-lg border p-3">
-        {sidecarOk ? (
-          <CheckCircle2 className="h-5 w-5 text-green-500" />
-        ) : (
-          <XCircle className="h-5 w-5 text-destructive" />
-        )}
-        <span className="text-sm font-medium">
-          Backend sidecar: {sidecarOk ? "Connected" : "Disconnected"}
-        </span>
-        {health?.version && (
-          <span className="text-xs text-muted-foreground">v{health.version}</span>
-        )}
+      {/* Sidecar status + demo mode toggle */}
+      <div className="mt-6 flex items-center gap-4 rounded-lg border p-3">
+        <div className="flex items-center gap-2">
+          {sidecarOk ? (
+            <CheckCircle2 className="h-5 w-5 text-green-500" />
+          ) : (
+            <XCircle className="h-5 w-5 text-destructive" />
+          )}
+          <span className="text-sm font-medium">
+            Backend sidecar: {sidecarOk ? "Connected" : "Disconnected"}
+          </span>
+          {health?.version && (
+            <span className="text-xs text-muted-foreground">v{health.version}</span>
+          )}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <FlaskConical className={`h-4 w-4 ${isDemo ? "text-primary" : "text-muted-foreground"}`} />
+          <button
+            onClick={() => toggleDemo.mutate(!isDemo)}
+            disabled={toggleDemo.isPending}
+            className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+              isDemo
+                ? "border-primary bg-primary text-primary-foreground"
+                : "hover:bg-accent"
+            }`}
+          >
+            {isDemo ? "Demo Mode ON" : "Enable Demo Mode"}
+          </button>
+        </div>
       </div>
 
       {/* Service cards */}

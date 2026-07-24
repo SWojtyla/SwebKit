@@ -75,6 +75,29 @@ export function useHealth() {
   });
 }
 
+// ── Demo Mode ────────────────────────────────────────────────────────────────
+
+export function useDemoMode() {
+  return useQuery({
+    queryKey: ["demo-mode"],
+    queryFn: () => apiFetch<{ isDemoMode: boolean }>("/api/demo-mode"),
+  });
+}
+
+export function useToggleDemoMode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiSend(`/api/demo-mode?enabled=${enabled}`, "POST"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["demo-mode"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["aks-test"] });
+      qc.invalidateQueries({ queryKey: ["aks-namespaces"] });
+    },
+  });
+}
+
 // ── Service Bus ──────────────────────────────────────────────────────────────
 
 export function useSbTestConnection(nsId: string | null) {

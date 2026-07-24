@@ -17,14 +17,15 @@ public static class ServiceBusEndpoints
         app.MapGet("/api/servicebus/{nsId}/test", async (
             string nsId,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
             try
             {
-                var client = CreateClient(ns, factory);
+                var client = CreateClient(ns, factory, demo);
                 var ok = await client.TestConnectionAsync();
                 return Results.Ok(new { connected = ok });
             }
@@ -37,12 +38,13 @@ public static class ServiceBusEndpoints
         app.MapGet("/api/servicebus/{nsId}/info", async (
             string nsId,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             var info = await client.GetNamespaceInfoAsync();
             return Results.Ok(info);
         });
@@ -50,12 +52,13 @@ public static class ServiceBusEndpoints
         app.MapGet("/api/servicebus/{nsId}/queues", async (
             string nsId,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             var queues = await client.ListQueuesAsync();
             return Results.Ok(queues);
         });
@@ -63,12 +66,13 @@ public static class ServiceBusEndpoints
         app.MapGet("/api/servicebus/{nsId}/topics", async (
             string nsId,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             var topics = await client.ListTopicsAsync();
             return Results.Ok(topics);
         });
@@ -77,12 +81,13 @@ public static class ServiceBusEndpoints
             string nsId,
             string topic,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             var subs = await client.ListSubscriptionsAsync(topic);
             return Results.Ok(subs);
         });
@@ -91,12 +96,13 @@ public static class ServiceBusEndpoints
             string nsId,
             string entityPath,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             var stats = await client.GetEntityStatsAsync(entityPath);
             return Results.Ok(stats);
         });
@@ -107,12 +113,13 @@ public static class ServiceBusEndpoints
             int count,
             long? fromSeq,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             var messages = await client.PeekMessagesAsync(entityPath, count, fromSequenceNumber: fromSeq);
             return Results.Ok(messages);
         });
@@ -123,12 +130,13 @@ public static class ServiceBusEndpoints
             int count,
             long? fromSeq,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             var messages = await client.PeekDeadLetterAsync(entityPath, count, fromSequenceNumber: fromSeq);
             return Results.Ok(messages);
         });
@@ -138,12 +146,13 @@ public static class ServiceBusEndpoints
             string entityPath,
             SbMessage message,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             await client.SendMessageAsync(entityPath, message);
             return Results.Ok();
         });
@@ -153,12 +162,13 @@ public static class ServiceBusEndpoints
             string entityPath,
             long[] sequenceNumbers,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             var count = await client.CompleteMessagesAsync(entityPath, sequenceNumbers);
             return Results.Ok(new { completed = count });
         });
@@ -168,12 +178,13 @@ public static class ServiceBusEndpoints
             string entityPath,
             bool deadLetter,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             var count = await client.PurgeMessagesAsync(entityPath, deadLetter);
             return Results.Ok(new { purged = count });
         });
@@ -183,12 +194,13 @@ public static class ServiceBusEndpoints
             string entityPath,
             string[] sequenceNumbers,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             await client.CompleteDeadLetterAsync(entityPath, sequenceNumbers);
             return Results.Ok();
         });
@@ -198,19 +210,26 @@ public static class ServiceBusEndpoints
             string entityPath,
             ResubmitRequest req,
             ProfileRepository profile,
-            IServiceBusClientFactory factory) =>
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
         {
             var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
             if (ns is null) return Results.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory);
+            var client = CreateClient(ns, factory, demo);
             await client.ResubmitDeadLetterAsync(entityPath, req.SequenceNumbers, req.TargetEntityPath, req.RemapRules);
             return Results.Ok();
         });
     }
 
-    private static IServiceBusClient CreateClient(ServiceBusNamespace ns, IServiceBusClientFactory factory)
+    private static IServiceBusClient CreateClient(
+        ServiceBusNamespace ns,
+        IServiceBusClientFactory factory,
+        DemoModeService demo)
     {
+        if (demo.IsDemoMode)
+            return demo.GetSbClient(ns);
+
         return ns.AuthMode == SbAuthMode.ConnectionString
             ? factory.Create(ns.CredentialKey, ns.TransportType)
             : factory.CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType);

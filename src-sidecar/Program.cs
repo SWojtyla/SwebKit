@@ -16,6 +16,7 @@ builder.Services.AddSingleton<EnvironmentRepository>();
 builder.Services.AddSingleton<CollectionRepository>();
 builder.Services.AddSingleton<UserSettingsRepository>();
 builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
+builder.Services.AddSingleton<DemoModeService>();
 
 // CORS for the Tauri WebView (dev mode uses http://localhost:1420)
 builder.Services.AddCors(options =>
@@ -40,9 +41,28 @@ await app.Services.GetRequiredService<UserSettingsRepository>().LoadAsync();
 
 app.MapGet("/health", () => new { status = "ok", version = "0.1.0" });
 
+// ── Demo Mode ────────────────────────────────────────────────────────────────
+
+app.MapGet("/api/demo-mode", (DemoModeService demo) =>
+    Results.Ok(new { isDemoMode = demo.IsDemoMode }));
+
+app.MapPost("/api/demo-mode", (DemoModeService demo, bool enabled) =>
+{
+    demo.IsDemoMode = enabled;
+    return Results.Ok(new { isDemoMode = demo.IsDemoMode });
+});
+
 // ── Config: Profiles ─────────────────────────────────────────────────────────
 
-app.MapGet("/api/config/profiles", (ProfileRepository repo) => Results.Ok(repo.GetProfileData()));
+app.MapGet("/api/config/profiles", (ProfileRepository repo, DemoModeService demo) =>
+{
+    var data = repo.GetProfileData();
+    if (demo.IsDemoMode)
+    {
+        data.ServiceBusNamespaces = [.. demo.GetDemoNamespaces()];
+    }
+    return Results.Ok(data);
+});
 
 app.MapPut("/api/config/profiles", async (ProfileRepository repo, ProfileData data) =>
 {
