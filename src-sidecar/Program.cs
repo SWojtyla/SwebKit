@@ -1,16 +1,19 @@
+using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Kestrel to use a dynamic port (port 0 = OS-assigned).
-// In production, Tauri reads the actual port from stdout.
+// Configure Kestrel to use a fixed dev port.
+// In production, Tauri will pass --urls http://127.0.0.1:0 for OS-assigned port.
 builder.WebHost.UseUrls("http://127.0.0.1:5199");
 
-// TODO: Register DI services from existing SwebKit projects
-// builder.Services.AddSingleton<ProfileRepository>();
-// builder.Services.AddSingleton<EnvironmentRepository>();
-// builder.Services.AddScoped<IServiceBusClientFactory, ServiceBusClientFactory>();
-// etc.
+// Register core configuration repositories (same as MauiProgram.cs)
+builder.Services.AddSingleton<ProfileRepository>();
+builder.Services.AddSingleton<EnvironmentRepository>();
+builder.Services.AddSingleton<CollectionRepository>();
+builder.Services.AddSingleton<UserSettingsRepository>();
 
-// Add CORS for the Tauri WebView (dev mode uses http://localhost:1420)
+// CORS for the Tauri WebView (dev mode uses http://localhost:1420)
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -23,26 +26,57 @@ var app = builder.Build();
 
 app.UseCors();
 
-// Health check endpoint
+// Load config repositories on startup
+await app.Services.GetRequiredService<ProfileRepository>().LoadAsync();
+await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
+await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
+await app.Services.GetRequiredService<UserSettingsRepository>().LoadAsync();
+
+// ── Health ───────────────────────────────────────────────────────────────────
+
 app.MapGet("/health", () => new { status = "ok", version = "0.1.0" });
 
-// Config endpoints (Phase 2)
-// app.MapGet("/api/config/profiles", ...);
-// app.MapPut("/api/config/profiles", ...);
+// ── Config: Profiles ─────────────────────────────────────────────────────────
 
-// Service Bus endpoints (Phase 3)
-// app.MapGet("/api/servicebus/{nsId}/info", ...);
+app.MapGet("/api/config/profiles", (ProfileRepository repo) => Results.Ok(repo.GetProfileData()));
 
-// AKS endpoints (Phase 4)
-// app.MapGet("/api/aks/contexts", ...);
+app.MapPut("/api/config/profiles", async (ProfileRepository repo, ProfileData data) =>
+{
+    repo.ReplaceProfileData(data);
+    await repo.SaveAsync();
+    return Results.Ok();
+});
 
-// Redis endpoints (Phase 6)
-// app.MapGet("/api/redis/{cacheId}/test", ...);
+// ── Config: Environments ─────────────────────────────────────────────────────
 
-// Storage endpoints (Phase 7)
-// app.MapGet("/api/storage/{accountId}/test", ...);
+app.MapGet("/api/config/environments", (EnvironmentRepository repo) =>
+    Results.Ok(new { repo.Environments, repo.UiState }));
 
-// Agent endpoints (Phase 8)
-// app.MapPost("/api/agent/chat", ...);
+app.MapPut("/api/config/environments", async (EnvironmentRepository repo, EnvironmentsStore store) =>
+{
+    await repo.ReplaceStoreAsync(store);
+    return Results.Ok();
+});
+
+// ── Config: Collections ──────────────────────────────────────────────────────
+
+app.MapGet("/api/config/collections", (CollectionRepository repo) => Results.Ok(repo.Collections));
+
+app.MapPut("/api/config/collections", async (CollectionRepository repo, CollectionsStore store) =>
+{
+    await repo.ReplaceStoreAsync(store);
+    return Results.Ok();
+});
+
+// ── Config: User Settings ────────────────────────────────────────────────────
+
+app.MapGet("/api/config/user-settings", (UserSettingsRepository repo) => Results.Ok(repo.Settings));
+
+app.MapPut("/api/config/user-settings", async (UserSettingsRepository repo, UserSettings settings) =>
+{
+    repo.ReplaceSettings(settings);
+    await repo.SaveAsync();
+    return Results.Ok();
+});
 
 app.Run();
