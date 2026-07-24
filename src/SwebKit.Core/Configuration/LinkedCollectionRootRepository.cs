@@ -96,6 +96,21 @@ public sealed class LinkedCollectionRootRepository(ILogger<LinkedCollectionRootR
         return true;
     }
 
+    /// <summary>
+    /// Updates the Bruno sync settings (folder path + enabled flag) for an existing linked root.
+    /// </summary>
+    public async Task<bool> UpdateBrunoSyncSettingsAsync(string rootId, string? brunoFolderPath, bool enabled)
+    {
+        var root = _store.Roots.FirstOrDefault(r => r.Id == rootId);
+        if (root is null)
+            return false;
+
+        root.BrunoSyncFolderPath = brunoFolderPath;
+        root.BrunoSyncEnabled = enabled;
+        await SaveAsync().ConfigureAwait(false);
+        return true;
+    }
+
     private static LinkedCollectionRootStore Deserialize(string json) =>
         JsonSerializer.Deserialize<LinkedCollectionRootStore>(json, Options) ?? new LinkedCollectionRootStore();
 }

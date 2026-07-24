@@ -65,6 +65,7 @@ public static partial class SwebKitServiceCollectionExtensions
         services.AddSingleton<PostmanCollectionImporter>();
         services.AddSingleton<BrunoCollectionExporter>();
         services.AddSingleton<BrunoFolderImporter>();
+        services.AddSingleton<BrunoSyncService>();
         services.AddSingleton<CollectionImportService>();
         services.AddHttpClient(HttpRequestExecutor.ClientName)
             .ConfigurePrimaryHttpMessageHandler(sp =>

@@ -14,7 +14,8 @@
                         OnAddRequest="OnAddRequestInFolder" OnRenameNode="OnRenameNode" OnDeleteNode="OnDeleteNode"
                         OnLinkedRootSelected="OnLinkedRootSelected" OnRenameCollection="OnRenameCollection"
                         OnDeleteCollection="OnDeleteCollection" OnLinkCollectionToRepo="OnLinkCollectionToRepo"
-                        OnMoveNode="OnMoveNode" />
+                        OnMoveNode="OnMoveNode" OnReimportFromBruno="OnReimportFromBruno"
+                        OnExportToBrunoFolder="OnExportToBrunoFolder" OnRemoveLinkedRoot="OnRemoveLinkedRoot" />
 
     @* Right: request builder + response viewer OR management screens *@
     <div class="api-client-workspace" id="main-workspace" role="main">
@@ -103,6 +104,12 @@
 
     [Parameter]
     public EventCallback<string> OnLinkCollectionToRepo { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnReimportFromBruno { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnExportToBrunoFolder { get; set; }
 
     [Parameter]
     public EventCallback<(string CollectionId, ApiCollectionNode DraggedNode, ApiCollectionNode? NewParent, int? NewIndex)>

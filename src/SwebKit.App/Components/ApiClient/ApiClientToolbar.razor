@@ -64,6 +64,16 @@
                         @onclick="HandleExportCollectionAsync">Export collection</button>
             </ChildContent>
         </AppDropdown>
+        @if (BrunoSyncAvailable)
+        {
+            <AppButton Variant="Secondary" Size="Small"
+                       CssClass="@(BrunoSyncEnabled ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
+                       Title="@(BrunoSyncEnabled ? "Bruno sync is ON — .bru files are updated on save" : "Bruno sync is OFF — .bru files are not updated")"
+                       OnClick="OnToggleBrunoSync">
+                <FluentIcon Value="@_iconSync" Width="14px" />
+                <span>Bruno Sync</span>
+            </AppButton>
+        }
     </div>
 
     <div class="api-client-toolbar__center" role="group" aria-label="Current request status">
@@ -254,6 +264,15 @@
     [Parameter]
     public EventCallback<string?> OnSelectEnvironment { get; set; }
 
+    [Parameter]
+    public bool BrunoSyncAvailable { get; set; }
+
+    [Parameter]
+    public bool BrunoSyncEnabled { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggleBrunoSync { get; set; }
+
     // Dropdown-open state — local to the toolbar; the toolbar is never conditionally rendered
     // on the page, so there's no BL-4 destroy/recreate risk in keeping these as local fields.
     private bool _showRepoMenu;
@@ -263,6 +282,7 @@
 
     private static readonly Icon _iconChevronDown = new Icons.Regular.Size16.ChevronDown();
     private static readonly Icon _iconGlobe = new Icons.Regular.Size16.Globe();
+    private static readonly Icon _iconSync = new Icons.Regular.Size16.ArrowSync();
     private static readonly Icon _iconDirtyDot = new Icons.Filled.Size12.Circle();
 
     // Menu-item handlers: close the local dropdown (mirrors the pre-extraction behaviour where

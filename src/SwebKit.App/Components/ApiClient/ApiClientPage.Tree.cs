@@ -95,6 +95,7 @@ public partial class ApiClientPage
     {
         if (_state.ActiveCollection is null) return;
 
+        var oldRequestName = args.Node.Request?.Name;
         RenameNodeInTree(_state.ActiveCollection.Nodes, args.Node.Id, args.NewName);
         if (args.Node.Request is not null)
             args.Node.Request.Name = args.NewName;
@@ -104,6 +105,16 @@ public partial class ApiClientPage
         if (linkedRoot is not null && args.Node.Request is not null)
         {
             await SaveActiveCollectionAsync();
+
+            // Best-effort Bruno sync: rename the .bru file in the original Bruno folder.
+            if (linkedRoot.Config is { BrunoSyncEnabled: true, BrunoSyncFolderPath: not null and not "" } brunoConfig
+                && oldRequestName is not null && args.Node.Request is not null)
+            {
+                var syncError = await BrunoSync.SyncRequestRenameAsync(
+                    brunoConfig.BrunoSyncFolderPath, _state.ActiveCollection, args.Node.Request, oldRequestName);
+                if (syncError is not null)
+                    _state.BrunoSyncWarning = $"Bruno sync: {syncError}";
+            }
         }
         else if (linkedRoot is not null)
         {
@@ -140,6 +151,16 @@ public partial class ApiClientPage
 
             if (operation is null) return;
             if (!await TryRunLinkedFileOperationAsync(operation)) return;
+
+            // Best-effort Bruno sync: delete the .bru file from the original Bruno folder.
+            if (node.Request is not null &&
+                linkedRoot.Config is { BrunoSyncEnabled: true, BrunoSyncFolderPath: not null and not "" } brunoConfig)
+            {
+                var syncError = await BrunoSync.SyncRequestDeleteAsync(
+                    brunoConfig.BrunoSyncFolderPath, collection, node.Request);
+                if (syncError is not null)
+                    _state.BrunoSyncWarning = $"Bruno sync: {syncError}";
+            }
         }
 
         RemoveNodeFromTree(collection.Nodes, node.Id);

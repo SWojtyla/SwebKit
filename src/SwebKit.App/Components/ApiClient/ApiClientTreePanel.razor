@@ -41,7 +41,9 @@
                         OnCollectionSelected="OnCollectionSelected" OnAddFolder="OnAddFolder" OnAddRequest="OnAddRequest"
                         OnRenameNode="OnRenameNode" OnDeleteNode="OnDeleteNode" OnLinkedRootSelected="OnLinkedRootSelected"
                         OnRenameCollection="OnRenameCollection" OnDeleteCollection="OnDeleteCollection"
-                        OnLinkCollectionToRepo="OnLinkCollectionToRepo" OnMoveNode="OnMoveNode" />
+                        OnLinkCollectionToRepo="OnLinkCollectionToRepo" OnMoveNode="OnMoveNode"
+                        OnReimportFromBruno="OnReimportFromBruno" OnExportToBrunoFolder="OnExportToBrunoFolder"
+                        OnRemoveLinkedRoot="OnRemoveLinkedRoot" />
     }
 </div>
 
@@ -86,6 +88,15 @@
 
     [Parameter]
     public EventCallback<string> OnLinkCollectionToRepo { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnReimportFromBruno { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnExportToBrunoFolder { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnRemoveLinkedRoot { get; set; }
 
     [Parameter]
     public EventCallback<(string CollectionId, ApiCollectionNode DraggedNode, ApiCollectionNode? NewParent, int?

@@ -30,6 +30,7 @@ public partial class ApiClientPage
     private bool _showLinkedRootDialog;
     private string _newLinkedRootName = string.Empty;
     private string _newLinkedRootPath = string.Empty;
+    private string _newLinkedRootBrunoFolder = string.Empty;
     private string? _linkedRootError;
     private ElementReference _newLinkedRootInput;
     private bool _shouldFocusLinkedRootInput;
@@ -94,6 +95,7 @@ public partial class ApiClientPage
                 IsGitRepository = result.GitStatus.IsGitRepository,
                 IsValid = result.IsValid,
                 CollectionIds = result.Collections.Select(c => c.Id).ToList(),
+                BrunoSyncFolderPath = result.Config.BrunoSyncFolderPath,
             }).ToList();
 
             _state.ActiveCollection ??= _state.Collections.FirstOrDefault();
@@ -133,6 +135,7 @@ public partial class ApiClientPage
     {
         _newLinkedRootName = string.Empty;
         _newLinkedRootPath = string.Empty;
+        _newLinkedRootBrunoFolder = string.Empty;
         _linkedRootError = null;
         _showLinkedRootDialog = true;
         _shouldFocusLinkedRootInput = true;
@@ -148,6 +151,7 @@ public partial class ApiClientPage
         var collection = _state.Collections.FirstOrDefault(c => c.Id == collectionId);
         _newLinkedRootName = collection?.Name ?? string.Empty;
         _newLinkedRootPath = string.Empty;
+        _newLinkedRootBrunoFolder = string.Empty;
         _linkedRootError = null;
         _showLinkedRootDialog = true;
         _shouldFocusLinkedRootInput = true;
@@ -160,6 +164,18 @@ public partial class ApiClientPage
             var path = await FolderPicker.PickFolderAsync("Select Git repository or API folder");
             if (path is null) return;
             _newLinkedRootPath = path;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task PickBrunoFolderAsync()
+    {
+        try
+        {
+            var path = await FolderPicker.PickFolderAsync("Select Bruno collection folder");
+            if (path is null) return;
+            _newLinkedRootBrunoFolder = path;
             await InvokeAsync(StateHasChanged); // BL-2
         }
         catch (OperationCanceledException) { }
@@ -221,8 +237,20 @@ public partial class ApiClientPage
         {
             var path = _newLinkedRootPath.Trim();
             var name = string.IsNullOrWhiteSpace(_newLinkedRootName) ? null : _newLinkedRootName.Trim();
-            await LinkedFileService.EnsureRootAsync(path, name ?? string.Empty);
-            await LinkedRootRepo.AddRootAsync(path, name);
+            var brunoFolder = string.IsNullOrWhiteSpace(_newLinkedRootBrunoFolder) ? null : _newLinkedRootBrunoFolder.Trim();
+
+            var apiRootPath = await LinkedFileService.EnsureRootAsync(path, name ?? string.Empty);
+            var addedRoot = await LinkedRootRepo.AddRootAsync(path, name);
+
+            // If a Bruno folder was specified, import it and enable sync on the config *before*
+            // loading, so the loaded state (and the toolbar's sync toggle) reflect it immediately.
+            if (brunoFolder is not null)
+            {
+                await ImportService.ImportBrunoFolderToLinkedRootAsync(brunoFolder, apiRootPath);
+                await LinkedRootRepo.UpdateBrunoSyncSettingsAsync(addedRoot.Id, brunoFolder, enabled: true);
+            }
+
+            await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
             await LoadLinkedRootsAsync();
             _showLinkedRootDialog = false;
             await InvokeAsync(StateHasChanged);
@@ -457,5 +485,89 @@ public partial class ApiClientPage
         await LoadLinkedRootsAsync();
         _state.LoadingCollections = false;
         await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    /// <summary>
+    /// Called after a Bruno folder is imported into a linked root. Updates the linked root
+    /// config with the Bruno folder path and enables Bruno sync so future saves write back
+    /// to the .bru files.
+    /// </summary>
+    private async Task OnBrunoFolderImportedAsync(string brunoFolderPath)
+    {
+        if (CurrentTargetLinkedRoot is { } linkedRoot)
+        {
+            await LinkedRootRepo.UpdateBrunoSyncSettingsAsync(linkedRoot.Config.Id, brunoFolderPath, enabled: true);
+            await LoadLinkedRootsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Re-imports a linked collection from its associated Bruno folder, replacing the current
+    /// collection content with the latest .bru files on disk.
+    /// </summary>
+    private async Task ReimportFromBrunoAsync(string collectionId)
+    {
+        var linkedRoot = FindLinkedRootForCollection(collectionId);
+        if (linkedRoot?.Config.BrunoSyncFolderPath is not { } brunoFolderPath)
+            return;
+
+        try
+        {
+            await ImportService.ImportBrunoFolderToLinkedRootAsync(
+                brunoFolderPath, linkedRoot.ApiRootPath);
+            await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
+            await LoadLinkedRootsAsync();
+            _state.BrunoSyncWarning = null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to re-import from Bruno folder {Path}", brunoFolderPath);
+            _state.BrunoSyncWarning = $"Re-import failed: {ex.Message}";
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Exports a linked collection to its associated Bruno folder, writing .bru files for all
+    /// requests and environments. Best-effort: failures are surfaced as a non-blocking warning.
+    /// </summary>
+    private async Task ExportToBrunoFolderAsync(string collectionId)
+    {
+        var linkedRoot = FindLinkedRootForCollection(collectionId);
+        if (linkedRoot?.Config.BrunoSyncFolderPath is not { } brunoFolderPath)
+            return;
+
+        var collection = _state.Collections.FirstOrDefault(c => c.Id == collectionId);
+        if (collection is null)
+            return;
+
+        try
+        {
+            await BrunoExporter.ExportToFolderAsync(collection, _state.Environments, brunoFolderPath);
+            _state.BrunoSyncWarning = null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to export to Bruno folder {Path}", brunoFolderPath);
+            _state.BrunoSyncWarning = $"Export to Bruno folder failed: {ex.Message}";
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Toggles Bruno sync on/off for the current target linked root.
+    /// </summary>
+    private async Task ToggleBrunoSyncAsync()
+    {
+        if (CurrentTargetLinkedRoot is not { } linkedRoot)
+            return;
+
+        var newEnabled = !linkedRoot.Config.BrunoSyncEnabled;
+        await LinkedRootRepo.UpdateBrunoSyncSettingsAsync(
+            linkedRoot.Config.Id,
+            linkedRoot.Config.BrunoSyncFolderPath,
+            enabled: newEnabled);
+        await LoadLinkedRootsAsync();
+        await InvokeAsync(StateHasChanged);
     }
 }

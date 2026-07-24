@@ -473,22 +473,6 @@
     border: 0;
 }
 
-/* Skip link for keyboard users */
-.api-client-skip-link {
-    position: absolute;
-    top: -40px;
-    left: 0;
-    background: var(--color-accent);
-    color: var(--color-solid-foreground);
-    padding: 8px 16px;
-    z-index: 9999;
-    border-radius: 0 0 4px 4px;
-}
-
-.api-client-skip-link:focus {
-    top: 0;
-}
-
 /* Focus states for better accessibility */
 .collection-tree__row:focus-visible {
     outline: 2px solid var(--color-accent);
@@ -529,15 +513,15 @@
         border-right: none;
         border-bottom: 1px solid var(--color-border);
     }
-    
+
     .collection-tree__rows {
         max-height: 200px;
     }
-    
+
     .collection-tree__row {
         min-height: 32px;
     }
-    
+
     .collection-tree__method-badge {
         min-width: 24px;
         font-size: var(--api-font-size-xs);
@@ -555,12 +539,12 @@
         background: Highlight !important;
         color: HighlightText !important;
     }
-    
+
     .collection-tree__method-badge {
         forced-color-adjust: none;
         border: 1px solid ButtonText;
     }
-    
+
     .collection-tree__fluent-icon :deep(svg) {
         forced-color-adjust: none;
         fill: ButtonText;
@@ -608,12 +592,12 @@
     .collection-tree__row {
         transition: none;
     }
-    
+
     .collection-tree__chevron:hover,
     .ctx-item:hover {
         transition: none;
     }
-    
+
     .collection-tree__row--new,
     .collection-tree__row--search-match {
         animation: none;

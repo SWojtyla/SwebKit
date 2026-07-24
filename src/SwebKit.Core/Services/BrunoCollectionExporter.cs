@@ -49,6 +49,112 @@ public sealed class BrunoCollectionExporter : ICollectionExporter
         return Task.FromResult(ms.ToArray());
     }
 
+    /// <summary>
+    /// Exports a collection to a folder on disk, writing one <c>.bru</c> file per request,
+    /// mirroring the Bruno collection format. Folder hierarchy is represented as subdirectories.
+    /// Unlike <see cref="ExportAsync"/>, this writes directly to the filesystem instead of a ZIP.
+    /// </summary>
+    public async Task ExportToFolderAsync(
+        ApiCollection collection,
+        IReadOnlyList<ApiEnvironment> environments,
+        string targetFolderPath,
+        CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(targetFolderPath);
+
+        // Clear existing .bru files first so requests/environments deleted in SwebKit don't linger
+        // as orphans on disk. Only .bru files are removed — other user files are left untouched.
+        DeleteBruFilesRecursive(targetFolderPath);
+
+        // Write bruno.json manifest
+        var manifest = $$"""
+            {
+              "version": "1",
+              "name": "{{JsonEscape(collection.Name)}}",
+              "type": "collection"
+            }
+            """;
+        await File.WriteAllTextAsync(Path.Combine(targetFolderPath, "bruno.json"), manifest, cancellationToken).ConfigureAwait(false);
+
+        // Write each request recursively to disk
+        await WriteNodesToFolderAsync(targetFolderPath, collection.Nodes, cancellationToken).ConfigureAwait(false);
+
+        // Write environments
+        var envFolder = Path.Combine(targetFolderPath, "environments");
+        if (environments.Count > 0)
+        {
+            Directory.CreateDirectory(envFolder);
+            var usedEnvNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var env in environments)
+            {
+                var envContent = BuildEnvFile(env);
+                var fileName = UniqueFileName(usedEnvNames, env.Name);
+                await File.WriteAllTextAsync(Path.Combine(envFolder, fileName), envContent, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static async Task WriteNodesToFolderAsync(
+        string folderPath, List<ApiCollectionNode> nodes, CancellationToken cancellationToken)
+    {
+        // Track file names claimed in this folder so same-named siblings don't overwrite each other.
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in nodes)
+        {
+            if (node.Type == ApiCollectionNodeType.Folder)
+            {
+                var subDir = Path.Combine(folderPath, Sanitize(node.Name));
+                Directory.CreateDirectory(subDir);
+                await File.WriteAllTextAsync(
+                    Path.Combine(subDir, "meta.bru"),
+                    $"meta {{\n  name: {node.Name}\n  seq: 1\n}}\n",
+                    cancellationToken).ConfigureAwait(false);
+                await WriteNodesToFolderAsync(subDir, node.Children, cancellationToken).ConfigureAwait(false);
+            }
+            else if (node.Type == ApiCollectionNodeType.Request && node.Request is not null)
+            {
+                var content = BuildBruFile(node.Request);
+                var fileName = UniqueFileName(usedNames, node.Request.Name);
+                await File.WriteAllTextAsync(Path.Combine(folderPath, fileName), content, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Produces a unique <c>.bru</c> file name within a folder, appending <c>-2</c>, <c>-3</c>, …
+    /// when the sanitized request/environment name collides with a sibling already written.
+    /// </summary>
+    private static string UniqueFileName(HashSet<string> used, string rawName)
+    {
+        var slug = Sanitize(rawName);
+        var candidate = slug + ".bru";
+        for (var index = 2; !used.Add(candidate); index++)
+            candidate = $"{slug}-{index}.bru";
+        return candidate;
+    }
+
+    /// <summary>Recursively deletes <c>.bru</c> files, skipping VCS/dependency directories.</summary>
+    private static void DeleteBruFilesRecursive(string directory)
+    {
+        try
+        {
+            foreach (var file in Directory.GetFiles(directory, "*.bru"))
+                File.Delete(file);
+
+            foreach (var subDir in Directory.GetDirectories(directory))
+            {
+                var dirName = Path.GetFileName(subDir);
+                if (string.Equals(dirName, ".git", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(dirName, ".svn", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(dirName, "node_modules", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                DeleteBruFilesRecursive(subDir);
+            }
+        }
+        catch (UnauthorizedAccessException) { /* best-effort cleanup */ }
+        catch (DirectoryNotFoundException) { /* nothing to clean */ }
+    }
+
     private static void WriteNodes(ZipArchive zip, List<ApiCollectionNode> nodes, string pathPrefix)
     {
         foreach (var node in nodes)
@@ -68,7 +174,7 @@ public sealed class BrunoCollectionExporter : ICollectionExporter
         }
     }
 
-    private static string BuildBruFile(HttpRequestEntry req)
+    internal static string BuildBruFile(HttpRequestEntry req)
     {
         var sb = new StringBuilder();
 

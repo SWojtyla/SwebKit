@@ -9,6 +9,35 @@
     position: relative; /* needed for dialog overlay */
 }
 
+/* ── Bruno sync warning banner ────────────────────────────── */
+
+.api-client-bruno-sync-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    background: var(--warning-bg, #fff4ce);
+    color: var(--warning-fg, #6a5300);
+    font-size: 12px;
+    border-bottom: 1px solid var(--warning-border, #f5d800);
+}
+
+.api-client-bruno-sync-warning__dismiss {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 4px;
+    opacity: 0.7;
+}
+
+.api-client-bruno-sync-warning__dismiss:hover {
+    opacity: 1;
+}
+
 /* ── New collection dialog ───────────────────────────────── */
 
 .api-client-dialog-backdrop {
@@ -98,9 +127,14 @@
 
 .api-client-dialog__error {
     padding: 6px 8px;
-    border: 1px solid color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+    border: 1px solid
+        color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
+    background: color-mix(
+        in srgb,
+        var(--color-warning) 12%,
+        var(--color-surface)
+    );
     color: var(--color-warning);
     font-size: 12px;
 }
@@ -183,12 +217,39 @@
     color: var(--color-text-muted);
 }
 
-.api-client-method-badge--get    { background: #1a6b2f; color: #a8f0bd; }
-.api-client-method-badge--post   { background: #1a4d8f; color: #a8d0f0; }
-.api-client-method-badge--put    { background: #6b5c1a; color: #f0e0a8; }
-.api-client-method-badge--patch  { background: #4a1a6b; color: #d8a8f0; }
-.api-client-method-badge--delete { background: #6b1a1a; color: #f0a8a8; }
-.api-client-method-badge--head   { background: #2a2a2a; color: #aaa; }
-.api-client-method-badge--options { background: #2a2a2a; color: #aaa; }
-.api-client-method-badge--graphql { background: #4a0d6b; color: #e2a8f0; }
-.api-client-method-badge--websocket { background: #0d4a4a; color: #a8e8f0; }
+.api-client-method-badge--get {
+    background: #1a6b2f;
+    color: #a8f0bd;
+}
+.api-client-method-badge--post {
+    background: #1a4d8f;
+    color: #a8d0f0;
+}
+.api-client-method-badge--put {
+    background: #6b5c1a;
+    color: #f0e0a8;
+}
+.api-client-method-badge--patch {
+    background: #4a1a6b;
+    color: #d8a8f0;
+}
+.api-client-method-badge--delete {
+    background: #6b1a1a;
+    color: #f0a8a8;
+}
+.api-client-method-badge--head {
+    background: #2a2a2a;
+    color: #aaa;
+}
+.api-client-method-badge--options {
+    background: #2a2a2a;
+    color: #aaa;
+}
+.api-client-method-badge--graphql {
+    background: #4a0d6b;
+    color: #e2a8f0;
+}
+.api-client-method-badge--websocket {
+    background: #0d4a4a;
+    color: #a8e8f0;
+}
