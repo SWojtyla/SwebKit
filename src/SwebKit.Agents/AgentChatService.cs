@@ -75,7 +75,7 @@ public sealed class AgentChatService : IAgentChatService
             SystemPrompt = systemPrompt,
             UserMessage = userMessage,
             Tools = tools,
-            History = _session.Messages.Take(^1).ToList(), // all except the user message we just added
+            History = _session.Messages.Take(_session.Count - 1).ToList(), // all except the user message we just added
             Temperature = _settings.Settings.Agent.GetActiveProfile()?.Temperature ?? 0.7,
             MaxTokens = _settings.Settings.Agent.GetActiveProfile()?.MaxTokens ?? 2048,
         };

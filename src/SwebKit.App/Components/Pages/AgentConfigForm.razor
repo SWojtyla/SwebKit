@@ -1,27 +1,139 @@
 @using SwebKit.Core.Domain
+@using SwebKit.Agents
 @inject UserSettingsRepository UserSettings
 @inject ICredentialStore CredentialStore
+@inject AgentCapabilityTester CapabilityTester
 
 <div style="display:grid; gap:12px; padding:12px 0;">
+
+    @* ── Profile selector ── *@
     <div style="display:grid; gap:4px;">
-        <label style="font-size:12px; color:var(--color-text-muted);">Mistral API Key</label>
-        <PasswordField Value="@ApiKey" ValueChanged="@(v => ApiKey = v ?? string.Empty)" Label="Mistral API Key"
-                       Placeholder="Enter Mistral API key (stored securely in Windows Credential Manager)" />
-        <span style="font-size:12px; color:var(--color-text-muted);">
-            Your Mistral AI API key. This is stored securely in Windows Credential Manager and never persisted in plain text.
-        </span>
+        <label style="font-size:12px; color:var(--color-text-muted);">Active profile</label>
+        <FluentSelect TOption="string" Value="@ActiveProfileId" ValueChanged="@OnProfileSelected"
+                      Style="min-width:300px">
+            @foreach (var p in Profiles)
+            {
+                <FluentOption Value="@p.Id">@p.DisplayName (@p.Provider)</FluentOption>
+            }
+        </FluentSelect>
+        <div style="display:flex; gap:8px; margin-top:4px;">
+            <FluentButton Appearance="Appearance.Neutral" @onclick="AddProfile">New profile</FluentButton>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="DeleteActiveProfile" disabled="@(Profiles.Count <= 1)">Delete</FluentButton>
+        </div>
     </div>
 
-    <div style="display:grid; gap:4px;">
-        <label style="font-size:12px; color:var(--color-text-muted);">Model Override</label>
-        <input type="text" @bind="ModelOverride" @bind:event="oninput"
-               style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
-               placeholder="mistral-medium-latest" />
-        <span style="font-size:12px; color:var(--color-text-muted);">
-            Override the default Mistral model. Leave empty to use the application default (mistral-medium-latest).
-        </span>
-    </div>
+    @if (ActiveProfile is not null)
+    {
+        @* ── Provider type ── *@
+        <div style="display:grid; gap:4px;">
+            <label style="font-size:12px; color:var(--color-text-muted);">Provider</label>
+            <FluentSelect TOption="string" Value="@ActiveProfile.Provider.ToString()" ValueChanged="@OnProviderChanged"
+                          Style="min-width:200px">
+                <FluentOption Value="LmStudio">LM Studio (local)</FluentOption>
+                <FluentOption Value="Mistral">Mistral (cloud)</FluentOption>
+                <FluentOption Value="OpenAiCompatible">OpenAI-compatible (generic)</FluentOption>
+            </FluentSelect>
+        </div>
 
+        @* ── Display name ── *@
+        <div style="display:grid; gap:4px;">
+            <label style="font-size:12px; color:var(--color-text-muted);">Profile name</label>
+            <input type="text" @bind="ActiveProfile.DisplayName" @bind:event="oninput"
+                   style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
+                   placeholder="My profile" />
+        </div>
+
+        @* ── Base URL ── *@
+        <div style="display:grid; gap:4px;">
+            <label style="font-size:12px; color:var(--color-text-muted);">Base URL</label>
+            <input type="text" @bind="ActiveProfile.BaseUrl" @bind:event="oninput"
+                   style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
+                   placeholder="http://localhost:1234/v1" />
+        </div>
+
+        @* ── Model ── *@
+        <div style="display:grid; gap:4px;">
+            <label style="font-size:12px; color:var(--color-text-muted);">Model</label>
+            <input type="text" @bind="ActiveProfile.Model" @bind:event="oninput"
+                   style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
+                   placeholder="mistral-medium-latest" />
+            @if (AvailableModels is { Count: > 0 })
+            {
+                <span style="font-size:12px; color:var(--color-text-muted);">
+                    Available: @string.Join(", ", AvailableModels)
+                </span>
+            }
+        </div>
+
+        @* ── API Key (hidden for LM Studio) ── *@
+        @if (ActiveProfile.RequiresApiKey)
+        {
+            <div style="display:grid; gap:4px;">
+                <label style="font-size:12px; color:var(--color-text-muted);">API Key</label>
+                <PasswordField Value="@ApiKey" ValueChanged="@(v => ApiKey = v ?? string.Empty)" Label="API Key"
+                               Placeholder="Enter API key (stored securely in Windows Credential Manager)" />
+                <span style="font-size:12px; color:var(--color-text-muted);">
+                    Stored in Windows Credential Manager, never in plain text.
+                </span>
+            </div>
+        }
+
+        @* ── Parameters ── *@
+        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+            <div style="display:grid; gap:4px;">
+                <label style="font-size:12px; color:var(--color-text-muted);">Temperature</label>
+                <input type="number" step="0.1" min="0" max="2" @bind="ActiveProfile.Temperature" @bind:event="oninput"
+                       style="width:120px; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
+            </div>
+            <div style="display:grid; gap:4px;">
+                <label style="font-size:12px; color:var(--color-text-muted);">Max tokens</label>
+                <input type="number" min="1" @bind="ActiveProfile.MaxTokens" @bind:event="oninput"
+                       style="width:120px; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
+            </div>
+            <div style="display:grid; gap:4px;">
+                <label style="font-size:12px; color:var(--color-text-muted);">Timeout (s)</label>
+                <input type="number" min="0" @bind="ActiveProfile.TimeoutSeconds" @bind:event="oninput"
+                       style="width:120px; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
+            </div>
+        </div>
+
+        @* ── Connection test ── *@
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <FluentButton Appearance="Appearance.Neutral" @onclick="TestConnectionAsync" disabled="@IsTesting">
+                @(IsTesting ? "Testing…" : "Test connection")
+            </FluentButton>
+
+            @if (TestResult is not null)
+            {
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <span style="font-size:12px; color:@(TestResult.ServerReachable ? "var(--color-success)" : "var(--color-error)");">
+                        Server: @(TestResult.ServerReachable ? "reachable" : "unreachable")
+                    </span>
+                    @if (TestResult.ServerReachable)
+                    {
+                        <span style="font-size:12px; color:@(TestResult.ModelAvailable ? "var(--color-success)" : "var(--color-error)");">
+                            Model: @(TestResult.ModelAvailable ? "available" : "not found")
+                        </span>
+                        <span style="font-size:12px; color:@(TestResult.ChatValid ? "var(--color-success)" : "var(--color-error)");">
+                            Chat: @(TestResult.ChatValid ? "valid" : "failed")
+                        </span>
+                        @if (TestResult.ChatValid)
+                        {
+                            <span style="font-size:12px; color:@(TestResult.ToolCallingValid ? "var(--color-success)" : "var(--color-warning)");">
+                                Tools: @(TestResult.ToolCallingValid ? "supported" : "not supported (chat-only)")
+                            </span>
+                        }
+                    }
+                    @if (TestResult.Diagnostic is not null)
+                    {
+                        <span style="font-size:12px; color:var(--color-text-muted);">@TestResult.Diagnostic</span>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @* ── History settings ── *@
     <div style="display:grid; gap:4px;">
         <label style="font-size:12px; color:var(--color-text-muted);">Maximum History Messages</label>
         <input type="number" @bind="MaxHistoryMessages" @bind:event="oninput"
@@ -32,6 +144,7 @@
         </span>
     </div>
 
+    @* ── Actions ── *@
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px;">
         <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">Save</FluentButton>
 
@@ -41,8 +154,7 @@
 
         @if (StatusMessage is not null)
         {
-            <span
-            style="font-size:12px; color:@(StatusOk ? "var(--color-success)" : "var(--color-error)");">@StatusMessage</span>
+            <span style="font-size:12px; color:@(StatusOk ? "var(--color-success)" : "var(--color-error)");">@StatusMessage</span>
         }
     </div>
 </div>
@@ -50,52 +162,183 @@
 @code {
     [Parameter] public EventCallback OnSaved { get; set; }
 
+    private List<AgentProfile> Profiles = [];
+    private string ActiveProfileId = string.Empty;
+    private AgentProfile? ActiveProfile;
     private string ApiKey = string.Empty;
-    private string ModelOverride = string.Empty;
     private int MaxHistoryMessages = 20;
     private bool IsEnabled;
     private string? StatusMessage;
     private bool StatusOk;
 
-    private const string ApiKeyCredentialKey = "SwebKit-Agent:Mistral-ApiKey";
+    // Connection test state
+    private bool IsTesting;
+    private CapabilityTestResult? TestResult;
+    private IReadOnlyList<string>? AvailableModels;
 
     protected override void OnParametersSet()
     {
-        // Load current values from UserSettings
         var agentConfig = UserSettings.Settings.Agent;
+        agentConfig.Migrate();
+
         IsEnabled = agentConfig.IsEnabled;
-        ModelOverride = agentConfig.ModelOverride;
         MaxHistoryMessages = agentConfig.MaxHistoryMessages;
-        
-        // Try to get saved API key from credential store
-        ApiKey = CredentialStore.Get(ApiKeyCredentialKey) ?? string.Empty;
-        
+        Profiles = agentConfig.Profiles;
+        ActiveProfileId = agentConfig.ActiveProfileId;
+        ActiveProfile = Profiles.FirstOrDefault(p => p.Id == ActiveProfileId);
+
+        // Load API key if the active profile requires one
+        if (ActiveProfile is not null && !string.IsNullOrEmpty(ActiveProfile.CredentialKey))
+            ApiKey = CredentialStore.Get(ActiveProfile.CredentialKey) ?? string.Empty;
+        else
+            ApiKey = string.Empty;
+
         StatusMessage = null;
+        TestResult = null;
+        AvailableModels = null;
+    }
+
+    private void OnProfileSelected(string profileId)
+    {
+        ActiveProfileId = profileId;
+        ActiveProfile = Profiles.FirstOrDefault(p => p.Id == profileId);
+
+        if (ActiveProfile is not null && !string.IsNullOrEmpty(ActiveProfile.CredentialKey))
+            ApiKey = CredentialStore.Get(ActiveProfile.CredentialKey) ?? string.Empty;
+        else
+            ApiKey = string.Empty;
+
+        TestResult = null;
+        AvailableModels = null;
+    }
+
+    private void OnProviderChanged(string providerStr)
+    {
+        if (ActiveProfile is null) return;
+        if (!Enum.TryParse<ProviderKind>(providerStr, out var provider)) return;
+
+        ActiveProfile.Provider = provider;
+
+        // Apply presets for known providers
+        switch (provider)
+        {
+            case ProviderKind.LmStudio:
+                ActiveProfile.BaseUrl = AgentProfilePresets.LmStudioBaseUrl;
+                ActiveProfile.CredentialKey = null;
+                ActiveProfile.TimeoutSeconds = 120;
+                break;
+            case ProviderKind.Mistral:
+                ActiveProfile.BaseUrl = AgentProfilePresets.MistralBaseUrl;
+                ActiveProfile.CredentialKey = AgentProfilePresets.MistralCredentialKey;
+                if (string.IsNullOrEmpty(ActiveProfile.Model))
+                    ActiveProfile.Model = AgentProfilePresets.MistralDefaultModel;
+                ActiveProfile.TimeoutSeconds = 60;
+                break;
+            case ProviderKind.OpenAiCompatible:
+                if (string.IsNullOrEmpty(ActiveProfile.CredentialKey))
+                    ActiveProfile.CredentialKey = $"SwebKit-Agent:OpenAiCompatible-{ActiveProfile.Id[..8]}";
+                ActiveProfile.TimeoutSeconds = 60;
+                break;
+        }
+
+        // Reload API key
+        if (!string.IsNullOrEmpty(ActiveProfile.CredentialKey))
+            ApiKey = CredentialStore.Get(ActiveProfile.CredentialKey) ?? string.Empty;
+        else
+            ApiKey = string.Empty;
+
+        TestResult = null;
+    }
+
+    private void AddProfile()
+    {
+        var newProfile = AgentProfilePresets.LmStudio();
+        newProfile.DisplayName = $"Profile {Profiles.Count + 1}";
+        Profiles.Add(newProfile);
+        ActiveProfileId = newProfile.Id;
+        ActiveProfile = newProfile;
+        ApiKey = string.Empty;
+        TestResult = null;
+    }
+
+    private void DeleteActiveProfile()
+    {
+        if (Profiles.Count <= 1 || ActiveProfile is null) return;
+
+        if (!string.IsNullOrEmpty(ActiveProfile.CredentialKey))
+            CredentialStore.Delete(ActiveProfile.CredentialKey);
+
+        Profiles.Remove(ActiveProfile);
+        ActiveProfileId = Profiles[0].Id;
+        ActiveProfile = Profiles[0];
+
+        if (!string.IsNullOrEmpty(ActiveProfile.CredentialKey))
+            ApiKey = CredentialStore.Get(ActiveProfile.CredentialKey) ?? string.Empty;
+        else
+            ApiKey = string.Empty;
+
+        TestResult = null;
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        if (ActiveProfile is null) return;
+
+        // Save current API key before testing
+        if (ActiveProfile.RequiresApiKey && !string.IsNullOrWhiteSpace(ApiKey) && ActiveProfile.CredentialKey is not null)
+            CredentialStore.Save(ActiveProfile.CredentialKey, ApiKey);
+
+        IsTesting = true;
+        TestResult = null;
+
+        try
+        {
+            TestResult = await CapabilityTester.TestAsync(ActiveProfile);
+            AvailableModels = TestResult.AvailableModels;
+
+            // Update profile capability state
+            ActiveProfile.Capability = TestResult.Capability;
+            ActiveProfile.LastTestDiagnostic = TestResult.Diagnostic;
+        }
+        catch (Exception ex)
+        {
+            TestResult = new CapabilityTestResult
+            {
+                ServerReachable = false,
+                Diagnostic = $"Test failed: {ex.Message}"
+            };
+        }
+        finally
+        {
+            IsTesting = false;
+        }
     }
 
     private async Task SaveAsync()
     {
         // Save API key to credential store
-        if (!string.IsNullOrWhiteSpace(ApiKey))
+        if (ActiveProfile is not null && ActiveProfile.RequiresApiKey)
         {
-            CredentialStore.Save(ApiKeyCredentialKey, ApiKey);
-        }
-        else
-        {
-            // If user cleared the API key, remove it from the store
-            CredentialStore.Delete(ApiKeyCredentialKey);
+            if (!string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrEmpty(ActiveProfile.CredentialKey))
+            {
+                CredentialStore.Save(ActiveProfile.CredentialKey, ApiKey);
+            }
+            else if (!string.IsNullOrEmpty(ActiveProfile.CredentialKey))
+            {
+                CredentialStore.Delete(ActiveProfile.CredentialKey);
+            }
         }
 
-        // Save agent configuration to UserSettings
+        // Save agent configuration
         UserSettings.Settings.Agent.IsEnabled = IsEnabled;
-        UserSettings.Settings.Agent.ModelOverride = ModelOverride;
         UserSettings.Settings.Agent.MaxHistoryMessages = MaxHistoryMessages;
-        
+        UserSettings.Settings.Agent.Profiles = Profiles;
+        UserSettings.Settings.Agent.ActiveProfileId = ActiveProfileId;
+
         await UserSettings.SaveAsync();
         await OnSaved.InvokeAsync();
-        
+
         StatusOk = true;
         StatusMessage = "Agent settings saved.";
-        await InvokeAsync(StateHasChanged);
     }
 }

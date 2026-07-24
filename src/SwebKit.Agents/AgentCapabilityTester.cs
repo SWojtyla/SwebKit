@@ -78,7 +78,7 @@ public sealed class AgentCapabilityTester
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Some servers don't support /models — treat as reachable but model list unavailable
             serverReachable = true;

@@ -139,7 +139,7 @@ try
                 SystemPrompt = systemPrompt,
                 UserMessage = userInput,
                 Tools = tools,
-                History = history.Take(^1).ToList(),
+                History = history.Take(history.Count - 1).ToList(),
             };
 
             var result = await modelClient.ChatAsync(

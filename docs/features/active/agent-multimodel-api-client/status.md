@@ -6,8 +6,8 @@
 
 | # | Milestone | Status |
 |---|-----------|--------|
-| 1 | Configuration/profils + client neutre + migration + tests | In Progress (code done, tests pending) |
-| 2 | Détection de capacités et UI LM Studio | Partial (capability tester done, UI pending) |
+| 1 | Configuration/profils + client neutre + migration + tests | Done |
+| 2 | Détection de capacités et UI LM Studio | Done |
 | 3 | Historique typé, contexte actif et fiabilité de boucle | Partial (typed session done, loop/context pending) |
 | 4 | Extraction du service API Client et synchronisation UI | Pending |
 | 5 | Infrastructure proposal/diff/confirmation | Pending |
@@ -47,12 +47,24 @@
 **Tests updated**
 - `tests/SwebKit.Agents.Tests/CoreServicesTests.cs` — `ConversationSessionTests` updated to use `AgentMessage`.
 
-### What remains for milestone 1
+### What was done (session 2025-07-24)
 
-- [ ] New unit tests: config migration, URL normalization, response parsing, capability detection
-- [ ] Multi-provider settings UI (`AgentConfigForm.razor`) — still shows Mistral-only form
-- [ ] Build verification and fix compilation errors
-- [ ] Register `AgentCapabilityTester` in DI
+- Registered `AgentCapabilityTester` in DI.
+- Fixed compilation errors: unused variable, Index conversion, enum FluentSelect binding.
+- Added `InternalsVisibleTo` for test project in `SwebKit.Agents.csproj`.
+- Replaced `MistralConfigTests` with `AgentProfilePresetsTests` (5 tests).
+- Created `AgentConfigMigrationTests` (8 tests: migration, idempotency, active profile).
+- Created `OpenAiCompatibleAgentClientTests` (20+ tests: URL normalization, response parsing, wire format).
+- Rewrote `AgentConfigForm.razor` as multi-provider UI with profile selector, provider dropdown, connection test with capability badges, add/delete profiles.
+- Build verification: Agents, App, PocConsole, Tests — all pass. 104 tests green.
+
+### Milestone 1 — Complete
+
+All items done:
+- [x] New unit tests: config migration, URL normalization, response parsing
+- [x] Multi-provider settings UI (`AgentConfigForm.razor`)
+- [x] Build verification and fix compilation errors
+- [x] Register `AgentCapabilityTester` in DI
 
 ### Key files created
 
@@ -62,6 +74,9 @@
 - `src/SwebKit.Agents/IAgentModelClient.cs`
 - `src/SwebKit.Agents/OpenAiCompatibleAgentClient.cs`
 - `src/SwebKit.Agents/AgentCapabilityTester.cs`
+- `tests/SwebKit.Agents.Tests/AgentProfilePresetsTests.cs`
+- `tests/SwebKit.Agents.Tests/AgentConfigMigrationTests.cs`
+- `tests/SwebKit.Agents.Tests/OpenAiCompatibleAgentClientTests.cs`
 
 ### Key files modified
 
@@ -76,12 +91,22 @@
 - `src/SwebKit.Agents/MistralHttpClient.cs`
 - `src/SwebKit.Agents/MistralConfig.cs`
 - `src/SwebKit.Agents/Tools/IAgentTool.cs`
+- `src/SwebKit.Agents/SwebKit.Agents.csproj`
 - `src/SwebKit.App/Hosting/SwebKitServiceCollectionExtensions.Agents.cs`
+- `src/SwebKit.App/Components/Pages/AgentConfigForm.razor`
 - `src/SwebKit.Agent.PocConsole/Program.cs`
 - `tests/SwebKit.Agents.Tests/CoreServicesTests.cs`
+
+### Next steps (milestone 3+)
+
+- Enrich `AgentContextBuilder` with API Client snapshot (active page, selected collection/request, dirty state)
+- Add tool metadata (read vs mutation, required capability, risk level)
+- Improve loop reliability: JSON validation, structured error correction, duplicate detection
+- Expose step/tool/pending-proposal info in `AgentChatReply`
+- UI statuses: thinking, reading context, preparing change, awaiting confirmation, applying, done/failed
 
 ### Notes
 
 - Backward compatibility: old Mistral-only config migrates automatically to a Mistral profile.
 - No API keys are persisted in plain text; credential store keys are logical references.
-- `AgentConfigForm.razor` still references `ModelOverride` — needs multi-provider UI update.
+- App build requires `-p:AppxPackageSigningEnabled=false` due to certificate issue unrelated to this feature.

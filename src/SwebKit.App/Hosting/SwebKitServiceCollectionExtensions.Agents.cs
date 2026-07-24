@@ -32,6 +32,7 @@ public static partial class SwebKitServiceCollectionExtensions
     public static IServiceCollection AddSwebKitAgents(this IServiceCollection services)
     {
         services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
+        services.AddHttpClient<AgentCapabilityTester>();
 
         services.AddSingleton<IAgentContextBuilder, AgentContextBuilder>();
 
