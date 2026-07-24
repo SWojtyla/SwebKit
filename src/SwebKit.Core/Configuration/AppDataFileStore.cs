@@ -19,24 +19,27 @@ internal static class AppDataFileStore
     /// never itself consulted by <see cref="Exists"/>/<see cref="LoadAsync{T}"/>, so it can't
     /// interfere with normal load/save operation.
     /// </summary>
-    public static void PreserveUnreadableFile(string filePath)
+    /// <returns><see langword="true"/> if at least one snapshot was successfully created; <see langword="false"/> if every copy attempt failed.</returns>
+    public static bool PreserveUnreadableFile(string filePath)
     {
-        TryCopyOver(filePath, GetUnreadableSnapshotPath(filePath));
-        TryCopyOver(GetBackupPath(filePath), GetUnreadableSnapshotPath(GetBackupPath(filePath)));
+        var primaryOk = TryCopyOver(filePath, GetUnreadableSnapshotPath(filePath));
+        var backupOk = TryCopyOver(GetBackupPath(filePath), GetUnreadableSnapshotPath(GetBackupPath(filePath)));
+        return primaryOk || backupOk;
     }
 
-    private static void TryCopyOver(string sourcePath, string destinationPath)
+    private static bool TryCopyOver(string sourcePath, string destinationPath)
     {
         try
         {
             if (File.Exists(sourcePath))
             {
                 File.Copy(sourcePath, destinationPath, overwrite: true);
+                return true;
             }
         }
-        catch
-        {
-        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        return false;
     }
 
     public static async Task<AppDataFileLoadResult<T>> LoadAsync<T>(

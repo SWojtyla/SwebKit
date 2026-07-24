@@ -34,9 +34,14 @@ public sealed class LinkedCollectionRootRepository(ILogger<LinkedCollectionRootR
         }
         catch (Exception ex)
         {
-            AppDataFileStore.PreserveUnreadableFile(AppDataPaths.ApiLinkedRootsJson);
-            logger?.LogWarning(ex, "Failed to load linked collection roots from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty store for this session.",
-                AppDataPaths.ApiLinkedRootsJson, AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.ApiLinkedRootsJson));
+            var preserved = AppDataFileStore.PreserveUnreadableFile(AppDataPaths.ApiLinkedRootsJson);
+            var snapshotPath = AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.ApiLinkedRootsJson);
+            if (preserved)
+                logger?.LogWarning(ex, "Failed to load linked collection roots from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty store for this session.",
+                    AppDataPaths.ApiLinkedRootsJson, snapshotPath);
+            else
+                logger?.LogWarning(ex, "Failed to load linked collection roots from '{File}'; WARNING: snapshot copy failed — the next save may overwrite the original file. Falling back to an empty store for this session.",
+                    AppDataPaths.ApiLinkedRootsJson);
             _store = new LinkedCollectionRootStore();
         }
     }

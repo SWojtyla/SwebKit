@@ -39,9 +39,14 @@ public sealed class EnvironmentRepository(ILogger<EnvironmentRepository>? logger
         }
         catch (Exception ex)
         {
-            AppDataFileStore.PreserveUnreadableFile(AppDataPaths.EnvironmentsJson);
-            logger?.LogWarning(ex, "Failed to load environments from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty store for this session.",
-                AppDataPaths.EnvironmentsJson, AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.EnvironmentsJson));
+            var preserved = AppDataFileStore.PreserveUnreadableFile(AppDataPaths.EnvironmentsJson);
+            var snapshotPath = AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.EnvironmentsJson);
+            if (preserved)
+                logger?.LogWarning(ex, "Failed to load environments from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty store for this session.",
+                    AppDataPaths.EnvironmentsJson, snapshotPath);
+            else
+                logger?.LogWarning(ex, "Failed to load environments from '{File}'; WARNING: snapshot copy failed — the next save may overwrite the original file. Falling back to an empty store for this session.",
+                    AppDataPaths.EnvironmentsJson);
             _store = new EnvironmentsStore();
         }
     }

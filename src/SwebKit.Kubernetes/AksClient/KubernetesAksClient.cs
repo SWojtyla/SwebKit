@@ -658,7 +658,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
             releases[name] = new HelmReleaseInfo
             {
                 Name = name,
-                Namespace = ns,
+                Namespace = secret.Metadata.NamespaceProperty ?? ns,
                 Chart = chart,
                 ChartVersion = chartVersion,
                 Revision = version,

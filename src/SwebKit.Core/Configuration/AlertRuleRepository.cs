@@ -28,9 +28,14 @@ public sealed class AlertRuleRepository(ILogger<AlertRuleRepository>? logger = n
         }
         catch (Exception ex)
         {
-            AppDataFileStore.PreserveUnreadableFile(AppDataPaths.MonitoringAlertsJson);
-            logger?.LogWarning(ex, "Failed to load monitoring alert rules from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty list for this session.",
-                AppDataPaths.MonitoringAlertsJson, AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.MonitoringAlertsJson));
+            var preserved = AppDataFileStore.PreserveUnreadableFile(AppDataPaths.MonitoringAlertsJson);
+            var snapshotPath = AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.MonitoringAlertsJson);
+            if (preserved)
+                logger?.LogWarning(ex, "Failed to load monitoring alert rules from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty list for this session.",
+                    AppDataPaths.MonitoringAlertsJson, snapshotPath);
+            else
+                logger?.LogWarning(ex, "Failed to load monitoring alert rules from '{File}'; WARNING: snapshot copy failed — the next save may overwrite the original file. Falling back to an empty list for this session.",
+                    AppDataPaths.MonitoringAlertsJson);
             return [];
         }
     }

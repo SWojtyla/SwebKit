@@ -284,6 +284,8 @@ public partial class AksPage
                     }
                     finally
                     {
+                        // Bitwise OR (not ||) so both Remove calls always execute — both pending
+                        // markers must be cleared regardless of whether the other was present.
                         if (_pendingResourceKinds.Remove("Secrets") | _pendingResourceKinds.Remove("Helm"))
                             datasetDirty = true;
                     }

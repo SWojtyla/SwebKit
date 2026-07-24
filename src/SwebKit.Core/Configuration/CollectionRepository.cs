@@ -37,9 +37,14 @@ public sealed class CollectionRepository(ILogger<CollectionRepository>? logger =
         }
         catch (Exception ex)
         {
-            AppDataFileStore.PreserveUnreadableFile(AppDataPaths.CollectionsJson);
-            logger?.LogWarning(ex, "Failed to load collections from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty store for this session.",
-                AppDataPaths.CollectionsJson, AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.CollectionsJson));
+            var preserved = AppDataFileStore.PreserveUnreadableFile(AppDataPaths.CollectionsJson);
+            var snapshotPath = AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.CollectionsJson);
+            if (preserved)
+                logger?.LogWarning(ex, "Failed to load collections from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty store for this session.",
+                    AppDataPaths.CollectionsJson, snapshotPath);
+            else
+                logger?.LogWarning(ex, "Failed to load collections from '{File}'; WARNING: snapshot copy failed — the next save may overwrite the original file. Falling back to an empty store for this session.",
+                    AppDataPaths.CollectionsJson);
             _store = new CollectionsStore();
         }
     }
