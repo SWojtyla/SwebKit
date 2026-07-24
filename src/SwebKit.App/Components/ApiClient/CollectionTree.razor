@@ -4,7 +4,7 @@
 @inherits SwebKit.App.Components.Shared.SwebKitComponentBase
 @inject IJSRuntime JS
 
-<div class="api-client collection-tree">
+<div class="api-client collection-tree" @ref="_treeContainer">
 
     <div class="collection-tree__search">
         <label for="collection-tree-search" class="sr-only">Filter collection tree</label>
@@ -595,6 +595,9 @@ Icons.Regular.Size16.AddSquare();
         else if (e.Key == "Escape") { _renamingNodeId = null; RequestRender(); }
     }
 
+    private ElementReference _treeContainer;
+    private bool _dragDropInitialized;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (_shouldFocusRename)
@@ -608,6 +611,17 @@ Icons.Regular.Size16.AddSquare();
         {
             _shouldClampCtx = false;
             try { await JS.InvokeVoidAsync("SwebKitUi.clampMenu", _ctxMenu); }
+            catch { }
+        }
+
+        // Initialize native drag-and-drop listeners once.
+        // Blazor's @ondragover:preventDefault is async and may not call preventDefault()
+        // in time for the browser to allow dropping. Native JS listeners ensure
+        // preventDefault() is called synchronously.
+        if (!_dragDropInitialized && _treeContainer.Id is not null)
+        {
+            _dragDropInitialized = true;
+            try { await JS.InvokeVoidAsync("SwebKitUi.enableDragDrop", _treeContainer); }
             catch { }
         }
     }
@@ -659,6 +673,7 @@ Icons.Regular.Size16.AddSquare();
     {
         if (!CanDrag(node)) return;
         _draggedNode = node;
+        StateHasChanged();
     }
 
     private void OnDragOver(DragEventArgs e, FlatTreeNode node)
@@ -669,21 +684,21 @@ Icons.Regular.Size16.AddSquare();
         if (_dragOverNodeId == node.Id && _dragOverPos == pos) return;
         _dragOverNodeId = node.Id;
         _dragOverPos = pos;
-        RequestRender();
+        StateHasChanged();
     }
 
     private void OnDragLeave(FlatTreeNode node)
     {
         if (_dragOverNodeId != node.Id) return;
         _dragOverNodeId = null;
-        RequestRender();
+        StateHasChanged();
     }
 
     private void OnDragEnd()
     {
         _draggedNode = null;
         _dragOverNodeId = null;
-        RequestRender();
+        StateHasChanged();
     }
 
     private async Task OnDropAsync(DragEventArgs e, FlatTreeNode target)
@@ -692,7 +707,7 @@ Icons.Regular.Size16.AddSquare();
         var dropPos = _dragOverPos;
         _draggedNode = null;
         _dragOverNodeId = null;
-        RequestRender();
+        StateHasChanged();
 
         if (dragged is null || !CanDrop(target)) return;
         if (dragged.Id == target.Id) return;

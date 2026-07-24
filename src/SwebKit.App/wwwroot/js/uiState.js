@@ -167,3 +167,40 @@ window.SwebKitUi.scrollToBottom = function (element) {
     element.scrollTop = element.scrollHeight;
   }
 };
+
+// Enable native HTML5 drag-and-drop for a container element.
+// Blazor's @ondragover:preventDefault is async — the browser needs preventDefault()
+// called synchronously on dragover/drop to allow dropping. This attaches native
+// listeners that call preventDefault() immediately, before Blazor processes the event.
+window.SwebKitUi.enableDragDrop = function (containerEl) {
+  if (!containerEl) return;
+
+  function isDraggableRow(el) {
+    return el && el.classList && el.classList.contains('collection-tree__row') && el.getAttribute('draggable') === 'true';
+  }
+
+  function onDragOver(e) {
+    // Only prevent default when hovering over a valid drop target row
+    var row = e.target.closest('.collection-tree__row');
+    if (row) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    }
+  }
+
+  function onDrop(e) {
+    var row = e.target.closest('.collection-tree__row');
+    if (row) {
+      e.preventDefault();
+    }
+  }
+
+  containerEl.addEventListener('dragover', onDragOver);
+  containerEl.addEventListener('drop', onDrop);
+
+  // Return a dispose function
+  return function () {
+    containerEl.removeEventListener('dragover', onDragOver);
+    containerEl.removeEventListener('drop', onDrop);
+  };
+};
