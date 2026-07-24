@@ -30,7 +30,14 @@ public class ScheduledMessageRepository(ILogger<ScheduledMessageRepository>? log
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Failed to load scheduled messages from '{File}'; falling back to an empty list.", AppDataPaths.ScheduledMessagesJson);
+            var preserved = AppDataFileStore.PreserveUnreadableFile(AppDataPaths.ScheduledMessagesJson);
+            var snapshotPath = AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.ScheduledMessagesJson);
+            if (preserved)
+                logger?.LogWarning(ex, "Failed to load scheduled messages from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty list for this session.",
+                    AppDataPaths.ScheduledMessagesJson, snapshotPath);
+            else
+                logger?.LogWarning(ex, "Failed to load scheduled messages from '{File}'; WARNING: snapshot copy failed — the next save may overwrite the original file. Falling back to an empty list for this session.",
+                    AppDataPaths.ScheduledMessagesJson);
             _entries = [];
         }
     }

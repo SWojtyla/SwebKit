@@ -18,20 +18,30 @@ public sealed class AlertRuleRepository(ILogger<AlertRuleRepository>? logger = n
     public async Task<IReadOnlyList<MonitoringAlertRule>> GetAllAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
-        if (!File.Exists(AppDataPaths.MonitoringAlertsJson))
+        if (!AppDataFileStore.Exists(AppDataPaths.MonitoringAlertsJson))
             return [];
         try
         {
-            var json = await File.ReadAllTextAsync(AppDataPaths.MonitoringAlertsJson).ConfigureAwait(false);
-            _rules = JsonSerializer.Deserialize<List<MonitoringAlertRule>>(json, Options) ?? [];
+            var result = await AppDataFileStore.LoadAsync(AppDataPaths.MonitoringAlertsJson, Deserialize).ConfigureAwait(false);
+            _rules = result.Value;
             return _rules.AsReadOnly();
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Failed to load monitoring alert rules from '{File}'; falling back to an empty list.", AppDataPaths.MonitoringAlertsJson);
+            var preserved = AppDataFileStore.PreserveUnreadableFile(AppDataPaths.MonitoringAlertsJson);
+            var snapshotPath = AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.MonitoringAlertsJson);
+            if (preserved)
+                logger?.LogWarning(ex, "Failed to load monitoring alert rules from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty list for this session.",
+                    AppDataPaths.MonitoringAlertsJson, snapshotPath);
+            else
+                logger?.LogWarning(ex, "Failed to load monitoring alert rules from '{File}'; WARNING: snapshot copy failed — the next save may overwrite the original file. Falling back to an empty list for this session.",
+                    AppDataPaths.MonitoringAlertsJson);
             return [];
         }
     }
+
+    private static List<MonitoringAlertRule> Deserialize(string json) =>
+        JsonSerializer.Deserialize<List<MonitoringAlertRule>>(json, Options) ?? [];
 
     public async Task SaveAllAsync(IReadOnlyList<MonitoringAlertRule> rules)
     {

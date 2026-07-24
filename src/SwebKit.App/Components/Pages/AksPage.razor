@@ -99,21 +99,35 @@
                        become unresponsive when switching tabs quickly. All datasets are already loaded by
                        LoadAsync, so keeping the grids mounted costs no extra network/data work. *@
                     <LazyPanel IsActive="@(ActiveResourceType == "Deployments")">
-                        <DeploymentGrid FilteredItems="@FilteredDeployments" Hpas="@Hpas"
-                                        IsMultiNamespace="@IsMultiNamespace" SelectedDeployment="@SelectedDeployment"
-                                        OnContextMenu="@((args) => ShowDeploymentMenu(args.Item1, args.Item2))"
-                                        OnSelectRow="@SelectDeployment" OnOpenHpa="@OpenHpaDetail"
-                                        OnOpenNetworkAnalysis="@OpenDeploymentNetworkAnalysis"
-                                        OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        @if (IsKindPending("Deployments") && Deployments.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading deployments…" />
+                        }
+                        else
+                        {
+                            <DeploymentGrid FilteredItems="@FilteredDeployments" Hpas="@Hpas"
+                                            IsMultiNamespace="@IsMultiNamespace" SelectedDeployment="@SelectedDeployment"
+                                            OnContextMenu="@((args) => ShowDeploymentMenu(args.Item1, args.Item2))"
+                                            OnSelectRow="@SelectDeployment" OnOpenHpa="@OpenHpaDetail"
+                                            OnOpenNetworkAnalysis="@OpenDeploymentNetworkAnalysis"
+                                            OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        }
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "StatefulSets")">
-                        <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas"
-                                         IsMultiNamespace="@IsMultiNamespace" SelectedStatefulSet="@SelectedStatefulSet"
-                                         OnSelectRow="@SelectStatefulSet"
-                                         OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))"
-                                         OnOpenHpa="@OpenHpaDetail" OnOpenNetworkAnalysis="@OpenStatefulSetNetworkAnalysis"
-                                         OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        @if (IsKindPending("StatefulSets") && StatefulSets.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading stateful sets…" />
+                        }
+                        else
+                        {
+                            <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas"
+                                             IsMultiNamespace="@IsMultiNamespace" SelectedStatefulSet="@SelectedStatefulSet"
+                                             OnSelectRow="@SelectStatefulSet"
+                                             OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))"
+                                             OnOpenHpa="@OpenHpaDetail" OnOpenNetworkAnalysis="@OpenStatefulSetNetworkAnalysis"
+                                             OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        }
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "ConfigMaps")">
@@ -124,6 +138,10 @@
                                             style="vertical-align:middle;" />
                                 ConfigMaps are not loaded in multi-namespace mode. Select a specific namespace to view them.
                             </div>
+                        }
+                        else if (IsKindPending("ConfigMaps") && ConfigMaps.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading config maps…" />
                         }
                         else
                         {
@@ -142,6 +160,10 @@
                                 Secrets are not loaded in multi-namespace mode. Select a specific namespace to view them.
                             </div>
                         }
+                        else if (IsKindPending("Secrets") && Secrets.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading secrets…" />
+                        }
                         else
                         {
                             <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
@@ -151,66 +173,129 @@
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "Pods")">
-                        <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
-                                 IsMultiNamespace="@IsMultiNamespace" SelectedPod="@SelectedPod"
-                                 CpuCeiling="@(AppState.Config.AksConfig?.CpuBarCeilingMillicores ?? 500)"
-                                 MemoryCeiling="@(AppState.Config.AksConfig?.MemoryBarCeilingMi ?? 512)" OnSelectRow="@SelectPod"
-                                 OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
-                                 OnOpenNetworkAnalysis="@OpenPodNetworkAnalysis" OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        @if (IsKindPending("Pods") && Pods.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading pods…" />
+                        }
+                        else
+                        {
+                            <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
+                                     IsMultiNamespace="@IsMultiNamespace" SelectedPod="@SelectedPod"
+                                     CpuCeiling="@(AppState.Config.AksConfig?.CpuBarCeilingMillicores ?? 500)"
+                                     MemoryCeiling="@(AppState.Config.AksConfig?.MemoryBarCeilingMi ?? 512)" OnSelectRow="@SelectPod"
+                                     OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
+                                     OnOpenNetworkAnalysis="@OpenPodNetworkAnalysis" OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        }
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "Services")">
-                        <ServiceGrid FilteredItems="@FilteredServices" IsMultiNamespace="@IsMultiNamespace"
-                                     SelectedService="@SelectedService" OnSelectRow="@SelectService"
-                                     OnContextMenu="@((args) => ShowServiceMenu(args.Item1, args.Item2))"
-                                     OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        @if (IsKindPending("Services") && Services.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading services…" />
+                        }
+                        else
+                        {
+                            <ServiceGrid FilteredItems="@FilteredServices" IsMultiNamespace="@IsMultiNamespace"
+                                         SelectedService="@SelectedService" OnSelectRow="@SelectService"
+                                         OnContextMenu="@((args) => ShowServiceMenu(args.Item1, args.Item2))"
+                                         OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        }
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "Ingresses")">
-                        <IngressGrid FilteredItems="@FilteredIngresses" SelectedIngress="@SelectedIngress"
-                                     OnSelectRow="@SelectIngress"
-                                     OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
-                                     OnOpenAnalysis="@OpenIngressAnalysis" OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
+                        @if (IsKindPending("Ingresses") && Ingresses.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading ingresses…" />
+                        }
+                        else
+                        {
+                            <IngressGrid FilteredItems="@FilteredIngresses" SelectedIngress="@SelectedIngress"
+                                         OnSelectRow="@SelectIngress"
+                                         OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
+                                         OnOpenAnalysis="@OpenIngressAnalysis" OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
+                        }
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "GatewayClasses")">
-                        <GatewayClassGrid FilteredItems="@FilteredGatewayClasses"
-                                          SelectedGatewayClass="@SelectedGatewayClass" OnSelectRow="@SelectGatewayClass"
-                                          OnContextMenu="@((args) => ShowGatewayClassMenu(args.Item1, args.Item2))" />
+                        @if (IsKindPending("GatewayClasses") && GatewayClasses.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading gateway classes…" />
+                        }
+                        else
+                        {
+                            <GatewayClassGrid FilteredItems="@FilteredGatewayClasses"
+                                              SelectedGatewayClass="@SelectedGatewayClass" OnSelectRow="@SelectGatewayClass"
+                                              OnContextMenu="@((args) => ShowGatewayClassMenu(args.Item1, args.Item2))" />
+                        }
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "Gateways")">
-                        <GatewayGrid FilteredItems="@FilteredGateways" IsMultiNamespace="@IsMultiNamespace"
-                                     SelectedGateway="@SelectedGateway" OnSelectRow="@SelectGateway"
-                                     OnContextMenu="@((args) => ShowGatewayMenu(args.Item1, args.Item2))"
-                                     OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        @if (IsKindPending("Gateways") && Gateways.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading gateways…" />
+                        }
+                        else
+                        {
+                            <GatewayGrid FilteredItems="@FilteredGateways" IsMultiNamespace="@IsMultiNamespace"
+                                         SelectedGateway="@SelectedGateway" OnSelectRow="@SelectGateway"
+                                         OnContextMenu="@((args) => ShowGatewayMenu(args.Item1, args.Item2))"
+                                         OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        }
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "HTTPRoutes")">
-                        <HttpRouteGrid FilteredItems="@FilteredHttpRoutes" IsMultiNamespace="@IsMultiNamespace"
-                                       SelectedHttpRoute="@SelectedHttpRoute" OnSelectRow="@SelectHttpRoute"
-                                       OnContextMenu="@((args) => ShowHttpRouteMenu(args.Item1, args.Item2))"
-                                       OnNamespaceClick="@HandleNamespaceJumpAsync" OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
+                        @if (IsKindPending("HTTPRoutes") && HttpRoutes.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading HTTP routes…" />
+                        }
+                        else
+                        {
+                            <HttpRouteGrid FilteredItems="@FilteredHttpRoutes" IsMultiNamespace="@IsMultiNamespace"
+                                           SelectedHttpRoute="@SelectedHttpRoute" OnSelectRow="@SelectHttpRoute"
+                                           OnContextMenu="@((args) => ShowHttpRouteMenu(args.Item1, args.Item2))"
+                                           OnNamespaceClick="@HandleNamespaceJumpAsync" OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
+                        }
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "Helm")">
-                        <HelmGrid FilteredItems="@FilteredHelmReleases" SelectedHelm="@SelectedHelmRelease"
-                                  OnSelectRow="@SelectHelmRelease"
-                                  OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
+                        @if (IsKindPending("Helm") && HelmReleases.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading Helm releases…" />
+                        }
+                        else
+                        {
+                            <HelmGrid FilteredItems="@FilteredHelmReleases" SelectedHelm="@SelectedHelmRelease"
+                                      OnSelectRow="@SelectHelmRelease"
+                                      OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
+                        }
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "Jobs")">
-                        <JobGrid FilteredItems="@FilteredJobs" IsMultiNamespace="@IsMultiNamespace"
-                                 SelectedJob="@SelectedJob" OnSelectRow="@SelectJob"
-                                 OnContextMenu="@((args) => ShowJobMenu(args.Item1, args.Item2))"
-                                 OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        @if (IsKindPending("Jobs") && Jobs.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading jobs…" />
+                        }
+                        else
+                        {
+                            <JobGrid FilteredItems="@FilteredJobs" IsMultiNamespace="@IsMultiNamespace"
+                                     SelectedJob="@SelectedJob" OnSelectRow="@SelectJob"
+                                     OnContextMenu="@((args) => ShowJobMenu(args.Item1, args.Item2))"
+                                     OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        }
                     </LazyPanel>
 
                     <LazyPanel IsActive="@(ActiveResourceType == "CronJobs")">
-                        <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
-                                     SelectedCronJob="@SelectedCronJob" OnSelectRow="@SelectCronJob"
-                                     OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
-                                     OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        @if (IsKindPending("CronJobs") && CronJobs.Count == 0)
+                        {
+                            <LoadingSpinner Message="Loading cron jobs…" />
+                        }
+                        else
+                        {
+                            <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
+                                         SelectedCronJob="@SelectedCronJob" OnSelectRow="@SelectCronJob"
+                                         OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
+                                         OnNamespaceClick="@HandleNamespaceJumpAsync" />
+                        }
                     </LazyPanel>
                 </div>
 

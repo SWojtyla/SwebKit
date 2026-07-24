@@ -51,6 +51,16 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     private bool? _kedaCrdAvailable;
 
     /// <summary>
+    /// Caches, per Gateway API resource plural (e.g. "gatewayclasses"), which API version actually
+    /// works on this cluster — or that none of them do — so repeated namespace switches and the
+    /// connection bar's auto-refresh don't re-probe all of <see cref="GatewayApiVersions"/> (up to 3
+    /// sequential round trips per resource kind) on every load. Scoped to this client instance, which
+    /// is recreated per kubeconfig context (see <see cref="AksClientFactory"/>), so a context switch
+    /// naturally starts with a fresh cache rather than carrying over another cluster's result.
+    /// </summary>
+    private readonly GatewayApiVersionCache _gatewayApiVersionCache = new();
+
+    /// <summary>
     /// Resource kinds — as recorded in <see cref="SwebKit.Core.Abstractions.AksAccessDeniedScope"/> denial
     /// tuples (model type name minus the "Info" suffix) — that belong to the optional Gateway API
     /// (<see cref="GatewayApiGroup"/>). An RBAC 403 on these represents missing access to optional advanced
@@ -383,22 +393,40 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 ? $"involvedObject.name={involvedObjectName}"
                 : null;
             var result = await _client.CoreV1.ListNamespacedEventAsync(ns, fieldSelector: fieldSelector, cancellationToken: ct).ConfigureAwait(false);
-            return result.Items
-                .OrderByDescending(e => e.LastTimestamp)
-                .Select(e => new KubernetesEvent
-                {
-                    Name = e.Metadata.Name,
-                    Namespace = e.Metadata.NamespaceProperty ?? ns,
-                    Type = e.Type ?? "Normal",
-                    Reason = e.Reason,
-                    Message = e.Message,
-                    InvolvedObjectName = e.InvolvedObject?.Name,
-                    InvolvedObjectKind = e.InvolvedObject?.Kind,
-                    LastTimestamp = e.LastTimestamp.HasValue ? new DateTimeOffset(e.LastTimestamp.Value) : null,
-                    Count = e.Count ?? 1
-                }).ToList();
+            return MapEvents(result.Items, ns);
         }).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Caps the events list server-side via the API's <c>limit</c> query parameter — a real
+    /// reduction in payload/serialization cost for high-churn namespaces, unlike the interface's
+    /// default (unbounded fetch + client-side <c>Take</c>). Still sorted client-side afterwards
+    /// since the API has no server-side recency ordering.
+    /// </summary>
+    public async Task<IReadOnlyList<KubernetesEvent>> GetEventsAsync(string ns, int limit, CancellationToken ct = default)
+    {
+        return await WithAuthRetryAsync(async () =>
+        {
+            var result = await _client.CoreV1.ListNamespacedEventAsync(ns, limit: limit, cancellationToken: ct).ConfigureAwait(false);
+            return MapEvents(result.Items, ns);
+        }).ConfigureAwait(false);
+    }
+
+    internal static List<KubernetesEvent> MapEvents(IEnumerable<Corev1Event> events, string ns) =>
+        events
+            .OrderByDescending(e => e.LastTimestamp)
+            .Select(e => new KubernetesEvent
+            {
+                Name = e.Metadata.Name,
+                Namespace = e.Metadata.NamespaceProperty ?? ns,
+                Type = e.Type ?? "Normal",
+                Reason = e.Reason,
+                Message = e.Message,
+                InvolvedObjectName = e.InvolvedObject?.Name,
+                InvolvedObjectKind = e.InvolvedObject?.Kind,
+                LastTimestamp = e.LastTimestamp.HasValue ? new DateTimeOffset(e.LastTimestamp.Value) : null,
+                Count = e.Count ?? 1
+            }).ToList();
 
     public async Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(string ns, CancellationToken ct = default)
     {
@@ -596,37 +624,52 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
             var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
                 ns, labelSelector: "owner=helm", cancellationToken: ct).ConfigureAwait(false);
 
-            var releases = new Dictionary<string, HelmReleaseInfo>();
-            foreach (var secret in secrets.Items)
-            {
-                var labels = secret.Metadata.Labels;
-                var name = (labels is not null && labels.TryGetValue("name", out var n) ? n : null) ?? secret.Metadata.Name;
-                var version = labels is not null && labels.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 1;
-                var status = (labels is not null && labels.TryGetValue("status", out var s) ? s : null) ?? "unknown";
-                var chart = labels is not null && labels.TryGetValue("chart", out var c) ? c : null;
-
-                // Keep only the latest revision per release name
-                if (releases.TryGetValue(name, out var existing) && existing.Revision >= version)
-                    continue;
-
-                var chartVersion = TryParseChartVersion(chart);
-
-                releases[name] = new HelmReleaseInfo
-                {
-                    Name = name,
-                    Namespace = ns,
-                    Chart = chart,
-                    ChartVersion = chartVersion,
-                    Revision = version,
-                    Status = status,
-                    Updated = secret.Metadata.CreationTimestamp.HasValue
-                        ? new DateTimeOffset(secret.Metadata.CreationTimestamp.Value)
-                        : null
-                };
-            }
-
-            return releases.Values.OrderBy(r => r.Name).ToList();
+            return MapHelmReleases(secrets.Items, ns);
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Maps Helm release Secrets (<c>owner=helm</c>, keeping only the latest revision per release
+    /// name) into <see cref="HelmReleaseInfo"/>. Filters defensively so it produces the same result
+    /// whether <paramref name="secrets"/> is already scoped to Helm secrets (the label-selected query
+    /// in <see cref="GetHelmReleasesAsync"/>) or an unfiltered namespace-wide list (the combined
+    /// <see cref="GetSecretsAndHelmReleasesAsync"/> path).
+    /// </summary>
+    internal static List<HelmReleaseInfo> MapHelmReleases(IEnumerable<V1Secret> secrets, string ns)
+    {
+        var releases = new Dictionary<string, HelmReleaseInfo>();
+        foreach (var secret in secrets)
+        {
+            var labels = secret.Metadata.Labels;
+            if (labels is not { } l || !l.TryGetValue("owner", out var owner) || owner != "helm")
+                continue;
+
+            var name = (l.TryGetValue("name", out var n) ? n : null) ?? secret.Metadata.Name;
+            var version = l.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 1;
+            var status = (l.TryGetValue("status", out var s) ? s : null) ?? "unknown";
+            var chart = l.TryGetValue("chart", out var c) ? c : null;
+
+            // Keep only the latest revision per release name
+            if (releases.TryGetValue(name, out var existing) && existing.Revision >= version)
+                continue;
+
+            var chartVersion = TryParseChartVersion(chart);
+
+            releases[name] = new HelmReleaseInfo
+            {
+                Name = name,
+                Namespace = secret.Metadata.NamespaceProperty ?? ns,
+                Chart = chart,
+                ChartVersion = chartVersion,
+                Revision = version,
+                Status = status,
+                Updated = secret.Metadata.CreationTimestamp.HasValue
+                    ? new DateTimeOffset(secret.Metadata.CreationTimestamp.Value)
+                    : null
+            };
+        }
+
+        return releases.Values.OrderBy(r => r.Name).ToList();
     }
 
     /// <summary>
