@@ -7,6 +7,17 @@ import type {
   SbEntityInfo,
   SbMessage,
   SbNamespaceInfo,
+  DeploymentInfo,
+  PodInfo,
+  KubernetesEvent,
+  ServiceInfo,
+  HelmReleaseInfo,
+  SecretInfo,
+  KubeContextInfo,
+  StatefulSetInfo,
+  HpaInfo,
+  CronJobInfo,
+  JobInfo,
 } from "./types";
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -197,5 +208,156 @@ export function useSbResubmitDlq() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["sb-dlq", vars.nsId, vars.entityPath] });
     },
+  });
+}
+
+// ── AKS / Kubernetes ─────────────────────────────────────────────────────────
+
+export function useAksTestConnection() {
+  return useQuery({
+    queryKey: ["aks-test"],
+    queryFn: () => apiFetch<{ connected: boolean; error?: string }>("/api/aks/test"),
+  });
+}
+
+export function useAksContexts() {
+  return useQuery({
+    queryKey: ["aks-contexts"],
+    queryFn: () => apiFetch<KubeContextInfo[]>("/api/aks/contexts"),
+  });
+}
+
+export function useAksNamespaces() {
+  return useQuery({
+    queryKey: ["aks-namespaces"],
+    queryFn: () => apiFetch<string[]>("/api/aks/namespaces"),
+  });
+}
+
+export function useAksDeployments(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-deployments", ns],
+    queryFn: () => apiFetch<DeploymentInfo[]>(`/api/aks/${ns}/deployments`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksPods(ns: string | null, labelSelector?: string) {
+  return useQuery({
+    queryKey: ["aks-pods", ns, labelSelector],
+    queryFn: () =>
+      apiFetch<PodInfo[]>(
+        `/api/aks/${ns}/pods${labelSelector ? `?labelSelector=${labelSelector}` : ""}`,
+      ),
+    enabled: !!ns,
+  });
+}
+
+export function useAksServices(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-services", ns],
+    queryFn: () => apiFetch<ServiceInfo[]>(`/api/aks/${ns}/services`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksHelmReleases(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-helm", ns],
+    queryFn: () => apiFetch<HelmReleaseInfo[]>(`/api/aks/${ns}/helm-releases`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksSecrets(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-secrets", ns],
+    queryFn: () => apiFetch<SecretInfo[]>(`/api/aks/${ns}/secrets`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksEvents(ns: string | null, limit = 50) {
+  return useQuery({
+    queryKey: ["aks-events", ns, limit],
+    queryFn: () => apiFetch<KubernetesEvent[]>(`/api/aks/${ns}/events?limit=${limit}`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksStatefulSets(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-statefulsets", ns],
+    queryFn: () => apiFetch<StatefulSetInfo[]>(`/api/aks/${ns}/statefulsets`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksHpas(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-hpas", ns],
+    queryFn: () => apiFetch<HpaInfo[]>(`/api/aks/${ns}/hpas`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksCronJobs(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-cronjobs", ns],
+    queryFn: () => apiFetch<CronJobInfo[]>(`/api/aks/${ns}/cronjobs`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksJobs(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-jobs", ns],
+    queryFn: () => apiFetch<JobInfo[]>(`/api/aks/${ns}/jobs`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksRestartDeployment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { ns: string; name: string }) =>
+      apiSend(`/api/aks/${vars.ns}/deployments/${vars.name}/restart`, "POST"),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["aks-deployments", vars.ns] });
+      qc.invalidateQueries({ queryKey: ["aks-pods", vars.ns] });
+    },
+  });
+}
+
+export function useAksScaleDeployment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { ns: string; name: string; replicas: number }) =>
+      apiSend(`/api/aks/${vars.ns}/deployments/${vars.name}/scale?replicas=${vars.replicas}`, "POST"),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["aks-deployments", vars.ns] });
+    },
+  });
+}
+
+export function useAksDeletePod() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { ns: string; name: string }) =>
+      apiSend(`/api/aks/${vars.ns}/pods/${vars.name}/delete`, "POST"),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["aks-pods", vars.ns] });
+    },
+  });
+}
+
+export function useAksResourceYaml(ns: string | null, kind: string | null, name: string | null) {
+  return useQuery({
+    queryKey: ["aks-yaml", ns, kind, name],
+    queryFn: async () => {
+      const res = await fetch(`/api/aks/${ns}/yaml/${kind}/${name}`);
+      return res.text();
+    },
+    enabled: !!ns && !!kind && !!name,
   });
 }

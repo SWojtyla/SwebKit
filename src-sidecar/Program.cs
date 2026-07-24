@@ -87,4 +87,8 @@ app.MapPut("/api/config/user-settings", async (UserSettingsRepository repo, User
 
 app.MapServiceBusEndpoints();
 
+// ── AKS / Kubernetes ─────────────────────────────────────────────────────────
+
+app.MapAksEndpoints();
+
 app.Run();

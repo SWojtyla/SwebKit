@@ -227,3 +227,151 @@ export interface RemapRules {
   propertyRenames: Record<string, string>;
   propertyRemoves: string[];
 }
+
+// ── AKS / Kubernetes ─────────────────────────────────────────────────────────
+
+export interface KubeContextInfo {
+  name: string;
+  cluster: string | null;
+  user: string | null;
+  namespace: string | null;
+  isCurrent: boolean;
+}
+
+export interface DeploymentInfo {
+  name: string;
+  namespace: string;
+  replicas: number;
+  readyReplicas: number;
+  status: string;
+  imageTag: string | null;
+  labels: Record<string, string>;
+  selectorLabels: Record<string, string>;
+}
+
+export interface PodInfo {
+  name: string;
+  namespace: string;
+  phase: string;
+  status: string;
+  ready: boolean;
+  readyContainers: number;
+  totalContainers: number;
+  restartCount: number;
+  lastRestartTime: string | null;
+  lastRestartReason: string | null;
+  podIP: string | null;
+  nodeName: string | null;
+  startTime: string | null;
+  containers: string[];
+  labels: Record<string, string>;
+  readyDisplay: string;
+}
+
+export interface KubernetesEvent {
+  name: string;
+  namespace: string;
+  type: string;
+  reason: string | null;
+  message: string | null;
+  involvedObjectName: string | null;
+  involvedObjectKind: string | null;
+  lastTimestamp: string | null;
+  count: number;
+}
+
+export interface ServiceInfo {
+  name: string;
+  namespace: string;
+  type: string;
+  clusterIp: string;
+  externalAddresses: string[];
+  ports: ServicePortInfo[];
+  selectorLabels: Record<string, string>;
+  labels: Record<string, string>;
+}
+
+export interface ServicePortInfo {
+  name: string | null;
+  protocol: string;
+  port: number;
+  targetPort: string | null;
+  nodePort: number | null;
+}
+
+export interface HelmReleaseInfo {
+  name: string;
+  namespace: string;
+  chart: string | null;
+  appVersion: string | null;
+  chartVersion: string | null;
+  status: string;
+  revision: number;
+  updated: string | null;
+}
+
+export interface SecretInfo {
+  name: string;
+  namespace: string;
+  type: string;
+  keys: string[];
+  labels: Record<string, string>;
+}
+
+export interface ConfigMapInfo {
+  name: string;
+  namespace: string;
+  data: Record<string, string>;
+  labels: Record<string, string>;
+}
+
+export interface StatefulSetInfo {
+  name: string;
+  namespace: string;
+  replicas: number;
+  readyReplicas: number;
+  currentRevision: string | null;
+  updateRevision: string | null;
+  labels: Record<string, string>;
+  selectorLabels: Record<string, string>;
+}
+
+export interface HpaInfo {
+  name: string;
+  namespace: string;
+  targetKind: string;
+  targetName: string;
+  minReplicas: number;
+  maxReplicas: number;
+  currentReplicas: number;
+  desiredReplicas: number;
+  currentCpuUtilizationPercent: number | null;
+  targetCpuUtilizationPercent: number | null;
+  isKedaManaged: boolean;
+  isScalingDisabled: boolean;
+}
+
+export interface CronJobInfo {
+  name: string;
+  namespace: string;
+  schedule: string | null;
+  suspend: boolean;
+  activeCount: number;
+  lastScheduleTime: string | null;
+  lastSuccessfulTime: string | null;
+}
+
+export interface JobInfo {
+  name: string;
+  namespace: string;
+  status: string;
+  active: number;
+  succeeded: number;
+  failed: number;
+  desiredCompletions: number | null;
+  parallelism: number;
+  startTime: string | null;
+  completionTime: string | null;
+  sourceKind: string | null;
+  sourceName: string | null;
+}
