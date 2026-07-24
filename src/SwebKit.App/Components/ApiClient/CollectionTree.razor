@@ -22,8 +22,8 @@
                  aria-expanded="@(node.Node.Type == ApiCollectionNodeType.Folder && node.IsExpanded)"
                  aria-level="@(node.Depth + 1)" tabindex="@(node.Node.Request?.Id == SelectedRequestId ? 0 : -1)"
                  draggable="@(CanDrag(node) ? "true" : "false")" @ondragstart="() => OnDragStart(node)"
-                 @ondragover="() => OnDragOver(node)" @ondragover:preventDefault="@CanDrop(node)"
-                 @ondragleave="() => OnDragLeave(node)" @ondrop="e => OnDropAsync(node)" @ondrop:preventDefault="true"
+                 @ondragover="e => OnDragOver(e, node)" @ondragover:preventDefault="@CanDrop(node)"
+                 @ondragleave="() => OnDragLeave(node)" @ondrop="e => OnDropAsync(e, node)" @ondrop:preventDefault="true"
                  @ondrop:stopPropagation="true" @ondragend="OnDragEnd" @onclick="() => OnRowClickAsync(node)"
                  @oncontextmenu="e => ShowContextMenu(e, node)" @oncontextmenu:preventDefault="true"
                  @onkeydown:preventDefault="true" @onkeydown="e => HandleTreeKeyDown(e, node)">
@@ -80,7 +80,7 @@
                     {
                         <input class="collection-tree__rename-input" value="@_renameValue"
                                @oninput="e => _renameValue = e.Value as string ?? _renameValue" @onkeydown="OnRenameKeyDownAsync"
-                               @onblur="CommitRenameAsync" @onclick:stopPropagation="true" @ref="_renameInput" />
+                               @onkeydown:stopPropagation="true" @onblur="CommitRenameAsync" @onclick:stopPropagation="true" @ref="_renameInput" />
                     }
                     else
                     {
@@ -632,6 +632,9 @@ Icons.Regular.Size16.AddSquare();
 
     private FlatTreeNode? _draggedNode;
     private string? _dragOverNodeId;
+    private DropPosition _dragOverPos;
+
+    private enum DropPosition { On, Before, After }
 
     private static bool CanDrag(FlatTreeNode node) =>
         node.Kind == FlatTreeNodeKind.Node && !node.Node.Id.StartsWith("__col__", StringComparison.Ordinal);
@@ -643,7 +646,12 @@ Icons.Regular.Size16.AddSquare();
         if (_draggedNode is not null && _draggedNode.Id == node.Id)
             return "collection-tree__row--dragging";
         if (_dragOverNodeId == node.Id && _draggedNode is not null && _draggedNode.Id != node.Id)
-            return "collection-tree__row--drop-target";
+            return _dragOverPos switch
+            {
+                DropPosition.Before => "collection-tree__row--drop-before",
+                DropPosition.After => "collection-tree__row--drop-after",
+                _ => "collection-tree__row--drop-target",
+            };
         return string.Empty;
     }
 
@@ -653,33 +661,38 @@ Icons.Regular.Size16.AddSquare();
         _draggedNode = node;
     }
 
-    private void OnDragOver(FlatTreeNode node)
+    private void OnDragOver(DragEventArgs e, FlatTreeNode node)
     {
-        if (_draggedNode is null || !CanDrop(node) || _dragOverNodeId == node.Id) return;
+        if (_draggedNode is null || !CanDrop(node)) return;
+
+        var pos = ComputeDropPosition(e, node);
+        if (_dragOverNodeId == node.Id && _dragOverPos == pos) return;
         _dragOverNodeId = node.Id;
-        StateHasChanged();
+        _dragOverPos = pos;
+        RequestRender();
     }
 
     private void OnDragLeave(FlatTreeNode node)
     {
         if (_dragOverNodeId != node.Id) return;
         _dragOverNodeId = null;
-        StateHasChanged();
+        RequestRender();
     }
 
     private void OnDragEnd()
     {
         _draggedNode = null;
         _dragOverNodeId = null;
-        StateHasChanged();
+        RequestRender();
     }
 
-    private async Task OnDropAsync(FlatTreeNode target)
+    private async Task OnDropAsync(DragEventArgs e, FlatTreeNode target)
     {
         var dragged = _draggedNode;
+        var dropPos = _dragOverPos;
         _draggedNode = null;
         _dragOverNodeId = null;
-        StateHasChanged();
+        RequestRender();
 
         if (dragged is null || !CanDrop(target)) return;
         if (dragged.Id == target.Id) return;
@@ -689,20 +702,55 @@ Icons.Regular.Size16.AddSquare();
         ApiCollectionNode? newParent;
         int? newIndex;
 
-        if (target.Node.Type == ApiCollectionNodeType.Folder)
+        if (target.Node.Type == ApiCollectionNodeType.Folder && dropPos == DropPosition.On)
         {
             // Drop onto a folder or the collection root row → reparent as its last child.
             newParent = target.Node.Id.StartsWith("__col__", StringComparison.Ordinal) ? null : target.Node;
             newIndex = null;
         }
+        else if (dropPos == DropPosition.Before || dropPos == DropPosition.After)
+        {
+            // Drop before/after a row → reorder as a sibling at that position.
+            newParent = FindParentOfFlatNode(target);
+            var baseIndex = ComputeSiblingIndex(target, newParent) ?? 0;
+            if (dropPos == DropPosition.After)
+                baseIndex++;
+
+            // When moving within the same parent, the removal in OnMoveNodeAsync shifts
+            // indices. If the dragged node was before the target, subtract 1 to compensate.
+            var siblings = newParent?.Children
+                ?? Collections.FirstOrDefault(c => c.Id == target.CollectionId)?.Nodes;
+            if (siblings is not null)
+            {
+                var draggedIndex = siblings.FindIndex(n => n.Id == dragged.Node.Id);
+                if (draggedIndex >= 0 && draggedIndex < baseIndex)
+                    baseIndex--;
+            }
+
+            newIndex = baseIndex;
+        }
         else
         {
-            // Drop onto a request row → reorder as a sibling at that position.
+            // Default: drop onto a request row → reorder as a sibling at that position.
             newParent = FindParentOfFlatNode(target);
             newIndex = ComputeSiblingIndex(target, newParent);
         }
 
         await OnMoveNode.InvokeAsync((target.CollectionId, dragged.Node, newParent, newIndex));
+    }
+
+    /// <summary>
+    /// Determines whether a drop on <paramref name="target"/> should insert before, after, or on
+    /// the target. For folders, always "on" (reparent). For requests, use the cursor Y position
+    /// relative to the row's vertical center: top half → before, bottom half → after.
+    /// </summary>
+    private static DropPosition ComputeDropPosition(DragEventArgs e, FlatTreeNode target)
+    {
+        if (target.Node.Type == ApiCollectionNodeType.Folder)
+            return DropPosition.On;
+
+        // Row height is 28px (Virtualize ItemSize). Top half → before, bottom half → after.
+        return e.OffsetY < 14 ? DropPosition.Before : DropPosition.After;
     }
 
     /// <summary>
