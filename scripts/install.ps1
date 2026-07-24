@@ -104,6 +104,45 @@ else {
 }
 
 # ---------------------------------------------------------------------------
+# 2b. Bump the package Identity Version so this install is a Windows upgrade
+# ---------------------------------------------------------------------------
+# MSIX Identity Version is Major.Minor.Build.Revision (each 0-65535). Windows performs an
+# in-place *upgrade* (which preserves the package's persisted per-app data) only when the new
+# package's version is strictly greater than the currently-installed one; a same-or-lower version
+# is rejected outright (0x80073CFB). Historically the manifest's version never changed between
+# rebuilds, so every re-run of this script hit that rejection and fell back to Remove-AppxPackage
+# + Add-AppxPackage below - and for an MSIX full-trust package, it's the *uninstall* half of that
+# fallback that wipes the per-package AppData folder Windows redirects %AppData% to, not the
+# upgrade path. Deriving Build/Revision from the current time (minutes since a fixed epoch, split
+# across two 16-bit fields) makes every publish strictly newer than the last automatically, so
+# routine reinstalls no longer destroy app data - the size cast into two 16-bit fields uses only
+# 4-byte precision, so lossless well beyond a human lifetime of usage.
+Write-Step "Bumping the package version so Windows treats this as an upgrade, not a reinstall..."
+
+$manifestPath = Join-Path $repoRoot "src/SwebKit.App/Platforms/Windows/Package.appxmanifest"
+if (-not (Test-Path $manifestPath)) {
+    throw "Could not find $manifestPath."
+}
+
+$epoch = Get-Date -Year 2024 -Month 1 -Day 1 -Hour 0 -Minute 0 -Second 0
+$minutesSinceEpoch = [long]((Get-Date) - $epoch).TotalMinutes
+$packageBuild = [int]([math]::Floor($minutesSinceEpoch / 65536))
+$packageRevision = [int]($minutesSinceEpoch % 65536)
+$packageVersion = "1.0.$packageBuild.$packageRevision"
+
+$manifestContent = Get-Content $manifestPath -Raw
+$versionPattern = '(<Identity[^>]*\bVersion=")[^"]*(")'
+
+if ($manifestContent -notmatch $versionPattern) {
+    throw "Could not find an <Identity Version=`"...`"> attribute in $manifestPath to update."
+}
+
+($manifestContent -replace $versionPattern, "`${1}$packageVersion`${2}") |
+    Set-Content -Path $manifestPath -NoNewline
+
+Write-Host "Package version set to $packageVersion."
+
+# ---------------------------------------------------------------------------
 # 3. Publish the Release MSIX
 # ---------------------------------------------------------------------------
 Write-Step "Publishing SwebKit (Release, $targetFramework)... this can take a few minutes."
@@ -177,10 +216,14 @@ try {
     Add-AppxPackage -Path $msix.FullName -ForceApplicationShutdown
 }
 catch {
-    # This script always publishes the same fixed package version, so a rebuild with code
-    # changes but no version bump has the same identity as the already-installed package.
-    # Windows blocks that (HRESULT 0x80073CFB) instead of silently upgrading it.
-    # Remove the stale package and retry once instead of making the user do it by hand.
+    # The version bump above (step 2b) makes this an upgrade in the normal case, so this should be
+    # rare - it only fires if this script somehow ran twice within the same minute (identical
+    # derived version) or a previous install predates the version-bump step entirely. Remove the
+    # stale package and retry once instead of making the user do it by hand.
+    #
+    # NOTE: unlike an in-place upgrade, this fallback IS destructive - Remove-AppxPackage on an
+    # MSIX full-trust package deletes the per-package AppData folder along with it. It's kept only
+    # as a last resort so the script never gets stuck; it should not trigger in routine use.
 
     $isSameIdentityConflict =
         $_.Exception.Message -match '0x80073CFB' -or
@@ -190,7 +233,7 @@ catch {
         throw
     }
 
-    Write-Host "An older build with the same package version is already installed - removing it and retrying..." -ForegroundColor Yellow
+    Write-Host "An installed build has the same package version - removing it and retrying. This will reset SwebKit's saved configuration." -ForegroundColor Yellow
 
     Get-AppxPackage -Name "*SwebKit*" | ForEach-Object {
         Remove-AppxPackage -Package $_.PackageFullName -ErrorAction Stop

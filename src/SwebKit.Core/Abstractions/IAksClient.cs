@@ -7,6 +7,20 @@ public interface IAksClient
     Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<PodInfo>> GetPodsAsync(string ns, string? labelSelector = null, CancellationToken ct = default);
     Task<IReadOnlyList<KubernetesEvent>> GetEventsAsync(string ns, string? involvedObjectName = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches events capped at <paramref name="limit"/>. The Kubernetes Events API has no
+    /// server-side recency sort, so this is a safety net against unbounded network/serialization
+    /// cost in high-churn namespaces, not a guarantee of the true most-recent <paramref name="limit"/>
+    /// events. Default implementation falls back to the unbounded overload and caps client-side
+    /// after the fact (no network savings); implementations that can pass a server-side limit
+    /// (the real Kubernetes client) should override this for the actual savings.
+    /// </summary>
+    async Task<IReadOnlyList<KubernetesEvent>> GetEventsAsync(string ns, int limit, CancellationToken ct = default)
+    {
+        var events = await GetEventsAsync(ns, null, ct).ConfigureAwait(false);
+        return events.Count > limit ? events.Take(limit).ToList() : events;
+    }
     IAsyncEnumerable<string> StreamPodLogsAsync(string ns, string podName, string container, LogStreamOptions opts, CancellationToken ct = default);
     Task<PortForwardSession> StartPortForwardAsync(string ns, string resourceName, int localPort, int remotePort, CancellationToken ct = default);
     Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default);
@@ -63,6 +77,22 @@ public interface IAksClient
     Task<IReadOnlyList<ConfigMapInfo>> GetConfigMapsAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<SecretInfo>> GetSecretsAsync(string ns, CancellationToken ct = default);
     Task<Dictionary<string, string>> GetSecretValuesAsync(string ns, string name, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches Secrets and Helm release info together. Helm releases are themselves stored as
+    /// Secrets (<c>owner=helm</c>) on real clusters, so implementations backed by a single
+    /// underlying list call (the real Kubernetes client) should override this to share one fetch
+    /// between the two instead of listing the namespace's secrets twice. Default implementation
+    /// just calls both existing methods independently.
+    /// </summary>
+    async Task<(IReadOnlyList<SecretInfo> Secrets, IReadOnlyList<HelmReleaseInfo> HelmReleases)> GetSecretsAndHelmReleasesAsync(
+        string ns, CancellationToken ct = default)
+    {
+        var secretsTask = GetSecretsAsync(ns, ct);
+        var helmTask = GetHelmReleasesAsync(ns, ct);
+        await Task.WhenAll(secretsTask, helmTask).ConfigureAwait(false);
+        return (await secretsTask.ConfigureAwait(false), await helmTask.ConfigureAwait(false));
+    }
 
     // ── Feature 4: Container details ─────────────────────────────────────────
     Task<IReadOnlyList<ContainerDetail>> GetContainerDetailsAsync(

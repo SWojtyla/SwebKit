@@ -39,9 +39,12 @@ public class ReleaseRepository(ILogger<ReleaseRepository>? logger = null)
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Failed to load releases from '{File}'; falling back to empty release data.", AppDataPaths.ReleasesJson);
+            AppDataFileStore.PreserveUnreadableFile(AppDataPaths.ReleasesJson);
+            logger?.LogWarning(ex, "Failed to load releases from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to empty release data for this session.",
+                AppDataPaths.ReleasesJson, AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.ReleasesJson));
             _releases = [];
             _snapshots = [];
+            _validationSnapshots = [];
         }
     }
 

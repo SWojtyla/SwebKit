@@ -17,11 +17,14 @@ This single command:
 1. Generates a local `CN=SwebKit` self-signed code-signing certificate (or reuses one
    you already have, if it's still valid).
 2. Updates `SwebKit.App.csproj`'s `PackageCertificateThumbprint` to match it.
-3. Runs `dotnet publish -c Release` to produce the MSIX.
-4. Trusts that certificate for local sideloading — this needs admin rights, so expect
+3. Bumps `Package.appxmanifest`'s `Identity Version` to a value newer than any
+   previous install, so Windows treats this as an **upgrade** (see
+   [Config persistence across installs](#config-persistence-across-installs) below).
+4. Runs `dotnet publish -c Release` to produce the MSIX.
+5. Trusts that certificate for local sideloading — this needs admin rights, so expect
    **one UAC prompt** the first time you ever run it on a machine.
-5. Installs the MSIX with `Add-AppxPackage`.
-6. Launches SwebKit.
+6. Installs the MSIX with `Add-AppxPackage`.
+7. Launches SwebKit.
 
 Re-run the exact same command any time (e.g. after pulling new changes) to rebuild and
 update the installed app — every step is idempotent, so nothing happens twice
@@ -79,7 +82,35 @@ certificate exists on the current machine — you should never need to edit this
 `Subject` (`CN=SwebKit`) — this is why the script always generates certificates with
 that exact subject, so any machine's self-signed cert satisfies the manifest.
 
-### 4. The self-signed certificate
+The `Version="0.0.0.0"` you see checked in is just a placeholder — `install.ps1`
+overwrites it before every publish. See the next section for why that matters.
+
+<a id="config-persistence-across-installs"></a>
+
+### 4. Config persistence across installs
+
+SwebKit is a packaged (MSIX, full-trust) app, so Windows redirects its `%AppData%`
+reads/writes to a per-package virtualized folder tied to the package's identity —
+and **deletes that folder when the package is uninstalled**. Upgrading a package
+in place (installing a strictly newer `Identity Version`) preserves it; only a full
+uninstall does not.
+
+Before the version-bump step existed, `Package.appxmanifest` carried the same
+hardcoded `Version="0.0.0.0"` on every rebuild. Publishing again with unchanged
+identity/version hits Windows' same-identity rejection (`0x80073CFB`), and the
+script's only recourse was to `Remove-AppxPackage` (uninstall) and reinstall —
+which is exactly the operation that wipes saved config. So on this script's old
+behavior, **every rebuild silently reset your settings**, because "install a new
+version" was actually "uninstall, then install."
+
+`install.ps1` now derives `Identity Version`'s `Build.Revision` from the current
+time before every publish, so each run is always strictly newer than the last and
+Windows performs a real in-place upgrade — config now survives normal use of this
+script. The old uninstall/reinstall fallback still exists for the rare case of two
+runs within the same minute, or an install that predates this change, but it's now
+the exception rather than the rule.
+
+### 5. The self-signed certificate
 
 Generated with:
 
@@ -127,6 +158,15 @@ In `src/SwebKit.App/SwebKit.App.csproj`:
 <PackageCertificateThumbprint>YOUR_THUMBPRINT_HERE</PackageCertificateThumbprint>
 ```
 
+### Step 2.5 — Bump the package version
+
+In `src/SwebKit.App/Platforms/Windows/Package.appxmanifest`, set `Identity`'s
+`Version` to something strictly greater than whatever is currently installed
+(check with `Get-AppxPackage -Name "*SwebKit*"`). Skipping this step means Windows
+may reject the install as a duplicate identity, or — if you work around that with
+`Remove-AppxPackage` first — wipe your saved SwebKit configuration; see
+[Config persistence across installs](#config-persistence-across-installs) above.
+
 ### Step 3 — Publish
 
 ```bash
@@ -162,6 +202,8 @@ Or just double-click the `.msix` file.
   path when SwebKit is ready to publish for real.
 - Certificates expire after 1 year. `scripts/install.ps1` detects an expired/missing
   certificate and generates a fresh one automatically — nothing to remember.
-- Bumping `ApplicationDisplayVersion` / `ApplicationVersion` in `SwebKit.App.csproj`
-  before a rebuild makes Windows treat the new package as an update instead of a
-  conflicting install (the script always uses whatever version is currently set).
+- The package version bump (previous section) touches the tracked
+  `Package.appxmanifest` file, the same way the certificate thumbprint sync touches
+  the tracked `.csproj` — expect a local working-tree diff on that file after
+  running the script. That's expected; it's local machine/build state, not meant
+  to be committed.

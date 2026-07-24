@@ -87,6 +87,7 @@ public partial class AksPage
             Jobs = [];
             CronJobs = [];
             PodMetricsList = [];
+            _pendingResourceKinds.Clear();
             IsLoading = false;
             await InvokeAsync(StateHasChanged);
             return;
@@ -144,7 +145,7 @@ public partial class AksPage
             // any call in single-namespace mode).
             using var accessScope = new AksAccessDeniedScope();
 
-            async Task LoadDataset<T>(Func<Task<IReadOnlyList<T>>> fetch, Action<List<T>> assign)
+            async Task LoadDataset<T>(Func<Task<IReadOnlyList<T>>> fetch, Action<List<T>> assign, string? tabKind = null)
             {
                 ct.ThrowIfCancellationRequested();
                 try
@@ -164,6 +165,14 @@ public partial class AksPage
                 {
                     Logger.LogWarning(ex, "Dataset load failed for namespace {Namespace}", CurrentNamespace);
                 }
+                finally
+                {
+                    // Whatever happened (success, denial, error), this tab's data is no longer "in
+                    // flight" for this generation — clear its pending marker so a tab the user
+                    // switched to while waiting stops showing a loading placeholder.
+                    if (tabKind is not null && _pendingResourceKinds.Remove(tabKind))
+                        datasetDirty = true;
+                }
             }
 
             var scope = CurrentNamespaceScope;
@@ -180,19 +189,25 @@ public partial class AksPage
                 _eventWarningCount = 0;
                 PodMetricsList = [];
 
+                _pendingResourceKinds.Clear();
+                _pendingResourceKinds.UnionWith([
+                    "Deployments", "StatefulSets", "Pods", "Services", "Ingresses",
+                    "GatewayClasses", "Gateways", "HTTPRoutes", "Jobs", "CronJobs"
+                ]);
+
                 var tasks = new List<Task>
                 {
-                    LoadDataset(() => Client.GetDeploymentsAsync(scopedNamespaces), r => Deployments = r),
-                    LoadDataset(() => Client.GetPodsAsync(scopedNamespaces), r => Pods = r),
-                    LoadDataset(() => Client.GetStatefulSetsAsync(scopedNamespaces), r => StatefulSets = r),
-                    LoadDataset(() => Client.GetServicesAsync(scopedNamespaces), r => Services = r),
-                    LoadDataset(() => Client.GetIngressesAsync(scopedNamespaces), r => Ingresses = r),
-                    LoadDataset(() => Client.GetGatewayClassesAsync(ct), r => GatewayClasses = r),
-                    LoadDataset(() => Client.GetGatewaysAsync(scopedNamespaces), r => Gateways = r),
-                    LoadDataset(() => Client.GetHttpRoutesAsync(scopedNamespaces), r => HttpRoutes = r),
+                    LoadDataset(() => Client.GetDeploymentsAsync(scopedNamespaces), r => Deployments = r, "Deployments"),
+                    LoadDataset(() => Client.GetPodsAsync(scopedNamespaces), r => Pods = r, "Pods"),
+                    LoadDataset(() => Client.GetStatefulSetsAsync(scopedNamespaces), r => StatefulSets = r, "StatefulSets"),
+                    LoadDataset(() => Client.GetServicesAsync(scopedNamespaces), r => Services = r, "Services"),
+                    LoadDataset(() => Client.GetIngressesAsync(scopedNamespaces), r => Ingresses = r, "Ingresses"),
+                    LoadDataset(() => Client.GetGatewayClassesAsync(ct), r => GatewayClasses = r, "GatewayClasses"),
+                    LoadDataset(() => Client.GetGatewaysAsync(scopedNamespaces), r => Gateways = r, "Gateways"),
+                    LoadDataset(() => Client.GetHttpRoutesAsync(scopedNamespaces), r => HttpRoutes = r, "HTTPRoutes"),
                     LoadDataset(() => Client.GetHpasAsync(scopedNamespaces), r => Hpas = r),
-                    LoadDataset(() => Client.GetJobsAsync(scopedNamespaces), r => Jobs = r),
-                    LoadDataset(() => Client.GetCronJobsAsync(scopedNamespaces), r => CronJobs = r),
+                    LoadDataset(() => Client.GetJobsAsync(scopedNamespaces), r => Jobs = r, "Jobs"),
+                    LoadDataset(() => Client.GetCronJobsAsync(scopedNamespaces), r => CronJobs = r, "CronJobs"),
                 };
 
                 // PERF2-8: Render flush loop — batch renders at ~150ms intervals
@@ -226,25 +241,72 @@ public partial class AksPage
             {
                 var ns = scope.Primary;
 
+                if (cached is null)
+                {
+                    // No stale snapshot to show for this namespace — clear the previous
+                    // namespace's data instead of letting it visually linger under the new
+                    // namespace's header until each dataset arrives and overwrites it.
+                    Deployments = []; StatefulSets = []; Pods = []; Services = []; Ingresses = [];
+                    GatewayClasses = []; Gateways = []; HttpRoutes = []; HelmReleases = [];
+                    ConfigMaps = []; Secrets = []; Hpas = []; Events = []; _eventWarningCount = 0;
+                    Jobs = []; CronJobs = []; PodMetricsList = [];
+                }
+
+                _pendingResourceKinds.Clear();
+                _pendingResourceKinds.UnionWith([
+                    "Deployments", "StatefulSets", "Pods", "Services", "Ingresses",
+                    "GatewayClasses", "Gateways", "HTTPRoutes", "Helm", "ConfigMaps",
+                    "Secrets", "Jobs", "CronJobs"
+                ]);
+
+                // Best-effort Bruno-style dedupe: Helm releases are themselves stored as Secrets
+                // (owner=helm), so fetch both from one underlying list call instead of two.
+                async Task LoadSecretsAndHelmAsync()
+                {
+                    ct.ThrowIfCancellationRequested();
+                    try
+                    {
+                        var (secrets, helmReleases) = await Client.GetSecretsAndHelmReleasesAsync(ns, ct);
+                        ct.ThrowIfCancellationRequested();
+                        Secrets = secrets.ToList();
+                        HelmReleases = helmReleases.ToList();
+                        datasetDirty = true;
+                    }
+                    catch (OperationCanceledException) { throw; } // CS-2
+                    catch (AksAccessDeniedException)
+                    {
+                        AksAccessDeniedScope.Record("Secret", CurrentNamespace);
+                        AksAccessDeniedScope.Record("HelmRelease", CurrentNamespace);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Dataset load failed for namespace {Namespace}", CurrentNamespace);
+                    }
+                    finally
+                    {
+                        if (_pendingResourceKinds.Remove("Secrets") | _pendingResourceKinds.Remove("Helm"))
+                            datasetDirty = true;
+                    }
+                }
+
                 var tasks = new List<Task>
                 {
-                    LoadDataset(() => Client.GetDeploymentsAsync(ns), r => Deployments = r),
-                    LoadDataset(() => Client.GetStatefulSetsAsync(ns), r => StatefulSets = r),
-                    LoadDataset(() => Client.GetPodsAsync(ns), r => Pods = r),
-                    LoadDataset(() => Client.GetServicesAsync(ns), r => Services = r),
-                    LoadDataset(() => Client.GetIngressesAsync(ns), r => Ingresses = r),
-                    LoadDataset(() => Client.GetGatewayClassesAsync(ct), r => GatewayClasses = r),
-                    LoadDataset(() => Client.GetGatewaysAsync(ns), r => Gateways = r),
-                    LoadDataset(() => Client.GetHttpRoutesAsync(ns), r => HttpRoutes = r),
-                    LoadDataset(() => Client.GetHelmReleasesAsync(ns), r => HelmReleases = r),
-                    LoadDataset(async () => (IReadOnlyList<KubernetesEvent>)(await Client.GetEventsAsync(ns)).Take(50).ToList(), r => {
+                    LoadDataset(() => Client.GetDeploymentsAsync(ns), r => Deployments = r, "Deployments"),
+                    LoadDataset(() => Client.GetStatefulSetsAsync(ns), r => StatefulSets = r, "StatefulSets"),
+                    LoadDataset(() => Client.GetPodsAsync(ns), r => Pods = r, "Pods"),
+                    LoadDataset(() => Client.GetServicesAsync(ns), r => Services = r, "Services"),
+                    LoadDataset(() => Client.GetIngressesAsync(ns), r => Ingresses = r, "Ingresses"),
+                    LoadDataset(() => Client.GetGatewayClassesAsync(ct), r => GatewayClasses = r, "GatewayClasses"),
+                    LoadDataset(() => Client.GetGatewaysAsync(ns), r => Gateways = r, "Gateways"),
+                    LoadDataset(() => Client.GetHttpRoutesAsync(ns), r => HttpRoutes = r, "HTTPRoutes"),
+                    LoadSecretsAndHelmAsync(),
+                    LoadDataset(async () => (IReadOnlyList<KubernetesEvent>)(await Client.GetEventsAsync(ns, 500, ct)).Take(50).ToList(), r => {
 Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
                     LoadDataset(() => Client.GetPodMetricsAsync(ns), r => PodMetricsList = r),
-                    LoadDataset(() => Client.GetConfigMapsAsync(ns), r => ConfigMaps = r),
-                    LoadDataset(() => Client.GetSecretsAsync(ns), r => Secrets = r),
+                    LoadDataset(() => Client.GetConfigMapsAsync(ns), r => ConfigMaps = r, "ConfigMaps"),
                     LoadDataset(() => Client.GetHpasAsync(ns), r => Hpas = r),
-                    LoadDataset(() => Client.GetJobsAsync(ns), r => Jobs = r),
-                    LoadDataset(() => Client.GetCronJobsAsync(ns), r => CronJobs = r),
+                    LoadDataset(() => Client.GetJobsAsync(ns), r => Jobs = r, "Jobs"),
+                    LoadDataset(() => Client.GetCronJobsAsync(ns), r => CronJobs = r, "CronJobs"),
                 };
 
                 // PERF2-8: Render flush loop — batch renders at ~150ms intervals
@@ -351,6 +413,7 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
         HelmReleases = []; ConfigMaps = []; Secrets = []; Hpas = [];
         Events = []; Jobs = []; CronJobs = []; PodMetricsList = [];
         _eventWarningCount = 0;
+        _pendingResourceKinds.Clear();
         await BootstrapAndLoadAsync(newContext, string.Empty);
         await PublishWorkspaceSnapshotAsync(recordRecent: false);
     }

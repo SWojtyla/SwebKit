@@ -745,22 +745,44 @@ public partial class KubernetesAksClient
 
     private async Task<object?> ListGatewayApiCustomObjectsAsync(string ns, string plural, CancellationToken ct)
     {
-        foreach (var version in GatewayApiVersions)
+        if (_gatewayApiVersionCache.IsKnownUnavailable(plural))
+            return null;
+
+        if (_gatewayApiVersionCache.TryGetWorkingVersion(plural) is { } knownVersion)
         {
             try
             {
                 return await _client.CustomObjects.ListNamespacedCustomObjectAsync(
+                    GatewayApiGroup, knownVersion, ns, plural, cancellationToken: ct).ConfigureAwait(false);
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+                // Cached version stopped working (e.g. CRD reinstalled at a different version) — reprobe below.
+                _gatewayApiVersionCache.ForgetWorkingVersion(plural);
+            }
+        }
+
+        foreach (var version in GatewayApiVersions)
+        {
+            try
+            {
+                var result = await _client.CustomObjects.ListNamespacedCustomObjectAsync(
                     GatewayApiGroup,
                     version,
                     ns,
                     plural,
                     cancellationToken: ct).ConfigureAwait(false);
+                _gatewayApiVersionCache.MarkWorking(plural, version);
+                return result;
             }
             catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
             {
             }
         }
 
+        // No version of this Gateway API resource is served by this cluster — remember so
+        // subsequent namespace switches / auto-refreshes skip the failing probes entirely.
+        _gatewayApiVersionCache.MarkUnavailable(plural);
         return null;
     }
 
@@ -787,21 +809,40 @@ public partial class KubernetesAksClient
 
     private async Task<object?> ListClusterGatewayApiCustomObjectsAsync(string plural, CancellationToken ct)
     {
-        foreach (var version in GatewayApiVersions)
+        if (_gatewayApiVersionCache.IsKnownUnavailable(plural))
+            return null;
+
+        if (_gatewayApiVersionCache.TryGetWorkingVersion(plural) is { } knownVersion)
         {
             try
             {
                 return await _client.CustomObjects.ListClusterCustomObjectAsync(
+                    GatewayApiGroup, knownVersion, plural, cancellationToken: ct).ConfigureAwait(false);
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+                _gatewayApiVersionCache.ForgetWorkingVersion(plural);
+            }
+        }
+
+        foreach (var version in GatewayApiVersions)
+        {
+            try
+            {
+                var result = await _client.CustomObjects.ListClusterCustomObjectAsync(
                     GatewayApiGroup,
                     version,
                     plural,
                     cancellationToken: ct).ConfigureAwait(false);
+                _gatewayApiVersionCache.MarkWorking(plural, version);
+                return result;
             }
             catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
             {
             }
         }
 
+        _gatewayApiVersionCache.MarkUnavailable(plural);
         return null;
     }
 

@@ -37,7 +37,9 @@ public sealed class CollectionRepository(ILogger<CollectionRepository>? logger =
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Failed to load collections from '{File}'; falling back to an empty store.", AppDataPaths.CollectionsJson);
+            AppDataFileStore.PreserveUnreadableFile(AppDataPaths.CollectionsJson);
+            logger?.LogWarning(ex, "Failed to load collections from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty store for this session.",
+                AppDataPaths.CollectionsJson, AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.CollectionsJson));
             _store = new CollectionsStore();
         }
     }

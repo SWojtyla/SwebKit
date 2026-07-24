@@ -112,21 +112,40 @@ public partial class KubernetesAksClient
         return await WithAuthRetryAsync(async () =>
         {
             var result = await _client.CoreV1.ListNamespacedSecretAsync(ns, cancellationToken: ct).ConfigureAwait(false);
-            return result.Items
-                // Exclude Helm release secrets and service-account token secrets
-                .Where(s =>
-                    s.Type != "kubernetes.io/service-account-token" &&
-                    !(s.Metadata.Labels?.TryGetValue("owner", out var owner) == true && owner == "helm"))
-                .Select(s => new SecretInfo
-                {
-                    Name = s.Metadata.Name,
-                    Namespace = s.Metadata.NamespaceProperty ?? ns,
-                    Type = s.Type ?? "Opaque",
-                    Keys = s.Data?.Keys.ToList() ?? [],
-                    Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : []
-                }).ToList();
+            return MapSecrets(result.Items, ns);
         }).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Fetches Secrets and Helm release info together with a single <c>ListNamespacedSecretAsync</c>
+    /// call — Helm releases are themselves stored as Secrets (<c>owner=helm</c>), so
+    /// <see cref="GetSecretsAsync"/> and <see cref="GetHelmReleasesAsync"/> would otherwise each list
+    /// the namespace's secrets independently on every namespace switch and auto-refresh.
+    /// </summary>
+    public async Task<(IReadOnlyList<SecretInfo> Secrets, IReadOnlyList<HelmReleaseInfo> HelmReleases)> GetSecretsAndHelmReleasesAsync(
+        string ns, CancellationToken ct = default)
+    {
+        return await WithAuthRetryAsync(async () =>
+        {
+            var result = await _client.CoreV1.ListNamespacedSecretAsync(ns, cancellationToken: ct).ConfigureAwait(false);
+            return (MapSecrets(result.Items, ns), MapHelmReleases(result.Items, ns));
+        }).ConfigureAwait(false);
+    }
+
+    internal static List<SecretInfo> MapSecrets(IEnumerable<V1Secret> secrets, string ns) =>
+        secrets
+            // Exclude Helm release secrets and service-account token secrets
+            .Where(s =>
+                s.Type != "kubernetes.io/service-account-token" &&
+                !(s.Metadata.Labels?.TryGetValue("owner", out var owner) == true && owner == "helm"))
+            .Select(s => new SecretInfo
+            {
+                Name = s.Metadata.Name,
+                Namespace = s.Metadata.NamespaceProperty ?? ns,
+                Type = s.Type ?? "Opaque",
+                Keys = s.Data?.Keys.ToList() ?? [],
+                Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : []
+            }).ToList();
 
     public async Task<Dictionary<string, string>> GetSecretValuesAsync(string ns, string name, CancellationToken ct = default)
     {

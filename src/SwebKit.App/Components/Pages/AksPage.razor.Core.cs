@@ -52,6 +52,17 @@ public partial class AksPage
     private bool IsLoading;
     private string? ErrorMessage;
     private string? PermissionWarning;
+
+    /// <summary>
+    /// Resource-tab kinds (the exact <see cref="ActiveResourceType"/> strings) whose fetch for the
+    /// current load generation hasn't completed yet. Lets the UI show "still loading" for a tab the
+    /// user switches to before its data has arrived, instead of a misleadingly empty grid — switching
+    /// tabs itself never starts or cancels any fetch, it only changes which already-in-flight (or
+    /// already-loaded) dataset is visible.
+    /// </summary>
+    private readonly HashSet<string> _pendingResourceKinds = [];
+
+    private bool IsKindPending(string kind) => _pendingResourceKinds.Contains(kind);
     // Set when the namespace picker came back empty because listing namespaces was RBAC-denied
     // (see AksClientBootstrapResult.NamespacesWarning), not because the cluster has none. Kept
     // separate from PermissionWarning because it's produced during bootstrap, before LoadAsync's

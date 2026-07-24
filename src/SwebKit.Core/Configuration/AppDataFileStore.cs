@@ -4,8 +4,40 @@ internal static class AppDataFileStore
 {
     public static string GetBackupPath(string filePath) => $"{filePath}.bak";
 
+    public static string GetUnreadableSnapshotPath(string filePath) => $"{filePath}.unreadable";
+
     public static bool Exists(string filePath) =>
         File.Exists(filePath) || File.Exists(GetBackupPath(filePath));
+
+    /// <summary>
+    /// Best-effort snapshot of a file (and its <c>.bak</c> sibling, if present) that failed to
+    /// deserialize into the current shape. Callers must invoke this <em>before</em> resetting
+    /// their in-memory store to defaults on a load failure — without it, the very next
+    /// <see cref="SaveAsync"/> would overwrite the only surviving copy of the user's data with an
+    /// empty store, turning a transient shape mismatch into permanent data loss. The snapshot uses
+    /// a fixed name (not timestamped) so repeated failed launches don't pile up copies, and it is
+    /// never itself consulted by <see cref="Exists"/>/<see cref="LoadAsync{T}"/>, so it can't
+    /// interfere with normal load/save operation.
+    /// </summary>
+    public static void PreserveUnreadableFile(string filePath)
+    {
+        TryCopyOver(filePath, GetUnreadableSnapshotPath(filePath));
+        TryCopyOver(GetBackupPath(filePath), GetUnreadableSnapshotPath(GetBackupPath(filePath)));
+    }
+
+    private static void TryCopyOver(string sourcePath, string destinationPath)
+    {
+        try
+        {
+            if (File.Exists(sourcePath))
+            {
+                File.Copy(sourcePath, destinationPath, overwrite: true);
+            }
+        }
+        catch
+        {
+        }
+    }
 
     public static async Task<AppDataFileLoadResult<T>> LoadAsync<T>(
         string filePath,

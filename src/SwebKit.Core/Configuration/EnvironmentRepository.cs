@@ -39,7 +39,9 @@ public sealed class EnvironmentRepository(ILogger<EnvironmentRepository>? logger
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Failed to load environments from '{File}'; falling back to an empty store.", AppDataPaths.EnvironmentsJson);
+            AppDataFileStore.PreserveUnreadableFile(AppDataPaths.EnvironmentsJson);
+            logger?.LogWarning(ex, "Failed to load environments from '{File}'; the file was preserved at '{Snapshot}' instead of being overwritten. Falling back to an empty store for this session.",
+                AppDataPaths.EnvironmentsJson, AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.EnvironmentsJson));
             _store = new EnvironmentsStore();
         }
     }
