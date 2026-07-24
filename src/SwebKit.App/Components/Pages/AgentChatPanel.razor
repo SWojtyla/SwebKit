@@ -95,6 +95,41 @@
                                 <span class="agent-elapsed">@msg.Elapsed.TotalSeconds.ToString("F1")s</span>
                             </div>
                         }
+                        @if (msg.Steps is { Count: > 0 })
+                        {
+                            <details class="agent-steps">
+                                <summary>Steps (@msg.Steps.Count)</summary>
+                                <div class="agent-steps-list">
+                                    @foreach (var step in msg.Steps)
+                                    {
+                                        <div class="agent-step">
+                                            @if (step.Type == "tool_call")
+                                            {
+                                                <FluentIcon Value="@(new Icons.Regular.Size16.Wrench())" Width="12px" />
+                                                <span class="agent-step-name">@step.ToolName</span>
+                                            }
+                                            else if (step.Type == "tool_result")
+                                            {
+                                                <FluentIcon Value="@(new Icons.Regular.Size16.CheckmarkCircle())" Width="12px" />
+                                                <span class="agent-step-name">@step.ToolName</span>
+                                                <span class="agent-step-time">@step.Elapsed.TotalSeconds.ToString("F1")s</span>
+                                            }
+                                            @if (step.Summary is not null)
+                                            {
+                                                <span class="agent-step-summary">@step.Summary</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </details>
+                        }
+                        @if (msg.Status == AgentStatus.Failed)
+                        {
+                            <div class="agent-status agent-status--failed">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
+                                <span>Failed</span>
+                            </div>
+                        }
                         <div class="agent-bubble__text agent-bubble__markdown">
                             @RenderMarkdown(msg.Content)
                         </div>
@@ -134,7 +169,9 @@
         bool IsUser,
         string Content,
         IReadOnlyList<string> ToolsUsed,
-        TimeSpan Elapsed);
+        TimeSpan Elapsed,
+        AgentStatus Status = AgentStatus.Done,
+        IReadOnlyList<AgentChatStep>? Steps = null);
 
     // Static counter: globally unique Mermaid source IDs across all rendered messages.
     private static int _mermaidIdCounter;
@@ -265,7 +302,7 @@
         try
         {
             var reply = await Agent.SendAsync(text, _cts.Token);
-            _messages.Add(new ChatMessage(false, reply.Text, reply.ToolsUsed, reply.Elapsed));
+            _messages.Add(new ChatMessage(false, reply.Text, reply.ToolsUsed, reply.Elapsed, reply.Status, reply.Steps));
             StateHasChanged(); // Notify UI of new assistant message
         }
         catch (OperationCanceledException)

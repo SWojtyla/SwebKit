@@ -17,15 +17,28 @@ var serviceProvider = BuildServiceProvider();
 var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
+// Ensure settings are loaded and a Mistral profile is active if MISTRAL_API_KEY is set.
+var settingsRepo = serviceProvider.GetRequiredService<UserSettingsRepository>();
+await settingsRepo.LoadAsync();
+var mistralKey = Environment.GetEnvironmentVariable("MISTRAL_API_KEY");
+if (!string.IsNullOrEmpty(mistralKey) && settingsRepo.Settings.Agent.GetActiveProfile()?.Provider != ProviderKind.Mistral)
+{
+    var mistralProfile = AgentProfilePresets.Mistral();
+    settingsRepo.Settings.Agent.Profiles.Clear();
+    settingsRepo.Settings.Agent.Profiles.Add(mistralProfile);
+    settingsRepo.Settings.Agent.ActiveProfileId = mistralProfile.Id;
+    await settingsRepo.SaveAsync();
+}
+
 try
 {
     PrintBanner();
 
-    var mistralClient = serviceProvider.GetRequiredService<IMistralClient>();
+    var modelClient = serviceProvider.GetRequiredService<IAgentModelClient>();
     var podStatusTool = serviceProvider.GetRequiredService<GetPodStatusTool>();
     var listNsTool = serviceProvider.GetRequiredService<ListNamespacesTool>();
 
-    // ── Tool executor — dispatches Mistral tool calls to local implementations ──
+    // ── Tool executor — dispatches model tool calls to local implementations ──
     var toolExecutor = async (string toolName, JsonElement args, CancellationToken ct) =>
     {
         Console.ForegroundColor = ConsoleColor.DarkCyan;
@@ -64,7 +77,7 @@ try
 
     // Conversation history: user/assistant/tool messages accumulate here.
     // The system prompt is never stored in history; ChatAsync prepends it each time.
-    var history = new List<object>();
+    var history = new List<AgentMessage>();
 
     Console.WriteLine($"Tools available: {string.Join(", ", tools.Select(t => t.Name))}");
     Console.WriteLine();
@@ -118,13 +131,24 @@ try
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
-            var response = await mistralClient.ChatAsync(
-                systemPrompt,
-                userInput,
-                tools,
-                history,
+            // Record user message in history
+            history.Add(new AgentMessage { Role = "user", Content = userInput });
+
+            var request = new AgentModelRequest
+            {
+                SystemPrompt = systemPrompt,
+                UserMessage = userInput,
+                Tools = tools,
+                History = history.Take(history.Count - 1).ToList(),
+            };
+
+            var result = await modelClient.ChatAsync(
+                request,
                 toolExecutor,
                 cts.Token);
+
+            // Record assistant response in history
+            history.Add(new AgentMessage { Role = "assistant", Content = result.Text });
 
             sw.Stop();
 
@@ -132,7 +156,7 @@ try
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("─── Response " + new string('─', 60));
             Console.ResetColor();
-            Console.WriteLine(response);
+            Console.WriteLine(result.Text);
             Console.ForegroundColor = ConsoleColor.DarkGray;
             Console.WriteLine($"─── {sw.Elapsed.TotalSeconds:F1}s " + new string('─', 60));
             Console.ResetColor();
@@ -254,17 +278,17 @@ static IServiceProvider BuildServiceProvider()
 {
     var services = new ServiceCollection();
 
-    services.AddSingleton<MistralConfig>(new MistralConfig());
     services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
     services.AddHttpClient();
     services.AddSingleton<ICredentialStore>(new SimpleConsoleCredentialStore());
     services.AddSingleton<IAppEventBus, AppEventBus>();
+    services.AddSingleton<UserSettingsRepository>();
     services.AddSingleton<AppStateService>(sp => new AppStateService(
         new ProfileRepository(),
         new UiStateRepository(),
         sp.GetRequiredService<IAppEventBus>()));
     services.AddSingleton<IAksClientFactory, AksClientFactory>();
-    services.AddSingleton<IMistralClient, MistralHttpClient>();
+    services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
     services.AddSingleton<GetPodStatusTool>();
     services.AddSingleton<ListNamespacesTool>();
 

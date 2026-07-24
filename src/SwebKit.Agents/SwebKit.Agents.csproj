@@ -13,4 +13,8 @@
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SwebKit.Agents.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -11,7 +11,7 @@ public class ConversationSessionTests
     public void Add_SingleMessage_CountIsOne()
     {
         var session = new ConversationSession(20);
-        session.Add(new { role = "user", content = "hello" });
+        session.Add(new AgentMessage { Role = "user", Content = "hello" });
         Assert.Equal(1, session.Count);
     }
 
@@ -19,8 +19,8 @@ public class ConversationSessionTests
     public void Clear_AfterAddingMessages_CountIsZero()
     {
         var session = new ConversationSession(20);
-        session.Add(new { role = "user", content = "hello" });
-        session.Add(new { role = "assistant", content = "hi" });
+        session.Add(new AgentMessage { Role = "user", Content = "hello" });
+        session.Add(new AgentMessage { Role = "assistant", Content = "hi" });
         session.Clear();
         Assert.Equal(0, session.Count);
     }
@@ -30,7 +30,7 @@ public class ConversationSessionTests
     {
         var session = new ConversationSession(maxMessages: 4);
         for (var i = 0; i < 5; i++)
-            session.Add(new { role = "user", content = $"msg {i}" });
+            session.Add(new AgentMessage { Role = "user", Content = $"msg {i}" });
 
         // After 5 adds with max=4, one trim pass removes 2 → leaves 3
         Assert.Equal(3, session.Count);
@@ -41,7 +41,7 @@ public class ConversationSessionTests
     {
         var session = new ConversationSession(maxMessages: 4);
         for (var i = 0; i < 4; i++)
-            session.Add(new { role = "user", content = $"msg {i}" });
+            session.Add(new AgentMessage { Role = "user", Content = $"msg {i}" });
 
         Assert.Equal(4, session.Count);
     }
@@ -50,7 +50,7 @@ public class ConversationSessionTests
     public void IsNearLimit_BelowThreshold_ReturnsFalse()
     {
         var session = new ConversationSession(maxMessages: 20);
-        session.Add(new { role = "user", content = "a" });
+        session.Add(new AgentMessage { Role = "user", Content = "a" });
         Assert.False(session.IsNearLimit);
     }
 
@@ -59,9 +59,9 @@ public class ConversationSessionTests
     {
         var session = new ConversationSession(maxMessages: 4);
         // 75% of 4 = 3
-        session.Add(new { role = "user", content = "1" });
-        session.Add(new { role = "user", content = "2" });
-        session.Add(new { role = "user", content = "3" });
+        session.Add(new AgentMessage { Role = "user", Content = "1" });
+        session.Add(new AgentMessage { Role = "user", Content = "2" });
+        session.Add(new AgentMessage { Role = "user", Content = "3" });
         Assert.True(session.IsNearLimit);
     }
 
@@ -86,8 +86,8 @@ public class ConversationSessionTests
     public void Messages_ReturnsReadOnlyView()
     {
         var session = new ConversationSession(20);
-        session.Add(new { role = "user", content = "test" });
-        Assert.IsAssignableFrom<IReadOnlyList<object>>(session.Messages);
+        session.Add(new AgentMessage { Role = "user", Content = "test" });
+        Assert.IsAssignableFrom<IReadOnlyList<AgentMessage>>(session.Messages);
         Assert.Single(session.Messages);
     }
 }

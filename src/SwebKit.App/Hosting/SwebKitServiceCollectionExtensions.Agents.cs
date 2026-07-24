@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
+using SwebKit.Agents.Tools.ApiClient;
 using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Services;
@@ -26,22 +27,24 @@ public static partial class SwebKitServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers AI agent infrastructure: Mistral client, agent context builder,
+    /// Registers AI agent infrastructure: model client, agent context builder,
     /// all agent tools, tool registry, and chat service.
     /// </summary>
     public static IServiceCollection AddSwebKitAgents(this IServiceCollection services)
     {
-        services.AddSingleton<MistralConfig>(sp =>
-        {
-            var store = sp.GetRequiredService<ICredentialStore>();
-            return new MistralConfig
-            {
-                ApiKey = store.Get("SwebKit-Agent:Mistral-ApiKey") ?? string.Empty
-            };
-        });
-        services.AddSingleton<IMistralClient, MistralHttpClient>();
+        services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
+        services.AddHttpClient<AgentCapabilityTester>();
 
         services.AddSingleton<IAgentContextBuilder, AgentContextBuilder>();
+
+        // Action coordinator for proposal/confirmation flow
+        services.AddSingleton<IAgentActionCoordinator, AgentActionCoordinator>();
+
+        // API Client agent service
+        services.AddSingleton<IApiClientAgentService, ApiClientAgentService>();
+
+        // Action applier for confirmed action execution
+        services.AddSingleton<AgentActionApplier>();
 
         // Tools — registered as IAgentTool so AgentToolRegistry receives them all via IEnumerable<IAgentTool>
         // Kubernetes Tools
@@ -60,6 +63,13 @@ public static partial class SwebKitServiceCollectionExtensions
         // Observability Tools
         services.AddSingleton<IAgentTool, QueryLogsTool>();
         services.AddSingleton<IAgentTool, GetMetricsTool>();
+
+        // API Client Tools
+        services.AddSingleton<IAgentTool, SearchApiRequestsTool>();
+        services.AddSingleton<IAgentTool, GetApiRequestTool>();
+        services.AddSingleton<IAgentTool, ProposeApiRequestChangeTool>();
+        services.AddSingleton<IAgentTool, ProposeApiRequestDeleteTool>();
+        services.AddSingleton<IAgentTool, PrepareApiRequestExecutionTool>();
 
         services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
         services.AddSingleton<IAgentChatService, AgentChatService>();

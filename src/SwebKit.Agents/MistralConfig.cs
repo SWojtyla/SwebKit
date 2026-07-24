@@ -1,9 +1,10 @@
 namespace SwebKit.Agents;
 
 /// <summary>
-/// Configuration for Mistral AI API integration.
-/// For Phase 0 POC: Minimal configuration with API key loaded from ICredentialStore.
+/// Legacy configuration for Mistral AI API integration.
+/// Replaced by <see cref="SwebKit.Core.Domain.AgentProfile"/> with <see cref="SwebKit.Core.Domain.ProviderKind.Mistral"/>.
 /// </summary>
+[Obsolete("Replaced by AgentProfile. Will be removed in a future version.")]
 public sealed class MistralConfig
 {
     /// <summary>

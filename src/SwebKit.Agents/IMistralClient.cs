@@ -1,19 +1,15 @@
 using System.Text.Json;
+using SwebKit.Agents.Tools;
+using SwebKit.Core.Domain;
 
 namespace SwebKit.Agents;
 
+/// <summary>
+/// Legacy interface kept for backward compatibility. Use <see cref="IAgentModelClient"/> instead.
+/// </summary>
+[Obsolete("Replaced by IAgentModelClient. Will be removed in a future version.")]
 public interface IMistralClient
 {
-    /// <summary>
-    /// Sends a user message and runs the full agentic loop: if Mistral requests
-    /// tool calls, <paramref name="toolExecutor"/> is invoked for each, and the
-    /// results are sent back to Mistral before returning the final text response.
-    /// </summary>
-    /// <param name="history">
-    /// Optional mutable list of prior conversation messages (role/content pairs).
-    /// When provided, prior turns are included in the request and the new user +
-    /// assistant messages are appended to it so the next call carries full context.
-    /// </param>
     Task<string> ChatAsync(
         string systemPrompt,
         string userMessage,
@@ -23,9 +19,21 @@ public interface IMistralClient
         CancellationToken ct);
 }
 
+/// <summary>
+/// Tool definition enriched with metadata for the agent loop and UI.
+/// </summary>
 public sealed class ToolDefinition
 {
     public required string Name { get; set; }
     public required string Description { get; set; }
     public required JsonElement ParametersSchema { get; set; }
+
+    /// <summary>Whether this tool reads data or mutates state.</summary>
+    public ToolKind Kind { get; set; } = ToolKind.Read;
+
+    /// <summary>Risk level for confirmation UI.</summary>
+    public ToolRisk Risk { get; set; } = ToolRisk.None;
+
+    /// <summary>Minimum capability the provider must support.</summary>
+    public AgentCapability RequiredCapability { get; set; } = AgentCapability.ToolCalling;
 }
