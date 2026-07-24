@@ -165,3 +165,65 @@ export interface ApiClientUiState {
   activeEnvironmentIdByCollection: Record<string, string>;
   lastSelectedRequestIdByCollection: Record<string, string>;
 }
+
+// ── Service Bus ──────────────────────────────────────────────────────────────
+
+export interface SbNamespaceInfo {
+  name: string;
+  endpoint: string;
+}
+
+export interface SbEntityInfo {
+  name: string;
+  entityPath: string;
+  stats: SbEntityStats | null;
+  isDisabled: boolean;
+  isTopic: boolean;
+  isSubscription: boolean;
+  topicName: string | null;
+}
+
+export interface SbEntityStats {
+  activeMessageCount: number;
+  deadLetterMessageCount: number;
+  scheduledMessageCount: number;
+  transferCount: number;
+  updatedAt: string | null;
+}
+
+export interface SbMessage {
+  messageId: string;
+  correlationId: string | null;
+  subject: string | null;
+  contentType: string | null;
+  body: string;
+  applicationProperties: Record<string, unknown>;
+  systemProperties: SbSystemProperties | null;
+  deadLetterReason: string | null;
+  deadLetterErrorDescription: string | null;
+  enqueuedAt: string;
+  deliveryCount: number;
+  lockToken: string | null;
+  sequenceNumber: number | null;
+  sessionId: string | null;
+}
+
+export interface SbSystemProperties {
+  expiresAt: string | null;
+  lockedUntil: string | null;
+  enqueuedSequenceNumber: string | null;
+  partitionKey: string | null;
+}
+
+export interface ResubmitRequest {
+  sequenceNumbers: string[];
+  targetEntityPath: string | null;
+  remapRules: RemapRules | null;
+}
+
+export interface RemapRules {
+  overrideSubject: string | null;
+  overrideCorrelationId: string | null;
+  propertyRenames: Record<string, string>;
+  propertyRemoves: string[];
+}

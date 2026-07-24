@@ -1,5 +1,8 @@
+using SwebKit.Azure.ServiceBus;
+using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
+using SwebKit.Sidecar.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +15,7 @@ builder.Services.AddSingleton<ProfileRepository>();
 builder.Services.AddSingleton<EnvironmentRepository>();
 builder.Services.AddSingleton<CollectionRepository>();
 builder.Services.AddSingleton<UserSettingsRepository>();
+builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
 
 // CORS for the Tauri WebView (dev mode uses http://localhost:1420)
 builder.Services.AddCors(options =>
@@ -78,5 +82,9 @@ app.MapPut("/api/config/user-settings", async (UserSettingsRepository repo, User
     await repo.SaveAsync();
     return Results.Ok();
 });
+
+// ── Service Bus ──────────────────────────────────────────────────────────────
+
+app.MapServiceBusEndpoints();
 
 app.Run();
