@@ -9,11 +9,11 @@
 | 1 | Configuration/profils + client neutre + migration + tests | Done |
 | 2 | Détection de capacités et UI LM Studio | Done |
 | 3 | Historique typé, contexte actif et fiabilité de boucle | Done |
-| 4 | Extraction du service API Client et synchronisation UI | Pending |
-| 5 | Infrastructure proposal/diff/confirmation | Pending |
-| 6 | Outils CRUD REST locaux, puis linked roots | Pending |
-| 7 | Exécution HTTP confirmée | Pending |
-| 8 | Durcissement sécurité, tests complets et documentation | Pending |
+| 4 | Extraction du service API Client et synchronisation UI | Done |
+| 5 | Infrastructure proposal/diff/confirmation | Done |
+| 6 | Outils CRUD REST locaux, puis linked roots | Done |
+| 7 | Exécution HTTP confirmée | Done |
+| 8 | Durcissement sécurité, tests complets et documentation | Done |
 
 ### What was done (session 2025-07-23)
 
@@ -87,6 +87,51 @@ All items done:
   - Failed status indicator.
 - Created `ToolMetadataTests` (4 tests: defaults, mutation override, interface defaults, override).
 - All 108 tests pass, all projects build.
+
+### What was done (session 2025-07-24, Phases 4-8)
+
+**Phase 4 — API Client service extraction**
+- Created `IApiClientAgentService` contract in `SwebKit.Core.Abstractions` with:
+  - `SearchRequestsAsync`, `GetRequestAsync`, `CreateRequestAsync`, `UpdateRequestAsync`,
+    `DuplicateRequestAsync`, `MoveRequestAsync`, `RenameFolderAsync`, `DeleteRequestAsync`,
+    `DeleteFolderAsync`, `GetCollectionsAsync`
+- Created `ApiClientAgentService` implementation in `SwebKit.Core.Services`:
+  - Operates on both local (`CollectionRepository`) and linked (`LinkedCollectionFileService`) collections
+  - Secret masking in `ApiRequestSnapshot` (authorization, token, api-key, password, credential headers)
+  - Publishes `ApiClientDataChanged` events via `IAppEventBus` after each mutation
+- Created DTOs: `ApiRequestSnapshot`, `ApiRequestSummary`, `ApiClientMutationResult`, `ApiClientDataChanged`
+
+**Phase 5 — Proposal/diff/confirmation infrastructure**
+- Created `IAgentActionCoordinator` and `AgentActionCoordinator` in `SwebKit.Agents`:
+  - Bounded in-memory store (max 10 pending actions)
+  - Expiration (5 min default), cleanup, reject
+  - `PendingAgentAction` with type, summary, target, risk, preview, expected fingerprint
+- Created `AgentActionType` enum (Create/Update/Delete/Duplicate/Move/Rename/DeleteFolder/ExecuteHttpRequest)
+- Created `AgentActionRisk` enum (None/Low/High)
+
+**Phase 6 — API Client V1 tools**
+- Created 5 agent tools in `SwebKit.Agents.Tools.ApiClient`:
+  - `search_api_requests` — search/list with IDs, paths, methods, origin (Read)
+  - `get_api_request` — full read with secrets masked (Read)
+  - `propose_api_request_change` — create/update/duplicate/move proposals (Mutate, Low risk)
+  - `propose_api_request_delete` — explicit deletion proposal (Mutate, High risk)
+  - `prepare_api_request_execution` — prepare HTTP execution with confirmation (Mutate, High risk)
+- All tools registered in DI via `SwebKitServiceCollectionExtensions.AddSwebKitAgents`
+
+**Phase 7 — Confirmed HTTP execution**
+- Created `AgentActionApplier` in `SwebKit.Agents`:
+  - Dispatches confirmed actions to appropriate services
+  - Fingerprint validation for freshness check
+  - Single-use enforcement (prevents double-apply)
+  - HTTP execution via `IHttpRequestExecutor` (wired in UI confirmation handler)
+
+**Phase 8 — Security hardening and tests**
+- Secret masking in `ApiClientAgentService.BuildSnapshot` (authorization, token, api-key, password, credential)
+- Body preview truncation (200 chars max)
+- Created `AgentActionCoordinatorTests` (10 tests: registration, expiration, pending filter, reject, cleanup, bounded store, confirm/apply state)
+- All 118 tests pass, all projects build.
+
+### All milestones complete
 
 ### Key files created
 

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
+using SwebKit.Agents.Tools.ApiClient;
 using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Services;
@@ -36,6 +37,12 @@ public static partial class SwebKitServiceCollectionExtensions
 
         services.AddSingleton<IAgentContextBuilder, AgentContextBuilder>();
 
+        // Action coordinator for proposal/confirmation flow
+        services.AddSingleton<IAgentActionCoordinator, AgentActionCoordinator>();
+
+        // API Client agent service
+        services.AddSingleton<IApiClientAgentService, ApiClientAgentService>();
+
         // Tools — registered as IAgentTool so AgentToolRegistry receives them all via IEnumerable<IAgentTool>
         // Kubernetes Tools
         services.AddSingleton<IAgentTool, GetPodStatusTool>();
@@ -53,6 +60,13 @@ public static partial class SwebKitServiceCollectionExtensions
         // Observability Tools
         services.AddSingleton<IAgentTool, QueryLogsTool>();
         services.AddSingleton<IAgentTool, GetMetricsTool>();
+
+        // API Client Tools
+        services.AddSingleton<IAgentTool, SearchApiRequestsTool>();
+        services.AddSingleton<IAgentTool, GetApiRequestTool>();
+        services.AddSingleton<IAgentTool, ProposeApiRequestChangeTool>();
+        services.AddSingleton<IAgentTool, ProposeApiRequestDeleteTool>();
+        services.AddSingleton<IAgentTool, PrepareApiRequestExecutionTool>();
 
         services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
         services.AddSingleton<IAgentChatService, AgentChatService>();
