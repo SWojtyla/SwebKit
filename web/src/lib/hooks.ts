@@ -4,6 +4,9 @@ import type {
   ProfileData,
   UserSettings,
   EnvironmentsResponse,
+  ApiCollection,
+  ApiClientExecutionResponse,
+  HttpRequestEntry,
   SbEntityInfo,
   SbMessage,
   SbNamespaceInfo,
@@ -382,5 +385,33 @@ export function useAksResourceYaml(ns: string | null, kind: string | null, name:
       return res.text();
     },
     enabled: !!ns && !!kind && !!name,
+  });
+}
+
+// ── API Client ───────────────────────────────────────────────────────────────
+
+export function useCollections() {
+  return useQuery({
+    queryKey: ["collections"],
+    queryFn: () => apiFetch<ApiCollection[]>("/api/config/collections"),
+  });
+}
+
+export function useUpdateCollections() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (collections: ApiCollection[]) =>
+      apiSend("/api/config/collections", "PUT", { collections }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["collections"] }),
+  });
+}
+
+export function useExecuteRequest() {
+  return useMutation({
+    mutationFn: (vars: {
+      request: HttpRequestEntry;
+      collectionId?: string;
+      environmentId?: string;
+    }) => apiSend<ApiClientExecutionResponse>("/api/api-client/execute", "POST", vars),
   });
 }

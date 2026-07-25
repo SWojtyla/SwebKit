@@ -42,3 +42,6 @@ src/SwebKit.App/AppPackages/
 **/test-results/
 **/playwright-report/
 
+# TypeScript
+*.tsbuildinfo
+

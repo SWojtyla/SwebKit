@@ -1,8 +1,11 @@
+using System.Text.Json;
 using SwebKit.Azure.ServiceBus;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
 using SwebKit.Sidecar.Endpoints;
+using SwebKit.Sidecar.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +21,19 @@ builder.Services.AddSingleton<UserSettingsRepository>();
 builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
 
+// HTTP client used by the API client request executor
+builder.Services.AddHttpClient();
+
+// API client request execution pipeline
+builder.Services.AddSingleton<ICredentialStore, SidecarCredentialStore>();
+builder.Services.AddSingleton<IKeyVaultSecretResolver, NoopKeyVaultSecretResolver>();
+builder.Services.AddSingleton<IVariableGeneratorService, VariableGeneratorService>();
+builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
+builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();
+builder.Services.AddSingleton<IAuthHeaderBuilder, SidecarAuthHeaderBuilder>();
+builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
+builder.Services.AddSingleton<IHttpRequestExecutor, HttpRequestExecutor>();
+
 // CORS for the Tauri WebView (dev mode uses http://localhost:1420)
 builder.Services.AddCors(options =>
 {
@@ -25,6 +41,14 @@ builder.Services.AddCors(options =>
     {
         policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
     });
+});
+
+// Match the JSON options used by the core repositories (camelCase + string enums)
+builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.PropertyNameCaseInsensitive = true;
+    options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 
 var app = builder.Build();
@@ -110,5 +134,9 @@ app.MapServiceBusEndpoints();
 // ── AKS / Kubernetes ─────────────────────────────────────────────────────────
 
 app.MapAksEndpoints();
+
+// ── API Client ───────────────────────────────────────────────────────────────
+
+app.MapApiClientEndpoints();
 
 app.Run();

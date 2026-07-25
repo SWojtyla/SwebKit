@@ -30,10 +30,19 @@ export async function apiSend<T>(
   method: "POST" | "PUT" | "PATCH" | "DELETE",
   body?: unknown,
 ): Promise<T> {
-  return apiFetch<T>(path, {
+  const res = await fetch(`${SIDECAR_BASE_URL}${path}`, {
     method,
+    headers: { "Content-Type": "application/json" },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+  }
+
+  const text = await res.text().catch(() => "");
+  return (text ? (JSON.parse(text) as T) : undefined) as T;
 }
 
 export { SIDECAR_BASE_URL };
