@@ -158,6 +158,38 @@ public static class ServiceBusEndpoints
             return Results.Ok();
         });
 
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/schedule", async (
+            string nsId,
+            string entityPath,
+            ScheduleRequest req,
+            ProfileRepository profile,
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var ns = ResolveNamespace(nsId, profile, demo);
+            if (ns is null) return Results.NotFound("Namespace not found");
+
+            var client = CreateClient(ns, factory, demo);
+            var seq = await client.ScheduleMessageAsync(entityPath, req.Message, req.ScheduledEnqueueTime);
+            return Results.Ok(new { sequenceNumber = seq });
+        });
+
+        app.MapDelete("/api/servicebus/{nsId}/entities/{entityPath}/scheduled/{sequenceNumber}", async (
+            string nsId,
+            string entityPath,
+            long sequenceNumber,
+            ProfileRepository profile,
+            IServiceBusClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var ns = ResolveNamespace(nsId, profile, demo);
+            if (ns is null) return Results.NotFound("Namespace not found");
+
+            var client = CreateClient(ns, factory, demo);
+            await client.CancelScheduledMessageAsync(entityPath, sequenceNumber);
+            return Results.Ok();
+        });
+
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/complete", async (
             string nsId,
             string entityPath,
@@ -258,5 +290,11 @@ public static class ServiceBusEndpoints
         public string[] SequenceNumbers { get; set; } = [];
         public string? TargetEntityPath { get; set; }
         public RemapRules? RemapRules { get; set; }
+    }
+
+    public sealed class ScheduleRequest
+    {
+        public SbMessage Message { get; set; } = null!;
+        public DateTimeOffset ScheduledEnqueueTime { get; set; }
     }
 }

@@ -217,4 +217,57 @@ test.describe("Service Bus", () => {
     await page.getByTestId("detail-tab-dlq").click();
     await expect(page.getByTestId("detail-tab-content-dlq")).toBeVisible();
   });
+
+  test("compose button opens composer modal", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    await page.getByTestId("sb-compose-button").click();
+    await expect(page.getByTestId("message-composer")).toBeVisible();
+    await expect(page.getByTestId("composer-title")).toContainText("Compose");
+
+    // Close
+    await page.getByTestId("composer-close").click();
+    await expect(page.getByTestId("message-composer")).not.toBeVisible();
+  });
+
+  test("composer can fill fields and send message", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    await page.getByTestId("sb-compose-button").click();
+    await expect(page.getByTestId("message-composer")).toBeVisible();
+
+    // Fill in fields
+    await page.getByTestId("composer-subject").fill("Test Subject");
+    await page.getByTestId("composer-body").fill('{"test": true}');
+
+    // Format JSON
+    await page.getByTestId("composer-format-json").click();
+
+    // Add a property
+    await page.getByTestId("composer-add-property").click();
+    await page.getByTestId("composer-property-key-0").fill("orderId");
+    await page.getByTestId("composer-property-value-0").fill("ORD-123");
+
+    // Send (in demo mode this should succeed)
+    await page.getByTestId("composer-send").click();
+
+    // Composer should close after successful send
+    await expect(page.getByTestId("message-composer")).not.toBeVisible();
+  });
+
+  test("composer cancel returns to page", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    await page.getByTestId("sb-compose-button").click();
+    await expect(page.getByTestId("message-composer")).toBeVisible();
+
+    await page.getByTestId("composer-cancel").click();
+    await expect(page.getByTestId("message-composer")).not.toBeVisible();
+  });
 });

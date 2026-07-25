@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { Plus } from "lucide-react";
 import { useProfile } from "@/lib/hooks";
 import { EntityTree } from "./EntityTree";
 import { MessageList } from "./MessageList";
 import { MessageDetail } from "./MessageDetail";
+import { MessageComposer, type ComposerMode } from "./MessageComposer";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 
 export function ServiceBusPage() {
@@ -11,12 +13,13 @@ export function ServiceBusPage() {
   const [selectedEntity, setSelectedEntity] = useState<SbEntityInfo | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<SbMessage | null>(null);
   const [viewMode, setViewMode] = useState<"active" | "dlq">("active");
+  const [composerMode, setComposerMode] = useState<ComposerMode | null>(null);
 
   const namespaces = profile?.serviceBusNamespaces ?? [];
 
   return (
     <div className="flex h-full flex-col" data-testid="service-bus-page">
-      {/* Namespace selector */}
+      {/* Namespace selector + compose button */}
       <div className="flex items-center gap-3 border-b px-4 py-2">
         <span className="text-sm font-medium">Namespace:</span>
         <select
@@ -41,6 +44,16 @@ export function ServiceBusPage() {
             Configure namespaces in Settings
           </span>
         )}
+        <div className="flex-1" />
+        <button
+          data-testid="sb-compose-button"
+          onClick={() => setComposerMode("compose")}
+          disabled={!selectedNsId}
+          className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Compose
+        </button>
       </div>
 
       {/* Main content: entity tree | message list | detail */}
@@ -104,6 +117,18 @@ export function ServiceBusPage() {
           />
         </div>
       </div>
+
+      {/* Message composer modal */}
+      {composerMode && (
+        <MessageComposer
+          mode={composerMode}
+          nsId={selectedNsId}
+          namespaces={namespaces}
+          entity={selectedEntity}
+          sourceMessage={composerMode === "replay" || composerMode === "edit" ? selectedMessage : null}
+          onClose={() => setComposerMode(null)}
+        />
+      )}
     </div>
   );
 }

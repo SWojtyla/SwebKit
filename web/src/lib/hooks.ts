@@ -195,6 +195,22 @@ export function useSbSendMessage() {
   });
 }
 
+export function useSbScheduleMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { nsId: string; entityPath: string; message: SbMessage; scheduledEnqueueTime: string }) =>
+      apiSend<{ sequenceNumber: number }>(
+        `/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/schedule`,
+        "POST",
+        { message: vars.message, scheduledEnqueueTime: vars.scheduledEnqueueTime },
+      ),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["sb-peek", vars.nsId, vars.entityPath] });
+      qc.invalidateQueries({ queryKey: ["sb-queues", vars.nsId] });
+    },
+  });
+}
+
 export function useSbCompleteMessages() {
   const qc = useQueryClient();
   return useMutation({

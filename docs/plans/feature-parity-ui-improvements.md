@@ -49,8 +49,8 @@ All four major feature areas are **high priority**. Execute in this order:
 - [ ] Add session pinning filter (filter by SessionId) — deferred
 - [x] Add filter toggle button to show/hide filter bar
 
-#### 1.2 Message Composer
-- [ ] Create `MessageComposer.tsx` — modal/panel for composing messages
+#### 1.2 Message Composer ✅ DONE
+- [x] Create `MessageComposer.tsx` — modal/panel for composing messages
   - Mode: Compose, Replay, Edit & Resubmit, Schedule
   - Target namespace + entity selectors (for replay cross-namespace)
   - Message body editor (textarea with JSON formatting)
@@ -58,13 +58,14 @@ All four major feature areas are **high priority**. Execute in this order:
   - Content type selector
   - Subject, CorrelationId, SessionId, PartitionKey inputs
   - Send / Schedule / Cancel buttons
-- [ ] Add "Send Message" button to `ServiceBusPage.tsx` header
-- [ ] Add "Edit & Resubmit" button to `MessageDetail.tsx`
-- [ ] Add "Replay" button to `MessageDetail.tsx` (opens composer in replay mode)
-- [ ] Add "Schedule" button to `MessageDetail.tsx`
-- [ ] Add sidecar endpoint: `POST /api/servicebus/{nsId}/entities/{entityPath}/send`
-- [ ] Add sidecar endpoint: `POST /api/servicebus/{nsId}/entities/{entityPath}/schedule`
-- [ ] Add React Query hook: `useSbSendMessage`, `useSbScheduleMessage`
+- [x] Add "Compose" button to `ServiceBusPage.tsx` header
+- [ ] Add "Edit & Resubmit" button to `MessageDetail.tsx` — deferred (composer supports mode, needs wiring)
+- [ ] Add "Replay" button to `MessageDetail.tsx` — deferred (composer supports mode, needs wiring)
+- [ ] Add "Schedule" button to `MessageDetail.tsx` — deferred (composer supports mode, needs wiring)
+- [x] Add sidecar endpoint: `POST /api/servicebus/{nsId}/entities/{entityPath}/send` (already existed)
+- [x] Add sidecar endpoint: `POST /api/servicebus/{nsId}/entities/{entityPath}/schedule`
+- [x] Add sidecar endpoint: `DELETE /api/servicebus/{nsId}/entities/{entityPath}/scheduled/{sequenceNumber}`
+- [x] Add React Query hook: `useSbSendMessage` (already existed), `useSbScheduleMessage`
 
 #### 1.3 Message Templates
 - [ ] Create `TemplatePicker.tsx` — modal for selecting saved message templates
