@@ -27,6 +27,10 @@ import type {
   RedisSortedSetEntry,
   RedisServerInfo,
   RedisSlowLogSummary,
+  StorageContainerItem,
+  StorageBlobPage,
+  BlobProperties,
+  StorageBlobContent,
 } from "./types";
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -545,5 +549,43 @@ export function useRedisSetValue(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+  });
+}
+
+// ── Storage hooks ─────────────────────────────────────────────────────────────
+
+export function useStorageContainers(accountId: string | null) {
+  return useQuery({
+    queryKey: ["storage", accountId, "containers"],
+    queryFn: () => apiFetch<StorageContainerItem[]>(`/api/storage/${accountId}/containers`),
+    enabled: !!accountId,
+  });
+}
+
+export function useStorageBlobs(accountId: string | null, container: string | null, prefix: string, continuationToken: string | null) {
+  return useQuery({
+    queryKey: ["storage", accountId, "containers", container, "blobs", prefix, continuationToken],
+    queryFn: () => {
+      const params = new URLSearchParams({ prefix });
+      if (continuationToken) params.set("continuationToken", continuationToken);
+      return apiFetch<StorageBlobPage>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs?${params}`);
+    },
+    enabled: !!accountId && !!container,
+  });
+}
+
+export function useBlobProperties(accountId: string | null, container: string | null, blobName: string | null) {
+  return useQuery({
+    queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "properties"],
+    queryFn: () => apiFetch<BlobProperties>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/properties`),
+    enabled: !!accountId && !!container && !!blobName,
+  });
+}
+
+export function useBlobContent(accountId: string | null, container: string | null, blobName: string | null) {
+  return useQuery({
+    queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "content"],
+    queryFn: () => apiFetch<StorageBlobContent>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/content`),
+    enabled: !!accountId && !!container && !!blobName,
   });
 }

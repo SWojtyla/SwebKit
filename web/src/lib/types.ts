@@ -605,3 +605,53 @@ export interface RedisSlowLogSummary {
   maxReturned: number;
   capability: string;
 }
+
+// ── Storage ───────────────────────────────────────────────────────────────────
+
+export interface StorageContainerItem {
+  name: string;
+  lastModified: string | null;
+  publicAccess: string | null;
+  leaseStatus: string | null;
+}
+
+export interface StorageBlobItem {
+  name: string;
+  isPrefix: boolean;
+  sizeBytes: number | null;
+  contentType: string | null;
+  lastModified: string | null;
+  etag: string | null;
+}
+
+export interface StorageBlobPage {
+  items: StorageBlobItem[];
+  continuationToken: string | null;
+}
+
+export interface BlobProperties {
+  name: string;
+  sizeBytes: number;
+  contentType: string;
+  lastModified: string;
+  etag: string;
+  leaseStatus: string | null;
+  leaseState: string | null;
+  accessTier: string | null;
+  accessTierInferred: boolean | null;
+  contentEncoding: string | null;
+  contentLanguage: string | null;
+  cacheControl: string | null;
+  metadata: Record<string, string>;
+  tags: Record<string, string>;
+}
+
+export interface StorageBlobContent {
+  containerName: string;
+  blobName: string;
+  content: string;
+  contentType: string | null;
+  totalSizeBytes: number;
+  wasTruncated: boolean;
+  isBinary: boolean;
+}

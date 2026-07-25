@@ -1,5 +1,6 @@
 using System.Text.Json;
 using SwebKit.Azure.ServiceBus;
+using SwebKit.Azure.Storage;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -21,6 +22,7 @@ builder.Services.AddSingleton<CollectionRepository>();
 builder.Services.AddSingleton<UserSettingsRepository>();
 builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
 builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
+builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
 
 // HTTP client used by the API client request executor
@@ -95,6 +97,11 @@ app.MapGet("/api/config/profiles", (ProfileRepository repo, DemoModeService demo
                 ActiveCacheId = demoCache.Id,
             };
         }
+        var demoStorage = demo.GetDemoStorageConfig();
+        if (demoStorage is not null)
+        {
+            data.Config.StorageAccounts = [demoStorage];
+        }
     }
     return Results.Ok(data);
 });
@@ -153,5 +160,9 @@ app.MapApiClientEndpoints();
 // ── Redis ─────────────────────────────────────────────────────────────────────
 
 app.MapRedisEndpoints();
+
+// ── Storage ───────────────────────────────────────────────────────────────────
+
+app.MapStorageEndpoints();
 
 app.Run();

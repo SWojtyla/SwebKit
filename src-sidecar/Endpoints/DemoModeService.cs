@@ -14,11 +14,13 @@ public sealed class DemoModeService : IDisposable
     public static readonly Guid DemoNamespaceId2 = new("00000000-0000-0000-0000-000000000002");
 
     public static readonly string DemoRedisCacheId = "demo-cache";
+    public static readonly string DemoStorageId = "demo-storage";
 
     private readonly DemoServiceBusClient _ordersClient = DemoServiceBusClient.OrdersDev();
     private readonly DemoServiceBusClient _paymentsClient = DemoServiceBusClient.PaymentsDev();
     private readonly DemoAksClient _aksClient = new();
     private readonly DemoRedisClient _redisClient = new(0);
+    private readonly DemoStorageClient _storageClient = new();
 
     public bool IsDemoMode { get; set; }
 
@@ -64,6 +66,17 @@ public sealed class DemoModeService : IDisposable
     }
 
     public IRedisClient GetRedisClient(RedisCacheEntry cache) => _redisClient;
+
+    public StorageConfig? GetDemoStorageConfig() =>
+        new()
+        {
+            Id = DemoStorageId,
+            DisplayName = "Demo Storage",
+            AccountName = "devstore",
+            UseAad = false,
+        };
+
+    public IStorageClient GetStorageClient() => _storageClient;
 
     public void Dispose() => _redisClient.Dispose();
 }
