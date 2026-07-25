@@ -5,13 +5,13 @@ export async function setDemoMode(page: Page, enabled: boolean) {
   await page.goto("/");
   const toggle = page.getByTestId("demo-mode-toggle");
   await toggle.waitFor();
-  const text = await toggle.textContent();
+  const text = (await toggle.textContent())?.trim() ?? "";
   const isOn = text === "Demo Mode ON";
   if (enabled && !isOn) {
     await toggle.click();
-    await expect(toggle).toHaveText("Demo Mode ON");
+    await expect(toggle).toContainText("Demo Mode ON");
   } else if (!enabled && isOn) {
     await toggle.click();
-    await expect(toggle).toHaveText("Enable Demo Mode");
+    await expect(toggle).toContainText("Enable Demo Mode");
   }
 }

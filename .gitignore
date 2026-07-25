@@ -39,6 +39,6 @@ artifacts/coverage*/
 src/SwebKit.App/AppPackages/
 
 # Playwright
-web/test-results/
-web/playwright-report/
+**/test-results/
+**/playwright-report/
 

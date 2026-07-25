@@ -87,9 +87,83 @@ src/
   SwebKit.Azure/        # Azure Service Bus + App Insights implementations
   SwebKit.Kubernetes/   # AKS / Kubernetes implementation
   SwebKit.OpenTelemetry/ # OTLP observability provider
+src-sidecar/            # .NET minimal API sidecar for the Tauri/React rewrite
+web/                    # Vite + React + Tailwind frontend
+web/e2e/                # Playwright E2E tests
 tests/
   SwebKit.Agents.Tests/
   SwebKit.Core.Tests/
   SwebKit.Azure.Tests/
   SwebKit.Kubernetes.Tests/
+```
+
+## Web + .NET Sidecar (Tauri/React rewrite)
+
+The `feat/tauri-react-rewrite` branch uses a .NET minimal API sidecar and a Vite/React/Tailwind frontend.
+
+### Prerequisites
+
+- .NET 10 SDK
+- Node.js 20+
+- (optional) Tauri CLI for the desktop shell
+
+### Run the sidecar (backend)
+
+```powershell
+cd src-sidecar
+dotnet run --urls http://127.0.0.1:5199
+```
+
+The sidecar port can be overridden with `--urls` or `ASPNETCORE_URLS`.
+
+### Run the frontend (dev)
+
+```powershell
+cd web
+npm install          # first time only
+npm run dev          # http://localhost:1420
+```
+
+The frontend expects the sidecar at `http://127.0.0.1:5199` unless you override it:
+
+```powershell
+cd web
+$env:VITE_SIDECAR_URL="http://127.0.0.1:5198"; npm run dev
+```
+
+### Build
+
+```powershell
+# Frontend
+cd web
+npm run build
+
+# Sidecar
+cd src-sidecar
+dotnet build
+```
+
+### Run E2E tests
+
+Playwright starts the sidecar and Vite automatically on isolated ports, so you don't need to run them manually.
+
+```powershell
+cd web
+npx playwright test
+```
+
+Useful variations:
+
+```powershell
+npx playwright test --ui            # interactive UI mode
+npx playwright test --headed        # visible browser
+npm run test:e2e                    # same as `playwright test`
+npm run test:e2e:ui
+npm run test:e2e:headed
+```
+
+### Run .NET unit tests
+
+```powershell
+dotnet test
 ```
