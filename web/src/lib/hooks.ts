@@ -34,6 +34,7 @@ import type {
   AgentReply,
   AgentStatus,
   SbMessageTemplate,
+  ScheduledMessageEntry,
 } from "./types";
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -208,6 +209,47 @@ export function useSbScheduleMessage() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["sb-peek", vars.nsId, vars.entityPath] });
       qc.invalidateQueries({ queryKey: ["sb-queues", vars.nsId] });
+    },
+  });
+}
+
+export function useSbBatchSend() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { nsId: string; entityPath: string; messages: SbMessage[] }) =>
+      apiSend<{ sent: number }>(
+        `/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/batch-send`,
+        "POST",
+        vars.messages,
+      ),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["sb-peek", vars.nsId, vars.entityPath] });
+      qc.invalidateQueries({ queryKey: ["sb-queues", vars.nsId] });
+    },
+  });
+}
+
+export function useSbScheduledMessages(nsId: string | null, entityPath: string | null) {
+  return useQuery({
+    queryKey: ["sb-scheduled", nsId, entityPath],
+    queryFn: () =>
+      apiFetch<ScheduledMessageEntry[]>(
+        `/api/servicebus/${nsId}/entities/${entityPath}/scheduled`,
+      ),
+    enabled: !!nsId && !!entityPath,
+  });
+}
+
+export function useSbCancelScheduled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { nsId: string; entityPath: string; sequenceNumber: number }) =>
+      apiSend(
+        `/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/scheduled/${vars.sequenceNumber}`,
+        "DELETE",
+      ),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["sb-scheduled", vars.nsId, vars.entityPath] });
     },
   });
 }

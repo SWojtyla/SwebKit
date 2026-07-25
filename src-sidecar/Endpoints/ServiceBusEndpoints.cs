@@ -158,10 +158,10 @@ public static class ServiceBusEndpoints
             return Results.Ok();
         });
 
-        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/schedule", async (
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/batch-send", async (
             string nsId,
             string entityPath,
-            ScheduleRequest req,
+            List<SbMessage> messages,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
@@ -170,8 +170,50 @@ public static class ServiceBusEndpoints
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
+            await client.SendBatchAsync(entityPath, messages);
+            return Results.Ok(new { sent = messages.Count });
+        });
+
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/schedule", async (
+            string nsId,
+            string entityPath,
+            ScheduleRequest req,
+            ProfileRepository profile,
+            IServiceBusClientFactory factory,
+            DemoModeService demo,
+            ScheduledMessageRepository schedRepo) =>
+        {
+            var ns = ResolveNamespace(nsId, profile, demo);
+            if (ns is null) return Results.NotFound("Namespace not found");
+
+            var client = CreateClient(ns, factory, demo);
             var seq = await client.ScheduleMessageAsync(entityPath, req.Message, req.ScheduledEnqueueTime);
+
+            var entry = new ScheduledMessageEntry
+            {
+                NamespaceId = ns.Id,
+                EntityPath = entityPath,
+                SequenceNumber = seq,
+                ScheduledEnqueueTime = req.ScheduledEnqueueTime,
+                MessageId = req.Message.MessageId,
+                Subject = req.Message.Subject,
+                CorrelationId = req.Message.CorrelationId,
+            };
+            await schedRepo.AddAsync(entry);
+
             return Results.Ok(new { sequenceNumber = seq });
+        });
+
+        app.MapGet("/api/servicebus/{nsId}/entities/{entityPath}/scheduled", (
+            string nsId,
+            string entityPath,
+            ScheduledMessageRepository schedRepo) =>
+        {
+            if (!Guid.TryParse(nsId, out var id))
+                return Results.BadRequest("Invalid namespace ID");
+
+            var entries = schedRepo.GetByEntity(id, entityPath);
+            return Results.Ok(entries);
         });
 
         app.MapDelete("/api/servicebus/{nsId}/entities/{entityPath}/scheduled/{sequenceNumber}", async (
@@ -180,13 +222,20 @@ public static class ServiceBusEndpoints
             long sequenceNumber,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            ScheduledMessageRepository schedRepo) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             await client.CancelScheduledMessageAsync(entityPath, sequenceNumber);
+
+            var entries = schedRepo.GetByEntity(ns.Id, entityPath);
+            var entry = entries.FirstOrDefault(e => e.SequenceNumber == sequenceNumber);
+            if (entry is not null)
+                await schedRepo.RemoveAsync(entry.Id);
+
             return Results.Ok();
         });
 

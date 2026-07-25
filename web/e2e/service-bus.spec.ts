@@ -332,4 +332,66 @@ test.describe("Service Bus", () => {
     // Composer should still be visible with loaded data
     await expect(page.getByTestId("message-composer")).toBeVisible();
   });
+
+  test("batch send panel opens and previews JSON input", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    await page.getByTestId("sb-batch-send-button").click();
+    await expect(page.getByTestId("batch-send-panel")).toBeVisible();
+
+    // Paste JSON array
+    const json = JSON.stringify([
+      { body: '{"orderId":"ORD-1"}', subject: "Order 1" },
+      { body: '{"orderId":"ORD-2"}', subject: "Order 2" },
+    ]);
+    await page.getByTestId("batch-input").fill(json);
+
+    // Preview
+    await page.getByTestId("batch-preview-btn").click();
+    await expect(page.getByTestId("batch-preview")).toBeVisible();
+    await expect(page.getByTestId("batch-preview")).toContainText("2 messages");
+
+    // Close
+    await page.getByTestId("batch-close").click();
+    await expect(page.getByTestId("batch-send-panel")).not.toBeVisible();
+  });
+
+  test("batch send panel can send messages", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    await page.getByTestId("sb-batch-send-button").click();
+    await expect(page.getByTestId("batch-send-panel")).toBeVisible();
+
+    // Paste JSON array with a single message
+    const json = JSON.stringify([{ body: '{"batch":true}', subject: "Batch Test" }]);
+    await page.getByTestId("batch-input").fill(json);
+    await page.getByTestId("batch-preview-btn").click();
+    await expect(page.getByTestId("batch-preview")).toBeVisible();
+
+    // Send
+    await page.getByTestId("batch-send-btn").click();
+    await expect(page.getByTestId("batch-send-panel")).not.toBeVisible();
+  });
+
+  test("scheduled messages panel opens and shows empty state", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    await page.getByTestId("sb-scheduled-button").click();
+    await expect(page.getByTestId("scheduled-messages-panel")).toBeVisible();
+    await expect(page.getByTestId("scheduled-title")).toContainText("order-created");
+
+    // Should show empty state or table (depends on prior test state)
+    const hasEmpty = await page.getByTestId("scheduled-empty").count();
+    const hasTable = await page.getByTestId("scheduled-table").count();
+    expect(hasEmpty + hasTable).toBeGreaterThan(0);
+
+    await page.getByTestId("scheduled-close").click();
+    await expect(page.getByTestId("scheduled-messages-panel")).not.toBeVisible();
+  });
 });

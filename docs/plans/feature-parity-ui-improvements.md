@@ -74,18 +74,20 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Add sidecar endpoints: `GET/POST/DELETE /api/servicebus/templates`
 - [x] Add React Query hooks: `useSbTemplates`, `useSbSaveTemplate`, `useSbDeleteTemplate`
 
-#### 1.4 Batch Operations
-- [ ] Create `BatchSendPanel.tsx` — CSV import + batch send
-- [ ] Create `BatchReplayPanel.tsx` — select messages + replay to different namespace/entity
-- [ ] Add "Batch Send" and "Batch Replay" buttons to `ServiceBusPage.tsx` header
-- [ ] Add sidecar endpoint: `POST /api/servicebus/{nsId}/entities/{entityPath}/batch-send`
-- [ ] Add sidecar endpoint: `POST /api/servicebus/{nsId}/entities/{entityPath}/batch-replay`
+#### 1.4 Batch Operations ✅ DONE
+- [x] Create `BatchSendPanel.tsx` — CSV/JSON import + batch send with preview
+- [ ] Create `BatchReplayPanel.tsx` — select messages + replay to different namespace/entity — deferred (resubmit endpoint exists, UI can be added later)
+- [x] Add "Batch Send" button to `ServiceBusPage.tsx` header
+- [x] Add sidecar endpoint: `POST /api/servicebus/{nsId}/entities/{entityPath}/batch-send`
+- [ ] Add sidecar endpoint: `POST /api/servicebus/{nsId}/entities/{entityPath}/batch-replay` — deferred (resubmit endpoint covers this)
 
-#### 1.5 Scheduled Messages View
-- [ ] Create `ScheduledMessages.tsx` — panel showing scheduled messages with cancel option
-- [ ] Add "Scheduled" tab/button to `ServiceBusPage.tsx`
-- [ ] Add sidecar endpoint: `GET /api/servicebus/{nsId}/entities/{entityPath}/scheduled`
-- [ ] Add sidecar endpoint: `DELETE /api/servicebus/{nsId}/entities/{entityPath}/scheduled/{sequenceNumber}`
+#### 1.5 Scheduled Messages View ✅ DONE
+- [x] Create `ScheduledMessages.tsx` — panel showing scheduled messages with cancel option
+- [x] Add "Scheduled" button to `ServiceBusPage.tsx`
+- [x] Add sidecar endpoint: `GET /api/servicebus/{nsId}/entities/{entityPath}/scheduled`
+- [x] Add sidecar endpoint: `DELETE /api/servicebus/{nsId}/entities/{entityPath}/scheduled/{sequenceNumber}`
+- [x] Register `ScheduledMessageRepository` in sidecar DI
+- [x] Schedule endpoint now saves entry to repository for tracking
 
 #### 1.6 Message Detail Enhancements ✅ DONE
 - [x] Add "Copy Body" button with clipboard feedback

@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Upload, Clock } from "lucide-react";
 import { useProfile } from "@/lib/hooks";
 import { EntityTree } from "./EntityTree";
 import { MessageList } from "./MessageList";
 import { MessageDetail } from "./MessageDetail";
 import { MessageComposer, type ComposerMode } from "./MessageComposer";
+import { BatchSendPanel } from "./BatchSendPanel";
+import { ScheduledMessages } from "./ScheduledMessages";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 
 export function ServiceBusPage() {
@@ -14,6 +16,8 @@ export function ServiceBusPage() {
   const [selectedMessage, setSelectedMessage] = useState<SbMessage | null>(null);
   const [viewMode, setViewMode] = useState<"active" | "dlq">("active");
   const [composerMode, setComposerMode] = useState<ComposerMode | null>(null);
+  const [showBatchSend, setShowBatchSend] = useState(false);
+  const [showScheduled, setShowScheduled] = useState(false);
 
   const namespaces = profile?.serviceBusNamespaces ?? [];
 
@@ -53,6 +57,24 @@ export function ServiceBusPage() {
         >
           <Plus className="h-3.5 w-3.5" />
           Compose
+        </button>
+        <button
+          data-testid="sb-batch-send-button"
+          onClick={() => setShowBatchSend(true)}
+          disabled={!selectedNsId}
+          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          Batch Send
+        </button>
+        <button
+          data-testid="sb-scheduled-button"
+          onClick={() => setShowScheduled(true)}
+          disabled={!selectedNsId || !selectedEntity}
+          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+        >
+          <Clock className="h-3.5 w-3.5" />
+          Scheduled
         </button>
       </div>
 
@@ -127,6 +149,25 @@ export function ServiceBusPage() {
           entity={selectedEntity}
           sourceMessage={composerMode === "replay" || composerMode === "edit" ? selectedMessage : null}
           onClose={() => setComposerMode(null)}
+        />
+      )}
+
+      {/* Batch send modal */}
+      {showBatchSend && (
+        <BatchSendPanel
+          nsId={selectedNsId}
+          namespaces={namespaces}
+          entity={selectedEntity}
+          onClose={() => setShowBatchSend(false)}
+        />
+      )}
+
+      {/* Scheduled messages modal */}
+      {showScheduled && selectedNsId && selectedEntity && (
+        <ScheduledMessages
+          nsId={selectedNsId}
+          entityPath={selectedEntity.entityPath}
+          onClose={() => setShowScheduled(false)}
         />
       )}
     </div>

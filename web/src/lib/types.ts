@@ -386,6 +386,18 @@ export interface SbSystemProperties {
   partitionKey: string | null;
 }
 
+export interface ScheduledMessageEntry {
+  id: string;
+  namespaceId: string;
+  entityPath: string;
+  sequenceNumber: number;
+  scheduledEnqueueTime: string;
+  messageId: string | null;
+  subject: string | null;
+  correlationId: string | null;
+  createdAt: string;
+}
+
 export interface ResubmitRequest {
   sequenceNumbers: string[];
   targetEntityPath: string | null;

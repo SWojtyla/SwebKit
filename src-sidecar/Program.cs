@@ -25,6 +25,7 @@ builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>
 builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
 builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
+builder.Services.AddSingleton<ScheduledMessageRepository>();
 
 // Agent: OpenAI-compatible LLM client + sidecar chat service
 builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
