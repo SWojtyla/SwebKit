@@ -8,14 +8,17 @@ namespace SwebKit.Sidecar.Endpoints;
 /// Provides demo Service Bus namespaces and clients when demo mode is enabled.
 /// Mirrors the old MAUI app's ServiceBusNamespaceBootstrapper.BuildDemoStates().
 /// </summary>
-public sealed class DemoModeService
+public sealed class DemoModeService : IDisposable
 {
     public static readonly Guid DemoNamespaceId1 = new("00000000-0000-0000-0000-000000000001");
     public static readonly Guid DemoNamespaceId2 = new("00000000-0000-0000-0000-000000000002");
 
+    public static readonly string DemoRedisCacheId = "demo-cache";
+
     private readonly DemoServiceBusClient _ordersClient = DemoServiceBusClient.OrdersDev();
     private readonly DemoServiceBusClient _paymentsClient = DemoServiceBusClient.PaymentsDev();
     private readonly DemoAksClient _aksClient = new();
+    private readonly DemoRedisClient _redisClient = new(0);
 
     public bool IsDemoMode { get; set; }
 
@@ -45,4 +48,22 @@ public sealed class DemoModeService
     }
 
     public IAksClient GetAksClient() => _aksClient;
+
+    public RedisCacheEntry? GetDemoRedisCache(string cacheId)
+    {
+        if (cacheId != DemoRedisCacheId)
+            return null;
+
+        return new RedisCacheEntry
+        {
+            Id = DemoRedisCacheId,
+            DisplayName = "Demo Cache",
+            ConnectionString = "localhost:6379",
+            Database = 0,
+        };
+    }
+
+    public IRedisClient GetRedisClient(RedisCacheEntry cache) => _redisClient;
+
+    public void Dispose() => _redisClient.Dispose();
 }

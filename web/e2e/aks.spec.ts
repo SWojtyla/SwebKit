@@ -6,6 +6,10 @@ test.describe("AKS", () => {
     await setDemoMode(page, true);
   });
 
+  test.afterEach(async ({ page }) => {
+    await setDemoMode(page, false);
+  });
+
   test("selects namespace and displays deployments", async ({ page }) => {
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption("ecommerce");

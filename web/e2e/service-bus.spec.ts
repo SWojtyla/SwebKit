@@ -6,6 +6,10 @@ test.describe("Service Bus", () => {
     await setDemoMode(page, true);
   });
 
+  test.afterEach(async ({ page }) => {
+    await setDemoMode(page, false);
+  });
+
   test("selects demo namespace, queue and displays active messages", async ({ page }) => {
     await page.goto("/service-bus");
     await expect(page.getByTestId("sb-namespace-select")).toContainText("orders-dev");

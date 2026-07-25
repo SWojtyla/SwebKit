@@ -1,5 +1,5 @@
 import { Save, Send } from "lucide-react";
-import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType } from "@/lib/types";
+import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig } from "@/lib/types";
 
 interface RequestEditorProps {
   request: HttpRequestEntry;
@@ -331,5 +331,3 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
     </div>
   );
 }
-
-type AuthConfig = import("@/lib/types").AuthConfig;

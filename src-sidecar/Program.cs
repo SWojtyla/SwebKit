@@ -4,6 +4,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
+using SwebKit.Redis;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
 
@@ -19,6 +20,7 @@ builder.Services.AddSingleton<EnvironmentRepository>();
 builder.Services.AddSingleton<CollectionRepository>();
 builder.Services.AddSingleton<UserSettingsRepository>();
 builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
+builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
 
 // HTTP client used by the API client request executor
@@ -84,6 +86,15 @@ app.MapGet("/api/config/profiles", (ProfileRepository repo, DemoModeService demo
     if (demo.IsDemoMode)
     {
         data.ServiceBusNamespaces = [.. demo.GetDemoNamespaces()];
+        var demoCache = demo.GetDemoRedisCache(DemoModeService.DemoRedisCacheId);
+        if (demoCache is not null)
+        {
+            data.Config.RedisConfig = new RedisConfig
+            {
+                Caches = [demoCache],
+                ActiveCacheId = demoCache.Id,
+            };
+        }
     }
     return Results.Ok(data);
 });
@@ -138,5 +149,9 @@ app.MapAksEndpoints();
 // ── API Client ───────────────────────────────────────────────────────────────
 
 app.MapApiClientEndpoints();
+
+// ── Redis ─────────────────────────────────────────────────────────────────────
+
+app.MapRedisEndpoints();
 
 app.Run();

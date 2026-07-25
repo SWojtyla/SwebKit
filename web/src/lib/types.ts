@@ -542,3 +542,66 @@ export interface JobInfo {
   sourceKind: string | null;
   sourceName: string | null;
 }
+
+// ── Redis ─────────────────────────────────────────────────────────────────────
+
+export interface RedisKeyScanResult {
+  cursor: number;
+  keys: string[];
+  isComplete: boolean;
+}
+
+export interface RedisKeyInfo {
+  key: string;
+  type: string;
+  ttl: string | null;
+  memoryBytes: number | null;
+  encoding: string | null;
+  frequency: number | null;
+  idleSeconds: number | null;
+}
+
+export interface RedisHashField {
+  field: string;
+  value: string;
+}
+
+export interface RedisSortedSetEntry {
+  member: string;
+  score: number;
+}
+
+export interface RedisServerInfo {
+  redisVersion: string;
+  uptimeSeconds: number;
+  connectedClients: number;
+  usedMemoryBytes: number;
+  maxMemoryBytes: number;
+  usedMemoryHuman: string;
+  totalCommandsProcessed: number;
+  keyspaceHitRatio: number;
+  databases: RedisDatabaseInfo[];
+}
+
+export interface RedisDatabaseInfo {
+  index: number;
+  keys: number;
+  expires: number;
+  avgTtl: number;
+}
+
+export interface RedisSlowLogEntry {
+  id: number;
+  executedAt: string;
+  duration: string;
+  command: string;
+  arguments: string;
+  clientName: string | null;
+}
+
+export interface RedisSlowLogSummary {
+  entries: RedisSlowLogEntry[];
+  truncated: boolean;
+  maxReturned: number;
+  capability: string;
+}

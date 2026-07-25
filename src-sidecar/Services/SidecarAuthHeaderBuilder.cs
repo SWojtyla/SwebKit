@@ -61,10 +61,10 @@ public sealed class SidecarAuthHeaderBuilder(ICredentialStore credentialStore) :
             var uri = message.RequestUri;
             if (uri is null) return;
 
-            var separator = uri.Query.Length > 0 ? "&" : "?";
             var newUri = new UriBuilder(uri);
             var query = uri.Query.TrimStart('?');
-            newUri.Query = (query + separator + Uri.EscapeDataString(auth.ApiKeyParamName) + "=" + Uri.EscapeDataString(apiKey)).TrimStart('&');
+            var prefix = string.IsNullOrEmpty(query) ? "" : "&";
+            newUri.Query = query + prefix + Uri.EscapeDataString(auth.ApiKeyParamName) + "=" + Uri.EscapeDataString(apiKey);
             message.RequestUri = newUri.Uri;
         }
     }
@@ -72,7 +72,7 @@ public sealed class SidecarAuthHeaderBuilder(ICredentialStore credentialStore) :
     private void ApplyBasic(HttpRequestMessage message, AuthConfig auth)
     {
         if (string.IsNullOrWhiteSpace(auth.CredentialKey)) return;
-        var password = credentialStore.Get(auth.CredentialKey) ?? auth.CredentialKey ?? string.Empty;
+        var password = credentialStore.Get(auth.CredentialKey) ?? auth.CredentialKey;
         var username = auth.BasicUsername ?? string.Empty;
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
         message.Headers.Authorization = new AuthenticationHeaderValue("Basic", encoded);
