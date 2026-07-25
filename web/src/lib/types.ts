@@ -655,3 +655,24 @@ export interface StorageBlobContent {
   wasTruncated: boolean;
   isBinary: boolean;
 }
+
+// ── Agent ─────────────────────────────────────────────────────────────────────
+
+export interface AgentReply {
+  text: string;
+  elapsedMs: number;
+  status: string;
+  error: boolean;
+}
+
+export interface AgentStatus {
+  historyCount: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  elapsedMs?: number;
+  error?: boolean;
+}

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using SwebKit.Azure.ServiceBus;
 using SwebKit.Azure.Storage;
+using SwebKit.Agents;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -24,6 +25,10 @@ builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>
 builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
 builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
+
+// Agent: OpenAI-compatible LLM client + sidecar chat service
+builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
+builder.Services.AddSingleton<SidecarAgentChatService>();
 
 // HTTP client used by the API client request executor
 builder.Services.AddHttpClient();
@@ -164,5 +169,9 @@ app.MapRedisEndpoints();
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 app.MapStorageEndpoints();
+
+// ── Agent ─────────────────────────────────────────────────────────────────────
+
+app.MapAgentEndpoints();
 
 app.Run();

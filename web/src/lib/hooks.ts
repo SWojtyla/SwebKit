@@ -31,6 +31,8 @@ import type {
   StorageBlobPage,
   BlobProperties,
   StorageBlobContent,
+  AgentReply,
+  AgentStatus,
 } from "./types";
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -587,5 +589,36 @@ export function useBlobContent(accountId: string | null, container: string | nul
     queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "content"],
     queryFn: () => apiFetch<StorageBlobContent>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/content`),
     enabled: !!accountId && !!container && !!blobName,
+  });
+}
+
+// ── Agent hooks ───────────────────────────────────────────────────────────────
+
+export function useAgentStatus() {
+  return useQuery({
+    queryKey: ["agent", "status"],
+    queryFn: () => apiFetch<AgentStatus>("/api/agent/status"),
+    refetchInterval: 5000,
+  });
+}
+
+export function useAgentChat() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (message: string) =>
+      apiSend<AgentReply>("/api/agent/chat", "POST", { message }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["agent", "status"] });
+    },
+  });
+}
+
+export function useAgentClear() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/agent/clear", "POST"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["agent", "status"] });
+    },
   });
 }
