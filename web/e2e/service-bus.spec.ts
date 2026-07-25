@@ -270,4 +270,66 @@ test.describe("Service Bus", () => {
     await page.getByTestId("composer-cancel").click();
     await expect(page.getByTestId("message-composer")).not.toBeVisible();
   });
+
+  test("save message as template from detail", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    const firstMessage = page.getByTestId("message-list").locator("button").first();
+    await firstMessage.click();
+    await expect(page.getByTestId("message-detail")).toBeVisible();
+
+    // Click Save as Template
+    await page.getByTestId("message-save-template").click();
+    await expect(page.getByTestId("save-template-dialog")).toBeVisible();
+
+    // Enter template name and save
+    await page.getByTestId("template-name-input").fill("E2E Test Template");
+    await page.getByTestId("template-save-confirm").click();
+
+    // Dialog should close
+    await expect(page.getByTestId("save-template-dialog")).not.toBeVisible();
+  });
+
+  test("load template in composer", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    // First save a template from a message
+    const firstMessage = page.getByTestId("message-list").locator("button").first();
+    await firstMessage.click();
+    await page.getByTestId("message-save-template").click();
+    await page.getByTestId("template-name-input").fill("Composer Load Test");
+    await page.getByTestId("template-save-confirm").click();
+    await expect(page.getByTestId("save-template-dialog")).not.toBeVisible();
+
+    // Wait a moment for the mutation to complete and cache to invalidate
+    await page.waitForTimeout(500);
+
+    // Now open composer and load the template
+    await page.getByTestId("sb-compose-button").click();
+    await expect(page.getByTestId("message-composer")).toBeVisible();
+
+    await page.getByTestId("composer-load-template").click();
+    await expect(page.getByTestId("template-picker")).toBeVisible();
+
+    // Wait for templates to load (either items or empty state)
+    await expect(
+      page.getByTestId("template-picker-empty").or(page.locator("[data-testid^='template-select-']").first()),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Should have at least one template from the save above
+    const templateItems = page.locator("[data-testid^='template-select-']");
+    const count = await templateItems.count();
+    expect(count).toBeGreaterThan(0);
+
+    // Select the first template
+    await templateItems.first().click();
+    await expect(page.getByTestId("template-picker")).not.toBeVisible();
+
+    // Composer should still be visible with loaded data
+    await expect(page.getByTestId("message-composer")).toBeVisible();
+  });
 });

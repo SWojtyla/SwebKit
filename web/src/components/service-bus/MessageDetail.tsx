@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { Copy, Check, AlertTriangle } from "lucide-react";
+import { Copy, Check, AlertTriangle, Save } from "lucide-react";
 import {
   useSbCompleteMessages,
   useSbCompleteDlq,
   useSbResubmitDlq,
   useSbPurgeMessages,
+  useSbSaveTemplate,
 } from "@/lib/hooks";
-import type { SbEntityInfo, SbMessage } from "@/lib/types";
+import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
 
 interface Props {
   message: SbMessage | null;
@@ -25,6 +26,9 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
   const [activeTab, setActiveTab] = useState<DetailTab>("body");
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const saveTemplateMutation = useSbSaveTemplate();
 
   if (!message) {
     return (
@@ -108,6 +112,25 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
       deadLetter: viewMode === "dlq",
     });
     setShowPurgeConfirm(false);
+  };
+
+  const onSaveAsTemplate = () => {
+    if (!templateName.trim()) return;
+    const template: SbMessageTemplate = {
+      id: crypto.randomUUID(),
+      name: templateName.trim(),
+      body: message.body,
+      contentType: message.contentType,
+      subject: message.subject,
+      correlationId: message.correlationId,
+      properties: Object.fromEntries(
+        Object.entries(message.applicationProperties).map(([k, v]) => [k, String(v)]),
+      ),
+      createdAt: new Date().toISOString(),
+    };
+    saveTemplateMutation.mutate(template);
+    setShowSaveTemplate(false);
+    setTemplateName("");
   };
 
   const tabs: { id: DetailTab; label: string; visible: boolean }[] = [
@@ -200,8 +223,48 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
               <><Copy className="h-3 w-3" /> Copy Full Message</>
             )}
           </button>
+          <button
+            data-testid="message-save-template"
+            onClick={() => setShowSaveTemplate(true)}
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+            title="Save this message as a reusable template"
+          >
+            <Save className="h-3 w-3" /> Save as Template
+          </button>
         </div>
       </div>
+
+      {/* Save as template dialog */}
+      {showSaveTemplate && (
+        <div className="flex items-center gap-3 border-b bg-primary/5 px-4 py-3" data-testid="save-template-dialog">
+          <Save className="h-5 w-5 shrink-0 text-primary" />
+          <input
+            type="text"
+            data-testid="template-name-input"
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            placeholder="Template name..."
+            className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === "Enter") onSaveAsTemplate(); }}
+          />
+          <button
+            data-testid="template-save-confirm"
+            onClick={onSaveAsTemplate}
+            disabled={!templateName.trim() || saveTemplateMutation.isPending}
+            className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          >
+            Save
+          </button>
+          <button
+            data-testid="template-save-cancel"
+            onClick={() => { setShowSaveTemplate(false); setTemplateName(""); }}
+            className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {/* Purge confirmation dialog */}
       {showPurgeConfirm && (

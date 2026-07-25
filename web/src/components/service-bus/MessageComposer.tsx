@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { X, Send, Calendar, RotateCcw } from "lucide-react";
+import { X, Send, Calendar, RotateCcw, FileText } from "lucide-react";
 import { useSbSendMessage, useSbScheduleMessage } from "@/lib/hooks";
-import type { SbEntityInfo, SbMessage, ServiceBusNamespace } from "@/lib/types";
+import type { SbEntityInfo, SbMessage, SbMessageTemplate, ServiceBusNamespace } from "@/lib/types";
+import { TemplatePicker } from "./TemplatePicker";
 
 export type ComposerMode = "compose" | "replay" | "edit" | "schedule";
 
@@ -50,6 +51,7 @@ export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage,
     return [{ key: "", value: "" }];
   });
   const [error, setError] = useState<string | null>(null);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   const updateProperty = (index: number, field: "key" | "value", value: string) => {
     setProperties((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
@@ -70,6 +72,16 @@ export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage,
     } catch {
       // Not valid JSON, leave as-is
     }
+  };
+
+  const loadTemplate = (template: SbMessageTemplate) => {
+    setBody(template.body);
+    setSubject(template.subject ?? "");
+    setCorrelationId(template.correlationId ?? "");
+    setContentType(template.contentType ?? "application/json");
+    const props = Object.entries(template.properties ?? {});
+    setProperties(props.length > 0 ? props.map(([key, value]) => ({ key, value })) : [{ key: "", value: "" }]);
+    setShowTemplatePicker(false);
   };
 
   const buildMessage = (): SbMessage => {
@@ -166,6 +178,19 @@ export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage,
               {error}
             </div>
           )}
+
+          {/* Load template */}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowTemplatePicker(true)}
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+              data-testid="composer-load-template"
+            >
+              <FileText className="h-3 w-3" />
+              Load Template
+            </button>
+          </div>
 
           {/* Target selectors */}
           <div className="grid grid-cols-2 gap-3">
@@ -352,6 +377,14 @@ export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage,
           </button>
         </div>
       </div>
+
+      {/* Template picker */}
+      {showTemplatePicker && (
+        <TemplatePicker
+          onSelect={loadTemplate}
+          onClose={() => setShowTemplatePicker(false)}
+        />
+      )}
     </div>
   );
 }

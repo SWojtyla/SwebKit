@@ -67,12 +67,12 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Add sidecar endpoint: `DELETE /api/servicebus/{nsId}/entities/{entityPath}/scheduled/{sequenceNumber}`
 - [x] Add React Query hook: `useSbSendMessage` (already existed), `useSbScheduleMessage`
 
-#### 1.3 Message Templates
-- [ ] Create `TemplatePicker.tsx` — modal for selecting saved message templates
-- [ ] Add "Save as Template" button to `MessageDetail.tsx`
-- [ ] Add "Load Template" button to `MessageComposer.tsx`
-- [ ] Add sidecar endpoints: `GET/POST/DELETE /api/servicebus/templates`
-- [ ] Add React Query hooks: `useSbTemplates`, `useSbSaveTemplate`, `useSbDeleteTemplate`
+#### 1.3 Message Templates ✅ DONE
+- [x] Create `TemplatePicker.tsx` — modal for selecting saved message templates
+- [x] Add "Save as Template" button to `MessageDetail.tsx`
+- [x] Add "Load Template" button to `MessageComposer.tsx`
+- [x] Add sidecar endpoints: `GET/POST/DELETE /api/servicebus/templates`
+- [x] Add React Query hooks: `useSbTemplates`, `useSbSaveTemplate`, `useSbDeleteTemplate`
 
 #### 1.4 Batch Operations
 - [ ] Create `BatchSendPanel.tsx` — CSV import + batch send

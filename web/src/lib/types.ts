@@ -98,7 +98,11 @@ export interface SbMessageTemplate {
   id: string;
   name: string;
   body: string;
-  contentType: string;
+  contentType: string | null;
+  subject: string | null;
+  correlationId: string | null;
+  properties: Record<string, string>;
+  createdAt: string;
 }
 
 // ── User Settings ────────────────────────────────────────────────────────────

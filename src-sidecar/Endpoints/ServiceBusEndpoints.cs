@@ -253,6 +253,25 @@ public static class ServiceBusEndpoints
             await client.ResubmitDeadLetterAsync(entityPath, req.SequenceNumbers, req.TargetEntityPath, req.RemapRules);
             return Results.Ok();
         });
+
+        // ── Message Templates ──────────────────────────────────────────────────
+        app.MapGet("/api/servicebus/templates", (ProfileRepository profile) =>
+        Results.Ok(profile.MessageTemplates));
+
+        app.MapPost("/api/servicebus/templates", (SbMessageTemplate template, ProfileRepository profile) =>
+        {
+            profile.SaveMessageTemplate(template);
+            return Results.Ok(template);
+        });
+
+        app.MapDelete("/api/servicebus/templates/{id}", (string id, ProfileRepository profile) =>
+        {
+            if (!Guid.TryParse(id, out var guid))
+                return Results.BadRequest("Invalid template ID");
+
+            profile.DeleteMessageTemplate(guid);
+            return Results.Ok();
+        });
     }
 
     private static ServiceBusNamespace? ResolveNamespace(

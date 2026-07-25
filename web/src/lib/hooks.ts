@@ -33,6 +33,7 @@ import type {
   StorageBlobContent,
   AgentReply,
   AgentStatus,
+  SbMessageTemplate,
 } from "./types";
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -207,6 +208,34 @@ export function useSbScheduleMessage() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["sb-peek", vars.nsId, vars.entityPath] });
       qc.invalidateQueries({ queryKey: ["sb-queues", vars.nsId] });
+    },
+  });
+}
+
+export function useSbTemplates() {
+  return useQuery({
+    queryKey: ["sb-templates"],
+    queryFn: () => apiFetch<SbMessageTemplate[]>("/api/servicebus/templates"),
+  });
+}
+
+export function useSbSaveTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (template: SbMessageTemplate) =>
+      apiSend<SbMessageTemplate>("/api/servicebus/templates", "POST", template),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sb-templates"] });
+    },
+  });
+}
+
+export function useSbDeleteTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend(`/api/servicebus/templates/${id}`, "DELETE"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sb-templates"] });
     },
   });
 }
