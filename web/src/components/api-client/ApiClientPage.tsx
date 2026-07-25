@@ -3,6 +3,7 @@ import { useCollections, useUpdateCollections, useExecuteRequest } from "@/lib/h
 import { CollectionTree } from "./CollectionTree";
 import { RequestEditor } from "./RequestEditor";
 import { ResponseViewer } from "./ResponseViewer";
+import { NameDialog, ConfirmDialog } from "./Dialogs";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -66,10 +67,34 @@ function insertIntoCollection(
   collections: ApiCollection[],
   collectionId: string,
   node: ApiCollectionNode,
+  parentId?: string,
 ): ApiCollection[] {
+  if (!parentId) {
+    return collections.map((c) =>
+      c.id === collectionId ? { ...c, nodes: [...c.nodes, node] } : c,
+    );
+  }
   return collections.map((c) =>
-    c.id === collectionId ? { ...c, nodes: [...c.nodes, node] } : c,
+    c.id === collectionId
+      ? { ...c, nodes: insertIntoNodes(c.nodes, parentId, node) }
+      : c,
   );
+}
+
+function insertIntoNodes(
+  nodes: ApiCollectionNode[],
+  parentId: string,
+  node: ApiCollectionNode,
+): ApiCollectionNode[] {
+  return nodes.map((n) => {
+    if (n.id === parentId && n.type === "Folder") {
+      return { ...n, children: [...n.children, node] };
+    }
+    if (n.type === "Folder") {
+      return { ...n, children: insertIntoNodes(n.children, parentId, node) };
+    }
+    return n;
+  });
 }
 
 function updateRequestInCollections(
@@ -99,6 +124,29 @@ function updateRequestInNodes(
   });
 }
 
+function renameNodeInCollections(
+  collections: ApiCollection[],
+  nodeId: string,
+  newName: string,
+): ApiCollection[] {
+  return collections.map((c) => {
+    if (c.id === nodeId) return { ...c, name: newName };
+    return { ...c, nodes: renameNodeInNodes(c.nodes, nodeId, newName) };
+  });
+}
+
+function renameNodeInNodes(
+  nodes: ApiCollectionNode[],
+  nodeId: string,
+  newName: string,
+): ApiCollectionNode[] {
+  return nodes.map((n) => {
+    if (n.id === nodeId) return { ...n, name: newName };
+    if (n.type === "Folder") return { ...n, children: renameNodeInNodes(n.children, nodeId, newName) };
+    return n;
+  });
+}
+
 export function ApiClientPage() {
   const { data: collections = [], isLoading } = useCollections();
   const updateCollections = useUpdateCollections();
@@ -109,6 +157,17 @@ export function ApiClientPage() {
   const [draftRequest, setDraftRequest] = useState<HttpRequestEntry | null>(null);
   const [response, setResponse] = useState<ApiClientExecutionResponse | null>(null);
   const [sending, setSending] = useState(false);
+  const [nameDialog, setNameDialog] = useState<{
+    title: string;
+    label: string;
+    defaultValue: string;
+    confirmText: string;
+    onConfirm: (name: string) => void;
+  } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const handleSelectNode = (node: ApiCollectionNode, collectionId: string) => {
     setSelectedNodeId(node.id);
@@ -122,75 +181,106 @@ export function ApiClientPage() {
   };
 
   const handleAddCollection = () => {
-    const name = window.prompt("Collection name");
-    if (!name?.trim()) return;
-    const collection: ApiCollection = {
-      id: newId(),
-      name: name.trim(),
-      nodes: [],
-      variables: [],
-      defaultAuth: null,
-      createdAt: now(),
-      updatedAt: now(),
-    };
-    updateCollections.mutate([...collections, collection]);
-  };
-
-  const handleAddRequest = () => {
-    const collectionId = selectedCollectionId;
-    if (!collectionId) return;
-    const request = emptyRequest();
-    const name = window.prompt("Request name", request.name);
-    if (name) request.name = name;
-    const node: ApiCollectionNode = {
-      id: request.id,
-      type: "Request",
-      name: request.name,
-      isExpanded: true,
-      children: [],
-      defaultAuth: null,
-      request,
-    };
-    const next = insertIntoCollection(collections, collectionId, node);
-    updateCollections.mutate(next, {
-      onSuccess: () => {
-        setSelectedNodeId(node.id);
-        setSelectedCollectionId(collectionId);
-        setDraftRequest(deepClone(request));
+    setNameDialog({
+      title: "New Collection",
+      label: "Collection name",
+      defaultValue: "",
+      confirmText: "Create",
+      onConfirm: (name) => {
+        const collection: ApiCollection = {
+          id: newId(),
+          name,
+          nodes: [],
+          variables: [],
+          defaultAuth: null,
+          createdAt: now(),
+          updatedAt: now(),
+        };
+        updateCollections.mutate([...collections, collection]);
+        setNameDialog(null);
       },
     });
   };
 
-  const handleAddFolder = () => {
-    const collectionId = selectedCollectionId;
-    if (!collectionId) return;
-    const name = window.prompt("Folder name");
-    if (!name?.trim()) return;
-    const node: ApiCollectionNode = {
-      id: newId(),
-      type: "Folder",
-      name: name.trim(),
-      isExpanded: true,
-      children: [],
-      defaultAuth: null,
-      request: null,
-    };
-    const next = insertIntoCollection(collections, collectionId, node);
-    updateCollections.mutate(next);
+  const handleAddRequest = (collectionId: string, parentId?: string) => {
+    const request = emptyRequest();
+    setNameDialog({
+      title: "New Request",
+      label: "Request name",
+      defaultValue: request.name,
+      confirmText: "Create",
+      onConfirm: (name) => {
+        request.name = name;
+        const node: ApiCollectionNode = {
+          id: request.id,
+          type: "Request",
+          name,
+          isExpanded: true,
+          children: [],
+          defaultAuth: null,
+          request,
+        };
+        const next = insertIntoCollection(collections, collectionId, node, parentId);
+        updateCollections.mutate(next, {
+          onSuccess: () => {
+            setSelectedNodeId(node.id);
+            setSelectedCollectionId(collectionId);
+            setDraftRequest(deepClone(request));
+          },
+        });
+        setNameDialog(null);
+      },
+    });
+  };
+
+  const handleAddFolder = (collectionId: string, parentId?: string) => {
+    setNameDialog({
+      title: "New Folder",
+      label: "Folder name",
+      defaultValue: "",
+      confirmText: "Create",
+      onConfirm: (name) => {
+        const node: ApiCollectionNode = {
+          id: newId(),
+          type: "Folder",
+          name,
+          isExpanded: true,
+          children: [],
+          defaultAuth: null,
+          request: null,
+        };
+        const next = insertIntoCollection(collections, collectionId, node, parentId);
+        updateCollections.mutate(next);
+        setNameDialog(null);
+      },
+    });
   };
 
   const handleDeleteNode = (nodeId: string, collectionId: string) => {
-    if (!window.confirm("Delete this item?")) return;
-    const next = removeNode(collections, nodeId);
-    updateCollections.mutate(next, {
-      onSuccess: () => {
-        if (selectedNodeId === nodeId) {
-          setSelectedNodeId(null);
-          setDraftRequest(null);
-          setSelectedCollectionId(collectionId === nodeId ? null : collectionId);
-        }
+    setConfirmDialog({
+      message: "Delete this item? This cannot be undone.",
+      onConfirm: () => {
+        const next = removeNode(collections, nodeId);
+        updateCollections.mutate(next, {
+          onSuccess: () => {
+            if (selectedNodeId === nodeId) {
+              setSelectedNodeId(null);
+              setDraftRequest(null);
+              setSelectedCollectionId(collectionId === nodeId ? null : collectionId);
+            }
+          },
+        });
+        setConfirmDialog(null);
       },
     });
+  };
+
+  const handleRenameNode = (_nodeId: string, _collectionId: string, newName: string) => {
+    const next = renameNodeInCollections(collections, _nodeId, newName);
+    updateCollections.mutate(next);
+    if (draftRequest && _nodeId === selectedNodeId) {
+      setDraftRequest({ ...draftRequest, name: newName });
+    }
   };
 
   const handleSave = () => {
@@ -249,6 +339,7 @@ export function ApiClientPage() {
         onAddRequest={handleAddRequest}
         onAddFolder={handleAddFolder}
         onDeleteNode={handleDeleteNode}
+        onRenameNode={handleRenameNode}
       />
 
       <div className="flex w-96 flex-col border-r">
@@ -270,8 +361,31 @@ export function ApiClientPage() {
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <ResponseViewer response={response} sending={sending} />
+        <ResponseViewer
+          response={response}
+          sending={sending}
+          request={draftRequest ? { method: draftRequest.method, url: draftRequest.url } : null}
+        />
       </div>
+
+      {/* Dialogs */}
+      {nameDialog && (
+        <NameDialog
+          title={nameDialog.title}
+          label={nameDialog.label}
+          defaultValue={nameDialog.defaultValue}
+          confirmText={nameDialog.confirmText}
+          onConfirm={nameDialog.onConfirm}
+          onCancel={() => setNameDialog(null)}
+        />
+      )}
+      {confirmDialog && (
+        <ConfirmDialog
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
     </div>
   );
 }

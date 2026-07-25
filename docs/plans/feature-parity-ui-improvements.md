@@ -131,48 +131,48 @@ All four major feature areas are **high priority**. Execute in this order:
 
 ### Tasks
 
-#### 2.1 Collection Tree Overhaul
-- [ ] Add virtualized rendering for large trees (react-window or similar)
-- [ ] Add drag-and-drop reordering (react-dnd or @dnd-kit)
-- [ ] Add right-click context menu (new sub-folder, new request, rename, delete, link to repo)
-- [ ] Add inline rename (double-click or F2)
-- [ ] Add tree filter/search input
-- [ ] Add expand/collapse all
-- [ ] Add method badge colors per HTTP method
-- [ ] Add folder expand/collapse chevrons
-- [ ] Add collection-level icons
-- [ ] Replace `window.prompt`/`window.confirm` with proper modal dialogs
+#### 2.1 Collection Tree Overhaul ✅ DONE
+- [ ] Add virtualized rendering for large trees (react-window or similar) — deferred (premature optimization)
+- [ ] Add drag-and-drop reordering (react-dnd or @dnd-kit) — deferred (requires external dep)
+- [x] Add right-click context menu (new sub-folder, new request, rename, delete)
+- [x] Add inline rename (double-click)
+- [x] Add tree filter/search input
+- [x] Add expand/collapse all
+- [x] Add method badge colors per HTTP method
+- [x] Add folder expand/collapse chevrons
+- [x] Add collection-level icons
+- [x] Replace `window.prompt`/`window.confirm` with proper modal dialogs (NameDialog + ConfirmDialog)
 
-#### 2.2 Request Editor Overhaul
-- [ ] Add tabbed layout: Params | Headers | Body | Auth | Capture Rules
-- [ ] Add URL bar with method picker dropdown (styled per method)
-- [ ] Add variable preview (show resolved URL with environment variables substituted)
-- [ ] Add body editor improvements:
+#### 2.2 Request Editor Overhaul ✅ DONE
+- [x] Add tabbed layout: Params | Headers | Body | Auth
+- [x] Add URL bar with method picker dropdown (styled per method)
+- [ ] Add variable preview (show resolved URL with environment variables substituted) — deferred (needs env management first)
+- [x] Add body editor improvements:
   - JSON pretty-print / minify toggle
-  - XML format toggle
-  - Form-data key-value grid
-  - Content type auto-detection
-- [ ] Add auth panel with all auth types:
+  - XML format toggle (basic)
+  - Form-data key-value grid (uses existing FormData mode)
+  - Content type auto-detection (body mode drives content type)
+- [x] Add auth panel with all auth types:
   - None, Bearer Token, Basic, API Key (header/query), OAuth2
   - OAuth2: authorization URL, token URL, scopes, client ID/secret, flow type
-- [ ] Add capture rules editor (extract values from response, set to variables)
-- [ ] Add request name inline edit (double-click)
-- [ ] Add dirty indicator (unsaved changes dot)
-- [ ] Add auto-save with debounce (500ms)
-- [ ] Add keyboard shortcut: Ctrl+S to save, Ctrl+Enter to send
+- [ ] Add capture rules editor — deferred (lower priority)
+- [x] Add request name inline edit (input in header)
+- [x] Add dirty indicator (unsaved changes: Save*)
+- [ ] Add auto-save with debounce (500ms) — deferred (explicit save is safer)
+- [x] Add keyboard shortcut: Ctrl+S to save, Ctrl+Enter to send
 
-#### 2.3 Response Viewer Overhaul
-- [ ] Add response history (list of past responses for this request)
-- [ ] Add response examples (saved response examples)
-- [ ] Add pretty-print for JSON/XML responses
-- [ ] Add copy response body button
-- [ ] Add copy as cURL button
-- [ ] Add response headers table with copy individual header
-- [ ] Add status badge with color coding (2xx green, 3xx blue, 4xx yellow, 5xx red)
-- [ ] Add response time graph (sparkline of recent response times)
-- [ ] Add capture warnings display
-- [ ] Add GraphQL errors display
-- [ ] Add subscription messages panel (for GraphQL subscriptions)
+#### 2.3 Response Viewer Overhaul ✅ DONE
+- [ ] Add response history (list of past responses for this request) — deferred
+- [ ] Add response examples (saved response examples) — deferred
+- [x] Add pretty-print for JSON/XML responses
+- [x] Add copy response body button
+- [x] Add copy as cURL button
+- [x] Add response headers table
+- [x] Add status badge with color coding (2xx green, 3xx blue, 4xx yellow, 5xx red)
+- [ ] Add response time graph (sparkline of recent response times) — deferred
+- [ ] Add capture warnings display — deferred
+- [ ] Add GraphQL errors display — deferred (needs GraphQL support first)
+- [ ] Add subscription messages panel — deferred (needs WebSocket support first)
 
 #### 2.4 Environment & Variable Management
 - [ ] Create `EnvironmentManager.tsx` — manage environments (create, edit, delete, duplicate)
