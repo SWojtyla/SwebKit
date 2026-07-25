@@ -35,19 +35,19 @@ All four major feature areas are **high priority**. Execute in this order:
 
 ### Tasks
 
-#### 1.1 Message List Filtering
-- [ ] Add text search bar to `MessageList.tsx` (filter by messageId, correlationId, subject, body)
-- [ ] Add advanced filter panel with rule builder:
+#### 1.1 Message List Filtering ✅ DONE
+- [x] Add text search bar to `MessageList.tsx` (filter by messageId, correlationId, subject, body)
+- [x] Add advanced filter panel with rule builder:
   - Field selector: Application Property, Enqueued Time, Delivery Count, Sequence Number
   - Operator selector: contains/equals/not-equals/regex (text), before/after/on-or-before (date), gt/gte/lt/lte (numeric)
   - Property name input (for application property field)
   - Value input with appropriate placeholder
   - Enable/disable toggle per rule
   - Add/remove rules
-- [ ] Implement client-side filter logic matching `ApplyFilters` / `MatchesAdvancedRule` from MAUI
-- [ ] Add column toggle dropdown (Enqueued, Message ID, Correlation ID, Subject, Delivery, Expires, Content Type, Session, Partition Key, DLQ Reason)
-- [ ] Add session pinning filter (filter by SessionId)
-- [ ] Add filter toggle button to show/hide filter bar
+- [x] Implement client-side filter logic matching `ApplyFilters` / `MatchesAdvancedRule` from MAUI
+- [ ] Add column toggle dropdown (Enqueued, Message ID, Correlation ID, Subject, Delivery, Expires, Content Type, Session, Partition Key, DLQ Reason) — deferred
+- [ ] Add session pinning filter (filter by SessionId) — deferred
+- [x] Add filter toggle button to show/hide filter bar
 
 #### 1.2 Message Composer
 - [ ] Create `MessageComposer.tsx` — modal/panel for composing messages
@@ -86,11 +86,12 @@ All four major feature areas are **high priority**. Execute in this order:
 - [ ] Add sidecar endpoint: `GET /api/servicebus/{nsId}/entities/{entityPath}/scheduled`
 - [ ] Add sidecar endpoint: `DELETE /api/servicebus/{nsId}/entities/{entityPath}/scheduled/{sequenceNumber}`
 
-#### 1.6 Message Detail Enhancements
-- [ ] Add "Copy Body" button with clipboard feedback
-- [ ] Add "Copy Full Message" button (JSON export of all properties + body)
-- [ ] Improve message detail layout: tabs for Properties / Application Properties / System Properties / Body
-- [ ] Add JSON syntax highlighting for body (use a lightweight highlighter or monaco editor)
+#### 1.6 Message Detail Enhancements ✅ DONE
+- [x] Add "Copy Body" button with clipboard feedback
+- [x] Add "Copy Full Message" button (JSON export of all properties + body)
+- [x] Improve message detail layout: tabs for Body / Properties / System / DLQ Info
+- [x] Replace `confirm()` with inline purge confirmation dialog
+- [ ] Add JSON syntax highlighting for body (use a lightweight highlighter or monaco editor) — deferred
 
 #### 1.7 Entity Command Palette
 - [ ] Create `EntityCommandPalette.tsx` — quick search + action palette for entities
