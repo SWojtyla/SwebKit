@@ -8,11 +8,12 @@ export function EventsTab({ ns }: { ns: string }) {
     return <div className="p-4 text-sm text-muted-foreground">No events found</div>;
 
   return (
-    <div className="p-4">
+    <div className="p-4" data-testid="events-list">
       <div className="space-y-1">
         {events.map((evt) => (
           <div
             key={`${evt.name}-${evt.involvedObjectName}`}
+            data-testid={`event-item-${evt.name}`}
             className="flex items-start gap-3 rounded-md border p-2 text-sm"
           >
             <span

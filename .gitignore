@@ -37,3 +37,8 @@ artifacts/coverage*/
 
 # MSIX build output
 src/SwebKit.App/AppPackages/
+
+# Playwright
+web/test-results/
+web/playwright-report/
+

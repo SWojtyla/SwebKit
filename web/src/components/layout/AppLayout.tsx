@@ -34,6 +34,7 @@ export function AppLayout() {
               key={to}
               to={to}
               end={end}
+              data-testid={`nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   isActive

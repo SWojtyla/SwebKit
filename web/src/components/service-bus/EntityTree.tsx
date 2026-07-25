@@ -16,14 +16,14 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
 
   if (!nsId) {
     return (
-      <div className="p-4 text-sm text-muted-foreground">
+      <div className="p-4 text-sm text-muted-foreground" data-testid="entity-tree-empty">
         Select a namespace to view entities
       </div>
     );
   }
 
   if (queuesLoading && topicsLoading) {
-    return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
+    return <div className="p-4 text-sm text-muted-foreground" data-testid="entity-tree-loading">Loading...</div>;
   }
 
   const toggleTopic = (name: string) => {
@@ -71,6 +71,7 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
           {queues.map((queue) => (
             <button
               key={queue.entityPath}
+              data-testid={`entity-tree-queue-${queue.name}`}
               onClick={() => onSelectEntity(queue)}
               className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
                 selectedEntity?.entityPath === queue.entityPath
@@ -95,6 +96,7 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
           {topics.map((topic) => (
             <div key={topic.entityPath}>
               <button
+                data-testid={`entity-tree-topic-${topic.name}`}
                 onClick={() => toggleTopic(topic.name)}
                 className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
                   selectedEntity?.entityPath === topic.entityPath
@@ -155,6 +157,7 @@ function TopicSubscriptions({
       {subs.map((sub) => (
         <button
           key={sub.entityPath}
+          data-testid={`entity-tree-sub-${sub.name}`}
           onClick={() => onSelectEntity(sub)}
           className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
             selectedEntity?.entityPath === sub.entityPath ? "bg-accent" : ""

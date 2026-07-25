@@ -39,20 +39,21 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" data-testid="settings-page">
       <div className="border-b px-6 py-4">
-        <h1 className="text-xl font-bold">Settings</h1>
+        <h1 className="text-xl font-bold" data-testid="settings-title">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Configure projects, environments, and connections
         </p>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-48 border-r p-2">
+        <div className="w-48 border-r p-2" data-testid="settings-tabs">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
+              data-testid={`settings-tab-${tab.id}`}
               className={`w-full rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
                 activeTab === tab.id
                   ? "bg-primary text-primary-foreground"
@@ -64,7 +65,7 @@ export function SettingsPage() {
           ))}
         </div>
 
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6" data-testid="settings-content">
           {activeTab === "general" && <GeneralSettings />}
           {activeTab === "service-bus" && <ServiceBusSettings />}
           {activeTab === "aks" && <AksSettings />}

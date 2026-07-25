@@ -28,11 +28,12 @@ export function AksPage() {
   const { data: testResult } = useAksTestConnection();
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" data-testid="aks-page">
       {/* Header with namespace selector */}
       <div className="flex items-center gap-3 border-b px-4 py-2">
         <span className="text-sm font-medium">Namespace:</span>
         <select
+          data-testid="aks-namespace-select"
           value={namespace ?? ""}
           onChange={(e) => setNamespace(e.target.value || null)}
           className="rounded-md border bg-card px-3 py-1.5 text-sm"
@@ -48,7 +49,7 @@ export function AksPage() {
           <span className="text-xs text-muted-foreground">Loading...</span>
         )}
         {testResult && (
-          <span className={`ml-auto flex items-center gap-1.5 text-xs ${testResult.connected ? "text-green-500" : "text-destructive"}`}>
+          <span className={`ml-auto flex items-center gap-1.5 text-xs ${testResult.connected ? "text-green-500" : "text-destructive"}`} data-testid="aks-connection-status">
             <span className={`h-2 w-2 rounded-full ${testResult.connected ? "bg-green-500" : "bg-destructive"}`} />
             {testResult.connected ? "Connected" : "Disconnected"}
             {testResult.error && ` — ${testResult.error}`}
@@ -57,11 +58,12 @@ export function AksPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b">
+      <div className="flex border-b" data-testid="aks-tabs">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
+            data-testid={`aks-tab-${tab.id}`}
             className={`px-4 py-2 text-sm font-medium ${
               activeTab === tab.id
                 ? "border-b-2 border-primary text-foreground"
@@ -74,9 +76,9 @@ export function AksPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto" data-testid="aks-content">
         {!namespace ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground" data-testid="aks-empty-state">
             Select a namespace to view resources
           </div>
         ) : (

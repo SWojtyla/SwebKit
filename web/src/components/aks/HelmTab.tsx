@@ -20,9 +20,9 @@ export function HelmTab({ ns }: { ns: string }) {
             <th className="py-2 pr-4">Updated</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody data-testid="helm-table-body">
           {releases.map((rel) => (
-            <tr key={rel.name} className="border-b last:border-0">
+            <tr key={rel.name} data-testid={`helm-row-${rel.name}`} className="border-b last:border-0">
               <td className="py-2 pr-4 font-medium">{rel.name}</td>
               <td className="py-2 pr-4 text-muted-foreground">{rel.chart ?? "—"}</td>
               <td className="py-2 pr-4 text-muted-foreground">{rel.appVersion ?? rel.chartVersion ?? "—"}</td>

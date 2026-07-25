@@ -23,7 +23,7 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
 
   if (!message) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground" data-testid="message-detail-empty">
         Select a message to view details
       </div>
     );
@@ -75,18 +75,19 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-4" data-testid="message-detail">
       {/* Header */}
       <div className="mb-4 flex items-start justify-between">
         <div>
-          <h2 className="text-lg font-semibold">{message.subject || message.messageId}</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <h2 className="text-lg font-semibold" data-testid="message-detail-subject">{message.subject || message.messageId}</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground" data-testid="message-detail-meta">
             Message ID: {message.messageId} · Seq: #{message.sequenceNumber}
           </p>
         </div>
         <div className="flex gap-2">
           {viewMode === "active" && (
             <button
+              data-testid="message-complete-button"
               onClick={onComplete}
               disabled={completeMutation.isPending}
               className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
@@ -97,6 +98,7 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
           {viewMode === "dlq" && (
             <>
               <button
+                data-testid="message-resubmit-button"
                 onClick={onResubmit}
                 disabled={resubmitMutation.isPending}
                 className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
@@ -104,6 +106,7 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
                 Resubmit
               </button>
               <button
+                data-testid="message-complete-dlq-button"
                 onClick={onCompleteDlq}
                 disabled={completeDlqMutation.isPending}
                 className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
@@ -113,6 +116,7 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
             </>
           )}
           <button
+            data-testid="message-purge-button"
             onClick={onPurge}
             disabled={purgeMutation.isPending}
             className="rounded-md border border-destructive px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
@@ -141,7 +145,7 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
       {/* Body */}
       <div className="mb-4">
         <h3 className="mb-2 text-sm font-semibold">Body</h3>
-        <pre className="max-h-96 overflow-auto rounded-lg border bg-card p-3 text-xs">
+        <pre data-testid="message-detail-body" className="max-h-96 overflow-auto rounded-lg border bg-card p-3 text-xs">
           {tryFormatJson(message.body)}
         </pre>
       </div>

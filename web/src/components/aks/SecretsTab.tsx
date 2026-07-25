@@ -17,9 +17,9 @@ export function SecretsTab({ ns }: { ns: string }) {
             <th className="py-2 pr-4">Keys</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody data-testid="secrets-table-body">
           {secrets.map((secret) => (
-            <tr key={secret.name} className="border-b last:border-0">
+            <tr key={secret.name} data-testid={`secret-row-${secret.name}`} className="border-b last:border-0">
               <td className="py-2 pr-4 font-medium">{secret.name}</td>
               <td className="py-2 pr-4 text-muted-foreground">{secret.type}</td>
               <td className="py-2 pr-4 text-xs text-muted-foreground">

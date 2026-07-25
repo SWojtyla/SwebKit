@@ -24,29 +24,30 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
 
   if (!entity) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground" data-testid="message-list-empty">
         Select an entity
       </div>
     );
   }
 
   if (isLoading) {
-    return <div className="p-4 text-sm text-muted-foreground">Loading messages...</div>;
+    return <div className="p-4 text-sm text-muted-foreground" data-testid="message-list-loading">Loading messages...</div>;
   }
 
   if (!messages || messages.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground" data-testid="message-list-no-messages">
         No {viewMode === "dlq" ? "dead-lettered" : "active"} messages
       </div>
     );
   }
 
   return (
-    <div className="overflow-auto">
+    <div className="overflow-auto" data-testid="message-list">
       {messages.map((msg) => (
         <button
           key={`${msg.messageId}-${msg.sequenceNumber}`}
+          data-testid={`message-item-${msg.sequenceNumber}`}
           onClick={() => onSelectMessage(msg)}
           className={`block w-full border-b px-3 py-2 text-left hover:bg-accent ${
             selectedMessage?.messageId === msg.messageId &&

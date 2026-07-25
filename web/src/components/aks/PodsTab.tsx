@@ -27,9 +27,9 @@ export function PodsTab({ ns }: { ns: string }) {
             <th className="py-2 pr-4">Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody data-testid="pods-table-body">
           {pods.map((pod) => (
-            <tr key={pod.name} className="border-b last:border-0">
+            <tr key={pod.name} data-testid={`pod-row-${pod.name}`} className="border-b last:border-0">
               <td className="py-2 pr-4 font-medium">{pod.name}</td>
               <td className="py-2 pr-4">
                 <PodStatusBadge status={pod.status} />

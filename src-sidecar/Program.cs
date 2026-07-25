@@ -6,9 +6,9 @@ using SwebKit.Sidecar.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Kestrel to use a fixed dev port.
-// In production, Tauri will pass --urls http://127.0.0.1:0 for OS-assigned port.
-builder.WebHost.UseUrls("http://127.0.0.1:5199");
+// Configure Kestrel to use a fixed dev port by default.
+// Allow override via --urls or ASPNETCORE_URLS (used by Tauri and Playwright tests).
+builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5199");
 
 // Register core configuration repositories (same as MauiProgram.cs)
 builder.Services.AddSingleton<ProfileRepository>();

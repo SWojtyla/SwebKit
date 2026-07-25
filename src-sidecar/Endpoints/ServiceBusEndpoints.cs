@@ -1,3 +1,4 @@
+using System.Linq;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -20,7 +21,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             try
@@ -41,7 +42,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -55,7 +56,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -69,7 +70,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -84,7 +85,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -99,7 +100,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -116,7 +117,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -133,7 +134,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -149,7 +150,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -165,7 +166,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -181,7 +182,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -197,7 +198,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
@@ -213,13 +214,30 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
-            var ns = profile.FindServiceBusNamespace(Guid.Parse(nsId));
+            var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             await client.ResubmitDeadLetterAsync(entityPath, req.SequenceNumbers, req.TargetEntityPath, req.RemapRules);
             return Results.Ok();
         });
+    }
+
+    private static ServiceBusNamespace? ResolveNamespace(
+        string nsId,
+        ProfileRepository profile,
+        DemoModeService demo)
+    {
+        if (!Guid.TryParse(nsId, out var id))
+            return null;
+
+        var ns = profile.FindServiceBusNamespace(id);
+        if (ns is not null)
+            return ns;
+
+        return demo.IsDemoMode
+            ? demo.GetDemoNamespaces().FirstOrDefault(n => n.Id == id)
+            : null;
     }
 
     private static IServiceBusClient CreateClient(

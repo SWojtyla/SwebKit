@@ -15,11 +15,12 @@ export function ServiceBusPage() {
   const namespaces = profile?.serviceBusNamespaces ?? [];
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" data-testid="service-bus-page">
       {/* Namespace selector */}
       <div className="flex items-center gap-3 border-b px-4 py-2">
         <span className="text-sm font-medium">Namespace:</span>
         <select
+          data-testid="sb-namespace-select"
           value={selectedNsId ?? ""}
           onChange={(e) => {
             setSelectedNsId(e.target.value || null);
@@ -61,6 +62,7 @@ export function ServiceBusPage() {
           {selectedEntity && (
             <div className="flex border-b">
               <button
+                data-testid="sb-view-active"
                 onClick={() => setViewMode("active")}
                 className={`flex-1 px-3 py-2 text-sm font-medium ${
                   viewMode === "active"
@@ -71,6 +73,7 @@ export function ServiceBusPage() {
                 Active {selectedEntity.stats && `(${selectedEntity.stats.activeMessageCount})`}
               </button>
               <button
+                data-testid="sb-view-dlq"
                 onClick={() => setViewMode("dlq")}
                 className={`flex-1 px-3 py-2 text-sm font-medium ${
                   viewMode === "dlq"

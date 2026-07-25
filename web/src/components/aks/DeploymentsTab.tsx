@@ -35,9 +35,9 @@ export function DeploymentsTab({ ns }: { ns: string }) {
             <th className="py-2 pr-4">Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody data-testid="deployments-table-body">
           {deployments.map((dep) => (
-            <tr key={dep.name} className="border-b last:border-0">
+            <tr key={dep.name} data-testid={`deployment-row-${dep.name}`} className="border-b last:border-0">
               <td className="py-2 pr-4 font-medium">{dep.name}</td>
               <td className="py-2 pr-4">
                 <span className={dep.readyReplicas === dep.replicas ? "text-green-500" : "text-yellow-500"}>

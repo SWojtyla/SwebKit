@@ -19,9 +19,9 @@ export function ServicesTab({ ns }: { ns: string }) {
             <th className="py-2 pr-4">Ports</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody data-testid="services-table-body">
           {services.map((svc) => (
-            <tr key={svc.name} className="border-b last:border-0">
+            <tr key={svc.name} data-testid={`service-row-${svc.name}`} className="border-b last:border-0">
               <td className="py-2 pr-4 font-medium">{svc.name}</td>
               <td className="py-2 pr-4">{svc.type}</td>
               <td className="py-2 pr-4 text-muted-foreground">{svc.clusterIp}</td>

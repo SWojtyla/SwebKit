@@ -64,21 +64,21 @@ export function DashboardPage() {
   ];
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+    <div className="p-6" data-testid="dashboard-page">
+      <h1 className="text-2xl font-bold" data-testid="dashboard-title">Dashboard</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Developer Swiss army knife for Azure
       </p>
 
       {/* Sidecar status + demo mode toggle */}
-      <div className="mt-6 flex items-center gap-4 rounded-lg border p-3">
+      <div className="mt-6 flex items-center gap-4 rounded-lg border p-3" data-testid="sidecar-status-bar">
         <div className="flex items-center gap-2">
           {sidecarOk ? (
             <CheckCircle2 className="h-5 w-5 text-green-500" />
           ) : (
             <XCircle className="h-5 w-5 text-destructive" />
           )}
-          <span className="text-sm font-medium">
+          <span className="text-sm font-medium" data-testid="sidecar-status-text">
             Backend sidecar: {sidecarOk ? "Connected" : "Disconnected"}
           </span>
           {health?.version && (
@@ -88,6 +88,7 @@ export function DashboardPage() {
         <div className="ml-auto flex items-center gap-2">
           <FlaskConical className={`h-4 w-4 ${isDemo ? "text-primary" : "text-muted-foreground"}`} />
           <button
+            data-testid="demo-mode-toggle"
             onClick={() => toggleDemo.mutate(!isDemo)}
             disabled={toggleDemo.isPending}
             className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -102,13 +103,14 @@ export function DashboardPage() {
       </div>
 
       {/* Service cards */}
-      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-3" data-testid="service-cards">
         {services.map((service) => {
           const Icon = service.icon;
           return (
             <Link
               key={service.name}
               to={service.to}
+              data-testid={`service-card-${service.name.toLowerCase().replace(/\s+/g, "-")}`}
               className="group rounded-lg border bg-card p-4 transition-colors hover:border-primary hover:bg-accent"
             >
               <div className="flex items-center gap-3">
@@ -140,6 +142,7 @@ export function DashboardPage() {
       {/* Quick link to settings */}
       <Link
         to="/settings"
+        data-testid="settings-quick-link"
         className="mt-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
         <Settings className="h-4 w-4" />
