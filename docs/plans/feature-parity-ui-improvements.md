@@ -212,9 +212,11 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Add GraphQl and WebSocket to method picker with color-coded badges
 - [ ] GraphQL subscription support (WebSocket-based) — backend exists (GraphQlSubscriptionService), frontend deferred
 
-#### 2.8 Collection Export
-- [ ] Create `CollectionExportDialog.tsx` — export to Bruno/Postman format
-- [ ] Add "Export Collection" action in context menu
+#### 2.8 Collection Export ✅ DONE
+- [x] Create `CollectionExportDialog.tsx` — export to SwebKit JSON, Postman v2.1, Raw JSON
+- [x] Add "Export" action in collection context menu
+- [x] Include environments option (SwebKit format only)
+- [x] Client-side download via Blob URL
 
 ---
 

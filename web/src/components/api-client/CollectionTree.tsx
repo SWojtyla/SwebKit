@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Plus, Folder, FileText, Trash2, ChevronRight, ChevronDown,
-  Search, MoreVertical, Pencil, FolderPlus, FilePlus,
+  Search, MoreVertical, Pencil, FolderPlus, FilePlus, Download,
 } from "lucide-react";
 import type { ApiCollection, ApiCollectionNode } from "@/lib/types";
 
@@ -15,6 +15,7 @@ interface CollectionTreeProps {
   onAddFolder: (collectionId: string, parentId?: string) => void;
   onDeleteNode: (nodeId: string, collectionId: string) => void;
   onRenameNode: (nodeId: string, collectionId: string, newName: string) => void;
+  onExportCollection: (collectionId: string) => void;
 }
 
 const methodColors: Record<string, string> = {
@@ -69,6 +70,7 @@ export function CollectionTree({
   onAddFolder,
   onDeleteNode,
   onRenameNode,
+  onExportCollection,
 }: CollectionTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() =>
     new Set(collections.map((c) => c.id)),
@@ -456,6 +458,18 @@ export function CollectionTree({
           >
             <Pencil className="h-3.5 w-3.5" /> Rename
           </button>
+          {contextMenu.isCollection && (
+            <button
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
+              onClick={() => {
+                onExportCollection(contextMenu.collectionId);
+                setContextMenu(null);
+              }}
+              data-testid="ctx-export"
+            >
+              <Download className="h-3.5 w-3.5" /> Export
+            </button>
+          )}
           <button
             className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10"
             onClick={() => {

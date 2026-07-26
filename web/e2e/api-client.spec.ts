@@ -434,4 +434,33 @@ test.describe("API Client", () => {
     // Should see saved messages section
     await expect(page.getByTestId("ws-add-saved")).toBeVisible();
   });
+
+  test("collection export dialog opens from context menu", async ({ page }) => {
+    // Create a collection
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Export Test Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    // Right-click on the collection to open context menu
+    const collectionNode = page.getByTestId(/collection-root-/).first();
+    await collectionNode.click({ button: "right" });
+
+    // Click Export in context menu
+    await page.getByTestId("ctx-export").click();
+
+    // Export dialog should be visible
+    await expect(page.getByTestId("collection-export-dialog")).toBeVisible();
+
+    // Should have format options
+    await expect(page.getByTestId("export-format-sweb")).toBeVisible();
+    await expect(page.getByTestId("export-format-postman")).toBeVisible();
+    await expect(page.getByTestId("export-format-json")).toBeVisible();
+
+    // Should have download button
+    await expect(page.getByTestId("export-download-button")).toBeVisible();
+
+    // Close dialog
+    await page.getByTestId("export-download-button").click();
+    await expect(page.getByTestId("collection-export-dialog")).not.toBeVisible();
+  });
 });

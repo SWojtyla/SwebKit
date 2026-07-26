@@ -14,6 +14,7 @@ import { NameDialog, ConfirmDialog } from "./Dialogs";
 import { EnvironmentManager } from "./EnvironmentManager";
 import { CollectionVariableEditor } from "./CollectionVariableEditor";
 import { RequestTabStrip, type RequestTab } from "./RequestTabStrip";
+import { CollectionExportDialog } from "./CollectionExportDialog";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -184,6 +185,7 @@ export function ApiClientPage() {
   const [tabStates, setTabStates] = useState<Record<string, TabState>>({});
   const [showEnvManager, setShowEnvManager] = useState(false);
   const [showColVarEditor, setShowColVarEditor] = useState(false);
+  const [exportCollectionId, setExportCollectionId] = useState<string | null>(null);
   const [nameDialog, setNameDialog] = useState<{
     title: string;
     label: string;
@@ -470,6 +472,11 @@ export function ApiClientPage() {
     [collections, selectedCollectionId],
   );
 
+  const exportCollection = useMemo(
+    () => collections.find((c) => c.id === exportCollectionId) ?? null,
+    [collections, exportCollectionId],
+  );
+
   const activeEnvironment = environments.find((e) => e.id === activeEnvironmentId) ?? null;
 
   if (isLoading) {
@@ -531,6 +538,7 @@ export function ApiClientPage() {
           onAddFolder={handleAddFolder}
           onDeleteNode={handleDeleteNode}
           onRenameNode={handleRenameNode}
+          onExportCollection={setExportCollectionId}
         />
 
         <div className="flex w-96 flex-col border-r">
@@ -598,6 +606,13 @@ export function ApiClientPage() {
           collection={selectedCollection}
           onSave={handleSaveCollectionVariables}
           onClose={() => setShowColVarEditor(false)}
+        />
+      )}
+      {exportCollectionId && exportCollection && (
+        <CollectionExportDialog
+          collection={exportCollection}
+          environments={environments}
+          onClose={() => setExportCollectionId(null)}
         />
       )}
     </div>
