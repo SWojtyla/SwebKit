@@ -8,6 +8,7 @@ import { RedisPage } from "./components/redis/RedisPage";
 import { StoragePage } from "./components/storage/StoragePage";
 import { AgentPage } from "./components/agent/AgentPage";
 import { SettingsPage } from "./components/settings/SettingsPage";
+import { MonitoringPage } from "./components/monitoring/MonitoringPage";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/redis" element={<RedisPage />} />
         <Route path="/storage" element={<StoragePage />} />
         <Route path="/agent" element={<AgentPage />} />
+        <Route path="/monitoring" element={<MonitoringPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
     </Routes>

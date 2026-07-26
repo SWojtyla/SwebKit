@@ -11,6 +11,7 @@ import {
   Settings,
   Search,
   Circle,
+  Activity,
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
 import { useHealth } from "@/lib/hooks";
@@ -23,6 +24,7 @@ const navItems = [
   { to: "/redis", label: "Redis", icon: Database },
   { to: "/storage", label: "Storage", icon: FolderOpen },
   { to: "/agent", label: "AI Agent", icon: Bot },
+  { to: "/monitoring", label: "Monitoring", icon: Activity },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

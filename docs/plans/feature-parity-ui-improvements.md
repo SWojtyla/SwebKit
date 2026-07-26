@@ -10,7 +10,7 @@ All four major feature areas are **high priority**. Execute in this order:
 3. AKS full detail panels — largest gap in component count
 4. Redis advanced features — moderate gaps
 5. Storage advanced features — moderate gaps
-6. Missing pages (Pipelines, Observability, Monitoring, Incident Timeline) — new pages
+6. Missing pages (Monitoring only — Pipelines, Observability, Incident Timeline dropped)
 7. Layout/shell features (command palette, notifications, themes, keyboard shortcuts)
 
 ---
@@ -434,42 +434,22 @@ All four major feature areas are **high priority**. Execute in this order:
 
 ## 6. Missing Pages
 
-### 6.1 Pipelines Page (DevOps)
-- [ ] Create `PipelinesPage.tsx` — project picker, pipeline tree, pipeline detail, pipeline activity
-- [ ] Create `PipelineDetail.tsx` — pipeline runs, stage details, logs
-- [ ] Create `PipelineActivity.tsx` — recent activity across all pipelines
-- [ ] Create `ApprovalCenter.tsx` — pending approval requests
-- [ ] Create `PipelineGroupEditor.tsx` — pipeline groups
-- [ ] Add sidecar endpoints for DevOps operations (using existing `SwebKit.DevOps` project)
-- [ ] Add route: `/pipelines`
+### 6.1 ~~Pipelines Page (DevOps)~~ DROPPED
+- Dropped — not needed for now
 
-### 6.2 Observability Page
-- [ ] Create `ObservabilityPage.tsx` — overview, logs, failures, performance, availability tabs
-- [ ] Create `ObservabilityOverview.tsx` — summary cards (requests, failure rate, P50/P95, exceptions, availability)
-- [ ] Create `ObservabilityLogs.tsx` — KQL query editor (guided + advanced mode), results table
-- [ ] Create `ObservabilityFailures.tsx` — failure analysis with exception grouping
-- [ ] Create `ObservabilityPerformance.tsx` — performance metrics with charts
-- [ ] Create `ObservabilityAvailability.tsx` — availability trends
-- [ ] Create `TimeRangePicker.tsx` — time range selector
-- [ ] Create `ResourceSelectorDialog.tsx` — Application Insights resource selector
-- [ ] Add sidecar endpoints for observability (using existing `SwebKit.Observability` project)
-- [ ] Add route: `/observability`
+### 6.2 ~~Observability Page~~ DROPPED
+- Dropped — not needed for now
 
-### 6.3 Monitoring Page
-- [ ] Create `MonitoringPage.tsx` — alert rule management, alert history
-- [ ] Create `AlertRuleEditor.tsx` — alert rule create/edit
-- [ ] Create `AlertHistoryPanel.tsx` — recent alert history
-- [ ] Add sidecar endpoints for alert rules
-- [ ] Add route: `/monitoring`
+### 6.3 Monitoring Page ✅ DONE
+- [x] Create `MonitoringPage.tsx` — alert rule management, alert history
+- [x] Create `AlertRuleEditor` — alert rule create/edit dialog
+- [x] Alert history panel with acknowledge functionality
+- [x] Add route: `/monitoring`
+- [x] Add to sidebar nav and command palette
+- [ ] Add sidecar endpoints for alert rules (deferred — demo data for now)
 
-### 6.4 Incident Timeline Page
-- [ ] Create `IncidentTimelinePage.tsx` — incident timeline with scope toolbar, timeline list, detail panel
-- [ ] Create `IncidentScopeToolbar.tsx` — scope selection (time range, resources)
-- [ ] Create `IncidentTimelineList.tsx` — timeline events list
-- [ ] Create `IncidentTimelineDetailPanel.tsx` — event detail
-- [ ] Create `IncidentSnapshotExportDialog.tsx` — export incident snapshot
-- [ ] Add sidecar endpoints for incident timeline
-- [ ] Add route: `/incident-timeline`
+### 6.4 ~~Incident Timeline Page~~ DROPPED
+- Dropped — not needed for now
 
 ---
 
@@ -534,7 +514,7 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Add metric tiles (pod count, container count, cache hit rate)
 - [x] Add configuration readiness (health tiles show Ready/Not configured)
 - [ ] Add pending approvals count (deferred)
-- [ ] Add recent pipeline failures (deferred — needs Pipelines page)
+- [ ] Add recent pipeline failures (dropped — Pipelines page dropped)
 
 ---
 

@@ -10,6 +10,7 @@ import {
   Bot,
   Settings,
   Search,
+  Activity,
 } from "lucide-react";
 
 const commands = [
@@ -20,6 +21,7 @@ const commands = [
   { to: "/redis", label: "Redis", icon: Database, keywords: "redis cache keys hash list set" },
   { to: "/storage", label: "Storage", icon: FolderOpen, keywords: "storage blobs containers azure" },
   { to: "/agent", label: "AI Agent", icon: Bot, keywords: "ai agent chat assistant" },
+  { to: "/monitoring", label: "Monitoring", icon: Activity, keywords: "monitoring alerts rules health" },
   { to: "/settings", label: "Settings", icon: Settings, keywords: "settings config preferences" },
 ];
 
