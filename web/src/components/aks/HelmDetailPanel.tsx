@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, History, Settings2 } from "lucide-react";
+import { X, History, Settings2, RotateCcw } from "lucide-react";
 import { useAksHelmHistory, useAksHelmValues } from "@/lib/hooks";
 
 interface HelmDetailPanelProps {
@@ -77,6 +77,18 @@ export function HelmDetailPanel({ ns, release, onClose }: HelmDetailPanelProps) 
                       <td className="py-2 pr-4 text-xs text-muted-foreground">{h.appVersion}</td>
                       <td className="py-2 pr-4 text-xs text-muted-foreground">{h.description}</td>
                       <td className="py-2 pr-4 text-xs text-muted-foreground">{h.age}</td>
+                      <td className="py-2 pr-4">
+                        {h.status !== "deployed" && (
+                          <button
+                            disabled
+                            title="Coming soon — rolling back needs a sidecar POST endpoint"
+                            className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs opacity-50 cursor-not-allowed"
+                            data-testid={`helm-rollback-rev-${h.revision}`}
+                          >
+                            <RotateCcw className="h-3 w-3" /> Rollback
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

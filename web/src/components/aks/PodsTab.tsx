@@ -1,14 +1,40 @@
+import { useEffect, useRef } from "react";
 import { useAksPods, useAksDeletePod } from "@/lib/hooks";
+import { showNotification } from "@/lib/tauri-bridge";
 import type { PodInfo } from "@/lib/types";
 
 interface PodsTabProps {
   ns: string;
   onPodClick?: (pod: PodInfo) => void;
+  onContextMenu?: (e: React.MouseEvent, pod: PodInfo) => void;
 }
 
-export function PodsTab({ ns, onPodClick }: PodsTabProps) {
+export function PodsTab({ ns, onPodClick, onContextMenu }: PodsTabProps) {
   const { data: pods, isLoading } = useAksPods(ns);
   const deleteMutation = useAksDeletePod();
+  const prevStatusesRef = useRef<Map<string, string>>(new Map());
+  const prevNsRef = useRef(ns);
+
+  // Fires a native notification the moment a pod actually transitions into
+  // Failed (not on initial load, which would spam notifications for
+  // already-failed pods on open) — restores the "the app notices when
+  // something breaks" behavior the MAUI health monitor had, for both demo
+  // and real clusters.
+  useEffect(() => {
+    if (!pods) return;
+    if (prevNsRef.current !== ns) {
+      prevStatusesRef.current = new Map();
+      prevNsRef.current = ns;
+    }
+    const prev = prevStatusesRef.current;
+    for (const pod of pods) {
+      const prevStatus = prev.get(pod.name);
+      if (prevStatus && prevStatus !== "Failed" && pod.status === "Failed") {
+        showNotification("Pod failed", `${pod.name} in ${ns} transitioned to Failed`).catch(() => {});
+      }
+    }
+    prevStatusesRef.current = new Map(pods.map((p) => [p.name, p.status]));
+  }, [pods, ns]);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
   if (!pods || pods.length === 0)
@@ -35,7 +61,7 @@ export function PodsTab({ ns, onPodClick }: PodsTabProps) {
         </thead>
         <tbody data-testid="pods-table-body">
           {pods.map((pod) => (
-            <tr key={pod.name} data-testid={`pod-row-${pod.name}`} className={`border-b last:border-0 ${onPodClick ? "cursor-pointer hover:bg-accent/50" : ""}`} onClick={() => onPodClick?.(pod)}>
+            <tr key={pod.name} data-testid={`pod-row-${pod.name}`} className={`border-b last:border-0 ${onPodClick ? "cursor-pointer hover:bg-accent/50" : ""}`} onClick={() => onPodClick?.(pod)} onContextMenu={(e) => onContextMenu?.(e, pod)}>
               <td className="py-2 pr-4 font-medium">{pod.name}</td>
               <td className="py-2 pr-4">
                 <PodStatusBadge status={pod.status} />

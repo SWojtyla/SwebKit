@@ -185,6 +185,27 @@ public static class AksEndpoints
             return Results.Ok();
         });
 
+        app.MapPost("/api/aks/{ns}/statefulsets/{name}/restart", async (string ns, string name, ProfileRepository profile, DemoModeService demo) =>
+        {
+            var client = GetClient(profile, demo);
+            await client.RestartStatefulSetAsync(ns, name);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/aks/{ns}/statefulsets/{name}/scale", async (string ns, string name, int replicas, ProfileRepository profile, DemoModeService demo) =>
+        {
+            var client = GetClient(profile, demo);
+            await client.ScaleStatefulSetAsync(ns, name, replicas);
+            return Results.Ok();
+        });
+
+        app.MapDelete("/api/aks/{ns}/ingresses/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo) =>
+        {
+            var client = GetClient(profile, demo);
+            await client.DeleteIngressAsync(ns, name);
+            return Results.Ok();
+        });
+
         // ── HPA ────────────────────────────────────────────────────────────────
 
         app.MapGet("/api/aks/{ns}/hpas", async (string ns, ProfileRepository profile, DemoModeService demo) =>
@@ -208,6 +229,43 @@ public static class AksEndpoints
             var client = GetClient(profile, demo);
             var jobs = await client.GetJobsAsync(ns);
             return Results.Ok(jobs);
+        });
+
+        // ── Gateway API ────────────────────────────────────────────────────────
+
+        app.MapGet("/api/aks/{ns}/httproutes", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        {
+            try
+            {
+                var client = GetClient(profile, demo);
+                var routes = await client.GetHttpRoutesAsync(ns);
+                return Results.Ok(routes);
+            }
+            catch
+            {
+                return Results.Ok(Array.Empty<object>());
+            }
+        });
+
+        app.MapDelete("/api/aks/{ns}/httproutes/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo) =>
+        {
+            var client = GetClient(profile, demo);
+            await client.DeleteHttpRouteAsync(ns, name);
+            return Results.Ok();
+        });
+
+        app.MapGet("/api/aks/gatewayclasses", async (ProfileRepository profile, DemoModeService demo) =>
+        {
+            var client = GetClient(profile, demo);
+            var classes = await client.GetGatewayClassesAsync();
+            return Results.Ok(classes);
+        });
+
+        app.MapGet("/api/aks/{ns}/gateways", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        {
+            var client = GetClient(profile, demo);
+            var gateways = await client.GetGatewaysAsync(ns);
+            return Results.Ok(gateways);
         });
 
         // ── Container details ──────────────────────────────────────────────────
@@ -241,6 +299,43 @@ public static class AksEndpoints
                 if (tail > 0 && lines.Count >= tail) break;
             }
             return Results.Text(string.Join('\n', lines), "text/plain");
+        });
+
+        app.MapGet("/api/aks/{ns}/pods/{podName}/logs/stream", async (HttpContext ctx, string ns, string podName, string? container, int tail, bool follow, int? sinceSeconds, bool previousContainer, string? filter, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            ctx.Response.ContentType = "text/event-stream";
+            ctx.Response.Headers.CacheControl = "no-cache";
+            ctx.Response.Headers.Connection = "keep-alive";
+
+            var opts = new LogStreamOptions
+            {
+                TailLines = tail > 0 ? tail : 100,
+                Follow = follow,
+                SinceSeconds = sinceSeconds,
+                PreviousContainer = previousContainer,
+            };
+
+            try
+            {
+                await foreach (var line in client.StreamPodLogsAsync(ns, podName, container ?? "", opts, ct))
+                {
+                    var output = string.IsNullOrEmpty(filter) || line.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                        ? line
+                        : null;
+                    if (output is not null)
+                    {
+                        await ctx.Response.WriteAsync($"data: {output}\n\n", ct);
+                        await ctx.Response.Body.FlushAsync(ct);
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            await ctx.Response.WriteAsync("event: done\ndata: \n\n", ct);
+            await ctx.Response.Body.FlushAsync(ct);
         });
     }
 }

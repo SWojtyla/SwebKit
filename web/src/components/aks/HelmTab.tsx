@@ -1,11 +1,13 @@
 import { useAksHelmReleases } from "@/lib/hooks";
+import type { HelmReleaseInfo } from "@/lib/types";
 
 interface HelmTabProps {
   ns: string;
   onReleaseClick?: (release: string) => void;
+  onContextMenu?: (e: React.MouseEvent, rel: HelmReleaseInfo) => void;
 }
 
-export function HelmTab({ ns, onReleaseClick }: HelmTabProps) {
+export function HelmTab({ ns, onReleaseClick, onContextMenu }: HelmTabProps) {
   const { data: releases, isLoading } = useAksHelmReleases(ns);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -27,7 +29,7 @@ export function HelmTab({ ns, onReleaseClick }: HelmTabProps) {
         </thead>
         <tbody data-testid="helm-table-body">
           {releases.map((rel) => (
-            <tr key={rel.name} data-testid={`helm-row-${rel.name}`} className={`border-b last:border-0 ${onReleaseClick ? "cursor-pointer hover:bg-accent/50" : ""}`} onClick={() => onReleaseClick?.(rel.name)}>
+            <tr key={rel.name} data-testid={`helm-row-${rel.name}`} className={`border-b last:border-0 ${onReleaseClick ? "cursor-pointer hover:bg-accent/50" : ""}`} onClick={() => onReleaseClick?.(rel.name)} onContextMenu={(e) => onContextMenu?.(e, rel)}>
               <td className="py-2 pr-4 font-medium">{rel.name}</td>
               <td className="py-2 pr-4 text-muted-foreground">{rel.chart ?? "—"}</td>
               <td className="py-2 pr-4 text-muted-foreground">{rel.appVersion ?? rel.chartVersion ?? "—"}</td>

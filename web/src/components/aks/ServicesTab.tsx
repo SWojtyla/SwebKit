@@ -1,6 +1,12 @@
 import { useAksServices } from "@/lib/hooks";
+import type { ServiceInfo } from "@/lib/types";
 
-export function ServicesTab({ ns }: { ns: string }) {
+interface ServicesTabProps {
+  ns: string;
+  onContextMenu?: (e: React.MouseEvent, svc: ServiceInfo) => void;
+}
+
+export function ServicesTab({ ns, onContextMenu }: ServicesTabProps) {
   const { data: services, isLoading } = useAksServices(ns);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -21,7 +27,7 @@ export function ServicesTab({ ns }: { ns: string }) {
         </thead>
         <tbody data-testid="services-table-body">
           {services.map((svc) => (
-            <tr key={svc.name} data-testid={`service-row-${svc.name}`} className="border-b last:border-0">
+            <tr key={svc.name} data-testid={`service-row-${svc.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, svc)}>
               <td className="py-2 pr-4 font-medium">{svc.name}</td>
               <td className="py-2 pr-4">{svc.type}</td>
               <td className="py-2 pr-4 text-muted-foreground">{svc.clusterIp}</td>

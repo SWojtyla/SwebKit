@@ -2,7 +2,12 @@ import { useState } from "react";
 import { useAksConfigMaps } from "@/lib/hooks";
 import type { ConfigMapInfo } from "@/lib/types";
 
-export function ConfigMapsTab({ ns }: { ns: string }) {
+interface ConfigMapsTabProps {
+  ns: string;
+  onContextMenu?: (e: React.MouseEvent, cm: ConfigMapInfo) => void;
+}
+
+export function ConfigMapsTab({ ns, onContextMenu }: ConfigMapsTabProps) {
   const { data: configmaps, isLoading } = useAksConfigMaps(ns);
   const [selected, setSelected] = useState<ConfigMapInfo | null>(null);
 
@@ -27,6 +32,7 @@ export function ConfigMapsTab({ ns }: { ns: string }) {
                 data-testid={`configmap-row-${cm.name}`}
                 className={`cursor-pointer border-b last:border-0 ${selected?.name === cm.name ? "bg-accent" : "hover:bg-accent/50"}`}
                 onClick={() => setSelected(cm)}
+                onContextMenu={(e) => onContextMenu?.(e, cm)}
               >
                 <td className="py-2 pr-4 font-medium">{cm.name}</td>
                 <td className="py-2 pr-4 text-xs text-muted-foreground">

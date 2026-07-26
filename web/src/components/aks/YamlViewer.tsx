@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, FileText } from "lucide-react";
+import { X, FileText, Pencil, Save, Eye } from "lucide-react";
 import { useAksResourceYaml } from "@/lib/hooks";
 
 interface YamlViewerProps {
@@ -10,8 +10,10 @@ interface YamlViewerProps {
 }
 
 export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
-  const { data: yaml, isLoading } = useAksResourceYaml(ns, kind, name);
+  const { data: yaml, isLoading, error } = useAksResourceYaml(ns, kind, name);
   const [copied, setCopied] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editedYaml, setEditedYaml] = useState("");
 
   const handleCopy = () => {
     navigator.clipboard.writeText(yaml ?? "");
@@ -27,6 +29,27 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
         <span className="text-xs text-muted-foreground">YAML</span>
         <div className="ml-auto flex items-center gap-2">
           <button
+            onClick={() => {
+              if (editMode) { setEditedYaml(""); setEditMode(false); }
+              else { setEditedYaml(yaml ?? ""); setEditMode(true); }
+            }}
+            className={`flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent ${editMode ? "border-primary text-primary" : ""}`}
+            data-testid="yaml-edit-toggle"
+          >
+            {editMode ? <Eye className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
+            {editMode ? "View" : "Edit"}
+          </button>
+          {editMode && (
+            <button
+              disabled
+              title="Coming soon — applying edited YAML needs a sidecar PUT endpoint"
+              className="flex items-center gap-1 rounded border px-2 py-1 text-xs opacity-50 cursor-not-allowed"
+              data-testid="yaml-apply"
+            >
+              <Save className="h-3 w-3" /> Apply (coming soon)
+            </button>
+          )}
+          <button
             onClick={handleCopy}
             className="rounded border px-2 py-1 text-xs hover:bg-accent"
             data-testid="yaml-copy"
@@ -38,11 +61,23 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-auto bg-black p-3">
+      <div className="flex-1 overflow-auto bg-card p-3">
         {isLoading ? (
-          <div className="text-green-400 text-xs font-mono">Loading YAML...</div>
+          <div className="text-primary text-xs font-mono">Loading YAML...</div>
+        ) : error ? (
+          <div className="text-destructive text-xs font-mono" data-testid="yaml-error">
+            Error: {error.message}
+          </div>
+        ) : editMode ? (
+          <textarea
+            value={editedYaml}
+            onChange={(e) => setEditedYaml(e.target.value)}
+            className="h-full w-full bg-card text-foreground text-xs font-mono resize-none border-none outline-none"
+            data-testid="yaml-editor"
+            spellCheck={false}
+          />
         ) : (
-          <pre className="whitespace-pre-wrap break-all text-xs font-mono text-green-400" data-testid="yaml-content">
+          <pre className="whitespace-pre-wrap break-all text-xs font-mono text-foreground" data-testid="yaml-content">
             {yaml ?? "No YAML available"}
           </pre>
         )}

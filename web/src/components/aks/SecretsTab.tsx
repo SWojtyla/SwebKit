@@ -1,6 +1,12 @@
 import { useAksSecrets } from "@/lib/hooks";
+import type { SecretInfo } from "@/lib/types";
 
-export function SecretsTab({ ns }: { ns: string }) {
+interface SecretsTabProps {
+  ns: string;
+  onContextMenu?: (e: React.MouseEvent, secret: SecretInfo) => void;
+}
+
+export function SecretsTab({ ns, onContextMenu }: SecretsTabProps) {
   const { data: secrets, isLoading } = useAksSecrets(ns);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -19,7 +25,7 @@ export function SecretsTab({ ns }: { ns: string }) {
         </thead>
         <tbody data-testid="secrets-table-body">
           {secrets.map((secret) => (
-            <tr key={secret.name} data-testid={`secret-row-${secret.name}`} className="border-b last:border-0">
+            <tr key={secret.name} data-testid={`secret-row-${secret.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, secret)}>
               <td className="py-2 pr-4 font-medium">{secret.name}</td>
               <td className="py-2 pr-4 text-muted-foreground">{secret.type}</td>
               <td className="py-2 pr-4 text-xs text-muted-foreground">

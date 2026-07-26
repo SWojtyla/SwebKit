@@ -1,6 +1,12 @@
 import { useAksStatefulSets } from "@/lib/hooks";
+import type { StatefulSetInfo } from "@/lib/types";
 
-export function StatefulSetsTab({ ns }: { ns: string }) {
+interface StatefulSetsTabProps {
+  ns: string;
+  onContextMenu?: (e: React.MouseEvent, sts: StatefulSetInfo) => void;
+}
+
+export function StatefulSetsTab({ ns, onContextMenu }: StatefulSetsTabProps) {
   const { data: statefulsets, isLoading } = useAksStatefulSets(ns);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -20,7 +26,7 @@ export function StatefulSetsTab({ ns }: { ns: string }) {
         </thead>
         <tbody data-testid="statefulsets-table-body">
           {statefulsets.map((sts) => (
-            <tr key={sts.name} data-testid={`statefulset-row-${sts.name}`} className="border-b last:border-0">
+            <tr key={sts.name} data-testid={`statefulset-row-${sts.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, sts)}>
               <td className="py-2 pr-4 font-medium">{sts.name}</td>
               <td className="py-2 pr-4">
                 <span className={sts.readyReplicas === sts.replicas ? "text-green-500" : "text-yellow-500"}>

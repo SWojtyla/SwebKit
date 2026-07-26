@@ -1,6 +1,12 @@
 import { useAksCronJobs } from "@/lib/hooks";
+import type { CronJobInfo } from "@/lib/types";
 
-export function CronJobsTab({ ns }: { ns: string }) {
+interface CronJobsTabProps {
+  ns: string;
+  onContextMenu?: (e: React.MouseEvent, cj: CronJobInfo) => void;
+}
+
+export function CronJobsTab({ ns, onContextMenu }: CronJobsTabProps) {
   const { data: cronjobs, isLoading } = useAksCronJobs(ns);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -22,7 +28,7 @@ export function CronJobsTab({ ns }: { ns: string }) {
         </thead>
         <tbody data-testid="cronjobs-table-body">
           {cronjobs.map((cj) => (
-            <tr key={cj.name} data-testid={`cronjob-row-${cj.name}`} className="border-b last:border-0">
+            <tr key={cj.name} data-testid={`cronjob-row-${cj.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, cj)}>
               <td className="py-2 pr-4 font-medium">{cj.name}</td>
               <td className="py-2 pr-4 font-mono text-xs">{cj.schedule ?? "—"}</td>
               <td className="py-2 pr-4">

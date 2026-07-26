@@ -2,7 +2,12 @@ import { useState } from "react";
 import { useAksDeployments, useAksRestartDeployment, useAksScaleDeployment } from "@/lib/hooks";
 import type { DeploymentInfo } from "@/lib/types";
 
-export function DeploymentsTab({ ns }: { ns: string }) {
+interface DeploymentsTabProps {
+  ns: string;
+  onContextMenu?: (e: React.MouseEvent, dep: DeploymentInfo) => void;
+}
+
+export function DeploymentsTab({ ns, onContextMenu }: DeploymentsTabProps) {
   const { data: deployments, isLoading } = useAksDeployments(ns);
   const restartMutation = useAksRestartDeployment();
   const scaleMutation = useAksScaleDeployment();
@@ -37,7 +42,7 @@ export function DeploymentsTab({ ns }: { ns: string }) {
         </thead>
         <tbody data-testid="deployments-table-body">
           {deployments.map((dep) => (
-            <tr key={dep.name} data-testid={`deployment-row-${dep.name}`} className="border-b last:border-0">
+            <tr key={dep.name} data-testid={`deployment-row-${dep.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, dep)}>
               <td className="py-2 pr-4 font-medium">{dep.name}</td>
               <td className="py-2 pr-4">
                 <span className={dep.readyReplicas === dep.replicas ? "text-green-500" : "text-yellow-500"}>
