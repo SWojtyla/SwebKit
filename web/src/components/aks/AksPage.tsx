@@ -9,13 +9,29 @@ import { ServicesTab } from "./ServicesTab";
 import { HelmTab } from "./HelmTab";
 import { SecretsTab } from "./SecretsTab";
 import { EventsTab } from "./EventsTab";
+import { StatefulSetsTab } from "./StatefulSetsTab";
+import { CronJobsTab } from "./CronJobsTab";
+import { JobsTab } from "./JobsTab";
+import { ConfigMapsTab } from "./ConfigMapsTab";
+import { IngressesTab } from "./IngressesTab";
+import { HpaTab } from "./HpaTab";
+import { PodDetailPanel } from "./PodDetailPanel";
+import { YamlViewer } from "./YamlViewer";
+import { HelmDetailPanel } from "./HelmDetailPanel";
+import type { PodInfo } from "@/lib/types";
 
 const tabs = [
   { id: "deployments", label: "Deployments" },
+  { id: "statefulsets", label: "StatefulSets" },
   { id: "pods", label: "Pods" },
   { id: "services", label: "Services" },
-  { id: "helm", label: "Helm" },
+  { id: "ingresses", label: "Ingresses" },
+  { id: "cronjobs", label: "CronJobs" },
+  { id: "jobs", label: "Jobs" },
+  { id: "configmaps", label: "ConfigMaps" },
   { id: "secrets", label: "Secrets" },
+  { id: "hpa", label: "HPA" },
+  { id: "helm", label: "Helm" },
   { id: "events", label: "Events" },
 ] as const;
 
@@ -26,6 +42,9 @@ export function AksPage() {
   const [namespace, setNamespace] = useState<string | null>(null);
   const { data: namespaces, isLoading: nsLoading } = useAksNamespaces();
   const { data: testResult } = useAksTestConnection();
+  const [selectedPod, setSelectedPod] = useState<PodInfo | null>(null);
+  const [yamlResource, setYamlResource] = useState<{ kind: string; name: string } | null>(null);
+  const [helmRelease, setHelmRelease] = useState<string | null>(null);
 
   return (
     <div className="flex h-full flex-col" data-testid="aks-page">
@@ -58,13 +77,13 @@ export function AksPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b" data-testid="aks-tabs">
+      <div className="flex border-b overflow-x-auto" data-testid="aks-tabs">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             data-testid={`aks-tab-${tab.id}`}
-            className={`px-4 py-2 text-sm font-medium ${
+            className={`whitespace-nowrap px-4 py-2 text-sm font-medium ${
               activeTab === tab.id
                 ? "border-b-2 border-primary text-foreground"
                 : "text-muted-foreground hover:text-foreground"
@@ -76,20 +95,58 @@ export function AksPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto" data-testid="aks-content">
-        {!namespace ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground" data-testid="aks-empty-state">
-            Select a namespace to view resources
+      <div className="flex flex-1 overflow-hidden" data-testid="aks-content">
+        <div className="flex-1 overflow-auto">
+          {!namespace ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground" data-testid="aks-empty-state">
+              Select a namespace to view resources
+            </div>
+          ) : (
+            <>
+              {activeTab === "deployments" && <DeploymentsTab ns={namespace} />}
+              {activeTab === "statefulsets" && <StatefulSetsTab ns={namespace} />}
+              {activeTab === "pods" && <PodsTab ns={namespace} onPodClick={setSelectedPod} />}
+              {activeTab === "services" && <ServicesTab ns={namespace} />}
+              {activeTab === "ingresses" && <IngressesTab ns={namespace} />}
+              {activeTab === "cronjobs" && <CronJobsTab ns={namespace} />}
+              {activeTab === "jobs" && <JobsTab ns={namespace} />}
+              {activeTab === "configmaps" && <ConfigMapsTab ns={namespace} />}
+              {activeTab === "secrets" && <SecretsTab ns={namespace} />}
+              {activeTab === "hpa" && <HpaTab ns={namespace} />}
+              {activeTab === "helm" && <HelmTab ns={namespace} onReleaseClick={setHelmRelease} />}
+              {activeTab === "events" && <EventsTab ns={namespace} />}
+            </>
+          )}
+        </div>
+
+        {/* Side panel for detail views */}
+        {selectedPod && namespace && (
+          <div className="w-2/5 border-l">
+            <PodDetailPanel
+              pod={selectedPod}
+              ns={namespace}
+              onClose={() => setSelectedPod(null)}
+            />
           </div>
-        ) : (
-          <>
-            {activeTab === "deployments" && <DeploymentsTab ns={namespace} />}
-            {activeTab === "pods" && <PodsTab ns={namespace} />}
-            {activeTab === "services" && <ServicesTab ns={namespace} />}
-            {activeTab === "helm" && <HelmTab ns={namespace} />}
-            {activeTab === "secrets" && <SecretsTab ns={namespace} />}
-            {activeTab === "events" && <EventsTab ns={namespace} />}
-          </>
+        )}
+        {yamlResource && namespace && (
+          <div className="w-2/5 border-l">
+            <YamlViewer
+              ns={namespace}
+              kind={yamlResource.kind}
+              name={yamlResource.name}
+              onClose={() => setYamlResource(null)}
+            />
+          </div>
+        )}
+        {helmRelease && namespace && (
+          <div className="w-2/5 border-l">
+            <HelmDetailPanel
+              ns={namespace}
+              release={helmRelease}
+              onClose={() => setHelmRelease(null)}
+            />
+          </div>
         )}
       </div>
     </div>

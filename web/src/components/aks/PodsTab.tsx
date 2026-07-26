@@ -1,6 +1,12 @@
 import { useAksPods, useAksDeletePod } from "@/lib/hooks";
+import type { PodInfo } from "@/lib/types";
 
-export function PodsTab({ ns }: { ns: string }) {
+interface PodsTabProps {
+  ns: string;
+  onPodClick?: (pod: PodInfo) => void;
+}
+
+export function PodsTab({ ns, onPodClick }: PodsTabProps) {
   const { data: pods, isLoading } = useAksPods(ns);
   const deleteMutation = useAksDeletePod();
 
@@ -29,7 +35,7 @@ export function PodsTab({ ns }: { ns: string }) {
         </thead>
         <tbody data-testid="pods-table-body">
           {pods.map((pod) => (
-            <tr key={pod.name} data-testid={`pod-row-${pod.name}`} className="border-b last:border-0">
+            <tr key={pod.name} data-testid={`pod-row-${pod.name}`} className={`border-b last:border-0 ${onPodClick ? "cursor-pointer hover:bg-accent/50" : ""}`} onClick={() => onPodClick?.(pod)}>
               <td className="py-2 pr-4 font-medium">{pod.name}</td>
               <td className="py-2 pr-4">
                 <PodStatusBadge status={pod.status} />
@@ -50,7 +56,7 @@ export function PodsTab({ ns }: { ns: string }) {
               <td className="py-2 pr-4 text-xs text-muted-foreground">
                 {pod.startTime ? new Date(pod.startTime).toLocaleDateString() : "—"}
               </td>
-              <td className="py-2 pr-4">
+              <td className="py-2 pr-4" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => handleDelete(pod.name)}
                   disabled={deleteMutation.isPending}

@@ -544,6 +544,29 @@ export interface CronJobInfo {
   lastSuccessfulTime: string | null;
 }
 
+export interface IngressInfo {
+  name: string;
+  namespace: string;
+  ingressClass: string | null;
+  rules: { host: string | null; paths: { path: string; pathType: string | null; serviceName: string | null; servicePort: number | null }[] }[];
+  addresses: string[];
+  labels: Record<string, string>;
+}
+
+export interface HelmHistoryEntry {
+  revision: number;
+  status: string;
+  chart: string;
+  appVersion: string;
+  description: string;
+  age: string;
+}
+
+export interface HelmValuesResponse {
+  userValues: string;
+  computedValues: string;
+}
+
 export interface JobInfo {
   name: string;
   namespace: string;

@@ -35,6 +35,10 @@ import type {
   AgentStatus,
   SbMessageTemplate,
   ScheduledMessageEntry,
+  ConfigMapInfo,
+  IngressInfo,
+  HelmHistoryEntry,
+  HelmValuesResponse,
 } from "./types";
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -485,6 +489,51 @@ export function useAksDeletePod() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["aks-pods", vars.ns] });
     },
+  });
+}
+
+export function useAksConfigMaps(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-configmaps", ns],
+    queryFn: () => apiFetch<ConfigMapInfo[]>(`/api/aks/${ns}/configmaps`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksIngresses(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-ingresses", ns],
+    queryFn: () => apiFetch<IngressInfo[]>(`/api/aks/${ns}/ingresses`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksHelmHistory(ns: string | null, release: string | null) {
+  return useQuery({
+    queryKey: ["aks-helm-history", ns, release],
+    queryFn: () => apiFetch<HelmHistoryEntry[]>(`/api/aks/${ns}/helm-releases/${release}/history`),
+    enabled: !!ns && !!release,
+  });
+}
+
+export function useAksHelmValues(ns: string | null, release: string | null) {
+  return useQuery({
+    queryKey: ["aks-helm-values", ns, release],
+    queryFn: () => apiFetch<HelmValuesResponse>(`/api/aks/${ns}/helm-releases/${release}/values`),
+    enabled: !!ns && !!release,
+  });
+}
+
+export function useAksPodLogs(ns: string | null, pod: string | null, container?: string, tail = 100) {
+  return useQuery({
+    queryKey: ["aks-pod-logs", ns, pod, container, tail],
+    queryFn: async () => {
+      const params = new URLSearchParams({ tail: String(tail) });
+      if (container) params.set("container", container);
+      const res = await fetch(`/api/aks/${ns}/pods/${pod}/logs?${params}`);
+      return res.text();
+    },
+    enabled: !!ns && !!pod,
   });
 }
 

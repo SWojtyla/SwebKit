@@ -227,5 +227,20 @@ public static class AksEndpoints
             var metrics = await client.GetPodMetricsAsync(ns);
             return Results.Ok(metrics);
         });
+
+        // ── Pod Logs ───────────────────────────────────────────────────────────
+
+        app.MapGet("/api/aks/{ns}/pods/{podName}/logs", async (string ns, string podName, string? container, int tail, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            var opts = new LogStreamOptions { TailLines = tail, Follow = false };
+            var lines = new List<string>(tail > 0 ? tail : 100);
+            await foreach (var line in client.StreamPodLogsAsync(ns, podName, container ?? "", opts, ct))
+            {
+                lines.Add(line);
+                if (tail > 0 && lines.Count >= tail) break;
+            }
+            return Results.Text(string.Join('\n', lines), "text/plain");
+        });
     }
 }

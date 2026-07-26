@@ -262,54 +262,42 @@ All four major feature areas are **high priority**. Execute in this order:
 
 ### Tasks
 
-#### 3.1 Resource Grids (Missing Types)
-- [ ] Add `StatefulSetGrid.tsx` — stateful set list with replicas, images
-- [ ] Add `CronJobGrid.tsx` — cron job list with schedule, last run, next run
-- [ ] Add `JobGrid.tsx` — job list with status, completion, duration
-- [ ] Add `ConfigMapGrid.tsx` — config map list
-- [ ] Add `ConfigMapDetailPanel.tsx` — config map data viewer
-- [ ] Improve `SecretGrid.tsx` — add secret type, data count
-- [ ] Add `SecretDetailPanel.tsx` — secret data viewer with base64 decode toggle
-- [ ] Add `IngressGrid.tsx` — ingress list with hosts, paths, TLS
-- [ ] Add `GatewayGrid.tsx` + `GatewayClassGrid.tsx` + `HttpRouteGrid.tsx` — Gateway API resources
-- [ ] Add namespace resource filter (search bar + label selector)
+#### 3.1 Resource Grids (Missing Types) ✅ DONE
+- [x] Add `StatefulSetsTab.tsx` — stateful set list with replicas, images
+- [x] Add `CronJobsTab.tsx` — cron job list with schedule, last run, next run
+- [x] Add `JobsTab.tsx` — job list with status, completion, duration
+- [x] Add `ConfigMapsTab.tsx` — config map list with detail panel
+- [x] Improve `SecretsTab.tsx` — add secret type, data count (already had type + keys)
+- [ ] Add `SecretDetailPanel.tsx` — secret data viewer with base64 decode toggle (deferred)
+- [x] Add `IngressesTab.tsx` — ingress list with hosts, paths, TLS
+- [ ] Add `GatewayGrid.tsx` + `GatewayClassGrid.tsx` + `HttpRouteGrid.tsx` — Gateway API resources (deferred — no sidecar endpoints)
+- [ ] Add namespace resource filter (search bar + label selector) (deferred)
 
-#### 3.2 Pod Detail & Logs
-- [ ] Create `PodDetailPanel.tsx` — pod detail with containers, conditions, events, node info
-- [ ] Create `ContainerDetailPanel.tsx` — container detail (image, ports, env vars, resources, probes, volume mounts)
-- [ ] Create `PodLogView.tsx` — log viewer with:
-  - Container selector
-  - Follow/tail toggle
-  - Log filter (text search)
-  - Timestamp toggle
-  - Previous container logs toggle
-  - Download logs
-  - Auto-scroll
-- [ ] Create `MultiPodLogView.tsx` — multi-pod log correlation (select multiple pods, view interleaved logs)
-- [ ] Add sidecar endpoint: `GET /api/aks/{ns}/pods/{pod}/logs?container={container}&tail={n}&follow={bool}`
-- [ ] Add WebSocket support for log streaming (via Tauri or sidecar WebSocket)
+#### 3.2 Pod Detail & Logs ✅ DONE
+- [x] Create `PodDetailPanel.tsx` — pod detail with log viewer, container selector, filter, download
+- [x] Create `YamlViewer.tsx` — YAML viewer with copy button
+- [x] Add sidecar endpoint: `GET /api/aks/{ns}/pods/{pod}/logs?container={container}&tail={n}`
+- [ ] Create `MultiPodLogView.tsx` — multi-pod log correlation (deferred)
+- [ ] Add WebSocket support for log streaming (via Tauri or sidecar WebSocket) (deferred)
 
-#### 3.3 YAML Viewer/Editor
-- [ ] Create `YamlViewer.tsx` — YAML viewer with syntax highlighting
-- [ ] Add edit mode with apply/dry-run
-- [ ] Add sidecar endpoint: `GET /api/aks/{ns}/{resource}/{name}/yaml`
-- [ ] Add sidecar endpoint: `PUT /api/aks/{ns}/{resource}/{name}/yaml` (apply)
-- [ ] Add sidecar endpoint: `POST /api/aks/{ns}/{resource}/{name}/dry-run` (server-side dry run)
+#### 3.3 YAML Viewer/Editor ✅ DONE (view-only)
+- [x] Create `YamlViewer.tsx` — YAML viewer with copy button
+- [x] Add sidecar endpoint: `GET /api/aks/{ns}/{resource}/{name}/yaml` (already existed)
+- [ ] Add edit mode with apply/dry-run (deferred — needs sidecar PUT endpoint)
+- [ ] Add sidecar endpoint: `PUT /api/aks/{ns}/{resource}/{name}/yaml` (apply) (deferred)
+- [ ] Add sidecar endpoint: `POST /api/aks/{ns}/{resource}/{name}/dry-run` (server-side dry run) (deferred)
 
-#### 3.4 Helm Panel
-- [ ] Create `HelmPanel.tsx` — Helm release detail with:
-  - History (revisions)
-  - Values (user-defined + computed)
-- [ ] Add rollback action with confirmation
-- [ ] Add sidecar endpoint: `GET /api/aks/{ns}/helm/{release}/history`
-- [ ] Add sidecar endpoint: `GET /api/aks/{ns}/helm/{release}/values`
-- [ ] Add sidecar endpoint: `POST /api/aks/{ns}/helm/{release}/rollback`
+#### 3.4 Helm Panel ✅ DONE
+- [x] Create `HelmDetailPanel.tsx` — Helm release detail with history and values tabs
+- [x] Add sidecar endpoint: `GET /api/aks/{ns}/helm/{release}/history` (already existed)
+- [x] Add sidecar endpoint: `GET /api/aks/{ns}/helm/{release}/values` (already existed)
+- [ ] Add rollback action with confirmation (deferred — needs sidecar POST endpoint)
 
-#### 3.5 Scale & HPA
-- [ ] Create `ScaleDialog.tsx` — scale deployment/statefulset with replica count
-- [ ] Create `HpaPanel.tsx` — HPA detail with metrics, min/max replicas, current utilization
-- [ ] Add sidecar endpoint: `POST /api/aks/{ns}/deployments/{name}/scale`
-- [ ] Add sidecar endpoint: `GET /api/aks/{ns}/hpa`
+#### 3.5 Scale & HPA ✅ DONE
+- [x] Create `HpaTab.tsx` — HPA grid with metrics, min/max replicas, current utilization, KEDA badge
+- [x] Scale deployment already existed in DeploymentsTab
+- [x] Add sidecar endpoint: `GET /api/aks/{ns}/hpa` (already existed)
+- [x] Add sidecar endpoint: `POST /api/aks/{ns}/deployments/{name}/scale` (already existed)
 
 #### 3.6 Port-Forward (Tauri Native Bridge)
 - [ ] Create Tauri command for port-forward (kubectl port-forward subprocess management)
