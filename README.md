@@ -143,6 +143,64 @@ cd src-sidecar
 dotnet build
 ```
 
+### Build the Tauri desktop app (installer)
+
+The Tauri shell wraps the React frontend into a native Windows desktop app with an MSI/NSIS installer.
+
+#### Prerequisites
+
+- **Rust** (stable): install from https://rustup.rs/
+- **Visual Studio Build Tools 2022** with the **Desktop development with C++** workload
+  - Download from https://visualstudio.microsoft.com/visual-cpp-build-tools/
+  - In the installer, check "Desktop development with C++" (includes MSVC, Windows SDK, and `link.exe`)
+  - VS Code alone is NOT sufficient — you need the Build Tools
+- Node.js 20+ (already required for the frontend)
+- .NET 10 SDK (already required for the sidecar)
+
+#### Build the frontend first
+
+```powershell
+cd web
+npm install
+npm run build
+```
+
+This produces `web/dist/` which Tauri bundles into the app.
+
+#### Build the installer
+
+```powershell
+cd src-tauri
+node ../web/node_modules/@tauri-apps/cli/tauri.js build
+```
+
+Or if you have the Tauri CLI globally installed:
+
+```powershell
+cd src-tauri
+tauri build
+```
+
+#### Output
+
+The installers are generated at:
+
+- **MSI**: `src-tauri/target/release/bundle/msi/SwebKit_0.1.0_x64_en-US.msi`
+- **NSIS**: `src-tauri/target/release/bundle/nsis/SwebKit_0.1.0_x64-setup.exe`
+
+Either can be distributed for installation. The MSI is recommended for enterprise deployment (supports silent install via `msiexec`).
+
+#### Dev mode (hot reload)
+
+For development with live reload, start the sidecar and Vite dev server first, then:
+
+```powershell
+cd src-tauri
+node ../web/node_modules/@tauri-apps/cli/tauri.js dev
+```
+
+This opens the native desktop window pointing at `http://localhost:1420` with hot module replacement.
+
 ### Run E2E tests
 
 Playwright starts the sidecar and Vite automatically on isolated ports, so you don't need to run them manually.
