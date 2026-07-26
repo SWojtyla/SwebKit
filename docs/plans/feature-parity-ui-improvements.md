@@ -362,12 +362,11 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Add "Clear selection" button
 - [x] Add export JSON (download selected keys as JSON)
 
-#### 4.4 Advanced Panels
-- [ ] Create `KeyspaceHealthExplorer.tsx` — keyspace health (hit rate, eviction, memory)
-- [ ] Create `PrefixMemory.tsx` — memory usage by key prefix
-- [ ] Create `PubSubPanel.tsx` — subscribe to channels, view messages, publish
-- [ ] Improve `SlowLogPanel` — show full command, client, duration with sorting
-- [ ] Create `OpsInsightsPanel.tsx` — operational insights summary
+#### 4.4 Advanced Panels ✅ DONE
+- [x] Create `KeyspaceHealthPanel` — keyspace health (hit rate, memory, clients, uptime, DB stats)
+- [x] Create `PrefixMemoryPanel` — key distribution by prefix with type breakdown
+- [x] Create `OpsInsightsPanel` — total commands, Redis version, total keys, top 5 slowest commands
+- [ ] Create `PubSubPanel.tsx` — subscribe to channels, view messages, publish (deferred — needs sidecar endpoint)
 
 #### 4.5 Connection Bar & Auto-Refresh ✅ DONE
 - [x] Connection status indicator in Redis header

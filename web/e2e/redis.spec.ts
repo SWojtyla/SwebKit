@@ -117,4 +117,24 @@ test.describe("Redis", () => {
     const count = await nsButtons.count();
     expect(count).toBeGreaterThan(0);
   });
+
+  test("advanced tab shows keyspace health and ops insights", async ({ page }) => {
+    await page.goto("/redis");
+    await expect(page.getByTestId("redis-page")).toBeVisible();
+    await page.getByTestId("redis-tab-advanced").click();
+    await expect(page.getByTestId("redis-advanced")).toBeVisible();
+    await expect(page.getByTestId("keyspace-health-panel")).toBeVisible();
+    await expect(page.getByTestId("health-hit-rate")).toBeVisible();
+    await expect(page.getByTestId("health-memory")).toBeVisible();
+    await expect(page.getByTestId("ops-insights-panel")).toBeVisible();
+    await expect(page.getByTestId("ops-total-commands")).toBeVisible();
+  });
+
+  test("advanced tab shows prefix memory breakdown", async ({ page }) => {
+    await page.goto("/redis");
+    await expect(page.getByTestId("redis-page")).toBeVisible();
+    await page.getByTestId("redis-tab-advanced").click();
+    await expect(page.getByTestId("prefix-memory-panel")).toBeVisible();
+    await expect(page.getByTestId("prefix-memory-table")).toBeVisible();
+  });
 });

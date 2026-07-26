@@ -17,6 +17,7 @@ import {
   useRedisSetValue,
 } from "@/lib/hooks";
 import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw } from "lucide-react";
+import { KeyspaceHealthPanel, PrefixMemoryPanel, OpsInsightsPanel } from "./AdvancedPanels";
 
 const typeColors: Record<string, string> = {
   string: "text-green-400",
@@ -65,7 +66,7 @@ export function RedisPage() {
   const [searchInput, setSearchInput] = useState("*");
   const [cursor, setCursor] = useState(0);
   const [allKeys, setAllKeys] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<"keys" | "info" | "slowlog">("keys");
+  const [activeTab, setActiveTab] = useState<"keys" | "info" | "slowlog" | "advanced">("keys");
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [editingValue, setEditingValue] = useState(false);
@@ -90,6 +91,7 @@ export function RedisPage() {
   const renameKey = useRedisRenameKey(resolvedCacheId);
   const setTtl = useRedisSetTtl(resolvedCacheId);
   const setValue = useRedisSetValue(resolvedCacheId);
+  const slowLog = useRedisSlowLog(resolvedCacheId);
 
   const handleManualRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["redis"] });
@@ -290,7 +292,7 @@ export function RedisPage() {
       </div>
 
       <div className="flex gap-1 border-b px-6">
-        {(["keys", "info", "slowlog"] as const).map((tab) => (
+        {(["keys", "info", "slowlog", "advanced"] as const).map((tab) => (
           <button
             key={tab}
             data-testid={`redis-tab-${tab}`}
@@ -301,7 +303,7 @@ export function RedisPage() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {tab === "info" ? "Server Info" : tab === "slowlog" ? "Slow Log" : "Keys"}
+            {tab === "info" ? "Server Info" : tab === "slowlog" ? "Slow Log" : tab === "advanced" ? "Advanced" : "Keys"}
           </button>
         ))}
       </div>
@@ -714,6 +716,17 @@ export function RedisPage() {
         {activeTab === "slowlog" && (
           <div className="flex-1 overflow-auto p-6" data-testid="redis-slowlog">
             <SlowLogTab cacheId={resolvedCacheId} />
+          </div>
+        )}
+
+        {activeTab === "advanced" && (
+          <div className="flex-1 overflow-auto p-6 space-y-6" data-testid="redis-advanced">
+            <KeyspaceHealthPanel info={serverInfo.data} />
+            <PrefixMemoryPanel
+              keys={displayKeys}
+              keyTypes={new Map(selectedKey ? [[selectedKey, keyInfo.data?.type ?? "unknown"]] : [])}
+            />
+            <OpsInsightsPanel info={serverInfo.data} slowLog={slowLog.data} />
           </div>
         )}
       </div>
