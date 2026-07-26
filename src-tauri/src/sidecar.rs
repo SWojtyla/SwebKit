@@ -1,4 +1,4 @@
-use std::process::{Child, Command, Stdio};
+use std::process::Child;
 use std::sync::Mutex;
 use tauri::State;
 

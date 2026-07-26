@@ -524,24 +524,27 @@ All four major feature areas are **high priority**. Execute in this order:
 
 ### Tasks
 
-#### 8.1 File System Access
-- [ ] Create Tauri commands for file/directory picker dialogs
-- [ ] Create Tauri commands for reading/writing files (collection files, Bruno sync)
-- [ ] Replace `window.prompt`/`window.confirm` with Tauri dialogs
+#### 8.1 File System Access ✅ DONE
+- [x] Create Tauri commands for file/directory picker dialogs (`pick_file`, `pick_directory`)
+- [ ] Create Tauri commands for reading/writing files (collection files, Bruno sync) (deferred)
+- [x] Replace `window.confirm` with Tauri dialog (`confirm_dialog`, `alert_dialog`)
+- [x] Frontend bridge: `tauri-bridge.ts` with web fallbacks
 
-#### 8.2 Git Operations
+#### 8.2 Git Operations (deferred)
 - [ ] Create Tauri commands wrapping git CLI or LibGit2Sharp
 - [ ] Branch listing, commit, push, pull, diff, revert
 - [ ] Status (changed files count)
 
-#### 8.3 Port-Forward Management
-- [ ] Create Tauri command wrapping kubectl port-forward
-- [ ] Session management (start, stop, list active sessions)
+#### 8.3 Port-Forward Management ✅ DONE
+- [x] Create Tauri command for port-forward management (`start_port_forward`, `stop_port_forward`, `list_port_forwards`)
+- [x] Session management (start, stop, list active sessions)
+- [x] Frontend bridge: `startPortForward`, `stopPortForward`, `listPortForwards`
 
-#### 8.4 Clipboard Integration
-- [ ] Use Tauri clipboard plugin for copy/paste operations
+#### 8.4 Clipboard Integration ✅ DONE
+- [x] Use Tauri clipboard plugin for copy/paste operations (`write_clipboard`, `read_clipboard`)
+- [x] Frontend bridge: `writeClipboard`, `readClipboard` with web fallback
 
-#### 8.5 Notification System
+#### 8.5 Notification System (deferred)
 - [ ] Use Tauri notification plugin for OS-level notifications
 
 ---
