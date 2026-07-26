@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useProfile,
   useRedisServerInfo,
@@ -15,7 +16,7 @@ import {
   useRedisSetTtl,
   useRedisSetValue,
 } from "@/lib/hooks";
-import { Copy, Pencil, Check, X, Clock, Trash2 } from "lucide-react";
+import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw } from "lucide-react";
 
 const typeColors: Record<string, string> = {
   string: "text-green-400",
@@ -55,7 +56,9 @@ export function RedisPage() {
   const { data: profile } = useProfile();
   const redisConfig = profile?.config?.redisConfig;
   const caches = redisConfig?.caches ?? [];
-  const activeCacheId = redisConfig?.activeCacheId ?? caches[0]?.id ?? null;
+  const [activeCacheId, setActiveCacheId] = useState<string | null>(null);
+  const resolvedCacheId = activeCacheId ?? caches[0]?.id ?? null;
+  const queryClient = useQueryClient();
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [pattern, setPattern] = useState("*");
@@ -72,19 +75,33 @@ export function RedisPage() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [batchMode, setBatchMode] = useState(false);
   const [namespaceFilter, setNamespaceFilter] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(10);
 
-  const serverInfo = useRedisServerInfo(activeCacheId);
-  const scanResult = useRedisScanKeys(activeCacheId, pattern, cursor, 100);
-  const keyInfo = useRedisKeyInfo(activeCacheId, selectedKey);
-  const keyValue = useRedisKeyValue(activeCacheId, selectedKey, keyInfo.data?.type ?? null);
-  const hashFields = useRedisHashFields(activeCacheId, selectedKey, keyInfo.data?.type ?? null);
-  const listItems = useRedisListItems(activeCacheId, selectedKey, keyInfo.data?.type ?? null);
-  const setMembers = useRedisSetMembers(activeCacheId, selectedKey, keyInfo.data?.type ?? null);
-  const sortedSetMembers = useRedisSortedSetMembers(activeCacheId, selectedKey, keyInfo.data?.type ?? null);
-  const deleteKey = useRedisDeleteKey(activeCacheId);
-  const renameKey = useRedisRenameKey(activeCacheId);
-  const setTtl = useRedisSetTtl(activeCacheId);
-  const setValue = useRedisSetValue(activeCacheId);
+  const serverInfo = useRedisServerInfo(resolvedCacheId);
+  const scanResult = useRedisScanKeys(resolvedCacheId, pattern, cursor, 100);
+  const keyInfo = useRedisKeyInfo(resolvedCacheId, selectedKey);
+  const keyValue = useRedisKeyValue(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
+  const hashFields = useRedisHashFields(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
+  const listItems = useRedisListItems(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
+  const setMembers = useRedisSetMembers(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
+  const sortedSetMembers = useRedisSortedSetMembers(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
+  const deleteKey = useRedisDeleteKey(resolvedCacheId);
+  const renameKey = useRedisRenameKey(resolvedCacheId);
+  const setTtl = useRedisSetTtl(resolvedCacheId);
+  const setValue = useRedisSetValue(resolvedCacheId);
+
+  const handleManualRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["redis"] });
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (!autoRefresh || !resolvedCacheId) return;
+    const id = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ["redis"] });
+    }, refreshInterval * 1000);
+    return () => clearInterval(id);
+  }, [autoRefresh, refreshInterval, resolvedCacheId, queryClient]);
 
   const handleSearch = () => {
     setPattern(searchInput);
@@ -198,7 +215,7 @@ export function RedisPage() {
     ? displayKeys.filter((k) => k.startsWith(namespaceFilter + ":") || k === namespaceFilter)
     : displayKeys;
 
-  if (!activeCacheId) {
+  if (!resolvedCacheId) {
     return (
       <div className="p-6" data-testid="redis-page">
         <h1 className="text-2xl font-bold" data-testid="redis-title">Redis</h1>
@@ -211,22 +228,64 @@ export function RedisPage() {
 
   return (
     <div className="flex h-full flex-col" data-testid="redis-page">
-      <div className="border-b px-6 py-3">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold" data-testid="redis-title">Redis</h1>
-          {caches.length > 1 && (
+      {/* Connection bar */}
+      <div className="flex items-center gap-3 border-b px-6 py-2">
+        <h1 className="text-lg font-bold" data-testid="redis-title">Redis</h1>
+        {caches.length > 0 && (
+          <select
+            data-testid="redis-cache-select"
+            className="rounded-md border bg-card px-3 py-1.5 text-sm"
+            value={resolvedCacheId}
+            onChange={(e) => {
+              setActiveCacheId(e.target.value);
+              setCursor(0);
+              setAllKeys([]);
+              setSelectedKey(null);
+            }}
+          >
+            {caches.map((c) => (
+              <option key={c.id} value={c.id}>{c.displayName}</option>
+            ))}
+          </select>
+        )}
+        {serverInfo.data && (
+          <span className="flex items-center gap-1.5 text-xs text-green-500" data-testid="redis-connection-status">
+            <span className="h-2 w-2 rounded-full bg-green-500" />
+            Connected
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs" data-testid="redis-auto-refresh">
+            <Clock className="h-3.5 w-3.5" />
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+              data-testid="redis-auto-refresh-checkbox"
+            />
+            <span>Auto</span>
+          </label>
+          {autoRefresh && (
             <select
-              data-testid="redis-cache-select"
-              className="rounded-md border bg-card px-3 py-1.5 text-sm"
-              value={activeCacheId}
-              onChange={() => {}}
-              disabled
+              value={refreshInterval}
+              onChange={(e) => setRefreshInterval(Number(e.target.value))}
+              className="rounded-md border bg-card px-2 py-1 text-xs"
+              data-testid="redis-refresh-interval"
             >
-              {caches.map((c) => (
-                <option key={c.id} value={c.id}>{c.displayName}</option>
-              ))}
+              <option value={5}>5s</option>
+              <option value={10}>10s</option>
+              <option value={30}>30s</option>
+              <option value={60}>60s</option>
             </select>
           )}
+          <button
+            onClick={handleManualRefresh}
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+            data-testid="redis-refresh-btn"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
+          </button>
         </div>
       </div>
 
@@ -654,7 +713,7 @@ export function RedisPage() {
 
         {activeTab === "slowlog" && (
           <div className="flex-1 overflow-auto p-6" data-testid="redis-slowlog">
-            <SlowLogTab cacheId={activeCacheId} />
+            <SlowLogTab cacheId={resolvedCacheId} />
           </div>
         )}
       </div>

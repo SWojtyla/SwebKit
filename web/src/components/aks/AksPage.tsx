@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useAksNamespaces,
   useAksTestConnection,
@@ -19,6 +20,7 @@ import { PodDetailPanel } from "./PodDetailPanel";
 import { YamlViewer } from "./YamlViewer";
 import { HelmDetailPanel } from "./HelmDetailPanel";
 import type { PodInfo } from "@/lib/types";
+import { RefreshCw, Clock } from "lucide-react";
 
 const tabs = [
   { id: "deployments", label: "Deployments" },
@@ -40,11 +42,26 @@ type TabId = (typeof tabs)[number]["id"];
 export function AksPage() {
   const [activeTab, setActiveTab] = useState<TabId>("deployments");
   const [namespace, setNamespace] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(10);
   const { data: namespaces, isLoading: nsLoading } = useAksNamespaces();
   const { data: testResult } = useAksTestConnection();
   const [selectedPod, setSelectedPod] = useState<PodInfo | null>(null);
   const [yamlResource, setYamlResource] = useState<{ kind: string; name: string } | null>(null);
   const [helmRelease, setHelmRelease] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const handleManualRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["aks-"] });
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (!autoRefresh || !namespace) return;
+    const id = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ["aks-"] });
+    }, refreshInterval * 1000);
+    return () => clearInterval(id);
+  }, [autoRefresh, refreshInterval, namespace, queryClient]);
 
   return (
     <div className="flex h-full flex-col" data-testid="aks-page">
@@ -67,8 +84,46 @@ export function AksPage() {
         {nsLoading && (
           <span className="text-xs text-muted-foreground">Loading...</span>
         )}
+
+        {/* Auto-refresh controls */}
+        <div className="ml-auto flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs" data-testid="aks-auto-refresh">
+            <Clock className="h-3.5 w-3.5" />
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+              disabled={!namespace}
+              data-testid="aks-auto-refresh-checkbox"
+            />
+            <span>Auto</span>
+          </label>
+          {autoRefresh && (
+            <select
+              value={refreshInterval}
+              onChange={(e) => setRefreshInterval(Number(e.target.value))}
+              className="rounded-md border bg-card px-2 py-1 text-xs"
+              data-testid="aks-refresh-interval"
+            >
+              <option value={5}>5s</option>
+              <option value={10}>10s</option>
+              <option value={30}>30s</option>
+              <option value={60}>60s</option>
+            </select>
+          )}
+          <button
+            onClick={handleManualRefresh}
+            disabled={!namespace}
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+            data-testid="aks-refresh-btn"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
+          </button>
+        </div>
+
         {testResult && (
-          <span className={`ml-auto flex items-center gap-1.5 text-xs ${testResult.connected ? "text-green-500" : "text-destructive"}`} data-testid="aks-connection-status">
+          <span className={`flex items-center gap-1.5 text-xs ${testResult.connected ? "text-green-500" : "text-destructive"}`} data-testid="aks-connection-status">
             <span className={`h-2 w-2 rounded-full ${testResult.connected ? "bg-green-500" : "bg-destructive"}`} />
             {testResult.connected ? "Connected" : "Disconnected"}
             {testResult.error && ` — ${testResult.error}`}

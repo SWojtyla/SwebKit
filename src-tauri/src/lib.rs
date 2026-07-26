@@ -1,6 +1,6 @@
 mod sidecar;
 
-use sidecar::{get_sidecar_port, manage, restart_sidecar, SidecarState};
+use sidecar::{get_sidecar_port, manage, restart_sidecar};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

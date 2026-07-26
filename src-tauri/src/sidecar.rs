@@ -2,7 +2,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::State;
 
-struct SidecarState {
+pub struct SidecarState {
     child: Mutex<Option<Child>>,
     port: Mutex<u16>,
 }

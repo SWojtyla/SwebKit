@@ -312,11 +312,12 @@ All four major feature areas are **high priority**. Execute in this order:
 - [ ] Create `NamespaceQuotaPanel.tsx` — resource quota usage
 - [ ] Create `PodDisruptionBudgetPanel.tsx` — PDB details
 
-#### 3.8 Auto-Refresh & UX
-- [ ] Create `AutoRefreshToggle.tsx` — toggle with interval selector
-- [ ] Add auto-refresh to all resource grids (polling with React Query refetchInterval)
-- [ ] Create `AksConfirmBar.tsx` — confirmation bar for destructive actions
-- [ ] Add keyboard shortcuts (e.g., 'l' for logs, 'y' for YAML, 'r' for refresh)
+#### 3.8 Auto-Refresh & UX ✅ DONE
+- [x] Auto-refresh toggle with interval selector (5s/10s/30s/60s) in AKS header
+- [x] Auto-refresh polls all resource grids via React Query invalidation
+- [x] Manual refresh button in AKS header
+- [ ] Create `AksConfirmBar.tsx` — confirmation bar for destructive actions (deferred)
+- [ ] Add keyboard shortcuts (e.g., 'l' for logs, 'y' for YAML, 'r' for refresh) (deferred)
 
 ---
 
@@ -368,10 +369,11 @@ All four major feature areas are **high priority**. Execute in this order:
 - [ ] Improve `SlowLogPanel` — show full command, client, duration with sorting
 - [ ] Create `OpsInsightsPanel.tsx` — operational insights summary
 
-#### 4.5 Connection Bar & Auto-Refresh
-- [ ] Create `ConnectionBar.tsx` — connection status indicator
-- [ ] Add `AutoRefreshToggle.tsx` — auto-refresh with interval
-- [ ] Add cache selector dropdown (for multi-cache configs)
+#### 4.5 Connection Bar & Auto-Refresh ✅ DONE
+- [x] Connection status indicator in Redis header
+- [x] Auto-refresh toggle with interval selector (5s/10s/30s/60s)
+- [x] Cache selector dropdown (for multi-cache configs)
+- [x] Manual refresh button
 
 #### 4.6 Sidecar Endpoints
 - [ ] `POST /api/redis/{cacheId}/keys/{key}/rename` — rename key

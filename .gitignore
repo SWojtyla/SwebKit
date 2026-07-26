@@ -45,3 +45,7 @@ src/SwebKit.App/AppPackages/
 # TypeScript
 *.tsbuildinfo
 
+# Tauri / Rust
+src-tauri/target/
+app-icon.png
+
