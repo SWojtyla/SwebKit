@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Save, Send, Wand2, Minimize2 } from "lucide-react";
 import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig } from "@/lib/types";
+import { GraphQlPanel } from "./GraphQlPanel";
+import { WebSocketPanel } from "./WebSocketPanel";
 
 interface RequestEditorProps {
   request: HttpRequestEntry;
@@ -11,7 +13,7 @@ interface RequestEditorProps {
 }
 
 const methods: ApiRequestMethod[] = [
-  "Get", "Post", "Put", "Patch", "Delete", "Head", "Options",
+  "Get", "Post", "Put", "Patch", "Delete", "Head", "Options", "GraphQl", "WebSocket",
 ];
 
 const bodyModes: RequestBodyMode[] = ["None", "Json", "Xml", "Text", "FormData"];
@@ -33,9 +35,11 @@ const methodColors: Record<string, string> = {
   Delete: "text-red-500",
   Head: "text-purple-500",
   Options: "text-gray-500",
+  GraphQl: "text-pink-500",
+  WebSocket: "text-cyan-500",
 };
 
-type Tab = "params" | "headers" | "body" | "auth";
+type Tab = "params" | "headers" | "body" | "auth" | "graphql" | "websocket";
 
 function updateHeaders(
   request: HttpRequestEntry,
@@ -196,24 +200,31 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
 
       {/* Tabs */}
       <div className="flex border-b">
-        {(["params", "headers", "body", "auth"] as Tab[]).map((tab) => (
-          <button
-            key={tab}
-            data-testid={`request-tab-${tab}`}
-            className={`px-4 py-2 text-sm font-medium capitalize ${
-              activeTab === tab ? "border-b-2 border-primary text-foreground" : "text-muted-foreground"
-            }`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab === "params" ? "Params" : tab === "headers" ? "Headers" : tab === "body" ? "Body" : "Auth"}
-            {tab === "params" && request.queryParams.length > 0 && (
-              <span className="ml-1 text-xs text-muted-foreground">({request.queryParams.length})</span>
-            )}
-            {tab === "headers" && request.headers.length > 0 && (
-              <span className="ml-1 text-xs text-muted-foreground">({request.headers.length})</span>
-            )}
-          </button>
-        ))}
+        {(() => {
+          const tabs: Tab[] = request.method === "GraphQl"
+            ? ["params", "headers", "graphql", "auth"]
+            : request.method === "WebSocket"
+            ? ["params", "headers", "websocket", "auth"]
+            : ["params", "headers", "body", "auth"];
+          return tabs.map((tab) => (
+            <button
+              key={tab}
+              data-testid={`request-tab-${tab}`}
+              className={`px-4 py-2 text-sm font-medium capitalize ${
+                activeTab === tab ? "border-b-2 border-primary text-foreground" : "text-muted-foreground"
+              }`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab === "params" ? "Params" : tab === "headers" ? "Headers" : tab === "body" ? "Body" : tab === "auth" ? "Auth" : tab === "graphql" ? "GraphQL" : "WebSocket"}
+              {tab === "params" && request.queryParams.length > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground">({request.queryParams.length})</span>
+              )}
+              {tab === "headers" && request.headers.length > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground">({request.headers.length})</span>
+              )}
+            </button>
+          ));
+        })()}
       </div>
 
       {/* Tab content */}
@@ -485,6 +496,16 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
               </div>
             )}
           </div>
+        )}
+
+        {/* GraphQL tab */}
+        {activeTab === "graphql" && (
+          <GraphQlPanel request={request} onChange={onChange} />
+        )}
+
+        {/* WebSocket tab */}
+        {activeTab === "websocket" && (
+          <WebSocketPanel request={request} onChange={onChange} />
         )}
       </div>
     </div>

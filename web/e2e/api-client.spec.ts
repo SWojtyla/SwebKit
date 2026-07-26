@@ -371,4 +371,67 @@ test.describe("API Client", () => {
     await expect(tabItems).toHaveCount(0);
     await expect(page.getByTestId("api-client-empty-editor")).toBeVisible();
   });
+
+  test("GraphQL panel shows query and variables editors", async ({ page }) => {
+    // Create a collection and request
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("GraphQL Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("GraphQL Request");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    // Switch method to GraphQL
+    await page.getByTestId("request-method-select").selectOption("GraphQl");
+
+    // Should see GraphQL tab instead of Body
+    await expect(page.getByTestId("request-tab-graphql")).toBeVisible();
+    await expect(page.getByTestId("request-tab-body")).not.toBeVisible();
+
+    // Click GraphQL tab
+    await page.getByTestId("request-tab-graphql").click();
+    await expect(page.getByTestId("graphql-panel")).toBeVisible();
+
+    // Type a query
+    await page.getByTestId("graphql-query-input").fill("query { hello }");
+    await expect(page.getByTestId("graphql-query-input")).toHaveValue("query { hello }");
+
+    // Type variables
+    await page.getByTestId("graphql-variables-input").fill('{\n  "key": "value"\n}');
+    await expect(page.getByTestId("graphql-variables-input")).toHaveValue('{\n  "key": "value"\n}');
+  });
+
+  test("WebSocket panel shows connection controls and message log", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("WebSocket Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("WebSocket Request");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    // Switch method to WebSocket
+    await page.getByTestId("request-method-select").selectOption("WebSocket");
+
+    // Should see WebSocket tab instead of Body
+    await expect(page.getByTestId("request-tab-websocket")).toBeVisible();
+    await expect(page.getByTestId("request-tab-body")).not.toBeVisible();
+
+    // Click WebSocket tab
+    await page.getByTestId("request-tab-websocket").click();
+    await expect(page.getByTestId("websocket-panel")).toBeVisible();
+
+    // Should see connect button and status
+    await expect(page.getByTestId("ws-connect-button")).toBeVisible();
+    await expect(page.getByTestId("ws-status")).toContainText("Disconnected");
+
+    // Should see message log area
+    await expect(page.getByTestId("ws-messages")).toBeVisible();
+
+    // Should see saved messages section
+    await expect(page.getByTestId("ws-add-saved")).toBeVisible();
+  });
 });

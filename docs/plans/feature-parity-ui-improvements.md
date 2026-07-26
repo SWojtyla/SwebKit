@@ -203,12 +203,14 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Auto-open tab when creating new request
 - [ ] Add setting toggle for tab mode vs single mode — deferred (multi-tab is default)
 
-#### 2.7 GraphQL & WebSocket Support
-- [ ] Create `GraphQlPanel.tsx` — query editor, variables editor, operation selector
-- [ ] Add GraphQL mode to request editor (when method is GraphQL)
-- [ ] Add GraphQL subscription support (WebSocket-based)
-- [ ] Create `WebSocketPanel.tsx` — WebSocket connection, send/receive messages
-- [ ] Add WebSocket mode to request editor
+#### 2.7 GraphQL & WebSocket Support ✅ DONE
+- [x] Create `GraphQlPanel.tsx` — query editor, variables editor, operation selector
+- [x] Add GraphQL mode to request editor (when method is GraphQL, shows GraphQL tab instead of Body)
+- [x] Backend already supports GraphQL execution (query, variables, operation selection, error parsing)
+- [x] Create `WebSocketPanel.tsx` — WebSocket connection, send/receive messages, saved messages
+- [x] Add WebSocket mode to request editor (when method is WebSocket, shows WebSocket tab instead of Body)
+- [x] Add GraphQl and WebSocket to method picker with color-coded badges
+- [ ] GraphQL subscription support (WebSocket-based) — backend exists (GraphQlSubscriptionService), frontend deferred
 
 #### 2.8 Collection Export
 - [ ] Create `CollectionExportDialog.tsx` — export to Bruno/Postman format
