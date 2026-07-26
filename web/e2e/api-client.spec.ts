@@ -242,4 +242,74 @@ test.describe("API Client", () => {
     await expect(page.getByTestId("response-curl-panel")).toBeVisible();
     await expect(page.getByTestId("response-curl-panel")).toContainText("curl");
   });
+
+  test("environment manager creates and edits environments", async ({ page }) => {
+    // Open environment manager
+    await page.getByTestId("env-manager-button").click();
+    await expect(page.getByTestId("env-manager")).toBeVisible();
+
+    // Add a new environment
+    await page.getByTestId("env-add-button").click();
+    await expect(page.getByTestId("env-editor")).toBeVisible();
+
+    // Edit name
+    await page.getByTestId("env-name-input").fill("Test Environment");
+
+    // Add a variable
+    await page.getByTestId("env-add-variable").click();
+    await page.getByTestId("env-var-key-0").fill("baseUrl");
+    await page.getByTestId("env-var-value-0").fill("http://localhost:5198");
+
+    // Save
+    await page.getByTestId("env-save-all").click();
+
+    // Environment selector should show the new environment
+    const envSelector = page.getByTestId("env-selector");
+    await expect(envSelector).toContainText("Test Environment");
+  });
+
+  test("environment selector dropdown shows environments", async ({ page }) => {
+    // Open env manager and create an environment
+    await page.getByTestId("env-manager-button").click();
+    await page.getByTestId("env-add-button").click();
+    await page.getByTestId("env-name-input").fill("Selector Test Env");
+    await page.getByTestId("env-save-all").click();
+
+    // Selector should contain it
+    const envSelector = page.getByTestId("env-selector");
+    await expect(envSelector).toContainText("Selector Test Env");
+
+    // Select it
+    await envSelector.selectOption({ label: "Selector Test Env" });
+
+    // Active env name should show
+    await expect(page.getByTestId("active-env-name")).toContainText("Selector Test Env");
+  });
+
+  test("collection variables editor works", async ({ page }) => {
+    // Create a collection
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Col Var Test Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    // Select it
+    await page.getByTestId(/collection-root-/).filter({ hasText: "Col Var Test Collection" }).first().click();
+
+    // Open collection variables editor
+    await page.getByTestId("col-vars-button").click();
+    await expect(page.getByTestId("col-var-editor")).toBeVisible();
+
+    // Add a variable
+    await page.getByTestId("col-var-add").click();
+    await page.getByTestId("col-var-key-0").fill("apiKey");
+    await page.getByTestId("col-var-value-0").fill("test-key-123");
+
+    // Save
+    await page.getByTestId("col-var-save").click();
+
+    // Reopen to verify
+    await page.getByTestId("col-vars-button").click();
+    await expect(page.getByTestId("col-var-key-0")).toHaveValue("apiKey");
+    await expect(page.getByTestId("col-var-value-0")).toHaveValue("test-key-123");
+  });
 });

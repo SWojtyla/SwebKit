@@ -82,6 +82,18 @@ export function useEnvironments() {
   });
 }
 
+export function useUpdateEnvironments() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (store: {
+      schemaVersion: number;
+      environments: import("./types").ApiEnvironment[];
+      uiState: import("./types").ApiClientUiState;
+    }) => apiSend("/api/config/environments", "PUT", store),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["environments"] }),
+  });
+}
+
 // ── Health ───────────────────────────────────────────────────────────────────
 
 export function useHealth() {

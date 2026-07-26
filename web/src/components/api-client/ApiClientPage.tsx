@@ -1,15 +1,26 @@
-import { useState } from "react";
-import { useCollections, useUpdateCollections, useExecuteRequest } from "@/lib/hooks";
+import { useState, useMemo } from "react";
+import { Globe, Settings2 } from "lucide-react";
+import {
+  useCollections,
+  useUpdateCollections,
+  useExecuteRequest,
+  useEnvironments,
+  useUpdateEnvironments,
+} from "@/lib/hooks";
 import { CollectionTree } from "./CollectionTree";
 import { RequestEditor } from "./RequestEditor";
 import { ResponseViewer } from "./ResponseViewer";
 import { NameDialog, ConfirmDialog } from "./Dialogs";
+import { EnvironmentManager } from "./EnvironmentManager";
+import { CollectionVariableEditor } from "./CollectionVariableEditor";
 import type {
   ApiCollection,
   ApiCollectionNode,
   HttpRequestEntry,
   ApiClientExecutionResponse,
   ApiRequestMethod,
+  ApiEnvironment,
+  CollectionVariable,
 } from "@/lib/types";
 
 function newId() {
@@ -151,12 +162,20 @@ export function ApiClientPage() {
   const { data: collections = [], isLoading } = useCollections();
   const updateCollections = useUpdateCollections();
   const executeRequest = useExecuteRequest();
+  const { data: envData } = useEnvironments();
+  const updateEnvironments = useUpdateEnvironments();
+
+  const environments = envData?.environments ?? [];
+  const uiState = envData?.uiState;
+  const activeEnvironmentId = uiState?.activeEnvironmentId ?? null;
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [draftRequest, setDraftRequest] = useState<HttpRequestEntry | null>(null);
   const [response, setResponse] = useState<ApiClientExecutionResponse | null>(null);
   const [sending, setSending] = useState(false);
+  const [showEnvManager, setShowEnvManager] = useState(false);
+  const [showColVarEditor, setShowColVarEditor] = useState(false);
   const [nameDialog, setNameDialog] = useState<{
     title: string;
     label: string;
@@ -297,6 +316,7 @@ export function ApiClientPage() {
       const result = await executeRequest.mutateAsync({
         request: draftRequest,
         collectionId: selectedCollectionId ?? undefined,
+        environmentId: activeEnvironmentId ?? undefined,
       });
       setResponse(result);
     } catch (err) {
@@ -320,6 +340,45 @@ export function ApiClientPage() {
     }
   };
 
+  const handleSaveEnvironments = (envs: ApiEnvironment[], activeId: string | null) => {
+    updateEnvironments.mutate({
+      schemaVersion: 1,
+      environments: envs,
+      uiState: {
+        activeEnvironmentId: activeId,
+        activeEnvironmentIdByCollection: uiState?.activeEnvironmentIdByCollection ?? {},
+        lastSelectedRequestIdByCollection: uiState?.lastSelectedRequestIdByCollection ?? {},
+      },
+    });
+  };
+
+  const handleSetActiveEnvironment = (envId: string | null) => {
+    updateEnvironments.mutate({
+      schemaVersion: 1,
+      environments,
+      uiState: {
+        activeEnvironmentId: envId,
+        activeEnvironmentIdByCollection: uiState?.activeEnvironmentIdByCollection ?? {},
+        lastSelectedRequestIdByCollection: uiState?.lastSelectedRequestIdByCollection ?? {},
+      },
+    });
+  };
+
+  const handleSaveCollectionVariables = (variables: CollectionVariable[]) => {
+    if (!selectedCollectionId) return;
+    const next = collections.map((c) =>
+      c.id === selectedCollectionId ? { ...c, variables } : c,
+    );
+    updateCollections.mutate(next);
+  };
+
+  const selectedCollection = useMemo(
+    () => collections.find((c) => c.id === selectedCollectionId) ?? null,
+    [collections, selectedCollectionId],
+  );
+
+  const activeEnvironment = environments.find((e) => e.id === activeEnvironmentId) ?? null;
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center" data-testid="api-client-page">
@@ -329,43 +388,83 @@ export function ApiClientPage() {
   }
 
   return (
-    <div className="flex h-full" data-testid="api-client-page">
-      <CollectionTree
-        collections={collections}
-        selectedNodeId={selectedNodeId}
-        selectedCollectionId={selectedCollectionId}
-        onSelectNode={handleSelectNode}
-        onAddCollection={handleAddCollection}
-        onAddRequest={handleAddRequest}
-        onAddFolder={handleAddFolder}
-        onDeleteNode={handleDeleteNode}
-        onRenameNode={handleRenameNode}
-      />
-
-      <div className="flex w-96 flex-col border-r">
-        {draftRequest ? (
-          <RequestEditor
-            request={draftRequest}
-            onChange={setDraftRequest}
-            onSend={handleSend}
-            onSave={handleSave}
-            sending={sending}
-          />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-            <span data-testid="api-client-empty-editor">
-              Select or create a request to start editing.
-            </span>
-          </div>
+    <div className="flex h-full flex-col" data-testid="api-client-page">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 border-b px-3 py-1.5 bg-card">
+        <Globe className="h-4 w-4 text-muted-foreground" />
+        <select
+          data-testid="env-selector"
+          value={activeEnvironmentId ?? ""}
+          onChange={(e) => handleSetActiveEnvironment(e.target.value || null)}
+          className="rounded border bg-background px-2 py-1 text-xs"
+        >
+          <option value="">— No environment —</option>
+          {environments.map((env) => (
+            <option key={env.id} value={env.id}>{env.name}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => setShowEnvManager(true)}
+          className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
+          data-testid="env-manager-button"
+        >
+          <Settings2 className="h-3 w-3" /> Manage
+        </button>
+        {selectedCollection && (
+          <button
+            onClick={() => setShowColVarEditor(true)}
+            className="rounded border px-2 py-1 text-xs hover:bg-accent"
+            data-testid="col-vars-button"
+          >
+            Collection Variables
+          </button>
+        )}
+        {activeEnvironment && (
+          <span className="text-xs text-muted-foreground" data-testid="active-env-name">
+            {activeEnvironment.name} ({activeEnvironment.variables.filter((v) => v.isEnabled).length} vars)
+          </span>
         )}
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <ResponseViewer
-          response={response}
-          sending={sending}
-          request={draftRequest ? { method: draftRequest.method, url: draftRequest.url } : null}
+      {/* Main 3-pane layout */}
+      <div className="flex flex-1 overflow-hidden">
+        <CollectionTree
+          collections={collections}
+          selectedNodeId={selectedNodeId}
+          selectedCollectionId={selectedCollectionId}
+          onSelectNode={handleSelectNode}
+          onAddCollection={handleAddCollection}
+          onAddRequest={handleAddRequest}
+          onAddFolder={handleAddFolder}
+          onDeleteNode={handleDeleteNode}
+          onRenameNode={handleRenameNode}
         />
+
+        <div className="flex w-96 flex-col border-r">
+          {draftRequest ? (
+            <RequestEditor
+              request={draftRequest}
+              onChange={setDraftRequest}
+              onSend={handleSend}
+              onSave={handleSave}
+              sending={sending}
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+              <span data-testid="api-client-empty-editor">
+                Select or create a request to start editing.
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-hidden">
+          <ResponseViewer
+            response={response}
+            sending={sending}
+            request={draftRequest ? { method: draftRequest.method, url: draftRequest.url } : null}
+          />
+        </div>
       </div>
 
       {/* Dialogs */}
@@ -384,6 +483,22 @@ export function ApiClientPage() {
           message={confirmDialog.message}
           onConfirm={confirmDialog.onConfirm}
           onCancel={() => setConfirmDialog(null)}
+        />
+      )}
+      {showEnvManager && (
+        <EnvironmentManager
+          environments={environments}
+          collections={collections}
+          activeEnvironmentId={activeEnvironmentId}
+          onSave={handleSaveEnvironments}
+          onClose={() => setShowEnvManager(false)}
+        />
+      )}
+      {showColVarEditor && selectedCollection && (
+        <CollectionVariableEditor
+          collection={selectedCollection}
+          onSave={handleSaveCollectionVariables}
+          onClose={() => setShowColVarEditor(false)}
         />
       )}
     </div>

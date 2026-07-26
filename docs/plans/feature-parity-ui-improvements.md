@@ -174,14 +174,16 @@ All four major feature areas are **high priority**. Execute in this order:
 - [ ] Add GraphQL errors display — deferred (needs GraphQL support first)
 - [ ] Add subscription messages panel — deferred (needs WebSocket support first)
 
-#### 2.4 Environment & Variable Management
-- [ ] Create `EnvironmentManager.tsx` — manage environments (create, edit, delete, duplicate)
-- [ ] Create `EnvironmentEditor.tsx` — key-value editor for environment variables
-- [ ] Add environment selector dropdown to API Client toolbar
-- [ ] Create `CollectionVariableEditor.tsx` — collection-level variables
-- [ ] Add variable substitution preview in request editor
-- [ ] Add sidecar endpoints: `GET/POST/PUT/DELETE /api/api-client/environments`
-- [ ] Add sidecar endpoints: `GET/PUT /api/api-client/collections/{id}/variables`
+#### 2.4 Environment & Variable Management ✅ DONE
+- [x] Create `EnvironmentManager.tsx` — manage environments (create, edit, delete)
+- [x] Create `EnvironmentEditor.tsx` — inline key-value editor for environment variables (integrated in EnvironmentManager)
+- [x] Add environment selector dropdown to API Client toolbar
+- [x] Create `CollectionVariableEditor.tsx` — collection-level variables
+- [ ] Add variable substitution preview in request editor — deferred (needs variable resolution engine)
+- [x] Add sidecar endpoints: `GET/PUT /api/config/environments` (already existed, full store replace)
+- [x] Collection variables saved via existing `PUT /api/config/collections` endpoint
+- [x] Pass `environmentId` to execute request endpoint
+- [x] Add `useUpdateEnvironments` hook
 
 #### 2.5 Git Integration (Tauri Native Bridge)
 - [ ] Create Tauri command for filesystem access (read/write collection files)
