@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   useProfile,
   useRedisServerInfo,
@@ -11,7 +11,11 @@ import {
   useRedisSortedSetMembers,
   useRedisSlowLog,
   useRedisDeleteKey,
+  useRedisRenameKey,
+  useRedisSetTtl,
+  useRedisSetValue,
 } from "@/lib/hooks";
+import { Copy, Pencil, Check, X, Clock, Trash2 } from "lucide-react";
 
 const typeColors: Record<string, string> = {
   string: "text-green-400",
@@ -59,6 +63,15 @@ export function RedisPage() {
   const [cursor, setCursor] = useState(0);
   const [allKeys, setAllKeys] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<"keys" | "info" | "slowlog">("keys");
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [editingValue, setEditingValue] = useState(false);
+  const [stringValue, setStringValue] = useState("");
+  const [showTtlEditor, setShowTtlEditor] = useState(false);
+  const [ttlSeconds, setTtlSeconds] = useState(0);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [batchMode, setBatchMode] = useState(false);
+  const [namespaceFilter, setNamespaceFilter] = useState<string | null>(null);
 
   const serverInfo = useRedisServerInfo(activeCacheId);
   const scanResult = useRedisScanKeys(activeCacheId, pattern, cursor, 100);
@@ -69,6 +82,9 @@ export function RedisPage() {
   const setMembers = useRedisSetMembers(activeCacheId, selectedKey, keyInfo.data?.type ?? null);
   const sortedSetMembers = useRedisSortedSetMembers(activeCacheId, selectedKey, keyInfo.data?.type ?? null);
   const deleteKey = useRedisDeleteKey(activeCacheId);
+  const renameKey = useRedisRenameKey(activeCacheId);
+  const setTtl = useRedisSetTtl(activeCacheId);
+  const setValue = useRedisSetValue(activeCacheId);
 
   const handleSearch = () => {
     setPattern(searchInput);
@@ -95,6 +111,92 @@ export function RedisPage() {
       },
     });
   };
+
+  const handleRenameKey = (oldKey: string) => {
+    if (!renameValue.trim() || renameValue === oldKey) {
+      setRenaming(false);
+      return;
+    }
+    renameKey.mutate({ key: oldKey, newKey: renameValue.trim() }, {
+      onSuccess: () => {
+        setSelectedKey(renameValue.trim());
+        setRenaming(false);
+        setCursor(0);
+        setAllKeys([]);
+      },
+    });
+  };
+
+  const handleCopyKey = (key: string) => {
+    navigator.clipboard.writeText(key);
+  };
+
+  const handleSetTtl = (key: string) => {
+    setTtl.mutate({ key, ttlSeconds }, {
+      onSuccess: () => setShowTtlEditor(false),
+    });
+  };
+
+  const handleRemoveTtl = (key: string) => {
+    setTtl.mutate({ key, removeTtl: true }, {
+      onSuccess: () => setShowTtlEditor(false),
+    });
+  };
+
+  const handleSaveStringValue = (key: string) => {
+    setValue.mutate({ key, value: stringValue }, {
+      onSuccess: () => setEditingValue(false),
+    });
+  };
+
+  const handleBatchDelete = () => {
+    selectedKeys.forEach((key) => deleteKey.mutate(key));
+    setSelectedKeys(new Set());
+    setBatchMode(false);
+    setCursor(0);
+    setAllKeys([]);
+  };
+
+  const handleExportSelected = () => {
+    const exportData: Record<string, { type: string; ttl: string | null }> = {};
+    selectedKeys.forEach((key) => {
+      exportData[key] = { type: keyInfo.data?.type ?? "unknown", ttl: keyInfo.data?.ttl ?? null };
+    });
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "redis-keys-export.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const toggleKeySelection = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Build namespace tree from displayed keys
+  const namespaceTree = useMemo(() => {
+    const tree: Record<string, string[]> = {};
+    for (const key of displayKeys) {
+      const parts = key.split(":");
+      if (parts.length > 1) {
+        const ns = parts[0];
+        if (!tree[ns]) tree[ns] = [];
+        tree[ns].push(key);
+      }
+    }
+    return tree;
+  }, [displayKeys]);
+
+  const filteredKeys = namespaceFilter
+    ? displayKeys.filter((k) => k.startsWith(namespaceFilter + ":") || k === namespaceFilter)
+    : displayKeys;
 
   if (!activeCacheId) {
     return (
@@ -168,7 +270,49 @@ export function RedisPage() {
                     Search
                   </button>
                 </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={() => { setBatchMode(!batchMode); setSelectedKeys(new Set()); }}
+                    className={`rounded border px-2 py-1 text-xs ${batchMode ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                    data-testid="redis-batch-toggle"
+                  >
+                    {batchMode ? "Exit Batch" : "Batch Select"}
+                  </button>
+                  {batchMode && selectedKeys.size > 0 && (
+                    <>
+                      <span className="text-xs text-muted-foreground" data-testid="redis-batch-count">{selectedKeys.size} selected</span>
+                      <button onClick={handleExportSelected} className="rounded border px-2 py-1 text-xs hover:bg-accent" data-testid="redis-batch-export">Export JSON</button>
+                      <button onClick={() => { if (confirm(`Delete ${selectedKeys.size} keys?`)) handleBatchDelete(); }} className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10" data-testid="redis-batch-delete">Delete</button>
+                      <button onClick={() => setSelectedKeys(new Set())} className="text-xs text-muted-foreground" data-testid="redis-batch-clear">Clear</button>
+                    </>
+                  )}
+                </div>
               </div>
+
+              {/* Namespace tree */}
+              {Object.keys(namespaceTree).length > 0 && (
+                <div className="border-b p-2" data-testid="redis-namespace-tree">
+                  <div className="mb-1 text-xs font-medium text-muted-foreground">Namespaces</div>
+                  <div className="flex flex-wrap gap-1">
+                    <button
+                      onClick={() => setNamespaceFilter(null)}
+                      className={`rounded px-2 py-0.5 text-xs ${!namespaceFilter ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                    >
+                      All
+                    </button>
+                    {Object.entries(namespaceTree).map(([ns, keys]) => (
+                      <button
+                        key={ns}
+                        onClick={() => setNamespaceFilter(namespaceFilter === ns ? null : ns)}
+                        className={`rounded px-2 py-0.5 text-xs font-mono ${namespaceFilter === ns ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                        data-testid={`redis-namespace-${ns}`}
+                      >
+                        {ns} ({keys.length})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex-1 overflow-auto">
                 {scanResult.isLoading && (
@@ -182,17 +326,27 @@ export function RedisPage() {
                 {displayKeys.length === 0 && !scanResult.isLoading && (
                   <div className="p-3 text-sm text-muted-foreground">No keys found</div>
                 )}
-                {displayKeys.map((key) => (
-                  <button
+                {filteredKeys.map((key) => (
+                  <div
                     key={key}
                     data-testid={`redis-key-${key}`}
-                    onClick={() => setSelectedKey(key)}
-                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
-                      selectedKey === key ? "bg-accent" : ""
+                    onClick={() => batchMode ? toggleKeySelection(key) : setSelectedKey(key)}
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent cursor-pointer ${
+                      batchMode ? selectedKeys.has(key) ? "bg-primary/20" : "" : selectedKey === key ? "bg-accent" : ""
                     }`}
                   >
+                    {batchMode && (
+                      <input
+                        type="checkbox"
+                        checked={selectedKeys.has(key)}
+                        onChange={() => toggleKeySelection(key)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-3.5 w-3.5"
+                        data-testid={`redis-key-checkbox-${key}`}
+                      />
+                    )}
                     <span className="truncate font-mono">{key}</span>
-                  </button>
+                  </div>
                 ))}
                 {scanResult.data && !scanResult.data.isComplete && (
                   <button
@@ -218,10 +372,38 @@ export function RedisPage() {
               ) : keyInfo.data ? (
                 <div className="p-6 space-y-4">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-lg font-mono font-semibold" data-testid="redis-detail-key-name">
-                        {keyInfo.data.key}
-                      </div>
+                    <div className="flex-1 min-w-0">
+                      {renaming ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleRenameKey(keyInfo.data.key)}
+                            className="rounded border bg-card px-2 py-1 text-sm font-mono flex-1"
+                            autoFocus
+                            data-testid="redis-rename-input"
+                          />
+                          <button onClick={() => handleRenameKey(keyInfo.data.key)} className="rounded bg-primary p-1 text-primary-foreground" data-testid="redis-rename-confirm">
+                            <Check className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => setRenaming(false)} className="rounded border p-1" data-testid="redis-rename-cancel">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="text-lg font-mono font-semibold truncate" data-testid="redis-detail-key-name">
+                            {keyInfo.data.key}
+                          </div>
+                          <button onClick={() => handleCopyKey(keyInfo.data.key)} className="text-muted-foreground hover:text-foreground" data-testid="redis-copy-key-btn" title="Copy key name">
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => { setRenaming(true); setRenameValue(keyInfo.data.key); }} className="text-muted-foreground hover:text-foreground" data-testid="redis-rename-btn" title="Rename key">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
                       <div className="mt-1 flex items-center gap-3 text-sm">
                         <span className={`font-medium ${typeColors[keyInfo.data.type] ?? ""}`} data-testid="redis-detail-key-type">
                           {keyInfo.data.type}
@@ -236,25 +418,76 @@ export function RedisPage() {
                           <span className="text-muted-foreground">enc: {keyInfo.data.encoding}</span>
                         )}
                       </div>
+                      {/* TTL bar */}
+                      {keyInfo.data.ttl && keyInfo.data.type !== "none" && (
+                        <TtlBar ttl={keyInfo.data.ttl} />
+                      )}
+                      {/* TTL controls */}
+                      {showTtlEditor ? (
+                        <div className="mt-2 flex items-center gap-2" data-testid="redis-ttl-editor">
+                          <input
+                            type="number"
+                            value={ttlSeconds}
+                            onChange={(e) => setTtlSeconds(parseInt(e.target.value) || 0)}
+                            placeholder="seconds"
+                            className="w-24 rounded border bg-card px-2 py-1 text-xs"
+                            autoFocus
+                          />
+                          <button onClick={() => handleSetTtl(keyInfo.data.key)} className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground" data-testid="redis-ttl-set-btn">Set TTL</button>
+                          <button onClick={() => handleRemoveTtl(keyInfo.data.key)} className="rounded border px-2 py-1 text-xs" data-testid="redis-ttl-remove-btn">Remove TTL</button>
+                          <button onClick={() => setShowTtlEditor(false)} className="text-xs text-muted-foreground">Cancel</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setShowTtlEditor(true); setTtlSeconds(3600); }} className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" data-testid="redis-ttl-edit-btn">
+                          <Clock className="h-3 w-3" /> Set TTL
+                        </button>
+                      )}
                     </div>
                     <button
                       data-testid="redis-delete-key-btn"
                       onClick={() => handleDeleteKey(keyInfo.data.key)}
-                      className="rounded-md border border-destructive px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10"
+                      disabled={deleteKey.isPending}
+                      className="flex items-center gap-1 rounded-md border border-destructive px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10"
                     >
-                      Delete
+                      <Trash2 className="h-3.5 w-3.5" /> Delete
                     </button>
                   </div>
 
                   {keyInfo.data.type === "string" && (
                     <div>
-                      <h3 className="mb-2 text-sm font-semibold">Value</h3>
-                      <pre
-                        className="rounded-md border bg-muted p-4 text-sm font-mono overflow-auto max-h-96"
-                        data-testid="redis-detail-string-value"
-                      >
-                        {keyValue.data?.value ?? "(empty)"}
-                      </pre>
+                      <div className="mb-2 flex items-center justify-between">
+                        <h3 className="text-sm font-semibold">Value</h3>
+                        {editingValue ? (
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => handleSaveStringValue(keyInfo.data.key)} disabled={setValue.isPending} className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground" data-testid="redis-string-save-btn">
+                              Save
+                            </button>
+                            <button onClick={() => setEditingValue(false)} className="rounded border px-2 py-1 text-xs" data-testid="redis-string-cancel-btn">
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => { setEditingValue(true); setStringValue(keyValue.data?.value ?? ""); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" data-testid="redis-string-edit-btn">
+                            <Pencil className="h-3 w-3" /> Edit
+                          </button>
+                        )}
+                      </div>
+                      {editingValue ? (
+                        <textarea
+                          value={stringValue}
+                          onChange={(e) => setStringValue(e.target.value)}
+                          className="w-full rounded-md border bg-card p-4 text-sm font-mono max-h-96 min-h-48"
+                          data-testid="redis-detail-string-edit"
+                          autoFocus
+                        />
+                      ) : (
+                        <pre
+                          className="rounded-md border bg-muted p-4 text-sm font-mono overflow-auto max-h-96"
+                          data-testid="redis-detail-string-value"
+                        >
+                          {keyValue.data?.value ?? "(empty)"}
+                        </pre>
+                      )}
                     </div>
                   )}
 
@@ -424,6 +657,34 @@ export function RedisPage() {
             <SlowLogTab cacheId={activeCacheId} />
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function TtlBar({ ttl }: { ttl: string }) {
+  let totalMs = 0;
+  let hasTtl = false;
+  try {
+    const ts = JSON.parse(ttl);
+    if (ts.Ticks !== undefined) {
+      totalMs = ts.Ticks / 10000;
+      hasTtl = totalMs > 0;
+    }
+  } catch {
+    return null;
+  }
+  if (!hasTtl) return null;
+
+  const secs = Math.floor(totalMs / 1000);
+  const maxSecs = 3600;
+  const pct = Math.min(100, (secs / maxSecs) * 100);
+  const color = secs < 60 ? "bg-red-500" : secs < 300 ? "bg-yellow-500" : "bg-green-500";
+
+  return (
+    <div className="mt-2" data-testid="redis-ttl-bar">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

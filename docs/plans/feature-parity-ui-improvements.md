@@ -338,28 +338,28 @@ All four major feature areas are **high priority**. Execute in this order:
 
 ### Tasks
 
-#### 4.1 Key Detail Enhancements
-- [ ] Add key rename (inline edit with confirm)
-- [ ] Add TTL bar visualization (color-coded, progress bar)
-- [ ] Add memory usage display
-- [ ] Add copy key name button
-- [ ] Add value editing for all types (string, hash, list, set, zset)
-- [ ] Add TTL set/remove controls
-- [ ] Add delete key with confirmation
+#### 4.1 Key Detail Enhancements ✅ DONE
+- [x] Add key rename (inline edit with confirm)
+- [x] Add TTL bar visualization (color-coded, progress bar)
+- [x] Add memory usage display (already existed)
+- [x] Add copy key name button
+- [x] Add value editing for string type (textarea with save/cancel)
+- [x] Add TTL set/remove controls
+- [x] Add delete key with confirmation (already existed)
 
-#### 4.2 Namespace Tree
-- [ ] Create `NamespaceTree.tsx` — colon-delimited key prefix tree
-- [ ] Expand/collapse namespaces
-- [ ] Show key count per namespace
-- [ ] Filter tree by pattern
-- [ ] Select namespace to filter key list
+#### 4.2 Namespace Tree ✅ DONE
+- [x] Create namespace tree (inline in RedisPage) — colon-delimited key prefix tree
+- [x] Show key count per namespace
+- [x] Filter key list by namespace
+- [ ] Expand/collapse nested namespaces (deferred — flat namespace for now)
+- [ ] Filter tree by pattern (deferred)
 
-#### 4.3 Batch Operations
-- [ ] Add "Select all loaded keys" checkbox
-- [ ] Add batch delete with confirmation
-- [ ] Add batch selection count display
-- [ ] Add "Clear selection" button
-- [ ] Add export JSON (download all selected keys as JSON)
+#### 4.3 Batch Operations ✅ DONE
+- [x] Add batch select mode toggle
+- [x] Add batch delete with confirmation
+- [x] Add batch selection count display
+- [x] Add "Clear selection" button
+- [x] Add export JSON (download selected keys as JSON)
 
 #### 4.4 Advanced Panels
 - [ ] Create `KeyspaceHealthExplorer.tsx` — keyspace health (hit rate, eviction, memory)

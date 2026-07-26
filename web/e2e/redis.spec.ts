@@ -78,4 +78,43 @@ test.describe("Redis", () => {
     // Key should be gone from the list after refresh
     await expect(page.getByTestId("redis-no-key-selected")).toBeVisible();
   });
+
+  test("key detail shows rename, copy, and TTL controls", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-key-user:1001").click();
+    await expect(page.getByTestId("redis-detail-key-name")).toBeVisible();
+    await expect(page.getByTestId("redis-copy-key-btn")).toBeVisible();
+    await expect(page.getByTestId("redis-rename-btn")).toBeVisible();
+    await expect(page.getByTestId("redis-ttl-edit-btn")).toBeVisible();
+  });
+
+  test("string value editing works", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-key-user:1001").click();
+    await expect(page.getByTestId("redis-detail-string-value")).toBeVisible();
+    await expect(page.getByTestId("redis-string-edit-btn")).toBeVisible();
+    await page.getByTestId("redis-string-edit-btn").click();
+    await expect(page.getByTestId("redis-detail-string-edit")).toBeVisible();
+    await expect(page.getByTestId("redis-string-save-btn")).toBeVisible();
+  });
+
+  test("batch mode shows checkboxes and batch actions", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-batch-toggle").click();
+    await expect(page.getByTestId("redis-batch-toggle")).toHaveText("Exit Batch");
+    // Checkboxes should be visible for keys
+    const firstKey = page.locator("[data-testid^='redis-key-checkbox-']").first();
+    await expect(firstKey).toBeVisible();
+    await page.getByTestId("redis-batch-toggle").click();
+    await expect(page.getByTestId("redis-batch-toggle")).toHaveText("Batch Select");
+  });
+
+  test("namespace tree shows key prefixes", async ({ page }) => {
+    await page.goto("/redis");
+    await expect(page.getByTestId("redis-namespace-tree")).toBeVisible();
+    // Should have namespace buttons for user, session, etc.
+    const nsButtons = page.locator("[data-testid^='redis-namespace-']");
+    const count = await nsButtons.count();
+    expect(count).toBeGreaterThan(0);
+  });
 });
