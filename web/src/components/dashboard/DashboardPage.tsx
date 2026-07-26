@@ -14,7 +14,7 @@ import {
   TrendingUp,
   AlertCircle,
 } from "lucide-react";
-import { useHealth, useProfile, useDemoMode, useToggleDemoMode, useAksNamespaces, useAksDeployments, useAksPods, useRedisServerInfo, useStorageContainers } from "@/lib/hooks";
+import { useHealth, useProfile, useDemoMode, useToggleDemoMode, useAksNamespaces, useAksDeployments, useAksPods, useRedisServerInfo, useStorageContainers, usePendingApprovals } from "@/lib/hooks";
 
 export function DashboardPage() {
   const { data: health } = useHealth();
@@ -37,6 +37,7 @@ export function DashboardPage() {
   const aksPods = useAksPods(activeAksNs ?? null);
   const redisInfo = useRedisServerInfo(redisCaches[0]?.id ?? null);
   const storageContainers = useStorageContainers(storageAccounts[0]?.id ?? null);
+  const pendingApprovals = usePendingApprovals();
 
   const deploymentCount = aksDeployments.data?.length ?? 0;
   const podCount = aksPods.data?.length ?? 0;
@@ -101,18 +102,20 @@ export function DashboardPage() {
     { label: "Cache Hit Rate", value: cacheHitRate ? `${cacheHitRate}%` : "-", to: "/redis", icon: TrendingUp },
   ];
 
+  const pendingCount = pendingApprovals.data?.count ?? 0;
+
   return (
-    <div className="p-6" data-testid="dashboard-page">
-      <h1 className="text-2xl font-bold" data-testid="dashboard-title">Dashboard</h1>
+    <div className="animate-fade-in-up p-6" data-testid="dashboard-page">
+      <h1 className="gradient-text text-2xl font-bold" data-testid="dashboard-title">Dashboard</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Developer Swiss army knife for Azure
       </p>
 
       {/* Sidecar status + demo mode toggle */}
-      <div className="mt-6 flex items-center gap-4 rounded-lg border p-3" data-testid="sidecar-status-bar">
+      <div className="mt-6 flex items-center gap-4 glass-card rounded-xl p-4" data-testid="sidecar-status-bar">
         <div className="flex items-center gap-2">
           {sidecarOk ? (
-            <CheckCircle2 className="h-5 w-5 text-green-500" />
+            <CheckCircle2 className="h-5 w-5 text-success" />
           ) : (
             <XCircle className="h-5 w-5 text-destructive" />
           )}
@@ -126,12 +129,12 @@ export function DashboardPage() {
         <div className="ml-auto flex items-center gap-2">
           <FlaskConical className={`h-4 w-4 ${isDemo ? "text-primary" : "text-muted-foreground"}`} />
           <button
-            data-testid="demo-mode-toggle"
+            data-testid="dashboard-demo-mode-toggle"
             onClick={() => toggleDemo.mutate(!isDemo)}
             disabled={toggleDemo.isPending}
-            className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-all ${
               isDemo
-                ? "border-primary bg-primary text-primary-foreground"
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
                 : "hover:bg-accent"
             }`}
           >
@@ -139,6 +142,21 @@ export function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* Pending approvals banner */}
+      {pendingCount > 0 && (
+        <Link
+          to="/agent"
+          className="mt-4 flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 p-3 transition-all hover:bg-warning/20"
+          data-testid="pending-approvals-banner"
+        >
+          <AlertCircle className="h-5 w-5 text-warning" />
+          <span className="text-sm font-medium">
+            {pendingCount} pending approval{pendingCount > 1 ? "s" : ""} awaiting your review
+          </span>
+          <span className="ml-auto text-xs text-muted-foreground">Review now →</span>
+        </Link>
+      )}
 
       {/* Health tiles */}
       <div className="mt-6">
@@ -149,15 +167,15 @@ export function DashboardPage() {
               key={tile.name}
               to={tile.to}
               data-testid={`health-tile-${tile.name.toLowerCase().replace(/\s+/g, "-")}`}
-              className="flex items-center gap-2 rounded-lg border bg-card p-3 transition-colors hover:border-primary"
+              className="flex items-center gap-2 glass-card rounded-xl p-3 transition-all hover:border-primary hover:shadow-md"
             >
               {tile.ok ? (
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <CheckCircle2 className="h-4 w-4 text-success" />
               ) : (
                 <AlertCircle className="h-4 w-4 text-muted-foreground" />
               )}
               <span className="text-sm font-medium">{tile.name}</span>
-              <span className={`ml-auto text-xs ${tile.ok ? "text-green-500" : "text-muted-foreground"}`}>
+              <span className={`ml-auto text-xs ${tile.ok ? "text-success" : "text-muted-foreground"}`}>
                 {tile.ok ? "Ready" : "Not configured"}
               </span>
             </Link>
@@ -176,10 +194,10 @@ export function DashboardPage() {
                 key={tile.label}
                 to={tile.to}
                 data-testid={`watch-tile-${tile.label.toLowerCase().replace(/\s+/g, "-")}`}
-                className="rounded-lg border bg-card p-3 transition-colors hover:border-primary"
+                className="glass-card rounded-xl p-3 transition-all hover:border-primary hover:shadow-md"
               >
                 <div className="flex items-center gap-2">
-                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <Icon className="h-4 w-4 text-primary" />
                   <span className="text-xs text-muted-foreground">{tile.label}</span>
                 </div>
                 <div className="mt-1 text-xl font-semibold">{tile.value}</div>
@@ -198,10 +216,10 @@ export function DashboardPage() {
               key={service.name}
               to={service.to}
               data-testid={`service-card-${service.name.toLowerCase().replace(/\s+/g, "-")}`}
-              className="group rounded-lg border bg-card p-4 transition-colors hover:border-primary hover:bg-accent"
+              className="group glass-card rounded-xl p-4 transition-all hover:border-primary hover:shadow-md"
             >
               <div className="flex items-center gap-3">
-                <Icon className="h-6 w-6 text-muted-foreground group-hover:text-foreground" />
+                <Icon className="h-6 w-6 text-primary group-hover:text-primary" />
                 <div>
                   <h3 className="font-semibold">{service.name}</h3>
                   {"count" in service && service.count !== undefined && (

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useProfile } from "@/lib/hooks";
+import { AlertTriangle } from "lucide-react";
+import { useProfile, useDemoMode } from "@/lib/hooks";
 import { ServiceBusSettings } from "./ServiceBusSettings";
 import { AksSettings } from "./AksSettings";
 import { RedisSettings } from "./RedisSettings";
@@ -24,9 +25,15 @@ const tabs = [
 
 type TabId = (typeof tabs)[number]["id"];
 
+// Tabs whose connection fields are inert while demo mode is on — demo mode
+// substitutes fixed sample data for these, so any real values entered here
+// have no effect until demo mode is turned off (Dashboard toggle).
+const DEMO_AFFECTED_TABS: ReadonlySet<TabId> = new Set(["service-bus", "aks", "redis", "storage"]);
+
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("general");
   const { data: profile, isLoading } = useProfile();
+  const { data: demoMode } = useDemoMode();
 
   if (isLoading) {
     return (
@@ -52,6 +59,13 @@ export function SettingsPage() {
           Configure projects, environments, and connections
         </p>
       </div>
+
+      {demoMode?.isDemoMode && DEMO_AFFECTED_TABS.has(activeTab) && (
+        <div className="flex items-center gap-2 border-b bg-yellow-500/10 px-6 py-2 text-xs text-yellow-600" data-testid="settings-demo-mode-banner">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          Demo mode is on — this tab's connection fields are inert until you turn it off from the Dashboard.
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         <div className="w-48 border-r p-2" data-testid="settings-tabs">
