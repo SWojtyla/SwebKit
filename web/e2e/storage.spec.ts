@@ -79,10 +79,10 @@ test.describe("Storage", () => {
     await page.getByTestId("storage-container-exports").click();
     await expect(page.getByTestId("storage-blob-filter")).toBeVisible();
     await page.getByTestId("storage-blob-filter").fill("report");
-    // Only items matching "report" should be visible
-    const items = page.locator("[data-testid^='storage-item-']");
-    const count = await items.count();
-    expect(count).toBeGreaterThan(0);
+    // Wait for filtered items to appear
+    await expect(page.getByTestId("storage-item-2026-03-21-report.csv")).toBeVisible();
+    // Verify not all items are shown (archive/ prefix should be filtered out)
+    await expect(page.getByTestId("storage-item-archive/")).not.toBeVisible();
   });
 
   test("copy URL and download buttons are visible", async ({ page }) => {
