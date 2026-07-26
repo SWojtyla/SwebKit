@@ -181,3 +181,173 @@ pub async fn read_clipboard(app: tauri::AppHandle) -> Result<String, String> {
         .read_text()
         .map_err(|e| e.to_string())
 }
+
+// ── Git Operations ───────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct GitStatus {
+    pub branch: String,
+    pub ahead: u32,
+    pub behind: u32,
+    pub staged: u32,
+    pub modified: u32,
+    pub untracked: u32,
+}
+
+#[derive(serde::Serialize)]
+pub struct GitBranch {
+    pub name: String,
+    pub current: bool,
+}
+
+/// Tauri command: get git status for a repository
+#[tauri::command]
+pub async fn git_status(path: String) -> Result<GitStatus, String> {
+    let output = std::process::Command::new("git")
+        .args(["status", "--porcelain=v2", "--branch"])
+        .current_dir(&path)
+        .output()
+        .map_err(|e| format!("Failed to run git: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut branch = String::new();
+    let mut ahead = 0u32;
+    let mut behind = 0u32;
+    let mut staged = 0u32;
+    let mut modified = 0u32;
+    let mut untracked = 0u32;
+
+    for line in text.lines() {
+        if line.starts_with("# branch.head ") {
+            branch = line["# branch.head ".len()..].to_string();
+        } else if line.starts_with("# branch.ab ") {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                ahead = parts[1].trim_start_matches('+').parse().unwrap_or(0);
+                behind = parts[2].trim_start_matches('-').parse().unwrap_or(0);
+            }
+        } else if line.starts_with('1') || line.starts_with('2') {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            if fields.len() >= 2 {
+                let staged_field = fields[1];
+                if staged_field != "." { staged += 1; }
+                else { modified += 1; }
+            }
+        } else if line.starts_with('u') {
+            modified += 1;
+        } else if line.starts_with("? ") {
+            untracked += 1;
+        }
+    }
+
+    Ok(GitStatus { branch, ahead, behind, staged, modified, untracked })
+}
+
+/// Tauri command: list git branches
+#[tauri::command]
+pub async fn git_branches(path: String) -> Result<Vec<GitBranch>, String> {
+    let output = std::process::Command::new("git")
+        .args(["branch", "--list", "--format=%(HEAD) %(refname:short)"])
+        .current_dir(&path)
+        .output()
+        .map_err(|e| format!("Failed to run git: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let branches: Vec<GitBranch> = text
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(|l| {
+            let current = l.starts_with('*');
+            let name = l.trim_start_matches('*').trim().to_string();
+            GitBranch { name, current }
+        })
+        .collect();
+
+    Ok(branches)
+}
+
+/// Tauri command: git commit
+#[tauri::command]
+pub async fn git_commit(path: String, message: String) -> Result<(), String> {
+    let output = std::process::Command::new("git")
+        .args(["commit", "-m", &message])
+        .current_dir(&path)
+        .output()
+        .map_err(|e| format!("Failed to run git: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    Ok(())
+}
+
+/// Tauri command: git push
+#[tauri::command]
+pub async fn git_push(path: String) -> Result<String, String> {
+    let output = std::process::Command::new("git")
+        .args(["push"])
+        .current_dir(&path)
+        .output()
+        .map_err(|e| format!("Failed to run git: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Tauri command: git pull
+#[tauri::command]
+pub async fn git_pull(path: String) -> Result<String, String> {
+    let output = std::process::Command::new("git")
+        .args(["pull"])
+        .current_dir(&path)
+        .output()
+        .map_err(|e| format!("Failed to run git: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Tauri command: git stage all
+#[tauri::command]
+pub async fn git_stage_all(path: String) -> Result<(), String> {
+    let output = std::process::Command::new("git")
+        .args(["add", "--all"])
+        .current_dir(&path)
+        .output()
+        .map_err(|e| format!("Failed to run git: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    Ok(())
+}
+
+// ── Notifications ────────────────────────────────────────────────────────────
+
+/// Tauri command: show an OS-level notification
+#[tauri::command]
+pub async fn show_notification(
+    app: tauri::AppHandle,
+    title: String,
+    body: String,
+) -> Result<(), String> {
+    use tauri_plugin_dialog::DialogExt;
+    // Use dialog as a simple notification fallback
+    app.dialog()
+        .message(body)
+        .title(title)
+        .blocking_show();
+    Ok(())
+}

@@ -110,3 +110,73 @@ export async function listPortForwards(): Promise<PortForwardSessionInfo[]> {
   }
   return [];
 }
+
+// ── Git Operations ───────────────────────────────────────────────────────────
+
+export interface GitStatus {
+  branch: string;
+  ahead: number;
+  behind: number;
+  staged: number;
+  modified: number;
+  untracked: number;
+}
+
+export interface GitBranch {
+  name: string;
+  current: boolean;
+}
+
+export async function gitStatus(path: string): Promise<GitStatus | null> {
+  if (isTauri()) {
+    return invoke<GitStatus>("git_status", { path });
+  }
+  return null;
+}
+
+export async function gitBranches(path: string): Promise<GitBranch[]> {
+  if (isTauri()) {
+    return invoke<GitBranch[]>("git_branches", { path });
+  }
+  return [];
+}
+
+export async function gitCommit(path: string, message: string): Promise<void> {
+  if (isTauri()) {
+    await invoke("git_commit", { path, message });
+  } else {
+    throw new Error("Git operations require the Tauri desktop app");
+  }
+}
+
+export async function gitPush(path: string): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>("git_push", { path });
+  }
+  throw new Error("Git operations require the Tauri desktop app");
+}
+
+export async function gitPull(path: string): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>("git_pull", { path });
+  }
+  throw new Error("Git operations require the Tauri desktop app");
+}
+
+export async function gitStageAll(path: string): Promise<void> {
+  if (isTauri()) {
+    await invoke("git_stage_all", { path });
+  } else {
+    throw new Error("Git operations require the Tauri desktop app");
+  }
+}
+
+// ── Notifications ────────────────────────────────────────────────────────────
+
+export async function showNotification(title: string, body: string): Promise<void> {
+  if (isTauri()) {
+    await invoke("show_notification", { title, body });
+  } else if ("Notification" in window) {
+    new Notification(title, { body });
+  }
+}

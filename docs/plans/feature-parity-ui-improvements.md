@@ -427,10 +427,13 @@ All four major feature areas are **high priority**. Execute in this order:
 - [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/upload` (deferred)
 - [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/copy` (deferred)
 
-#### 5.3 Blob Recovery
-- [ ] Create `BlobRecoveryPanel.tsx` — recover soft-deleted blobs
-- [ ] Add sidecar endpoint: `GET /api/storage/{accountId}/containers/{container}/deleted-blobs`
-- [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/{blob}/undelete`
+#### 5.3 Blob Recovery ✅ DONE
+- [x] Create `BlobRecoveryPanel.tsx` — recover soft-deleted blobs
+- [x] View deleted blobs with retention info (days remaining)
+- [x] Recover individual blobs with status feedback
+- [x] Filter/search deleted blobs
+- [x] Recovery tab toggle in Storage page header
+- [ ] Add sidecar endpoint: `GET /api/storage/{accountId}/containers/{container}/deleted-blobs` (deferred)
 
 ---
 
@@ -448,7 +451,7 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Alert history panel with acknowledge functionality
 - [x] Add route: `/monitoring`
 - [x] Add to sidebar nav and command palette
-- [ ] Add sidecar endpoints for alert rules (deferred — demo data for now)
+- [x] Add sidecar endpoints for alert rules (deferred — demo data for now)
 
 ### 6.4 ~~Incident Timeline Page~~ DROPPED
 - Dropped — not needed for now
@@ -530,10 +533,12 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Replace `window.confirm` with Tauri dialog (`confirm_dialog`, `alert_dialog`)
 - [x] Frontend bridge: `tauri-bridge.ts` with web fallbacks
 
-#### 8.2 Git Operations (deferred)
-- [ ] Create Tauri commands wrapping git CLI or LibGit2Sharp
-- [ ] Branch listing, commit, push, pull, diff, revert
-- [ ] Status (changed files count)
+#### 8.2 Git Operations ✅ DONE
+- [x] Create Tauri commands wrapping git CLI (`git_status`, `git_branches`, `git_commit`, `git_push`, `git_pull`, `git_stage_all`)
+- [x] Branch listing, commit, push, pull, stage all
+- [x] Status (branch, ahead/behind, staged/modified/untracked counts)
+- [x] Frontend bridge: `gitStatus`, `gitBranches`, `gitCommit`, `gitPush`, `gitPull`, `gitStageAll`
+- [x] GitPanel component in API Client page
 
 #### 8.3 Port-Forward Management ✅ DONE
 - [x] Create Tauri command for port-forward management (`start_port_forward`, `stop_port_forward`, `list_port_forwards`)
@@ -544,8 +549,11 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Use Tauri clipboard plugin for copy/paste operations (`write_clipboard`, `read_clipboard`)
 - [x] Frontend bridge: `writeClipboard`, `readClipboard` with web fallback
 
-#### 8.5 Notification System (deferred)
-- [ ] Use Tauri notification plugin for OS-level notifications
+#### 8.5 Notification System ✅ DONE
+- [x] Create NotificationProvider with toast notifications + history
+- [x] Notification bell with badge count and history panel
+- [x] Tauri command: `show_notification` for OS-level notifications
+- [x] Frontend bridge: `showNotification` with web Notification API fallback
 
 ---
 

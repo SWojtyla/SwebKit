@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { Globe, Settings2 } from "lucide-react";
+import { Globe, Settings2, GitBranch } from "lucide-react";
 import {
   useCollections,
   useUpdateCollections,
@@ -15,6 +15,7 @@ import { EnvironmentManager } from "./EnvironmentManager";
 import { CollectionVariableEditor } from "./CollectionVariableEditor";
 import { RequestTabStrip, type RequestTab } from "./RequestTabStrip";
 import { CollectionExportDialog } from "./CollectionExportDialog";
+import { GitPanel } from "./GitPanel";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -186,6 +187,7 @@ export function ApiClientPage() {
   const [showEnvManager, setShowEnvManager] = useState(false);
   const [showColVarEditor, setShowColVarEditor] = useState(false);
   const [exportCollectionId, setExportCollectionId] = useState<string | null>(null);
+  const [showGitPanel, setShowGitPanel] = useState(false);
   const [nameDialog, setNameDialog] = useState<{
     title: string;
     label: string;
@@ -524,6 +526,14 @@ export function ApiClientPage() {
             {activeEnvironment.name} ({activeEnvironment.variables.filter((v) => v.isEnabled).length} vars)
           </span>
         )}
+        <div className="ml-auto" />
+        <button
+          onClick={() => setShowGitPanel(!showGitPanel)}
+          className={`flex items-center gap-1 rounded border px-2 py-1 text-xs ${showGitPanel ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+          data-testid="api-client-git-toggle"
+        >
+          <GitBranch className="h-3 w-3" /> Git
+        </button>
       </div>
 
       {/* Main 3-pane layout */}
@@ -614,6 +624,20 @@ export function ApiClientPage() {
           environments={environments}
           onClose={() => setExportCollectionId(null)}
         />
+      )}
+
+      {/* Git side panel */}
+      {showGitPanel && (
+        <div className="fixed right-0 top-0 bottom-0 z-40 w-96 border-l bg-card shadow-lg" data-testid="api-client-git-panel">
+          <GitPanel repoPath="." />
+          <button
+            onClick={() => setShowGitPanel(false)}
+            className="absolute right-2 top-2 rounded p-1 text-muted-foreground hover:bg-accent"
+            data-testid="api-client-git-close"
+          >
+            ✕
+          </button>
+        </div>
       )}
     </div>
   );

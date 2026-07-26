@@ -19,6 +19,8 @@ import { HpaTab } from "./HpaTab";
 import { PodDetailPanel } from "./PodDetailPanel";
 import { YamlViewer } from "./YamlViewer";
 import { HelmDetailPanel } from "./HelmDetailPanel";
+import { PortForwardPanel } from "./PortForwardPanel";
+import { AnalysisPanel } from "./AnalysisPanel";
 import type { PodInfo } from "@/lib/types";
 import { RefreshCw, Clock } from "lucide-react";
 
@@ -35,6 +37,8 @@ const tabs = [
   { id: "hpa", label: "HPA" },
   { id: "helm", label: "Helm" },
   { id: "events", label: "Events" },
+  { id: "portforward", label: "Port-Forward" },
+  { id: "analysis", label: "Analysis" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -170,6 +174,8 @@ export function AksPage() {
               {activeTab === "hpa" && <HpaTab ns={namespace} />}
               {activeTab === "helm" && <HelmTab ns={namespace} onReleaseClick={setHelmRelease} />}
               {activeTab === "events" && <EventsTab ns={namespace} />}
+              {activeTab === "portforward" && <PortForwardPanel ns={namespace} selectedPod={selectedPod?.name ?? null} />}
+              {activeTab === "analysis" && <AnalysisPanel ns={namespace} />}
             </>
           )}
         </div>

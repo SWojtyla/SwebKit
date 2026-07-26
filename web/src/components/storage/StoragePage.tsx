@@ -7,7 +7,8 @@ import {
   useBlobContent,
 } from "@/lib/hooks";
 import type { StorageBlobItem } from "@/lib/types";
-import { Download, Link as LinkIcon, Check, Plus, Trash2 } from "lucide-react";
+import { Download, Link as LinkIcon, Check, Plus, Trash2, RotateCcw } from "lucide-react";
+import { BlobRecoveryPanel } from "./BlobRecoveryPanel";
 
 function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null) return "-";
@@ -42,6 +43,7 @@ export function StoragePage() {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [metadataEditing, setMetadataEditing] = useState(false);
   const [metadataDraft, setMetadataDraft] = useState<Record<string, string>>({});
+  const [storageViewMode, setStorageViewMode] = useState<"browser" | "recovery">("browser");
 
   const containers = useStorageContainers(activeAccountId);
   const blobs = useStorageBlobs(activeAccountId, selectedContainer, currentPrefix, continuationToken);
@@ -139,7 +141,27 @@ export function StoragePage() {
   return (
     <div className="flex h-full flex-col" data-testid="storage-page">
       <div className="border-b px-6 py-3">
-        <h1 className="text-2xl font-bold" data-testid="storage-title">Storage</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold" data-testid="storage-title">Storage</h1>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setStorageViewMode("browser")}
+              className={`rounded-md px-3 py-1.5 text-xs ${storageViewMode === "browser" ? "bg-primary text-primary-foreground" : "border hover:bg-accent"}`}
+              data-testid="storage-view-browser"
+            >
+              Browser
+            </button>
+            <button
+              onClick={() => setStorageViewMode("recovery")}
+              disabled={!selectedContainer}
+              className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs disabled:opacity-50 ${storageViewMode === "recovery" ? "bg-primary text-primary-foreground" : "border hover:bg-accent"}`}
+              data-testid="storage-view-recovery"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Recovery
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -171,6 +193,13 @@ export function StoragePage() {
           )}
         </div>
 
+        {/* Recovery mode */}
+        {storageViewMode === "recovery" ? (
+          <div className="flex-1 overflow-auto">
+            <BlobRecoveryPanel accountId={activeAccountId} container={selectedContainer} />
+          </div>
+        ) : (
+        <>
         {/* Blob browser */}
         <div className="w-1/3 border-r overflow-hidden flex flex-col" data-testid="storage-blob-browser">
           {!selectedContainer ? (
@@ -430,6 +459,8 @@ export function StoragePage() {
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
     </div>
   );
