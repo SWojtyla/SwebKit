@@ -47,5 +47,18 @@ src/SwebKit.App/AppPackages/
 
 # Tauri / Rust
 src-tauri/target/
+src-tauri/binaries/
 app-icon.png
+
+# Ad-hoc local build logs (repo root)
+build_log.txt
+build_stdout.txt
+build_stderr.txt
+tauri_build_out.txt
+tauri_build_err.txt
+
+# Root-level node_modules (holds only the @tauri-apps/cli dev dependency used
+# to drive `tauri dev`/`tauri build` from the repo root) — regenerate with
+# `npm install`, don't commit it.
+/node_modules/
 

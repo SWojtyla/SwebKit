@@ -1,9 +1,26 @@
-const SIDECAR_BASE_URL = (() => {
-  // In dev, the sidecar port is injected by Tauri via env or a runtime command.
-  // In production, Tauri spawns the sidecar and provides the port.
-  // Fallback to a default for browser dev mode.
+// Sidecar port is fixed (5199) only in dev, where the sidecar is started
+// separately via `dotnet run`. In production Tauri lets the OS pick a free
+// port and reports the real one via the `get_sidecar_port` command, so this
+// must be re-resolved at startup (see `initSidecarBaseUrl`) before anything
+// fetches — it can't be a one-shot module-load constant anymore.
+let SIDECAR_BASE_URL = (() => {
   return (import.meta as any).env?.VITE_SIDECAR_URL ?? "http://localhost:5199";
 })();
+
+/// Resolves the real sidecar port from Tauri (production: OS-assigned; dev:
+/// fixed 5199) and updates `SIDECAR_BASE_URL` in place. No-op outside Tauri
+/// (plain browser dev mode keeps the static default above). Must be awaited
+/// before the app renders anything that calls `apiFetch`/`apiSend`.
+export async function initSidecarBaseUrl(): Promise<void> {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+    return;
+  }
+  const { getSidecarPort } = await import("./tauri-bridge");
+  const port = await getSidecarPort();
+  if (port) {
+    SIDECAR_BASE_URL = `http://127.0.0.1:${port}`;
+  }
+}
 
 export async function apiFetch<T>(
   path: string,

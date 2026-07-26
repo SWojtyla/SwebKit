@@ -44,12 +44,28 @@ builder.Services.AddSingleton<IAuthHeaderBuilder, SidecarAuthHeaderBuilder>();
 builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
 builder.Services.AddSingleton<IHttpRequestExecutor, HttpRequestExecutor>();
 
-// CORS for the Tauri WebView (dev mode uses http://localhost:1420)
+// CORS for the Tauri WebView only — this sidecar listens on 127.0.0.1 and would
+// otherwise be reachable by *any* website open in the user's regular browser
+// ("localhost CORS drive-by"). The threat model is a REMOTE origin driving the
+// sidecar via a browser tab; any origin on localhost/127.0.0.1 is trusted
+// regardless of port (Vite's dev port, the Playwright e2e port, a future port
+// change — all still fine, since something already running locally has
+// equivalent access to this machine either way) plus the Tauri webview's own
+// fixed origins. No wildcard, no remote origin ever matches.
+bool IsAllowedOrigin(string origin)
+{
+    if (origin is "http://tauri.localhost" or "tauri://localhost")
+        return true;
+    return Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+        && uri.Scheme == "http"
+        && (uri.Host is "localhost" or "127.0.0.1");
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        policy.SetIsOriginAllowed(IsAllowedOrigin).AllowAnyHeader().AllowAnyMethod();
     });
 });
 
@@ -64,6 +80,31 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =
 var app = builder.Build();
 
 app.UseCors();
+
+// Global exception handler — ensures all error responses include CORS headers
+// and return JSON instead of a bare 500 that the browser blocks.
+app.UseExceptionHandler(ex =>
+{
+    ex.Run(async context =>
+    {
+        var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+        context.Response.StatusCode = exception switch
+        {
+            InvalidOperationException => 400,
+            ArgumentException => 400,
+            UnauthorizedAccessException => 401,
+            _ => 500,
+        };
+        context.Response.ContentType = "application/json; charset=utf-8";
+        var origin = context.Request.Headers.Origin.ToString();
+        if (IsAllowedOrigin(origin))
+        {
+            context.Response.Headers.AccessControlAllowOrigin = origin;
+        }
+        var payload = System.Text.Json.JsonSerializer.Serialize(new { error = exception?.Message ?? "Internal server error" });
+        await context.Response.WriteAsync(payload);
+    });
+});
 
 // Load config repositories on startup
 await app.Services.GetRequiredService<ProfileRepository>().LoadAsync();

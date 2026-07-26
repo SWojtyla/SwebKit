@@ -1,6 +1,54 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::State;
+
+/// Roots the frontend is allowed to read/write files under, via `read_file`/
+/// `write_file`/`list_dir`. A root is only added when the user themselves picks
+/// a file/folder through the native OS dialog (`pick_file`/`pick_directory`) —
+/// the frontend can never grant itself access to an arbitrary path.
+pub struct AllowedRoots {
+    roots: Mutex<Vec<PathBuf>>,
+}
+
+impl AllowedRoots {
+    pub fn new() -> Self {
+        Self { roots: Mutex::new(Vec::new()) }
+    }
+
+    fn allow(&self, root: PathBuf) {
+        let mut roots = self.roots.lock().unwrap();
+        if !roots.iter().any(|r| r == &root) {
+            roots.push(root);
+        }
+    }
+
+    fn is_allowed(&self, candidate: &Path) -> bool {
+        let roots = self.roots.lock().unwrap();
+        roots.iter().any(|root| candidate.starts_with(root))
+    }
+}
+
+/// Resolves `path` to a canonical, validated target inside an allowed root.
+/// Canonicalizes the *parent* directory (the file itself may not exist yet, e.g.
+/// on write) and checks that against the allowlist, then rejoins the filename —
+/// this also collapses any `..`/symlink tricks in the parent portion.
+fn validate_within_roots(path: &str, roots: &AllowedRoots) -> Result<PathBuf, String> {
+    let requested = Path::new(path);
+    let parent = requested
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .ok_or_else(|| "Invalid path".to_string())?;
+    let canonical_parent =
+        std::fs::canonicalize(parent).map_err(|e| format!("Invalid path: {e}"))?;
+    if !roots.is_allowed(&canonical_parent) {
+        return Err("Path is outside the allowed workspace".to_string());
+    }
+    let file_name = requested
+        .file_name()
+        .ok_or_else(|| "Invalid path".to_string())?;
+    Ok(canonical_parent.join(file_name))
+}
 
 /// Active port-forward sessions: local_port -> (namespace, pod, remote_port)
 pub struct PortForwardState {
@@ -97,9 +145,16 @@ pub struct PortForwardSessionInfo {
     pub remote_port: u16,
 }
 
-/// Tauri command: open a file picker dialog and return the selected path
+/// Tauri command: open a file picker dialog and return the selected path.
+/// The picked file's parent directory becomes an allowed root for `read_file`/
+/// `write_file`/`list_dir` — the user's own pick is what grants access, not the
+/// frontend's say-so.
 #[tauri::command]
-pub async fn pick_file(app: tauri::AppHandle, title: Option<String>) -> Result<Option<String>, String> {
+pub async fn pick_file(
+    app: tauri::AppHandle,
+    roots: State<'_, AllowedRoots>,
+    title: Option<String>,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
     let mut builder = app.dialog().file();
@@ -107,13 +162,27 @@ pub async fn pick_file(app: tauri::AppHandle, title: Option<String>) -> Result<O
         builder = builder.set_title(t);
     }
 
-    let result = builder.blocking_pick_file();
-    Ok(result.map(|p| p.to_string()))
+    let result = builder.blocking_pick_file().map(|p| p.to_string());
+
+    if let Some(path_str) = &result {
+        if let Some(parent) = Path::new(path_str).parent() {
+            if let Ok(canonical) = std::fs::canonicalize(parent) {
+                roots.allow(canonical);
+            }
+        }
+    }
+
+    Ok(result)
 }
 
-/// Tauri command: open a directory picker dialog and return the selected path
+/// Tauri command: open a directory picker dialog and return the selected path.
+/// The picked directory itself becomes an allowed root (see `pick_file`).
 #[tauri::command]
-pub async fn pick_directory(app: tauri::AppHandle, title: Option<String>) -> Result<Option<String>, String> {
+pub async fn pick_directory(
+    app: tauri::AppHandle,
+    roots: State<'_, AllowedRoots>,
+    title: Option<String>,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
     let mut builder = app.dialog().file();
@@ -121,8 +190,15 @@ pub async fn pick_directory(app: tauri::AppHandle, title: Option<String>) -> Res
         builder = builder.set_title(t);
     }
 
-    let result = builder.blocking_pick_folder();
-    Ok(result.map(|p| p.to_string()))
+    let result = builder.blocking_pick_folder().map(|p| p.to_string());
+
+    if let Some(dir_str) = &result {
+        if let Ok(canonical) = std::fs::canonicalize(dir_str) {
+            roots.allow(canonical);
+        }
+    }
+
+    Ok(result)
 }
 
 /// Tauri command: show a confirmation dialog (replaces window.confirm)
@@ -332,6 +408,50 @@ pub async fn git_stage_all(path: String) -> Result<(), String> {
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
     Ok(())
+}
+
+// ── Filesystem ───────────────────────────────────────────────────────────────
+//
+// These commands only operate inside roots the user themselves granted via
+// `pick_file`/`pick_directory` (see `AllowedRoots` above) — otherwise any script
+// running in the webview (a compromised dependency, an XSS in a rendered
+// YAML/log viewer) would be able to read/write any file the OS user can touch.
+
+/// Tauri command: read a text file
+#[tauri::command]
+pub async fn read_file(path: String, roots: State<'_, AllowedRoots>) -> Result<String, String> {
+    let target = validate_within_roots(&path, &roots)?;
+    std::fs::read_to_string(&target).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+/// Tauri command: write a text file
+#[tauri::command]
+pub async fn write_file(
+    path: String,
+    content: String,
+    roots: State<'_, AllowedRoots>,
+) -> Result<(), String> {
+    let target = validate_within_roots(&path, &roots)?;
+    std::fs::write(&target, &content).map_err(|e| format!("Failed to write file: {}", e))
+}
+
+/// Tauri command: list files in a directory
+#[tauri::command]
+pub async fn list_dir(path: String, roots: State<'_, AllowedRoots>) -> Result<Vec<String>, String> {
+    let canonical = std::fs::canonicalize(&path).map_err(|e| format!("Invalid path: {e}"))?;
+    if !roots.is_allowed(&canonical) {
+        return Err("Path is outside the allowed workspace".to_string());
+    }
+    let entries = std::fs::read_dir(&canonical).map_err(|e| format!("Failed to read dir: {}", e))?;
+    let mut names = Vec::new();
+    for entry in entries {
+        if let Ok(entry) = entry {
+            if let Some(name) = entry.file_name().to_str() {
+                names.push(name.to_string());
+            }
+        }
+    }
+    Ok(names)
 }
 
 // ── Notifications ────────────────────────────────────────────────────────────
