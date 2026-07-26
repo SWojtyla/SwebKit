@@ -553,6 +553,33 @@ export interface IngressInfo {
   labels: Record<string, string>;
 }
 
+export interface HttpRouteInfo {
+  name: string;
+  namespace: string;
+  status: string;
+  hostnames: string[];
+  parentRefs: string[];
+  backendRefs: string[];
+  labels: Record<string, string>;
+}
+
+export interface GatewayInfo {
+  name: string;
+  namespace: string;
+  gatewayClass: string;
+  status: string;
+  addresses: string[];
+  attachedRoutes: number;
+  labels: Record<string, string>;
+}
+
+export interface GatewayClassInfo {
+  name: string;
+  controllerName: string;
+  status: string;
+  labels: Record<string, string>;
+}
+
 export interface HelmHistoryEntry {
   revision: number;
   status: string;
@@ -714,4 +741,42 @@ export interface ChatMessage {
   content: string;
   elapsedMs?: number;
   error?: boolean;
+}
+
+export interface ContainerDetail {
+  name: string;
+  image: string;
+  imageTag: string | null;
+  resources: ResourceRequirements;
+  envVars: EnvVarDetail[];
+}
+
+export interface ResourceRequirements {
+  cpuRequest: string | null;
+  memoryRequest: string | null;
+  cpuLimit: string | null;
+  memoryLimit: string | null;
+}
+
+export type EnvVarSourceKind = "Plain" | "ConfigMapRef" | "SecretRef" | "FieldRef";
+
+export interface EnvVarDetail {
+  name: string;
+  value: string | null;
+  source: EnvVarSourceKind;
+  sourceName: string | null;
+  sourceKey: string | null;
+  isResolved: boolean;
+}
+
+export interface PodMetricInfo {
+  name: string;
+  namespace: string;
+  containers: PodMetricContainer[];
+}
+
+export interface PodMetricContainer {
+  name: string;
+  cpuUsage: string;
+  memoryUsage: string;
 }

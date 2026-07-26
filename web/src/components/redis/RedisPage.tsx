@@ -16,8 +16,9 @@ import {
   useRedisSetTtl,
   useRedisSetValue,
 } from "@/lib/hooks";
-import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw } from "lucide-react";
+import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw, ChevronRight, ChevronDown } from "lucide-react";
 import { KeyspaceHealthPanel, PrefixMemoryPanel, OpsInsightsPanel } from "./AdvancedPanels";
+import { PubSubPanel } from "./PubSubPanel";
 
 const typeColors: Record<string, string> = {
   string: "text-green-400",
@@ -66,7 +67,7 @@ export function RedisPage() {
   const [searchInput, setSearchInput] = useState("*");
   const [cursor, setCursor] = useState(0);
   const [allKeys, setAllKeys] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<"keys" | "info" | "slowlog" | "advanced">("keys");
+  const [activeTab, setActiveTab] = useState<"keys" | "info" | "slowlog" | "advanced" | "pubsub">("keys");
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [editingValue, setEditingValue] = useState(false);
@@ -78,6 +79,7 @@ export function RedisPage() {
   const [namespaceFilter, setNamespaceFilter] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(10);
+  const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(new Set());
 
   const serverInfo = useRedisServerInfo(resolvedCacheId);
   const scanResult = useRedisScanKeys(resolvedCacheId, pattern, cursor, 100);
@@ -217,6 +219,15 @@ export function RedisPage() {
     ? displayKeys.filter((k) => k.startsWith(namespaceFilter + ":") || k === namespaceFilter)
     : displayKeys;
 
+  const toggleNamespace = (ns: string) => {
+    setExpandedNamespaces((prev) => {
+      const next = new Set(prev);
+      if (next.has(ns)) next.delete(ns);
+      else next.add(ns);
+      return next;
+    });
+  };
+
   if (!resolvedCacheId) {
     return (
       <div className="p-6" data-testid="redis-page">
@@ -350,26 +361,53 @@ export function RedisPage() {
                 </div>
               </div>
 
-              {/* Namespace tree */}
+              {/* Namespace tree with expand/collapse */}
               {Object.keys(namespaceTree).length > 0 && (
                 <div className="border-b p-2" data-testid="redis-namespace-tree">
                   <div className="mb-1 text-xs font-medium text-muted-foreground">Namespaces</div>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="space-y-0.5">
                     <button
                       onClick={() => setNamespaceFilter(null)}
-                      className={`rounded px-2 py-0.5 text-xs ${!namespaceFilter ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                      className={`flex w-full items-center rounded px-2 py-0.5 text-xs ${!namespaceFilter ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
                     >
-                      All
+                      All ({displayKeys.length})
                     </button>
                     {Object.entries(namespaceTree).map(([ns, keys]) => (
-                      <button
-                        key={ns}
-                        onClick={() => setNamespaceFilter(namespaceFilter === ns ? null : ns)}
-                        className={`rounded px-2 py-0.5 text-xs font-mono ${namespaceFilter === ns ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-                        data-testid={`redis-namespace-${ns}`}
-                      >
-                        {ns} ({keys.length})
-                      </button>
+                      <div key={ns}>
+                        <div className="flex items-center">
+                          <button
+                            onClick={() => toggleNamespace(ns)}
+                            className="p-0.5 text-muted-foreground hover:text-foreground"
+                            data-testid={`redis-namespace-toggle-${ns}`}
+                          >
+                            {expandedNamespaces.has(ns) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                          </button>
+                          <button
+                            onClick={() => setNamespaceFilter(namespaceFilter === ns ? null : ns)}
+                            className={`flex-1 rounded px-2 py-0.5 text-left text-xs font-mono ${namespaceFilter === ns ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                            data-testid={`redis-namespace-${ns}`}
+                          >
+                            {ns} ({keys.length})
+                          </button>
+                        </div>
+                        {expandedNamespaces.has(ns) && (
+                          <div className="ml-5 border-l pl-1" data-testid={`redis-namespace-children-${ns}`}>
+                            {keys.slice(0, 20).map((k) => (
+                              <button
+                                key={k}
+                                onClick={() => setSelectedKey(k)}
+                                className={`block w-full truncate rounded px-2 py-0.5 text-left text-xs font-mono ${selectedKey === k ? "bg-accent" : "hover:bg-accent"}`}
+                                data-testid={`redis-namespace-key-${k}`}
+                              >
+                                {k.split(":").slice(1).join(":") || k}
+                              </button>
+                            ))}
+                            {keys.length > 20 && (
+                              <span className="px-2 text-xs text-muted-foreground">+{keys.length - 20} more...</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -727,6 +765,12 @@ export function RedisPage() {
               keyTypes={new Map(selectedKey ? [[selectedKey, keyInfo.data?.type ?? "unknown"]] : [])}
             />
             <OpsInsightsPanel info={serverInfo.data} slowLog={slowLog.data} />
+          </div>
+        )}
+
+        {activeTab === "pubsub" && (
+          <div className="flex-1 overflow-auto p-6" data-testid="redis-pubsub">
+            <PubSubPanel cacheId={resolvedCacheId} />
           </div>
         )}
       </div>

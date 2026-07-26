@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Save, Send, Wand2, Minimize2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Save, Send, Wand2, Minimize2, Eye, Crosshair } from "lucide-react";
 import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig } from "@/lib/types";
 import { GraphQlPanel } from "./GraphQlPanel";
 import { WebSocketPanel } from "./WebSocketPanel";
@@ -39,7 +39,7 @@ const methodColors: Record<string, string> = {
   WebSocket: "text-cyan-500",
 };
 
-type Tab = "params" | "headers" | "body" | "auth" | "graphql" | "websocket";
+type Tab = "params" | "headers" | "body" | "auth" | "graphql" | "websocket" | "capture";
 
 function updateHeaders(
   request: HttpRequestEntry,
@@ -78,11 +78,28 @@ function tryMinifyJson(content: string): string {
 export function RequestEditor({ request, onChange, onSend, onSave, sending }: RequestEditorProps) {
   const [activeTab, setActiveTab] = useState<Tab>("params");
   const [dirty, setDirty] = useState(false);
+  const [showVarPreview, setShowVarPreview] = useState(false);
+  const [captureRules, setCaptureRules] = useState<{ name: string; path: string; target: string }[]>([]);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track dirty state by comparing to a saved snapshot
   useEffect(() => {
     setDirty(true);
   }, [request]);
+
+  // Auto-save with debounce
+  useEffect(() => {
+    if (dirty && !sending) {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = setTimeout(() => {
+        onSave();
+        setDirty(false);
+      }, 2000);
+    }
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [request, dirty, sending, onSave]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -168,6 +185,14 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
           className="flex-1 rounded border bg-background px-3 py-1.5 text-sm"
         />
         <button
+          data-testid="request-var-preview"
+          onClick={() => setShowVarPreview(!showVarPreview)}
+          title="Preview variable substitution"
+          className={`flex items-center gap-1 rounded border px-2 py-1.5 text-xs ${showVarPreview ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
+        <button
           data-testid="request-send-button"
           className="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           onClick={onSend}
@@ -186,6 +211,14 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
         </button>
       </div>
 
+      {/* Variable preview */}
+      {showVarPreview && (
+        <div className="border-b bg-muted/30 px-3 py-2" data-testid="variable-preview">
+          <span className="text-xs text-muted-foreground">Resolved: </span>
+          <span className="text-xs font-mono">{request.url.replace(/\{\{([^}]+)\}\}/g, (_, name) => `<${name.trim()}>`)}</span>
+        </div>
+      )}
+
       {/* Request name */}
       <div className="border-b px-3 py-1.5">
         <input
@@ -202,10 +235,10 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
       <div className="flex border-b">
         {(() => {
           const tabs: Tab[] = request.method === "GraphQl"
-            ? ["params", "headers", "graphql", "auth"]
+            ? ["params", "headers", "graphql", "auth", "capture"]
             : request.method === "WebSocket"
-            ? ["params", "headers", "websocket", "auth"]
-            : ["params", "headers", "body", "auth"];
+            ? ["params", "headers", "websocket", "auth", "capture"]
+            : ["params", "headers", "body", "auth", "capture"];
           return tabs.map((tab) => (
             <button
               key={tab}
@@ -215,7 +248,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
               }`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === "params" ? "Params" : tab === "headers" ? "Headers" : tab === "body" ? "Body" : tab === "auth" ? "Auth" : tab === "graphql" ? "GraphQL" : "WebSocket"}
+              {tab === "params" ? "Params" : tab === "headers" ? "Headers" : tab === "body" ? "Body" : tab === "auth" ? "Auth" : tab === "graphql" ? "GraphQL" : tab === "capture" ? "Capture" : "WebSocket"}
               {tab === "params" && request.queryParams.length > 0 && (
                 <span className="ml-1 text-xs text-muted-foreground">({request.queryParams.length})</span>
               )}
@@ -501,6 +534,68 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
         {/* GraphQL tab */}
         {activeTab === "graphql" && (
           <GraphQlPanel request={request} onChange={onChange} />
+        )}
+
+        {/* Capture rules tab */}
+        {activeTab === "capture" && (
+          <div data-testid="capture-tab">
+            <div className="mb-2 flex items-center gap-2">
+              <Crosshair className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Capture Rules</span>
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">Extract values from responses and save them to variables automatically.</p>
+            {captureRules.map((rule, i) => (
+              <div key={i} className="mb-2 flex items-center gap-2" data-testid={`capture-rule-row-${i}`}>
+                <input
+                  type="text"
+                  value={rule.name}
+                  onChange={(e) => {
+                    const next = [...captureRules];
+                    next[i] = { ...next[i], name: e.target.value };
+                    setCaptureRules(next);
+                  }}
+                  placeholder="Variable name"
+                  className="w-32 rounded border bg-background px-2 py-1 text-sm"
+                />
+                <input
+                  type="text"
+                  value={rule.path}
+                  onChange={(e) => {
+                    const next = [...captureRules];
+                    next[i] = { ...next[i], path: e.target.value };
+                    setCaptureRules(next);
+                  }}
+                  placeholder="JSONPath (e.g. $.data.id)"
+                  className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
+                />
+                <select
+                  value={rule.target}
+                  onChange={(e) => {
+                    const next = [...captureRules];
+                    next[i] = { ...next[i], target: e.target.value };
+                    setCaptureRules(next);
+                  }}
+                  className="rounded border bg-background px-2 py-1 text-xs"
+                >
+                  <option value="env">Environment</option>
+                  <option value="collection">Collection</option>
+                </select>
+                <button
+                  className="text-xs text-destructive"
+                  onClick={() => setCaptureRules(captureRules.filter((_, j) => j !== i))}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              className="text-sm text-primary hover:underline"
+              onClick={() => setCaptureRules([...captureRules, { name: "", path: "", target: "env" }])}
+              data-testid="add-capture-rule"
+            >
+              + Add capture rule
+            </button>
+          </div>
         )}
 
         {/* WebSocket tab */}

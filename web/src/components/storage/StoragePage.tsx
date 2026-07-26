@@ -5,9 +5,14 @@ import {
   useStorageBlobs,
   useBlobProperties,
   useBlobContent,
+  useBlobSasUrl,
+  useBlobVersions,
+  useUploadBlob,
+  useCopyBlob,
+  useDeletedBlobs,
 } from "@/lib/hooks";
 import type { StorageBlobItem } from "@/lib/types";
-import { Download, Link as LinkIcon, Check, Plus, Trash2, RotateCcw } from "lucide-react";
+import { Download, Link as LinkIcon, Check, Plus, Trash2, RotateCcw, Upload, Copy as CopyIcon } from "lucide-react";
 import { BlobRecoveryPanel } from "./BlobRecoveryPanel";
 
 function formatBytes(bytes: number | null | undefined): string {
@@ -44,11 +49,25 @@ export function StoragePage() {
   const [metadataEditing, setMetadataEditing] = useState(false);
   const [metadataDraft, setMetadataDraft] = useState<Record<string, string>>({});
   const [storageViewMode, setStorageViewMode] = useState<"browser" | "recovery">("browser");
+  const [blobDetailTab, setBlobDetailTab] = useState<"properties" | "versions" | "content">("properties");
+  const [showSasUrl, setShowSasUrl] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploadBlobName, setUploadBlobName] = useState("");
+  const [uploadContent, setUploadContent] = useState("");
+  const [showCopyDialog, setShowCopyDialog] = useState(false);
+  const [copyDestContainer, setCopyDestContainer] = useState("");
+  const [copyDestBlob, setCopyDestBlob] = useState("");
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
   const containers = useStorageContainers(activeAccountId);
   const blobs = useStorageBlobs(activeAccountId, selectedContainer, currentPrefix, continuationToken);
   const blobProps = useBlobProperties(activeAccountId, selectedContainer, selectedBlob);
   const blobContent = useBlobContent(activeAccountId, selectedContainer, selectedBlob);
+  const sasUrl = useBlobSasUrl(activeAccountId, selectedContainer, selectedBlob, 60);
+  const blobVersions = useBlobVersions(activeAccountId, selectedContainer, selectedBlob);
+  const uploadBlob = useUploadBlob(activeAccountId, selectedContainer);
+  const copyBlob = useCopyBlob(activeAccountId);
+  const deletedBlobs = useDeletedBlobs(activeAccountId, selectedContainer);
 
   const handleSelectContainer = (name: string) => {
     setSelectedContainer(name);
@@ -196,7 +215,7 @@ export function StoragePage() {
         {/* Recovery mode */}
         {storageViewMode === "recovery" ? (
           <div className="flex-1 overflow-auto">
-            <BlobRecoveryPanel accountId={activeAccountId} container={selectedContainer} />
+            <BlobRecoveryPanel accountId={activeAccountId} container={selectedContainer} serverDeletedBlobs={deletedBlobs.data ?? undefined} />
           </div>
         ) : (
         <>
@@ -250,6 +269,13 @@ export function StoragePage() {
                   >
                     {multiSelectMode ? "Exit Multi" : "Multi-Select"}
                   </button>
+                  <button
+                    onClick={() => setShowUpload(!showUpload)}
+                    className={`flex items-center gap-1 rounded border px-2 py-1 text-xs ${showUpload ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                    data-testid="storage-upload-toggle"
+                  >
+                    <Upload className="h-3 w-3" /> Upload
+                  </button>
                   {multiSelectMode && selectedBlobs.size > 0 && (
                     <>
                       <span className="text-xs text-muted-foreground" data-testid="storage-batch-count">{selectedBlobs.size} selected</span>
@@ -260,6 +286,43 @@ export function StoragePage() {
                     </>
                   )}
                 </div>
+                {showUpload && (
+                  <div className="border-b p-3" data-testid="storage-upload-panel">
+                    <h4 className="mb-2 text-xs font-semibold">Upload Blob</h4>
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={uploadBlobName}
+                        onChange={(e) => setUploadBlobName(e.target.value)}
+                        placeholder="Blob name (e.g. folder/file.json)"
+                        className="w-full rounded border bg-card px-2 py-1 text-xs"
+                        data-testid="storage-upload-name"
+                      />
+                      <textarea
+                        value={uploadContent}
+                        onChange={(e) => setUploadContent(e.target.value)}
+                        placeholder="Content..."
+                        className="w-full rounded border bg-card px-2 py-1 text-xs font-mono h-24"
+                        data-testid="storage-upload-content"
+                      />
+                      <button
+                        onClick={() => {
+                          if (uploadBlobName.trim() && uploadContent) {
+                            uploadBlob.mutate({ blobName: uploadBlobName.trim(), content: uploadContent });
+                            setUploadBlobName("");
+                            setUploadContent("");
+                            setShowUpload(false);
+                          }
+                        }}
+                        disabled={!uploadBlobName.trim() || !uploadContent || uploadBlob.isPending}
+                        className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50"
+                        data-testid="storage-upload-confirm"
+                      >
+                        {uploadBlob.isPending ? "Uploading..." : "Upload"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Blob list */}
@@ -331,7 +394,22 @@ export function StoragePage() {
               {blobProps.error && <div className="text-sm text-destructive">Error: {blobProps.error.message}</div>}
               {blobProps.data && (
                 <>
-                  <div>
+                  {/* Blob detail tabs */}
+                  <div className="flex border-b">
+                    {(["properties", "versions", "content"] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setBlobDetailTab(tab)}
+                        className={`px-3 py-1.5 text-xs font-medium capitalize ${blobDetailTab === tab ? "border-b-2 border-primary text-foreground" : "text-muted-foreground"}`}
+                        data-testid={`storage-blob-tab-${tab}`}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+
+                  {blobDetailTab === "properties" && (
+                  <>
                     <div className="flex items-center gap-2">
                       <div className="text-lg font-mono font-semibold" data-testid="storage-blob-name">
                         {blobProps.data.name}
@@ -342,7 +420,40 @@ export function StoragePage() {
                       <button onClick={() => handleDownloadBlob(blobProps.data.name)} className="text-muted-foreground hover:text-foreground" data-testid="storage-download-btn" title="Download blob">
                         <Download className="h-3.5 w-3.5" />
                       </button>
+                      <button onClick={() => setShowSasUrl(!showSasUrl)} className="text-muted-foreground hover:text-foreground" data-testid="storage-sas-url-btn" title="Generate SAS URL">
+                        <LinkIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => setShowCopyDialog(true)} className="text-muted-foreground hover:text-foreground" data-testid="storage-copy-blob-btn" title="Copy blob">
+                        <CopyIcon className="h-3.5 w-3.5" />
+                      </button>
                     </div>
+                    {showSasUrl && (
+                      <div className="mt-2 rounded border bg-muted/30 p-2" data-testid="storage-sas-url-display">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={sasUrl.data?.sasUrl ?? "Loading..."}
+                            className="flex-1 rounded border bg-card px-2 py-1 text-xs font-mono"
+                            data-testid="storage-sas-url-input"
+                          />
+                          <button
+                            onClick={() => {
+                              if (sasUrl.data?.sasUrl) {
+                                navigator.clipboard.writeText(sasUrl.data.sasUrl);
+                                setCopiedUrl(true);
+                                setTimeout(() => setCopiedUrl(false), 2000);
+                              }
+                            }}
+                            className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                            data-testid="storage-sas-url-copy"
+                          >
+                            {copiedUrl ? <Check className="h-3 w-3" /> : "Copy"}
+                          </button>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">Valid for 60 minutes</p>
+                      </div>
+                    )}
                     <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
                       <span className="text-muted-foreground" data-testid="storage-blob-size">
                         {formatBytes(blobProps.data.sizeBytes)}
@@ -357,7 +468,6 @@ export function StoragePage() {
                         <span className="text-muted-foreground">Tier: {blobProps.data.accessTier}</span>
                       )}
                     </div>
-                  </div>
 
                   {/* Metadata */}
                   <div>
@@ -426,40 +536,144 @@ export function StoragePage() {
                       <div className="text-xs text-muted-foreground">No metadata</div>
                     )}
                   </div>
-                </>
-              )}
+                  </>
+                  )}
 
-              {/* Content preview */}
-              {blobContent.isLoading && <div className="text-sm text-muted-foreground">Loading content...</div>}
-              {blobContent.error && <div className="text-sm text-destructive">Error: {blobContent.error.message}</div>}
-              {blobContent.data && (
-                <div>
-                  <h3 className="mb-2 text-sm font-semibold">Content Preview</h3>
-                  {blobContent.data.isBinary ? (
-                    <div className="rounded-md border bg-muted p-4 text-sm text-muted-foreground" data-testid="storage-blob-binary">
-                      Binary content ({formatBytes(blobContent.data.totalSizeBytes)})
-                    </div>
-                  ) : (
-                    <>
-                      <pre
-                        className="rounded-md border bg-muted p-4 text-sm font-mono overflow-auto max-h-96"
-                        data-testid="storage-blob-content"
-                      >
-                        {blobContent.data.content}
-                      </pre>
-                      {blobContent.data.wasTruncated && (
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          Content truncated at {formatBytes(blobContent.data.totalSizeBytes)}
+                  {blobDetailTab === "versions" && (
+                    <div data-testid="storage-blob-versions">
+                      {blobVersions.isLoading && <div className="text-sm text-muted-foreground">Loading versions...</div>}
+                      {blobVersions.error && <div className="text-sm text-destructive">Error: {blobVersions.error.message}</div>}
+                      {blobVersions.data && (
+                        <div className="rounded-md border overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium">Version ID</th>
+                                <th className="px-3 py-2 text-left font-medium">Modified</th>
+                                <th className="px-3 py-2 text-right font-medium">Size</th>
+                                <th className="px-3 py-2 text-center font-medium">Current</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {blobVersions.data.map((v) => (
+                                <tr key={v.versionId} className="border-t">
+                                  <td className="px-3 py-2 font-mono text-xs">{v.versionId}</td>
+                                  <td className="px-3 py-2 text-xs">{formatDate(v.lastModified)}</td>
+                                  <td className="px-3 py-2 text-right text-xs">{formatBytes(v.sizeBytes)}</td>
+                                  <td className="px-3 py-2 text-center">{v.isCurrent && <Check className="inline h-3 w-3 text-green-500" />}</td>
+                                </tr>
+                              ))}
+                              {blobVersions.data.length === 0 && (
+                                <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">No versions available</td></tr>
+                              )}
+                            </tbody>
+                          </table>
                         </div>
                       )}
-                    </>
+                    </div>
                   )}
-                </div>
+
+                  {blobDetailTab === "content" && (
+                    <div data-testid="storage-blob-content-tab">
+                      {blobContent.isLoading && <div className="text-sm text-muted-foreground">Loading content...</div>}
+                      {blobContent.error && <div className="text-sm text-destructive">Error: {blobContent.error.message}</div>}
+                      {blobContent.data && (
+                        <div>
+                          {blobContent.data.isBinary ? (
+                            <div className="rounded-md border bg-muted p-4 text-sm text-muted-foreground" data-testid="storage-blob-binary">
+                              Binary content ({formatBytes(blobContent.data.totalSizeBytes)})
+                            </div>
+                          ) : (
+                            <>
+                              <pre
+                                className="rounded-md border bg-black p-4 text-sm font-mono overflow-auto max-h-96 text-green-400"
+                                data-testid="storage-blob-content"
+                              >
+                                {blobContent.data.content}
+                              </pre>
+                              {blobContent.data.wasTruncated && (
+                                <div className="mt-2 text-xs text-muted-foreground">
+                                  Content truncated at {formatBytes(blobContent.data.totalSizeBytes)}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
         </div>
         </>
+        )}
+
+        {/* Copy blob dialog */}
+        {showCopyDialog && selectedBlob && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="storage-copy-dialog">
+            <div className="rounded-lg border bg-card p-6 shadow-lg w-96">
+              <h3 className="mb-4 text-lg font-semibold">Copy Blob</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Source</label>
+                  <div className="rounded border bg-muted px-3 py-2 text-xs font-mono">
+                    {selectedContainer}/{selectedBlob}
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Destination Container</label>
+                  <input
+                    type="text"
+                    value={copyDestContainer}
+                    onChange={(e) => setCopyDestContainer(e.target.value)}
+                    placeholder="destination-container"
+                    className="w-full rounded border bg-card px-3 py-2 text-sm"
+                    data-testid="storage-copy-dest-container"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Destination Blob Name</label>
+                  <input
+                    type="text"
+                    value={copyDestBlob}
+                    onChange={(e) => setCopyDestBlob(e.target.value)}
+                    placeholder="blob-name"
+                    className="w-full rounded border bg-card px-3 py-2 text-sm"
+                    data-testid="storage-copy-dest-blob"
+                  />
+                </div>
+                {copyStatus && (
+                  <p className="text-xs text-muted-foreground" data-testid="storage-copy-status">{copyStatus}</p>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => { setShowCopyDialog(false); setCopyStatus(null); }}
+                    className="rounded border px-3 py-1.5 text-sm hover:bg-accent"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      copyBlob.mutate(
+                        { sourceContainer: selectedContainer!, sourceBlob: selectedBlob, destContainer: copyDestContainer, destBlob: copyDestBlob },
+                        {
+                          onSuccess: () => { setCopyStatus("Copied successfully"); setTimeout(() => { setShowCopyDialog(false); setCopyStatus(null); }, 2000); },
+                          onError: (e) => setCopyStatus(`Error: ${e}`),
+                        },
+                      );
+                    }}
+                    disabled={!copyDestContainer.trim() || !copyDestBlob.trim() || copyBlob.isPending}
+                    className="rounded bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
+                    data-testid="storage-copy-confirm"
+                  >
+                    {copyBlob.isPending ? "Copying..." : "Copy"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

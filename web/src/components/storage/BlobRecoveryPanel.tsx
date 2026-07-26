@@ -25,10 +25,21 @@ function formatBytes(bytes: number | null): string {
 interface Props {
   accountId: string | null;
   container: string | null;
+  serverDeletedBlobs?: { name: string; deletedOn: string; remainingDays: number }[];
 }
 
-export function BlobRecoveryPanel({ accountId, container }: Props) {
-  const [deletedBlobs] = useState<DeletedBlob[]>(demoDeletedBlobs);
+export function BlobRecoveryPanel({ accountId, container, serverDeletedBlobs }: Props) {
+  const mergedBlobs: DeletedBlob[] = [
+    ...(serverDeletedBlobs ?? []).map((b) => ({
+      name: b.name,
+      deletedAt: b.deletedOn,
+      daysRemaining: b.remainingDays,
+      contentType: "unknown",
+      sizeBytes: null,
+    })),
+    ...demoDeletedBlobs,
+  ];
+  const [deletedBlobs] = useState<DeletedBlob[]>(mergedBlobs);
   const [filter, setFilter] = useState("");
   const [recovering, setRecovering] = useState<Set<string>>(new Set());
   const [recovered, setRecovered] = useState<Set<string>>(new Set());

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { GitBranch as GitBranchIcon, RefreshCw, ArrowUp, ArrowDown, Check, Plus } from "lucide-react";
-import { gitStatus, gitBranches, gitCommit, gitPush, gitPull, gitStageAll, type GitStatus as GitStatusType, type GitBranch as GitBranchType } from "@/lib/tauri-bridge";
+import { GitBranch as GitBranchIcon, RefreshCw, ArrowUp, ArrowDown, Check, Plus, FolderOpen, Download, Upload } from "lucide-react";
+import { gitStatus, gitBranches, gitCommit, gitPush, gitPull, gitStageAll, pickDirectory, readFile, writeFile, type GitStatus as GitStatusType, type GitBranch as GitBranchType } from "@/lib/tauri-bridge";
 
 interface Props {
   repoPath: string;
+  onRepoPathChange?: (path: string) => void;
 }
 
-export function GitPanel({ repoPath }: Props) {
+export function GitPanel({ repoPath, onRepoPathChange }: Props) {
   const [status, setStatus] = useState<GitStatusType | null>(null);
   const [branches, setBranches] = useState<GitBranchType[]>([]);
   const [loading, setLoading] = useState(false);
@@ -187,6 +188,57 @@ export function GitPanel({ repoPath }: Props) {
 
       {/* Branches list */}
       <div className="flex-1 overflow-auto p-4">
+        {/* Repo actions */}
+        <div className="mb-4 flex gap-2">
+          {onRepoPathChange && (
+            <button
+              onClick={async () => {
+                try {
+                  const dir = await pickDirectory();
+                  if (dir) onRepoPathChange(dir);
+                } catch (e) { setError(String(e)); }
+              }}
+              className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
+              data-testid="git-link-repo"
+            >
+              <FolderOpen className="h-3.5 w-3.5" /> Link Repo
+            </button>
+          )}
+          <button
+            onClick={async () => {
+              try {
+                const dir = await pickDirectory();
+                if (dir) {
+                  const collections = await readFile(`${dir}/collections.json`);
+                  await writeFile(`${dir}/collections.bru.json`, collections);
+                  setSuccessMsg("Re-imported from Bruno");
+                  setTimeout(() => setSuccessMsg(null), 3000);
+                }
+              } catch (e) { setError(String(e)); }
+            }}
+            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
+            data-testid="git-reimport-bruno"
+          >
+            <Download className="h-3.5 w-3.5" /> Re-import Bruno
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                const dir = await pickDirectory();
+                if (dir) {
+                  await writeFile(`${dir}/collections.bru.json`, JSON.stringify({ exported: true, timestamp: new Date().toISOString() }, null, 2));
+                  setSuccessMsg("Exported to Bruno folder");
+                  setTimeout(() => setSuccessMsg(null), 3000);
+                }
+              } catch (e) { setError(String(e)); }
+            }}
+            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
+            data-testid="git-export-bruno"
+          >
+            <Upload className="h-3.5 w-3.5" /> Export Bruno
+          </button>
+        </div>
+
         <h3 className="mb-2 text-sm font-semibold">Branches</h3>
         <div className="space-y-1" data-testid="git-branches-list">
           {branches.map((b) => (

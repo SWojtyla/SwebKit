@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiSend } from "./api";
+import { apiFetch, apiSend, SIDECAR_BASE_URL } from "./api";
 import type {
   ProfileData,
   UserSettings,
@@ -39,6 +39,9 @@ import type {
   IngressInfo,
   HelmHistoryEntry,
   HelmValuesResponse,
+  ContainerDetail,
+  PodMetricInfo,
+  HttpRouteInfo,
 } from "./types";
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -123,10 +126,10 @@ export function useToggleDemoMode() {
     mutationFn: (enabled: boolean) =>
       apiSend(`/api/demo-mode?enabled=${enabled}`, "POST"),
     onSuccess: () => {
+      qc.invalidateQueries();
+    },
+    onError: () => {
       qc.invalidateQueries({ queryKey: ["demo-mode"] });
-      qc.invalidateQueries({ queryKey: ["profile"] });
-      qc.invalidateQueries({ queryKey: ["aks-test"] });
-      qc.invalidateQueries({ queryKey: ["aks-namespaces"] });
     },
   });
 }
@@ -531,6 +534,10 @@ export function useAksPodLogs(ns: string | null, pod: string | null, container?:
       const params = new URLSearchParams({ tail: String(tail) });
       if (container) params.set("container", container);
       const res = await fetch(`/api/aks/${ns}/pods/${pod}/logs?${params}`);
+      const ct = res.headers.get("content-type") ?? "";
+      if (ct.includes("text/html")) {
+        return "";
+      }
       return res.text();
     },
     enabled: !!ns && !!pod,
@@ -541,10 +548,38 @@ export function useAksResourceYaml(ns: string | null, kind: string | null, name:
   return useQuery({
     queryKey: ["aks-yaml", ns, kind, name],
     queryFn: async () => {
-      const res = await fetch(`/api/aks/${ns}/yaml/${kind}/${name}`);
+      const res = await fetch(`${SIDECAR_BASE_URL}/api/aks/${ns}/yaml/${kind}/${name}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`API ${res.status}: ${body || res.statusText}`);
+      }
       return res.text();
     },
     enabled: !!ns && !!kind && !!name,
+  });
+}
+
+export function useAksContainerDetails(ns: string | null, podName: string | null) {
+  return useQuery({
+    queryKey: ["aks-container-details", ns, podName],
+    queryFn: () => apiFetch<ContainerDetail[]>(`/api/aks/${ns}/pods/${podName}/containers`),
+    enabled: !!ns && !!podName,
+  });
+}
+
+export function useAksPodMetrics(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-pod-metrics", ns],
+    queryFn: () => apiFetch<PodMetricInfo[]>(`/api/aks/${ns}/pod-metrics`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksHttpRoutes(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-httproutes", ns],
+    queryFn: () => apiFetch<HttpRouteInfo[]>(`/api/aks/${ns}/httproutes`),
+    enabled: !!ns,
   });
 }
 
@@ -740,7 +775,61 @@ export function useBlobContent(accountId: string | null, container: string | nul
   });
 }
 
+export function useBlobSasUrl(accountId: string | null, container: string | null, blobName: string | null, expiryMinutes: number = 60) {
+  return useQuery({
+    queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "sas"],
+    queryFn: () => apiFetch<{ sasUrl: string }>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/sas?expiryMinutes=${expiryMinutes}`),
+    enabled: !!accountId && !!container && !!blobName,
+  });
+}
+
+export function useBlobVersions(accountId: string | null, container: string | null, blobName: string | null) {
+  return useQuery({
+    queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "versions"],
+    queryFn: () => apiFetch<{ versionId: string; lastModified: string; sizeBytes: number; isCurrent: boolean }[]>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/versions`),
+    enabled: !!accountId && !!container && !!blobName,
+  });
+}
+
+export function useUploadBlob(accountId: string | null, container: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ blobName, content, contentType }: { blobName: string; content: string; contentType?: string }) =>
+      apiSend(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName)}/upload`, "POST", { content, contentType }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs"] });
+    },
+  });
+}
+
+export function useCopyBlob(accountId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sourceContainer, sourceBlob, destContainer, destBlob }: { sourceContainer: string; sourceBlob: string; destContainer: string; destBlob: string }) =>
+      apiSend(`/api/storage/${accountId}/copy`, "POST", { sourceContainer, sourceBlob, destContainer, destBlob }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["storage", accountId] });
+    },
+  });
+}
+
+export function useDeletedBlobs(accountId: string | null, container: string | null) {
+  return useQuery({
+    queryKey: ["storage", accountId, "containers", container, "deleted-blobs"],
+    queryFn: () => apiFetch<{ name: string; deletedOn: string; remainingDays: number }[]>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/deleted-blobs`),
+    enabled: !!accountId && !!container,
+  });
+}
+
 // ── Agent hooks ───────────────────────────────────────────────────────────────
+
+export function usePendingApprovals() {
+  return useQuery({
+    queryKey: ["pending-approvals"],
+    queryFn: () => apiFetch<{ count: number }>("/api/agent/pending-approvals"),
+    refetchInterval: 30_000,
+  });
+}
 
 export function useAgentStatus() {
   return useQuery({

@@ -1,6 +1,12 @@
-import { useState, useEffect } from "react";
-import { Copy, Check, Terminal } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Copy, Check, Terminal, History, Save, TrendingUp, AlertCircle } from "lucide-react";
 import type { ApiClientExecutionResponse } from "@/lib/types";
+
+interface ResponseHistoryEntry {
+  id: number;
+  response: ApiClientExecutionResponse;
+  timestamp: number;
+}
 
 interface ResponseViewerProps {
   response: ApiClientExecutionResponse | null;
@@ -8,7 +14,7 @@ interface ResponseViewerProps {
   request?: { method: string; url: string } | null;
 }
 
-type Tab = "body" | "headers";
+type Tab = "body" | "headers" | "history";
 
 function statusColor(code: number): string {
   if (code === 0) return "bg-destructive/10 text-destructive";
@@ -50,12 +56,24 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
   const [prettyPrinted, setPrettyPrinted] = useState(false);
   const [showCurl, setShowCurl] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
+  const [history, setHistory] = useState<ResponseHistoryEntry[]>([]);
+  const [savedExamples, setSavedExamples] = useState<{ name: string; body: string }[]>([]);
+  const [showSaveExample, setShowSaveExample] = useState(false);
+  const [exampleName, setExampleName] = useState("");
+  const historyIdRef = useRef(0);
 
   useEffect(() => {
     setPrettyPrinted(false);
     setCopied(false);
     setShowCurl(false);
   }, [response]);
+
+  useEffect(() => {
+    if (response && !sending) {
+      const id = ++historyIdRef.current;
+      setHistory((prev) => [{ id, response, timestamp: Date.now() }, ...prev].slice(0, 20));
+    }
+  }, [response, sending]);
 
   if (sending) {
     return (
@@ -76,6 +94,17 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
   const isError = !!response.errorMessage;
   const rawBody = isError ? response.errorMessage ?? "" : response.responseBody ?? "";
   const displayBody = prettyPrinted ? tryPrettyPrint(rawBody, response.contentType) : rawBody;
+
+  const isGraphQlError = !isError && response.contentType?.includes("json") && rawBody.includes("errors");
+  let graphQlErrors: string[] = [];
+  if (isGraphQlError) {
+    try {
+      const parsed = JSON.parse(rawBody);
+      if (parsed.errors && Array.isArray(parsed.errors)) {
+        graphQlErrors = parsed.errors.map((e: any) => e.message || String(e));
+      }
+    } catch {}
+  }
 
   const copyBody = async () => {
     await navigator.clipboard.writeText(rawBody);
@@ -163,12 +192,36 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
         >
           Headers
         </button>
+        <button
+          data-testid="response-tab-history"
+          className={`flex items-center gap-1 px-4 py-2 text-sm font-medium ${
+            activeTab === "history" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground"
+          }`}
+          onClick={() => setActiveTab("history")}
+        >
+          <History className="h-3.5 w-3.5" />
+          History ({history.length})
+        </button>
       </div>
 
       {/* Tab content */}
       <div className="flex-1 overflow-auto p-3">
         {activeTab === "body" && (
           <div data-testid="response-body-container">
+            {/* GraphQL errors */}
+            {graphQlErrors.length > 0 && (
+              <div className="mb-3 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3" data-testid="graphql-errors">
+                <div className="flex items-center gap-2 mb-1">
+                  <AlertCircle className="h-4 w-4 text-yellow-500" />
+                  <span className="text-sm font-medium text-yellow-500">GraphQL Errors</span>
+                </div>
+                <ul className="list-disc list-inside text-xs space-y-1">
+                  {graphQlErrors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="mb-2 flex items-center gap-2">
               <button
                 onClick={() => setPrettyPrinted(!prettyPrinted)}
@@ -185,7 +238,47 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
                 {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                 {copied ? "Copied!" : "Copy"}
               </button>
+              <button
+                onClick={() => setShowSaveExample(!showSaveExample)}
+                className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent"
+                data-testid="response-save-example"
+              >
+                <Save className="h-3 w-3" /> Save Example
+              </button>
             </div>
+            {showSaveExample && (
+              <div className="mb-2 flex items-center gap-2" data-testid="save-example-form">
+                <input
+                  type="text"
+                  value={exampleName}
+                  onChange={(e) => setExampleName(e.target.value)}
+                  placeholder="Example name..."
+                  className="flex-1 rounded border bg-background px-2 py-1 text-xs"
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    if (exampleName.trim()) {
+                      setSavedExamples((prev) => [...prev, { name: exampleName, body: rawBody }]);
+                      setShowSaveExample(false);
+                      setExampleName("");
+                    }
+                  }}
+                  className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground"
+                >
+                  Save
+                </button>
+                <button onClick={() => setShowSaveExample(false)} className="rounded border px-2 py-1 text-xs">Cancel</button>
+              </div>
+            )}
+            {savedExamples.length > 0 && (
+              <div className="mb-2" data-testid="saved-examples">
+                <span className="text-xs text-muted-foreground">Saved examples: </span>
+                {savedExamples.map((ex, i) => (
+                  <button key={i} className="ml-1 text-xs text-primary hover:underline">{ex.name}</button>
+                ))}
+              </div>
+            )}
             <pre
               data-testid="response-body"
               className="whitespace-pre-wrap break-all font-mono text-sm"
@@ -205,6 +298,50 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
               ))}
             </tbody>
           </table>
+        )}
+        {activeTab === "history" && (
+          <div data-testid="response-history-panel">
+            {/* Response time sparkline */}
+            {history.length > 1 && (
+              <div className="mb-4" data-testid="response-time-sparkline">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">Response times</span>
+                </div>
+                <div className="flex items-end gap-1 h-12">
+                  {history.slice(0, 20).reverse().map((h) => {
+                    const maxMs = Math.max(...history.map((x) => x.response.elapsedMs), 1);
+                    const height = Math.max(2, (h.response.elapsedMs / maxMs) * 100);
+                    return (
+                      <div
+                        key={h.id}
+                        className="flex-1 bg-primary/30 rounded-sm"
+                        style={{ height: `${height}%` }}
+                        title={`${h.response.elapsedMs.toFixed(0)}ms`}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {/* History list */}
+            {history.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No response history yet</div>
+            ) : (
+              <div className="space-y-1">
+                {history.map((h) => (
+                  <div key={h.id} className="flex items-center gap-3 rounded border px-3 py-2 text-xs" data-testid={`response-history-item-${h.id}`}>
+                    <span className={`rounded px-1.5 py-0.5 font-semibold ${statusColor(h.response.statusCode)}`}>
+                      {h.response.statusCode}
+                    </span>
+                    <span className="text-muted-foreground">{h.response.elapsedMs.toFixed(0)}ms</span>
+                    <span className="text-muted-foreground">{new Date(h.timestamp).toLocaleTimeString()}</span>
+                    <span className="flex-1 truncate text-muted-foreground">{h.response.resolvedUrl}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

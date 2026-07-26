@@ -171,6 +171,30 @@ export async function gitStageAll(path: string): Promise<void> {
   }
 }
 
+// ── Filesystem ───────────────────────────────────────────────────────────────
+
+export async function readFile(path: string): Promise<string> {
+  if (isTauri()) {
+    return await invoke<string>("read_file", { path });
+  }
+  throw new Error("Filesystem access requires the Tauri desktop app");
+}
+
+export async function writeFile(path: string, content: string): Promise<void> {
+  if (isTauri()) {
+    await invoke("write_file", { path, content });
+  } else {
+    throw new Error("Filesystem access requires the Tauri desktop app");
+  }
+}
+
+export async function listDir(path: string): Promise<string[]> {
+  if (isTauri()) {
+    return await invoke<string[]>("list_dir", { path });
+  }
+  throw new Error("Filesystem access requires the Tauri desktop app");
+}
+
 // ── Notifications ────────────────────────────────────────────────────────────
 
 export async function showNotification(title: string, body: string): Promise<void> {
@@ -179,4 +203,20 @@ export async function showNotification(title: string, body: string): Promise<voi
   } else if ("Notification" in window) {
     new Notification(title, { body });
   }
+}
+
+// ── Sidecar ──────────────────────────────────────────────────────────────────
+
+export async function getSidecarPort(): Promise<number | null> {
+  if (isTauri()) {
+    return invoke<number>("get_sidecar_port");
+  }
+  return null;
+}
+
+export async function restartSidecar(): Promise<number | null> {
+  if (isTauri()) {
+    return invoke<number>("restart_sidecar");
+  }
+  return null;
 }

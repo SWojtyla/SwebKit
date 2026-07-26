@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -12,9 +12,17 @@ import {
   Search,
   Circle,
   Activity,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Sun,
+  Moon,
+  Beaker,
+  Keyboard,
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
-import { useHealth } from "@/lib/hooks";
+import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
+import { useHealth, useDemoMode, useToggleDemoMode } from "@/lib/hooks";
+import { useSettingsStore } from "@/lib/stores/settings";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -30,9 +38,18 @@ const navItems = [
 
 export function AppLayout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: health } = useHealth();
+  const { data: demoData } = useDemoMode();
+  const toggleDemoMode = useToggleDemoMode();
+  const { theme, toggleTheme } = useSettingsStore();
   const sidecarOk = health?.status === "ok";
+  const isDemoMode = demoData?.isDemoMode ?? false;
+
+  const contextTitle = navItems.find((n) => n.to === location.pathname)?.label ?? "SwebKit";
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
@@ -41,6 +58,12 @@ export function AppLayout() {
     } else if ((e.ctrlKey || e.metaKey) && (e.key === "g" || e.key === "G")) {
       e.preventDefault();
       navigate("/settings");
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
+      e.preventDefault();
+      setNavCollapsed((prev) => !prev);
+    } else if (e.key === "?" && e.shiftKey && e.target === document.body) {
+      e.preventDefault();
+      setShortcutsOpen(true);
     }
   }, [navigate]);
 
@@ -50,10 +73,17 @@ export function AppLayout() {
   }, [handleKeyDown]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
-      <aside className="flex w-56 flex-col border-r bg-card">
+    <div className="aurora-bg theme-transition flex h-screen w-screen overflow-hidden bg-background text-foreground">
+      <aside className={`flex flex-col border-r bg-sidebar transition-all duration-200 ${navCollapsed ? "w-14" : "w-56"}`}>
         <div className="flex h-14 items-center gap-2 border-b px-4">
-          <span className="text-lg font-bold tracking-tight">SwebKit</span>
+          {!navCollapsed && <span className="gradient-text text-lg font-bold tracking-tight">SwebKit</span>}
+          <button
+            onClick={() => setNavCollapsed(!navCollapsed)}
+            className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent"
+            data-testid="nav-collapse-toggle"
+          >
+            {navCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
         </div>
         <nav className="flex-1 space-y-1 p-2">
           {navItems.map(({ to, label, icon: Icon, end }) => (
@@ -63,15 +93,15 @@ export function AppLayout() {
               end={end}
               data-testid={`nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
               className={({ isActive }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
                   isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-sidebar-foreground hover:bg-sidebar-active hover:text-primary"
                 }`
               }
             >
               <Icon className="h-4 w-4" />
-              {label}
+              {!navCollapsed && label}
             </NavLink>
           ))}
         </nav>
@@ -79,16 +109,45 @@ export function AppLayout() {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="flex h-14 items-center gap-3 border-b px-4" data-testid="top-bar">
+        <header className="glass flex h-14 items-center gap-3 border-b px-4" data-testid="top-bar">
+          <span className="text-sm font-semibold" data-testid="context-title">{contextTitle}</span>
           <button
             onClick={() => setPaletteOpen(true)}
-            className="flex items-center gap-2 rounded-md border bg-muted px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent"
+            className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground transition-all hover:border-primary/30 hover:bg-accent"
             data-testid="command-palette-trigger"
           >
             <Search className="h-4 w-4" />
             <span>Search...</span>
-            <kbd className="ml-4 rounded border bg-card px-1.5 py-0.5 text-xs">Ctrl+K</kbd>
+            <kbd className="ml-4 rounded border bg-card px-1.5 py-0.5 text-xs text-muted-foreground">Ctrl+K</kbd>
           </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => toggleTheme()}
+              className="rounded-lg border p-2 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
+              data-testid="theme-toggle"
+              title="Toggle theme"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <button
+              onClick={() => toggleDemoMode.mutate(!isDemoMode)}
+              disabled={toggleDemoMode.isPending}
+              className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${isDemoMode ? "border-primary text-primary" : "text-muted-foreground hover:bg-accent"} disabled:opacity-50`}
+              data-testid="demo-mode-toggle"
+              title="Toggle demo mode"
+            >
+              <Beaker className="h-3.5 w-3.5" />
+              {toggleDemoMode.isPending ? "..." : isDemoMode ? "Demo" : "Live"}
+            </button>
+            <button
+              onClick={() => setShortcutsOpen(true)}
+              className="rounded-lg border p-2 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
+              data-testid="keyboard-shortcuts-btn"
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="h-4 w-4" />
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 overflow-auto">
@@ -96,19 +155,24 @@ export function AppLayout() {
         </main>
 
         {/* Status bar */}
-        <footer className="flex h-7 items-center gap-4 border-t px-4 text-xs text-muted-foreground" data-testid="status-bar">
+        <footer className="glass flex h-7 items-center gap-4 border-t px-4 text-xs text-muted-foreground" data-testid="status-bar">
           <div className="flex items-center gap-1.5">
-            <Circle className={`h-2 w-2 ${sidecarOk ? "fill-green-500 text-green-500" : "fill-destructive text-destructive"}`} />
+            <Circle className={`h-2 w-2 ${sidecarOk ? "fill-success text-success" : "fill-destructive text-destructive"}`} />
             <span data-testid="status-bar-connection">{sidecarOk ? "Connected" : "Disconnected"}</span>
           </div>
           {health?.version && (
             <span>v{health.version}</span>
           )}
-          <span className="ml-auto">SwebKit</span>
+          {isDemoMode && (
+            <span className="text-warning" data-testid="status-bar-demo">Demo Mode</span>
+          )}
+          <span className="ml-auto">{theme === "dark" ? "Dark" : "Light"} theme</span>
+          <span>SwebKit</span>
         </footer>
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <KeyboardShortcutsPanel open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 }
