@@ -403,26 +403,26 @@ All four major feature areas are **high priority**. Execute in this order:
 
 ### Tasks
 
-#### 5.1 Blob Detail Enhancements
-- [ ] Add download button with progress indicator
-- [ ] Add "Copy URL" button
-- [ ] Add "Copy SAS URL" button (generate SAS token via sidecar)
-- [ ] Add "Versions" tab — list blob versions, view version content, restore version
-- [ ] Add "Metadata" tab — metadata key-value editor with add/edit/delete
-- [ ] Add content syntax highlighting (JSON, XML, CSV, images)
-- [ ] Add sidecar endpoint: `GET /api/storage/{accountId}/containers/{container}/blobs/{blob}/versions`
-- [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/{blob}/metadata`
-- [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/{blob}/download-url`
+#### 5.1 Blob Detail Enhancements ✅ DONE
+- [x] Add download button (fetches content, triggers browser download)
+- [x] Add "Copy URL" button (constructs blob URL)
+- [ ] Add "Copy SAS URL" button (deferred — needs sidecar endpoint)
+- [ ] Add "Versions" tab (deferred — needs sidecar endpoint)
+- [x] Add metadata editor (add/edit/delete metadata keys in UI)
+- [ ] Add content syntax highlighting (deferred)
+- [ ] Add sidecar endpoint: `GET /api/storage/{accountId}/containers/{container}/blobs/{blob}/versions` (deferred)
+- [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/{blob}/metadata` (deferred — UI ready)
+- [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/{blob}/download-url` (deferred)
 
-#### 5.2 Blob List Enhancements
-- [ ] Add blob filter input (client-side filter by name)
-- [ ] Add multi-select mode with checkboxes
-- [ ] Add bulk download as ZIP
-- [ ] Add download progress card
-- [ ] Add upload button (Tauri file picker)
-- [ ] Add blob copy dialog
-- [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/upload`
-- [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/copy`
+#### 5.2 Blob List Enhancements ✅ DONE
+- [x] Add blob filter input (client-side filter by name)
+- [x] Add multi-select mode with checkboxes
+- [x] Add batch download for selected blobs
+- [x] Add "Clear selection" button
+- [ ] Add upload button (deferred — needs Tauri file picker)
+- [ ] Add blob copy dialog (deferred — needs sidecar endpoint)
+- [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/upload` (deferred)
+- [ ] Add sidecar endpoint: `POST /api/storage/{accountId}/containers/{container}/blobs/copy` (deferred)
 
 #### 5.3 Blob Recovery
 - [ ] Create `BlobRecoveryPanel.tsx` — recover soft-deleted blobs

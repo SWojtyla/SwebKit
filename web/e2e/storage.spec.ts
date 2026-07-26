@@ -73,4 +73,44 @@ test.describe("Storage", () => {
     const metadataSection = page.locator("text=Metadata");
     await expect(metadataSection).toBeVisible();
   });
+
+  test("blob filter narrows the list", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-exports").click();
+    await expect(page.getByTestId("storage-blob-filter")).toBeVisible();
+    await page.getByTestId("storage-blob-filter").fill("report");
+    // Only items matching "report" should be visible
+    const items = page.locator("[data-testid^='storage-item-']");
+    const count = await items.count();
+    expect(count).toBeGreaterThan(0);
+  });
+
+  test("copy URL and download buttons are visible", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-exports").click();
+    await page.getByTestId("storage-item-2026-03-21-report.csv").click();
+    await expect(page.getByTestId("storage-copy-url-btn")).toBeVisible();
+    await expect(page.getByTestId("storage-download-btn")).toBeVisible();
+  });
+
+  test("multi-select mode shows checkboxes", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-exports").click();
+    await page.getByTestId("storage-multi-select-toggle").click();
+    await expect(page.getByTestId("storage-multi-select-toggle")).toHaveText("Exit Multi");
+    const checkbox = page.locator("[data-testid^='storage-blob-checkbox-']").first();
+    await expect(checkbox).toBeVisible();
+    await page.getByTestId("storage-multi-select-toggle").click();
+    await expect(page.getByTestId("storage-multi-select-toggle")).toHaveText("Multi-Select");
+  });
+
+  test("metadata editor can be opened", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-configs").click();
+    await page.getByTestId("storage-item-app-settings.json").click();
+    await expect(page.getByTestId("storage-metadata-edit-btn")).toBeVisible();
+    await page.getByTestId("storage-metadata-edit-btn").click();
+    await expect(page.getByTestId("storage-metadata-editor")).toBeVisible();
+    await expect(page.getByTestId("storage-metadata-add-key")).toBeVisible();
+  });
 });

@@ -7,6 +7,7 @@ import {
   useBlobContent,
 } from "@/lib/hooks";
 import type { StorageBlobItem } from "@/lib/types";
+import { Download, Link as LinkIcon, Check, Plus, Trash2 } from "lucide-react";
 
 function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null) return "-";
@@ -35,6 +36,12 @@ export function StoragePage() {
   const [selectedBlob, setSelectedBlob] = useState<string | null>(null);
   const [continuationToken, setContinuationToken] = useState<string | null>(null);
   const [allItems, setAllItems] = useState<StorageBlobItem[]>([]);
+  const [blobFilter, setBlobFilter] = useState("");
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedBlobs, setSelectedBlobs] = useState<Set<string>>(new Set());
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [metadataEditing, setMetadataEditing] = useState(false);
+  const [metadataDraft, setMetadataDraft] = useState<Record<string, string>>({});
 
   const containers = useStorageContainers(activeAccountId);
   const blobs = useStorageBlobs(activeAccountId, selectedContainer, currentPrefix, continuationToken);
@@ -79,6 +86,44 @@ export function StoragePage() {
   };
 
   const displayItems = continuationToken === null ? (blobs.data?.items ?? []) : [...allItems, ...(blobs.data?.items ?? [])];
+
+  const filteredItems = blobFilter
+    ? displayItems.filter((item) => item.name.toLowerCase().includes(blobFilter.toLowerCase()))
+    : displayItems;
+
+  const handleCopyUrl = (blobName: string) => {
+    const url = `https://${activeAccountId}.blob.core.windows.net/${selectedContainer}/${blobName}`;
+    navigator.clipboard.writeText(url);
+    setCopiedUrl(true);
+    setTimeout(() => setCopiedUrl(false), 2000);
+  };
+
+  const handleDownloadBlob = async (blobName: string) => {
+    try {
+      const response = await fetch(`/api/storage/${activeAccountId}/containers/${selectedContainer}/blobs/${encodeURIComponent(blobName)}/content`);
+      const data = await response.json();
+      if (data.content) {
+        const blob = new Blob([data.content], { type: data.contentType || "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = blobName.split("/").pop() || blobName;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      console.error("Download failed:", e);
+    }
+  };
+
+  const toggleBlobSelection = (name: string) => {
+    setSelectedBlobs((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
 
   if (!activeAccountId) {
     return (
@@ -134,30 +179,58 @@ export function StoragePage() {
             </div>
           ) : (
             <>
-              {/* Breadcrumbs */}
-              <div className="flex items-center gap-1 px-3 py-2 border-b text-sm">
-                <button
-                  data-testid="storage-breadcrumb-0"
-                  onClick={() => handleBreadcrumb(0)}
-                  className="text-primary hover:underline"
-                >
-                  {selectedContainer}
-                </button>
-                {prefixHistory.map((p, i) => (
-                  <span key={i} className="flex items-center gap-1">
-                    <span className="text-muted-foreground">/</span>
-                    <button
-                      data-testid={`storage-breadcrumb-${i + 1}`}
-                      onClick={() => handleBreadcrumb(i + 1)}
-                      className="text-primary hover:underline"
-                    >
-                      {p.replace(currentPrefix, "").replace(/\//g, "") || p}
-                    </button>
-                  </span>
-                ))}
-                {currentPrefix && (
-                  <span className="text-muted-foreground">/ {currentPrefix.replace(prefixHistory[prefixHistory.length - 1] ?? "", "")}</span>
-                )}
+              {/* Breadcrumbs + filter */}
+              <div className="px-3 py-2 border-b">
+                <div className="flex items-center gap-1 text-sm">
+                  <button
+                    data-testid="storage-breadcrumb-0"
+                    onClick={() => handleBreadcrumb(0)}
+                    className="text-primary hover:underline"
+                  >
+                    {selectedContainer}
+                  </button>
+                  {prefixHistory.map((p, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <span className="text-muted-foreground">/</span>
+                      <button
+                        data-testid={`storage-breadcrumb-${i + 1}`}
+                        onClick={() => handleBreadcrumb(i + 1)}
+                        className="text-primary hover:underline"
+                      >
+                        {p.replace(currentPrefix, "").replace(/\//g, "") || p}
+                      </button>
+                    </span>
+                  ))}
+                  {currentPrefix && (
+                    <span className="text-muted-foreground">/ {currentPrefix.replace(prefixHistory[prefixHistory.length - 1] ?? "", "")}</span>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Filter blobs..."
+                    value={blobFilter}
+                    onChange={(e) => setBlobFilter(e.target.value)}
+                    className="flex-1 rounded border bg-card px-2 py-1 text-xs"
+                    data-testid="storage-blob-filter"
+                  />
+                  <button
+                    onClick={() => { setMultiSelectMode(!multiSelectMode); setSelectedBlobs(new Set()); }}
+                    className={`rounded border px-2 py-1 text-xs ${multiSelectMode ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                    data-testid="storage-multi-select-toggle"
+                  >
+                    {multiSelectMode ? "Exit Multi" : "Multi-Select"}
+                  </button>
+                  {multiSelectMode && selectedBlobs.size > 0 && (
+                    <>
+                      <span className="text-xs text-muted-foreground" data-testid="storage-batch-count">{selectedBlobs.size} selected</span>
+                      <button onClick={() => selectedBlobs.forEach((b) => handleDownloadBlob(b))} className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent" data-testid="storage-batch-download">
+                        <Download className="h-3 w-3" /> Download
+                      </button>
+                      <button onClick={() => setSelectedBlobs(new Set())} className="text-xs text-muted-foreground" data-testid="storage-batch-clear">Clear</button>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* Blob list */}
@@ -173,15 +246,25 @@ export function StoragePage() {
                 {displayItems.length === 0 && !blobs.isLoading && (
                   <div className="px-3 py-2 text-sm text-muted-foreground">No blobs found</div>
                 )}
-                {displayItems.map((item) => (
-                  <button
+                {filteredItems.map((item) => (
+                  <div
                     key={item.name}
                     data-testid={`storage-item-${item.name}`}
-                    onClick={() => item.isPrefix ? handleNavigatePrefix(item.name) : handleSelectBlob(item.name)}
-                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
-                      !item.isPrefix && selectedBlob === item.name ? "bg-accent" : ""
+                    onClick={() => multiSelectMode && !item.isPrefix ? toggleBlobSelection(item.name) : item.isPrefix ? handleNavigatePrefix(item.name) : handleSelectBlob(item.name)}
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent cursor-pointer ${
+                      multiSelectMode && !item.isPrefix ? selectedBlobs.has(item.name) ? "bg-primary/20" : "" : !item.isPrefix && selectedBlob === item.name ? "bg-accent" : ""
                     }`}
                   >
+                    {multiSelectMode && !item.isPrefix && (
+                      <input
+                        type="checkbox"
+                        checked={selectedBlobs.has(item.name)}
+                        onChange={() => toggleBlobSelection(item.name)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-3.5 w-3.5"
+                        data-testid={`storage-blob-checkbox-${item.name}`}
+                      />
+                    )}
                     <span className={item.isPrefix ? "text-blue-400" : "text-muted-foreground"}>
                       {item.isPrefix ? "📁" : "📄"}
                     </span>
@@ -191,7 +274,7 @@ export function StoragePage() {
                     {!item.isPrefix && (
                       <span className="ml-auto text-xs text-muted-foreground">{formatBytes(item.sizeBytes)}</span>
                     )}
-                  </button>
+                  </div>
                 ))}
                 {blobs.data?.continuationToken && (
                   <button
@@ -220,8 +303,16 @@ export function StoragePage() {
               {blobProps.data && (
                 <>
                   <div>
-                    <div className="text-lg font-mono font-semibold" data-testid="storage-blob-name">
-                      {blobProps.data.name}
+                    <div className="flex items-center gap-2">
+                      <div className="text-lg font-mono font-semibold" data-testid="storage-blob-name">
+                        {blobProps.data.name}
+                      </div>
+                      <button onClick={() => handleCopyUrl(blobProps.data.name)} className="text-muted-foreground hover:text-foreground" data-testid="storage-copy-url-btn" title="Copy URL">
+                        {copiedUrl ? <Check className="h-3.5 w-3.5 text-green-500" /> : <LinkIcon className="h-3.5 w-3.5" />}
+                      </button>
+                      <button onClick={() => handleDownloadBlob(blobProps.data.name)} className="text-muted-foreground hover:text-foreground" data-testid="storage-download-btn" title="Download blob">
+                        <Download className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
                       <span className="text-muted-foreground" data-testid="storage-blob-size">
@@ -240,9 +331,50 @@ export function StoragePage() {
                   </div>
 
                   {/* Metadata */}
-                  {Object.keys(blobProps.data.metadata).length > 0 && (
-                    <div>
-                      <h3 className="mb-2 text-sm font-semibold">Metadata</h3>
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold">Metadata</h3>
+                      {metadataEditing ? (
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => setMetadataEditing(false)} className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground" data-testid="storage-metadata-save">Save</button>
+                          <button onClick={() => { setMetadataEditing(false); setMetadataDraft({}); }} className="rounded border px-2 py-1 text-xs" data-testid="storage-metadata-cancel">Cancel</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setMetadataEditing(true); setMetadataDraft(blobProps.data.metadata); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" data-testid="storage-metadata-edit-btn">
+                          <Plus className="h-3 w-3" /> Edit
+                        </button>
+                      )}
+                    </div>
+                    {metadataEditing ? (
+                      <div className="rounded-md border p-3 space-y-2" data-testid="storage-metadata-editor">
+                        {Object.entries(metadataDraft).map(([k, v]) => (
+                          <div key={k} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={k}
+                              readOnly
+                              className="flex-1 rounded border bg-muted px-2 py-1 text-xs font-mono"
+                            />
+                            <input
+                              type="text"
+                              value={v}
+                              onChange={(e) => setMetadataDraft((prev) => ({ ...prev, [k]: e.target.value }))}
+                              className="flex-1 rounded border bg-card px-2 py-1 text-xs font-mono"
+                            />
+                            <button onClick={() => { const next = { ...metadataDraft }; delete next[k]; setMetadataDraft(next); }} className="text-destructive hover:bg-destructive/10 rounded p-1">
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => setMetadataDraft((prev) => ({ ...prev, "new-key": "" }))}
+                          className="flex items-center gap-1 text-xs text-primary hover:underline"
+                          data-testid="storage-metadata-add-key"
+                        >
+                          <Plus className="h-3 w-3" /> Add key
+                        </button>
+                      </div>
+                    ) : Object.keys(blobProps.data.metadata).length > 0 ? (
                       <div className="rounded-md border overflow-hidden">
                         <table className="w-full text-sm">
                           <thead className="bg-muted">
@@ -261,8 +393,10 @@ export function StoragePage() {
                           </tbody>
                         </table>
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No metadata</div>
+                    )}
+                  </div>
                 </>
               )}
 
