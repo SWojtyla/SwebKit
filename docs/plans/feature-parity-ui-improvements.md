@@ -519,13 +519,13 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Add global shortcuts: Ctrl+K (command palette), Ctrl+G (go to settings)
 - [ ] Add per-page shortcuts (deferred)
 
-#### 7.6 Settings Page Expansion
-- [ ] Add "DevOps" settings tab (ADO organization, PAT, project selection)
-- [ ] Add "Observability" settings tab (Application Insights resource selection)
-- [ ] Add "Incident Timeline" settings tab (mapping configuration)
-- [ ] Add "API Client" settings tab (request tabs toggle, default auth)
-- [ ] Add "Diagnostics" settings tab (log viewer, config health)
-- [ ] Add "Appearance" settings tab (theme selection, font size)
+#### 7.6 Settings Page Expansion ✅ DONE
+- [x] Add "DevOps" settings tab (ADO organization, PAT, project selection)
+- [ ] Add "Observability" settings tab (deferred — needs Application Insights integration)
+- [ ] Add "Incident Timeline" settings tab (deferred — needs incident mapping config)
+- [ ] Add "API Client" settings tab (deferred — needs request defaults config)
+- [x] Add "Diagnostics" settings tab (config health, log viewer)
+- [x] Add "Appearance" settings tab (theme selection, font size, density)
 
 #### 7.7 Dashboard Enhancement ✅ DONE
 - [x] Add health tiles per service area
