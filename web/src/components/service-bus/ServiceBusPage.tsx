@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Upload, Clock, Search } from "lucide-react";
+import { Plus, Upload, Clock, Search, RotateCcw } from "lucide-react";
 import { useProfile } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { EntityTree } from "./EntityTree";
@@ -9,6 +9,7 @@ import { MessageComposer, type ComposerMode } from "./MessageComposer";
 import { BatchSendPanel } from "./BatchSendPanel";
 import { ScheduledMessages } from "./ScheduledMessages";
 import { EntityCommandPalette, type EntityAction } from "./EntityCommandPalette";
+import { BatchReplayPanel } from "./BatchReplayPanel";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 
 export function ServiceBusPage() {
@@ -21,6 +22,7 @@ export function ServiceBusPage() {
   const [showBatchSend, setShowBatchSend] = useState(false);
   const [showScheduled, setShowScheduled] = useState(false);
   const [showEntityPalette, setShowEntityPalette] = useState(false);
+  const [showBatchReplay, setShowBatchReplay] = useState(false);
   const queryClient = useQueryClient();
 
   const handleEntityAction = useCallback((entity: SbEntityInfo, action: EntityAction) => {
@@ -109,6 +111,15 @@ export function ServiceBusPage() {
           <Clock className="h-3.5 w-3.5" />
           Scheduled
         </button>
+        <button
+          data-testid="sb-batch-replay-button"
+          onClick={() => setShowBatchReplay(true)}
+          disabled={!selectedNsId || !selectedEntity}
+          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Batch Replay
+        </button>
       </div>
 
       {/* Main content: entity tree | message list | detail */}
@@ -118,9 +129,10 @@ export function ServiceBusPage() {
           <EntityTree
             nsId={selectedNsId}
             selectedEntity={selectedEntity}
-            onSelectEntity={(entity) => {
+            onSelectEntity={(entity, mode) => {
               setSelectedEntity(entity);
               setSelectedMessage(null);
+              if (mode) setViewMode(mode);
             }}
           />
         </div>
@@ -169,6 +181,9 @@ export function ServiceBusPage() {
             nsId={selectedNsId}
             entity={selectedEntity}
             viewMode={viewMode}
+            onEditResubmit={(msg) => { setSelectedMessage(msg); setComposerMode("edit"); }}
+            onReplay={(msg) => { setSelectedMessage(msg); setComposerMode("replay"); }}
+            onSchedule={(msg) => { setSelectedMessage(msg); setComposerMode("schedule"); }}
           />
         </div>
       </div>
@@ -201,6 +216,15 @@ export function ServiceBusPage() {
           nsId={selectedNsId}
           entityPath={selectedEntity.entityPath}
           onClose={() => setShowScheduled(false)}
+        />
+      )}
+
+      {/* Batch replay modal */}
+      {showBatchReplay && selectedNsId && selectedEntity && (
+        <BatchReplayPanel
+          nsId={selectedNsId}
+          entity={selectedEntity}
+          onClose={() => setShowBatchReplay(false)}
         />
       )}
 

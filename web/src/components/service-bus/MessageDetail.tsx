@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Copy, Check, AlertTriangle, Save } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Copy, Check, AlertTriangle, Save, Pencil, RotateCcw, Clock, Search, X } from "lucide-react";
 import {
   useSbCompleteMessages,
   useSbCompleteDlq,
@@ -14,11 +14,14 @@ interface Props {
   nsId: string | null;
   entity: SbEntityInfo | null;
   viewMode: "active" | "dlq";
+  onEditResubmit?: (message: SbMessage) => void;
+  onReplay?: (message: SbMessage) => void;
+  onSchedule?: (message: SbMessage) => void;
 }
 
 type DetailTab = "body" | "properties" | "system" | "dlq";
 
-export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
+export function MessageDetail({ message, nsId, entity, viewMode, onEditResubmit, onReplay, onSchedule }: Props) {
   const completeMutation = useSbCompleteMessages();
   const completeDlqMutation = useSbCompleteDlq();
   const resubmitMutation = useSbResubmitDlq();
@@ -28,7 +31,42 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  const [propFilter, setPropFilter] = useState("");
+  const [copyPropKey, setCopyPropKey] = useState<string | null>(null);
   const saveTemplateMutation = useSbSaveTemplate();
+
+  const tryFormatJson = (body: string): string => {
+    try {
+      return JSON.stringify(JSON.parse(body), null, 2);
+    } catch {
+      return body;
+    }
+  };
+
+  const detectFormat = (body: string): "json" | "xml" | "text" => {
+    const trimmed = body.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) return "json";
+    if (trimmed.startsWith("<")) return "xml";
+    return "text";
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const bodyFormat = message ? detectFormat(message.body) : "text";
+  const bodySize = message ? new TextEncoder().encode(message.body).length : 0;
+  const bodyLineCount = message ? message.body.split("\n").length : 0;
+
+  const filteredProps = useMemo(() => {
+    if (!message) return [];
+    const entries = Object.entries(message.applicationProperties);
+    if (!propFilter.trim()) return entries;
+    const q = propFilter.toLowerCase();
+    return entries.filter(([k, v]) => k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q));
+  }, [message, propFilter]);
 
   if (!message) {
     return (
@@ -38,12 +76,12 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
     );
   }
 
-  const tryFormatJson = (body: string): string => {
+  const copyProp = async (key: string, value: unknown) => {
     try {
-      return JSON.stringify(JSON.parse(body), null, 2);
-    } catch {
-      return body;
-    }
+      await navigator.clipboard.writeText(String(value));
+      setCopyPropKey(key);
+      setTimeout(() => setCopyPropKey(null), 2000);
+    } catch {}
   };
 
   const copyToClipboard = async (text: string, feedbackKey: string) => {
@@ -231,6 +269,36 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
           >
             <Save className="h-3 w-3" /> Save as Template
           </button>
+          {onEditResubmit && (
+            <button
+              data-testid="message-edit-resubmit"
+              onClick={() => onEditResubmit(message)}
+              className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+              title="Edit and resubmit this message"
+            >
+              <Pencil className="h-3 w-3" /> Edit & Resubmit
+            </button>
+          )}
+          {onReplay && (
+            <button
+              data-testid="message-replay"
+              onClick={() => onReplay(message)}
+              className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+              title="Replay this message"
+            >
+              <RotateCcw className="h-3 w-3" /> Replay
+            </button>
+          )}
+          {onSchedule && (
+            <button
+              data-testid="message-schedule"
+              onClick={() => onSchedule(message)}
+              className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+              title="Schedule this message for later delivery"
+            >
+              <Clock className="h-3 w-3" /> Schedule
+            </button>
+          )}
         </div>
       </div>
 
@@ -314,8 +382,24 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
       <div className="flex-1 overflow-auto p-4">
         {activeTab === "body" && (
           <div data-testid="detail-tab-content-body">
+            <div className="mb-2 flex items-center gap-3 text-xs text-muted-foreground">
+              <span data-testid="body-format">Format: {bodyFormat.toUpperCase()}</span>
+              <span data-testid="body-size">Size: {formatBytes(bodySize)}</span>
+              <span data-testid="body-lines">Lines: {bodyLineCount}</span>
+              <button
+                onClick={copyBody}
+                className="flex items-center gap-1 rounded border px-2 py-0.5 hover:bg-accent"
+                data-testid="body-copy-btn"
+              >
+                {copyFeedback === "body" ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
+              </button>
+            </div>
             <pre data-testid="message-detail-body" className="max-h-[60vh] overflow-auto rounded-lg border bg-card p-3 text-xs">
-              {tryFormatJson(message.body)}
+              {bodyFormat === "json" ? (
+                <JsonHighlight text={tryFormatJson(message.body)} />
+              ) : (
+                <span className="whitespace-pre-wrap break-all">{message.body}</span>
+              )}
             </pre>
           </div>
         )}
@@ -323,14 +407,46 @@ export function MessageDetail({ message, nsId, entity, viewMode }: Props) {
         {activeTab === "properties" && (
           <div data-testid="detail-tab-content-properties">
             {Object.keys(message.applicationProperties).length > 0 ? (
-              <div className="rounded-lg border">
-                {Object.entries(message.applicationProperties).map(([key, value]) => (
-                  <div key={key} className="flex border-b px-3 py-1.5 text-xs last:border-0">
-                    <span className="w-48 font-medium text-muted-foreground">{key}</span>
-                    <span className="flex-1 break-all">{String(value)}</span>
-                  </div>
-                ))}
-              </div>
+              <>
+                <div className="relative mb-2">
+                  <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    data-testid="prop-filter-input"
+                    value={propFilter}
+                    onChange={(e) => setPropFilter(e.target.value)}
+                    placeholder="Filter properties..."
+                    className="w-full rounded-md border bg-card py-1.5 pl-8 pr-7 text-xs"
+                  />
+                  {propFilter && (
+                    <button
+                      onClick={() => setPropFilter("")}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                <div className="rounded-lg border">
+                  {filteredProps.map(([key, value]) => (
+                    <div key={key} className="group flex items-start border-b px-3 py-1.5 text-xs last:border-0">
+                      <span className="w-48 shrink-0 font-medium text-muted-foreground">{key}</span>
+                      <span className="flex-1 break-all">{String(value)}</span>
+                      <button
+                        onClick={() => copyProp(key, value)}
+                        className="ml-2 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                        data-testid={`prop-copy-${key}`}
+                        title="Copy value"
+                      >
+                        {copyPropKey === key ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      </button>
+                    </div>
+                  ))}
+                  {filteredProps.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">No properties match filter</div>
+                  )}
+                </div>
+              </>
             ) : (
               <span className="text-sm text-muted-foreground">No application properties</span>
             )}
@@ -381,5 +497,47 @@ function Field({ label, value }: { label: string; value: string | null | undefin
       <span className="text-xs text-muted-foreground">{label}</span>
       <p className="text-sm">{value || "—"}</p>
     </div>
+  );
+}
+
+function JsonHighlight({ text }: { text: string }) {
+  const tokens = useMemo(() => {
+    const parts: { text: string; cls: string }[] = [];
+    const regex = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({ text: text.slice(lastIndex, match.index), cls: "" });
+      }
+      let cls = "text-blue-400";
+      if (/^"/.test(match[0])) {
+        if (/:$/.test(match[0])) {
+          cls = "text-purple-400";
+        } else {
+          cls = "text-green-400";
+        }
+      } else if (/true|false/.test(match[0])) {
+        cls = "text-orange-400";
+      } else if (/null/.test(match[0])) {
+        cls = "text-muted-foreground";
+      } else if (/-?\d/.test(match[0])) {
+        cls = "text-cyan-400";
+      }
+      parts.push({ text: match[0], cls });
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) {
+      parts.push({ text: text.slice(lastIndex), cls: "" });
+    }
+    return parts;
+  }, [text]);
+
+  return (
+    <span>
+      {tokens.map((tok, i) => (
+        <span key={i} className={tok.cls}>{tok.text}</span>
+      ))}
+    </span>
   );
 }

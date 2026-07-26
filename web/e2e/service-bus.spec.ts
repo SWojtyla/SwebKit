@@ -19,7 +19,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("entity-tree-queue-order-created").click();
 
     await expect(page.getByTestId("message-list")).toBeVisible();
-    const firstMessage = page.getByTestId("message-list").locator("button").first();
+    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
     await expect(firstMessage).toBeVisible();
 
     await firstMessage.click();
@@ -37,7 +37,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("sb-view-dlq").click();
 
     await expect(page.getByTestId("message-list")).toBeVisible();
-    const firstMessage = page.getByTestId("message-list").locator("button").first();
+    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
     await expect(firstMessage).toBeVisible();
 
     await firstMessage.click();
@@ -52,7 +52,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("entity-tree-queue-order-created").click();
 
     await expect(page.getByTestId("message-list")).toBeVisible();
-    const initialCount = await page.getByTestId("message-list").locator("button[data-testid^='message-item-']").count();
+    const initialCount = await page.getByTestId("message-list").locator("[data-testid^='message-item-']").count();
     expect(initialCount).toBeGreaterThan(0);
 
     // Type a filter that should narrow results
@@ -111,7 +111,7 @@ test.describe("Service Bus", () => {
 
     // Should filter - either show matches or no-matches (depends on demo data)
     // The key assertion is that the filter is being applied
-    const hasMatches = await page.getByTestId("message-list").locator("button[data-testid^='message-item-']").count();
+    const hasMatches = await page.getByTestId("message-list").locator("[data-testid^='message-item-']").count();
     const hasNoMatch = await page.getByTestId("message-list-no-matches").count();
     expect(hasMatches > 0 || hasNoMatch > 0).toBeTruthy();
   });
@@ -138,7 +138,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
     await page.getByTestId("entity-tree-queue-order-created").click();
 
-    const firstMessage = page.getByTestId("message-list").locator("button").first();
+    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
     await firstMessage.click();
     await expect(page.getByTestId("message-detail")).toBeVisible();
 
@@ -165,7 +165,7 @@ test.describe("Service Bus", () => {
       await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
       await page.getByTestId("entity-tree-queue-order-created").click();
 
-      const firstMessage = page.getByTestId("message-list").locator("button").first();
+      const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
       await firstMessage.click();
       await expect(page.getByTestId("message-detail")).toBeVisible();
 
@@ -189,7 +189,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
     await page.getByTestId("entity-tree-queue-order-created").click();
 
-    const firstMessage = page.getByTestId("message-list").locator("button").first();
+    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
     await firstMessage.click();
     await expect(page.getByTestId("message-detail")).toBeVisible();
 
@@ -208,7 +208,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("entity-tree-queue-order-failed").click();
     await page.getByTestId("sb-view-dlq").click();
 
-    const firstMessage = page.getByTestId("message-list").locator("button").first();
+    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
     await firstMessage.click();
     await expect(page.getByTestId("message-detail")).toBeVisible();
 
@@ -276,7 +276,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
     await page.getByTestId("entity-tree-queue-order-created").click();
 
-    const firstMessage = page.getByTestId("message-list").locator("button").first();
+    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
     await firstMessage.click();
     await expect(page.getByTestId("message-detail")).toBeVisible();
 
@@ -298,7 +298,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("entity-tree-queue-order-created").click();
 
     // First save a template from a message
-    const firstMessage = page.getByTestId("message-list").locator("button").first();
+    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
     await firstMessage.click();
     await page.getByTestId("message-save-template").click();
     await page.getByTestId("template-name-input").fill("Composer Load Test");
