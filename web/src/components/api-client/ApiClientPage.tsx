@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Globe, Settings2 } from "lucide-react";
 import {
   useCollections,
@@ -13,6 +13,7 @@ import { ResponseViewer } from "./ResponseViewer";
 import { NameDialog, ConfirmDialog } from "./Dialogs";
 import { EnvironmentManager } from "./EnvironmentManager";
 import { CollectionVariableEditor } from "./CollectionVariableEditor";
+import { RequestTabStrip, type RequestTab } from "./RequestTabStrip";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -158,6 +159,13 @@ function renameNodeInNodes(
   });
 }
 
+interface TabState {
+  draft: HttpRequestEntry;
+  response: ApiClientExecutionResponse | null;
+  sending: boolean;
+  dirty: boolean;
+}
+
 export function ApiClientPage() {
   const { data: collections = [], isLoading } = useCollections();
   const updateCollections = useUpdateCollections();
@@ -171,9 +179,9 @@ export function ApiClientPage() {
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
-  const [draftRequest, setDraftRequest] = useState<HttpRequestEntry | null>(null);
-  const [response, setResponse] = useState<ApiClientExecutionResponse | null>(null);
-  const [sending, setSending] = useState(false);
+  const [tabs, setTabs] = useState<RequestTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [tabStates, setTabStates] = useState<Record<string, TabState>>({});
   const [showEnvManager, setShowEnvManager] = useState(false);
   const [showColVarEditor, setShowColVarEditor] = useState(false);
   const [nameDialog, setNameDialog] = useState<{
@@ -188,14 +196,62 @@ export function ApiClientPage() {
     onConfirm: () => void;
   } | null>(null);
 
+  const openTab = useCallback((node: ApiCollectionNode, collectionId: string) => {
+    if (node.type !== "Request" || !node.request) return;
+    const existingTab = tabs.find((t) => t.nodeId === node.id);
+    if (existingTab) {
+      setActiveTabId(existingTab.id);
+      return;
+    }
+    const tabId = newId();
+    const tab: RequestTab = {
+      id: tabId,
+      nodeId: node.id,
+      collectionId,
+      name: node.name,
+      method: node.request.method,
+      dirty: false,
+    };
+    setTabs((prev) => [...prev, tab]);
+    setTabStates((prev) => ({
+      ...prev,
+      [tabId]: { draft: deepClone(node.request!), response: null, sending: false, dirty: false },
+    }));
+    setActiveTabId(tabId);
+  }, [tabs]);
+
+  const closeTab = useCallback((tabId: string) => {
+    const tabState = tabStates[tabId];
+    if (tabState?.dirty) {
+      setConfirmDialog({
+        message: `Close "${tabs.find((t) => t.id === tabId)?.name}" with unsaved changes?`,
+        onConfirm: () => {
+          setTabs((prev) => prev.filter((t) => t.id !== tabId));
+          setTabStates((prev) => { const next = { ...prev }; delete next[tabId]; return next; });
+          if (activeTabId === tabId) setActiveTabId(null);
+          setConfirmDialog(null);
+        },
+      });
+      return;
+    }
+    setTabs((prev) => prev.filter((t) => t.id !== tabId));
+    setTabStates((prev) => { const next = { ...prev }; delete next[tabId]; return next; });
+    if (activeTabId === tabId) setActiveTabId(null);
+  }, [tabStates, tabs, activeTabId]);
+
+  const updateTabDraft = useCallback((tabId: string, draft: HttpRequestEntry) => {
+    setTabStates((prev) => ({
+      ...prev,
+      [tabId]: { ...prev[tabId], draft, dirty: true },
+    }));
+    setTabs((prev) => prev.map((t) => t.id === tabId ? { ...t, name: draft.name, method: draft.method, dirty: true } : t));
+  }, []);
+
   const handleSelectNode = (node: ApiCollectionNode, collectionId: string) => {
     setSelectedNodeId(node.id);
     setSelectedCollectionId(collectionId);
-    setResponse(null);
     if (node.type === "Request" && node.request) {
-      setDraftRequest(deepClone(node.request));
-    } else {
-      setDraftRequest(null);
+      openTab(node, collectionId);
     }
   };
 
@@ -244,7 +300,22 @@ export function ApiClientPage() {
           onSuccess: () => {
             setSelectedNodeId(node.id);
             setSelectedCollectionId(collectionId);
-            setDraftRequest(deepClone(request));
+            // Open tab for the new request
+            const tabId = newId();
+            const tab: RequestTab = {
+              id: tabId,
+              nodeId: node.id,
+              collectionId,
+              name,
+              method: request.method,
+              dirty: false,
+            };
+            setTabs((prev) => [...prev, tab]);
+            setTabStates((prev) => ({
+              ...prev,
+              [tabId]: { draft: deepClone(request), response: null, sending: false, dirty: false },
+            }));
+            setActiveTabId(tabId);
           },
         });
         setNameDialog(null);
@@ -284,7 +355,13 @@ export function ApiClientPage() {
           onSuccess: () => {
             if (selectedNodeId === nodeId) {
               setSelectedNodeId(null);
-              setDraftRequest(null);
+              // Close tab for deleted node
+              const tabToClose = tabs.find((t) => t.nodeId === nodeId);
+              if (tabToClose) {
+                setTabs((prev) => prev.filter((t) => t.id !== tabToClose.id));
+                setTabStates((prev) => { const next = { ...prev }; delete next[tabToClose.id]; return next; });
+                if (activeTabId === tabToClose.id) setActiveTabId(null);
+              }
               setSelectedCollectionId(collectionId === nodeId ? null : collectionId);
             }
           },
@@ -297,46 +374,62 @@ export function ApiClientPage() {
   const handleRenameNode = (_nodeId: string, _collectionId: string, newName: string) => {
     const next = renameNodeInCollections(collections, _nodeId, newName);
     updateCollections.mutate(next);
-    if (draftRequest && _nodeId === selectedNodeId) {
-      setDraftRequest({ ...draftRequest, name: newName });
-    }
+    // Update tab name if open
+    setTabs((prev) => prev.map((t) => t.nodeId === _nodeId ? { ...t, name: newName } : t));
   };
 
   const handleSave = () => {
-    if (!draftRequest || !selectedNodeId) return;
-    const next = updateRequestInCollections(collections, selectedNodeId, draftRequest);
-    updateCollections.mutate(next);
+    if (!activeTabId) return;
+    const tabState = tabStates[activeTabId];
+    if (!tabState) return;
+    const tab = tabs.find((t) => t.id === activeTabId);
+    if (!tab) return;
+    const next = updateRequestInCollections(collections, tab.nodeId, tabState.draft);
+    updateCollections.mutate(next, {
+      onSuccess: () => {
+        setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], dirty: false } }));
+        setTabs((prev) => prev.map((t) => t.id === activeTabId ? { ...t, dirty: false } : t));
+      },
+    });
   };
 
   const handleSend = async () => {
-    if (!draftRequest) return;
-    setSending(true);
-    setResponse(null);
+    if (!activeTabId) return;
+    const tabState = tabStates[activeTabId];
+    if (!tabState) return;
+    const tab = tabs.find((t) => t.id === activeTabId);
+    if (!tab) return;
+    setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], sending: true, response: null } }));
     try {
       const result = await executeRequest.mutateAsync({
-        request: draftRequest,
-        collectionId: selectedCollectionId ?? undefined,
+        request: tabState.draft,
+        collectionId: tab.collectionId ?? undefined,
         environmentId: activeEnvironmentId ?? undefined,
       });
-      setResponse(result);
+      setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], response: result, sending: false } }));
     } catch (err) {
-      setResponse({
-        resolvedUrl: draftRequest.url,
-        method: draftRequest.method,
-        statusCode: 0,
-        statusText: "Request Failed",
-        errorMessage: err instanceof Error ? err.message : "Unknown error",
-        elapsedMs: 0,
-        contentLength: -1,
-        contentType: null,
-        responseBody: null,
-        responseBodyTruncated: false,
-        headers: [],
-        captureWarnings: [],
-        graphQlErrors: null,
-      });
-    } finally {
-      setSending(false);
+      setTabStates((prev) => ({
+        ...prev,
+        [activeTabId]: {
+          ...prev[activeTabId],
+          sending: false,
+          response: {
+            resolvedUrl: tabState.draft.url,
+            method: tabState.draft.method,
+            statusCode: 0,
+            statusText: "Request Failed",
+            errorMessage: err instanceof Error ? err.message : "Unknown error",
+            elapsedMs: 0,
+            contentLength: -1,
+            contentType: null,
+            responseBody: null,
+            responseBodyTruncated: false,
+            headers: [],
+            captureWarnings: [],
+            graphQlErrors: null,
+          },
+        },
+      }));
     }
   };
 
@@ -441,13 +534,19 @@ export function ApiClientPage() {
         />
 
         <div className="flex w-96 flex-col border-r">
-          {draftRequest ? (
+          <RequestTabStrip
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onSelectTab={setActiveTabId}
+            onCloseTab={closeTab}
+          />
+          {activeTabId && tabStates[activeTabId] ? (
             <RequestEditor
-              request={draftRequest}
-              onChange={setDraftRequest}
+              request={tabStates[activeTabId].draft}
+              onChange={(req) => updateTabDraft(activeTabId, req)}
               onSend={handleSend}
               onSave={handleSave}
-              sending={sending}
+              sending={tabStates[activeTabId].sending}
             />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
@@ -460,9 +559,9 @@ export function ApiClientPage() {
 
         <div className="flex-1 overflow-hidden">
           <ResponseViewer
-            response={response}
-            sending={sending}
-            request={draftRequest ? { method: draftRequest.method, url: draftRequest.url } : null}
+            response={activeTabId ? tabStates[activeTabId]?.response ?? null : null}
+            sending={activeTabId ? tabStates[activeTabId]?.sending ?? false : false}
+            request={activeTabId && tabStates[activeTabId] ? { method: tabStates[activeTabId].draft.method, url: tabStates[activeTabId].draft.url } : null}
           />
         </div>
       </div>

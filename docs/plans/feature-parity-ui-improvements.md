@@ -194,12 +194,14 @@ All four major feature areas are **high priority**. Execute in this order:
 - [ ] Add linked repo badges in collection tree (branch name, dirty count)
 - [ ] Add sidecar endpoints for Git operations (using LibGit2Sharp or shell git)
 
-#### 2.6 Multi-Tab Request Editing
-- [ ] Create `RequestTabs.tsx` — tab strip for open requests
-- [ ] Add tab open/close, tab selection
-- [ ] Per-tab dirty state tracking
-- [ ] Per-tab response state
-- [ ] Add setting toggle for tab mode vs single mode
+#### 2.6 Multi-Tab Request Editing ✅ DONE
+- [x] Create `RequestTabStrip.tsx` — tab strip for open requests
+- [x] Add tab open/close, tab selection
+- [x] Per-tab dirty state tracking (dirty indicator on tab)
+- [x] Per-tab response state (each tab has own draft, response, sending state)
+- [x] Close tab with unsaved changes confirmation dialog
+- [x] Auto-open tab when creating new request
+- [ ] Add setting toggle for tab mode vs single mode — deferred (multi-tab is default)
 
 #### 2.7 GraphQL & WebSocket Support
 - [ ] Create `GraphQlPanel.tsx` — query editor, variables editor, operation selector

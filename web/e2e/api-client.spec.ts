@@ -312,4 +312,63 @@ test.describe("API Client", () => {
     await expect(page.getByTestId("col-var-key-0")).toHaveValue("apiKey");
     await expect(page.getByTestId("col-var-value-0")).toHaveValue("test-key-123");
   });
+
+  test("multi-tab: opening requests creates tabs and switching preserves state", async ({ page }) => {
+    // Create a collection with two requests
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Multi-Tab Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("First Request");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("Second Request");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    // Creating requests auto-opens tabs, so we should already have 2 tabs
+    const tabItems = page.locator('[data-testid^="open-tab-"]');
+    await expect(tabItems).toHaveCount(2);
+    await expect(page.getByTestId("request-tab-strip")).toBeVisible();
+
+    // Set URL on second request (currently active tab from last creation)
+    await page.getByTestId("request-url-input").fill("http://127.0.0.1:5198/second");
+
+    // Switch to first tab — URL should be empty
+    await tabItems.filter({ hasText: "First Request" }).first().click();
+    await expect(page.getByTestId("request-url-input")).toHaveValue("");
+
+    // Set URL on first request
+    await page.getByTestId("request-url-input").fill("http://127.0.0.1:5198/first");
+
+    // Switch to second tab — URL should be preserved
+    await tabItems.filter({ hasText: "Second Request" }).first().click();
+    await expect(page.getByTestId("request-url-input")).toHaveValue("http://127.0.0.1:5198/second");
+
+    // Switch back to first tab — URL should also be preserved
+    await tabItems.filter({ hasText: "First Request" }).first().click();
+    await expect(page.getByTestId("request-url-input")).toHaveValue("http://127.0.0.1:5198/first");
+  });
+
+  test("multi-tab: closing a tab works", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Close Tab Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("Closable Request");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    // Tab should be open
+    const tabItems = page.locator('[data-testid^="open-tab-"]');
+    await expect(tabItems).toHaveCount(1);
+
+    // Close it
+    await page.locator('[data-testid^="tab-close-"]').first().click();
+    await expect(tabItems).toHaveCount(0);
+    await expect(page.getByTestId("api-client-empty-editor")).toBeVisible();
+  });
 });
