@@ -1,12 +1,14 @@
-import { useState } from "react";
-import { Plus, Upload, Clock } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Plus, Upload, Clock, Search } from "lucide-react";
 import { useProfile } from "@/lib/hooks";
+import { useQueryClient } from "@tanstack/react-query";
 import { EntityTree } from "./EntityTree";
 import { MessageList } from "./MessageList";
 import { MessageDetail } from "./MessageDetail";
 import { MessageComposer, type ComposerMode } from "./MessageComposer";
 import { BatchSendPanel } from "./BatchSendPanel";
 import { ScheduledMessages } from "./ScheduledMessages";
+import { EntityCommandPalette, type EntityAction } from "./EntityCommandPalette";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 
 export function ServiceBusPage() {
@@ -18,6 +20,28 @@ export function ServiceBusPage() {
   const [composerMode, setComposerMode] = useState<ComposerMode | null>(null);
   const [showBatchSend, setShowBatchSend] = useState(false);
   const [showScheduled, setShowScheduled] = useState(false);
+  const [showEntityPalette, setShowEntityPalette] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleEntityAction = useCallback((entity: SbEntityInfo, action: EntityAction) => {
+    setSelectedEntity(entity);
+    setSelectedMessage(null);
+    if (action === "peek-active") setViewMode("active");
+    if (action === "peek-dlq") setViewMode("dlq");
+    if (action === "send") setComposerMode("compose");
+    if (action === "refresh") queryClient.invalidateQueries({ queryKey: ["sb-"] });
+  }, [queryClient]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "e" || e.key === "E")) {
+        e.preventDefault();
+        setShowEntityPalette((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const namespaces = profile?.serviceBusNamespaces ?? [];
 
@@ -49,6 +73,15 @@ export function ServiceBusPage() {
           </span>
         )}
         <div className="flex-1" />
+        <button
+          data-testid="sb-entity-search"
+          onClick={() => setShowEntityPalette(true)}
+          disabled={!selectedNsId}
+          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+        >
+          <Search className="h-3.5 w-3.5" />
+          Search Entities
+        </button>
         <button
           data-testid="sb-compose-button"
           onClick={() => setComposerMode("compose")}
@@ -170,6 +203,18 @@ export function ServiceBusPage() {
           onClose={() => setShowScheduled(false)}
         />
       )}
+
+      {/* Entity command palette */}
+      <EntityCommandPalette
+        open={showEntityPalette}
+        nsId={selectedNsId}
+        onClose={() => setShowEntityPalette(false)}
+        onSelectEntity={(entity) => {
+          setSelectedEntity(entity);
+          setSelectedMessage(null);
+        }}
+        onAction={handleEntityAction}
+      />
     </div>
   );
 }

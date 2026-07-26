@@ -96,10 +96,12 @@ All four major feature areas are **high priority**. Execute in this order:
 - [x] Replace `confirm()` with inline purge confirmation dialog
 - [ ] Add JSON syntax highlighting for body (use a lightweight highlighter or monaco editor) — deferred
 
-#### 1.7 Entity Command Palette
-- [ ] Create `EntityCommandPalette.tsx` — quick search + action palette for entities
-- [ ] Add keyboard shortcut (Ctrl+K) to open
-- [ ] Actions: peek active, peek DLQ, send message, purge, refresh
+#### 1.7 Entity Command Palette ✅ DONE
+- [x] Create `EntityCommandPalette.tsx` — quick search + action palette for entities
+- [x] Add keyboard shortcut (Ctrl+Shift+E) to open
+- [x] Actions: peek active, peek DLQ, send message, purge, refresh
+- [x] Search button in Service Bus header
+- [x] Keyboard navigation (arrow keys, enter, tab for actions, escape)
 
 ---
 

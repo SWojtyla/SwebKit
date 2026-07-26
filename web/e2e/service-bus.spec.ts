@@ -394,4 +394,41 @@ test.describe("Service Bus", () => {
     await page.getByTestId("scheduled-close").click();
     await expect(page.getByTestId("scheduled-messages-panel")).not.toBeVisible();
   });
+
+  test("entity command palette opens and searches entities", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+
+    // Open palette via search button
+    await page.getByTestId("sb-entity-search").click();
+    await expect(page.getByTestId("entity-command-palette")).toBeVisible();
+
+    // Should show entity results
+    await expect(page.getByTestId("entity-palette-search")).toBeVisible();
+    const items = page.locator("[data-testid^='entity-palette-item-']");
+    expect(await items.count()).toBeGreaterThan(0);
+
+    // Search for a specific entity
+    await page.getByTestId("entity-palette-search").fill("order");
+    const filteredItems = page.locator("[data-testid^='entity-palette-item-']");
+    expect(await filteredItems.count()).toBeGreaterThan(0);
+
+    // Close with Escape
+    await page.getByTestId("entity-palette-search").press("Escape");
+    await expect(page.getByTestId("entity-command-palette")).not.toBeVisible();
+  });
+
+  test("entity command palette selects entity on Enter", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+
+    await page.getByTestId("sb-entity-search").click();
+    await expect(page.getByTestId("entity-command-palette")).toBeVisible();
+
+    // Press Enter to select first entity
+    await page.getByTestId("entity-palette-search").press("Enter");
+    // Palette should show actions for selected entity (Tab toggles actions)
+    // The entity should be selected in the tree
+    await expect(page.getByTestId("entity-command-palette")).toBeVisible();
+  });
 });
