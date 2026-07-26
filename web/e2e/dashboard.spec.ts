@@ -29,4 +29,24 @@ test.describe("Dashboard", () => {
     await page.goto("/");
     await expect(page.getByTestId("service-card-service-bus")).toContainText("2 namespaces");
   });
+
+  test("shows health tiles for each service", async ({ page }) => {
+    await setDemoMode(page, true);
+    await page.goto("/");
+    await expect(page.getByTestId("health-tiles")).toBeVisible();
+    await expect(page.getByTestId("health-tile-service-bus")).toBeVisible();
+    await expect(page.getByTestId("health-tile-aks")).toBeVisible();
+    await expect(page.getByTestId("health-tile-redis")).toBeVisible();
+    await expect(page.getByTestId("health-tile-storage")).toBeVisible();
+  });
+
+  test("shows watch tiles with metrics", async ({ page }) => {
+    await setDemoMode(page, true);
+    await page.goto("/");
+    await expect(page.getByTestId("watch-tiles")).toBeVisible();
+    await expect(page.getByTestId("watch-tile-deployments")).toBeVisible();
+    await expect(page.getByTestId("watch-tile-pods")).toBeVisible();
+    await expect(page.getByTestId("watch-tile-containers")).toBeVisible();
+    await expect(page.getByTestId("watch-tile-cache-hit-rate")).toBeVisible();
+  });
 });

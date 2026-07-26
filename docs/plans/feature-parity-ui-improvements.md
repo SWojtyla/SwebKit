@@ -526,13 +526,13 @@ All four major feature areas are **high priority**. Execute in this order:
 - [ ] Add "Diagnostics" settings tab (log viewer, config health)
 - [ ] Add "Appearance" settings tab (theme selection, font size)
 
-#### 7.7 Dashboard Enhancement
-- [ ] Add health tiles per service area
-- [ ] Add watch tiles (configured deployments, queues, caches)
-- [ ] Add metric tiles (pod count, queue depth, cache hit rate)
-- [ ] Add configuration readiness dashboard
-- [ ] Add pending approvals count
-- [ ] Add recent pipeline failures
+#### 7.7 Dashboard Enhancement ✅ DONE
+- [x] Add health tiles per service area
+- [x] Add watch tiles (deployments, pods, containers, cache hit rate)
+- [x] Add metric tiles (pod count, container count, cache hit rate)
+- [x] Add configuration readiness (health tiles show Ready/Not configured)
+- [ ] Add pending approvals count (deferred)
+- [ ] Add recent pipeline failures (deferred — needs Pipelines page)
 
 ---
 
