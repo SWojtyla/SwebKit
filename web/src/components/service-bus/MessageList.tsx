@@ -6,7 +6,7 @@ import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { applyFilters } from "./filterLogic";
 import { AdvancedFilterPanel } from "./AdvancedFilterPanel";
 import type { AdvancedFilterRule } from "./filterTypes";
-import { isRuleConfigured } from "./filterTypes";
+import { isRuleConfigured, createFilterRule } from "./filterTypes";
 import {
   loadSbPreferences,
   saveSbPreferences,
@@ -86,9 +86,8 @@ function truncateNsbType(value: string): string {
 export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectMessage }: Props) {
   const qc = useQueryClient();
   const [textFilter, setTextFilter] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [advancedRules, setAdvancedRules] = useState<AdvancedFilterRule[]>([]);
-  const [advancedEnabled, setAdvancedEnabled] = useState(true);
+  const [advancedEnabled, setAdvancedEnabled] = useState(false);
   const [pinnedSessionId, setPinnedSessionId] = useState<string | null>(null);
   const [showColumnToggle, setShowColumnToggle] = useState(false);
   const [selectedMsgs, setSelectedMsgs] = useState<Set<string>>(new Set());
@@ -243,8 +242,8 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
 
   const filteredMessages = useMemo(() => {
     if (!filtersEnabled) return messages ?? [];
-    return applyFilters(messages ?? [], textFilter, advancedRules, advancedEnabled && showAdvanced, pinnedSessionId);
-  }, [messages, textFilter, advancedRules, advancedEnabled, showAdvanced, pinnedSessionId, filtersEnabled]);
+    return applyFilters(messages ?? [], textFilter, advancedRules, advancedEnabled, pinnedSessionId);
+  }, [messages, textFilter, advancedRules, advancedEnabled, pinnedSessionId, filtersEnabled]);
 
   const activeRuleCount = advancedRules.filter((r) => r.enabled && isRuleConfigured(r)).length;
 
@@ -443,12 +442,13 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
         </button>
         <button
           data-testid="toggle-advanced-filter"
-          onClick={() => setShowAdvanced(!showAdvanced)}
+          onClick={() => setAdvancedEnabled((prev) => !prev)}
+          disabled={!filtersEnabled}
           title="Advanced filters"
           className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${
-            showAdvanced || activeRuleCount > 0
+            advancedEnabled && filtersEnabled
               ? "border-primary bg-primary/10 text-primary"
-              : "text-muted-foreground hover:bg-accent"
+              : "text-muted-foreground hover:bg-accent disabled:opacity-50"
           }`}
         >
           <Filter className="h-3.5 w-3.5" />
@@ -457,7 +457,18 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
               {activeRuleCount}
             </span>
           )}
+          <span className="hidden sm:inline">{advancedEnabled ? "Advanced: On" : "Advanced: Off"}</span>
         </button>
+        {advancedEnabled && (
+          <button
+            data-testid="add-rule"
+            onClick={() => setAdvancedRules((rules) => [...rules, createFilterRule()])}
+            title="Add advanced filter rule"
+            className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent"
+          >
+            <Plus className="h-3.5 w-3.5" /> Rule
+          </button>
+        )}
         <button
           data-testid="toggle-column-visibility"
           onClick={() => setShowColumnToggle(!showColumnToggle)}
@@ -569,17 +580,10 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
       </div>
 
       {/* Advanced filter panel */}
-      {showAdvanced && (
+      {advancedEnabled && (
         <>
           <div className="flex items-center justify-between border-b bg-muted/20 px-2 py-1">
-            <label className="flex items-center gap-1.5 text-xs">
-              <input
-                type="checkbox"
-                checked={advancedEnabled}
-                onChange={(e) => setAdvancedEnabled(e.target.checked)}
-              />
-              <span className="font-medium">Advanced filters</span>
-            </label>
+            <span className="text-xs font-medium">Advanced filters</span>
             {advancedRules.length > 0 && (
               <button
                 onClick={() => setAdvancedRules([])}

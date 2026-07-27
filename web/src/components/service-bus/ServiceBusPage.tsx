@@ -23,6 +23,7 @@ export function ServiceBusPage() {
   const [showScheduled, setShowScheduled] = useState(false);
   const [showEntityPalette, setShowEntityPalette] = useState(false);
   const [showBatchReplay, setShowBatchReplay] = useState(false);
+  const [showEntityTree, setShowEntityTree] = useState(true);
   const queryClient = useQueryClient();
 
   const handleEntityAction = useCallback((entity: SbEntityInfo, action: EntityAction) => {
@@ -75,6 +76,13 @@ export function ServiceBusPage() {
             Configure namespaces in Settings
           </span>
         )}
+        <button
+          data-testid="toggle-entity-tree"
+          onClick={() => setShowEntityTree((v) => !v)}
+          className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+        >
+          {showEntityTree ? "Hide Entities" : "Show Entities"}
+        </button>
         <div className="flex-1" />
         <button
           data-testid="sb-entity-search"
@@ -126,17 +134,28 @@ export function ServiceBusPage() {
       {/* Main content: entity tree | message list | detail */}
       <div className="flex flex-1 overflow-hidden">
         {/* Entity tree */}
-        <div className="w-64 overflow-auto border-r">
-          <EntityTree
-            nsId={selectedNsId}
-            selectedEntity={selectedEntity}
-            onSelectEntity={(entity, mode) => {
-              setSelectedEntity(entity);
-              setSelectedMessage(null);
-              if (mode) setViewMode(mode);
-            }}
-          />
-        </div>
+        {showEntityTree ? (
+          <div className="w-64 overflow-auto border-r">
+            <EntityTree
+              nsId={selectedNsId}
+              selectedEntity={selectedEntity}
+              onSelectEntity={(entity, mode) => {
+                setSelectedEntity(entity);
+                setSelectedMessage(null);
+                if (mode) setViewMode(mode);
+              }}
+            />
+          </div>
+        ) : (
+          <button
+            data-testid="show-entity-tree"
+            onClick={() => setShowEntityTree(true)}
+            className="flex items-center border-r bg-card px-1.5 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="Show entity tree"
+          >
+            Entities
+          </button>
+        )}
 
         {/* Message list */}
         <div className="flex w-80 flex-col overflow-hidden border-r">
