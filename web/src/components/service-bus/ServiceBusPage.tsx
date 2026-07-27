@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Upload, Clock, Search, RotateCcw } from "lucide-react";
+import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft } from "lucide-react";
 import { useProfile } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { EntityTree } from "./EntityTree";
@@ -23,6 +23,7 @@ export function ServiceBusPage() {
   const [showScheduled, setShowScheduled] = useState(false);
   const [showEntityPalette, setShowEntityPalette] = useState(false);
   const [showBatchReplay, setShowBatchReplay] = useState(false);
+  const [showEntityTree, setShowEntityTree] = useState(true);
   const queryClient = useQueryClient();
 
   const handleEntityAction = useCallback((entity: SbEntityInfo, action: EntityAction) => {
@@ -46,6 +47,7 @@ export function ServiceBusPage() {
   }, []);
 
   const namespaces = profile?.serviceBusNamespaces ?? [];
+  const selectedNs = namespaces.find((ns) => ns.id === selectedNsId);
 
   return (
     <div className="flex h-full flex-col" data-testid="service-bus-page">
@@ -74,6 +76,13 @@ export function ServiceBusPage() {
             Configure namespaces in Settings
           </span>
         )}
+        <button
+          data-testid="toggle-entity-tree"
+          onClick={() => setShowEntityTree((v) => !v)}
+          className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+        >
+          {showEntityTree ? "Hide Entities" : "Show Entities"}
+        </button>
         <div className="flex-1" />
         <button
           data-testid="sb-entity-search"
@@ -125,20 +134,51 @@ export function ServiceBusPage() {
       {/* Main content: entity tree | message list | detail */}
       <div className="flex flex-1 overflow-hidden">
         {/* Entity tree */}
-        <div className="w-64 overflow-auto border-r">
-          <EntityTree
-            nsId={selectedNsId}
-            selectedEntity={selectedEntity}
-            onSelectEntity={(entity, mode) => {
-              setSelectedEntity(entity);
-              setSelectedMessage(null);
-              if (mode) setViewMode(mode);
-            }}
-          />
-        </div>
+        {showEntityTree ? (
+          <div className="w-64 overflow-auto border-r">
+            <EntityTree
+              nsId={selectedNsId}
+              selectedEntity={selectedEntity}
+              onSelectEntity={(entity, mode) => {
+                setSelectedEntity(entity);
+                setSelectedMessage(null);
+                if (mode) setViewMode(mode);
+              }}
+            />
+          </div>
+        ) : (
+          <button
+            data-testid="show-entity-tree"
+            onClick={() => setShowEntityTree(true)}
+            className="flex items-center border-r bg-card px-1.5 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="Show entity tree"
+          >
+            Entities
+          </button>
+        )}
 
         {/* Message list */}
         <div className="flex w-80 flex-col overflow-hidden border-r">
+          {selectedEntity && (
+            <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs" data-testid="sb-breadcrumb">
+              <button
+                type="button"
+                onClick={() => { setSelectedEntity(null); setSelectedMessage(null); }}
+                className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                title="Return to entity overview"
+              >
+                <ChevronLeft className="h-3 w-3" /> Overview
+              </button>
+              <span className="text-muted-foreground">/</span>
+              <span className="truncate text-muted-foreground" title={selectedNs?.alias ?? selectedNsId ?? ""}>
+                {selectedNs?.alias ?? selectedNsId}
+              </span>
+              <span className="text-muted-foreground">/</span>
+              <span className="truncate font-medium" title={selectedEntity.name}>
+                {selectedEntity.name}
+              </span>
+            </div>
+          )}
           {selectedEntity && (
             <div className="flex border-b">
               <button
@@ -181,6 +221,7 @@ export function ServiceBusPage() {
             nsId={selectedNsId}
             entity={selectedEntity}
             viewMode={viewMode}
+            onClose={() => setSelectedMessage(null)}
             onEditResubmit={(msg) => { setSelectedMessage(msg); setComposerMode("edit"); }}
             onReplay={(msg) => { setSelectedMessage(msg); setComposerMode("replay"); }}
             onSchedule={(msg) => { setSelectedMessage(msg); setComposerMode("schedule"); }}

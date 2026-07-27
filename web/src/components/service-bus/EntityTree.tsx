@@ -11,6 +11,67 @@ interface Props {
 
 type SortCol = "name" | "active" | "dlq" | "sched";
 
+function EntityStatsBadges({
+  entity,
+  onSelectEntity,
+}: {
+  entity: SbEntityInfo;
+  onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
+}) {
+  const CountBadge = ({
+    count,
+    mode,
+  }: {
+    count: number | undefined;
+    mode?: "active" | "dlq";
+  }) => {
+    const value = count ?? 0;
+    if (value > 0 && mode) {
+      return (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onSelectEntity(entity, mode); }}
+          className={`rounded px-1.5 py-0.5 hover:opacity-80 ${
+            mode === "dlq"
+              ? "bg-destructive/20 text-destructive"
+              : "bg-secondary text-secondary-foreground"
+          }`}
+          title={`Open ${mode === "dlq" ? "dead-letter" : "active"} messages`}
+        >
+          {value}
+        </button>
+      );
+    }
+    return (
+      <span
+        className={`rounded px-1.5 py-0.5 ${
+          value > 0 ? "bg-muted text-muted-foreground" : "text-muted-foreground"
+        }`}
+      >
+        {value > 0 ? value : "–"}
+      </span>
+    );
+  };
+
+  if (entity.isTopic || !entity.stats) {
+    return (
+      <span className="ml-auto flex gap-1 text-xs text-muted-foreground">
+        <span className="rounded px-1.5 py-0.5">–</span>
+        <span className="rounded px-1.5 py-0.5">–</span>
+        <span className="rounded px-1.5 py-0.5">–</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="ml-auto flex gap-1 text-xs">
+      <CountBadge count={entity.stats.activeMessageCount} mode="active" />
+      <CountBadge count={entity.stats.deadLetterMessageCount} mode="dlq" />
+      <CountBadge count={entity.stats.scheduledMessageCount} />
+    </span>
+  );
+}
+
 export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
   const { data: queues, isLoading: queuesLoading } = useSbQueues(nsId);
   const { data: topics, isLoading: topicsLoading } = useSbTopics(nsId);
@@ -79,46 +140,7 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
     return <Mail className="h-4 w-4 text-muted-foreground" />;
   };
 
-  // Active/DLQ/Scheduled counts are clickable — clicking one selects the
-  // entity and jumps straight into that view, matching the MAUI grid's
-  // drill-down behavior. stopPropagation keeps the click from also firing
-  // the row's own onClick (which would select the entity without changing
-  // the current view mode).
-  const EntityBadges = ({ entity }: { entity: SbEntityInfo }) => {
-    if (!entity.stats) return null;
-    return (
-      <span className="ml-auto flex gap-1 text-xs">
-        {entity.stats.activeMessageCount > 0 && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onSelectEntity(entity, "active"); }}
-            className="rounded bg-secondary px-1.5 py-0.5 text-secondary-foreground hover:opacity-80"
-            title="Open active messages"
-          >
-            {entity.stats.activeMessageCount}
-          </button>
-        )}
-        {entity.stats.deadLetterMessageCount > 0 && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onSelectEntity(entity, "dlq"); }}
-            className="rounded bg-destructive/20 px-1.5 py-0.5 text-destructive hover:opacity-80"
-            title="Open dead-letter messages"
-          >
-            {entity.stats.deadLetterMessageCount}
-          </button>
-        )}
-        {entity.stats.scheduledMessageCount > 0 && (
-          <span
-            className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
-            title="Scheduled messages"
-          >
-            {entity.stats.scheduledMessageCount}
-          </span>
-        )}
-      </span>
-    );
-  };
+
 
   return (
     <div className="flex h-full flex-col text-sm">
@@ -171,7 +193,7 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
               >
                 <EntityIcon entity={queue} />
                 <span className="truncate flex-1">{queue.name}</span>
-                <EntityBadges entity={queue} />
+                <EntityStatsBadges entity={queue} onSelectEntity={onSelectEntity} />
               </button>
             ))}
           </div>
@@ -199,7 +221,7 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
                   )}
                   <Folder className="h-4 w-4 text-muted-foreground" />
                   <span className="truncate">{topic.name}</span>
-                  <EntityBadges entity={topic} />
+                  <EntityStatsBadges entity={topic} onSelectEntity={onSelectEntity} />
                 </button>
 
                 {expandedTopics.has(topic.name) && (
@@ -254,28 +276,7 @@ function TopicSubscriptions({
         >
           <Mail className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="truncate flex-1">{sub.name}</span>
-          <span className="ml-auto flex gap-1 text-xs">
-            {!!sub.stats?.activeMessageCount && (
-              <span
-                role="button"
-                onClick={(e) => { e.stopPropagation(); onSelectEntity(sub, "active"); }}
-                className="rounded bg-secondary px-1.5 py-0.5 text-secondary-foreground hover:opacity-80"
-                title="Open active messages"
-              >
-                {sub.stats.activeMessageCount}
-              </span>
-            )}
-            {!!sub.stats?.deadLetterMessageCount && (
-              <span
-                role="button"
-                onClick={(e) => { e.stopPropagation(); onSelectEntity(sub, "dlq"); }}
-                className="rounded bg-destructive/20 px-1.5 py-0.5 text-destructive hover:opacity-80"
-                title="Open dead-letter messages"
-              >
-                {sub.stats.deadLetterMessageCount}
-              </span>
-            )}
-          </span>
+          <EntityStatsBadges entity={sub} onSelectEntity={onSelectEntity} />
         </button>
       ))}
     </div>

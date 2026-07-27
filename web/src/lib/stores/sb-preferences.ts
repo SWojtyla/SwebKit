@@ -6,6 +6,7 @@ export interface SbListPreferences {
   rowDensity: RowDensity;
   visibleColumns: string[];
   customColumns: string[];
+  nsbMode?: boolean;
 }
 
 const DEFAULT_PREFS: SbListPreferences = {
@@ -14,6 +15,7 @@ const DEFAULT_PREFS: SbListPreferences = {
   rowDensity: "default",
   visibleColumns: ["subject", "sequenceNumber", "enqueuedAt"],
   customColumns: [],
+  nsbMode: false,
 };
 
 const STORAGE_PREFIX = "sb-list-prefs";
