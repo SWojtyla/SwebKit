@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Play, Pause, Square, Download, Search } from "lucide-react";
 import { SIDECAR_BASE_URL } from "@/lib/api";
+import { getLogLineClass } from "@/lib/logLevel";
 
 interface PodLogViewProps {
   ns: string;
@@ -53,7 +54,6 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
     if (container) params.set("container", container);
     if (sinceSeconds !== null) params.set("sinceSeconds", String(sinceSeconds));
     if (previousContainer) params.set("previousContainer", "true");
-    if (filter) params.set("filter", filter);
 
     const url = `${SIDECAR_BASE_URL}/api/aks/${ns}/pods/${podName}/logs/stream?${params}`;
     const es = new EventSource(url);
@@ -80,7 +80,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
       es.close();
       eventSourceRef.current = null;
     };
-  }, [ns, podName, container, tail, follow, sinceSeconds, previousContainer, filter, stopStream]);
+  }, [ns, podName, container, tail, follow, sinceSeconds, previousContainer, stopStream]);
 
   // Render timer: throttle re-renders to ~10/sec
   useEffect(() => {
@@ -114,7 +114,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
       startStream();
     }
     return () => stopStream();
-  }, [ns, podName, container, tail, follow, sinceSeconds, previousContainer]);
+  }, [ns, podName, container, tail, follow, sinceSeconds, previousContainer, startStream, stopStream]);
 
   const handleExport = () => {
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
@@ -133,9 +133,15 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
     { label: "Last 1h", value: 3600 },
   ];
 
-  const totalPages = Math.max(1, Math.ceil(lines.length / PAGE_SIZE));
+  const filteredLines = useMemo(() => {
+    const term = filter.trim().toLowerCase();
+    if (!term) return lines;
+    return lines.filter((line) => line.toLowerCase().includes(term));
+  }, [lines, filter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLines.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
-  const visibleLines = lines.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const visibleLines = filteredLines.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return (
     <div className="flex h-full flex-col" data-testid="pod-log-view">
@@ -274,7 +280,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
           </div>
         ) : (
           visibleLines.map((line, i) => (
-            <div key={safePage * PAGE_SIZE + i} className="whitespace-pre-wrap break-all hover:bg-accent/30">
+            <div key={safePage * PAGE_SIZE + i} className={`log-line whitespace-pre-wrap break-all hover:bg-accent/30 ${getLogLineClass(line)}`}>
               {line}
             </div>
           ))
@@ -282,10 +288,10 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
       </div>
 
       {/* Pagination */}
-      {lines.length > PAGE_SIZE && (
+      {filteredLines.length > PAGE_SIZE && (
         <div className="flex items-center justify-between border-t px-3 py-1 text-xs" data-testid="log-pagination">
           <span className="text-muted-foreground">
-            Page {safePage + 1} of {totalPages} ({lines.length} lines)
+            Page {safePage + 1} of {totalPages} ({filteredLines.length} lines)
           </span>
           <div className="flex gap-1">
             <button

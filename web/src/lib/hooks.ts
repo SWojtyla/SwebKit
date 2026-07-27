@@ -379,6 +379,19 @@ export function useAksTestConnection() {
   });
 }
 
+export function useAksSetContext() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { context: string; defaultNamespace?: string }) =>
+      apiSend<{ connected: boolean; error?: string }>("/api/aks/context", "POST", vars),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aks-test"] });
+      qc.invalidateQueries({ queryKey: ["aks-namespaces"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    },
+  });
+}
+
 export function useAksContexts() {
   return useQuery({
     queryKey: ["aks-contexts"],

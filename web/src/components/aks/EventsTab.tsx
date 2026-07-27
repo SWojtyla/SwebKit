@@ -1,6 +1,6 @@
 import { useAksEvents } from "@/lib/hooks";
 
-export function EventsTab({ ns }: { ns: string }) {
+export function EventsTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   const { data: events, isLoading } = useAksEvents(ns);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -12,7 +12,7 @@ export function EventsTab({ ns }: { ns: string }) {
       <div className="space-y-1">
         {events.map((evt) => (
           <div
-            key={`${evt.name}-${evt.involvedObjectName}`}
+            key={`${evt.namespace}/${evt.name}-${evt.involvedObjectName}`}
             data-testid={`event-item-${evt.name}`}
             className="flex items-start gap-3 rounded-md border p-2 text-sm"
           >
@@ -27,6 +27,7 @@ export function EventsTab({ ns }: { ns: string }) {
             </span>
             <div className="flex-1">
               <div className="flex items-center gap-2">
+                {isMulti && <span className="text-xs text-muted-foreground">{evt.namespace}</span>}
                 <span className="font-medium">{evt.reason}</span>
                 {evt.involvedObjectName && (
                   <span className="text-xs text-muted-foreground">

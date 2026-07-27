@@ -3,10 +3,11 @@ import type { HttpRouteInfo } from "@/lib/types";
 
 interface HttpRoutesTabProps {
   ns: string;
+  isMulti?: boolean;
   onContextMenu?: (e: React.MouseEvent, route: HttpRouteInfo) => void;
 }
 
-export function HttpRoutesTab({ ns, onContextMenu }: HttpRoutesTabProps) {
+export function HttpRoutesTab({ ns, isMulti, onContextMenu }: HttpRoutesTabProps) {
   const { data: routes, isLoading } = useAksHttpRoutes(ns);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -19,6 +20,7 @@ export function HttpRoutesTab({ ns, onContextMenu }: HttpRoutesTabProps) {
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
             <th className="py-2 pr-4">Name</th>
+            {isMulti && <th className="py-2 pr-4">Namespace</th>}
             <th className="py-2 pr-4">Hosts</th>
             <th className="py-2 pr-4">Parents</th>
             <th className="py-2 pr-4">Backends</th>
@@ -28,12 +30,13 @@ export function HttpRoutesTab({ ns, onContextMenu }: HttpRoutesTabProps) {
         <tbody data-testid="httproutes-table-body">
           {routes.map((route) => (
             <tr
-              key={route.name}
+              key={`${route.namespace}/${route.name}`}
               data-testid={`httproute-row-${route.name}`}
               className="border-b last:border-0 hover:bg-accent/30"
               onContextMenu={(e) => onContextMenu?.(e, route)}
             >
               <td className="py-2 pr-4 font-medium">{route.name}</td>
+              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{route.namespace}</td>}
               <td className="py-2 pr-4 text-xs">
                 {route.hostnames.length > 0 ? route.hostnames.join(", ") : "—"}
               </td>

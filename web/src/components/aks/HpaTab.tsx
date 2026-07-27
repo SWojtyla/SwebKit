@@ -1,6 +1,6 @@
 import { useAksHpas } from "@/lib/hooks";
 
-export function HpaTab({ ns }: { ns: string }) {
+export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   const { data: hpas, isLoading } = useAksHpas(ns);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -13,6 +13,7 @@ export function HpaTab({ ns }: { ns: string }) {
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
             <th className="py-2 pr-4">Name</th>
+            {isMulti && <th className="py-2 pr-4">Namespace</th>}
             <th className="py-2 pr-4">Target</th>
             <th className="py-2 pr-4">Min</th>
             <th className="py-2 pr-4">Max</th>
@@ -24,8 +25,9 @@ export function HpaTab({ ns }: { ns: string }) {
         </thead>
         <tbody data-testid="hpas-table-body">
           {hpas.map((hpa) => (
-            <tr key={hpa.name} data-testid={`hpa-row-${hpa.name}`} className="border-b last:border-0">
+            <tr key={`${hpa.namespace}/${hpa.name}`} data-testid={`hpa-row-${hpa.name}`} className="border-b last:border-0">
               <td className="py-2 pr-4 font-medium">{hpa.name}</td>
+              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{hpa.namespace}</td>}
               <td className="py-2 pr-4 text-xs text-muted-foreground">{hpa.targetKind}/{hpa.targetName}</td>
               <td className="py-2 pr-4">{hpa.minReplicas}</td>
               <td className="py-2 pr-4">{hpa.maxReplicas}</td>

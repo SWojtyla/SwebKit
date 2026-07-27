@@ -1,5 +1,6 @@
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Kubernetes.AksClient;
 
@@ -29,16 +30,68 @@ public static class AksEndpoints
         }
     }
 
+    public static void ResetCachedClient()
+    {
+        lock (_clientLock)
+        {
+            if (_client is IAsyncDisposable asyncDisp)
+            {
+                try { asyncDisp.DisposeAsync().AsTask().Wait(); } catch { /* best effort */ }
+            }
+            else if (_client is IDisposable disp)
+            {
+                try { disp.Dispose(); } catch { /* best effort */ }
+            }
+
+            _client = null;
+        }
+    }
+
+    private static IReadOnlyList<string> ParseNamespaceToken(string ns)
+    {
+        var trimmed = ns.Trim();
+        if (trimmed == "*" || string.IsNullOrWhiteSpace(trimmed))
+            return ["*"];
+
+        if (!trimmed.Contains(','))
+            return [trimmed];
+
+        return trimmed
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(s => !string.IsNullOrWhiteSpace(s) && s != "*")
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static async Task<IReadOnlyList<string>> ResolveNamespacesAsync(IAksClient client, string ns, CancellationToken ct)
+    {
+        var token = ns.Trim();
+        if (token == "*")
+        {
+            var all = await client.GetNamespacesAsync(ct);
+            return all.Count > 0 ? all : ["default"];
+        }
+
+        var parsed = ParseNamespaceToken(ns);
+        if (parsed.Count == 1 && parsed[0] == "*")
+        {
+            var all = await client.GetNamespacesAsync(ct);
+            return all.Count > 0 ? all : ["default"];
+        }
+
+        return parsed;
+    }
+
     public static void MapAksEndpoints(this WebApplication app)
     {
-        // ── Connection ─────────────────────────────────────────────────────────
+        // ── Connection / context ─────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/test", async (ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/test", async (ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             try
             {
                 var client = GetClient(profile, demo);
-                var ok = await client.TestConnectionAsync();
+                var ok = await client.TestConnectionAsync(ct);
                 return Results.Ok(new { connected = ok });
             }
             catch (Exception ex)
@@ -54,191 +107,230 @@ public static class AksEndpoints
             return Results.Ok(contexts);
         });
 
-        app.MapGet("/api/aks/namespaces", async (ProfileRepository profile, DemoModeService demo) =>
+        app.MapPost("/api/aks/context", async (SetContextRequest request, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var data = profile.GetProfileData();
+            data.Config.AksConfig ??= new AksConfig();
+            data.Config.AksConfig.KubeconfigContext = request.Context;
+
+            if (request.DefaultNamespace is not null)
+                data.Config.AksConfig.DefaultNamespace = request.DefaultNamespace;
+
+            await profile.SaveAsync();
+            ResetCachedClient();
+
+            try
+            {
+                var client = GetClient(profile, demo);
+                var ok = await client.TestConnectionAsync(ct);
+                return Results.Ok(new { connected = ok, context = request.Context });
+            }
+            catch (Exception ex)
+            {
+                return Results.Ok(new { connected = false, context = request.Context, error = ex.Message });
+            }
+        });
+
+        app.MapGet("/api/aks/namespaces", async (ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var namespaces = await client.GetNamespacesAsync();
+            var namespaces = await client.GetNamespacesAsync(ct);
             return Results.Ok(namespaces);
         });
 
         // ── Workloads ──────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/deployments", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/deployments", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var deployments = await client.GetDeploymentsAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var deployments = await client.GetDeploymentsAsync(namespaces, ct);
             return Results.Ok(deployments);
         });
 
-        app.MapGet("/api/aks/{ns}/pods", async (string ns, string? labelSelector, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/pods", async (string ns, string? labelSelector, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var pods = await client.GetPodsAsync(ns, labelSelector);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var pods = string.IsNullOrWhiteSpace(labelSelector)
+                ? await client.GetPodsAsync(namespaces, ct)
+                : await client.GetPodsAsync(namespaces, labelSelector, ct);
             return Results.Ok(pods);
         });
 
-        app.MapGet("/api/aks/{ns}/statefulsets", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/statefulsets", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var sts = await client.GetStatefulSetsAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var sts = await client.GetStatefulSetsAsync(namespaces, ct);
             return Results.Ok(sts);
         });
 
-        app.MapGet("/api/aks/{ns}/services", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/services", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var services = await client.GetServicesAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var services = await client.GetServicesAsync(namespaces, ct);
             return Results.Ok(services);
         });
 
-        app.MapGet("/api/aks/{ns}/ingresses", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/ingresses", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var ingresses = await client.GetIngressesAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var ingresses = await client.GetIngressesAsync(namespaces, ct);
             return Results.Ok(ingresses);
         });
 
-        app.MapGet("/api/aks/{ns}/events", async (string ns, int? limit, string? involvedObject, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/events", async (string ns, int? limit, string? involvedObject, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
             var events = limit.HasValue
-                ? await client.GetEventsAsync(ns, limit.Value)
-                : await client.GetEventsAsync(ns, involvedObject);
+                ? await client.GetEventsAsync(namespaces, limit.Value, ct)
+                : await client.GetEventsAsync(namespaces, involvedObject, ct);
             return Results.Ok(events);
         });
 
         // ── Helm ───────────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/helm-releases", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/helm-releases", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var releases = await client.GetHelmReleasesAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var releases = await client.GetHelmReleasesAsync(namespaces, ct);
             return Results.Ok(releases);
         });
 
-        app.MapGet("/api/aks/{ns}/helm-releases/{release}/history", async (string ns, string release, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/helm-releases/{release}/history", async (string ns, string release, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var history = await client.GetHelmReleaseHistoryAsync(ns, release);
+            var history = await client.GetHelmReleaseHistoryAsync(ns, release, ct);
             return Results.Ok(history);
         });
 
-        app.MapGet("/api/aks/{ns}/helm-releases/{release}/values", async (string ns, string release, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/helm-releases/{release}/values", async (string ns, string release, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var values = await client.GetHelmReleaseValuesAsync(ns, release);
+            var values = await client.GetHelmReleaseValuesAsync(ns, release, ct);
             return Results.Text(values, "text/yaml");
         });
 
         // ── ConfigMaps & Secrets ───────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/configmaps", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/configmaps", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var configMaps = await client.GetConfigMapsAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var configMaps = await client.GetConfigMapsAsync(namespaces, ct);
             return Results.Ok(configMaps);
         });
 
-        app.MapGet("/api/aks/{ns}/secrets", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/secrets", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var (secrets, _) = await client.GetSecretsAndHelmReleasesAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var (secrets, _) = await client.GetSecretsAndHelmReleasesAsync(namespaces, ct);
             return Results.Ok(secrets);
         });
 
-        app.MapGet("/api/aks/{ns}/secrets/{name}/values", async (string ns, string name, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/secrets/{name}/values", async (string ns, string name, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var values = await client.GetSecretValuesAsync(ns, name);
+            var values = await client.GetSecretValuesAsync(ns, name, ct);
             return Results.Ok(values);
         });
 
         // ── YAML ───────────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/yaml/{kind}/{name}", async (string ns, string kind, string name, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/yaml/{kind}/{name}", async (string ns, string kind, string name, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var yaml = await client.GetResourceYamlAsync(ns, kind, name);
+            var yaml = await client.GetResourceYamlAsync(ns, kind, name, ct);
             return Results.Text(yaml, "text/yaml");
         });
 
         // ── Actions ────────────────────────────────────────────────────────────
 
-        app.MapPost("/api/aks/{ns}/deployments/{name}/restart", async (string ns, string name, ProfileRepository profile, DemoModeService demo) =>
+        app.MapPost("/api/aks/{ns}/deployments/{name}/restart", async (string ns, string name, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            await client.RestartDeploymentAsync(ns, name);
+            await client.RestartDeploymentAsync(ns, name, ct);
             return Results.Ok();
         });
 
-        app.MapPost("/api/aks/{ns}/deployments/{name}/scale", async (string ns, string name, int replicas, ProfileRepository profile, DemoModeService demo) =>
+        app.MapPost("/api/aks/{ns}/deployments/{name}/scale", async (string ns, string name, int replicas, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            await client.ScaleDeploymentAsync(ns, name, replicas);
+            await client.ScaleDeploymentAsync(ns, name, replicas, ct);
             return Results.Ok();
         });
 
-        app.MapPost("/api/aks/{ns}/pods/{name}/delete", async (string ns, string name, ProfileRepository profile, DemoModeService demo) =>
+        app.MapPost("/api/aks/{ns}/pods/{name}/delete", async (string ns, string name, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            await client.DeletePodAsync(ns, name);
+            await client.DeletePodAsync(ns, name, ct);
             return Results.Ok();
         });
 
-        app.MapPost("/api/aks/{ns}/statefulsets/{name}/restart", async (string ns, string name, ProfileRepository profile, DemoModeService demo) =>
+        app.MapPost("/api/aks/{ns}/statefulsets/{name}/restart", async (string ns, string name, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            await client.RestartStatefulSetAsync(ns, name);
+            await client.RestartStatefulSetAsync(ns, name, ct);
             return Results.Ok();
         });
 
-        app.MapPost("/api/aks/{ns}/statefulsets/{name}/scale", async (string ns, string name, int replicas, ProfileRepository profile, DemoModeService demo) =>
+        app.MapPost("/api/aks/{ns}/statefulsets/{name}/scale", async (string ns, string name, int replicas, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            await client.ScaleStatefulSetAsync(ns, name, replicas);
+            await client.ScaleStatefulSetAsync(ns, name, replicas, ct);
             return Results.Ok();
         });
 
-        app.MapDelete("/api/aks/{ns}/ingresses/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo) =>
+        app.MapDelete("/api/aks/{ns}/ingresses/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            await client.DeleteIngressAsync(ns, name);
+            await client.DeleteIngressAsync(ns, name, ct);
             return Results.Ok();
         });
 
         // ── HPA ────────────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/hpas", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/hpas", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var hpas = await client.GetHpasAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var hpas = await client.GetHpasAsync(namespaces, ct);
             return Results.Ok(hpas);
         });
 
         // ── Jobs & CronJobs ────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/cronjobs", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/cronjobs", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var cronJobs = await client.GetCronJobsAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var cronJobs = await client.GetCronJobsAsync(namespaces, ct);
             return Results.Ok(cronJobs);
         });
 
-        app.MapGet("/api/aks/{ns}/jobs", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/jobs", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var jobs = await client.GetJobsAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var jobs = await client.GetJobsAsync(namespaces, ct);
             return Results.Ok(jobs);
         });
 
         // ── Gateway API ────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/httproutes", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/httproutes", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             try
             {
                 var client = GetClient(profile, demo);
-                var routes = await client.GetHttpRoutesAsync(ns);
+                var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+                var routes = await client.GetHttpRoutesAsync(namespaces, ct);
                 return Results.Ok(routes);
             }
             catch
@@ -247,42 +339,44 @@ public static class AksEndpoints
             }
         });
 
-        app.MapDelete("/api/aks/{ns}/httproutes/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo) =>
+        app.MapDelete("/api/aks/{ns}/httproutes/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            await client.DeleteHttpRouteAsync(ns, name);
+            await client.DeleteHttpRouteAsync(ns, name, ct);
             return Results.Ok();
         });
 
-        app.MapGet("/api/aks/gatewayclasses", async (ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/gatewayclasses", async (ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var classes = await client.GetGatewayClassesAsync();
+            var classes = await client.GetGatewayClassesAsync(ct);
             return Results.Ok(classes);
         });
 
-        app.MapGet("/api/aks/{ns}/gateways", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/gateways", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var gateways = await client.GetGatewaysAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var gateways = await client.GetGatewaysAsync(namespaces, ct);
             return Results.Ok(gateways);
         });
 
         // ── Container details ──────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/pods/{podName}/containers", async (string ns, string podName, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/pods/{podName}/containers", async (string ns, string podName, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var containers = await client.GetContainerDetailsAsync(ns, podName);
+            var containers = await client.GetContainerDetailsAsync(ns, podName, ct);
             return Results.Ok(containers);
         });
 
         // ── Pod metrics ────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/pod-metrics", async (string ns, ProfileRepository profile, DemoModeService demo) =>
+        app.MapGet("/api/aks/{ns}/pod-metrics", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
-            var metrics = await client.GetPodMetricsAsync(ns);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var metrics = await client.GetPodMetricsAsync(namespaces, ct);
             return Results.Ok(metrics);
         });
 
@@ -339,3 +433,5 @@ public static class AksEndpoints
         });
     }
 }
+
+public sealed record SetContextRequest(string Context, string? DefaultNamespace = null);

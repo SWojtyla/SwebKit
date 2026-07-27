@@ -5,11 +5,12 @@ import type { PodInfo } from "@/lib/types";
 
 interface PodsTabProps {
   ns: string;
+  isMulti?: boolean;
   onPodClick?: (pod: PodInfo) => void;
   onContextMenu?: (e: React.MouseEvent, pod: PodInfo) => void;
 }
 
-export function PodsTab({ ns, onPodClick, onContextMenu }: PodsTabProps) {
+export function PodsTab({ ns, isMulti, onPodClick, onContextMenu }: PodsTabProps) {
   const { data: pods, isLoading } = useAksPods(ns);
   const deleteMutation = useAksDeletePod();
   const prevStatusesRef = useRef<Map<string, string>>(new Map());
@@ -40,9 +41,9 @@ export function PodsTab({ ns, onPodClick, onContextMenu }: PodsTabProps) {
   if (!pods || pods.length === 0)
     return <div className="p-4 text-sm text-muted-foreground">No pods found</div>;
 
-  const handleDelete = (name: string) => {
-    if (!confirm(`Delete pod ${name}? The controller will recreate it.`)) return;
-    deleteMutation.mutate({ ns, name });
+  const handleDelete = (pod: PodInfo) => {
+    if (!confirm(`Delete pod ${pod.name}? The controller will recreate it.`)) return;
+    deleteMutation.mutate({ ns: pod.namespace, name: pod.name });
   };
 
   return (
@@ -51,6 +52,7 @@ export function PodsTab({ ns, onPodClick, onContextMenu }: PodsTabProps) {
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
             <th className="py-2 pr-4">Name</th>
+            {isMulti && <th className="py-2 pr-4">Namespace</th>}
             <th className="py-2 pr-4">Status</th>
             <th className="py-2 pr-4">Ready</th>
             <th className="py-2 pr-4">Restarts</th>
@@ -61,8 +63,9 @@ export function PodsTab({ ns, onPodClick, onContextMenu }: PodsTabProps) {
         </thead>
         <tbody data-testid="pods-table-body">
           {pods.map((pod) => (
-            <tr key={pod.name} data-testid={`pod-row-${pod.name}`} className={`border-b last:border-0 ${onPodClick ? "cursor-pointer hover:bg-accent/50" : ""}`} onClick={() => onPodClick?.(pod)} onContextMenu={(e) => onContextMenu?.(e, pod)}>
+            <tr key={`${pod.namespace}/${pod.name}`} data-testid={`pod-row-${pod.name}`} className={`border-b last:border-0 ${onPodClick ? "cursor-pointer hover:bg-accent/50" : ""}`} onClick={() => onPodClick?.(pod)} onContextMenu={(e) => onContextMenu?.(e, pod)}>
               <td className="py-2 pr-4 font-medium">{pod.name}</td>
+              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{pod.namespace}</td>}
               <td className="py-2 pr-4">
                 <PodStatusBadge status={pod.status} />
               </td>
@@ -84,7 +87,7 @@ export function PodsTab({ ns, onPodClick, onContextMenu }: PodsTabProps) {
               </td>
               <td className="py-2 pr-4" onClick={(e) => e.stopPropagation()}>
                 <button
-                  onClick={() => handleDelete(pod.name)}
+                  onClick={() => handleDelete(pod)}
                   disabled={deleteMutation.isPending}
                   className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
                 >
