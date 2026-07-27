@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useAksNamespaces,
   useAksTestConnection,
+  useAksSetContext,
+  useAksContexts,
   useAksDeletePod,
   useAksRestartDeployment,
   useAksScaleDeployment,
@@ -32,6 +34,8 @@ import { MultiPodLogView } from "./MultiPodLogView";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
 import { AksConfirmBar } from "./AksConfirmBar";
+import { NamespaceSelector } from "./NamespaceSelector";
+import { ContextSelector } from "./ContextSelector";
 import type { PodInfo, SecretInfo, DeploymentInfo, ServiceInfo, IngressInfo, StatefulSetInfo, ConfigMapInfo, HelmReleaseInfo, CronJobInfo, JobInfo, HttpRouteInfo } from "@/lib/types";
 import { RefreshCw, Clock } from "lucide-react";
 import { apiFetch, SIDECAR_BASE_URL } from "@/lib/api";
@@ -70,32 +74,71 @@ interface PendingConfirm {
 
 export function AksPage() {
   const [activeTab, setActiveTab] = useState<TabId>("deployments");
-  const [namespace, setNamespace] = useState<string | null>(null);
+  const [selectedNamespaces, setSelectedNamespaces] = useState<string[]>([]);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(10);
-  const { data: namespaces, isLoading: nsLoading } = useAksNamespaces();
-  const { data: testResult } = useAksTestConnection();
+  const { data: namespaces, isLoading: nsLoading, refetch: refetchNamespaces } = useAksNamespaces();
+  const { data: contexts } = useAksContexts();
+  const { data: testResult, refetch: refetchTest } = useAksTestConnection();
   const { data: profile } = useProfile();
+  const setContextMutation = useAksSetContext();
   const isProduction = profile?.config.isProduction ?? false;
-  const { data: allPods } = useAksPods(namespace);
+
+  const namespaceToken = useMemo(() => {
+    if (selectedNamespaces.length === 0 || !namespaces || namespaces.length === 0) return null;
+    if (selectedNamespaces.includes("*") || selectedNamespaces.length === namespaces.length) return "*";
+    return selectedNamespaces.join(",");
+  }, [selectedNamespaces, namespaces]);
+
+  const isMultiNamespace = namespaceToken === "*" || selectedNamespaces.length > 1;
+
+  const { data: allPods } = useAksPods(namespaceToken);
   const [selectedPod, setSelectedPod] = useState<PodInfo | null>(null);
-  const [yamlResource, setYamlResource] = useState<{ kind: string; name: string } | null>(null);
-  const [helmRelease, setHelmRelease] = useState<string | null>(null);
+  const [yamlResource, setYamlResource] = useState<{ kind: string; name: string; namespace: string } | null>(null);
+  const [helmRelease, setHelmRelease] = useState<HelmReleaseInfo | null>(null);
   const [selectedSecret, setSelectedSecret] = useState<SecretInfo | null>(null);
   const [showMultiPodLogs, setShowMultiPodLogs] = useState(false);
   const [multiPodNames, setMultiPodNames] = useState<string[]>([]);
+  const [multiPodNamespace, setMultiPodNamespace] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [containerDetailPod, setContainerDetailPod] = useState<string | null>(null);
+  const [containerDetail, setContainerDetail] = useState<{ podName: string; namespace: string } | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const queryClient = useQueryClient();
   const deletePodMutation = useAksDeletePod();
   const restartMutation = useAksRestartDeployment();
   const scaleMutation = useAksScaleDeployment();
 
-  // Destructive/production-impacting actions route through this instead of a
-  // raw confirm()/prompt() — in a profile flagged as production, the confirm
-  // button stays disabled until the resource name is typed (matches the MAUI
-  // app's `requireTypedName: IsProduction` guard).
+  // Initialize namespace selection once namespaces are loaded.
+  useEffect(() => {
+    if (!namespaces || namespaces.length === 0 || selectedNamespaces.length > 0) return;
+    const defaultNs = profile?.config.aksConfig?.defaultNamespace;
+    const initial = defaultNs && namespaces.includes(defaultNs) ? [defaultNs] : [namespaces[0]];
+    setSelectedNamespaces(initial);
+  }, [namespaces, profile, selectedNamespaces.length]);
+
+  const handleContextChange = useCallback(
+    (context: string, defaultNamespace?: string) => {
+      setSelectedPod(null);
+      setYamlResource(null);
+      setHelmRelease(null);
+      setSelectedSecret(null);
+      setContainerDetail(null);
+      setShowMultiPodLogs(false);
+      setSelectedNamespaces(defaultNamespace && namespaces?.includes(defaultNamespace) ? [defaultNamespace] : []);
+      setContextMutation.mutate(
+        { context, defaultNamespace },
+        {
+          onSuccess: () => {
+            refetchNamespaces();
+            refetchTest();
+            queryClient.invalidateQueries({ queryKey: ["aks-"] });
+          },
+        },
+      );
+    },
+    [namespaces, queryClient, refetchNamespaces, refetchTest, setContextMutation],
+  );
+
   const requestConfirm = (opts: { message: string; resourceName: string; onConfirm: () => void }) => {
     setPendingConfirm({
       message: opts.message,
@@ -107,9 +150,6 @@ export function AksPage() {
     });
   };
 
-  // Resolves the pods actually owned by a Deployment/StatefulSet via its
-  // selector labels, instead of assuming whatever pod happens to be globally
-  // selected elsewhere on the page belongs to this resource.
   const resolvePodsForSelector = async (
     ns: string,
     selectorLabels: Record<string, string>,
@@ -125,16 +165,16 @@ export function AksPage() {
   }, [queryClient]);
 
   useEffect(() => {
-    if (!autoRefresh || !namespace) return;
+    if (!autoRefresh || !namespaceToken) return;
     const id = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: ["aks-"] });
     }, refreshInterval * 1000);
     return () => clearInterval(id);
-  }, [autoRefresh, refreshInterval, namespace, queryClient]);
+  }, [autoRefresh, refreshInterval, namespaceToken, queryClient]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!namespace) return;
+      if (!namespaceToken) return;
       if (e.key === "r" && !e.ctrlKey && !e.metaKey && e.target === document.body) {
         e.preventDefault();
         queryClient.invalidateQueries({ queryKey: ["aks-"] });
@@ -145,12 +185,12 @@ export function AksPage() {
       }
       if (e.key === "y" && !e.ctrlKey && !e.metaKey && e.target === document.body) {
         e.preventDefault();
-        if (selectedPod) setYamlResource({ kind: "Pod", name: selectedPod.name });
+        if (selectedPod) setYamlResource({ kind: "Pod", name: selectedPod.name, namespace: selectedPod.namespace });
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [namespace, queryClient, selectedPod]);
+  }, [namespaceToken, queryClient, selectedPod]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -161,23 +201,34 @@ export function AksPage() {
     setYamlResource(null);
     setHelmRelease(null);
     setSelectedSecret(null);
-    setContainerDetailPod(null);
+    setContainerDetail(null);
   };
 
-  const openYaml = (kind: string, name: string) => {
-    setYamlResource({ kind, name });
+  const openYaml = (kind: string, name: string, namespace: string) => {
+    setYamlResource({ kind, name, namespace });
     setSelectedPod(null);
     setHelmRelease(null);
     setSelectedSecret(null);
-    setContainerDetailPod(null);
+    setContainerDetail(null);
   };
 
-  const openContainerDetails = (podName: string) => {
-    setContainerDetailPod(podName);
+  const openContainerDetails = (podName: string, namespace: string) => {
+    setContainerDetail({ podName, namespace });
     setSelectedPod(null);
     setYamlResource(null);
     setHelmRelease(null);
     setSelectedSecret(null);
+  };
+
+  const openMultiPodLogs = (pods: PodInfo[]) => {
+    setMultiPodNames(pods.map((p) => p.name));
+    setMultiPodNamespace(pods[0]?.namespace ?? namespaceToken);
+    setShowMultiPodLogs(true);
+    setSelectedPod(null);
+    setYamlResource(null);
+    setHelmRelease(null);
+    setSelectedSecret(null);
+    setContainerDetail(null);
   };
 
   const handleKillPod = (pod: PodInfo) => {
@@ -216,20 +267,19 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(dep.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => openYaml("deployment", dep.name) },
-        { label: "Edit YAML", icon: "✎", onClick: () => openYaml("deployment", dep.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("deployment", dep.name, dep.namespace) },
+        { label: "Edit YAML", icon: "✎", onClick: () => openYaml("deployment", dep.name, dep.namespace) },
         { label: "View Logs", icon: "☰", onClick: async () => {
           const podsForDep = await resolvePodsForSelector(dep.namespace, dep.selectorLabels);
           if (podsForDep.length > 0) openLogs(podsForDep[0]);
         } },
         { label: "Logs for all pods", icon: "¦", onClick: async () => {
           const podsForDep = await resolvePodsForSelector(dep.namespace, dep.selectorLabels);
-          setMultiPodNames(podsForDep.map((p) => p.name));
-          setShowMultiPodLogs(true);
+          openMultiPodLogs(podsForDep);
         } },
         { label: "Container Details", icon: "⚙", onClick: async () => {
           const podsForDep = await resolvePodsForSelector(dep.namespace, dep.selectorLabels);
-          if (podsForDep.length > 0) openContainerDetails(podsForDep[0].name);
+          if (podsForDep.length > 0) openContainerDetails(podsForDep[0].name, podsForDep[0].namespace);
         } },
         { label: "Analyze network", icon: "📶", onClick: () => { setActiveTab("analysis"); } },
         { label: "Probe failures", icon: "🚧", onClick: () => {}, disabled: true },
@@ -247,9 +297,9 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(pod.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => openYaml("pod", pod.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("pod", pod.name, pod.namespace) },
         { label: "View Logs", icon: "☰", onClick: () => openLogs(pod) },
-        { label: "Container Details", icon: "⚙", onClick: () => openContainerDetails(pod.name) },
+        { label: "Container Details", icon: "⚙", onClick: () => openContainerDetails(pod.name, pod.namespace) },
         { label: "Analyze network", icon: "📶", onClick: () => { setActiveTab("analysis"); } },
         { label: "", separator: true, onClick: () => {} },
         { label: "Open shell in pod", icon: ">", onClick: () => {}, disabled: true },
@@ -266,7 +316,7 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(svc.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => openYaml("service", svc.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("service", svc.name, svc.namespace) },
       ],
     });
   };
@@ -278,8 +328,8 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(ing.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => openYaml("ingress", ing.name) },
-        { label: "Edit YAML", icon: "✎", onClick: () => openYaml("ingress", ing.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("ingress", ing.name, ing.namespace) },
+        { label: "Edit YAML", icon: "✎", onClick: () => openYaml("ingress", ing.name, ing.namespace) },
         { label: "Open URL in browser", icon: "🔗", onClick: () => { if (host) window.open(`http://${host}`, "_blank"); }, disabled: !host },
         { label: "Copy URL", icon: "📋", onClick: () => { if (host) copyToClipboard(`http://${host}`); }, disabled: !host },
         { label: "Analyze ingress", icon: "🔍", onClick: () => { setActiveTab("analysis"); } },
@@ -304,8 +354,8 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(route.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => openYaml("httproute", route.name) },
-        { label: "Edit YAML", icon: "✎", onClick: () => openYaml("httproute", route.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("httproute", route.name, route.namespace) },
+        { label: "Edit YAML", icon: "✎", onClick: () => openYaml("httproute", route.name, route.namespace) },
         { label: "Open URL in browser", icon: "🔗", onClick: () => { if (host) window.open(`https://${host}`, "_blank"); }, disabled: !host },
         { label: "Copy URL", icon: "📋", onClick: () => { if (host) copyToClipboard(`https://${host}`); }, disabled: !host },
         { label: "", separator: true, onClick: () => {} },
@@ -328,14 +378,14 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(sts.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => openYaml("statefulset", sts.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("statefulset", sts.name, sts.namespace) },
         { label: "View Logs", icon: "☰", onClick: async () => {
           const podsForSts = await resolvePodsForSelector(sts.namespace, sts.selectorLabels);
           if (podsForSts.length > 0) openLogs(podsForSts[0]);
         } },
         { label: "Container Details", icon: "⚙", onClick: async () => {
           const podsForSts = await resolvePodsForSelector(sts.namespace, sts.selectorLabels);
-          if (podsForSts.length > 0) openContainerDetails(podsForSts[0].name);
+          if (podsForSts.length > 0) openContainerDetails(podsForSts[0].name, podsForSts[0].namespace);
         } },
         { label: "Analyze network", icon: "📶", onClick: () => { setActiveTab("analysis"); } },
         { label: "", separator: true, onClick: () => {} },
@@ -371,7 +421,7 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(cm.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => openYaml("configmap", cm.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("configmap", cm.name, cm.namespace) },
         { label: "View keys", icon: "🔑", onClick: () => copyToClipboard(Object.keys(cm.data).join(", ")) },
       ],
     });
@@ -383,7 +433,7 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(secret.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => openYaml("secret", secret.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("secret", secret.name, secret.namespace) },
         { label: "View keys", icon: "🔑", onClick: () => setSelectedSecret(secret) },
       ],
     });
@@ -395,8 +445,8 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(rel.name) },
-        { label: "History", icon: "📜", onClick: () => setHelmRelease(rel.name) },
-        { label: "Values", icon: "📋", onClick: () => setHelmRelease(rel.name) },
+        { label: "History", icon: "📜", onClick: () => setHelmRelease(rel) },
+        { label: "Values", icon: "📋", onClick: () => setHelmRelease(rel) },
         { label: "Rollback", icon: "↶", onClick: () => {
           const rev = prompt(`Rollback to which revision?`);
           if (rev === null) return;
@@ -414,7 +464,7 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(cj.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => openYaml("cronjob", cj.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("cronjob", cj.name, cj.namespace) },
         { label: "Trigger", icon: "▶", onClick: () => {
           fetch(`${SIDECAR_BASE_URL}/api/aks/${cj.namespace}/cronjobs/${cj.name}/trigger`, { method: "POST" }).then(() => queryClient.invalidateQueries({ queryKey: ["aks-cronjobs"] }));
         }, disabled: true },
@@ -428,29 +478,29 @@ export function AksPage() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(job.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => openYaml("job", job.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("job", job.name, job.namespace) },
       ],
     });
   };
 
   return (
     <div className="flex h-full flex-col" data-testid="aks-page">
-      {/* Header with namespace selector */}
+      {/* Header with context and namespace selectors */}
       <div className="flex items-center gap-3 border-b px-4 py-2">
+        <span className="text-sm font-medium">Context:</span>
+        <ContextSelector
+          contexts={contexts}
+          currentContext={profile?.config.aksConfig?.kubeconfigContext ?? null}
+          onChange={handleContextChange}
+        />
+
         <span className="text-sm font-medium">Namespace:</span>
-        <select
-          data-testid="aks-namespace-select"
-          value={namespace ?? ""}
-          onChange={(e) => setNamespace(e.target.value || null)}
-          className="rounded-md border bg-card px-3 py-1.5 text-sm"
-        >
-          <option value="">Select namespace...</option>
-          {namespaces?.map((ns) => (
-            <option key={ns} value={ns}>
-              {ns}
-            </option>
-          ))}
-        </select>
+        <NamespaceSelector
+          namespaces={namespaces}
+          selected={selectedNamespaces}
+          onChange={setSelectedNamespaces}
+          isLoading={nsLoading}
+        />
         {nsLoading && (
           <span className="text-xs text-muted-foreground">Loading...</span>
         )}
@@ -463,7 +513,7 @@ export function AksPage() {
               type="checkbox"
               checked={autoRefresh}
               onChange={(e) => setAutoRefresh(e.target.checked)}
-              disabled={!namespace}
+              disabled={!namespaceToken}
               data-testid="aks-auto-refresh-checkbox"
             />
             <span>Auto</span>
@@ -483,7 +533,7 @@ export function AksPage() {
           )}
           <button
             onClick={handleManualRefresh}
-            disabled={!namespace}
+            disabled={!namespaceToken}
             className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
             data-testid="aks-refresh-btn"
           >
@@ -492,10 +542,9 @@ export function AksPage() {
           </button>
           <button
             onClick={() => {
-              setMultiPodNames((allPods ?? []).map((p) => p.name));
-              setShowMultiPodLogs(true);
+              openMultiPodLogs(allPods ?? []);
             }}
-            disabled={!namespace}
+            disabled={!namespaceToken}
             className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
             data-testid="aks-multi-pod-logs"
           >
@@ -542,62 +591,62 @@ export function AksPage() {
       {/* Content */}
       <div className="flex flex-1 overflow-hidden" data-testid="aks-content">
         <div className="flex-1 overflow-auto">
-          {!namespace ? (
+          {!namespaceToken ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground" data-testid="aks-empty-state">
               Select a namespace to view resources
             </div>
           ) : (
             <>
-              {activeTab === "deployments" && <DeploymentsTab ns={namespace} onContextMenu={showDeploymentMenu} />}
-              {activeTab === "statefulsets" && <StatefulSetsTab ns={namespace} onContextMenu={showStatefulSetMenu} />}
-              {activeTab === "pods" && <PodsTab ns={namespace} onPodClick={setSelectedPod} onContextMenu={showPodMenu} />}
-              {activeTab === "services" && <ServicesTab ns={namespace} onContextMenu={showServiceMenu} />}
-              {activeTab === "ingresses" && <IngressesTab ns={namespace} onContextMenu={showIngressMenu} />}
-              {activeTab === "httproutes" && <HttpRoutesTab ns={namespace} onContextMenu={showHttpRouteMenu} />}
-              {activeTab === "cronjobs" && <CronJobsTab ns={namespace} onContextMenu={showCronJobMenu} />}
-              {activeTab === "jobs" && <JobsTab ns={namespace} onContextMenu={showJobMenu} />}
-              {activeTab === "configmaps" && <ConfigMapsTab ns={namespace} onContextMenu={showConfigMapMenu} />}
-              {activeTab === "secrets" && <SecretsTab ns={namespace} onContextMenu={showSecretMenu} />}
-              {activeTab === "hpa" && <HpaTab ns={namespace} />}
-              {activeTab === "helm" && <HelmTab ns={namespace} onReleaseClick={setHelmRelease} onContextMenu={showHelmMenu} />}
-              {activeTab === "events" && <EventsTab ns={namespace} />}
-              {activeTab === "portforward" && <PortForwardPanel ns={namespace} selectedPod={selectedPod?.name ?? null} />}
-              {activeTab === "analysis" && <AnalysisPanel ns={namespace} />}
+              {activeTab === "deployments" && <DeploymentsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showDeploymentMenu} />}
+              {activeTab === "statefulsets" && <StatefulSetsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showStatefulSetMenu} />}
+              {activeTab === "pods" && <PodsTab ns={namespaceToken} isMulti={isMultiNamespace} onPodClick={setSelectedPod} onContextMenu={showPodMenu} />}
+              {activeTab === "services" && <ServicesTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showServiceMenu} />}
+              {activeTab === "ingresses" && <IngressesTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showIngressMenu} />}
+              {activeTab === "httproutes" && <HttpRoutesTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showHttpRouteMenu} />}
+              {activeTab === "cronjobs" && <CronJobsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showCronJobMenu} />}
+              {activeTab === "jobs" && <JobsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showJobMenu} />}
+              {activeTab === "configmaps" && <ConfigMapsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showConfigMapMenu} />}
+              {activeTab === "secrets" && <SecretsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showSecretMenu} />}
+              {activeTab === "hpa" && <HpaTab ns={namespaceToken} isMulti={isMultiNamespace} />}
+              {activeTab === "helm" && <HelmTab ns={namespaceToken} isMulti={isMultiNamespace} onReleaseClick={setHelmRelease} onContextMenu={showHelmMenu} />}
+              {activeTab === "events" && <EventsTab ns={namespaceToken} isMulti={isMultiNamespace} />}
+              {activeTab === "portforward" && <PortForwardPanel ns={namespaceToken} selectedPod={selectedPod?.name ?? null} />}
+              {activeTab === "analysis" && <AnalysisPanel ns={namespaceToken} />}
             </>
           )}
         </div>
 
         {/* Side panel for detail views */}
-        {selectedPod && namespace && (
+        {selectedPod && (
           <div className="w-2/5 border-l">
             <PodDetailPanel
               pod={selectedPod}
-              ns={namespace}
+              ns={selectedPod.namespace}
               onClose={() => setSelectedPod(null)}
-              onViewYaml={() => openYaml("pod", selectedPod.name)}
+              onViewYaml={() => openYaml("pod", selectedPod.name, selectedPod.namespace)}
             />
           </div>
         )}
-        {yamlResource && namespace && (
+        {yamlResource && (
           <div className="w-2/5 border-l">
             <YamlViewer
-              ns={namespace}
+              ns={yamlResource.namespace}
               kind={yamlResource.kind}
               name={yamlResource.name}
               onClose={() => setYamlResource(null)}
             />
           </div>
         )}
-        {helmRelease && namespace && (
+        {helmRelease && (
           <div className="w-2/5 border-l">
             <HelmDetailPanel
-              ns={namespace}
-              release={helmRelease}
+              ns={helmRelease.namespace}
+              release={helmRelease.name}
               onClose={() => setHelmRelease(null)}
             />
           </div>
         )}
-        {selectedSecret && namespace && (
+        {selectedSecret && (
           <div className="w-2/5 border-l">
             <SecretDetailPanel
               secret={selectedSecret}
@@ -605,27 +654,27 @@ export function AksPage() {
             />
           </div>
         )}
-        {showMultiPodLogs && namespace && (
+        {showMultiPodLogs && multiPodNamespace && (
           <div className="w-2/5 border-l">
             <MultiPodLogView
-              ns={namespace}
+              ns={multiPodNamespace}
               pods={multiPodNames}
               onClose={() => setShowMultiPodLogs(false)}
             />
           </div>
         )}
-        {containerDetailPod && namespace && (
+        {containerDetail && (
           <div className="w-2/5 border-l">
             <div className="flex items-center justify-between border-b px-4 py-2">
-              <span className="text-sm font-medium">{containerDetailPod}</span>
+              <span className="text-sm font-medium">{containerDetail.podName}</span>
               <button
-                onClick={() => setContainerDetailPod(null)}
+                onClick={() => setContainerDetail(null)}
                 className="rounded p-1 text-xs hover:bg-accent"
               >
                 Close
               </button>
             </div>
-            <ContainerDetailPanel ns={namespace} podName={containerDetailPod} />
+            <ContainerDetailPanel ns={containerDetail.namespace} podName={containerDetail.podName} />
           </div>
         )}
       </div>

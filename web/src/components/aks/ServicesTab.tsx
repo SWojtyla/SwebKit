@@ -3,10 +3,11 @@ import type { ServiceInfo } from "@/lib/types";
 
 interface ServicesTabProps {
   ns: string;
+  isMulti?: boolean;
   onContextMenu?: (e: React.MouseEvent, svc: ServiceInfo) => void;
 }
 
-export function ServicesTab({ ns, onContextMenu }: ServicesTabProps) {
+export function ServicesTab({ ns, isMulti, onContextMenu }: ServicesTabProps) {
   const { data: services, isLoading } = useAksServices(ns);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -19,6 +20,7 @@ export function ServicesTab({ ns, onContextMenu }: ServicesTabProps) {
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
             <th className="py-2 pr-4">Name</th>
+            {isMulti && <th className="py-2 pr-4">Namespace</th>}
             <th className="py-2 pr-4">Type</th>
             <th className="py-2 pr-4">Cluster IP</th>
             <th className="py-2 pr-4">External</th>
@@ -27,8 +29,9 @@ export function ServicesTab({ ns, onContextMenu }: ServicesTabProps) {
         </thead>
         <tbody data-testid="services-table-body">
           {services.map((svc) => (
-            <tr key={svc.name} data-testid={`service-row-${svc.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, svc)}>
+            <tr key={`${svc.namespace}/${svc.name}`} data-testid={`service-row-${svc.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, svc)}>
               <td className="py-2 pr-4 font-medium">{svc.name}</td>
+              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{svc.namespace}</td>}
               <td className="py-2 pr-4">{svc.type}</td>
               <td className="py-2 pr-4 text-muted-foreground">{svc.clusterIp}</td>
               <td className="py-2 pr-4 text-muted-foreground">

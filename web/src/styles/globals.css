@@ -279,3 +279,102 @@ body {
   filter: brightness(0.95);
   transform: translateY(1px);
 }
+
+/* ── AKS log line coloring ──────────────────────────────────────────── */
+.log-line {
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.log-line:hover {
+  background: var(--accent);
+}
+
+.log-level-error {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 6%, transparent);
+}
+
+.log-level-warn {
+  color: var(--warning);
+}
+
+.log-level-debug {
+  color: var(--muted-foreground);
+}
+
+.log-level-default {
+  color: inherit;
+}
+
+/* ── YAML syntax highlighting ───────────────────────────────────────── */
+.yml-viewer .yml-key {
+  color: oklch(0.55 0.18 265);
+  font-weight: 600;
+}
+
+.yml-viewer .yml-colon {
+  color: var(--muted-foreground);
+}
+
+.yml-viewer .yml-value {
+  color: var(--foreground);
+}
+
+.yml-viewer .yml-string {
+  color: oklch(0.55 0.15 155);
+}
+
+.yml-viewer .yml-number {
+  color: oklch(0.55 0.18 295);
+}
+
+.yml-viewer .yml-bool {
+  color: oklch(0.55 0.18 265);
+  font-weight: 600;
+}
+
+.yml-viewer .yml-null {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.yml-viewer .yml-scalar {
+  color: oklch(0.60 0.12 75);
+}
+
+.yml-viewer .yml-anchor {
+  color: oklch(0.55 0.15 340);
+}
+
+.yml-viewer .yml-dash {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.yml-viewer .yml-comment {
+  color: oklch(0.55 0.08 140);
+  font-style: italic;
+}
+
+.yml-viewer .yml-doc-marker,
+.yml-viewer .yml-directive {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.dark .yml-viewer .yml-key {
+  color: oklch(0.70 0.18 265);
+}
+
+.dark .yml-viewer .yml-string {
+  color: oklch(0.70 0.15 155);
+}
+
+.dark .yml-viewer .yml-number {
+  color: oklch(0.70 0.18 295);
+}
+
+.dark .yml-viewer .yml-comment {
+  color: oklch(0.55 0.06 140);
+}

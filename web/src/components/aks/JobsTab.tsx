@@ -3,10 +3,11 @@ import type { JobInfo } from "@/lib/types";
 
 interface JobsTabProps {
   ns: string;
+  isMulti?: boolean;
   onContextMenu?: (e: React.MouseEvent, job: JobInfo) => void;
 }
 
-export function JobsTab({ ns, onContextMenu }: JobsTabProps) {
+export function JobsTab({ ns, isMulti, onContextMenu }: JobsTabProps) {
   const { data: jobs, isLoading } = useAksJobs(ns);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -19,6 +20,7 @@ export function JobsTab({ ns, onContextMenu }: JobsTabProps) {
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
             <th className="py-2 pr-4">Name</th>
+            {isMulti && <th className="py-2 pr-4">Namespace</th>}
             <th className="py-2 pr-4">Status</th>
             <th className="py-2 pr-4">Active</th>
             <th className="py-2 pr-4">Succeeded</th>
@@ -29,8 +31,9 @@ export function JobsTab({ ns, onContextMenu }: JobsTabProps) {
         </thead>
         <tbody data-testid="jobs-table-body">
           {jobs.map((job) => (
-            <tr key={job.name} data-testid={`job-row-${job.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, job)}>
+            <tr key={`${job.namespace}/${job.name}`} data-testid={`job-row-${job.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, job)}>
               <td className="py-2 pr-4 font-medium">{job.name}</td>
+              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{job.namespace}</td>}
               <td className="py-2 pr-4">
                 <span className={
                   job.status === "Completed" ? "text-green-500" :

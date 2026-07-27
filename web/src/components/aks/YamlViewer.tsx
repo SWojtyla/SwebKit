@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X, FileText, Pencil, Save, Eye } from "lucide-react";
 import { useAksResourceYaml } from "@/lib/hooks";
+import { highlightYaml } from "@/lib/yamlHighlight";
 
 interface YamlViewerProps {
   ns: string;
@@ -72,14 +73,16 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
           <textarea
             value={editedYaml}
             onChange={(e) => setEditedYaml(e.target.value)}
-            className="h-full w-full bg-card text-foreground text-xs font-mono resize-none border-none outline-none"
+            className="h-full w-full bg-background text-foreground text-xs font-mono resize-none border-none outline-none"
             data-testid="yaml-editor"
             spellCheck={false}
           />
         ) : (
-          <pre className="whitespace-pre-wrap break-all text-xs font-mono text-foreground" data-testid="yaml-content">
-            {yaml ?? "No YAML available"}
-          </pre>
+          <pre
+            className="yml-viewer whitespace-pre-wrap break-all text-xs font-mono text-foreground"
+            data-testid="yaml-content"
+            dangerouslySetInnerHTML={{ __html: highlightYaml(yaml ?? "", true) }}
+          />
         )}
       </div>
     </div>

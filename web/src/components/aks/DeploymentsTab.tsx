@@ -4,10 +4,11 @@ import type { DeploymentInfo } from "@/lib/types";
 
 interface DeploymentsTabProps {
   ns: string;
+  isMulti?: boolean;
   onContextMenu?: (e: React.MouseEvent, dep: DeploymentInfo) => void;
 }
 
-export function DeploymentsTab({ ns, onContextMenu }: DeploymentsTabProps) {
+export function DeploymentsTab({ ns, isMulti, onContextMenu }: DeploymentsTabProps) {
   const { data: deployments, isLoading } = useAksDeployments(ns);
   const restartMutation = useAksRestartDeployment();
   const scaleMutation = useAksScaleDeployment();
@@ -18,13 +19,13 @@ export function DeploymentsTab({ ns, onContextMenu }: DeploymentsTabProps) {
   if (!deployments || deployments.length === 0)
     return <div className="p-4 text-sm text-muted-foreground">No deployments found</div>;
 
-  const handleRestart = (name: string) => {
-    if (!confirm(`Restart deployment ${name}?`)) return;
-    restartMutation.mutate({ ns, name });
+  const handleRestart = (dep: DeploymentInfo) => {
+    if (!confirm(`Restart deployment ${dep.name}?`)) return;
+    restartMutation.mutate({ ns: dep.namespace, name: dep.name });
   };
 
   const handleScale = (dep: DeploymentInfo) => {
-    scaleMutation.mutate({ ns, name: dep.name, replicas: scaleValue });
+    scaleMutation.mutate({ ns: dep.namespace, name: dep.name, replicas: scaleValue });
     setScaling(null);
   };
 
@@ -34,6 +35,7 @@ export function DeploymentsTab({ ns, onContextMenu }: DeploymentsTabProps) {
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
             <th className="py-2 pr-4">Name</th>
+            {isMulti && <th className="py-2 pr-4">Namespace</th>}
             <th className="py-2 pr-4">Ready</th>
             <th className="py-2 pr-4">Status</th>
             <th className="py-2 pr-4">Image</th>
@@ -42,8 +44,9 @@ export function DeploymentsTab({ ns, onContextMenu }: DeploymentsTabProps) {
         </thead>
         <tbody data-testid="deployments-table-body">
           {deployments.map((dep) => (
-            <tr key={dep.name} data-testid={`deployment-row-${dep.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, dep)}>
+            <tr key={`${dep.namespace}/${dep.name}`} data-testid={`deployment-row-${dep.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, dep)}>
               <td className="py-2 pr-4 font-medium">{dep.name}</td>
+              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{dep.namespace}</td>}
               <td className="py-2 pr-4">
                 <span className={dep.readyReplicas === dep.replicas ? "text-green-500" : "text-yellow-500"}>
                   {dep.readyReplicas}/{dep.replicas}
@@ -56,7 +59,7 @@ export function DeploymentsTab({ ns, onContextMenu }: DeploymentsTabProps) {
               <td className="py-2 pr-4">
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleRestart(dep.name)}
+                    onClick={() => handleRestart(dep)}
                     disabled={restartMutation.isPending}
                     className="rounded border px-2 py-1 text-xs hover:bg-accent"
                   >
