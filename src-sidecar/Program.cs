@@ -217,10 +217,23 @@ app.MapPut("/api/config/environments", async (EnvironmentRepository repo, Enviro
 
 // ── Config: Collections ──────────────────────────────────────────────────────
 
-app.MapGet("/api/config/collections", (CollectionRepository repo) => Results.Ok(repo.Collections));
-
-app.MapPut("/api/config/collections", async (CollectionRepository repo, CollectionsStore store) =>
+app.MapGet("/api/config/collections", (CollectionRepository repo, DemoModeService demo) =>
 {
+    var collections = repo.Collections;
+    if (demo.IsDemoMode)
+    {
+        collections = [DemoApiCollectionFactory.CreateDemoCollection(), .. collections];
+    }
+    return Results.Ok(collections);
+});
+
+app.MapPut("/api/config/collections", async (CollectionRepository repo, CollectionsStore store, DemoModeService demo) =>
+{
+    // Demo collection is synthetic and must not be persisted. Remove it before saving.
+    if (demo.IsDemoMode || store.Collections.Any(c => c.Id == DemoApiCollectionFactory.DemoCollectionId))
+    {
+        store.Collections.RemoveAll(c => c.Id == DemoApiCollectionFactory.DemoCollectionId);
+    }
     await repo.ReplaceStoreAsync(store);
     return Results.Ok();
 });

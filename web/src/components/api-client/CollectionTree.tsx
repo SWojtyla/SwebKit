@@ -255,7 +255,7 @@ export function CollectionTree({
 
   return (
     <>
-      <div className="flex h-full w-64 flex-col border-r bg-card" data-testid="collection-tree">
+      <div className="flex h-full w-full flex-col border-r bg-card" data-testid="collection-tree">
         {/* Header */}
         <div className="flex items-center justify-between border-b p-2">
           <span className="text-sm font-semibold">Collections</span>

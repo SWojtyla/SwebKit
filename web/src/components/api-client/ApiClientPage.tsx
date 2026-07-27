@@ -16,6 +16,8 @@ import { CollectionVariableEditor } from "./CollectionVariableEditor";
 import { RequestTabStrip, type RequestTab } from "./RequestTabStrip";
 import { CollectionExportDialog } from "./CollectionExportDialog";
 import { GitPanel } from "./GitPanel";
+import { ResizablePanels } from "@/components/ui/ResizablePanels";
+import { buildVariableScope } from "@/lib/variable-utils";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -46,7 +48,7 @@ function emptyRequest(): HttpRequestEntry {
     url: "",
     headers: [],
     queryParams: [],
-    body: { mode: "None", rawContent: null, contentType: "application/json", formData: [], filePath: null },
+    body: { mode: "None", rawContent: null, contentType: null, formData: [], filePath: null },
     auth: null,
     captureRules: [],
     graphQlQuery: null,
@@ -382,19 +384,16 @@ export function ApiClientPage() {
     setTabs((prev) => prev.map((t) => t.nodeId === _nodeId ? { ...t, name: newName } : t));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!activeTabId) return;
     const tabState = tabStates[activeTabId];
     if (!tabState) return;
     const tab = tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
     const next = updateRequestInCollections(collections, tab.nodeId, tabState.draft);
-    updateCollections.mutate(next, {
-      onSuccess: () => {
-        setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], dirty: false } }));
-        setTabs((prev) => prev.map((t) => t.id === activeTabId ? { ...t, dirty: false } : t));
-      },
-    });
+    await updateCollections.mutateAsync(next);
+    setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], dirty: false } }));
+    setTabs((prev) => prev.map((t) => t.id === activeTabId ? { ...t, dirty: false } : t));
   };
 
   const handleSend = async () => {
@@ -403,6 +402,7 @@ export function ApiClientPage() {
     if (!tabState) return;
     const tab = tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
+    await handleSave();
     setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], sending: true, response: null } }));
     try {
       const result = await executeRequest.mutateAsync({
@@ -481,6 +481,15 @@ export function ApiClientPage() {
 
   const activeEnvironment = environments.find((e) => e.id === activeEnvironmentId) ?? null;
 
+  const activeTab = activeTabId ? tabs.find((t) => t.id === activeTabId) : null;
+  const activeCollection = activeTab
+    ? collections.find((c) => c.id === activeTab.collectionId)
+    : null;
+  const variableScope = buildVariableScope(
+    activeCollection?.variables ?? [],
+    activeEnvironment,
+  );
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center" data-testid="api-client-page">
@@ -492,7 +501,7 @@ export function ApiClientPage() {
   return (
     <div className="flex h-full flex-col" data-testid="api-client-page">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 border-b px-3 py-1.5 bg-card">
+      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 bg-card">
         <Globe className="h-4 w-4 text-muted-foreground" />
         <select
           data-testid="env-selector"
@@ -538,50 +547,53 @@ export function ApiClientPage() {
 
       {/* Main 3-pane layout */}
       <div className="flex flex-1 overflow-hidden">
-        <CollectionTree
-          collections={collections}
-          selectedNodeId={selectedNodeId}
-          selectedCollectionId={selectedCollectionId}
-          onSelectNode={handleSelectNode}
-          onAddCollection={handleAddCollection}
-          onAddRequest={handleAddRequest}
-          onAddFolder={handleAddFolder}
-          onDeleteNode={handleDeleteNode}
-          onRenameNode={handleRenameNode}
-          onExportCollection={setExportCollectionId}
-        />
-
-        <div className="flex w-96 flex-col border-r">
-          <RequestTabStrip
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSelectTab={setActiveTabId}
-            onCloseTab={closeTab}
+        <ResizablePanels initialWidths={[260, 420, null]} minWidths={[180, 300, 300]} className="w-full">
+          <CollectionTree
+            collections={collections}
+            selectedNodeId={selectedNodeId}
+            selectedCollectionId={selectedCollectionId}
+            onSelectNode={handleSelectNode}
+            onAddCollection={handleAddCollection}
+            onAddRequest={handleAddRequest}
+            onAddFolder={handleAddFolder}
+            onDeleteNode={handleDeleteNode}
+            onRenameNode={handleRenameNode}
+            onExportCollection={setExportCollectionId}
           />
-          {activeTabId && tabStates[activeTabId] ? (
-            <RequestEditor
-              request={tabStates[activeTabId].draft}
-              onChange={(req) => updateTabDraft(activeTabId, req)}
-              onSend={handleSend}
-              onSave={handleSave}
-              sending={tabStates[activeTabId].sending}
+
+          <div className="flex h-full w-full flex-col border-r">
+            <RequestTabStrip
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelectTab={setActiveTabId}
+              onCloseTab={closeTab}
             />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-              <span data-testid="api-client-empty-editor">
-                Select or create a request to start editing.
-              </span>
-            </div>
-          )}
-        </div>
+            {activeTabId && tabStates[activeTabId] ? (
+              <RequestEditor
+                request={tabStates[activeTabId].draft}
+                onChange={(req) => updateTabDraft(activeTabId, req)}
+                onSend={handleSend}
+                onSave={handleSave}
+                sending={tabStates[activeTabId].sending}
+                variableScope={variableScope}
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+                <span data-testid="api-client-empty-editor">
+                  Select or create a request to start editing.
+                </span>
+              </div>
+            )}
+          </div>
 
-        <div className="flex-1 overflow-hidden">
-          <ResponseViewer
-            response={activeTabId ? tabStates[activeTabId]?.response ?? null : null}
-            sending={activeTabId ? tabStates[activeTabId]?.sending ?? false : false}
-            request={activeTabId && tabStates[activeTabId] ? { method: tabStates[activeTabId].draft.method, url: tabStates[activeTabId].draft.url } : null}
-          />
-        </div>
+          <div className="flex h-full w-full flex-col overflow-hidden">
+            <ResponseViewer
+              response={activeTabId ? tabStates[activeTabId]?.response ?? null : null}
+              sending={activeTabId ? tabStates[activeTabId]?.sending ?? false : false}
+              request={activeTabId ? tabStates[activeTabId]?.draft ?? null : null}
+            />
+          </div>
+        </ResizablePanels>
       </div>
 
       {/* Dialogs */}

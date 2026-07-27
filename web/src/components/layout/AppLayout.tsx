@@ -109,7 +109,7 @@ export function AppLayout() {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="glass flex h-14 items-center gap-3 border-b px-4" data-testid="top-bar">
+        <header className="glass flex min-h-14 flex-wrap items-center gap-2 border-b px-3 py-2" data-testid="top-bar">
           <span className="text-sm font-semibold" data-testid="context-title">{contextTitle}</span>
           <button
             onClick={() => setPaletteOpen(true)}
@@ -117,10 +117,10 @@ export function AppLayout() {
             data-testid="command-palette-trigger"
           >
             <Search className="h-4 w-4" />
-            <span>Search...</span>
-            <kbd className="ml-4 rounded border bg-card px-1.5 py-0.5 text-xs text-muted-foreground">Ctrl+K</kbd>
+            <span className="hidden sm:inline">Search...</span>
+            <kbd className="ml-4 rounded border bg-card px-1.5 py-0.5 text-xs text-muted-foreground hidden sm:inline">Ctrl+K</kbd>
           </button>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <button
               onClick={() => toggleTheme()}
               className="rounded-lg border p-2 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
