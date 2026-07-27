@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Search, Filter, X, Columns, Pin, Plus, RotateCw, Check, AlertCircle, ArrowUpRight } from "lucide-react";
+import { Search, Filter, X, Columns, Pin, Plus, RotateCw, Check, AlertCircle, ArrowUpRight, Bookmark } from "lucide-react";
 import { useSbPeekMessages, useSbPeekDlq, useSbCompleteMessages, useSbCompleteDlq, useSbResubmitDlq } from "@/lib/hooks";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { applyFilters } from "./filterLogic";
 import { AdvancedFilterPanel } from "./AdvancedFilterPanel";
 import type { AdvancedFilterRule } from "./filterTypes";
+import { isRuleConfigured } from "./filterTypes";
 import {
   loadSbPreferences,
   saveSbPreferences,
@@ -15,6 +16,12 @@ import {
   type SbListPreferences,
   type RowDensity,
 } from "@/lib/stores/sb-preferences";
+import {
+  loadSavedFilters,
+  addSavedFilter,
+  deleteSavedFilter,
+  type SbSavedFilter,
+} from "@/lib/stores/sb-filters";
 
 interface Props {
   nsId: string | null;
@@ -56,6 +63,26 @@ const COLUMN_DEFS: ColumnDef[] = [
   { key: "deadLetterReason", label: "DLQ Reason", className: "max-w-[200px]", dlqOnly: true, render: (m) => m.deadLetterReason ?? "-" },
 ];
 
+const NSB_COLUMN_DEFS: ColumnDef[] = [
+  { key: "nsbEndpoint", label: "NSB Endpoint", className: "max-w-[200px]", render: (m) => getNsbProp(m, "NServiceBus.OriginatingEndpoint") },
+  { key: "nsbMessageType", label: "NSB Message Type", render: (m) => truncateNsbType(getNsbProp(m, "NServiceBus.EnclosedMessageTypes")) },
+  { key: "nsbTimeSent", label: "NSB Time Sent", className: "max-w-[150px]", render: (m) => getNsbProp(m, "NServiceBus.TimeSent") },
+  { key: "nsbConversation", label: "NSB Conversation", className: "max-w-[200px]", render: (m) => getNsbProp(m, "NServiceBus.ConversationId") },
+];
+
+function getNsbProp(message: SbMessage, key: string): string {
+  const value = message.applicationProperties[key];
+  return value === undefined || value === null ? "-" : String(value);
+}
+
+function truncateNsbType(value: string): string {
+  if (value === "-") return value;
+  const comma = value.indexOf(",");
+  const typePart = comma > 0 ? value.slice(0, comma) : value;
+  const lastDot = typePart.lastIndexOf(".");
+  return lastDot >= 0 ? typePart.slice(lastDot + 1) : typePart;
+}
+
 export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectMessage }: Props) {
   const qc = useQueryClient();
   const [textFilter, setTextFilter] = useState("");
@@ -67,6 +94,13 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
   const [selectedMsgs, setSelectedMsgs] = useState<Set<string>>(new Set());
   const [customColumnInput, setCustomColumnInput] = useState("");
 
+  // Master filter switch and saved filter state
+  const [filtersEnabled, setFiltersEnabled] = useState(true);
+  const [savedFilters, setSavedFilters] = useState<SbSavedFilter[]>([]);
+  const [showSavedFilters, setShowSavedFilters] = useState(false);
+  const [saveFilterName, setSaveFilterName] = useState("");
+  const [showSaveFilterInput, setShowSaveFilterInput] = useState(false);
+
   // Load preferences
   const [prefs, setPrefs] = useState<SbListPreferences>(() => {
     if (nsId && entity) return loadSbPreferences(nsId, entity.entityPath);
@@ -76,6 +110,7 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
       rowDensity: "default" as RowDensity,
       visibleColumns: ["subject", "sequenceNumber", "enqueuedAt"],
       customColumns: [],
+      nsbMode: false,
     };
   });
 
@@ -94,6 +129,14 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
   }, [prefs, nsId, entity?.entityPath]);
 
   const visibleColumns = new Set(prefs.visibleColumns);
+  const nsbMode = prefs.nsbMode ?? false;
+
+  // Load saved filters when entity changes
+  useEffect(() => {
+    if (nsId && entity) {
+      setSavedFilters(loadSavedFilters(nsId, entity.entityPath));
+    }
+  }, [nsId, entity?.entityPath]);
 
   const activeQuery = useSbPeekMessages(
     viewMode === "active" ? nsId : null,
@@ -198,13 +241,30 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
     return [...allKeys].filter((k) => !prefs.customColumns.includes(k)).slice(0, 10);
   }, [messages, prefs.customColumns]);
 
-  const filteredMessages = useMemo(
-    () =>
-      applyFilters(messages ?? [], textFilter, advancedRules, advancedEnabled && showAdvanced, pinnedSessionId),
-    [messages, textFilter, advancedRules, advancedEnabled, showAdvanced, pinnedSessionId],
-  );
+  const filteredMessages = useMemo(() => {
+    if (!filtersEnabled) return messages ?? [];
+    return applyFilters(messages ?? [], textFilter, advancedRules, advancedEnabled && showAdvanced, pinnedSessionId);
+  }, [messages, textFilter, advancedRules, advancedEnabled, showAdvanced, pinnedSessionId, filtersEnabled]);
 
-  const activeRuleCount = advancedRules.filter((r) => r.enabled && r.value.trim()).length;
+  const activeRuleCount = advancedRules.filter((r) => r.enabled && isRuleConfigured(r)).length;
+
+  const canSaveFilter = Boolean(textFilter.trim() || pinnedSessionId || advancedRules.some(isRuleConfigured));
+
+  const handleSaveFilter = () => {
+    if (!nsId || !entity || !saveFilterName.trim()) return;
+    const filter: SbSavedFilter = {
+      name: saveFilterName.trim(),
+      text: textFilter,
+      filtersEnabled,
+      advancedEnabled,
+      advancedRules,
+      pinnedSessionId,
+    };
+    const updated = addSavedFilter(nsId, entity.entityPath, filter);
+    setSavedFilters(updated);
+    setShowSaveFilterInput(false);
+    setSaveFilterName("");
+  };
 
   if (!entity) {
     return (
@@ -240,6 +300,93 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
             >
               <X className="h-3.5 w-3.5" />
             </button>
+          )}
+        </div>
+
+        {/* Saved filters */}
+        <div className="relative">
+          <button
+            data-testid="saved-filters-toggle"
+            onClick={() => setShowSavedFilters(!showSavedFilters)}
+            disabled={savedFilters.length === 0 && !canSaveFilter}
+            title="Saved filters"
+            className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+          >
+            <Bookmark className="h-3.5 w-3.5" />
+            Saved
+          </button>
+          {showSavedFilters && (
+            <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-md border bg-card p-2 shadow-lg">
+              {savedFilters.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No saved filters</div>
+              ) : (
+                <div className="space-y-1">
+                  {savedFilters.map((f) => (
+                    <div key={f.name} className="flex items-center justify-between gap-1">
+                      <button
+                        className="flex-1 rounded px-1 py-0.5 text-left text-xs hover:bg-accent"
+                        onClick={() => {
+                          setTextFilter(f.text);
+                          setFiltersEnabled(f.filtersEnabled);
+                          setAdvancedEnabled(f.advancedEnabled);
+                          setAdvancedRules(f.advancedRules);
+                          setPinnedSessionId(f.pinnedSessionId);
+                          setShowSavedFilters(false);
+                        }}
+                      >
+                        {f.name}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!nsId || !entity) return;
+                          const updated = deleteSavedFilter(nsId, entity.entityPath, f.name);
+                          setSavedFilters(updated);
+                        }}
+                        className="text-muted-foreground hover:text-foreground"
+                        title="Delete saved filter"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {showSaveFilterInput ? (
+                <div className="mt-2 flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={saveFilterName}
+                    onChange={(e) => setSaveFilterName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSaveFilter()}
+                    placeholder="Filter name..."
+                    className="flex-1 rounded border bg-card px-2 py-1 text-xs"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveFilter}
+                    disabled={!saveFilterName.trim()}
+                    className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { setShowSaveFilterInput(false); setSaveFilterName(""); }}
+                    className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                canSaveFilter && (
+                  <button
+                    onClick={() => setShowSaveFilterInput(true)}
+                    className="mt-2 w-full rounded border px-2 py-1 text-xs hover:bg-accent"
+                  >
+                    Save current filter
+                  </button>
+                )
+              )}
+            </div>
           )}
         </div>
 
@@ -283,6 +430,18 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
         </select>
 
         <button
+          data-testid="toggle-filters-enabled"
+          onClick={() => setFiltersEnabled(!filtersEnabled)}
+          title="Toggle all filters"
+          className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${
+            filtersEnabled
+              ? "border-primary bg-primary/10 text-primary"
+              : "text-muted-foreground hover:bg-accent"
+          }`}
+        >
+          {filtersEnabled ? "Filters: On" : "Filters: Off"}
+        </button>
+        <button
           data-testid="toggle-advanced-filter"
           onClick={() => setShowAdvanced(!showAdvanced)}
           title="Advanced filters"
@@ -308,6 +467,16 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
           }`}
         >
           <Columns className="h-3.5 w-3.5" />
+        </button>
+        <button
+          data-testid="toggle-nsb-mode"
+          onClick={() => setPrefs((p) => ({ ...p, nsbMode: !nsbMode }))}
+          title="Toggle NServiceBus view — shows endpoint, message type, conversation ID"
+          className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${
+            nsbMode ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent"
+          }`}
+        >
+          NSB
         </button>
       </div>
 
@@ -498,6 +667,11 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
                     {col}
                   </th>
                 ))}
+                {nsbMode && NSB_COLUMN_DEFS.map((col) => (
+                  <th key={col.key} className="whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground">
+                    {col.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -547,6 +721,14 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
                       return (
                         <td key={col} title={display} className={`truncate px-2 text-muted-foreground ${densityClass[prefs.rowDensity]}`}>
                           {display}
+                        </td>
+                      );
+                    })}
+                    {nsbMode && NSB_COLUMN_DEFS.map((col) => {
+                      const value = col.render(msg);
+                      return (
+                        <td key={col.key} title={value} className={`truncate px-2 text-muted-foreground ${densityClass[prefs.rowDensity]} ${col.className ?? ""}`}>
+                          {value}
                         </td>
                       );
                     })}

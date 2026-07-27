@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Upload, Clock, Search, RotateCcw } from "lucide-react";
+import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft } from "lucide-react";
 import { useProfile } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { EntityTree } from "./EntityTree";
@@ -46,6 +46,7 @@ export function ServiceBusPage() {
   }, []);
 
   const namespaces = profile?.serviceBusNamespaces ?? [];
+  const selectedNs = namespaces.find((ns) => ns.id === selectedNsId);
 
   return (
     <div className="flex h-full flex-col" data-testid="service-bus-page">
@@ -140,6 +141,26 @@ export function ServiceBusPage() {
         {/* Message list */}
         <div className="flex w-80 flex-col overflow-hidden border-r">
           {selectedEntity && (
+            <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs" data-testid="sb-breadcrumb">
+              <button
+                type="button"
+                onClick={() => { setSelectedEntity(null); setSelectedMessage(null); }}
+                className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                title="Return to entity overview"
+              >
+                <ChevronLeft className="h-3 w-3" /> Overview
+              </button>
+              <span className="text-muted-foreground">/</span>
+              <span className="truncate text-muted-foreground" title={selectedNs?.alias ?? selectedNsId ?? ""}>
+                {selectedNs?.alias ?? selectedNsId}
+              </span>
+              <span className="text-muted-foreground">/</span>
+              <span className="truncate font-medium" title={selectedEntity.name}>
+                {selectedEntity.name}
+              </span>
+            </div>
+          )}
+          {selectedEntity && (
             <div className="flex border-b">
               <button
                 data-testid="sb-view-active"
@@ -181,6 +202,7 @@ export function ServiceBusPage() {
             nsId={selectedNsId}
             entity={selectedEntity}
             viewMode={viewMode}
+            onClose={() => setSelectedMessage(null)}
             onEditResubmit={(msg) => { setSelectedMessage(msg); setComposerMode("edit"); }}
             onReplay={(msg) => { setSelectedMessage(msg); setComposerMode("replay"); }}
             onSchedule={(msg) => { setSelectedMessage(msg); setComposerMode("schedule"); }}

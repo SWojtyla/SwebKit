@@ -14,6 +14,7 @@ interface Props {
   nsId: string | null;
   entity: SbEntityInfo | null;
   viewMode: "active" | "dlq";
+  onClose?: () => void;
   onEditResubmit?: (message: SbMessage) => void;
   onReplay?: (message: SbMessage) => void;
   onSchedule?: (message: SbMessage) => void;
@@ -21,7 +22,7 @@ interface Props {
 
 type DetailTab = "body" | "properties" | "system" | "dlq";
 
-export function MessageDetail({ message, nsId, entity, viewMode, onEditResubmit, onReplay, onSchedule }: Props) {
+export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEditResubmit, onReplay, onSchedule }: Props) {
   const completeMutation = useSbCompleteMessages();
   const completeDlqMutation = useSbCompleteDlq();
   const resubmitMutation = useSbResubmitDlq();
@@ -194,6 +195,16 @@ export function MessageDetail({ message, nsId, entity, viewMode, onEditResubmit,
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
+            {onClose && (
+              <button
+                data-testid="message-detail-close"
+                onClick={onClose}
+                className="rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                title="Close message details"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
             {viewMode === "active" && (
               <button
                 data-testid="message-complete-button"
