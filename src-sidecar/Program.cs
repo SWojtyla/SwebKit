@@ -6,6 +6,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
+using SwebKit.Kubernetes.AksClient;
 using SwebKit.Redis;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
@@ -24,8 +25,50 @@ builder.Services.AddSingleton<UserSettingsRepository>();
 builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
 builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
 builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
+builder.Services.AddSingleton<IAksClientFactory, AksClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
 builder.Services.AddSingleton<ScheduledMessageRepository>();
+
+// Monitoring: persisted alert rules + evaluation engine + signal sources
+builder.Services.AddSingleton<SwebKit.Core.Configuration.AlertRuleRepository>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertRuleRepository>(
+    sp => sp.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>());
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.SidecarMonitoringConnectionPool>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IMonitoringConnectionPool>(
+    sp => sp.GetRequiredService<SwebKit.Sidecar.Services.SidecarMonitoringConnectionPool>());
+
+// Each signal source is registered both as its concrete type and as IAlertSignalSource so the
+// engine can resolve the full IAlertSignalSource list via DI.
+builder.Services.AddSingleton<SwebKit.Kubernetes.AksClient.AksPodHealthSignalSource>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertSignalSource>(
+    sp => sp.GetRequiredService<SwebKit.Kubernetes.AksClient.AksPodHealthSignalSource>());
+builder.Services.AddSingleton<SwebKit.Kubernetes.AksClient.AksPodRestartRateSignalSource>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertSignalSource>(
+    sp => sp.GetRequiredService<SwebKit.Kubernetes.AksClient.AksPodRestartRateSignalSource>());
+builder.Services.AddSingleton<SwebKit.Kubernetes.AksClient.AksNamespaceHealthScoreSignalSource>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertSignalSource>(
+    sp => sp.GetRequiredService<SwebKit.Kubernetes.AksClient.AksNamespaceHealthScoreSignalSource>());
+builder.Services.AddSingleton<SwebKit.Azure.ServiceBus.ServiceBusDlqSignalSource>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertSignalSource>(
+    sp => sp.GetRequiredService<SwebKit.Azure.ServiceBus.ServiceBusDlqSignalSource>());
+builder.Services.AddSingleton<SwebKit.Azure.ServiceBus.ServiceBusActiveDepthSignalSource>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertSignalSource>(
+    sp => sp.GetRequiredService<SwebKit.Azure.ServiceBus.ServiceBusActiveDepthSignalSource>());
+builder.Services.AddSingleton<SwebKit.Azure.ServiceBus.ServiceBusDeadSubscriptionSignalSource>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertSignalSource>(
+    sp => sp.GetRequiredService<SwebKit.Azure.ServiceBus.ServiceBusDeadSubscriptionSignalSource>());
+builder.Services.AddSingleton<SwebKit.Redis.RedisMemorySignalSource>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertSignalSource>(
+    sp => sp.GetRequiredService<SwebKit.Redis.RedisMemorySignalSource>());
+builder.Services.AddSingleton<SwebKit.Redis.RedisConnectedClientsSignalSource>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertSignalSource>(
+    sp => sp.GetRequiredService<SwebKit.Redis.RedisConnectedClientsSignalSource>());
+
+// The evaluation engine is a singleton shared between the hosted-service lifetime and the
+// endpoint handlers (which call ReloadRulesAsync after CRUD mutations).
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.MonitoringAlertEvaluationService>();
+builder.Services.AddHostedService(
+    sp => sp.GetRequiredService<SwebKit.Sidecar.Services.MonitoringAlertEvaluationService>());
 
 // Agent: OpenAI-compatible LLM client + sidecar chat service
 builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
@@ -111,6 +154,7 @@ await app.Services.GetRequiredService<ProfileRepository>().LoadAsync();
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
 await app.Services.GetRequiredService<UserSettingsRepository>().LoadAsync();
+await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
 
 // ── Health ───────────────────────────────────────────────────────────────────
 
@@ -215,5 +259,9 @@ app.MapStorageEndpoints();
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
 app.MapAgentEndpoints();
+
+// ── Monitoring ───────────────────────────────────────────────────────────────
+
+app.MapMonitoringEndpoints();
 
 app.Run();

@@ -2,68 +2,53 @@
 
 ## Current State
 
-`Planned`
-
-## Quick Summary
-
-Fresh MAUI-vs-React comparison across API Client, Redis, Storage, Dashboard, Shell/Layout, Settings,
-and Monitoring, plus a UX-quality (not bug-parity) pass over AKS/Service Bus — scoped to avoid
-duplicating the existing `aks-migration-fixes`, `service-bus-migration-fixes`, `demo-mode-parity`,
-and `dashboard-redesign` plans. Found 5 "critical" findings where UI presents as functional but is
-wired to nothing or silently wrong (Monitoring, Redis Pub/Sub, Redis export, Storage
-upload/copy/metadata/versions, plaintext auth secrets), plus 25 smaller feature/UX gaps. See
-[technical-plan.md](technical-plan.md) for the phased Verify → Fix sequence and
-[test-plan.md](test-plan.md) for how each phase gets checked.
-
-**Every item below must be re-verified against the running app before being fixed** — the findings
-came from a static code-reading pass, not from exercising the app, and the codebase is actively
-changing under another in-progress session.
+`In Review (triaged)` — review produced 30 findings on 2026-07-26. Each finding must be
+re-verified against the running app before being fixed (per the standing rule below). This pass
+**triages** the findings: records what has since been resolved by other active plans and groups
+the remainder into follow-up work.
 
 **Jira:** not linked
 
-## Progress Checklist
+## Standing rule
 
-### Phase 1 — Critical (do first)
-- [ ] 1.1 Auth secrets: verified in plaintext, then moved to a real OS-backed secret store
-- [ ] 1.2 Monitoring: scope decision made (rebuild vs. drop) and recorded here
-- [ ] 1.3 Redis Pub/Sub: verified broken, then hidden or wired to real endpoints
-- [ ] 1.4 Redis export: verified wrong, then fixed to fetch real per-key data server-side
-- [ ] 1.5 Storage mutations: verified all dead (upload/copy/metadata/versions/undelete), then
-      routes added or buttons disabled (not silently no-op); Metadata Save fixed first
+> Every item must be re-verified against the running app before being fixed. The findings came
+> from a static code-reading pass, not from exercising the app, and the codebase is actively
+> changing.
 
-### Phase 2 — Quick wins
-- [ ] 2.1 `DevOpsSettings` dead tab removed
-- [ ] 2.2 Appearance Font Size/Density wired or removed
-- [ ] 2.3 API Client Capture Rules tab wired to `request.captureRules`
-- [ ] 2.4 Destructive-action mutations get `onError` toasts (AKS first, then SB/Redis/Storage)
+## Triage outcome (2026-07-27)
 
-### Phase 3 — Feature-level gaps
-- [ ] API Client: body editor (CodeMirror6), variable generator, command-palette integration,
-      Git multi-repo picker, conflict-resolution toast
-- [ ] Redis: hash/list/set/zset mutation routes, keyspace-health analyzer port, prefix-memory
-      bytes, namespace tree recursion/virtualization
-- [ ] Storage: `allowMutations` enforcement, real file upload, version-diff pane, copy-dialog
-      container picker
-- [ ] Dashboard: "Pin to dashboard" affordance, Settings getting-started checklist (check
-      `dashboard-redesign` status first)
-- [ ] Shell: live per-area health strip, command-palette fuzzy search + MRU
-- [ ] AKS/SB: shared `<ResizablePanel>`, Pods grid resource-usage column, URL-driven drill-down
-      state, Service Bus bulk DLQ actions
+### Resolved / closed by another plan
+- **#1 Monitoring** — split out and **rebuilt** as `../monitoring-rebuild/` (persisted rules,
+  sidecar evaluation engine, live React UI + SSE). No longer a mockup. Finding closed.
+- **#1.2 Monitoring scope decision** — rebuild chosen (user decision 2026-07-27). Closed.
 
-## Validation
+### Remaining critical findings (Phase 1) — still open, need app verification + fix
+- **#1.1 Auth secrets persisted in plaintext** — highest priority; needs a real OS-backed secret
+  store (see `agent-multimodel-api-client` for the credential-store direction). **Not yet done.**
+- **#1.3 Redis Pub/Sub** — broken endpoints; hide panel or wire real SSE. Open.
+- **#1.4 Redis export** — exports wrong data; needs server-side per-key fetch. Open.
+- **#1.5 Storage mutations** — upload/copy/metadata/versions/undelete routes missing; Metadata
+  Save is a no-op. Open (large — candidate for a dedicated `storage-mutation-endpoints` plan).
 
-Not started. See [test-plan.md](test-plan.md) — manual verification per phase, automated coverage
-added alongside any new sidecar endpoint.
+### Quick wins (Phase 2) — open
+- **#2.1 `DevOpsSettings` dead tab** — delete per `demo-mode-parity` cleanup decision.
+- **#2.2 Appearance Font Size/Density** — wire or remove.
+- **#2.3 API Client Capture Rules** — wire to `request.captureRules`.
+- **#2.4 Destructive-action `onError` toasts** — AKS first, then SB/Redis/Storage.
 
-## Blockers
+### Feature-level gaps (Phase 3) — open, tracked as future work
+- API Client: body editor (CodeMirror6), variable generator, command-palette integration,
+  Git multi-repo picker, conflict-resolution toast.
+- Redis: hash/list/set/zset mutation routes, keyspace-health analyzer, prefix-memory bytes,
+  namespace tree recursion/virtualization.
+- Storage: `allowMutations` enforcement, real file upload, version-diff pane, copy-dialog
+  container picker.
+- Dashboard: "Pin to dashboard", Settings getting-started checklist.
+- Shell: live per-area health strip, command-palette fuzzy + MRU.
+- AKS/SB: shared `<ResizablePanel>`, Pods grid resource-usage column, URL-driven drill-down,
+  Service Bus bulk DLQ actions.
 
-None to start Phase 1. Any AKS/SB item in Phase 3 should check current state of
-`aks-migration-fixes`/`service-bus-migration-fixes` first in case the other in-progress session has
-since expanded their scope. Dashboard items should check `dashboard-redesign`'s status first.
-
-## Notes
-
-- Produced 2026-07-26 via direct comparison against the deleted MAUI source at git commit `85d24ed`
-  (`src/SwebKit.App/Components/*`, last commit before the Tauri+React scaffold in `ec175a7`).
-- Deliberately excludes Observability, DevOps/Pipelines/Releases (permanently dropped,
-  2026-07-26) and IncidentTimeline (never ported, not requested).
+## Blocker
+- This is a **review/triage**, not an implementation plan. The open items should be promoted into
+  their own `docs/features/active/` folders (matching the established convention) before work
+  starts — do not fold them into this doc.

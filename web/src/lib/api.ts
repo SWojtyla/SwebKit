@@ -63,3 +63,106 @@ export async function apiSend<T>(
 }
 
 export { SIDECAR_BASE_URL };
+
+// ── Monitoring ───────────────────────────────────────────────────────────────
+
+export type AlertRuleSource =
+  | "AksPodHealth"
+  | "AksPodRestartRate"
+  | "AksNamespaceHealthScore"
+  | "ServiceBusDlqDepth"
+  | "ServiceBusActiveDepth"
+  | "ServiceBusDeadSubscription"
+  | "RedisMemoryUsage"
+  | "RedisConnectedClients";
+
+export type AlertSeverity = "Warning" | "Critical";
+export type AlertSignalStatus = "Ok" | "Firing" | "Skipped" | "Error";
+
+export interface AksPodAlertParams {
+  namespace: string;
+  kubeconfigContext?: string;
+  restartThreshold?: number;
+  healthScoreThreshold?: number;
+}
+
+export interface ServiceBusAlertParams {
+  namespaceConnectionAlias?: string;
+  entityPath?: string;
+  messageCountThreshold?: number;
+}
+
+export interface RedisAlertParams {
+  connectionAlias?: string;
+  memoryUsageThresholdPercent?: number;
+  clientCountLowerBound?: number;
+}
+
+export interface MonitoringAlertRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  source: AlertRuleSource;
+  severity: AlertSeverity;
+  intervalSeconds: number;
+  cooldownMinutes: number;
+  aksPodParams?: AksPodAlertParams | null;
+  serviceBusParams?: ServiceBusAlertParams | null;
+  redisAlertParams?: RedisAlertParams | null;
+  lastEvaluatedAt?: string | null;
+  lastFiredAt?: string | null;
+}
+
+export interface AlertFiredEvent {
+  ruleId: string;
+  ruleName: string;
+  source: AlertRuleSource;
+  severity: AlertSeverity;
+  message: string;
+  detail: string;
+  firedAt: string;
+  profileName: string;
+}
+
+export async function getMonitoringRules(): Promise<MonitoringAlertRule[]> {
+  return apiFetch<MonitoringAlertRule[]>("/api/monitoring/rules");
+}
+
+export async function createMonitoringRule(rule: MonitoringAlertRule): Promise<MonitoringAlertRule> {
+  return apiSend<MonitoringAlertRule>("/api/monitoring/rules", "POST", rule);
+}
+
+export async function updateMonitoringRule(rule: MonitoringAlertRule): Promise<MonitoringAlertRule> {
+  return apiSend<MonitoringAlertRule>(`/api/monitoring/rules/${rule.id}`, "PUT", rule);
+}
+
+export async function deleteMonitoringRule(id: string): Promise<void> {
+  await apiSend<void>(`/api/monitoring/rules/${id}`, "DELETE");
+}
+
+export async function getMonitoringHistory(): Promise<AlertFiredEvent[]> {
+  return apiFetch<AlertFiredEvent[]>("/api/monitoring/history");
+}
+
+export interface SbNamespaceListItem {
+  id: string;
+  alias: string;
+  fullyQualifiedNamespace: string;
+}
+
+export interface RedisCacheListItem {
+  id: string;
+  displayName: string;
+}
+
+/** Returns the configured Service Bus namespaces (alias + id) for the alert entity picker. */
+export async function getServiceBusNamespaces(): Promise<SbNamespaceListItem[]> {
+  const data = await apiFetch<{ serviceBusNamespaces?: SbNamespaceListItem[] }>("/api/config/profiles");
+  return data.serviceBusNamespaces ?? [];
+}
+
+/** Returns the configured Redis caches (displayName + id) for the alert connection picker. */
+export async function getRedisCaches(): Promise<RedisCacheListItem[]> {
+  const data = await apiFetch<{ config?: { redisConfig?: { caches?: RedisCacheListItem[] } } }>("/api/config/profiles");
+  return data.config?.redisConfig?.caches ?? [];
+}

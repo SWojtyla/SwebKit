@@ -37,20 +37,14 @@ Each needs a scope decision before "fix" is meaningful.
 - **Priority:** highest in this entire plan — treat as a security fix, land before touching anything
   else in `RequestEditor.tsx`.
 
-### 1.2 Monitoring: scope decision, then rebuild or drop (index.md #1)
+### 1.2 Monitoring: scope decision, then rebuild or drop (index.md #1) — DECIDED
 
 - **Verify:** open Monitoring, create a rule, reload the app, confirm it's gone (no persistence);
   grep `src-sidecar/Endpoints/` for any monitoring/alert route to confirm none exists.
-- **Decide first (ask the user if unclear):** mirror the Observability/DevOps precedent — is
-  Monitoring worth a real rebuild, or should it be dropped like Observability/DevOps/Releases were?
-  The MAUI version was a real 5-component system (structured per-source rule editor, grouped list
-  with live status, SSE-style history) — rebuilding is a multi-day effort, not a quick fix.
-- **If rebuild:** split into its own feature folder (`monitoring-rebuild`) with its own index/
-  technical-plan/test-plan before starting — this plan only carries the scope decision, not the
-  implementation detail.
-- **If drop:** remove `MonitoringPage.tsx` and its nav entry, delete any now-dead demo data, and
-  update `docs/features/README.md`'s feature order the same way the Observability/DevOps drop was
-  recorded in `demo-mode-parity`.
+- **Decision (user, 2026-07-27): rebuild.** Monitoring is worth a real rebuild, not a drop — see
+  [`../monitoring-rebuild/`](../monitoring-rebuild/index.md) for the dedicated feature folder
+  (index/technical-plan/test-plan) split out per this item's own instructions. This item is
+  complete as far as `post-migration-ux-review` is concerned; implementation tracking moved there.
 
 ### 1.3 Redis Pub/Sub calls nonexistent routes (index.md #2)
 
