@@ -12,9 +12,10 @@ public static class ApiClientEndpoints
             ExecuteRequestRequest req,
             IHttpRequestExecutor executor,
             CollectionRepository collections,
-            EnvironmentRepository environments) =>
+            EnvironmentRepository environments,
+            DemoModeService demo) =>
         {
-            var collection = await ResolveCollectionAsync(req.CollectionId, collections);
+            var collection = await ResolveCollectionAsync(req.CollectionId, collections, demo);
             if (collection is null && req.CollectionId is not null)
                 return Results.NotFound("Collection not found");
 
@@ -40,10 +41,13 @@ public static class ApiClientEndpoints
         });
     }
 
-    private static async Task<ApiCollection?> ResolveCollectionAsync(string? collectionId, CollectionRepository collections)
+    private static async Task<ApiCollection?> ResolveCollectionAsync(string? collectionId, CollectionRepository collections, DemoModeService demo)
     {
         if (string.IsNullOrWhiteSpace(collectionId))
             return null;
+
+        if (demo.IsDemoMode && collectionId == DemoApiCollectionFactory.DemoCollectionId)
+            return DemoApiCollectionFactory.CreateDemoCollection();
 
         // Load the latest persisted store so we get the full tree and variables.
         await collections.LoadAsync().ConfigureAwait(false);

@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Save, Send, Wand2, Minimize2, Eye, Crosshair } from "lucide-react";
 import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig } from "@/lib/types";
+import { substituteVariables, previewVariables, isLikelySecret } from "@/lib/variable-utils";
 import { GraphQlPanel } from "./GraphQlPanel";
 import { WebSocketPanel } from "./WebSocketPanel";
 
@@ -8,8 +9,9 @@ interface RequestEditorProps {
   request: HttpRequestEntry;
   onChange: (request: HttpRequestEntry) => void;
   onSend: () => void;
-  onSave: () => void;
+  onSave: () => void | Promise<void>;
   sending: boolean;
+  variableScope?: Record<string, string | null>;
 }
 
 const methods: ApiRequestMethod[] = [
@@ -75,16 +77,25 @@ function tryMinifyJson(content: string): string {
   }
 }
 
-export function RequestEditor({ request, onChange, onSend, onSave, sending }: RequestEditorProps) {
+export function RequestEditor({ request, onChange, onSend, onSave, sending, variableScope = {} }: RequestEditorProps) {
   const [activeTab, setActiveTab] = useState<Tab>("params");
   const [dirty, setDirty] = useState(false);
   const [showVarPreview, setShowVarPreview] = useState(false);
   const [captureRules, setCaptureRules] = useState<{ name: string; path: string; target: string }[]>([]);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedSnapshotRef = useRef<HttpRequestEntry>(request);
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
 
-  // Track dirty state by comparing to a saved snapshot
+  const handleSave = useCallback(async () => {
+    await onSaveRef.current();
+    savedSnapshotRef.current = request;
+    setDirty(false);
+  }, [request]);
+
+  // Track dirty state by comparing to the last saved snapshot
   useEffect(() => {
-    setDirty(true);
+    setDirty(JSON.stringify(request) !== JSON.stringify(savedSnapshotRef.current));
   }, [request]);
 
   // Auto-save with debounce
@@ -92,22 +103,20 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
     if (dirty && !sending) {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       autoSaveTimer.current = setTimeout(() => {
-        onSave();
-        setDirty(false);
+        handleSave();
       }, 2000);
     }
     return () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     };
-  }, [request, dirty, sending, onSave]);
+  }, [request, dirty, sending, handleSave]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        onSave();
-        setDirty(false);
+        handleSave();
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
@@ -116,12 +125,18 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onSave, onSend]);
+  }, [onSend, handleSave]);
 
   const setMethod = (method: ApiRequestMethod) => onChange({ ...request, method });
   const setUrl = (url: string) => onChange({ ...request, url });
-  const setBodyMode = (mode: RequestBodyMode) =>
-    onChange({ ...request, body: { ...request.body, mode } });
+  const setBodyMode = (mode: RequestBodyMode) => {
+    const contentType =
+      mode === "Json" ? "application/json" :
+      mode === "Xml" ? "application/xml" :
+      mode === "Text" ? (request.body.contentType ?? "text/plain") :
+      request.body.contentType;
+    onChange({ ...request, body: { ...request.body, mode, contentType } });
+  };
   const setBodyContent = (rawContent: string) =>
     onChange({ ...request, body: { ...request.body, rawContent } });
 
@@ -214,8 +229,22 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
       {/* Variable preview */}
       {showVarPreview && (
         <div className="border-b bg-muted/30 px-3 py-2" data-testid="variable-preview">
-          <span className="text-xs text-muted-foreground">Resolved: </span>
-          <span className="text-xs font-mono">{request.url.replace(/\{\{([^}]+)\}\}/g, (_, name) => `<${name.trim()}>`)}</span>
+          <div className="text-xs text-muted-foreground">Resolved URL:</div>
+          <div className="break-all font-mono text-xs">
+            {substituteVariables(request.url, variableScope)}
+          </div>
+          {Object.keys(previewVariables(request.url, variableScope)).length > 0 && (
+            <div className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              {Object.entries(previewVariables(request.url, variableScope)).map(([key, value]) => (
+                <>
+                  <span key={`k-${key}`} className="text-muted-foreground">{key}</span>
+                  <span key={`v-${key}`} className="font-mono">
+                    {value === null ? "<unresolved>" : isLikelySecret(key) ? "••••••••" : value}
+                  </span>
+                </>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -343,7 +372,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
         {/* Body tab */}
         {activeTab === "body" && (
           <div data-testid="body-tab">
-            <div className="mb-2 flex items-center gap-2">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">Body</span>
               <select
                 data-testid="request-body-mode-select"
@@ -355,6 +384,16 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending }: Re
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
+              {request.body.mode === "Text" && (
+                <input
+                  data-testid="request-body-content-type"
+                  type="text"
+                  value={request.body.contentType ?? "text/plain"}
+                  onChange={(e) => onChange({ ...request, body: { ...request.body, contentType: e.target.value } })}
+                  placeholder="text/plain"
+                  className="w-40 rounded border bg-background px-2 py-1 text-xs font-mono"
+                />
+              )}
               {request.body.mode === "Json" && request.body.rawContent && (
                 <>
                   <button

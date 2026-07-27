@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Copy, Check, Terminal, History, Save, TrendingUp, AlertCircle } from "lucide-react";
-import type { ApiClientExecutionResponse } from "@/lib/types";
+import type { ApiClientExecutionResponse, HttpRequestEntry } from "@/lib/types";
 
 interface ResponseHistoryEntry {
   id: number;
@@ -11,7 +11,7 @@ interface ResponseHistoryEntry {
 interface ResponseViewerProps {
   response: ApiClientExecutionResponse | null;
   sending: boolean;
-  request?: { method: string; url: string } | null;
+  request?: HttpRequestEntry | null;
 }
 
 type Tab = "body" | "headers" | "history";
@@ -39,14 +39,27 @@ function tryPrettyPrint(content: string, contentType: string | null): string {
   return content;
 }
 
-function buildCurl(request: { method: string; url: string }, response: ApiClientExecutionResponse): string {
+function buildCurl(request: HttpRequestEntry, response: ApiClientExecutionResponse): string {
   const parts = [`curl -X ${request.method.toUpperCase()}`];
+
+  // Request headers (enabled only)
+  for (const h of request.headers) {
+    if (h.isEnabled && h.key) {
+      parts.push(`-H "${h.key}: ${h.value ?? ""}"`);
+    }
+  }
+
+  // Body for raw modes
+  if (request.body.mode === "Json" || request.body.mode === "Xml" || request.body.mode === "Text") {
+    const contentType = request.body.contentType ?? (request.body.mode === "Json" ? "application/json" : request.body.mode === "Xml" ? "application/xml" : "text/plain");
+    parts.push(`-H "Content-Type: ${contentType}"`);
+    if (request.body.rawContent) {
+      parts.push(`-d '${request.body.rawContent.replace(/'/g, "'\\''")}'`);
+    }
+  }
+
   // Add resolved URL
   parts.push(`"${response.resolvedUrl}"`);
-  // Add headers
-  for (const h of response.headers) {
-    parts.push(`-H "${h.name}: ${h.value}"`);
-  }
   return parts.join(" \\\n  ");
 }
 
@@ -151,6 +164,21 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
           </button>
         )}
       </div>
+
+      {/* Capture warnings */}
+      {response.captureWarnings && response.captureWarnings.length > 0 && (
+        <div className="border-b bg-yellow-500/10 p-3" data-testid="response-capture-warnings">
+          <div className="flex items-center gap-2 text-xs font-medium text-yellow-500">
+            <AlertCircle className="h-4 w-4" />
+            Capture warnings
+          </div>
+          <ul className="mt-1 list-disc list-inside text-xs text-yellow-500/90">
+            {response.captureWarnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* cURL preview */}
       {showCurl && request && !isError && (
