@@ -141,6 +141,18 @@ test.describe("Redis", () => {
     expect(count).toBeGreaterThan(0);
   });
 
+  test("namespace tree expands recursively", async ({ page }) => {
+    await page.goto("/redis");
+
+    await page.getByTestId("redis-namespace-toggle-user").click();
+    await expect(page.getByTestId("redis-namespace-user-profile")).toBeVisible();
+
+    await page.getByTestId("redis-namespace-toggle-user:profile").click();
+    await expect(page.getByTestId("redis-namespace-key-user:profile:1001")).toBeVisible();
+    await page.getByTestId("redis-namespace-key-user:profile:1001").click();
+    await expect(page.getByTestId("redis-detail-key-name")).toHaveText("user:profile:1001");
+  });
+
   test("keyspace tab shows health panel", async ({ page }) => {
     await page.goto("/redis");
     await expect(page.getByTestId("redis-page")).toBeVisible();

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -56,6 +56,42 @@ function formatBytes(bytes: number | null | undefined): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
+type NamespaceNode = {
+  name: string;
+  path: string;
+  children: Map<string, NamespaceNode>;
+  keys: string[];
+  keyCount: number;
+};
+
+function buildNamespaceTree(keys: string[], separator: string): NamespaceNode[] {
+  const roots = new Map<string, NamespaceNode>();
+
+  for (const key of keys) {
+    const parts = key.split(separator);
+    if (parts.length < 2) continue;
+
+    let nodes = roots;
+    let path = "";
+    const namespaceParts = parts.slice(0, -1);
+    namespaceParts.forEach((name, index) => {
+      path = index === 0 ? name : `${path}${separator}${name}`;
+      let node = nodes.get(name);
+      if (!node) {
+        node = { name, path, children: new Map(), keys: [], keyCount: 0 };
+        nodes.set(name, node);
+      }
+      node.keyCount += 1;
+      nodes = node.children;
+      if (index === namespaceParts.length - 1) {
+        node.keys.push(key);
+      }
+    });
+  }
+
+  return [...roots.values()];
+}
+
 export function RedisPage() {
   const { data: profile } = useProfile();
   const location = useLocation();
@@ -92,7 +128,6 @@ export function RedisPage() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(10);
   const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(new Set());
-  const [namespaceVisibleCounts, setNamespaceVisibleCounts] = useState<Record<string, number>>({});
   const [pendingConfirm, setPendingConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [hashAdding, setHashAdding] = useState(false);
   const [newHashField, setNewHashField] = useState("");
@@ -301,28 +336,10 @@ export function RedisPage() {
     });
   };
 
-  // Build namespace tree from displayed keys using the configured separator
-  const namespaceTree = useMemo(() => {
-    const tree: Record<string, string[]> = {};
-    if (!namespaceSeparator) return tree;
-    for (const key of displayKeys) {
-      const idx = key.indexOf(namespaceSeparator);
-      if (idx !== -1) {
-        const ns = key.slice(0, idx);
-        if (!tree[ns]) tree[ns] = [];
-        tree[ns].push(key);
-      }
-    }
-    return tree;
-  }, [displayKeys, namespaceSeparator]);
-
-  const getNamespaceVisibleCount = (ns: string) => namespaceVisibleCounts[ns] ?? 20;
-  const showMoreNamespace = (ns: string) => {
-    setNamespaceVisibleCounts((prev) => ({
-      ...prev,
-      [ns]: (prev[ns] ?? 20) + 20,
-    }));
-  };
+  const namespaceTree = useMemo(
+    () => buildNamespaceTree(displayKeys, namespaceSeparator),
+    [displayKeys, namespaceSeparator],
+  );
 
   const filteredKeys = namespaceFilter
     ? displayKeys.filter((k) => k === namespaceFilter || k.startsWith(namespaceFilter + namespaceSeparator))
@@ -335,6 +352,50 @@ export function RedisPage() {
       else next.add(ns);
       return next;
     });
+  };
+
+  const renderNamespaceNode = (node: NamespaceNode, depth = 0): ReactNode => {
+    const isExpanded = expandedNamespaces.has(node.path);
+    return (
+      <div key={node.path}>
+        <div className="flex items-center">
+          <button
+            onClick={() => toggleNamespace(node.path)}
+            className="p-0.5 text-muted-foreground hover:text-foreground"
+            data-testid={`redis-namespace-toggle-${node.path}`}
+            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${node.path}`}
+          >
+            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          </button>
+          <button
+            onClick={() => setNamespaceFilter(namespaceFilter === node.path ? null : node.path)}
+            className={`flex-1 rounded px-2 py-0.5 text-left text-xs font-mono ${namespaceFilter === node.path ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+            data-testid={`redis-namespace-${node.path}`}
+          >
+            {node.name} ({node.keyCount})
+          </button>
+        </div>
+        {isExpanded && (
+          <div
+            className="border-l pl-1"
+            style={{ marginLeft: `${(depth + 1) * 1.25}rem` }}
+            data-testid={`redis-namespace-children-${node.path}`}
+          >
+            {[...node.children.values()].map((child) => renderNamespaceNode(child, depth + 1))}
+            {node.keys.map((key) => (
+              <button
+                key={key}
+                onClick={() => setSelectedKey(key)}
+                className={`block w-full truncate rounded px-2 py-0.5 text-left text-xs font-mono ${selectedKey === key ? "bg-accent" : "hover:bg-accent"}`}
+                data-testid={`redis-namespace-key-${key}`}
+              >
+                {key.slice(node.path.length + namespaceSeparator.length) || key}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (!resolvedCacheId) {
@@ -486,7 +547,7 @@ export function RedisPage() {
               </div>
 
               {/* Namespace tree with expand/collapse */}
-              {Object.keys(namespaceTree).length > 0 && (
+              {namespaceTree.length > 0 && (
                 <div className="border-b p-2" data-testid="redis-namespace-tree">
                   <div className="mb-1 text-xs font-medium text-muted-foreground">Namespaces</div>
                   <div className="space-y-0.5">
@@ -496,52 +557,7 @@ export function RedisPage() {
                     >
                       All ({displayKeys.length})
                     </button>
-                    {Object.entries(namespaceTree).map(([ns, keys]) => {
-                      const visibleCount = getNamespaceVisibleCount(ns);
-                      return (
-                        <div key={ns}>
-                          <div className="flex items-center">
-                            <button
-                              onClick={() => toggleNamespace(ns)}
-                              className="p-0.5 text-muted-foreground hover:text-foreground"
-                              data-testid={`redis-namespace-toggle-${ns}`}
-                            >
-                              {expandedNamespaces.has(ns) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                            </button>
-                            <button
-                              onClick={() => setNamespaceFilter(namespaceFilter === ns ? null : ns)}
-                              className={`flex-1 rounded px-2 py-0.5 text-left text-xs font-mono ${namespaceFilter === ns ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-                              data-testid={`redis-namespace-${ns}`}
-                            >
-                              {ns} ({keys.length})
-                            </button>
-                          </div>
-                          {expandedNamespaces.has(ns) && (
-                            <div className="ml-5 border-l pl-1" data-testid={`redis-namespace-children-${ns}`}>
-                              {keys.slice(0, visibleCount).map((k) => (
-                                <button
-                                  key={k}
-                                  onClick={() => setSelectedKey(k)}
-                                  className={`block w-full truncate rounded px-2 py-0.5 text-left text-xs font-mono ${selectedKey === k ? "bg-accent" : "hover:bg-accent"}`}
-                                  data-testid={`redis-namespace-key-${k}`}
-                                >
-                                  {k.slice(k.indexOf(namespaceSeparator) + namespaceSeparator.length) || k}
-                                </button>
-                              ))}
-                              {keys.length > visibleCount && (
-                                <button
-                                  onClick={() => showMoreNamespace(ns)}
-                                  className="px-2 py-0.5 text-left text-xs text-primary hover:text-foreground"
-                                  data-testid={`redis-namespace-show-more-${ns}`}
-                                >
-                                  +{Math.min(20, keys.length - visibleCount)} more
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {namespaceTree.map((node) => renderNamespaceNode(node))}
                   </div>
                 </div>
               )}
