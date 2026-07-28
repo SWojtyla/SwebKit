@@ -43,8 +43,7 @@ public sealed class SidecarAuthHeaderBuilder(ICredentialStore credentialStore, I
 
     private void ApplyBearer(HttpRequestMessage message, AuthConfig auth)
     {
-        if (string.IsNullOrWhiteSpace(auth.CredentialKey)) return;
-        var token = credentialStore.Get(auth.CredentialKey) ?? auth.CredentialKey;
+        var token = ResolveSecret(auth);
         if (string.IsNullOrWhiteSpace(token)) return;
 
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -52,8 +51,8 @@ public sealed class SidecarAuthHeaderBuilder(ICredentialStore credentialStore, I
 
     private void ApplyApiKey(HttpRequestMessage message, AuthConfig auth)
     {
-        if (string.IsNullOrWhiteSpace(auth.CredentialKey) || string.IsNullOrWhiteSpace(auth.ApiKeyParamName)) return;
-        var apiKey = credentialStore.Get(auth.CredentialKey) ?? auth.CredentialKey;
+        if (string.IsNullOrWhiteSpace(auth.ApiKeyParamName)) return;
+        var apiKey = ResolveSecret(auth);
         if (string.IsNullOrWhiteSpace(apiKey)) return;
 
         if (auth.ApiKeyLocation == ApiKeyLocation.Header)
@@ -75,8 +74,8 @@ public sealed class SidecarAuthHeaderBuilder(ICredentialStore credentialStore, I
 
     private void ApplyBasic(HttpRequestMessage message, AuthConfig auth)
     {
-        if (string.IsNullOrWhiteSpace(auth.CredentialKey)) return;
-        var password = credentialStore.Get(auth.CredentialKey) ?? auth.CredentialKey;
+        var password = ResolveSecret(auth);
+        if (string.IsNullOrWhiteSpace(password)) return;
         var username = auth.BasicUsername ?? string.Empty;
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
         message.Headers.Authorization = new AuthenticationHeaderValue("Basic", encoded);
@@ -93,10 +92,10 @@ public sealed class SidecarAuthHeaderBuilder(ICredentialStore credentialStore, I
 
     private async Task ApplyOAuth2ClientCredentialsAsync(HttpRequestMessage message, AuthConfig auth, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(auth.OAuth2TokenUrl) || string.IsNullOrWhiteSpace(auth.OAuth2ClientId) || string.IsNullOrWhiteSpace(auth.CredentialKey))
+        if (string.IsNullOrWhiteSpace(auth.OAuth2TokenUrl) || string.IsNullOrWhiteSpace(auth.OAuth2ClientId))
             return;
 
-        var clientSecret = credentialStore.Get(auth.CredentialKey) ?? auth.CredentialKey;
+        var clientSecret = ResolveSecret(auth);
         if (string.IsNullOrWhiteSpace(clientSecret)) return;
 
         var form = new Dictionary<string, string>
@@ -125,6 +124,32 @@ public sealed class SidecarAuthHeaderBuilder(ICredentialStore credentialStore, I
         {
             message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", json.AccessToken);
         }
+    }
+
+    /// <summary>
+    /// Resolves the secret for an auth config. The transient <see cref="AuthConfig.CredentialSecret"/>
+    /// takes precedence, then the OS-backed credential store, and finally the legacy literal value of
+    /// <see cref="AuthConfig.CredentialKey"/> only when the key is not an opaque generated key and was
+    /// not found in the store.
+    /// </summary>
+    private string? ResolveSecret(AuthConfig auth)
+    {
+        if (!string.IsNullOrWhiteSpace(auth.CredentialSecret))
+            return auth.CredentialSecret;
+
+        if (string.IsNullOrWhiteSpace(auth.CredentialKey))
+            return null;
+
+        var fromStore = credentialStore.Get(auth.CredentialKey);
+        if (!string.IsNullOrWhiteSpace(fromStore))
+            return fromStore;
+
+        // Legacy fallback: the collections.json value itself is the secret, not a key reference.
+        // Only use it when the value does not look like an opaque generated key.
+        if (auth.CredentialKey.StartsWith("sw-secret:", StringComparison.Ordinal))
+            return null;
+
+        return auth.CredentialKey;
     }
 
     private sealed class OAuth2TokenResponse

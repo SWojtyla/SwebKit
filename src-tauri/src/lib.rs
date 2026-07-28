@@ -1,8 +1,10 @@
 mod sidecar;
 mod native;
+mod secrets;
 
 use tauri::Manager;
 use sidecar::{get_sidecar_port, restart_sidecar};
+use secrets::{save_secret, get_secret, delete_secret, list_secrets};
 use native::{
     start_port_forward, stop_port_forward, list_port_forwards,
     pick_file, pick_directory, confirm_dialog, alert_dialog,
@@ -51,6 +53,10 @@ pub fn run() {
             read_file,
             write_file,
             list_dir,
+            save_secret,
+            get_secret,
+            delete_secret,
+            list_secrets,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

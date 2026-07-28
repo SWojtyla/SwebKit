@@ -19,6 +19,7 @@ import { CollectionExportDialog } from "./CollectionExportDialog";
 import { GitPanel } from "./GitPanel";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
 import { buildVariableScope } from "@/lib/variable-utils";
+import { getSecret } from "@/lib/tauri-bridge";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -27,6 +28,7 @@ import type {
   ApiRequestMethod,
   ApiEnvironment,
   CollectionVariable,
+  AuthConfig,
 } from "@/lib/types";
 
 function newId() {
@@ -72,6 +74,31 @@ function emptyRequest(): HttpRequestEntry {
     createdAt: now(),
     updatedAt: now(),
   };
+}
+
+const CREDENTIAL_KEY_PREFIX = "sw-secret:";
+
+function isLegacyCredentialKey(auth: AuthConfig | null | undefined): boolean {
+  return !!auth?.credentialKey && !auth.credentialKey.startsWith(CREDENTIAL_KEY_PREFIX);
+}
+
+function countLegacySecrets(collections: ApiCollection[]): number {
+  let count = 0;
+  for (const collection of collections) {
+    if (isLegacyCredentialKey(collection.defaultAuth)) count++;
+    function walk(nodes: ApiCollectionNode[]) {
+      for (const node of nodes) {
+        if (node.type === "Folder") {
+          if (isLegacyCredentialKey(node.defaultAuth)) count++;
+          walk(node.children);
+        } else if (node.request) {
+          if (isLegacyCredentialKey(node.request.auth)) count++;
+        }
+      }
+    }
+    walk(collection.nodes);
+  }
+  return count;
 }
 
 function removeNode(collections: ApiCollection[], nodeId: string): ApiCollection[] {
@@ -204,6 +231,10 @@ export function ApiClientPage() {
   const [showColVarEditor, setShowColVarEditor] = useState(false);
   const [exportCollectionId, setExportCollectionId] = useState<string | null>(null);
   const [showGitPanel, setShowGitPanel] = useState(false);
+  const [legacyNoticeDismissed, setLegacyNoticeDismissed] = useState(() =>
+    typeof window !== "undefined" && localStorage.getItem("swokit-legacy-secret-notice") === "dismissed"
+  );
+  const legacySecretCount = useMemo(() => countLegacySecrets(collections), [collections]);
   const [nameDialog, setNameDialog] = useState<{
     title: string;
     label: string;
@@ -417,7 +448,12 @@ export function ApiClientPage() {
     if (!tabState) return;
     const tab = tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
-    const next = updateRequestInCollections(collections, tab.nodeId, tabState.draft);
+    // The transient credentialSecret must never be written to collections.json.
+    const draftForSave = deepClone(tabState.draft);
+    if (draftForSave.auth) {
+      draftForSave.auth = { ...draftForSave.auth, credentialSecret: null };
+    }
+    const next = updateRequestInCollections(collections, tab.nodeId, draftForSave);
     await updateCollections.mutateAsync(next);
     setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], dirty: false } }));
     setTabs((prev) => prev.map((t) => t.id === activeTabId ? { ...t, dirty: false } : t));
@@ -432,8 +468,16 @@ export function ApiClientPage() {
     await handleSave();
     setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], sending: true, response: null } }));
     try {
+      // Resolve the secret from the persisted store if the editor has not already loaded it.
+      const request = deepClone(tabState.draft);
+      if (request.auth?.credentialKey && !request.auth.credentialSecret) {
+        const secret = await getSecret(request.auth.credentialKey);
+        if (secret) {
+          request.auth = { ...request.auth, credentialSecret: secret };
+        }
+      }
       const result = await executeRequest.mutateAsync({
-        request: tabState.draft,
+        request,
         collectionId: tab.collectionId ?? undefined,
         environmentId: activeEnvironmentId ?? undefined,
       });
@@ -571,6 +615,26 @@ export function ApiClientPage() {
           <GitBranch className="h-3 w-3" /> Git
         </button>
       </div>
+
+      {/* Legacy plaintext secret notice */}
+      {legacySecretCount > 0 && !legacyNoticeDismissed && (
+        <div className="flex items-start gap-2 border-b bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100" data-testid="legacy-secret-notice">
+          <span className="flex-1">
+            {legacySecretCount} API Client auth value{legacySecretCount === 1 ? "" : "s"} look{legacySecretCount === 1 ? "s" : ""} like a raw secret stored in collections.json.
+            Re-enter {legacySecretCount === 1 ? "it" : "them"} to move {legacySecretCount === 1 ? "it" : "them"} to the secure store.
+          </span>
+          <button
+            onClick={() => {
+              localStorage.setItem("swokit-legacy-secret-notice", "dismissed");
+              setLegacyNoticeDismissed(true);
+            }}
+            className="shrink-0 rounded border px-2 py-0.5 hover:bg-amber-100 dark:hover:bg-amber-900"
+            data-testid="legacy-secret-notice-dismiss"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Main 3-pane layout */}
       <div className="flex min-w-0 flex-1 overflow-hidden">
