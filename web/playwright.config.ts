@@ -55,7 +55,7 @@ export default defineConfig({
 
   webServer: [
     {
-      command: `dotnet run --project ../src-sidecar/SwebKit.Sidecar.csproj --urls http://127.0.0.1:${sidecarPort}`,
+      command: `rm -rf "${e2eAppDataRoot}" && mkdir -p "${e2eAppDataRoot}" && dotnet run --project ../src-sidecar/SwebKit.Sidecar.csproj --urls http://127.0.0.1:${sidecarPort}`,
       url: `http://127.0.0.1:${sidecarPort}/health`,
       timeout: 120 * 1000,
       reuseExistingServer: false,

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using SwebKit.Azure.ServiceBus;
+using SwebKit.Core.Serialization;
 using SwebKit.Azure.Storage;
 using SwebKit.Agents;
 using SwebKit.Core.Abstractions;
@@ -176,14 +177,16 @@ app.MapPost("/api/demo-mode", (DemoModeService demo, bool enabled) =>
 
 app.MapGet("/api/config/profiles", (ProfileRepository repo, DemoModeService demo) =>
 {
+    // Clone before applying demo overlays so the in-memory repository is not mutated.
     var data = repo.GetProfileData();
+    var result = JsonSerializer.Deserialize<ProfileData>(JsonSerializer.Serialize(data, SwebKitJsonOptions.Default), SwebKitJsonOptions.Default) ?? new ProfileData();
     if (demo.IsDemoMode)
     {
-        data.ServiceBusNamespaces = [.. demo.GetDemoNamespaces()];
+        result.ServiceBusNamespaces = [.. demo.GetDemoNamespaces()];
         var demoCache = demo.GetDemoRedisCache(DemoModeService.DemoRedisCacheId);
         if (demoCache is not null)
         {
-            data.Config.RedisConfig = new RedisConfig
+            result.Config.RedisConfig = new RedisConfig
             {
                 Caches = [demoCache],
                 ActiveCacheId = demoCache.Id,
@@ -193,10 +196,10 @@ app.MapGet("/api/config/profiles", (ProfileRepository repo, DemoModeService demo
         var demoStorage = demo.GetDemoStorageConfig();
         if (demoStorage is not null)
         {
-            data.Config.StorageAccounts = [demoStorage];
+            result.Config.StorageAccounts = [demoStorage];
         }
     }
-    return Results.Ok(data);
+    return Results.Ok(result);
 });
 
 app.MapPut("/api/config/profiles", async (ProfileRepository repo, ProfileData data) =>
