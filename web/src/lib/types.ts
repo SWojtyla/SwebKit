@@ -92,6 +92,24 @@ export interface FavoriteEntity {
 export interface FavoriteResource {
   name: string;
   pinnedAt: string;
+  snapshot: WorkspaceSnapshot;
+}
+
+export interface WorkspaceSnapshot {
+  resource: OperatorResourceReference;
+  restoreState: Record<string, string>;
+  capturedAt: string;
+}
+
+export interface OperatorResourceReference {
+  key: string;
+  area: string;
+  kind: string;
+  displayName: string;
+  displayPath?: string | null;
+  summary?: string | null;
+  icon?: string | null;
+  metadata: Record<string, string>;
 }
 
 export interface SbMessageTemplate {

@@ -131,4 +131,13 @@ test.describe("Dashboard", () => {
     await expect(page.getByTestId("watch-tile-containers")).toBeVisible();
     await expect(page.getByTestId("watch-tile-cache-hit-rate")).toBeVisible();
   });
+
+  test("pins a resource and shows it in the pinned list", async ({ page }) => {
+    await setDemoMode(page, true);
+    await page.goto("/");
+    await expect(page.getByTestId("dashboard-resource-rows")).toBeVisible();
+    await page.getByTestId("pin-resource-redis").click();
+    await expect(page.getByTestId("pinned-resource-redis")).toBeVisible();
+    await expect(page.getByTestId("pin-resource-redis")).toHaveAttribute("aria-label", "Unpin Redis");
+  });
 });

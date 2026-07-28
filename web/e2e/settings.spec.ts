@@ -17,6 +17,15 @@ test.describe("Settings", () => {
     }
   });
 
+  test("general tab shows getting started readiness checklist", async ({ page }) => {
+    await page.goto("/settings");
+    await expect(page.getByTestId("getting-started-checklist")).toBeVisible();
+    await expect(page.getByTestId("getting-started-aks")).toBeVisible();
+    await expect(page.getByTestId("getting-started-service-bus")).toBeVisible();
+    await expect(page.getByTestId("getting-started-redis")).toBeVisible();
+    await expect(page.getByTestId("getting-started-storage")).toBeVisible();
+  });
+
   test("devops tab shows configuration form", async ({ page }) => {
     await page.goto("/settings");
     await page.getByTestId("settings-tab-devops").click();

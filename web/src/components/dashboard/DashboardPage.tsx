@@ -13,8 +13,11 @@ import {
   Activity,
   TrendingUp,
   AlertCircle,
+  Pin,
+  PinOff,
 } from "lucide-react";
-import { useHealth, useProfile, useDemoMode, useToggleDemoMode, useAksNamespaces, useAksDeployments, useAksPods, useRedisServerInfo, useStorageContainers, usePendingApprovals } from "@/lib/hooks";
+import { useHealth, useProfile, useDemoMode, useToggleDemoMode, useAksNamespaces, useAksDeployments, useAksPods, useRedisServerInfo, useStorageContainers, usePendingApprovals, useTogglePinnedResource } from "@/lib/hooks";
+import type { FavoriteResource } from "@/lib/types";
 
 export function DashboardPage() {
   const { data: health } = useHealth();
@@ -47,6 +50,7 @@ export function DashboardPage() {
   const redisInfo = useRedisServerInfo(redisCaches[0]?.id ?? null);
   const storageContainers = useStorageContainers(storageAccounts[0]?.id ?? null);
   const pendingApprovals = usePendingApprovals();
+  const togglePinned = useTogglePinnedResource();
 
   const deploymentCount = aksDeployments.data?.length ?? 0;
   const podCount = aksPods.data?.length ?? 0;
@@ -112,6 +116,72 @@ export function DashboardPage() {
   ];
 
   const pendingCount = pendingApprovals.data?.count ?? 0;
+
+  const resourceRows = [
+    {
+      key: "aks",
+      name: "AKS",
+      summary: aksConfigured ? "Cluster configured" : "Configure a cluster connection",
+      to: "/aks",
+      icon: Ship,
+      ready: aksConfigured,
+    },
+    {
+      key: "service-bus",
+      name: "Service Bus",
+      summary: sbNamespaces.length ? `${sbNamespaces.length} namespace${sbNamespaces.length === 1 ? "" : "s"}` : "Configure a namespace",
+      to: "/service-bus",
+      icon: MessageSquare,
+      ready: sbNamespaces.length > 0,
+    },
+    {
+      key: "redis",
+      name: "Redis",
+      summary: redisCaches.length ? `${redisCaches.length} cache${redisCaches.length === 1 ? "" : "s"}` : "Configure a cache",
+      to: "/redis",
+      icon: Database,
+      ready: redisCaches.length > 0,
+    },
+    {
+      key: "storage",
+      name: "Storage",
+      summary: storageAccounts.length ? `${storageAccounts.length} account${storageAccounts.length === 1 ? "" : "s"}` : "Configure an account",
+      to: "/storage",
+      icon: FolderOpen,
+      ready: storageAccounts.length > 0,
+    },
+  ];
+
+  const pinnedResources = profile?.config.favoriteResources ?? [];
+  const isPinned = (key: string) =>
+    pinnedResources.some((favorite) => favorite.snapshot.resource.key === key);
+  const makeFavorite = (resource: (typeof resourceRows)[number]): FavoriteResource => ({
+    name: resource.name,
+    pinnedAt: new Date().toISOString(),
+    snapshot: {
+      resource: {
+        key: resource.key,
+        area: resource.key,
+        kind: "service",
+        displayName: resource.name,
+        displayPath: resource.to,
+        summary: resource.summary,
+        icon: resource.key,
+        metadata: {},
+      },
+      restoreState: {},
+      capturedAt: new Date().toISOString(),
+    },
+  });
+
+  const handlePin = (resource: (typeof resourceRows)[number]) => {
+    if (!profile) return;
+    togglePinned.mutate({
+      profile,
+      resource: makeFavorite(resource),
+      pinned: !isPinned(resource.key),
+    });
+  };
 
   return (
     <div className="animate-fade-in-up p-6" data-testid="dashboard-page">
@@ -214,6 +284,59 @@ export function DashboardPage() {
             );
           })}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Resources</h2>
+        <div className="space-y-2" data-testid="dashboard-resource-rows">
+          {resourceRows.map((resource) => {
+            const Icon = resource.icon;
+            const pinned = isPinned(resource.key);
+            return (
+              <div key={resource.key} className="flex items-center gap-3 rounded-xl border bg-card/50 p-3" data-testid={`dashboard-resource-row-${resource.key}`}>
+                <Icon className="h-5 w-5 text-primary" />
+                <Link to={resource.to} className="min-w-0 flex-1 hover:text-primary">
+                  <div className="font-medium">{resource.name}</div>
+                  <div className="text-xs text-muted-foreground">{resource.summary}</div>
+                </Link>
+                <button
+                  type="button"
+                  aria-label={pinned ? `Unpin ${resource.name}` : `Pin ${resource.name} to dashboard`}
+                  title={pinned ? "Unpin from dashboard" : "Pin to dashboard"}
+                  data-testid={`pin-resource-${resource.key}`}
+                  onClick={() => handlePin(resource)}
+                  disabled={togglePinned.isPending}
+                  className={`rounded-md p-2 transition-colors hover:bg-accent ${pinned ? "text-primary" : "text-muted-foreground"}`}
+                >
+                  {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-6" data-testid="pinned-resources">
+        <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Pinned to dashboard</h2>
+        {pinnedResources.length === 0 ? (
+          <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+            Pin a resource above for quick access.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {pinnedResources.map((favorite) => (
+              <Link
+                key={favorite.snapshot.resource.key}
+                to={favorite.snapshot.resource.displayPath ?? "/"}
+                className="inline-flex items-center gap-2 rounded-lg border bg-card/50 px-3 py-2 text-sm hover:border-primary"
+                data-testid={`pinned-resource-${favorite.snapshot.resource.key}`}
+              >
+                <Pin className="h-3.5 w-3.5 text-primary" />
+                {favorite.name}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Service cards */}

@@ -74,6 +74,7 @@ import type {
   HttpRouteInfo,
   GatewayClassInfo,
   GatewayInfo,
+  FavoriteResource,
 } from "./types";
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -90,6 +91,38 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: (data: ProfileData) =>
       apiSend("/api/config/profiles", "PUT", data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
+  });
+}
+
+export function usePinnedResources() {
+  const { data: profile, ...query } = useProfile();
+  return {
+    ...query,
+    data: profile?.config.favoriteResources ?? [],
+  };
+}
+
+export function useTogglePinnedResource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { profile: ProfileData; resource: FavoriteResource; pinned: boolean }) => {
+      const favorites = vars.pinned
+        ? [
+            ...vars.profile.config.favoriteResources.filter(
+              (favorite) => favorite.snapshot.resource.key !== vars.resource.snapshot.resource.key,
+            ),
+            vars.resource,
+          ]
+        : vars.profile.config.favoriteResources.filter(
+            (favorite) => favorite.snapshot.resource.key !== vars.resource.snapshot.resource.key,
+          );
+
+      return apiSend("/api/config/profiles", "PUT", {
+        ...vars.profile,
+        config: { ...vars.profile.config, favoriteResources: favorites },
+      });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
   });
 }
