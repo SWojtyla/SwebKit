@@ -154,4 +154,78 @@ test.describe("Redis", () => {
     await expect(page.getByTestId("redis-pubsub")).toBeVisible();
     await expect(page.getByTestId("redis-pubsub-panel")).toBeVisible();
   });
+
+  test("hash field add, edit, and delete", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-key-session:abc123").click();
+    await expect(page.getByTestId("redis-detail-hash-fields")).toBeVisible();
+
+    const field = `e2e_field_${Date.now()}`;
+
+    await page.getByTestId("redis-hash-add-btn").click();
+    await page.getByTestId("redis-hash-new-field").fill(field);
+    await page.getByTestId("redis-hash-new-value").fill("initial-value");
+    await page.getByTestId("redis-hash-new-save").click();
+
+    const table = page.getByTestId("redis-detail-hash-fields");
+    await expect(table).toContainText(field);
+    await expect(table).toContainText("initial-value");
+
+    await page.getByTestId(`redis-hash-edit-${field}`).click();
+    await page.getByTestId(`redis-hash-edit-value-${field}`).fill("updated-value");
+    await page.getByTestId(`redis-hash-save-${field}`).click();
+    await expect(table).toContainText("updated-value");
+
+    await page.getByTestId(`redis-hash-delete-${field}`).click();
+    await expect(page.getByTestId("redis-confirm-bar")).toBeVisible();
+    await page.getByTestId("redis-confirm-yes").click();
+    await expect(table).not.toContainText(field);
+  });
+
+  test("zset score click-to-edit", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-key-leaderboard:daily").click();
+    await expect(page.getByTestId("redis-detail-zset-members")).toBeVisible();
+
+    await expect(page.getByTestId("redis-zset-score-alice")).toHaveText("1500");
+
+    await page.getByTestId("redis-zset-score-alice").click();
+    await page.getByTestId("redis-zset-score-input-alice").fill("9999");
+    await page.getByTestId("redis-zset-score-save-alice").click();
+    await expect(page.getByTestId("redis-zset-score-alice")).toHaveText("9999");
+
+    // restore original score
+    await page.getByTestId("redis-zset-score-alice").click();
+    await page.getByTestId("redis-zset-score-input-alice").fill("1500");
+    await page.getByTestId("redis-zset-score-save-alice").click();
+    await expect(page.getByTestId("redis-zset-score-alice")).toHaveText("1500");
+  });
+
+  test("list pagination loads more items", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-key-cache:products").click();
+    await expect(page.getByTestId("redis-detail-list-items")).toBeVisible();
+
+    const table = page.getByTestId("redis-detail-list-items");
+    await expect(table.getByText("product-5")).toBeVisible();
+    await expect(table.getByText("product-6")).toHaveCount(0);
+
+    await page.getByTestId("redis-list-load-more").click();
+    await expect(table.getByText("product-6")).toBeVisible();
+    await expect(table.getByText("product-10")).toBeVisible();
+  });
+
+  test("set pagination loads more members", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-key-cache:categories").click();
+    await expect(page.getByTestId("redis-detail-set-members")).toBeVisible();
+
+    const container = page.getByTestId("redis-detail-set-members");
+    await expect(container.getByText("books")).toBeVisible();
+    await expect(container.getByText("food")).toHaveCount(0);
+
+    await page.getByTestId("redis-set-load-more").click();
+    await expect(container.getByText("electronics")).toBeVisible();
+    await expect(container.getByText("food")).toBeVisible();
+  });
 });

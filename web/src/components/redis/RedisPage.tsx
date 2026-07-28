@@ -8,9 +8,12 @@ import {
   useRedisKeyInfo,
   useRedisKeyValue,
   useRedisHashFields,
-  useRedisListItems,
-  useRedisSetMembers,
+  useRedisListItemsPaginated,
+  useRedisSetMembersPaginated,
   useRedisSortedSetMembers,
+  useRedisSetHashField,
+  useRedisDeleteHashField,
+  useRedisUpdateSortedSetScore,
   useRedisSlowLog,
   useRedisDeleteKey,
   useRedisRenameKey,
@@ -19,7 +22,7 @@ import {
 } from "@/lib/hooks";
 import { formatTtl, parseTtl, getTtlColorClass } from "@/lib/redis-format";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
-import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw, ChevronRight, ChevronDown } from "lucide-react";
+import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw, ChevronRight, ChevronDown, Plus } from "lucide-react";
 import { KeyspaceHealthPanel, PrefixMemoryPanel, OpsInsightsPanel } from "./AdvancedPanels";
 import { PubSubPanel } from "./PubSubPanel";
 
@@ -88,22 +91,38 @@ export function RedisPage() {
   const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(new Set());
   const [namespaceVisibleCounts, setNamespaceVisibleCounts] = useState<Record<string, number>>({});
   const [pendingConfirm, setPendingConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [hashAdding, setHashAdding] = useState(false);
+  const [newHashField, setNewHashField] = useState("");
+  const [newHashValue, setNewHashValue] = useState("");
+  const [hashEditingField, setHashEditingField] = useState<string | null>(null);
+  const [hashEditFieldName, setHashEditFieldName] = useState("");
+  const [hashEditValue, setHashEditValue] = useState("");
+  const [zsetEditingMember, setZsetEditingMember] = useState<string | null>(null);
+  const [zsetEditScore, setZsetEditScore] = useState("");
 
   const namespaceSeparator = redisConfig?.namespaceSeparator?.trim() || ":";
+  const listPageSize = 5;
+  const setPageSize = 2;
 
   const serverInfo = useRedisServerInfo(resolvedCacheId);
   const scanResult = useRedisScanKeys(resolvedCacheId, pattern, cursor, 100);
   const keyInfo = useRedisKeyInfo(resolvedCacheId, selectedKey);
   const keyValue = useRedisKeyValue(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
   const hashFields = useRedisHashFields(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
-  const listItems = useRedisListItems(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
-  const setMembers = useRedisSetMembers(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
+  const listItemsQuery = useRedisListItemsPaginated(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null, listPageSize);
+  const setMembersQuery = useRedisSetMembersPaginated(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null, setPageSize);
   const sortedSetMembers = useRedisSortedSetMembers(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
   const deleteKey = useRedisDeleteKey(resolvedCacheId);
   const renameKey = useRedisRenameKey(resolvedCacheId);
   const setTtl = useRedisSetTtl(resolvedCacheId);
   const setValue = useRedisSetValue(resolvedCacheId);
+  const setHashField = useRedisSetHashField(resolvedCacheId);
+  const deleteHashField = useRedisDeleteHashField(resolvedCacheId);
+  const updateZsetScore = useRedisUpdateSortedSetScore(resolvedCacheId);
   const slowLog = useRedisSlowLog(resolvedCacheId);
+
+  const listItems = listItemsQuery.data?.pages.flat() ?? [];
+  const setMembers = setMembersQuery.data?.pages.flatMap((p) => p.members) ?? [];
 
   const handleManualRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["redis"] });
@@ -116,6 +135,17 @@ export function RedisPage() {
     }, refreshInterval * 1000);
     return () => clearInterval(id);
   }, [autoRefresh, refreshInterval, resolvedCacheId, queryClient]);
+
+  useEffect(() => {
+    setHashAdding(false);
+    setNewHashField("");
+    setNewHashValue("");
+    setHashEditingField(null);
+    setHashEditFieldName("");
+    setHashEditValue("");
+    setZsetEditingMember(null);
+    setZsetEditScore("");
+  }, [selectedKey]);
 
   const handleSearch = () => {
     setPattern(searchInput);
@@ -184,6 +214,51 @@ export function RedisPage() {
     setPendingConfirm({
       message: `Delete key "${key}"?`,
       onConfirm: () => handleDeleteKey(key),
+    });
+  };
+
+  const handleAddHashField = (key: string) => {
+    const field = newHashField.trim();
+    if (!field) return;
+    setHashField.mutate({ key, field, value: newHashValue }, {
+      onSuccess: () => {
+        setHashAdding(false);
+        setNewHashField("");
+        setNewHashValue("");
+      },
+    });
+  };
+
+  const handleSaveHashField = (key: string, originalField: string) => {
+    const field = hashEditFieldName.trim();
+    if (!field) return;
+    if (field === originalField) {
+      setHashField.mutate({ key, field, value: hashEditValue }, {
+        onSuccess: () => setHashEditingField(null),
+      });
+    } else {
+      setHashField.mutate({ key, field, value: hashEditValue }, {
+        onSuccess: () => {
+          deleteHashField.mutate({ key, field: originalField }, {
+            onSuccess: () => setHashEditingField(null),
+          });
+        },
+      });
+    }
+  };
+
+  const requestDeleteHashField = (key: string, field: string) => {
+    setPendingConfirm({
+      message: `Delete field "${field}"?`,
+      onConfirm: () => deleteHashField.mutate({ key, field }),
+    });
+  };
+
+  const handleSaveZsetScore = (key: string, member: string) => {
+    const score = parseFloat(zsetEditScore);
+    if (Number.isNaN(score)) return;
+    updateZsetScore.mutate({ key, member, score }, {
+      onSuccess: () => setZsetEditingMember(null),
     });
   };
 
@@ -647,24 +722,145 @@ export function RedisPage() {
 
                   {keyInfo.data.type === "hash" && (
                     <div>
-                      <h3 className="mb-2 text-sm font-semibold">Hash Fields</h3>
+                      <div className="mb-2 flex items-center justify-between">
+                        <h3 className="text-sm font-semibold">Hash Fields</h3>
+                        {!hashAdding && (
+                          <button
+                            onClick={() => setHashAdding(true)}
+                            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
+                            data-testid="redis-hash-add-btn"
+                          >
+                            <Plus className="h-3 w-3" /> Add field
+                          </button>
+                        )}
+                      </div>
                       <div className="rounded-md border overflow-hidden" data-testid="redis-detail-hash-fields">
                         <table className="w-full text-sm">
                           <thead className="bg-muted">
                             <tr>
                               <th className="px-3 py-2 text-left font-medium">Field</th>
                               <th className="px-3 py-2 text-left font-medium">Value</th>
+                              <th className="px-3 py-2 text-left font-medium w-24">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
+                            {hashAdding && (
+                              <tr className="border-t">
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="text"
+                                    value={newHashField}
+                                    onChange={(e) => setNewHashField(e.target.value)}
+                                    placeholder="field"
+                                    className="w-full rounded border bg-card px-2 py-1 text-xs font-mono"
+                                    data-testid="redis-hash-new-field"
+                                    autoFocus
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="text"
+                                    value={newHashValue}
+                                    onChange={(e) => setNewHashValue(e.target.value)}
+                                    placeholder="value"
+                                    className="w-full rounded border bg-card px-2 py-1 text-xs font-mono"
+                                    data-testid="redis-hash-new-value"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => handleAddHashField(keyInfo.data.key)}
+                                      className="rounded bg-primary p-1 text-primary-foreground"
+                                      data-testid="redis-hash-new-save"
+                                    >
+                                      <Check className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => setHashAdding(false)}
+                                      className="rounded border p-1"
+                                      data-testid="redis-hash-new-cancel"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
                             {hashFields.data?.map((f) => (
                               <tr key={f.field} className="border-t">
-                                <td className="px-3 py-2 font-mono">{f.field}</td>
-                                <td className="px-3 py-2 font-mono break-all">{f.value}</td>
+                                {hashEditingField === f.field ? (
+                                  <>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="text"
+                                        value={hashEditFieldName}
+                                        onChange={(e) => setHashEditFieldName(e.target.value)}
+                                        onKeyDown={(e) => e.key === "Enter" && handleSaveHashField(keyInfo.data.key, f.field)}
+                                        className="w-full rounded border bg-card px-2 py-1 text-xs font-mono"
+                                        data-testid={`redis-hash-edit-field-${f.field}`}
+                                        autoFocus
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="text"
+                                        value={hashEditValue}
+                                        onChange={(e) => setHashEditValue(e.target.value)}
+                                        onKeyDown={(e) => e.key === "Enter" && handleSaveHashField(keyInfo.data.key, f.field)}
+                                        className="w-full rounded border bg-card px-2 py-1 text-xs font-mono"
+                                        data-testid={`redis-hash-edit-value-${f.field}`}
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={() => handleSaveHashField(keyInfo.data.key, f.field)}
+                                          className="rounded bg-primary p-1 text-primary-foreground"
+                                          data-testid={`redis-hash-save-${f.field}`}
+                                        >
+                                          <Check className="h-3 w-3" />
+                                        </button>
+                                        <button
+                                          onClick={() => setHashEditingField(null)}
+                                          className="rounded border p-1"
+                                          data-testid={`redis-hash-cancel-${f.field}`}
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td className="px-3 py-2 font-mono">{f.field}</td>
+                                    <td className="px-3 py-2 font-mono break-all">{f.value}</td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={() => { setHashEditingField(f.field); setHashEditFieldName(f.field); setHashEditValue(f.value); }}
+                                          className="text-muted-foreground hover:text-foreground"
+                                          data-testid={`redis-hash-edit-${f.field}`}
+                                          title="Edit field"
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => requestDeleteHashField(keyInfo.data.key, f.field)}
+                                          className="text-destructive hover:text-destructive/80"
+                                          data-testid={`redis-hash-delete-${f.field}`}
+                                          title="Delete field"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </>
+                                )}
                               </tr>
                             ))}
-                            {(!hashFields.data || hashFields.data.length === 0) && (
-                              <tr><td colSpan={2} className="px-3 py-4 text-center text-muted-foreground">No fields</td></tr>
+                            {(!hashFields.data || hashFields.data.length === 0) && !hashAdding && (
+                              <tr><td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">No fields</td></tr>
                             )}
                           </tbody>
                         </table>
@@ -674,7 +870,19 @@ export function RedisPage() {
 
                   {keyInfo.data.type === "list" && (
                     <div>
-                      <h3 className="mb-2 text-sm font-semibold">List Items</h3>
+                      <div className="mb-2 flex items-center justify-between">
+                        <h3 className="text-sm font-semibold">List Items</h3>
+                        {listItemsQuery.hasNextPage && (
+                          <button
+                            onClick={() => listItemsQuery.fetchNextPage()}
+                            disabled={listItemsQuery.isFetchingNextPage}
+                            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                            data-testid="redis-list-load-more"
+                          >
+                            {listItemsQuery.isFetchingNextPage ? "Loading..." : "Load more"}
+                          </button>
+                        )}
+                      </div>
                       <div className="rounded-md border overflow-hidden" data-testid="redis-detail-list-items">
                         <table className="w-full text-sm">
                           <thead className="bg-muted">
@@ -684,13 +892,13 @@ export function RedisPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {listItems.data?.map((item, i) => (
+                            {listItems.map((item, i) => (
                               <tr key={i} className="border-t">
                                 <td className="px-3 py-2 text-muted-foreground">{i}</td>
                                 <td className="px-3 py-2 font-mono break-all">{item}</td>
                               </tr>
                             ))}
-                            {(!listItems.data || listItems.data.length === 0) && (
+                            {listItems.length === 0 && (
                               <tr><td colSpan={2} className="px-3 py-4 text-center text-muted-foreground">No items</td></tr>
                             )}
                           </tbody>
@@ -701,11 +909,23 @@ export function RedisPage() {
 
                   {keyInfo.data.type === "set" && (
                     <div>
-                      <h3 className="mb-2 text-sm font-semibold">Set Members</h3>
+                      <div className="mb-2 flex items-center justify-between">
+                        <h3 className="text-sm font-semibold">Set Members</h3>
+                        {setMembersQuery.hasNextPage && (
+                          <button
+                            onClick={() => setMembersQuery.fetchNextPage()}
+                            disabled={setMembersQuery.isFetchingNextPage}
+                            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                            data-testid="redis-set-load-more"
+                          >
+                            {setMembersQuery.isFetchingNextPage ? "Loading..." : "Load more"}
+                          </button>
+                        )}
+                      </div>
                       <div className="rounded-md border p-3" data-testid="redis-detail-set-members">
-                        {setMembers.data?.length ? (
+                        {setMembers.length ? (
                           <div className="flex flex-wrap gap-2">
-                            {setMembers.data.map((m) => (
+                            {setMembers.map((m) => (
                               <span key={m} className="rounded bg-muted px-2 py-1 text-sm font-mono">{m}</span>
                             ))}
                           </div>
@@ -724,14 +944,50 @@ export function RedisPage() {
                           <thead className="bg-muted">
                             <tr>
                               <th className="px-3 py-2 text-left font-medium">Member</th>
-                              <th className="px-3 py-2 text-right font-medium w-24">Score</th>
+                              <th className="px-3 py-2 text-right font-medium w-32">Score</th>
                             </tr>
                           </thead>
                           <tbody>
                             {sortedSetMembers.data?.map((m) => (
                               <tr key={m.member} className="border-t">
                                 <td className="px-3 py-2 font-mono">{m.member}</td>
-                                <td className="px-3 py-2 text-right font-mono">{m.score}</td>
+                                <td className="px-3 py-2 text-right">
+                                  {zsetEditingMember === m.member ? (
+                                    <div className="flex items-center justify-end gap-2">
+                                      <input
+                                        type="number"
+                                        value={zsetEditScore}
+                                        onChange={(e) => setZsetEditScore(e.target.value)}
+                                        onKeyDown={(e) => e.key === "Enter" && handleSaveZsetScore(keyInfo.data.key, m.member)}
+                                        className="w-24 rounded border bg-card px-2 py-1 text-xs font-mono text-right"
+                                        data-testid={`redis-zset-score-input-${m.member}`}
+                                        autoFocus
+                                      />
+                                      <button
+                                        onClick={() => handleSaveZsetScore(keyInfo.data.key, m.member)}
+                                        className="rounded bg-primary p-1 text-primary-foreground"
+                                        data-testid={`redis-zset-score-save-${m.member}`}
+                                      >
+                                        <Check className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => setZsetEditingMember(null)}
+                                        className="rounded border p-1"
+                                        data-testid={`redis-zset-score-cancel-${m.member}`}
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => { setZsetEditingMember(m.member); setZsetEditScore(String(m.score)); }}
+                                      className="font-mono hover:underline"
+                                      data-testid={`redis-zset-score-${m.member}`}
+                                    >
+                                      {m.score}
+                                    </button>
+                                  )}
+                                </td>
                               </tr>
                             ))}
                             {(!sortedSetMembers.data || sortedSetMembers.data.length === 0) && (

@@ -658,6 +658,12 @@ export interface RedisSortedSetEntry {
   score: number;
 }
 
+export interface RedisSetMembersPage {
+  members: string[];
+  cursor: number;
+  isComplete: boolean;
+}
+
 export interface RedisServerInfo {
   redisVersion: string;
   uptimeSeconds: number;

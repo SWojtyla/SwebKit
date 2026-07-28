@@ -1,4 +1,9 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useInfiniteQuery,
+} from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -53,6 +58,7 @@ import type {
   RedisKeyInfo,
   RedisHashField,
   RedisSortedSetEntry,
+  RedisSetMembersPage,
   RedisServerInfo,
   RedisSlowLogSummary,
   StorageContainerItem,
@@ -834,6 +840,89 @@ export function useRedisSetValue(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+  });
+}
+
+export function useRedisSetHashField(cacheId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { key: string; field: string; value: string }) =>
+      apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/hash/field`, "POST", {
+        field: vars.field,
+        value: vars.value,
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "hash"] });
+      qc.invalidateQueries({ queryKey: ["redis", cacheId] });
+    },
+  });
+}
+
+export function useRedisDeleteHashField(cacheId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { key: string; field: string }) =>
+      apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/hash/field/delete`, "POST", {
+        field: vars.field,
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "hash"] });
+      qc.invalidateQueries({ queryKey: ["redis", cacheId] });
+    },
+  });
+}
+
+export function useRedisUpdateSortedSetScore(cacheId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { key: string; member: string; score: number }) =>
+      apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/zset/score`, "POST", {
+        member: vars.member,
+        score: vars.score,
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "zset"] });
+      qc.invalidateQueries({ queryKey: ["redis", cacheId] });
+    },
+  });
+}
+
+export function useRedisListItemsPaginated(
+  cacheId: string | null,
+  key: string | null,
+  keyType: string | null,
+  pageSize = 50,
+) {
+  return useInfiniteQuery<string[]>({
+    queryKey: ["redis", cacheId, "keys", key, "list", pageSize],
+    queryFn: ({ pageParam }) => {
+      const start = pageParam as number;
+      return apiFetch<string[]>(
+        `/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/list?start=${start}&stop=${start + pageSize - 1}`,
+      );
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length < pageSize ? undefined : allPages.length * pageSize,
+    enabled: !!cacheId && !!key && keyType === "list",
+  });
+}
+
+export function useRedisSetMembersPaginated(
+  cacheId: string | null,
+  key: string | null,
+  keyType: string | null,
+  pageSize = 50,
+) {
+  return useInfiniteQuery<RedisSetMembersPage>({
+    queryKey: ["redis", cacheId, "keys", key, "set", pageSize],
+    queryFn: ({ pageParam }) =>
+      apiFetch<RedisSetMembersPage>(
+        `/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/set/page?cursor=${pageParam as number}&pageSize=${pageSize}`,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => (lastPage.isComplete ? undefined : lastPage.cursor),
+    enabled: !!cacheId && !!key && keyType === "set",
   });
 }
 

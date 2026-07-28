@@ -604,7 +604,7 @@ public sealed class DemoRedisClient : IRedisClient
             ["ip"] = "10.0.0.2",
             ["created"] = DateTimeOffset.UtcNow.AddMinutes(-8).ToString("O")
         }, DateTimeOffset.UtcNow.AddMinutes(30));
-        db["cache:products"] = new DemoValue("list", Enumerable.Range(1, 10).Select(x => $"product-{x}").ToList(), DateTimeOffset.UtcNow.AddMinutes(5));
+        db["cache:products"] = new DemoValue("list", Enumerable.Range(1, 10).Select(x => $"product-{x}").ToList(), null);
         db["cache:categories"] = new DemoValue("set", new HashSet<string>(["electronics", "clothing", "food", "books"], StringComparer.Ordinal), null);
         db["leaderboard:daily"] = new DemoValue("zset", new List<RedisSortedSetEntry>
         {
