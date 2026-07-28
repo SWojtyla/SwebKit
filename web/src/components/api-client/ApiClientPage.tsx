@@ -499,7 +499,7 @@ export function ApiClientPage() {
   }
 
   return (
-    <div className="flex h-full flex-col" data-testid="api-client-page">
+    <div className="flex h-full min-w-0 flex-col" data-testid="api-client-page">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 bg-card">
         <Globe className="h-4 w-4 text-muted-foreground" />
@@ -546,8 +546,8 @@ export function ApiClientPage() {
       </div>
 
       {/* Main 3-pane layout */}
-      <div className="flex flex-1 overflow-hidden">
-        <ResizablePanels initialWidths={[260, 420, null]} minWidths={[180, 300, 300]} className="w-full">
+      <div className="flex min-w-0 flex-1 overflow-hidden">
+        <ResizablePanels initialWidths={[260, 360, null]} minWidths={[180, 260, 260]} className="w-full min-w-0">
           <CollectionTree
             collections={collections}
             selectedNodeId={selectedNodeId}
