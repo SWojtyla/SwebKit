@@ -135,14 +135,14 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
   };
 
   return (
-    <div className="flex h-full flex-col bg-card" data-testid="response-viewer">
+    <div className="flex h-full min-w-0 flex-col bg-card" data-testid="response-viewer">
       {/* Status bar */}
       <div className="flex items-center gap-3 border-b p-3">
         <span
           data-testid="response-status"
           className={`rounded px-2 py-1 text-sm font-semibold ${statusColor(response.statusCode)}`}
         >
-          {isError ? "ERROR" : `${response.statusCode} ${response.statusText}`}
+          {isError ? "ERROR" : (response.statusText || response.statusCode.toString())}
         </span>
         <span data-testid="response-elapsed" className="text-xs text-muted-foreground">
           {response.elapsedMs.toFixed(0)} ms
@@ -233,9 +233,9 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-auto p-3">
+      <div className="flex min-w-0 flex-1 overflow-auto p-3">
         {activeTab === "body" && (
-          <div data-testid="response-body-container">
+          <div className="min-w-0 flex-1" data-testid="response-body-container">
             {/* GraphQL errors */}
             {graphQlErrors.length > 0 && (
               <div className="mb-3 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3" data-testid="graphql-errors">
@@ -309,14 +309,14 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
             )}
             <pre
               data-testid="response-body"
-              className="whitespace-pre-wrap break-all font-mono text-sm"
+              className="min-w-0 w-full whitespace-pre-wrap break-words font-mono text-sm"
             >
               {displayBody}
             </pre>
           </div>
         )}
         {activeTab === "headers" && (
-          <table className="w-full text-sm" data-testid="response-headers-table">
+          <table className="min-w-0 w-full text-sm" data-testid="response-headers-table">
             <tbody>
               {response.headers.map((h, i) => (
                 <tr key={i} data-testid={`response-header-row-${i}`}>
@@ -328,7 +328,7 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
           </table>
         )}
         {activeTab === "history" && (
-          <div data-testid="response-history-panel">
+          <div className="min-w-0 w-full" data-testid="response-history-panel">
             {/* Response time sparkline */}
             {history.length > 1 && (
               <div className="mb-4" data-testid="response-time-sparkline">

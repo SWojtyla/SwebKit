@@ -176,14 +176,14 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   };
 
   return (
-    <div className="flex h-full flex-col border-r bg-card" data-testid="request-editor">
+    <div className="flex h-full min-w-0 flex-col border-r bg-card" data-testid="request-editor">
       {/* URL bar */}
-      <div className="flex items-center gap-2 border-b p-3">
+      <div className="flex min-w-0 items-center gap-2 border-b p-3">
         <select
           data-testid="request-method-select"
           value={request.method}
           onChange={(e) => setMethod(e.target.value as ApiRequestMethod)}
-          className={`rounded border bg-background px-2 py-1.5 text-sm font-semibold ${methodColors[request.method] ?? ""}`}
+          className={`shrink-0 rounded border bg-background px-2 py-1.5 text-sm font-semibold ${methodColors[request.method] ?? ""}`}
         >
           {methods.map((m) => (
             <option key={m} value={m}>
@@ -197,19 +197,19 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
           value={request.url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://api.example.com/resource"
-          className="flex-1 rounded border bg-background px-3 py-1.5 text-sm"
+          className="min-w-0 flex-1 rounded border bg-background px-3 py-1.5 text-sm"
         />
         <button
           data-testid="request-var-preview"
           onClick={() => setShowVarPreview(!showVarPreview)}
           title="Preview variable substitution"
-          className={`flex items-center gap-1 rounded border px-2 py-1.5 text-xs ${showVarPreview ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+          className={`shrink-0 flex items-center gap-1 rounded border px-2 py-1.5 text-xs ${showVarPreview ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
         >
           <Eye className="h-3.5 w-3.5" />
         </button>
         <button
           data-testid="request-send-button"
-          className="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="shrink-0 flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           onClick={onSend}
           disabled={sending || !request.url.trim()}
         >
@@ -218,7 +218,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
         </button>
         <button
           data-testid="request-save-button"
-          className="flex items-center gap-1 rounded border px-3 py-1.5 text-sm font-medium hover:bg-accent"
+          className="shrink-0 flex items-center gap-1 rounded border px-3 py-1.5 text-sm font-medium hover:bg-accent"
           onClick={() => { onSave(); setDirty(false); }}
         >
           <Save className="h-4 w-4" />
