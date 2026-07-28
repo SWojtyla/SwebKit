@@ -64,6 +64,40 @@ export async function apiSend<T>(
   return (text ? (JSON.parse(text) as T) : undefined) as T;
 }
 
+export function apiUpload<T>(
+  path: string,
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `${SIDECAR_BASE_URL}${path}`);
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress?.(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    request.onerror = () => reject(new Error("Upload failed"));
+    request.onload = () => {
+      const body = request.responseText || "";
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(`API ${request.status}: ${body || request.statusText}`));
+        return;
+      }
+
+      try {
+        resolve((body ? JSON.parse(body) : undefined) as T);
+      } catch {
+        reject(new Error("Upload returned invalid JSON"));
+      }
+    };
+
+    const form = new FormData();
+    form.append("file", file, file.name);
+    request.send(form);
+  });
+}
+
 export { SIDECAR_BASE_URL };
 
 // ── Monitoring ───────────────────────────────────────────────────────────────

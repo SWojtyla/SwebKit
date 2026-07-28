@@ -768,6 +768,22 @@ export interface StorageBlobContent {
   isBinary: boolean;
 }
 
+export interface BlobVersionComparison {
+  baseVersionId: string;
+  compareVersionId: string | null;
+  metadataDiff: {
+    before: Record<string, string | null>;
+    after: Record<string, string | null>;
+    addedKeys: string[];
+    removedKeys: string[];
+    changedKeys: string[];
+  };
+  contentComparePossible: boolean;
+  baseSizeBytes: number | null;
+  compareSizeBytes: number | null;
+  textDiff: string | null;
+}
+
 export interface BlobMutationResult {
   success: boolean;
   errorMessage?: string | null;

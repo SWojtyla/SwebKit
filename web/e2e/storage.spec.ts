@@ -146,4 +146,56 @@ test.describe("Storage", () => {
     await expect(page.getByTestId("storage-metadata-editor")).toBeVisible();
     await expect(page.getByTestId("storage-metadata-add-key")).toBeVisible();
   });
+
+  test("uploads a file through the dropzone", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-configs").click();
+    await page.getByTestId("storage-upload-toggle").click();
+
+    await page.getByTestId("storage-upload-file").setInputFiles({
+      name: "e2e-upload.json",
+      mimeType: "application/json",
+      buffer: Buffer.from('{"source":"e2e"}'),
+    });
+    await expect(page.getByTestId("storage-upload-name")).toHaveValue("e2e-upload.json");
+    await page.getByTestId("storage-upload-confirm").click();
+
+    await expect(page.getByTestId("storage-item-e2e-upload.json")).toBeVisible();
+  });
+
+  test("compares and restores blob versions", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-configs").click();
+    await page.getByTestId("storage-item-app-settings.json").click();
+    await page.getByTestId("storage-blob-tab-versions").click();
+
+    await page.getByTestId("storage-version-base").selectOption({ index: 1 });
+    await page.getByTestId("storage-version-compare-btn").click();
+    await expect(page.getByTestId("storage-version-diff-pane")).toBeVisible();
+    await expect(page.getByTestId("storage-version-text-diff")).toContainText("version: 2");
+
+    await page.getByTestId("storage-version-restore-2026-03-15T08:30:00Z").click();
+    await expect(page.getByTestId("storage-version-restore-confirm")).toBeVisible();
+    await page.getByTestId("storage-version-restore-confirm-yes").click();
+    await expect(page.getByTestId("storage-version-restore-confirm")).not.toBeVisible();
+  });
+
+  test("uses a container picker and guards overwrite copies", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-configs").click();
+    await page.getByTestId("storage-item-app-settings.json").click();
+    await page.getByTestId("storage-copy-blob-btn").click();
+
+    await expect(page.getByTestId("storage-copy-dest-container")).toHaveValue("configs");
+    await page.getByTestId("storage-copy-dest-container").selectOption("exports");
+    await page.getByTestId("storage-copy-dest-blob").fill("e2e-copy.json");
+    await page.getByTestId("storage-copy-overwrite").check();
+    await page.getByTestId("storage-copy-confirm").click();
+
+    await expect(page.getByTestId("storage-copy-overwrite-confirm")).toBeVisible();
+    await expect(page.getByTestId("storage-copy-overwrite-confirm-yes")).toBeDisabled();
+    await page.getByTestId("storage-copy-overwrite-confirm-name").fill("exports/e2e-copy.json");
+    await page.getByTestId("storage-copy-overwrite-confirm-yes").click();
+    await expect(page.getByTestId("storage-copy-status")).toHaveText("Copied successfully");
+  });
 });

@@ -127,6 +127,45 @@ public static class StorageEndpoints
             }));
         });
 
+        app.MapGet("/api/storage/{accountId}/containers/{container}/blobs/{blobName}/versions/compare", async (
+            string accountId,
+            string container,
+            string blobName,
+            string baseVersionId,
+            string? compareVersionId,
+            ProfileRepository profile,
+            IStorageClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return Results.NotFound("Storage account not found");
+            if (string.IsNullOrWhiteSpace(baseVersionId)) return Results.BadRequest("baseVersionId is required");
+
+            var client = CreateClient(config, factory, demo);
+            var comparison = await client.GetVersionComparisonAsync(container, blobName, baseVersionId, compareVersionId);
+            return Results.Ok(comparison);
+        });
+
+        app.MapPost("/api/storage/{accountId}/containers/{container}/blobs/{blobName}/versions/{versionId}/restore", async (
+            string accountId,
+            string container,
+            string blobName,
+            string versionId,
+            ProfileRepository profile,
+            IStorageClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return Results.NotFound("Storage account not found");
+            if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
+
+            var client = CreateClient(config, factory, demo);
+            var result = await client.RestoreBlobVersionAsync(container, blobName, versionId);
+            return result.State == BlobRecoveryState.Restored
+                ? Results.Ok(result)
+                : Results.BadRequest(result);
+        });
+
         // ── Blob SAS URL ───────────────────────────────────────────────────────
 
         app.MapGet("/api/storage/{accountId}/containers/{container}/blobs/{blobName}/sas", async (
@@ -175,7 +214,7 @@ public static class StorageEndpoints
             string accountId,
             string container,
             string blobName,
-            BlobUploadRequest request,
+            HttpRequest httpRequest,
             ProfileRepository profile,
             IStorageClientFactory factory,
             DemoModeService demo) =>
@@ -183,10 +222,15 @@ public static class StorageEndpoints
             var config = ResolveStorage(accountId, profile, demo);
             if (config is null) return Results.NotFound("Storage account not found");
             if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
+            if (!httpRequest.HasFormContentType) return Results.BadRequest("Upload requires multipart/form-data");
+
+            var form = await httpRequest.ReadFormAsync();
+            var file = form.Files.GetFile("file");
+            if (file is null || file.Length == 0) return Results.BadRequest("A non-empty file is required");
 
             var client = CreateClient(config, factory, demo);
-            var options = new BlobUploadOptions(container, blobName, Overwrite: false, request.ContentType ?? "text/plain");
-            using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(request.Content ?? string.Empty));
+            var options = new BlobUploadOptions(container, blobName, Overwrite: false, file.ContentType);
+            await using var stream = file.OpenReadStream();
             var result = await client.UploadBlobAsync(options, stream);
             return result.Success ? Results.Ok(result) : Results.BadRequest(result);
         });
@@ -210,7 +254,7 @@ public static class StorageEndpoints
                 request.SourceBlob,
                 request.DestContainer,
                 request.DestBlob,
-                Overwrite: false);
+                Overwrite: request.Overwrite);
             var result = await client.CopyBlobAsync(options);
             return result.Success ? Results.Ok(result) : Results.BadRequest(result);
         });
@@ -281,16 +325,11 @@ public static class StorageEndpoints
     }
 }
 
-public sealed class BlobUploadRequest
-{
-    public string? Content { get; set; }
-    public string? ContentType { get; set; }
-}
-
 public sealed class BlobCopyRequest
 {
     public string SourceContainer { get; set; } = string.Empty;
     public string SourceBlob { get; set; } = string.Empty;
     public string DestContainer { get; set; } = string.Empty;
     public string DestBlob { get; set; } = string.Empty;
+    public bool Overwrite { get; set; }
 }
