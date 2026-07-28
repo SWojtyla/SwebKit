@@ -300,7 +300,31 @@ export interface AuthConfig {
 export interface CollectionVariable {
   key: string;
   value: string | null;
+  generator?: VariableGeneratorDefinition | null;
   isEnabled: boolean;
+}
+
+export type VariableGeneratorKind =
+  | "Integer"
+  | "Decimal"
+  | "Boolean"
+  | "Guid"
+  | "DateTime"
+  | "List"
+  | "Faker"
+  | "Template";
+
+export interface VariableGeneratorDefinition {
+  kind: VariableGeneratorKind;
+  minInt?: number | null;
+  maxInt?: number | null;
+  minDecimal?: number | null;
+  maxDecimal?: number | null;
+  decimalPlaces?: number;
+  trueWeightPercent?: number | null;
+  fakerCategory?: string | null;
+  template?: string | null;
+  values?: string[];
 }
 
 export interface CaptureRule {

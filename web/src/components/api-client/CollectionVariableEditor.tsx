@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Trash2, X } from "lucide-react";
-import type { ApiCollection, CollectionVariable } from "@/lib/types";
+import { Trash2, Wand2, X } from "lucide-react";
+import type { ApiCollection, CollectionVariable, VariableGeneratorDefinition, VariableGeneratorKind } from "@/lib/types";
 
 interface CollectionVariableEditorProps {
   collection: ApiCollection;
@@ -12,7 +12,7 @@ export function CollectionVariableEditor({ collection, onSave, onClose }: Collec
   const [variables, setVariables] = useState<CollectionVariable[]>(collection.variables ?? []);
 
   const addVariable = () =>
-    setVariables([...variables, { key: "", value: "", isEnabled: true }]);
+    setVariables([...variables, { key: "", value: "", generator: null, isEnabled: true }]);
 
   const updateVariable = (index: number, patch: Partial<CollectionVariable>) =>
     setVariables(variables.map((v, i) => (i === index ? { ...v, ...patch } : v)));
@@ -59,14 +59,83 @@ export function CollectionVariableEditor({ collection, onSave, onClose }: Collec
                 data-testid={`col-var-key-${i}`}
               />
               <span className="text-xs text-muted-foreground">=</span>
-              <input
-                type="text"
-                value={v.value ?? ""}
-                onChange={(e) => updateVariable(i, { value: e.target.value })}
-                placeholder="Value"
-                className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
-                data-testid={`col-var-value-${i}`}
-              />
+              <select
+                value={v.generator ? "generated" : "value"}
+                onChange={(e) => {
+                  const generated = e.target.value === "generated";
+                  updateVariable(i, {
+                    generator: generated
+                      ? { kind: "Guid" }
+                      : null,
+                  });
+                }}
+                className="rounded border bg-background px-2 py-1 text-xs"
+                data-testid={`col-var-mode-${i}`}
+              >
+                <option value="value">Value</option>
+                <option value="generated">Generator</option>
+              </select>
+              {v.generator ? (
+                <div className="flex flex-1 items-center gap-1">
+                  <Wand2 className="h-3 w-3 text-primary" />
+                  <select
+                    value={v.generator.kind}
+                    onChange={(e) => {
+                      const generator = v.generator;
+                      if (!generator) return;
+                      updateVariable(i, {
+                        generator: { ...generator, kind: e.target.value as VariableGeneratorKind },
+                      });
+                    }}
+                    className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-xs"
+                    data-testid={`col-var-generator-${i}`}
+                  >
+                    <option value="Guid">GUID</option>
+                    <option value="DateTime">Timestamp</option>
+                    <option value="Integer">Integer</option>
+                    <option value="Decimal">Decimal</option>
+                    <option value="Boolean">Boolean</option>
+                    <option value="List">List</option>
+                    <option value="Faker">Faker</option>
+                    <option value="Template">Template</option>
+                  </select>
+                  {(v.generator.kind === "List" || v.generator.kind === "Faker" || v.generator.kind === "Template") && (
+                    <input
+                      type="text"
+                      value={
+                        v.generator.kind === "List"
+                          ? (v.generator.values ?? []).join(", ")
+                          : v.generator.kind === "Faker"
+                            ? v.generator.fakerCategory ?? ""
+                            : v.generator.template ?? ""
+                      }
+                      onChange={(e) => {
+                        const generator = v.generator;
+                        if (!generator) return;
+                        const patch: Partial<VariableGeneratorDefinition> =
+                          generator.kind === "List"
+                            ? { values: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) }
+                            : generator.kind === "Faker"
+                              ? { fakerCategory: e.target.value }
+                              : { template: e.target.value };
+                        updateVariable(i, { generator: { ...generator, ...patch } });
+                      }}
+                      placeholder={v.generator.kind === "List" ? "one, two, three" : v.generator.kind === "Faker" ? "person.firstName" : "{{otherVariable}}"}
+                      className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-xs font-mono"
+                      data-testid={`col-var-generator-input-${i}`}
+                    />
+                  )}
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={v.value ?? ""}
+                  onChange={(e) => updateVariable(i, { value: e.target.value })}
+                  placeholder="Value"
+                  className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
+                  data-testid={`col-var-value-${i}`}
+                />
+              )}
               <button
                 className="p-1 text-destructive"
                 onClick={() => removeVariable(i)}
