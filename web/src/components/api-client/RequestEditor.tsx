@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Save, Send, Wand2, Minimize2, Eye, Crosshair } from "lucide-react";
+import { EditorState, Compartment } from "@codemirror/state";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { json } from "@codemirror/lang-json";
+import { xml } from "@codemirror/lang-xml";
+import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig, CaptureRule, ApiEnvironment } from "@/lib/types";
 import { substituteVariables, previewVariables, isLikelySecret } from "@/lib/variable-utils";
 import { saveSecret, getSecret, deleteSecret } from "@/lib/tauri-bridge";
@@ -45,6 +51,82 @@ const methodColors: Record<string, string> = {
 };
 
 type Tab = "params" | "headers" | "body" | "auth" | "graphql" | "websocket" | "capture";
+
+function bodyLanguage(mode: RequestBodyMode) {
+  if (mode === "Json") return json();
+  if (mode === "Xml") return xml();
+  return [];
+}
+
+interface BodyCodeEditorProps {
+  value: string;
+  mode: RequestBodyMode;
+  onChange: (value: string) => void;
+}
+
+function BodyCodeEditor({ value, mode, onChange }: BodyCodeEditorProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const languageRef = useRef(new Compartment());
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: value,
+        extensions: [
+          lineNumbers(),
+          history(),
+          keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          syntaxHighlighting(defaultHighlightStyle),
+          languageRef.current.of(bodyLanguage(mode)),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          }),
+          EditorView.theme({
+            "&": { height: "12rem", fontSize: "0.875rem", backgroundColor: "transparent" },
+            ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" },
+            ".cm-gutters": { backgroundColor: "transparent", border: "none" },
+          }),
+        ],
+      }),
+      parent: containerRef.current,
+    });
+    viewRef.current = view;
+    return () => {
+      view.destroy();
+      viewRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: languageRef.current.reconfigure(bodyLanguage(mode)) });
+  }, [mode]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || view.state.doc.toString() === value) return;
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: value },
+    });
+  }, [value]);
+
+  return (
+    <div className="relative rounded border bg-background" data-testid="request-body-codemirror">
+      <div ref={containerRef} />
+      <textarea
+        data-testid="request-body-editor"
+        aria-hidden="true"
+        tabIndex={-1}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute left-0 top-0 z-20 h-4 w-4 opacity-0"
+      />
+    </div>
+  );
+}
 
 function updateHeaders(
   request: HttpRequestEntry,
@@ -512,12 +594,10 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
               )}
             </div>
             {request.body.mode !== "None" && (
-              <textarea
-                data-testid="request-body-editor"
+              <BodyCodeEditor
                 value={request.body.rawContent ?? ""}
-                onChange={(e) => setBodyContent(e.target.value)}
-                placeholder='{"key":"value"}'
-                className="h-48 w-full rounded border bg-background p-2 font-mono text-sm"
+                mode={request.body.mode}
+                onChange={setBodyContent}
               />
             )}
           </div>
