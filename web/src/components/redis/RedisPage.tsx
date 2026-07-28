@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useProfile,
@@ -51,11 +52,21 @@ function formatBytes(bytes: number | null | undefined): string {
 
 export function RedisPage() {
   const { data: profile } = useProfile();
+  const location = useLocation();
+  const navigate = useNavigate();
   const redisConfig = profile?.config?.redisConfig;
   const caches = redisConfig?.caches ?? [];
   const [activeCacheId, setActiveCacheId] = useState<string | null>(null);
   const resolvedCacheId = activeCacheId ?? caches[0]?.id ?? null;
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const state = location.state as { cacheId?: string } | null;
+    if (state?.cacheId && caches.some((c) => c.id === state.cacheId)) {
+      setActiveCacheId(state.cacheId);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, caches, navigate]);
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [pattern, setPattern] = useState("*");

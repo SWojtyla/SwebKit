@@ -1,6 +1,15 @@
 import { test, expect } from "@playwright/test";
+import { setDemoMode } from "./helpers";
 
 test.describe("Layout", () => {
+  test.beforeEach(async ({ page }) => {
+    await setDemoMode(page, true);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await setDemoMode(page, false);
+  });
+
   test("top bar and status bar are visible", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByTestId("top-bar")).toBeVisible();
@@ -37,9 +46,10 @@ test.describe("Layout", () => {
 
   test("command palette opens with Ctrl+K", async ({ page }) => {
     await page.goto("/");
-    // Dispatch Ctrl+K via the page to avoid browser interception
+    await page.getByTestId("top-bar").waitFor();
+    // Dispatch on document so the window listener receives the bubbling event.
     await page.evaluate(() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }));
     });
     await expect(page.getByTestId("command-palette")).toBeVisible();
   });

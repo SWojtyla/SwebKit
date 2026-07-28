@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   useProfile,
   useStorageContainers,
@@ -33,8 +34,11 @@ function formatDate(date: string | null | undefined): string {
 
 export function StoragePage() {
   const { data: profile } = useProfile();
+  const location = useLocation();
+  const navigate = useNavigate();
   const accounts = profile?.config?.storageAccounts ?? [];
-  const activeAccountId = accounts[0]?.id ?? null;
+  const [activeAccountId, setActiveAccountId] = useState<string | null>(accounts[0]?.id ?? null);
+  const resolvedAccountId = activeAccountId ?? accounts[0]?.id ?? null;
 
   const [selectedContainer, setSelectedContainer] = useState<string | null>(null);
   const [currentPrefix, setCurrentPrefix] = useState("");
@@ -59,15 +63,24 @@ export function StoragePage() {
   const [copyDestBlob, setCopyDestBlob] = useState("");
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
-  const containers = useStorageContainers(activeAccountId);
-  const blobs = useStorageBlobs(activeAccountId, selectedContainer, currentPrefix, continuationToken);
-  const blobProps = useBlobProperties(activeAccountId, selectedContainer, selectedBlob);
-  const blobContent = useBlobContent(activeAccountId, selectedContainer, selectedBlob);
-  const sasUrl = useBlobSasUrl(activeAccountId, selectedContainer, selectedBlob, 60);
-  const blobVersions = useBlobVersions(activeAccountId, selectedContainer, selectedBlob);
-  const uploadBlob = useUploadBlob(activeAccountId, selectedContainer);
-  const copyBlob = useCopyBlob(activeAccountId);
-  const deletedBlobs = useDeletedBlobs(activeAccountId, selectedContainer);
+  useEffect(() => {
+    const state = location.state as { accountId?: string } | null;
+    if (state?.accountId && accounts.some((a) => a.id === state.accountId)) {
+      setActiveAccountId(state.accountId);
+      setSelectedContainer(null);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate, accounts]);
+
+  const containers = useStorageContainers(resolvedAccountId);
+  const blobs = useStorageBlobs(resolvedAccountId, selectedContainer, currentPrefix, continuationToken);
+  const blobProps = useBlobProperties(resolvedAccountId, selectedContainer, selectedBlob);
+  const blobContent = useBlobContent(resolvedAccountId, selectedContainer, selectedBlob);
+  const sasUrl = useBlobSasUrl(resolvedAccountId, selectedContainer, selectedBlob, 60);
+  const blobVersions = useBlobVersions(resolvedAccountId, selectedContainer, selectedBlob);
+  const uploadBlob = useUploadBlob(resolvedAccountId, selectedContainer);
+  const copyBlob = useCopyBlob(resolvedAccountId);
+  const deletedBlobs = useDeletedBlobs(resolvedAccountId, selectedContainer);
 
   const handleSelectContainer = (name: string) => {
     setSelectedContainer(name);
@@ -113,7 +126,7 @@ export function StoragePage() {
     : displayItems;
 
   const handleCopyUrl = (blobName: string) => {
-    const url = `https://${activeAccountId}.blob.core.windows.net/${selectedContainer}/${blobName}`;
+    const url = `https://${resolvedAccountId}.blob.core.windows.net/${selectedContainer}/${blobName}`;
     navigator.clipboard.writeText(url);
     setCopiedUrl(true);
     setTimeout(() => setCopiedUrl(false), 2000);
@@ -121,7 +134,7 @@ export function StoragePage() {
 
   const handleDownloadBlob = async (blobName: string) => {
     try {
-      const response = await fetch(`/api/storage/${activeAccountId}/containers/${selectedContainer}/blobs/${encodeURIComponent(blobName)}/content`);
+      const response = await fetch(`/api/storage/${resolvedAccountId}/containers/${selectedContainer}/blobs/${encodeURIComponent(blobName)}/content`);
       const data = await response.json();
       if (data.content) {
         const blob = new Blob([data.content], { type: data.contentType || "text/plain" });
@@ -146,7 +159,7 @@ export function StoragePage() {
     });
   };
 
-  if (!activeAccountId) {
+  if (!resolvedAccountId) {
     return (
       <div className="p-6" data-testid="storage-page">
         <h1 className="text-2xl font-bold" data-testid="storage-title">Storage</h1>
@@ -215,7 +228,7 @@ export function StoragePage() {
         {/* Recovery mode */}
         {storageViewMode === "recovery" ? (
           <div className="flex-1 overflow-auto">
-            <BlobRecoveryPanel accountId={activeAccountId} container={selectedContainer} serverDeletedBlobs={deletedBlobs.data ?? undefined} />
+            <BlobRecoveryPanel accountId={resolvedAccountId} container={selectedContainer} serverDeletedBlobs={deletedBlobs.data ?? undefined} />
           </div>
         ) : (
         <>
