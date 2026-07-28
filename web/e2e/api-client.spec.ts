@@ -1,8 +1,16 @@
 import { test, expect } from "@playwright/test";
+import { setDemoMode } from "./helpers";
+
+const sidecarBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198"}`;
 
 test.describe("API Client", () => {
   test.beforeEach(async ({ page }) => {
+    await setDemoMode(page, false);
     await page.goto("/api-client");
+  });
+
+  test.afterEach(async ({ page }) => {
+    await setDemoMode(page, false);
   });
 
   test("creates a collection, request, sends it and shows response", async ({ page }) => {
@@ -25,7 +33,7 @@ test.describe("API Client", () => {
     await requestNode.waitFor();
     await requestNode.click();
 
-    await page.getByTestId("request-url-input").fill("http://127.0.0.1:5198/health");
+    await page.getByTestId("request-url-input").fill(`${sidecarBaseUrl}/health`);
     await page.getByTestId("request-send-button").click();
 
     await expect(page.getByTestId("response-status")).toContainText("200", { timeout: 10_000 });
@@ -227,7 +235,7 @@ test.describe("API Client", () => {
     await page.getByTestId("name-dialog-confirm").click();
     await page.getByTestId(/collection-node-Request-/).first().click();
 
-    await page.getByTestId("request-url-input").fill("http://127.0.0.1:5198/health");
+    await page.getByTestId("request-url-input").fill(`${sidecarBaseUrl}/health`);
     await page.getByTestId("request-send-button").click();
 
     await expect(page.getByTestId("response-status")).toContainText("200", { timeout: 10_000 });
@@ -462,5 +470,55 @@ test.describe("API Client", () => {
     // Close dialog
     await page.getByTestId("export-download-button").click();
     await expect(page.getByTestId("collection-export-dialog")).not.toBeVisible();
+  });
+
+  test("bearer token is saved to the secure store and only an opaque key is persisted in collections.json", async ({ page, request }) => {
+    const token = `my-secret-bearer-token-${Date.now()}`;
+    const collectionName = `Secret Store Collection ${Date.now()}`;
+    const requestName = `Secret Store Request ${Date.now()}`;
+
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill(collectionName);
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).filter({ hasText: collectionName }).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill(requestName);
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-node-Request-/).filter({ hasText: requestName }).first().click();
+
+    await page.getByTestId("request-tab-auth").click();
+    await page.getByTestId("auth-type-select").selectOption("BearerToken");
+    await page.getByTestId("auth-bearer-input").fill(token);
+    await page.getByTestId("auth-bearer-input").blur();
+
+    await page.getByTestId("request-url-input").fill(`${sidecarBaseUrl}/health`);
+    await page.getByTestId("request-save-button").click();
+    await page.waitForTimeout(500);
+
+    const sidecarPort = process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198";
+    const response = await request.get(`http://127.0.0.1:${sidecarPort}/api/config/collections`);
+    expect(response.ok()).toBeTruthy();
+    const collections = await response.json();
+    const collection = collections.find((c: any) => c.name === collectionName);
+    expect(collection).toBeTruthy();
+
+    function findRequest(nodes: any[]): any | undefined {
+      for (const node of nodes) {
+        if (node.type === "Request" && node.request) return node.request;
+        if (node.children) {
+          const found = findRequest(node.children);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    }
+
+    const req = findRequest(collection.nodes);
+    expect(req).toBeTruthy();
+    expect(req.auth.type).toBe("BearerToken");
+    expect(req.auth.credentialKey).not.toBe(token);
+    expect(req.auth.credentialKey).toMatch(/^sw-secret:/);
+    expect(JSON.stringify(collections)).not.toContain(token);
   });
 });

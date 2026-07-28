@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Save, Send, Wand2, Minimize2, Eye, Crosshair } from "lucide-react";
 import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig } from "@/lib/types";
 import { substituteVariables, previewVariables, isLikelySecret } from "@/lib/variable-utils";
+import { saveSecret, getSecret, deleteSecret } from "@/lib/tauri-bridge";
 import { GraphQlPanel } from "./GraphQlPanel";
 import { WebSocketPanel } from "./WebSocketPanel";
 
@@ -88,6 +89,11 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   onSaveRef.current = onSave;
 
   const handleSave = useCallback(async () => {
+    if (secretSaveTimer.current) {
+      clearTimeout(secretSaveTimer.current);
+      secretSaveTimer.current = null;
+    }
+    await persistSecret();
     await onSaveRef.current();
     savedSnapshotRef.current = request;
     setDirty(false);
@@ -156,12 +162,81 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   const removeQueryParam = (index: number) =>
     onChange({ ...request, queryParams: request.queryParams.filter((_, i) => i !== index) });
 
+  const CREDENTIAL_KEY_PREFIX = "sw-secret:";
+  const isGeneratedCredentialKey = (key: string | null | undefined) =>
+    !!key && key.startsWith(CREDENTIAL_KEY_PREFIX);
+  const generateCredentialKey = () => `${CREDENTIAL_KEY_PREFIX}${crypto.randomUUID()}`;
+
   const setAuthType = (type: AuthType) =>
-    onChange({ ...request, auth: { ...(request.auth ?? {}), type } as AuthConfig });
+    onChange({
+      ...request,
+      auth: { ...(request.auth ?? {}), type, credentialKey: null, credentialSecret: null } as AuthConfig,
+    });
   const updateAuth = (patch: Partial<AuthConfig>) =>
     onChange({ ...request, auth: { ...(request.auth ?? { type: "None" }), ...patch } as AuthConfig });
 
-  const auth = request.auth ?? { type: "None" };
+  const auth = (request.auth ?? ({ type: "None" } as AuthConfig));
+
+  const [authSecretInput, setAuthSecretInput] = useState("");
+  const secretSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const authSecretRef = useRef(authSecretInput);
+  useEffect(() => {
+    authSecretRef.current = authSecretInput;
+  }, [authSecretInput]);
+
+  // Load the secret from the persisted store when the credential key changes.
+  useEffect(() => {
+    let active = true;
+    if (isGeneratedCredentialKey(auth.credentialKey)) {
+      getSecret(auth.credentialKey!).then((value) => {
+        if (!active) return;
+        // If the user has already started typing, don't overwrite the input with the loaded value.
+        if (authSecretRef.current !== "") return;
+        setAuthSecretInput(value ?? auth.credentialSecret ?? "");
+      });
+    } else if (auth.credentialKey) {
+      // Legacy: the collections.json value itself is the secret.
+      setAuthSecretInput(auth.credentialKey);
+    } else {
+      setAuthSecretInput(auth.credentialSecret ?? "");
+    }
+    return () => {
+      active = false;
+    };
+  }, [auth.credentialKey]);
+
+  const persistSecret = async () => {
+    const key = auth.credentialKey;
+    if (!key || !isGeneratedCredentialKey(key)) return;
+    const value = authSecretRef.current;
+    if (value.trim() === "") {
+      await deleteSecret(key);
+      updateAuth({ credentialKey: null, credentialSecret: null });
+      setAuthSecretInput("");
+    } else {
+      await saveSecret(key, value);
+    }
+  };
+
+  const handleSecretChange = (value: string) => {
+    setAuthSecretInput(value);
+    const key = isGeneratedCredentialKey(auth.credentialKey)
+      ? auth.credentialKey!
+      : generateCredentialKey();
+    updateAuth({ credentialKey: key, credentialSecret: value });
+    if (secretSaveTimer.current) clearTimeout(secretSaveTimer.current);
+    secretSaveTimer.current = setTimeout(() => {
+      void persistSecret();
+    }, 1000);
+  };
+
+  const handleSecretBlur = () => {
+    if (secretSaveTimer.current) {
+      clearTimeout(secretSaveTimer.current);
+      secretSaveTimer.current = null;
+    }
+    void persistSecret();
+  };
 
   const prettyPrint = () => {
     if (request.body.rawContent) {
@@ -445,8 +520,9 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
               <input
                 data-testid="auth-bearer-input"
                 type="password"
-                value={auth.credentialKey ?? ""}
-                onChange={(e) => updateAuth({ credentialKey: e.target.value })}
+                value={authSecretInput}
+                onChange={(e) => handleSecretChange(e.target.value)}
+                onBlur={handleSecretBlur}
                 placeholder="Bearer token"
                 className="w-full rounded border bg-background px-2 py-1 text-sm"
               />
@@ -465,8 +541,9 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
                 <input
                   data-testid="auth-basic-password"
                   type="password"
-                  value={auth.credentialKey ?? ""}
-                  onChange={(e) => updateAuth({ credentialKey: e.target.value })}
+                  value={authSecretInput}
+                  onChange={(e) => handleSecretChange(e.target.value)}
+                  onBlur={handleSecretBlur}
                   placeholder="Password"
                   className="flex-1 rounded border bg-background px-2 py-1 text-sm"
                 />
@@ -495,8 +572,9 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
                 <input
                   data-testid="auth-apikey-value"
                   type="password"
-                  value={auth.credentialKey ?? ""}
-                  onChange={(e) => updateAuth({ credentialKey: e.target.value })}
+                  value={authSecretInput}
+                  onChange={(e) => handleSecretChange(e.target.value)}
+                  onBlur={handleSecretBlur}
                   placeholder="API key value"
                   className="flex-1 rounded border bg-background px-2 py-1 text-sm"
                 />
@@ -554,8 +632,9 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
                 <input
                   data-testid="auth-oauth2-secret"
                   type="password"
-                  value={auth.credentialKey ?? ""}
-                  onChange={(e) => updateAuth({ credentialKey: e.target.value })}
+                  value={authSecretInput}
+                  onChange={(e) => handleSecretChange(e.target.value)}
+                  onBlur={handleSecretBlur}
                   placeholder="Client Secret"
                   className="w-full rounded border bg-background px-2 py-1 text-sm"
                 />

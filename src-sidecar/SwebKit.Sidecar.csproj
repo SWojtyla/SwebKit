@@ -13,6 +13,7 @@
     <ProjectReference Include="..\src\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />
     <ProjectReference Include="..\src\SwebKit.Redis\SwebKit.Redis.csproj" />
     <ProjectReference Include="..\src\SwebKit.Agents\SwebKit.Agents.csproj" />
+    <PackageReference Include="keyring-dotnet" />
   </ItemGroup>
   <!--
     SwebKit.Observability and SwebKit.DevOps are deliberately NOT ported to the

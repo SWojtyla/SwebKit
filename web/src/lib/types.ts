@@ -259,7 +259,10 @@ export interface KeyValuePair<T> {
 
 export interface AuthConfig {
   type: AuthType;
+  /** Reference key into the persisted secret store. Never contains the actual secret. */
   credentialKey: string | null;
+  /** Transient secret material for the current session; never persisted to collections.json. */
+  credentialSecret?: string | null;
   apiKeyParamName: string | null;
   apiKeyLocation: ApiKeyLocation;
   basicUsername: string | null;

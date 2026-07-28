@@ -220,3 +220,43 @@ export async function restartSidecar(): Promise<number | null> {
   }
   return null;
 }
+
+// ── Secret Store (API Client auth) ───────────────────────────────────────────
+
+const WEB_SECRET_VAULT_KEY = "sw-secrets-v1";
+
+export async function saveSecret(key: string, secret: string): Promise<void> {
+  if (isTauri()) {
+    await invoke("save_secret", { key, secret });
+    return;
+  }
+  const vault = JSON.parse(localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}");
+  vault[key] = secret;
+  localStorage.setItem(WEB_SECRET_VAULT_KEY, JSON.stringify(vault));
+}
+
+export async function getSecret(key: string): Promise<string | null> {
+  if (isTauri()) {
+    return invoke<string | null>("get_secret", { key });
+  }
+  const vault = JSON.parse(localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}");
+  return vault[key] ?? null;
+}
+
+export async function deleteSecret(key: string): Promise<void> {
+  if (isTauri()) {
+    await invoke("delete_secret", { key });
+    return;
+  }
+  const vault = JSON.parse(localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}");
+  delete vault[key];
+  localStorage.setItem(WEB_SECRET_VAULT_KEY, JSON.stringify(vault));
+}
+
+export async function listSecrets(prefix?: string): Promise<string[]> {
+  if (isTauri()) {
+    return invoke<string[]>("list_secrets", { prefix: prefix ?? null });
+  }
+  const vault = JSON.parse(localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}");
+  return Object.keys(vault).filter((k) => !prefix || k.startsWith(prefix));
+}
