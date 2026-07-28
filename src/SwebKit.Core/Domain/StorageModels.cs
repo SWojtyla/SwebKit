@@ -121,3 +121,8 @@ public record BlobRecoveryResult(
     BlobRecoveryState State,
     string? ResultBlobPath = null,
     string? ErrorMessage = null);
+
+public record DeletedBlobItem(
+    string Name,
+    DateTimeOffset DeletedOn,
+    int RemainingDays);

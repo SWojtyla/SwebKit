@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { RotateCcw, Search } from "lucide-react";
+import { useUndeleteBlob } from "@/lib/hooks";
 
 interface DeletedBlob {
   name: string;
@@ -8,12 +9,6 @@ interface DeletedBlob {
   contentType: string;
   sizeBytes: number | null;
 }
-
-const demoDeletedBlobs: DeletedBlob[] = [
-  { name: "logs/2026-07-20/app.log", deletedAt: "2026-07-20T10:30:00Z", daysRemaining: 11, contentType: "text/plain", sizeBytes: 45678 },
-  { name: "backups/db-2026-07-19.bak", deletedAt: "2026-07-19T03:00:00Z", daysRemaining: 10, contentType: "application/octet-stream", sizeBytes: 1048576 },
-  { name: "temp/upload-123.tmp", deletedAt: "2026-07-25T14:22:00Z", daysRemaining: 13, contentType: "application/octet-stream", sizeBytes: 2048 },
-];
 
 function formatBytes(bytes: number | null): string {
   if (bytes == null) return "-";
@@ -25,24 +20,23 @@ function formatBytes(bytes: number | null): string {
 interface Props {
   accountId: string | null;
   container: string | null;
+  allowMutations?: boolean;
   serverDeletedBlobs?: { name: string; deletedOn: string; remainingDays: number }[];
 }
 
-export function BlobRecoveryPanel({ accountId, container, serverDeletedBlobs }: Props) {
-  const mergedBlobs: DeletedBlob[] = [
-    ...(serverDeletedBlobs ?? []).map((b) => ({
-      name: b.name,
-      deletedAt: b.deletedOn,
-      daysRemaining: b.remainingDays,
-      contentType: "unknown",
-      sizeBytes: null,
-    })),
-    ...demoDeletedBlobs,
-  ];
-  const [deletedBlobs] = useState<DeletedBlob[]>(mergedBlobs);
+export function BlobRecoveryPanel({ accountId, container, allowMutations = false, serverDeletedBlobs }: Props) {
+  const deletedBlobs: DeletedBlob[] = (serverDeletedBlobs ?? []).map((b) => ({
+    name: b.name,
+    deletedAt: b.deletedOn,
+    daysRemaining: b.remainingDays,
+    contentType: "unknown",
+    sizeBytes: null,
+  }));
   const [filter, setFilter] = useState("");
   const [recovering, setRecovering] = useState<Set<string>>(new Set());
   const [recovered, setRecovered] = useState<Set<string>>(new Set());
+  const [errorByBlob, setErrorByBlob] = useState<Record<string, string>>({});
+  const undeleteBlob = useUndeleteBlob(accountId, container);
 
   const filtered = filter
     ? deletedBlobs.filter((b) => b.name.toLowerCase().includes(filter.toLowerCase()))
@@ -50,10 +44,12 @@ export function BlobRecoveryPanel({ accountId, container, serverDeletedBlobs }: 
 
   const handleRecover = async (name: string) => {
     setRecovering((prev) => new Set(prev).add(name));
+    setErrorByBlob((prev) => ({ ...prev, [name]: "" }));
     try {
-      // In production: POST /api/storage/{accountId}/containers/{container}/blobs/{blob}/undelete
-      await new Promise((r) => setTimeout(r, 500));
+      await undeleteBlob.mutateAsync(name);
       setRecovered((prev) => new Set(prev).add(name));
+    } catch (e) {
+      setErrorByBlob((prev) => ({ ...prev, [name]: e instanceof Error ? e.message : String(e) }));
     } finally {
       setRecovering((prev) => {
         const next = new Set(prev);
@@ -112,6 +108,7 @@ export function BlobRecoveryPanel({ accountId, container, serverDeletedBlobs }: 
               {filtered.map((blob) => {
                 const isRecovered = recovered.has(blob.name);
                 const isRecovering = recovering.has(blob.name);
+                const error = errorByBlob[blob.name];
                 return (
                   <tr key={blob.name} className="border-b last:border-0">
                     <td className="px-3 py-2 font-mono text-xs">{blob.name}</td>
@@ -130,15 +127,18 @@ export function BlobRecoveryPanel({ accountId, container, serverDeletedBlobs }: 
                           Recovered
                         </span>
                       ) : (
-                        <button
-                          onClick={() => handleRecover(blob.name)}
-                          disabled={isRecovering}
-                          className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                          data-testid={`blob-recover-btn-${blob.name}`}
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                          {isRecovering ? "Recovering..." : "Recover"}
-                        </button>
+                        <span title={allowMutations ? "Recover deleted blob" : "Mutations are disabled for this storage account. Enable allowMutations in Settings."}>
+                          <button
+                            onClick={() => handleRecover(blob.name)}
+                            disabled={isRecovering || !allowMutations}
+                            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                            data-testid={`blob-recover-btn-${blob.name}`}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            {isRecovering ? "Recovering..." : "Recover"}
+                          </button>
+                          {error && <span className="block text-xs text-destructive">{error}</span>}
+                        </span>
                       )}
                     </td>
                   </tr>

@@ -59,6 +59,8 @@ import type {
   StorageBlobPage,
   BlobProperties,
   StorageBlobContent,
+  BlobMutationResult,
+  BlobRecoveryResult,
   AgentReply,
   AgentStatus,
   SbMessageTemplate,
@@ -883,6 +885,29 @@ export function useDeletedBlobs(accountId: string | null, container: string | nu
     queryKey: ["storage", accountId, "containers", container, "deleted-blobs"],
     queryFn: () => apiFetch<{ name: string; deletedOn: string; remainingDays: number }[]>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/deleted-blobs`),
     enabled: !!accountId && !!container,
+  });
+}
+
+export function useSetBlobMetadata(accountId: string | null, container: string | null, blobName: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (metadata: Record<string, string>) =>
+      apiSend<BlobMutationResult>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/metadata`, "POST", metadata),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "properties"] });
+    },
+  });
+}
+
+export function useUndeleteBlob(accountId: string | null, container: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (blobName: string) =>
+      apiSend<BlobRecoveryResult>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName)}/undelete`, "POST"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "deleted-blobs"] });
+      qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs"] });
+    },
   });
 }
 

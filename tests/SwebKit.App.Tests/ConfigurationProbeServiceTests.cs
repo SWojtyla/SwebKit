@@ -198,6 +198,7 @@ public sealed class ConfigurationProbeServiceTests
         public Task<BlobVersionComparison> GetVersionComparisonAsync(string containerName, string blobName, string baseVersionId, string? compareVersionId = null, CancellationToken ct = default) => throw new NotSupportedException("Not implemented in test stub.");
         public Task<BlobRecoveryResult> RestoreBlobVersionAsync(string containerName, string blobName, string versionId, CancellationToken ct = default) => Task.FromResult(new BlobRecoveryResult(BlobRecoveryState.Unsupported));
         public Task<BlobRecoveryResult> UndeleteBlobAsync(string containerName, string blobName, CancellationToken ct = default) => Task.FromResult(new BlobRecoveryResult(BlobRecoveryState.Unsupported));
+        public Task<IReadOnlyList<DeletedBlobItem>> ListDeletedBlobsAsync(string containerName, string? prefix = null, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<DeletedBlobItem>>([]);
     }
 
     private sealed class FakeRedisClientFactory : IRedisClientFactory

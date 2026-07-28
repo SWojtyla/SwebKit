@@ -11,6 +11,7 @@ import {
   useUploadBlob,
   useCopyBlob,
   useDeletedBlobs,
+  useSetBlobMetadata,
 } from "@/lib/hooks";
 import type { StorageBlobItem } from "@/lib/types";
 import { Download, Link as LinkIcon, Check, Plus, Trash2, RotateCcw, Upload, Copy as CopyIcon } from "lucide-react";
@@ -39,6 +40,8 @@ export function StoragePage() {
   const accounts = profile?.config?.storageAccounts ?? [];
   const [activeAccountId, setActiveAccountId] = useState<string | null>(accounts[0]?.id ?? null);
   const resolvedAccountId = activeAccountId ?? accounts[0]?.id ?? null;
+  const activeAccount = accounts.find((a) => a.id === resolvedAccountId);
+  const allowMutations = activeAccount?.allowMutations ?? false;
 
   const [selectedContainer, setSelectedContainer] = useState<string | null>(null);
   const [currentPrefix, setCurrentPrefix] = useState("");
@@ -80,6 +83,7 @@ export function StoragePage() {
   const blobVersions = useBlobVersions(resolvedAccountId, selectedContainer, selectedBlob);
   const uploadBlob = useUploadBlob(resolvedAccountId, selectedContainer);
   const copyBlob = useCopyBlob(resolvedAccountId);
+  const setBlobMetadata = useSetBlobMetadata(resolvedAccountId, selectedContainer, selectedBlob);
   const deletedBlobs = useDeletedBlobs(resolvedAccountId, selectedContainer);
 
   const handleSelectContainer = (name: string) => {
@@ -228,7 +232,7 @@ export function StoragePage() {
         {/* Recovery mode */}
         {storageViewMode === "recovery" ? (
           <div className="flex-1 overflow-auto">
-            <BlobRecoveryPanel accountId={resolvedAccountId} container={selectedContainer} serverDeletedBlobs={deletedBlobs.data ?? undefined} />
+            <BlobRecoveryPanel accountId={resolvedAccountId} container={selectedContainer} allowMutations={allowMutations} serverDeletedBlobs={deletedBlobs.data ?? undefined} />
           </div>
         ) : (
         <>
@@ -282,13 +286,16 @@ export function StoragePage() {
                   >
                     {multiSelectMode ? "Exit Multi" : "Multi-Select"}
                   </button>
-                  <button
-                    onClick={() => setShowUpload(!showUpload)}
-                    className={`flex items-center gap-1 rounded border px-2 py-1 text-xs ${showUpload ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-                    data-testid="storage-upload-toggle"
-                  >
-                    <Upload className="h-3 w-3" /> Upload
-                  </button>
+                  <span title={allowMutations ? "Upload a new blob" : "Mutations are disabled for this storage account. Enable allowMutations in Settings."}>
+                    <button
+                      onClick={() => setShowUpload(!showUpload)}
+                      disabled={!allowMutations}
+                      className={`flex items-center gap-1 rounded border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50 ${showUpload ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                      data-testid="storage-upload-toggle"
+                    >
+                      <Upload className="h-3 w-3" /> Upload
+                    </button>
+                  </span>
                   {multiSelectMode && selectedBlobs.size > 0 && (
                     <>
                       <span className="text-xs text-muted-foreground" data-testid="storage-batch-count">{selectedBlobs.size} selected</span>
@@ -436,9 +443,11 @@ export function StoragePage() {
                       <button onClick={() => setShowSasUrl(!showSasUrl)} className="text-muted-foreground hover:text-foreground" data-testid="storage-sas-url-btn" title="Generate SAS URL">
                         <LinkIcon className="h-3.5 w-3.5" />
                       </button>
-                      <button onClick={() => setShowCopyDialog(true)} className="text-muted-foreground hover:text-foreground" data-testid="storage-copy-blob-btn" title="Copy blob">
-                        <CopyIcon className="h-3.5 w-3.5" />
-                      </button>
+                      <span title={allowMutations ? "Copy blob" : "Mutations are disabled for this storage account. Enable allowMutations in Settings."}>
+                        <button onClick={() => setShowCopyDialog(true)} disabled={!allowMutations} className="text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50" data-testid="storage-copy-blob-btn">
+                          <CopyIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
                     </div>
                     {showSasUrl && (
                       <div className="mt-2 rounded border bg-muted/30 p-2" data-testid="storage-sas-url-display">
@@ -488,7 +497,7 @@ export function StoragePage() {
                       <h3 className="text-sm font-semibold">Metadata</h3>
                       {metadataEditing ? (
                         <div className="flex items-center gap-2">
-                          <button onClick={() => setMetadataEditing(false)} className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground" data-testid="storage-metadata-save">Save</button>
+                          <button onClick={() => { setBlobMetadata.mutate(metadataDraft, { onSuccess: () => setMetadataEditing(false) }); }} disabled={setBlobMetadata.isPending} className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50" data-testid="storage-metadata-save">{setBlobMetadata.isPending ? "Saving..." : "Save"}</button>
                           <button onClick={() => { setMetadataEditing(false); setMetadataDraft({}); }} className="rounded border px-2 py-1 text-xs" data-testid="storage-metadata-cancel">Cancel</button>
                         </div>
                       ) : (
