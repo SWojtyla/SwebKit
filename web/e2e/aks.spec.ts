@@ -26,6 +26,7 @@ test.describe("AKS", () => {
     await page.getByTestId("aks-tab-pods").click();
     await expect(page.getByTestId("pods-table-body")).toBeVisible();
 
+    await page.getByTestId("aks-tab-network").click();
     await page.getByTestId("aks-tab-services").click();
     await expect(page.getByTestId("services-table-body")).toBeVisible();
 
@@ -55,6 +56,7 @@ test.describe("AKS", () => {
     await page.getByTestId("aks-tab-configmaps").click();
     await expect(page.getByTestId("configmaps-table-body")).toBeVisible();
 
+    await page.getByTestId("aks-tab-network").click();
     await page.getByTestId("aks-tab-ingresses").click();
     await expect(page.getByTestId("ingresses-table-body")).toBeVisible();
 
