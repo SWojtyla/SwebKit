@@ -28,6 +28,7 @@ import {
   deleteMonitoringRule,
   getMonitoringHistory,
   getRedisPubSubSnapshot,
+  exportRedisKeys,
 } from "./api";
 import type {
   MonitoringAlertRule,
@@ -906,6 +907,12 @@ export function useRedisUpdateSortedSetScore(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "zset"] });
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+  });
+}
+
+export function useRedisExportKeys(cacheId: string | null) {
+  return useMutation({
+    mutationFn: (keys: string[]) => exportRedisKeys(cacheId!, keys),
   });
 }
 

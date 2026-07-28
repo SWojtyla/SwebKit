@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { setDemoMode } from "./helpers";
 
 test.describe("Redis", () => {
@@ -108,6 +109,27 @@ test.describe("Redis", () => {
     await expect(firstKey).toBeVisible();
     await page.getByTestId("redis-batch-toggle").click();
     await expect(page.getByTestId("redis-batch-toggle")).toHaveText("Batch Select");
+  });
+
+  test("exports selected keys with their values", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-batch-toggle").click();
+    await page.getByTestId("redis-key-checkbox-user:1001").check();
+    await page.getByTestId("redis-key-checkbox-session:abc123").check();
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByTestId("redis-batch-export").click();
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+
+    const exported = JSON.parse(await readFile(downloadPath!, "utf8")) as Record<string, unknown>;
+    expect(exported["user:1001"]).toBe('{"id":1001,"name":"Alice","email":"alice@example.com"}');
+    expect(exported["session:abc123"]).toMatchObject({
+      user_id: "1001",
+      ip: "10.0.0.1",
+    });
+    expect(exported["session:abc123"]).not.toEqual(exported["user:1001"]);
   });
 
   test("namespace tree shows key prefixes", async ({ page }) => {
