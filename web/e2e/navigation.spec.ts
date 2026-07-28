@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { setDemoMode } from "./helpers";
 
 const navItems = [
   { nav: "nav-dashboard", url: "/", page: "dashboard-page" },
@@ -13,7 +14,11 @@ const navItems = [
 
 test.describe("Navigation", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/");
+    await setDemoMode(page, true);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await setDemoMode(page, false);
   });
 
   for (const item of navItems) {
