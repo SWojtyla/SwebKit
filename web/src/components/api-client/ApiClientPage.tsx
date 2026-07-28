@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Globe, Settings2, GitBranch } from "lucide-react";
 import {
   useCollections,
@@ -38,6 +39,17 @@ function now() {
 
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
+}
+
+function findRequestNode(nodes: ApiCollectionNode[], nodeId: string): ApiCollectionNode | null {
+  for (const node of nodes) {
+    if (node.id === nodeId) return node;
+    if (node.children) {
+      const found = findRequestNode(node.children, nodeId);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 function emptyRequest(): HttpRequestEntry {
@@ -176,6 +188,8 @@ export function ApiClientPage() {
   const executeRequest = useExecuteRequest();
   const { data: envData } = useEnvironments();
   const updateEnvironments = useUpdateEnvironments();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const environments = envData?.environments ?? [];
   const uiState = envData?.uiState;
@@ -225,6 +239,19 @@ export function ApiClientPage() {
     }));
     setActiveTabId(tabId);
   }, [tabs]);
+
+  useEffect(() => {
+    const state = location.state as { collectionId?: string; nodeId?: string } | null;
+    if (!state?.collectionId || !state?.nodeId) return;
+    const collection = collections.find((c) => c.id === state.collectionId);
+    const node = collection ? findRequestNode(collection.nodes, state.nodeId) : null;
+    if (node?.type === "Request" && node.request) {
+      setSelectedCollectionId(state.collectionId);
+      setSelectedNodeId(state.nodeId);
+      openTab(node, state.collectionId);
+    }
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location, collections, navigate, openTab]);
 
   const closeTab = useCallback((tabId: string) => {
     const tabState = tabStates[tabId];

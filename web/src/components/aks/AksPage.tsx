@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useAksNamespaces,
@@ -87,6 +88,8 @@ interface PendingConfirm {
 }
 
 export function AksPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabId>("deployments");
   const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
   const isNetworkTabActive = networkTabIds.has(activeTab);
@@ -131,6 +134,16 @@ export function AksPage() {
     const initial = defaultNs && namespaces.includes(defaultNs) ? [defaultNs] : [namespaces[0]];
     setSelectedNamespaces(initial);
   }, [namespaces, profile, selectedNamespaces.length]);
+
+  // Apply a namespace selected from the command palette.
+  useEffect(() => {
+    const state = location.state as { namespace?: string } | null;
+    if (state?.namespace) {
+      setSelectedNamespaces([state.namespace]);
+      setActiveTab("deployments");
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate]);
 
   const handleContextChange = useCallback(
     (context: string, defaultNamespace?: string) => {

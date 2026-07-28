@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft } from "lucide-react";
 import { useProfile } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,6 +16,8 @@ import type { SbEntityInfo, SbMessage } from "@/lib/types";
 
 export function ServiceBusPage() {
   const { data: profile } = useProfile();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [selectedNsId, setSelectedNsId] = useState<string | null>(null);
   const [selectedEntity, setSelectedEntity] = useState<SbEntityInfo | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<SbMessage | null>(null);
@@ -26,6 +29,18 @@ export function ServiceBusPage() {
   const [showBatchReplay, setShowBatchReplay] = useState(false);
   const [showEntityTree, setShowEntityTree] = useState(true);
   const queryClient = useQueryClient();
+
+  const namespaces = profile?.serviceBusNamespaces ?? [];
+
+  useEffect(() => {
+    const state = location.state as { nsId?: string } | null;
+    if (state?.nsId && namespaces.some((ns) => ns.id === state.nsId)) {
+      setSelectedNsId(state.nsId);
+      setSelectedEntity(null);
+      setSelectedMessage(null);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate, namespaces]);
 
   const handleEntityAction = useCallback((entity: SbEntityInfo, action: EntityAction) => {
     setSelectedEntity(entity);
@@ -47,7 +62,6 @@ export function ServiceBusPage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const namespaces = profile?.serviceBusNamespaces ?? [];
   const selectedNs = namespaces.find((ns) => ns.id === selectedNsId);
 
   return (
