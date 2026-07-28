@@ -11,6 +11,15 @@ use std::sync::mpsc;
 #[cfg(not(debug_assertions))]
 use std::time::Duration;
 
+#[cfg(all(not(debug_assertions), windows))]
+use std::os::windows::process::CommandExt;
+
+/// Windows process creation flag that prevents a console window from appearing
+/// for the child process. Without this, spawning the .NET sidecar (a console
+/// app) pops up an empty cmd window that stays visible for the app's lifetime.
+#[cfg(all(not(debug_assertions), windows))]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 pub struct SidecarState {
     pub child: Mutex<Option<Child>>,
     pub port: Mutex<u16>,
@@ -58,12 +67,17 @@ pub fn spawn_sidecar(app: &AppHandle) -> Result<(u16, Option<Child>), String> {
         // that port. We recover the real port from Kestrel's own startup log
         // line ("Now listening on: http://127.0.0.1:<port>"), which is only
         // printed once the socket is actually bound and accepting connections.
-        let mut child = Command::new(&sidecar_exe)
-            .arg("--urls")
+        let mut cmd = Command::new(&sidecar_exe);
+        cmd.arg("--urls")
             .arg("http://127.0.0.1:0")
             .current_dir(&sidecar_dir)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let mut child = cmd
             .spawn()
             .map_err(|e| format!("Failed to spawn sidecar: {e}"))?;
 

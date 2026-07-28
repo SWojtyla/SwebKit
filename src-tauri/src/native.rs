@@ -3,6 +3,19 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::State;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn hidden_command(program: &str) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
+
 /// Roots the frontend is allowed to read/write files under, via `read_file`/
 /// `write_file`/`list_dir`. A root is only added when the user themselves picks
 /// a file/folder through the native OS dialog (`pick_file`/`pick_directory`) —
@@ -279,7 +292,7 @@ pub struct GitBranch {
 /// Tauri command: get git status for a repository
 #[tauri::command]
 pub async fn git_status(path: String) -> Result<GitStatus, String> {
-    let output = std::process::Command::new("git")
+    let output = hidden_command("git")
         .args(["status", "--porcelain=v2", "--branch"])
         .current_dir(&path)
         .output()
@@ -326,7 +339,7 @@ pub async fn git_status(path: String) -> Result<GitStatus, String> {
 /// Tauri command: list git branches
 #[tauri::command]
 pub async fn git_branches(path: String) -> Result<Vec<GitBranch>, String> {
-    let output = std::process::Command::new("git")
+    let output = hidden_command("git")
         .args(["branch", "--list", "--format=%(HEAD) %(refname:short)"])
         .current_dir(&path)
         .output()
@@ -353,7 +366,7 @@ pub async fn git_branches(path: String) -> Result<Vec<GitBranch>, String> {
 /// Tauri command: git commit
 #[tauri::command]
 pub async fn git_commit(path: String, message: String) -> Result<(), String> {
-    let output = std::process::Command::new("git")
+    let output = hidden_command("git")
         .args(["commit", "-m", &message])
         .current_dir(&path)
         .output()
@@ -368,7 +381,7 @@ pub async fn git_commit(path: String, message: String) -> Result<(), String> {
 /// Tauri command: git push
 #[tauri::command]
 pub async fn git_push(path: String) -> Result<String, String> {
-    let output = std::process::Command::new("git")
+    let output = hidden_command("git")
         .args(["push"])
         .current_dir(&path)
         .output()
@@ -383,7 +396,7 @@ pub async fn git_push(path: String) -> Result<String, String> {
 /// Tauri command: git pull
 #[tauri::command]
 pub async fn git_pull(path: String) -> Result<String, String> {
-    let output = std::process::Command::new("git")
+    let output = hidden_command("git")
         .args(["pull"])
         .current_dir(&path)
         .output()
@@ -398,7 +411,7 @@ pub async fn git_pull(path: String) -> Result<String, String> {
 /// Tauri command: git stage all
 #[tauri::command]
 pub async fn git_stage_all(path: String) -> Result<(), String> {
-    let output = std::process::Command::new("git")
+    let output = hidden_command("git")
         .args(["add", "--all"])
         .current_dir(&path)
         .output()
