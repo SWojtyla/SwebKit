@@ -37,6 +37,7 @@ import type {
   UserSettings,
   EnvironmentsResponse,
   ApiCollection,
+  CollectionsStoreResponse,
   ApiCollectionNode,
   ApiClientExecutionResponse,
   HttpRequestEntry,
@@ -691,19 +692,28 @@ export function useAksHttpRoutes(ns: string | null) {
 // ── API Client ───────────────────────────────────────────────────────────────
 
 export function useCollections(enabled = true) {
-  return useQuery({
+  return useQuery<CollectionsStoreResponse, Error, ApiCollection[]>({
     queryKey: ["collections"],
-    queryFn: () => apiFetch<ApiCollection[]>("/api/config/collections"),
+    queryFn: () => apiFetch<CollectionsStoreResponse>("/api/config/collections/store"),
+    select: (data) => data.collections ?? [],
     enabled,
   });
 }
 
 export function useUpdateCollections() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (collections: ApiCollection[]) =>
-      apiSend("/api/config/collections", "PUT", { schemaVersion: 1, collections }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["collections"] }),
+  return useMutation<CollectionsStoreResponse, Error, ApiCollection[]>({
+    mutationFn: async (collections) => {
+      const current = qc.getQueryData<CollectionsStoreResponse>(["collections"]);
+      const token = current?.concurrencyToken;
+      const path = token
+        ? `/api/config/collections?concurrencyToken=${encodeURIComponent(token)}`
+        : "/api/config/collections";
+      return apiSend<CollectionsStoreResponse>(path, "PUT", { schemaVersion: 1, collections });
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(["collections"], data);
+    },
   });
 }
 
