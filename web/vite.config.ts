@@ -20,5 +20,17 @@ export default defineConfig({
     target: "es2022",
     minify: "esbuild",
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        // Split the heaviest third-party deps out of the app chunk so no single
+        // file trips Vite's 500 kB warning and the browser can cache them apart
+        // from application code.
+        manualChunks: {
+          react: ["react", "react-dom", "react-router-dom"],
+          query: ["@tanstack/react-query"],
+          icons: ["lucide-react"],
+        },
+      },
+    },
   },
 });

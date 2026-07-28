@@ -167,6 +167,19 @@ npm run build
 
 This produces `web/dist/` which Tauri bundles into the app.
 
+#### Publish the sidecar second
+
+The bundle ships the .NET sidecar as a resource (`src-tauri/binaries/sidecar/`). That
+folder is gitignored and starts empty, so it must be populated before bundling — otherwise
+the installer builds fine but the installed app dies at startup with
+"Sidecar binary not found".
+
+```powershell
+dotnet publish src-sidecar\SwebKit.Sidecar.csproj -c Release -r win-x64 --self-contained true -o src-tauri\binaries\sidecar
+```
+
+Self-contained is required: end users are not expected to have the .NET runtime installed.
+
 #### Build the installer
 
 ```powershell

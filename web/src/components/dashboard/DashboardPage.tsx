@@ -30,9 +30,18 @@ export function DashboardPage() {
   const storageAccounts = profile?.config.storageAccounts ?? [];
   const sbNamespaces = profile?.serviceBusNamespaces ?? [];
 
-  const firstAksNs = aksConfigured ? "default" : null;
-  const aksNamespaces = useAksNamespaces();
-  const activeAksNs = aksNamespaces.data?.[0] ?? firstAksNs;
+  // Prefer the namespace the user actually configured. The old fallback was a
+  // hardcoded "default", which most users have no RBAC on — those requests take
+  // ~37s to come back 403 and, because the dashboard mounts first, they hold the
+  // browser's per-host connections and stall every other page's queries.
+  // Skip the slow cluster-scoped namespace listing when we already know which
+  // namespace to use. This has to wait for the profile: firing while it is still
+  // loading would issue the very request we are trying to avoid, and only cancel
+  // it afterwards. When no namespace is configured we still list them, since demo
+  // mode has no aksConfig but does serve namespaces.
+  const configuredAksNs = profile?.config.aksConfig?.defaultNamespace?.trim() || null;
+  const aksNamespaces = useAksNamespaces(!!profile && !configuredAksNs);
+  const activeAksNs = configuredAksNs ?? aksNamespaces.data?.[0] ?? null;
   const aksDeployments = useAksDeployments(activeAksNs ?? null);
   const aksPods = useAksPods(activeAksNs ?? null);
   const redisInfo = useRedisServerInfo(redisCaches[0]?.id ?? null);

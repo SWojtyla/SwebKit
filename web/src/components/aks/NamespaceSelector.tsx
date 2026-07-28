@@ -52,7 +52,13 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
 
   return (
     <div ref={ref} className="relative flex items-center gap-2">
-      {/* Hidden native select keeps Playwright tests working */}
+      {/*
+        Hidden native select keeps Playwright tests working. `sr-only` alone is
+        the right class: it renders a 1x1 clipped element that is invisible to
+        users but still has a bounding box, so Playwright can interact with it.
+        Adding `h-0 w-0` collapsed that box to nothing, which made every
+        selectOption() call fail its actionability check.
+      */}
       <select
         data-testid="aks-namespace-select"
         multiple
@@ -61,7 +67,7 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
           const options = Array.from(e.target.selectedOptions).map((o) => o.value);
           onChange(options.length ? options : all.length > 0 ? [all[0]] : []);
         }}
-        className="sr-only absolute h-0 w-0 opacity-0"
+        className="sr-only"
       >
         <option value="*">All namespaces</option>
         {all.map((ns) => (

@@ -399,10 +399,16 @@ export function useAksContexts() {
   });
 }
 
-export function useAksNamespaces() {
+/// Lists cluster namespaces. This is a cluster-scoped call and is by far the
+/// slowest AKS endpoint (~18s cold on a large cluster), so callers that already
+/// know which namespace they want should pass `enabled: false` rather than pay
+/// for it — it otherwise occupies one of the browser's six per-host connections
+/// and delays every other request behind it.
+export function useAksNamespaces(enabled = true) {
   return useQuery({
     queryKey: ["aks-namespaces"],
     queryFn: () => apiFetch<string[]>("/api/aks/namespaces"),
+    enabled,
   });
 }
 

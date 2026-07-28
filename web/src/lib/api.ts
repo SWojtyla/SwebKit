@@ -3,6 +3,8 @@
 // port and reports the real one via the `get_sidecar_port` command, so this
 // must be re-resolved at startup (see `initSidecarBaseUrl`) before anything
 // fetches — it can't be a one-shot module-load constant anymore.
+import { getSidecarPort } from "./tauri-bridge";
+
 let SIDECAR_BASE_URL = (() => {
   return (import.meta as any).env?.VITE_SIDECAR_URL ?? "http://localhost:5199";
 })();
@@ -15,7 +17,6 @@ export async function initSidecarBaseUrl(): Promise<void> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
     return;
   }
-  const { getSidecarPort } = await import("./tauri-bridge");
   const port = await getSidecarPort();
   if (port) {
     SIDECAR_BASE_URL = `http://127.0.0.1:${port}`;

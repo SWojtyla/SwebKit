@@ -1,2 +1,8 @@
 node_modules/
 dist/
+
+# Throwaway sidecar profile store used by the Playwright suite
+# (SWEBKIT_APPDATA_ROOT, see playwright.config.ts)
+.e2e-appdata/
+test-results/
+playwright-report/
