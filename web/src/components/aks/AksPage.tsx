@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useAksNamespaces,
@@ -88,13 +88,54 @@ interface PendingConfirm {
   onConfirm: () => void;
 }
 
+// URL key helpers — these serialize AKS drill-down state into query params
+// so back/forward and deep links preserve the current view.
+function makeKey(ns: string, name: string): string {
+  return `${encodeURIComponent(ns)}/${encodeURIComponent(name)}`;
+}
+
+function parseKey(key: string | null): { ns: string; name: string } | null {
+  if (!key) return null;
+  const slash = key.indexOf("/");
+  if (slash === -1) return null;
+  return { ns: decodeURIComponent(key.slice(0, slash)), name: decodeURIComponent(key.slice(slash + 1)) };
+}
+
+function makeYamlKey(kind: string, ns: string, name: string): string {
+  return `${kind}:${makeKey(ns, name)}`;
+}
+
+function parseYamlKey(key: string | null): { kind: string; namespace: string; name: string } | null {
+  if (!key) return null;
+  const colon = key.indexOf(":");
+  if (colon === -1) return null;
+  const kind = key.slice(0, colon);
+  const parsed = parseKey(key.slice(colon + 1));
+  if (!parsed) return null;
+  return { kind, namespace: parsed.ns, name: parsed.name };
+}
+
+function encodeNamespaces(namespaces: string[]): string | null {
+  if (namespaces.length === 0) return null;
+  if (namespaces.includes("*")) return "*";
+  return namespaces.join(",");
+}
+
+function parseNamespaces(value: string | null): string[] {
+  if (!value) return [];
+  if (value === "*") return ["*"];
+  return value.split(",").filter(Boolean);
+}
+
+function parseTab(value: string | null): TabId {
+  return allTabs.find((t) => t.id === value)?.id ?? "deployments";
+}
+
 export function AksPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TabId>("deployments");
+  const [searchParams, setSearchParams] = useSearchParams();
   const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
-  const isNetworkTabActive = networkTabIds.has(activeTab);
-  const [selectedNamespaces, setSelectedNamespaces] = useState<string[]>([]);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(10);
   const { data: namespaces, isLoading: nsLoading, refetch: refetchNamespaces } = useAksNamespaces();
@@ -103,6 +144,32 @@ export function AksPage() {
   const { data: profile } = useProfile();
   const setContextMutation = useAksSetContext();
   const isProduction = profile?.config.isProduction ?? false;
+
+  const updateParams = useCallback(
+    (updates: Record<string, string | null | undefined>, options?: { replace?: boolean }) => {
+      const next = new URLSearchParams(searchParams);
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === null || value === undefined || value === "") next.delete(key);
+        else next.set(key, value);
+      }
+      setSearchParams(next, { replace: options?.replace ?? false, preventScrollReset: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  // Drill-down state is read from the URL so back/forward and deep links work.
+  const activeTab = useMemo(() => parseTab(searchParams.get("tab")), [searchParams]);
+  const setActiveTab = useCallback(
+    (tab: TabId) => updateParams({ tab: tab === "deployments" ? null : tab }),
+    [updateParams],
+  );
+  const isNetworkTabActive = networkTabIds.has(activeTab);
+
+  const selectedNamespaces = useMemo(() => parseNamespaces(searchParams.get("ns")), [searchParams]);
+  const setSelectedNamespaces = useCallback(
+    (namespaces: string[]) => updateParams({ ns: encodeNamespaces(namespaces) }),
+    [updateParams],
+  );
 
   const namespaceToken = useMemo(() => {
     if (selectedNamespaces.length === 0 || !namespaces || namespaces.length === 0) return null;
@@ -113,15 +180,74 @@ export function AksPage() {
   const isMultiNamespace = namespaceToken === "*" || selectedNamespaces.length > 1;
 
   const { data: allPods } = useAksPods(namespaceToken);
-  const [selectedPod, setSelectedPod] = useState<PodInfo | null>(null);
-  const [yamlResource, setYamlResource] = useState<{ kind: string; name: string; namespace: string } | null>(null);
-  const [helmRelease, setHelmRelease] = useState<HelmReleaseInfo | null>(null);
+
+  const podParam = searchParams.get("pod");
+  const selectedPod = useMemo(() => {
+    if (!podParam || !allPods) return null;
+    return allPods.find((p) => makeKey(p.namespace, p.name) === podParam) ?? null;
+  }, [podParam, allPods]);
+  const setPodKey = useCallback(
+    (pod: PodInfo | null, options?: { clearOthers?: boolean }) => {
+      if (options?.clearOthers) {
+        updateParams({
+          pod: pod ? makeKey(pod.namespace, pod.name) : null,
+          yaml: null,
+          helm: null,
+          container: null,
+          logs: null,
+          logsNs: null,
+        });
+      } else {
+        updateParams({ pod: pod ? makeKey(pod.namespace, pod.name) : null });
+      }
+    },
+    [updateParams],
+  );
+
+  const yamlParam = searchParams.get("yaml");
+  const yamlResource = useMemo(() => parseYamlKey(yamlParam), [yamlParam]);
+  const setYamlResource = useCallback(
+    (res: { kind: string; name: string; namespace: string } | null) => {
+      updateParams({ yaml: res ? makeYamlKey(res.kind, res.namespace, res.name) : null });
+    },
+    [updateParams],
+  );
+
+  const helmParam = searchParams.get("helm");
+  const helmRelease = useMemo(() => {
+    const parsed = parseKey(helmParam);
+    if (!parsed) return null;
+    return { name: parsed.name, namespace: parsed.ns } as HelmReleaseInfo;
+  }, [helmParam]);
+  const setHelmRelease = useCallback(
+    (rel: HelmReleaseInfo | { name: string; namespace: string } | null) => {
+      updateParams({ helm: rel ? makeKey(rel.namespace, rel.name) : null });
+    },
+    [updateParams],
+  );
+
   const [selectedSecret, setSelectedSecret] = useState<SecretInfo | null>(null);
-  const [showMultiPodLogs, setShowMultiPodLogs] = useState(false);
-  const [multiPodNames, setMultiPodNames] = useState<string[]>([]);
-  const [multiPodNamespace, setMultiPodNamespace] = useState<string | null>(null);
+
+  const containerParam = searchParams.get("container");
+  const containerDetail = useMemo(() => {
+    const parsed = parseKey(containerParam);
+    if (!parsed) return null;
+    return { podName: parsed.name, namespace: parsed.ns };
+  }, [containerParam]);
+  const setContainerDetail = useCallback(
+    (detail: { podName: string; namespace: string } | null) => {
+      updateParams({ container: detail ? makeKey(detail.namespace, detail.podName) : null });
+    },
+    [updateParams],
+  );
+
+  const logsParam = searchParams.get("logs");
+  const logsNsParam = searchParams.get("logsNs");
+  const showMultiPodLogs = !!logsParam && !!logsNsParam;
+  const multiPodNames = useMemo(() => logsParam?.split(",").filter(Boolean) ?? [], [logsParam]);
+  const multiPodNamespace = logsNsParam;
+
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [containerDetail, setContainerDetail] = useState<{ podName: string; namespace: string } | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const queryClient = useQueryClient();
   const deletePodMutation = useAksDeletePod();
@@ -130,31 +256,37 @@ export function AksPage() {
 
   // Initialize namespace selection once namespaces are loaded.
   useEffect(() => {
-    if (!namespaces || namespaces.length === 0 || selectedNamespaces.length > 0) return;
+    const nsParam = searchParams.get("ns");
+    if (nsParam || !namespaces || namespaces.length === 0) return;
     const defaultNs = profile?.config.aksConfig?.defaultNamespace;
     const initial = defaultNs && namespaces.includes(defaultNs) ? [defaultNs] : [namespaces[0]];
-    setSelectedNamespaces(initial);
-  }, [namespaces, profile, selectedNamespaces.length]);
+    updateParams({ ns: initial.join(",") }, { replace: true });
+  }, [searchParams, namespaces, profile, updateParams]);
 
   // Apply a namespace selected from the command palette.
   useEffect(() => {
     const state = location.state as { namespace?: string } | null;
     if (state?.namespace) {
-      setSelectedNamespaces([state.namespace]);
-      setActiveTab("deployments");
-      navigate(location.pathname, { replace: true, state: null });
+      const next = new URLSearchParams();
+      next.set("ns", state.namespace);
+      next.set("tab", "deployments");
+      navigate({ pathname: location.pathname, search: next.toString() }, { replace: true, state: null });
     }
   }, [location, navigate]);
 
   const handleContextChange = useCallback(
     (context: string, defaultNamespace?: string) => {
-      setSelectedPod(null);
-      setYamlResource(null);
-      setHelmRelease(null);
+      const defaultNs = defaultNamespace && namespaces?.includes(defaultNamespace) ? defaultNamespace : (namespaces?.[0] ?? "");
+      updateParams({
+        ns: defaultNs || null,
+        pod: null,
+        yaml: null,
+        helm: null,
+        container: null,
+        logs: null,
+        logsNs: null,
+      });
       setSelectedSecret(null);
-      setContainerDetail(null);
-      setShowMultiPodLogs(false);
-      setSelectedNamespaces(defaultNamespace && namespaces?.includes(defaultNamespace) ? [defaultNamespace] : []);
       setContextMutation.mutate(
         { context, defaultNamespace },
         {
@@ -166,7 +298,7 @@ export function AksPage() {
         },
       );
     },
-    [namespaces, queryClient, refetchNamespaces, refetchTest, setContextMutation],
+    [namespaces, queryClient, refetchNamespaces, refetchTest, setContextMutation, updateParams],
   );
 
   const requestConfirm = (opts: { message: string; resourceName: string; onConfirm: () => void }) => {
@@ -227,43 +359,59 @@ export function AksPage() {
   };
 
   const openLogs = (pod: PodInfo) => {
-    setSelectedPod(pod);
-    setYamlResource(null);
-    setHelmRelease(null);
+    setPodKey(pod, { clearOthers: true });
     setSelectedSecret(null);
-    setContainerDetail(null);
   };
 
   const openYaml = (kind: string, name: string, namespace: string) => {
-    setYamlResource({ kind, name, namespace });
-    setSelectedPod(null);
-    setHelmRelease(null);
+    updateParams({
+      yaml: makeYamlKey(kind, namespace, name),
+      pod: null,
+      helm: null,
+      container: null,
+      logs: null,
+      logsNs: null,
+    });
     setSelectedSecret(null);
-    setContainerDetail(null);
   };
 
   const openContainerDetails = (podName: string, namespace: string) => {
-    setContainerDetail({ podName, namespace });
-    setSelectedPod(null);
-    setYamlResource(null);
-    setHelmRelease(null);
+    updateParams({
+      container: makeKey(namespace, podName),
+      pod: null,
+      yaml: null,
+      helm: null,
+      logs: null,
+      logsNs: null,
+    });
     setSelectedSecret(null);
   };
 
   const openMultiPodLogs = (pods: PodInfo[]) => {
-    setMultiPodNames(pods.map((p) => p.name));
-    setMultiPodNamespace(pods[0]?.namespace ?? namespaceToken);
-    setShowMultiPodLogs(true);
-    setSelectedPod(null);
-    setYamlResource(null);
-    setHelmRelease(null);
+    if (pods.length === 0) return;
+    const ns = pods[0].namespace ?? namespaceToken;
+    updateParams({
+      logs: pods.map((p) => p.name).join(","),
+      logsNs: ns,
+      pod: null,
+      yaml: null,
+      helm: null,
+      container: null,
+    });
     setSelectedSecret(null);
-    setContainerDetail(null);
   };
 
   const handleKillPod = (pod: PodInfo) => {
     requestConfirm({
       message: `Delete pod "${pod.name}"? This is irreversible.`,
+      resourceName: pod.name,
+      onConfirm: () => deletePodMutation.mutate({ ns: pod.namespace, name: pod.name }),
+    });
+  };
+
+  const handleDeletePod = (pod: PodInfo) => {
+    requestConfirm({
+      message: `Delete pod "${pod.name}"? The controller will recreate it.`,
       resourceName: pod.name,
       onConfirm: () => deletePodMutation.mutate({ ns: pod.namespace, name: pod.name }),
     });
@@ -333,7 +481,7 @@ export function AksPage() {
         { label: "Analyze network", icon: "📶", onClick: () => { setActiveTab("analysis"); } },
         { label: "", separator: true, onClick: () => {} },
         { label: "Open shell in pod", icon: ">", onClick: () => {}, disabled: true },
-        { label: "Port-forward…", icon: "→", onClick: () => { setActiveTab("portforward"); setSelectedPod(pod); } },
+        { label: "Port-forward…", icon: "→", onClick: () => { updateParams({ tab: "portforward", pod: makeKey(pod.namespace, pod.name) }); } },
         { label: "", separator: true, onClick: () => {} },
         { label: "Kill Pod", icon: "✕", onClick: () => handleKillPod(pod), destructive: true },
       ],
@@ -698,7 +846,7 @@ export function AksPage() {
             <>
               {activeTab === "deployments" && <DeploymentsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showDeploymentMenu} />}
               {activeTab === "statefulsets" && <StatefulSetsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showStatefulSetMenu} />}
-              {activeTab === "pods" && <PodsTab ns={namespaceToken} isMulti={isMultiNamespace} onPodClick={setSelectedPod} onContextMenu={showPodMenu} />}
+              {activeTab === "pods" && <PodsTab ns={namespaceToken} isMulti={isMultiNamespace} onPodClick={(pod) => setPodKey(pod)} onContextMenu={showPodMenu} onDeletePod={handleDeletePod} />}
               {activeTab === "services" && <ServicesTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showServiceMenu} />}
               {activeTab === "ingresses" && <IngressesTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showIngressMenu} />}
               {activeTab === "httproutes" && <HttpRoutesTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showHttpRouteMenu} />}
@@ -729,7 +877,7 @@ export function AksPage() {
             <PodDetailPanel
               pod={selectedPod}
               ns={selectedPod.namespace}
-              onClose={() => setSelectedPod(null)}
+              onClose={() => setPodKey(null)}
               onViewYaml={() => openYaml("pod", selectedPod.name, selectedPod.namespace)}
             />
           </ResizablePanel>
@@ -790,7 +938,7 @@ export function AksPage() {
             <MultiPodLogView
               ns={multiPodNamespace}
               pods={multiPodNames}
-              onClose={() => setShowMultiPodLogs(false)}
+              onClose={() => updateParams({ logs: null, logsNs: null })}
             />
           </ResizablePanel>
         )}

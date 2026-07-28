@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft } from "lucide-react";
-import { useProfile } from "@/lib/hooks";
+import { useProfile, useSbPeekMessages, useSbPeekDlq } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { EntityTree } from "./EntityTree";
 import { MessageList } from "./MessageList";
@@ -12,16 +12,14 @@ import { BatchSendPanel } from "./BatchSendPanel";
 import { ScheduledMessages } from "./ScheduledMessages";
 import { EntityCommandPalette, type EntityAction } from "./EntityCommandPalette";
 import { BatchReplayPanel } from "./BatchReplayPanel";
+import { loadSbPreferences } from "@/lib/stores/sb-preferences";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 
 export function ServiceBusPage() {
   const { data: profile } = useProfile();
   const location = useLocation();
   const navigate = useNavigate();
-  const [selectedNsId, setSelectedNsId] = useState<string | null>(null);
-  const [selectedEntity, setSelectedEntity] = useState<SbEntityInfo | null>(null);
-  const [selectedMessage, setSelectedMessage] = useState<SbMessage | null>(null);
-  const [viewMode, setViewMode] = useState<"active" | "dlq">("active");
+  const [searchParams, setSearchParams] = useSearchParams();
   const [composerMode, setComposerMode] = useState<ComposerMode | null>(null);
   const [showBatchSend, setShowBatchSend] = useState(false);
   const [showScheduled, setShowScheduled] = useState(false);
@@ -32,24 +30,101 @@ export function ServiceBusPage() {
 
   const namespaces = profile?.serviceBusNamespaces ?? [];
 
+  const updateParams = useCallback(
+    (updates: Record<string, string | null | undefined>, options?: { replace?: boolean }) => {
+      const next = new URLSearchParams(searchParams);
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === null || value === undefined || value === "") next.delete(key);
+        else next.set(key, value);
+      }
+      setSearchParams(next, { replace: options?.replace ?? false, preventScrollReset: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  // Drill-down state is read from the URL so back/forward and deep links work.
+  const selectedNsId = searchParams.get("ns");
+  const setSelectedNsId = useCallback(
+    (id: string | null) => updateParams({ ns: id, entity: null, entityName: null, msg: null, seq: null, view: null }),
+    [updateParams],
+  );
+
+  const selectedEntity = useMemo<SbEntityInfo | null>(() => {
+    const entityPath = searchParams.get("entity");
+    if (!entityPath) return null;
+    const name = searchParams.get("entityName") || entityPath;
+    return { entityPath, name } as SbEntityInfo;
+  }, [searchParams]);
+  const setSelectedEntity = useCallback(
+    (entity: SbEntityInfo | null) =>
+      updateParams({
+        entity: entity?.entityPath ?? null,
+        entityName: entity?.name ?? null,
+        msg: null,
+        seq: null,
+      }),
+    [updateParams],
+  );
+
+  const viewMode = useMemo<"active" | "dlq">(() => {
+    const v = searchParams.get("view");
+    return v === "dlq" ? "dlq" : "active";
+  }, [searchParams]);
+  const setViewMode = useCallback(
+    (mode: "active" | "dlq") => updateParams({ view: mode }),
+    [updateParams],
+  );
+
+  const prefs = useMemo(() => {
+    if (!selectedNsId || !selectedEntity) return { peekCount: 50 };
+    return loadSbPreferences(selectedNsId, selectedEntity.entityPath);
+  }, [selectedNsId, selectedEntity]);
+
+  const activeMessagesQuery = useSbPeekMessages(
+    viewMode === "active" ? selectedNsId : null,
+    selectedEntity?.entityPath ?? null,
+    prefs.peekCount,
+  );
+  const dlqMessagesQuery = useSbPeekDlq(
+    viewMode === "dlq" ? selectedNsId : null,
+    selectedEntity?.entityPath ?? null,
+    prefs.peekCount,
+  );
+  const messages = viewMode === "active" ? activeMessagesQuery.data : dlqMessagesQuery.data;
+
+  const selectedMessage = useMemo<SbMessage | null>(() => {
+    const msgId = searchParams.get("msg");
+    const seq = searchParams.get("seq");
+    if (!msgId || seq === null || !messages) return null;
+    const seqNum = parseInt(seq, 10);
+    return messages.find((m) => m.messageId === msgId && m.sequenceNumber === seqNum) ?? null;
+  }, [searchParams, messages]);
+  const selectMessage = useCallback(
+    (message: SbMessage | null) =>
+      updateParams({
+        msg: message?.messageId ?? null,
+        seq: message?.sequenceNumber != null ? String(message.sequenceNumber) : null,
+      }),
+    [updateParams],
+  );
+
+  // Apply a namespace selected from the command palette.
   useEffect(() => {
     const state = location.state as { nsId?: string } | null;
     if (state?.nsId && namespaces.some((ns) => ns.id === state.nsId)) {
-      setSelectedNsId(state.nsId);
-      setSelectedEntity(null);
-      setSelectedMessage(null);
-      navigate(location.pathname, { replace: true, state: null });
+      const next = new URLSearchParams();
+      next.set("ns", state.nsId);
+      navigate({ pathname: location.pathname, search: next.toString() }, { replace: true, state: null });
     }
   }, [location, navigate, namespaces]);
 
   const handleEntityAction = useCallback((entity: SbEntityInfo, action: EntityAction) => {
     setSelectedEntity(entity);
-    setSelectedMessage(null);
     if (action === "peek-active") setViewMode("active");
     if (action === "peek-dlq") setViewMode("dlq");
     if (action === "send") setComposerMode("compose");
     if (action === "refresh") queryClient.invalidateQueries({ queryKey: ["sb-"] });
-  }, [queryClient]);
+  }, [queryClient, setSelectedEntity, setViewMode]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -74,8 +149,6 @@ export function ServiceBusPage() {
           value={selectedNsId ?? ""}
           onChange={(e) => {
             setSelectedNsId(e.target.value || null);
-            setSelectedEntity(null);
-            setSelectedMessage(null);
           }}
           className="rounded-md border bg-card px-3 py-1.5 text-sm"
         >
@@ -156,7 +229,6 @@ export function ServiceBusPage() {
               selectedEntity={selectedEntity}
               onSelectEntity={(entity, mode) => {
                 setSelectedEntity(entity);
-                setSelectedMessage(null);
                 if (mode) setViewMode(mode);
               }}
             />
@@ -178,7 +250,7 @@ export function ServiceBusPage() {
             <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs" data-testid="sb-breadcrumb">
               <button
                 type="button"
-                onClick={() => { setSelectedEntity(null); setSelectedMessage(null); }}
+                onClick={() => setSelectedEntity(null)}
                 className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
                 title="Return to entity overview"
               >
@@ -225,7 +297,7 @@ export function ServiceBusPage() {
             entity={selectedEntity}
             viewMode={viewMode}
             selectedMessage={selectedMessage}
-            onSelectMessage={setSelectedMessage}
+            onSelectMessage={selectMessage}
           />
         </div>
 
@@ -233,7 +305,7 @@ export function ServiceBusPage() {
         {selectedMessage && (
           <SidePanel
             title="Message details"
-            onClose={() => setSelectedMessage(null)}
+            onClose={() => selectMessage(null)}
             defaultWidth={380}
             minWidth={240}
             maxWidth={600}
@@ -244,9 +316,9 @@ export function ServiceBusPage() {
               nsId={selectedNsId}
               entity={selectedEntity}
               viewMode={viewMode}
-              onEditResubmit={(msg) => { setSelectedMessage(msg); setComposerMode("edit"); }}
-              onReplay={(msg) => { setSelectedMessage(msg); setComposerMode("replay"); }}
-              onSchedule={(msg) => { setSelectedMessage(msg); setComposerMode("schedule"); }}
+              onEditResubmit={(msg) => { selectMessage(msg); setComposerMode("edit"); }}
+              onReplay={(msg) => { selectMessage(msg); setComposerMode("replay"); }}
+              onSchedule={(msg) => { selectMessage(msg); setComposerMode("schedule"); }}
             />
           </SidePanel>
         )}
@@ -299,7 +371,6 @@ export function ServiceBusPage() {
         onClose={() => setShowEntityPalette(false)}
         onSelectEntity={(entity) => {
           setSelectedEntity(entity);
-          setSelectedMessage(null);
         }}
         onAction={handleEntityAction}
       />
