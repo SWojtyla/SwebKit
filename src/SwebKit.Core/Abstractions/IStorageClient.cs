@@ -89,6 +89,9 @@ public interface IStorageClient
 
     /// <summary>Undeletes a soft-deleted blob. Returns Unsupported when soft delete is not enabled or the blob is not found. Never throws.</summary>
     Task<BlobRecoveryResult> UndeleteBlobAsync(string containerName, string blobName, CancellationToken ct = default);
+
+    /// <summary>Lists soft-deleted blobs in a container that are still within retention.</summary>
+    Task<IReadOnlyList<DeletedBlobItem>> ListDeletedBlobsAsync(string containerName, string? prefix = null, CancellationToken ct = default);
 }
 
 public interface IStorageClientFactory

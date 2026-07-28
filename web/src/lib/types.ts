@@ -725,6 +725,20 @@ export interface StorageBlobContent {
   isBinary: boolean;
 }
 
+export interface BlobMutationResult {
+  success: boolean;
+  errorMessage?: string | null;
+  resultBlobPath?: string | null;
+}
+
+export type BlobRecoveryState = "Restored" | "Undeleted" | "Unsupported" | "Failed";
+
+export interface BlobRecoveryResult {
+  state: BlobRecoveryState;
+  resultBlobPath?: string | null;
+  errorMessage?: string | null;
+}
+
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
 export interface AgentReply {

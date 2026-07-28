@@ -74,6 +74,7 @@ public sealed class DemoModeService : IDisposable
             DisplayName = "Demo Storage",
             AccountName = "devstore",
             UseAad = false,
+            AllowMutations = true,
         };
 
     public IStorageClient GetStorageClient() => _storageClient;

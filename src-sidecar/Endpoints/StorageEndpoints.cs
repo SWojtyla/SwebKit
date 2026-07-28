@@ -102,6 +102,159 @@ public static class StorageEndpoints
             var content = await client.GetBlobContentAsync(container, blobName);
             return Results.Ok(content);
         });
+
+        // ── Blob versions ────────────────────────────────────────────────────────
+
+        app.MapGet("/api/storage/{accountId}/containers/{container}/blobs/{blobName}/versions", async (
+            string accountId,
+            string container,
+            string blobName,
+            ProfileRepository profile,
+            IStorageClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return Results.NotFound("Storage account not found");
+
+            var client = CreateClient(config, factory, demo);
+            var versions = await client.ListBlobVersionsAsync(container, blobName);
+            return Results.Ok(versions.Select(v => new
+            {
+                versionId = v.VersionId,
+                lastModified = v.CreatedOn,
+                sizeBytes = v.ContentLength,
+                isCurrent = v.IsCurrentVersion,
+            }));
+        });
+
+        // ── Blob SAS URL ───────────────────────────────────────────────────────
+
+        app.MapGet("/api/storage/{accountId}/containers/{container}/blobs/{blobName}/sas", async (
+            string accountId,
+            string container,
+            string blobName,
+            int expiryMinutes,
+            ProfileRepository profile,
+            IStorageClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return Results.NotFound("Storage account not found");
+
+            var client = CreateClient(config, factory, demo);
+            var sasUrl = await client.GetBlobSasUrlAsync(container, blobName, TimeSpan.FromMinutes(expiryMinutes));
+            return Results.Ok(new { sasUrl = sasUrl.ToString() });
+        });
+
+        // ── Deleted blobs ──────────────────────────────────────────────────────
+
+        app.MapGet("/api/storage/{accountId}/containers/{container}/deleted-blobs", async (
+            string accountId,
+            string container,
+            string? prefix,
+            ProfileRepository profile,
+            IStorageClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return Results.NotFound("Storage account not found");
+
+            var client = CreateClient(config, factory, demo);
+            var deleted = await client.ListDeletedBlobsAsync(container, prefix);
+            return Results.Ok(deleted.Select(d => new
+            {
+                name = d.Name,
+                deletedOn = d.DeletedOn,
+                remainingDays = d.RemainingDays,
+            }));
+        });
+
+        // ── Upload blob ──────────────────────────────────────────────────────────
+
+        app.MapPost("/api/storage/{accountId}/containers/{container}/blobs/{blobName}/upload", async (
+            string accountId,
+            string container,
+            string blobName,
+            BlobUploadRequest request,
+            ProfileRepository profile,
+            IStorageClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return Results.NotFound("Storage account not found");
+            if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
+
+            var client = CreateClient(config, factory, demo);
+            var options = new BlobUploadOptions(container, blobName, Overwrite: false, request.ContentType ?? "text/plain");
+            using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(request.Content ?? string.Empty));
+            var result = await client.UploadBlobAsync(options, stream);
+            return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+        });
+
+        // ── Copy blob ───────────────────────────────────────────────────────────
+
+        app.MapPost("/api/storage/{accountId}/copy", async (
+            string accountId,
+            BlobCopyRequest request,
+            ProfileRepository profile,
+            IStorageClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return Results.NotFound("Storage account not found");
+            if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
+
+            var client = CreateClient(config, factory, demo);
+            var options = new BlobCopyOptions(
+                request.SourceContainer,
+                request.SourceBlob,
+                request.DestContainer,
+                request.DestBlob,
+                Overwrite: false);
+            var result = await client.CopyBlobAsync(options);
+            return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+        });
+
+        // ── Set blob metadata ──────────────────────────────────────────────────
+
+        app.MapPost("/api/storage/{accountId}/containers/{container}/blobs/{blobName}/metadata", async (
+            string accountId,
+            string container,
+            string blobName,
+            Dictionary<string, string> metadata,
+            ProfileRepository profile,
+            IStorageClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return Results.NotFound("Storage account not found");
+            if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
+
+            var client = CreateClient(config, factory, demo);
+            var result = await client.SetBlobMetadataAsync(container, blobName, metadata);
+            return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+        });
+
+        // ── Undelete blob ──────────────────────────────────────────────────────
+
+        app.MapPost("/api/storage/{accountId}/containers/{container}/blobs/{blobName}/undelete", async (
+            string accountId,
+            string container,
+            string blobName,
+            ProfileRepository profile,
+            IStorageClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return Results.NotFound("Storage account not found");
+            if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
+
+            var client = CreateClient(config, factory, demo);
+            var result = await client.UndeleteBlobAsync(container, blobName);
+            return result.State is BlobRecoveryState.Undeleted or BlobRecoveryState.Restored
+                ? Results.Ok(result)
+                : Results.BadRequest(result);
+        });
     }
 
     private static StorageConfig? ResolveStorage(
@@ -126,4 +279,18 @@ public static class StorageEndpoints
 
         return factory.Create(config);
     }
+}
+
+public sealed class BlobUploadRequest
+{
+    public string? Content { get; set; }
+    public string? ContentType { get; set; }
+}
+
+public sealed class BlobCopyRequest
+{
+    public string SourceContainer { get; set; } = string.Empty;
+    public string SourceBlob { get; set; } = string.Empty;
+    public string DestContainer { get; set; } = string.Empty;
+    public string DestBlob { get; set; } = string.Empty;
 }

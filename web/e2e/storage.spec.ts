@@ -32,6 +32,7 @@ test.describe("Storage", () => {
 
     await expect(page.getByTestId("storage-blob-name")).toHaveText("app-settings.json");
     await expect(page.getByTestId("storage-blob-type")).toHaveText("application/json");
+    await page.getByTestId("storage-blob-tab-content").click();
     await expect(page.getByTestId("storage-blob-content")).toContainText("Logging");
   });
 
@@ -60,6 +61,7 @@ test.describe("Storage", () => {
 
     await expect(page.getByTestId("storage-blob-name")).toHaveText("2026-03-21-report.csv");
     await expect(page.getByTestId("storage-blob-type")).toHaveText("text/csv");
+    await page.getByTestId("storage-blob-tab-content").click();
     await expect(page.getByTestId("storage-blob-content")).toContainText("OrderId");
   });
 
@@ -72,6 +74,37 @@ test.describe("Storage", () => {
     // Demo blobs have metadata key "demo" = "true"
     const metadataSection = page.locator("text=Metadata");
     await expect(metadataSection).toBeVisible();
+  });
+
+  test("metadata edits persist after reload", async ({ page }) => {
+    await page.goto("/storage");
+
+    await page.getByTestId("storage-container-configs").click();
+    await page.getByTestId("storage-item-app-settings.json").click();
+
+    await expect(page.getByTestId("storage-metadata-edit-btn")).toBeVisible();
+    await page.getByTestId("storage-metadata-edit-btn").click();
+    await expect(page.getByTestId("storage-metadata-editor")).toBeVisible();
+
+    // Add a new metadata key (default name is "new-key"; the key input is read-only).
+    await page.getByTestId("storage-metadata-add-key").click();
+
+    // The editor starts with the existing "demo" key (inputs 0/1), then the new "new-key" row (inputs 2/3).
+    const newKeyValueInput = page.locator("[data-testid='storage-metadata-editor'] input").nth(3);
+    await newKeyValueInput.fill("e2e-persist-value");
+
+    await page.getByTestId("storage-metadata-save").click();
+
+    // The metadata table should now show the new key/value.
+    await expect(page.getByText("new-key")).toBeVisible();
+    await expect(page.getByText("e2e-persist-value")).toBeVisible();
+
+    // Reload and navigate back to the same blob; the edit must still be present.
+    await page.reload();
+    await page.getByTestId("storage-container-configs").click();
+    await page.getByTestId("storage-item-app-settings.json").click();
+    await expect(page.getByText("new-key")).toBeVisible();
+    await expect(page.getByText("e2e-persist-value")).toBeVisible();
   });
 
   test("blob filter narrows the list", async ({ page }) => {
