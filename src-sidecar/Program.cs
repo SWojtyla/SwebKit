@@ -27,6 +27,7 @@ builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
 builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
 builder.Services.AddSingleton<IAksClientFactory, AksClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
+builder.Services.AddSingleton<RedisKeyspaceHealthAnalyzer>();
 builder.Services.AddSingleton<ScheduledMessageRepository>();
 
 // Monitoring: persisted alert rules + evaluation engine + signal sources

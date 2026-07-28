@@ -4,7 +4,11 @@
 // must be re-resolved at startup (see `initSidecarBaseUrl`) before anything
 // fetches — it can't be a one-shot module-load constant anymore.
 import { getSidecarPort } from "./tauri-bridge";
-import type { RedisPubSubSnapshot } from "./types";
+import type {
+  RedisKeyspaceHealthReport,
+  RedisPrefixMemoryBucket,
+  RedisPubSubSnapshot,
+} from "./types";
 
 let SIDECAR_BASE_URL = (() => {
   return (import.meta as any).env?.VITE_SIDECAR_URL ?? "http://localhost:5199";
@@ -228,4 +232,26 @@ export async function getRedisPubSubSnapshot(cacheId: string, pattern: string | 
   if (pattern) params.set("pattern", pattern);
   const query = params.toString() ? `?${params.toString()}` : "";
   return apiFetch<RedisPubSubSnapshot>(`/api/redis/${cacheId}/pubsub${query}`);
+}
+
+export async function analyzeRedisKeyspace(
+  cacheId: string,
+  keys: string[],
+  separator: string,
+): Promise<RedisKeyspaceHealthReport> {
+  return apiSend<RedisKeyspaceHealthReport>(`/api/redis/${cacheId}/health/analyze`, "POST", {
+    keys,
+    separator,
+  });
+}
+
+export async function getRedisPrefixMemory(
+  cacheId: string,
+  keys: string[],
+  separator: string,
+): Promise<RedisPrefixMemoryBucket[]> {
+  return apiSend<RedisPrefixMemoryBucket[]>(`/api/redis/${cacheId}/prefix-memory`, "POST", {
+    keys,
+    separator,
+  });
 }

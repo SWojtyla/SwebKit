@@ -49,6 +49,47 @@ public static class RedisEndpoints
             return Results.Ok(info);
         });
 
+        // ── Keyspace analysis ────────────────────────────────────────────────
+
+        app.MapPost("/api/redis/{cacheId}/health/analyze", async (
+            string cacheId,
+            RedisAnalysisRequest req,
+            ProfileRepository profile,
+            IRedisClientFactory factory,
+            RedisKeyspaceHealthAnalyzer analyzer,
+            DemoModeService demo) =>
+        {
+            var cache = ResolveCache(cacheId, profile, demo);
+            if (cache is null) return Results.NotFound("Cache not found");
+
+            var client = await CreateClientAsync(cache, factory, demo);
+            var infos = await LoadKeyInfosAsync(client, req.Keys);
+            var serverInfo = await client.GetServerInfoAsync();
+            var estimatedKeyCount = serverInfo.Databases.Sum(database => database.Keys);
+            var report = analyzer.Analyze(infos, estimatedKeyCount, new RedisHealthScanOptions
+            {
+                Separator = req.Separator ?? ":",
+                MaxFindings = req.MaxFindings ?? 250
+            });
+            return Results.Ok(report);
+        });
+
+        app.MapPost("/api/redis/{cacheId}/prefix-memory", async (
+            string cacheId,
+            RedisAnalysisRequest req,
+            ProfileRepository profile,
+            IRedisClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var cache = ResolveCache(cacheId, profile, demo);
+            if (cache is null) return Results.NotFound("Cache not found");
+
+            var client = await CreateClientAsync(cache, factory, demo);
+            var infos = await LoadKeyInfosAsync(client, req.Keys);
+            var buckets = RedisKeyGrouper.ComputePrefixMemory(infos, req.Separator ?? ":");
+            return Results.Ok(buckets);
+        });
+
         // ── Key scan ───────────────────────────────────────────────────────────
 
         app.MapGet("/api/redis/{cacheId}/keys", async (
@@ -402,6 +443,20 @@ public static class RedisEndpoints
         return await factory.CreateAsync(cache);
     }
 
+    private static async Task<IReadOnlyList<RedisKeyInfo>> LoadKeyInfosAsync(
+        IRedisClient client,
+        IReadOnlyList<string> keys)
+    {
+        var normalizedKeys = keys
+            .Where(static key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.Ordinal)
+            .Take(500)
+            .ToList();
+
+        var infos = await Task.WhenAll(normalizedKeys.Select(key => client.GetKeyInfoAsync(key)));
+        return infos.Where(static info => !string.Equals(info.Type, "none", StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
     public sealed class SetTtlRequest
     {
         public int? TtlSeconds { get; set; }
@@ -422,6 +477,13 @@ public static class RedisEndpoints
     public sealed class ExportKeysRequest
     {
         public IReadOnlyList<string> Keys { get; set; } = [];
+    }
+
+    public sealed class RedisAnalysisRequest
+    {
+        public IReadOnlyList<string> Keys { get; set; } = [];
+        public string? Separator { get; set; }
+        public int? MaxFindings { get; set; }
     }
 
     public sealed class SetHashFieldRequest

@@ -29,6 +29,8 @@ import {
   getMonitoringHistory,
   getRedisPubSubSnapshot,
   exportRedisKeys,
+  analyzeRedisKeyspace,
+  getRedisPrefixMemory,
 } from "./api";
 import type {
   MonitoringAlertRule,
@@ -65,6 +67,8 @@ import type {
   RedisSetMembersPage,
   RedisServerInfo,
   RedisSlowLogSummary,
+  RedisKeyspaceHealthReport,
+  RedisPrefixMemoryBucket,
   RedisPubSubSnapshot,
   StorageContainerItem,
   StorageBlobPage,
@@ -739,6 +743,22 @@ export function useRedisServerInfo(cacheId: string | null) {
     queryKey: ["redis", cacheId, "info"],
     queryFn: () => apiFetch<RedisServerInfo>(`/api/redis/${cacheId}/info`),
     enabled: !!cacheId,
+  });
+}
+
+export function useRedisKeyspaceHealth(cacheId: string | null, keys: string[], separator: string) {
+  return useQuery<RedisKeyspaceHealthReport>({
+    queryKey: ["redis", cacheId, "health", keys, separator],
+    queryFn: () => analyzeRedisKeyspace(cacheId!, keys, separator),
+    enabled: !!cacheId && keys.length > 0,
+  });
+}
+
+export function useRedisPrefixMemory(cacheId: string | null, keys: string[], separator: string) {
+  return useQuery<RedisPrefixMemoryBucket[]>({
+    queryKey: ["redis", cacheId, "prefix-memory", keys, separator],
+    queryFn: () => getRedisPrefixMemory(cacheId!, keys, separator),
+    enabled: !!cacheId && keys.length > 0,
   });
 }
 
