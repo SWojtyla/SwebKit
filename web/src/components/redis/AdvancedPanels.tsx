@@ -84,11 +84,11 @@ export function KeyspaceHealthPanel({ info }: { info: RedisServerInfo | undefine
   );
 }
 
-export function PrefixMemoryPanel({ keys, keyTypes }: { keys: string[], keyTypes: Map<string, string> }) {
+export function PrefixMemoryPanel({ keys, keyTypes, separator = ":" }: { keys: string[], keyTypes: Map<string, string>, separator?: string }) {
   const prefixStats: Record<string, { count: number; types: Set<string> }> = {};
   for (const key of keys) {
-    const parts = key.split(":");
-    const prefix = parts.length > 1 ? parts[0] : "(no prefix)";
+    const idx = separator ? key.indexOf(separator) : -1;
+    const prefix = idx !== -1 ? key.slice(0, idx) : "(no prefix)";
     if (!prefixStats[prefix]) prefixStats[prefix] = { count: 0, types: new Set() };
     prefixStats[prefix].count++;
     const type = keyTypes.get(key);
@@ -101,7 +101,7 @@ export function PrefixMemoryPanel({ keys, keyTypes }: { keys: string[], keyTypes
   return (
     <div className="space-y-4" data-testid="prefix-memory-panel">
       <h3 className="text-sm font-semibold">Prefix Memory Breakdown</h3>
-      <p className="text-xs text-muted-foreground">Key distribution by colon-delimited prefix (from current scan results)</p>
+      <p className="text-xs text-muted-foreground">Key distribution by separator-delimited prefix (from current scan results)</p>
 
       <div className="rounded-lg border">
         <table className="w-full text-sm" data-testid="prefix-memory-table">
@@ -116,7 +116,7 @@ export function PrefixMemoryPanel({ keys, keyTypes }: { keys: string[], keyTypes
           <tbody>
             {sorted.map(([prefix, stats]) => (
               <tr key={prefix} className="border-b last:border-0">
-                <td className="px-3 py-2 font-mono text-xs">{prefix}:</td>
+                <td className="px-3 py-2 font-mono text-xs">{prefix === "(no prefix)" ? prefix : `${prefix}${separator}`}</td>
                 <td className="px-3 py-2 text-right">{stats.count}</td>
                 <td className="px-3 py-2 text-right">{((stats.count / total) * 100).toFixed(1)}%</td>
                 <td className="px-3 py-2 text-xs">
