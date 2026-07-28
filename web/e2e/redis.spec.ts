@@ -65,15 +65,16 @@ test.describe("Redis", () => {
     await expect(page.getByTestId("redis-key-user:1001")).not.toBeVisible();
   });
 
-  test("deletes a key", async ({ page }) => {
+  test("deletes a key after confirm", async ({ page }) => {
     await page.goto("/redis");
 
     await expect(page.getByTestId("redis-key-user:1002")).toBeVisible();
     await page.getByTestId("redis-key-user:1002").click();
     await expect(page.getByTestId("redis-detail-key-name")).toHaveText("user:1002");
 
-    page.on("dialog", (d) => d.accept());
     await page.getByTestId("redis-delete-key-btn").click();
+    await expect(page.getByTestId("redis-confirm-bar")).toBeVisible();
+    await page.getByTestId("redis-confirm-yes").click();
 
     // Key should be gone from the list after refresh
     await expect(page.getByTestId("redis-no-key-selected")).toBeVisible();
@@ -118,23 +119,39 @@ test.describe("Redis", () => {
     expect(count).toBeGreaterThan(0);
   });
 
-  test("advanced tab shows keyspace health and ops insights", async ({ page }) => {
+  test("keyspace tab shows health panel", async ({ page }) => {
     await page.goto("/redis");
     await expect(page.getByTestId("redis-page")).toBeVisible();
-    await page.getByTestId("redis-tab-advanced").click();
-    await expect(page.getByTestId("redis-advanced")).toBeVisible();
+    await page.getByTestId("redis-tab-keyspace").click();
+    await expect(page.getByTestId("redis-keyspace")).toBeVisible();
     await expect(page.getByTestId("keyspace-health-panel")).toBeVisible();
     await expect(page.getByTestId("health-hit-rate")).toBeVisible();
     await expect(page.getByTestId("health-memory")).toBeVisible();
+  });
+
+  test("ops tab shows operational insights", async ({ page }) => {
+    await page.goto("/redis");
+    await expect(page.getByTestId("redis-page")).toBeVisible();
+    await page.getByTestId("redis-tab-ops").click();
+    await expect(page.getByTestId("redis-ops")).toBeVisible();
     await expect(page.getByTestId("ops-insights-panel")).toBeVisible();
     await expect(page.getByTestId("ops-total-commands")).toBeVisible();
   });
 
-  test("advanced tab shows prefix memory breakdown", async ({ page }) => {
+  test("prefixes tab shows memory breakdown", async ({ page }) => {
     await page.goto("/redis");
     await expect(page.getByTestId("redis-page")).toBeVisible();
-    await page.getByTestId("redis-tab-advanced").click();
+    await page.getByTestId("redis-tab-prefix").click();
+    await expect(page.getByTestId("redis-prefix")).toBeVisible();
     await expect(page.getByTestId("prefix-memory-panel")).toBeVisible();
     await expect(page.getByTestId("prefix-memory-table")).toBeVisible();
+  });
+
+  test("pub/sub tab is reachable", async ({ page }) => {
+    await page.goto("/redis");
+    await expect(page.getByTestId("redis-page")).toBeVisible();
+    await page.getByTestId("redis-tab-pubsub").click();
+    await expect(page.getByTestId("redis-pubsub")).toBeVisible();
+    await expect(page.getByTestId("redis-pubsub-panel")).toBeVisible();
   });
 });

@@ -186,6 +186,7 @@ app.MapGet("/api/config/profiles", (ProfileRepository repo, DemoModeService demo
             {
                 Caches = [demoCache],
                 ActiveCacheId = demoCache.Id,
+                NamespaceSeparator = ":",
             };
         }
         var demoStorage = demo.GetDemoStorageConfig();

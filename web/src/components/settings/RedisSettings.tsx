@@ -10,7 +10,7 @@ export function RedisSettings() {
   const redis = profile.config.redisConfig ?? {
     caches: [],
     activeCacheId: null,
-    namespaceSeparator: "-",
+    namespaceSeparator: ":",
   };
 
   const update = (patch: Partial<typeof redis>) => {
