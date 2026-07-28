@@ -21,7 +21,16 @@ import {
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
-import { useHealth, useDemoMode, useToggleDemoMode } from "@/lib/hooks";
+import {
+  useAksTestConnection,
+  useDemoMode,
+  useHealth,
+  useProfile,
+  useRedisServerInfo,
+  useSbTestConnection,
+  useStorageContainers,
+  useToggleDemoMode,
+} from "@/lib/hooks";
 import { useSettingsStore } from "@/lib/stores/settings";
 
 const navItems = [
@@ -43,13 +52,48 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { data: health } = useHealth();
+  const { data: profile } = useProfile();
   const { data: demoData } = useDemoMode();
+  const sbHealth = useSbTestConnection(profile?.serviceBusNamespaces[0]?.id ?? null);
+  const aksHealth = useAksTestConnection();
+  const redisHealth = useRedisServerInfo(profile?.config.redisConfig?.caches[0]?.id ?? null);
+  const storageHealth = useStorageContainers(profile?.config.storageAccounts[0]?.id ?? null);
   const toggleDemoMode = useToggleDemoMode();
   const { theme, toggleTheme } = useSettingsStore();
   const sidecarOk = health?.status === "ok";
   const isDemoMode = demoData?.isDemoMode ?? false;
 
   const contextTitle = navItems.find((n) => n.to === location.pathname)?.label ?? "SwebKit";
+  const areaHealth = [
+    {
+      id: "service-bus",
+      label: "Service Bus",
+      configured: isDemoMode || (profile?.serviceBusNamespaces.length ?? 0) > 0,
+      query: sbHealth,
+      connected: sbHealth.data?.connected ?? false,
+    },
+    {
+      id: "aks",
+      label: "AKS",
+      configured: isDemoMode || profile?.config.aksConfig != null,
+      query: aksHealth,
+      connected: aksHealth.data?.connected ?? false,
+    },
+    {
+      id: "redis",
+      label: "Redis",
+      configured: isDemoMode || (profile?.config.redisConfig?.caches.length ?? 0) > 0,
+      query: redisHealth,
+      connected: redisHealth.data != null,
+    },
+    {
+      id: "storage",
+      label: "Storage",
+      configured: isDemoMode || (profile?.config.storageAccounts.length ?? 0) > 0,
+      query: storageHealth,
+      connected: storageHealth.data != null,
+    },
+  ];
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
@@ -159,6 +203,37 @@ export function AppLayout() {
           <div className="flex items-center gap-1.5">
             <Circle className={`h-2 w-2 ${sidecarOk ? "fill-success text-success" : "fill-destructive text-destructive"}`} />
             <span data-testid="status-bar-connection">{sidecarOk ? "Connected" : "Disconnected"}</span>
+          </div>
+          <div className="flex min-w-0 items-center gap-3" data-testid="status-bar-area-health">
+            {areaHealth.map(({ id, label, configured, query, connected }) => {
+              const state = !configured
+                ? "Not configured"
+                : query.isPending
+                  ? "Checking"
+                  : query.isError || !connected
+                    ? "Unavailable"
+                    : "Connected";
+              const stateClass = state === "Connected"
+                ? "fill-success text-success"
+                : state === "Checking"
+                  ? "fill-warning text-warning"
+                  : state === "Not configured"
+                    ? "fill-muted-foreground text-muted-foreground"
+                    : "fill-destructive text-destructive";
+
+              return (
+                <div
+                  key={id}
+                  className="flex items-center gap-1"
+                  data-testid={`status-bar-health-${id}`}
+                  aria-label={`${label}: ${state}`}
+                  title={`${label}: ${state}`}
+                >
+                  <Circle className={`h-1.5 w-1.5 ${stateClass}`} />
+                  <span>{label}</span>
+                </div>
+              );
+            })}
           </div>
           {health?.version && (
             <span>v{health.version}</span>
