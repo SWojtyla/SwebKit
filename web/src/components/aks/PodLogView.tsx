@@ -112,7 +112,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
       if (container) params.set("container", container);
       const selected = rangeOptions.find((r) => r.value === range);
       if (selected?.since) params.set("sinceSeconds", String(selected.since));
-      if (range === "previous") params.set("previousContainer", "true");
+      params.set("previousContainer", String(range === "previous"));
 
       const url = `${SIDECAR_BASE_URL}/api/aks/${ns}/pods/${podName}/logs/stream?${params}`;
       const es = new EventSource(url);
@@ -305,7 +305,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
     if (container) params.set("container", container);
     const selected = rangeOptions.find((r) => r.value === range);
     if (selected?.since) params.set("sinceSeconds", String(selected.since));
-    if (range === "previous") params.set("previousContainer", "true");
+    params.set("previousContainer", String(range === "previous"));
 
     const url = `${SIDECAR_BASE_URL}/api/aks/${ns}/pods/${podName}/logs/stream?${params}`;
     const es = new EventSource(url);
