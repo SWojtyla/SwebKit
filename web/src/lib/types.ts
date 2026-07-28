@@ -846,13 +846,13 @@ export interface EnvVarDetail {
 }
 
 export interface PodMetricInfo {
-  name: string;
+  podName: string;
   namespace: string;
   containers: PodMetricContainer[];
 }
 
 export interface PodMetricContainer {
   name: string;
-  cpuUsage: string;
-  memoryUsage: string;
+  cpuCores: number;
+  memoryBytes: number;
 }

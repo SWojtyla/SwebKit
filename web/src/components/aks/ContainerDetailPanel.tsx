@@ -12,7 +12,7 @@ export function ContainerDetailPanel({ ns, podName }: ContainerDetailPanelProps)
   const [activeContainer, setActiveContainer] = useState(0);
   const [revealedSecrets, setRevealedSecrets] = useState<Set<string>>(new Set());
 
-  const podMetrics = metrics?.find((m) => m.name === podName);
+  const podMetrics = metrics?.find((m) => m.podName === podName);
 
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground">Loading container details...</div>;
@@ -73,11 +73,11 @@ export function ContainerDetailPanel({ ns, podName }: ContainerDetailPanelProps)
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
                 <span className="text-muted-foreground">CPU:</span>{" "}
-                <span className="font-mono">{containerMetric.cpuUsage}</span>
+                <span className="font-mono">{(containerMetric.cpuCores * 1000).toFixed(0)}m</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Memory:</span>{" "}
-                <span className="font-mono">{containerMetric.memoryUsage}</span>
+                <span className="font-mono">{Math.round(containerMetric.memoryBytes / (1024 * 1024))}Mi</span>
               </div>
             </div>
           </div>

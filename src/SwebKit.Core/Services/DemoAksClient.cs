@@ -1287,10 +1287,10 @@ public class DemoAksClient : IAksClient
         {
             for (var i = 0; i < d.Replicas; i++)
             {
-                var suffix = $"{d.Name}-{i:D5}";
+                var suffix = StableSuffix(d.Name, i);
                 metrics.Add(new PodMetrics
                 {
-                    PodName = suffix,
+                    PodName = $"{d.Name}-{suffix[..5]}-{suffix[5..]}",
                     Namespace = ns,
                     Containers =
                     [
