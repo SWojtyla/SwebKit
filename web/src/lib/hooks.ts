@@ -57,6 +57,8 @@ import type {
   ContainerDetail,
   PodMetricInfo,
   HttpRouteInfo,
+  GatewayClassInfo,
+  GatewayInfo,
 } from "./types";
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -541,6 +543,21 @@ export function useAksIngresses(ns: string | null) {
   return useQuery({
     queryKey: ["aks-ingresses", ns],
     queryFn: () => apiFetch<IngressInfo[]>(`/api/aks/${ns}/ingresses`),
+    enabled: !!ns,
+  });
+}
+
+export function useAksGatewayClasses() {
+  return useQuery({
+    queryKey: ["aks-gatewayclasses"],
+    queryFn: () => apiFetch<GatewayClassInfo[]>("/api/aks/gatewayclasses"),
+  });
+}
+
+export function useAksGateways(ns: string | null) {
+  return useQuery({
+    queryKey: ["aks-gateways", ns],
+    queryFn: () => apiFetch<GatewayInfo[]>(`/api/aks/${ns}/gateways`),
     enabled: !!ns,
   });
 }

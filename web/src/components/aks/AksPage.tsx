@@ -24,6 +24,8 @@ import { ConfigMapsTab } from "./ConfigMapsTab";
 import { IngressesTab } from "./IngressesTab";
 import { HttpRoutesTab } from "./HttpRoutesTab";
 import { HpaTab } from "./HpaTab";
+import { GatewayClassesTab } from "./GatewayClassesTab";
+import { GatewaysTab } from "./GatewaysTab";
 import { PodDetailPanel } from "./PodDetailPanel";
 import { YamlViewer } from "./YamlViewer";
 import { HelmDetailPanel } from "./HelmDetailPanel";
@@ -36,29 +38,41 @@ import { ContainerDetailPanel } from "./ContainerDetailPanel";
 import { AksConfirmBar } from "./AksConfirmBar";
 import { NamespaceSelector } from "./NamespaceSelector";
 import { ContextSelector } from "./ContextSelector";
-import type { PodInfo, SecretInfo, DeploymentInfo, ServiceInfo, IngressInfo, StatefulSetInfo, ConfigMapInfo, HelmReleaseInfo, CronJobInfo, JobInfo, HttpRouteInfo } from "@/lib/types";
+import type { PodInfo, SecretInfo, DeploymentInfo, ServiceInfo, IngressInfo, StatefulSetInfo, ConfigMapInfo, HelmReleaseInfo, CronJobInfo, JobInfo, HttpRouteInfo, GatewayClassInfo, GatewayInfo } from "@/lib/types";
 import { RefreshCw, Clock } from "lucide-react";
 import { apiFetch, SIDECAR_BASE_URL } from "@/lib/api";
 
-const tabs = [
+const directTabs = [
   { id: "deployments", label: "Deployments" },
   { id: "statefulsets", label: "StatefulSets" },
   { id: "pods", label: "Pods" },
-  { id: "services", label: "Services" },
-  { id: "ingresses", label: "Ingresses" },
-  { id: "httproutes", label: "HTTPRoutes" },
-  { id: "cronjobs", label: "CronJobs" },
-  { id: "jobs", label: "Jobs" },
   { id: "configmaps", label: "ConfigMaps" },
   { id: "secrets", label: "Secrets" },
-  { id: "hpa", label: "HPA" },
   { id: "helm", label: "Helm" },
+  { id: "jobs", label: "Jobs" },
+  { id: "cronjobs", label: "CronJobs" },
+] as const;
+
+const networkTabs = [
+  { id: "services", label: "Services" },
+  { id: "ingresses", label: "Ingresses" },
+  { id: "gatewayclasses", label: "GatewayClasses" },
+  { id: "gateways", label: "Gateways" },
+  { id: "httproutes", label: "HTTPRoutes" },
+] as const;
+
+const extraTabs = [
+  { id: "hpa", label: "HPA" },
   { id: "events", label: "Events" },
   { id: "portforward", label: "Port-Forward" },
   { id: "analysis", label: "Analysis" },
 ] as const;
 
-type TabId = (typeof tabs)[number]["id"];
+const allTabs = [...directTabs, ...networkTabs, ...extraTabs] as const;
+
+type TabId = (typeof allTabs)[number]["id"];
+
+const networkTabIds = new Set<string>(networkTabs.map((t) => t.id));
 
 interface ContextMenuState {
   x: number;
@@ -74,6 +88,8 @@ interface PendingConfirm {
 
 export function AksPage() {
   const [activeTab, setActiveTab] = useState<TabId>("deployments");
+  const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
+  const isNetworkTabActive = networkTabIds.has(activeTab);
   const [selectedNamespaces, setSelectedNamespaces] = useState<string[]>([]);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(10);
@@ -372,6 +388,29 @@ export function AksPage() {
     });
   };
 
+  const showGatewayClassMenu = (e: React.MouseEvent, gc: GatewayClassInfo) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX, y: e.clientY,
+      items: [
+        { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(gc.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("gatewayclass", gc.name, "default") },
+      ],
+    });
+  };
+
+  const showGatewayMenu = (e: React.MouseEvent, gw: GatewayInfo) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX, y: e.clientY,
+      items: [
+        { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(gw.name) },
+        { label: "View YAML", icon: "{ }", onClick: () => openYaml("gateway", gw.name, gw.namespace) },
+        { label: "Analyze network", icon: "📶", onClick: () => { setActiveTab("analysis"); } },
+      ],
+    });
+  };
+
   const showStatefulSetMenu = (e: React.MouseEvent, sts: StatefulSetInfo) => {
     e.preventDefault();
     setContextMenu({
@@ -572,10 +611,36 @@ export function AksPage() {
 
       {/* Tabs */}
       <div className="flex border-b overflow-x-auto" data-testid="aks-tabs">
-        {tabs.map((tab) => (
+        {directTabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => { setActiveTab(tab.id); setNetworkMenuOpen(false); }}
+            data-testid={`aks-tab-${tab.id}`}
+            className={`whitespace-nowrap px-4 py-2 text-sm font-medium ${
+              activeTab === tab.id
+                ? "border-b-2 border-primary text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setNetworkMenuOpen((v) => !v)}
+          data-testid="aks-tab-network"
+          className={`flex items-center gap-1 whitespace-nowrap px-4 py-2 text-sm font-medium ${
+            isNetworkTabActive || networkMenuOpen
+              ? "border-b-2 border-primary text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Network <span className="text-xs">{networkMenuOpen ? "▲" : "▼"}</span>
+        </button>
+        {extraTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => { setActiveTab(tab.id); setNetworkMenuOpen(false); }}
             data-testid={`aks-tab-${tab.id}`}
             className={`whitespace-nowrap px-4 py-2 text-sm font-medium ${
               activeTab === tab.id
@@ -587,6 +652,26 @@ export function AksPage() {
           </button>
         ))}
       </div>
+
+      {networkMenuOpen && (
+        <div className="flex gap-1 border-b bg-card px-2 py-1" data-testid="aks-network-submenu">
+          <span className="text-xs text-muted-foreground py-1 px-2">Network</span>
+          {networkTabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => { setActiveTab(tab.id); setNetworkMenuOpen(true); }}
+              data-testid={`aks-tab-${tab.id}`}
+              className={`rounded px-3 py-1 text-xs ${
+                activeTab === tab.id
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex flex-1 overflow-hidden" data-testid="aks-content">
@@ -603,6 +688,8 @@ export function AksPage() {
               {activeTab === "services" && <ServicesTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showServiceMenu} />}
               {activeTab === "ingresses" && <IngressesTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showIngressMenu} />}
               {activeTab === "httproutes" && <HttpRoutesTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showHttpRouteMenu} />}
+              {activeTab === "gatewayclasses" && <GatewayClassesTab onContextMenu={showGatewayClassMenu} />}
+              {activeTab === "gateways" && <GatewaysTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showGatewayMenu} />}
               {activeTab === "cronjobs" && <CronJobsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showCronJobMenu} />}
               {activeTab === "jobs" && <JobsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showJobMenu} />}
               {activeTab === "configmaps" && <ConfigMapsTab ns={namespaceToken} isMulti={isMultiNamespace} onContextMenu={showConfigMapMenu} />}

@@ -300,7 +300,7 @@ body {
 }
 
 .log-level-debug {
-  color: var(--muted-foreground);
+  color: var(--info);
 }
 
 .log-level-default {
