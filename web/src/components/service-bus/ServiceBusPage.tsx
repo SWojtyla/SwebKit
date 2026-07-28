@@ -237,6 +237,7 @@ export function ServiceBusPage() {
             defaultWidth={380}
             minWidth={240}
             maxWidth={600}
+            storageKey="service-bus-message-detail"
           >
             <MessageDetail
               message={selectedMessage}

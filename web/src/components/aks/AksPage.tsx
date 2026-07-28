@@ -37,6 +37,7 @@ import { MultiPodLogView } from "./MultiPodLogView";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
 import { AksConfirmBar } from "./AksConfirmBar";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { NamespaceSelector } from "./NamespaceSelector";
 import { ContextSelector } from "./ContextSelector";
 import type { PodInfo, SecretInfo, DeploymentInfo, ServiceInfo, IngressInfo, StatefulSetInfo, ConfigMapInfo, HelmReleaseInfo, CronJobInfo, JobInfo, HttpRouteInfo, GatewayClassInfo, GatewayInfo } from "@/lib/types";
@@ -718,64 +719,92 @@ export function AksPage() {
 
         {/* Side panel for detail views */}
         {selectedPod && (
-          <div className="w-2/5 border-l">
+          <ResizablePanel
+            storageKey="aks-pod-detail"
+            defaultWidth={620}
+            minWidth={320}
+            maxWidth={1200}
+            showHeader={false}
+          >
             <PodDetailPanel
               pod={selectedPod}
               ns={selectedPod.namespace}
               onClose={() => setSelectedPod(null)}
               onViewYaml={() => openYaml("pod", selectedPod.name, selectedPod.namespace)}
             />
-          </div>
+          </ResizablePanel>
         )}
         {yamlResource && (
-          <div className="w-2/5 border-l">
+          <ResizablePanel
+            storageKey="aks-yaml-viewer"
+            defaultWidth={620}
+            minWidth={320}
+            maxWidth={1200}
+            showHeader={false}
+          >
             <YamlViewer
               ns={yamlResource.namespace}
               kind={yamlResource.kind}
               name={yamlResource.name}
               onClose={() => setYamlResource(null)}
             />
-          </div>
+          </ResizablePanel>
         )}
         {helmRelease && (
-          <div className="w-2/5 border-l">
+          <ResizablePanel
+            storageKey="aks-helm-detail"
+            defaultWidth={620}
+            minWidth={320}
+            maxWidth={1200}
+            showHeader={false}
+          >
             <HelmDetailPanel
               ns={helmRelease.namespace}
               release={helmRelease.name}
               onClose={() => setHelmRelease(null)}
             />
-          </div>
+          </ResizablePanel>
         )}
         {selectedSecret && (
-          <div className="w-2/5 border-l">
+          <ResizablePanel
+            storageKey="aks-secret-detail"
+            defaultWidth={620}
+            minWidth={320}
+            maxWidth={1200}
+            showHeader={false}
+          >
             <SecretDetailPanel
               secret={selectedSecret}
               onClose={() => setSelectedSecret(null)}
             />
-          </div>
+          </ResizablePanel>
         )}
         {showMultiPodLogs && multiPodNamespace && (
-          <div className="w-2/5 border-l">
+          <ResizablePanel
+            storageKey="aks-multi-pod-logs"
+            defaultWidth={620}
+            minWidth={320}
+            maxWidth={1200}
+            showHeader={false}
+          >
             <MultiPodLogView
               ns={multiPodNamespace}
               pods={multiPodNames}
               onClose={() => setShowMultiPodLogs(false)}
             />
-          </div>
+          </ResizablePanel>
         )}
         {containerDetail && (
-          <div className="w-2/5 border-l">
-            <div className="flex items-center justify-between border-b px-4 py-2">
-              <span className="text-sm font-medium">{containerDetail.podName}</span>
-              <button
-                onClick={() => setContainerDetail(null)}
-                className="rounded p-1 text-xs hover:bg-accent"
-              >
-                Close
-              </button>
-            </div>
+          <ResizablePanel
+            storageKey="aks-container-detail"
+            title={containerDetail.podName}
+            onClose={() => setContainerDetail(null)}
+            defaultWidth={620}
+            minWidth={320}
+            maxWidth={1200}
+          >
             <ContainerDetailPanel ns={containerDetail.namespace} podName={containerDetail.podName} />
-          </div>
+          </ResizablePanel>
         )}
       </div>
 
