@@ -1,6 +1,15 @@
 import { test, expect } from "@playwright/test";
+import { setDemoMode } from "./helpers";
 
 test.describe("Agent", () => {
+  test.beforeEach(async ({ page }) => {
+    await setDemoMode(page, true);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await setDemoMode(page, false);
+  });
+
   test("displays empty state and input field", async ({ page }) => {
     await page.goto("/agent");
 

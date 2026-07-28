@@ -1,6 +1,15 @@
 import { test, expect } from "@playwright/test";
+import { setDemoMode } from "./helpers";
 
 test.describe("API Client Git Panel", () => {
+  test.beforeEach(async ({ page }) => {
+    await setDemoMode(page, true);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await setDemoMode(page, false);
+  });
+
   test("git toggle button is visible", async ({ page }) => {
     await page.goto("/api-client");
     await expect(page.getByTestId("api-client-git-toggle")).toBeVisible();
@@ -18,6 +27,14 @@ test.describe("API Client Git Panel", () => {
 });
 
 test.describe("Notification System", () => {
+  test.beforeEach(async ({ page }) => {
+    await setDemoMode(page, true);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await setDemoMode(page, false);
+  });
+
   test("notification bell is visible", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByTestId("notification-bell")).toBeVisible();
