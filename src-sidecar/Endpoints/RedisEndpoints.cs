@@ -164,6 +164,44 @@ public static class RedisEndpoints
             return Results.Ok(members);
         });
 
+        app.MapPost("/api/redis/{cacheId}/keys/export", async (
+            string cacheId,
+            ExportKeysRequest req,
+            ProfileRepository profile,
+            IRedisClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var cache = ResolveCache(cacheId, profile, demo);
+            if (cache is null) return Results.NotFound("Cache not found");
+
+            var client = await CreateClientAsync(cache, factory, demo);
+            var data = new Dictionary<string, object?>();
+            foreach (var key in req.Keys)
+            {
+                try
+                {
+                    var info = await client.GetKeyInfoAsync(key);
+                    object? value = info.Type switch
+                    {
+                        "string" => await client.GetKeyValueAsync(key),
+                        "hash" => (await client.GetHashFieldsAsync(key))
+                            .ToDictionary(field => field.Field, field => field.Value),
+                        "list" => await client.GetListItemsAsync(key),
+                        "set" => await client.GetSetMembersAsync(key),
+                        "zset" => await client.GetSortedSetMembersAsync(key),
+                        _ => null
+                    };
+                    data[key] = value;
+                }
+                catch
+                {
+                    data[key] = "<error reading key>";
+                }
+            }
+
+            return Results.Ok(data);
+        });
+
         // ── Key mutations ──────────────────────────────────────────────────────
 
         app.MapPost("/api/redis/{cacheId}/keys/{key}/delete", async (
@@ -379,6 +417,11 @@ public static class RedisEndpoints
     {
         public string? Value { get; set; }
         public int? TtlSeconds { get; set; }
+    }
+
+    public sealed class ExportKeysRequest
+    {
+        public IReadOnlyList<string> Keys { get; set; } = [];
     }
 
     public sealed class SetHashFieldRequest

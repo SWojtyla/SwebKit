@@ -217,6 +217,10 @@ export async function updateRedisSortedSetScore(cacheId: string, key: string, me
   await apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/zset/score`, "POST", { member, score });
 }
 
+export async function exportRedisKeys(cacheId: string, keys: string[]): Promise<Record<string, unknown>> {
+  return apiSend<Record<string, unknown>>(`/api/redis/${cacheId}/keys/export`, "POST", { keys });
+}
+
 // ── Redis Pub/Sub snapshot ───────────────────────────────────────────────────
 
 export async function getRedisPubSubSnapshot(cacheId: string, pattern: string | null = null): Promise<RedisPubSubSnapshot> {

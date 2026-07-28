@@ -19,6 +19,7 @@ import {
   useRedisRenameKey,
   useRedisSetTtl,
   useRedisSetValue,
+  useRedisExportKeys,
 } from "@/lib/hooks";
 import { formatTtl, parseTtl, getTtlColorClass } from "@/lib/redis-format";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
@@ -116,6 +117,7 @@ export function RedisPage() {
   const renameKey = useRedisRenameKey(resolvedCacheId);
   const setTtl = useRedisSetTtl(resolvedCacheId);
   const setValue = useRedisSetValue(resolvedCacheId);
+  const exportKeys = useRedisExportKeys(resolvedCacheId);
   const setHashField = useRedisSetHashField(resolvedCacheId);
   const deleteHashField = useRedisDeleteHashField(resolvedCacheId);
   const updateZsetScore = useRedisUpdateSortedSetScore(resolvedCacheId);
@@ -275,11 +277,8 @@ export function RedisPage() {
     });
   };
 
-  const handleExportSelected = () => {
-    const exportData: Record<string, { type: string; ttl: string | null }> = {};
-    selectedKeys.forEach((key) => {
-      exportData[key] = { type: keyInfo.data?.type ?? "unknown", ttl: keyInfo.data?.ttl ?? null };
-    });
+  const handleExportSelected = async () => {
+    const exportData = await exportKeys.mutateAsync(Array.from(selectedKeys));
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1176,4 +1175,3 @@ function SlowLogTab({ cacheId }: { cacheId: string }) {
     </div>
   );
 }
-
