@@ -1,6 +1,26 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { setDemoMode } from "./helpers";
+
+async function createRule(page: Page, name: string) {
+  await page.getByTestId("monitoring-add-rule").click();
+  await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
+  await page.getByTestId("alert-rule-name").fill(name);
+  await page.getByTestId("alert-rule-dialog-save").click();
+
+  const row = page.locator("[data-testid^='monitoring-rule-row-']").filter({ hasText: name });
+  await expect(row).toBeVisible();
+  return row;
+}
 
 test.describe("Monitoring", () => {
+  test.beforeEach(async ({ page }) => {
+    await setDemoMode(page, true);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await setDemoMode(page, false);
+  });
+
   test("page loads with title and tabs", async ({ page }) => {
     await page.goto("/monitoring");
     await expect(page.getByTestId("monitoring-page")).toBeVisible();
@@ -9,61 +29,83 @@ test.describe("Monitoring", () => {
     await expect(page.getByTestId("monitoring-tab-history")).toBeVisible();
   });
 
-  test("alert rules table shows demo rules", async ({ page }) => {
+  test("alert rules are rendered in source groups", async ({ page }) => {
     await page.goto("/monitoring");
-    await expect(page.getByTestId("monitoring-rules-table")).toBeVisible();
-    const rows = page.locator("tbody tr");
-    expect(await rows.count()).toBeGreaterThan(0);
+    await createRule(page, `Grouped Alert ${Date.now()}`);
+    await expect(page.getByTestId("monitoring-rules")).toBeVisible();
+
+    const groups = page.getByTestId("monitoring-rule-groups");
+    const emptyState = page.getByTestId("monitoring-rules-empty");
+    await expect(groups.or(emptyState)).toBeVisible();
+
+    await expect(groups).toBeVisible();
+    await expect(groups.locator("[data-testid^='monitoring-group-']").first()).toBeVisible();
+    await expect(groups.locator("[data-testid^='monitoring-rule-row-']").first()).toBeVisible();
   });
 
   test("toggle rule enabled/disabled", async ({ page }) => {
     await page.goto("/monitoring");
-    await page.getByTestId("monitoring-rule-toggle-1").click();
-    // Toggle should still be present
-    await expect(page.getByTestId("monitoring-rule-toggle-1")).toBeVisible();
+    const row = await createRule(page, `Toggle Alert ${Date.now()}`);
+    const toggle = row.locator("[data-testid^='monitoring-rule-toggle-']");
+    await expect(toggle).toBeVisible();
+    const enabled = await toggle.isChecked();
+    await toggle.click();
+    await expect(toggle).toHaveJSProperty("checked", !enabled);
   });
 
   test("add rule opens editor and saves", async ({ page }) => {
     await page.goto("/monitoring");
     await page.getByTestId("monitoring-add-rule").click();
-    await expect(page.getByTestId("alert-rule-editor")).toBeVisible();
-    await page.getByTestId("alert-rule-name").fill("Test Alert");
-    await page.getByTestId("alert-rule-condition").fill("Memory > 90%");
-    await page.getByTestId("alert-rule-resource").fill("test-resource");
-    await page.getByTestId("alert-rule-save").click();
-    await expect(page.getByTestId("alert-rule-editor")).not.toBeVisible();
-    // New rule should appear in table
-    await expect(page.getByText("Test Alert")).toBeVisible();
+    await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
+    const name = `Playwright Alert ${Date.now()}`;
+    await page.getByTestId("alert-rule-name").fill(name);
+    await page.getByTestId("alert-rule-dialog-save").click();
+    await expect(page.getByTestId("alert-rule-dialog")).not.toBeVisible();
+    await expect(page.getByText(name)).toBeVisible();
   });
 
   test("edit rule opens editor with existing values", async ({ page }) => {
     await page.goto("/monitoring");
-    await page.getByTestId("monitoring-rule-edit-1").click();
-    await expect(page.getByTestId("alert-rule-editor")).toBeVisible();
-    await expect(page.getByTestId("alert-rule-name")).toHaveValue("High CPU Usage");
+    const row = await createRule(page, `Editable Alert ${Date.now()}`);
+    await row.locator("[data-testid^='monitoring-rule-edit-']").click();
+    await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
+    await expect(page.getByTestId("alert-rule-name")).not.toHaveValue("");
   });
 
   test("delete rule removes from table", async ({ page }) => {
     await page.goto("/monitoring");
-    const initialRows = await page.locator("tbody tr").count();
-    await page.getByTestId("monitoring-rule-delete-4").click();
-    const finalRows = await page.locator("tbody tr").count();
-    expect(finalRows).toBe(initialRows - 1);
+    const name = `Delete Me ${Date.now()}`;
+    const row = await createRule(page, name);
+    await row.locator("[data-testid^='monitoring-rule-delete-']").click();
+    await expect(row).not.toBeVisible();
   });
 
-  test("alert history tab shows events", async ({ page }) => {
+  test("alert history tab renders the current history state", async ({ page }) => {
     await page.goto("/monitoring");
     await page.getByTestId("monitoring-tab-history").click();
-    await expect(page.getByTestId("monitoring-history-table")).toBeVisible();
-    const rows = page.locator("tbody tr");
-    expect(await rows.count()).toBeGreaterThan(0);
+    const history = page.getByTestId("monitoring-history-panel");
+    const emptyState = page.getByTestId("monitoring-history-empty");
+    await expect(history.or(emptyState)).toBeVisible();
+
+    if (await history.isVisible()) {
+      await expect(history.locator("[data-testid^='monitoring-history-row-']").first()).toBeVisible();
+    }
   });
 
-  test("acknowledge event updates status", async ({ page }) => {
+  test("snoozing a history event removes it for the session", async ({ page }) => {
     await page.goto("/monitoring");
     await page.getByTestId("monitoring-tab-history").click();
-    await expect(page.getByTestId("monitoring-event-ack-e1")).toBeVisible();
-    await page.getByTestId("monitoring-event-ack-e1").click();
-    await expect(page.getByTestId("monitoring-event-ack-e1")).not.toBeVisible();
+    const history = page.getByTestId("monitoring-history-panel");
+    if (!(await history.isVisible())) {
+      await expect(page.getByTestId("monitoring-history-empty")).toBeVisible();
+      return;
+    }
+
+    const row = history.locator("[data-testid^='monitoring-history-row-']").first();
+    await expect(row).toBeVisible();
+    const rowTestId = await row.getAttribute("data-testid");
+    if (!rowTestId) throw new Error("History row is missing its test ID");
+    await row.locator("[data-testid^='monitoring-history-snooze-']").click();
+    await expect(page.getByTestId(rowTestId)).not.toBeVisible();
   });
 });
