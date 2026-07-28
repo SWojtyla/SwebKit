@@ -20,6 +20,8 @@ import {
   useRedisSetTtl,
   useRedisSetValue,
   useRedisExportKeys,
+  useRedisKeyspaceHealth,
+  useRedisPrefixMemory,
 } from "@/lib/hooks";
 import { formatTtl, parseTtl, getTtlColorClass } from "@/lib/redis-format";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
@@ -164,6 +166,8 @@ export function RedisPage() {
 
   const scanKeys = scanResult.data?.keys ?? [];
   const displayKeys = cursor === 0 ? scanKeys : allKeys.length > 0 ? [...allKeys, ...scanKeys] : scanKeys;
+  const health = useRedisKeyspaceHealth(resolvedCacheId, displayKeys, namespaceSeparator);
+  const prefixMemory = useRedisPrefixMemory(resolvedCacheId, displayKeys, namespaceSeparator);
 
   const handleDeleteKey = (key: string) => {
     deleteKey.mutate(key, {
@@ -1069,15 +1073,22 @@ export function RedisPage() {
 
         {activeTab === "keyspace" && (
           <div className="flex-1 overflow-auto p-6" data-testid="redis-keyspace">
-            <KeyspaceHealthPanel info={serverInfo.data} />
+            <KeyspaceHealthPanel
+              info={serverInfo.data}
+              report={health.data}
+              onOpenKey={(key) => {
+                setSelectedKey(key);
+                setActiveTab("keys");
+              }}
+            />
           </div>
         )}
 
         {activeTab === "prefix" && (
           <div className="flex-1 overflow-auto p-6" data-testid="redis-prefix">
             <PrefixMemoryPanel
-              keys={displayKeys}
-              keyTypes={new Map(selectedKey ? [[selectedKey, keyInfo.data?.type ?? "unknown"]] : [])}
+              buckets={prefixMemory.data}
+              loading={prefixMemory.isLoading}
               separator={namespaceSeparator}
             />
           </div>

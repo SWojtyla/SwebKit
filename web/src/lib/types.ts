@@ -729,6 +729,45 @@ export interface RedisSlowLogSummary {
   capability: string;
 }
 
+export interface RedisPrefixMemoryBucket {
+  prefix: string;
+  keyCount: number;
+  totalBytes: number;
+  percentage: number;
+}
+
+export type RedisHealthSeverity = "Info" | "Warning" | "Critical";
+
+export interface RedisHealthFinding {
+  entityType: string;
+  riskType: string;
+  severity: RedisHealthSeverity;
+  target: string;
+  reason: string;
+  memoryBytes: number | null;
+  keyCount: number | null;
+  sharePercent: number | null;
+  drillKey: string | null;
+}
+
+export interface RedisKeyspaceHealthReport {
+  generatedAtUtc: string;
+  loadedKeyCount: number;
+  estimatedKeyCount: number | null;
+  coveragePercent: number;
+  isPartialCoverage: boolean;
+  confidenceLabel: string;
+  hotKeySignalsAvailable: boolean;
+  keysWithHotKeySignal: number;
+  keysWithoutHotKeySignal: number;
+  criticalCount: number;
+  warningCount: number;
+  infoCount: number;
+  keyFindingCount: number;
+  prefixFindingCount: number;
+  findings: RedisHealthFinding[];
+}
+
 export interface RedisPubSubChannelInfo {
   channel: string;
   subscriberCount: number;

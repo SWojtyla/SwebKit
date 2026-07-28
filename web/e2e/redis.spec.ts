@@ -149,6 +149,12 @@ test.describe("Redis", () => {
     await expect(page.getByTestId("keyspace-health-panel")).toBeVisible();
     await expect(page.getByTestId("health-hit-rate")).toBeVisible();
     await expect(page.getByTestId("health-memory")).toBeVisible();
+    await expect(page.getByTestId("health-findings")).toBeVisible();
+    await expect(page.getByTestId("health-severity-filters")).toBeVisible();
+    await page.getByTestId("health-filter-critical").click();
+    await expect(page.getByTestId("health-findings")).toContainText("Critical");
+    await page.locator("[data-testid^='health-open-']").first().click();
+    await expect(page.getByTestId("redis-detail-key-name")).toBeVisible();
   });
 
   test("ops tab shows operational insights", async ({ page }) => {
@@ -167,6 +173,8 @@ test.describe("Redis", () => {
     await expect(page.getByTestId("redis-prefix")).toBeVisible();
     await expect(page.getByTestId("prefix-memory-panel")).toBeVisible();
     await expect(page.getByTestId("prefix-memory-table")).toBeVisible();
+    await expect(page.getByTestId("prefix-memory-table")).toContainText("B");
+    await expect(page.getByTestId("prefix-memory-table")).toContainText("%");
   });
 
   test("pub/sub tab is reachable", async ({ page }) => {

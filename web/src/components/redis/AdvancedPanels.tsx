@@ -1,4 +1,11 @@
-import type { RedisServerInfo, RedisSlowLogSummary } from "@/lib/types";
+import { useState } from "react";
+import type {
+  RedisHealthFinding,
+  RedisKeyspaceHealthReport,
+  RedisPrefixMemoryBucket,
+  RedisServerInfo,
+  RedisSlowLogSummary,
+} from "@/lib/types";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
@@ -16,8 +23,18 @@ function formatUptime(seconds: number): string {
   return `${mins}m`;
 }
 
-export function KeyspaceHealthPanel({ info }: { info: RedisServerInfo | undefined }) {
-  if (!info) {
+export function KeyspaceHealthPanel({
+  info,
+  report,
+  onOpenKey,
+}: {
+  info: RedisServerInfo | undefined;
+  report: RedisKeyspaceHealthReport | undefined;
+  onOpenKey: (key: string) => void;
+}) {
+  const [severityFilter, setSeverityFilter] = useState<"All" | "Critical" | "Warning" | "Info">("All");
+
+  if (!info || !report) {
     return <div className="text-sm text-muted-foreground" data-testid="keyspace-health-loading">Loading...</div>;
   }
 
@@ -25,10 +42,30 @@ export function KeyspaceHealthPanel({ info }: { info: RedisServerInfo | undefine
   const memUsage = info.maxMemoryBytes > 0
     ? ((info.usedMemoryBytes / info.maxMemoryBytes) * 100).toFixed(1)
     : null;
+  const findings = report.findings.filter((finding) => severityFilter === "All" || finding.severity === severityFilter);
+  const severityCounts = {
+    Critical: report.criticalCount,
+    Warning: report.warningCount,
+    Info: report.infoCount,
+  };
 
   return (
     <div className="space-y-4" data-testid="keyspace-health-panel">
       <h3 className="text-sm font-semibold">Keyspace Health</h3>
+
+      <div className="flex flex-wrap gap-2" data-testid="health-severity-filters">
+        {(["All", "Critical", "Warning", "Info"] as const).map((severity) => (
+          <button
+            key={severity}
+            type="button"
+            onClick={() => setSeverityFilter(severity)}
+            className={`rounded-full border px-2.5 py-1 text-xs ${severityFilter === severity ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground"}`}
+            data-testid={`health-filter-${severity.toLowerCase()}`}
+          >
+            {severity}{severity === "All" ? ` (${report.findings.length})` : ` (${severityCounts[severity]})`}
+          </button>
+        ))}
+      </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-lg border p-3" data-testid="health-hit-rate">
@@ -80,28 +117,37 @@ export function KeyspaceHealthPanel({ info }: { info: RedisServerInfo | undefine
           </tbody>
         </table>
       </div>
+
+      <div className="rounded-lg border" data-testid="health-findings">
+        <div className="border-b px-3 py-2 text-sm font-medium">
+          Findings ({findings.length}) · {report.confidenceLabel} confidence
+        </div>
+        <div className="divide-y">
+          {findings.map((finding, index) => (
+            <HealthFindingRow key={`${finding.target}-${finding.riskType}-${index}`} finding={finding} onOpenKey={onOpenKey} />
+          ))}
+          {findings.length === 0 && <p className="px-3 py-4 text-sm text-muted-foreground">No findings match this filter.</p>}
+        </div>
+      </div>
     </div>
   );
 }
 
-export function PrefixMemoryPanel({ keys, keyTypes, separator = ":" }: { keys: string[], keyTypes: Map<string, string>, separator?: string }) {
-  const prefixStats: Record<string, { count: number; types: Set<string> }> = {};
-  for (const key of keys) {
-    const idx = separator ? key.indexOf(separator) : -1;
-    const prefix = idx !== -1 ? key.slice(0, idx) : "(no prefix)";
-    if (!prefixStats[prefix]) prefixStats[prefix] = { count: 0, types: new Set() };
-    prefixStats[prefix].count++;
-    const type = keyTypes.get(key);
-    if (type) prefixStats[prefix].types.add(type);
-  }
-
-  const sorted = Object.entries(prefixStats).sort((a, b) => b[1].count - a[1].count);
-  const total = keys.length;
+export function PrefixMemoryPanel({
+  buckets,
+  loading,
+  separator = ":",
+}: {
+  buckets: RedisPrefixMemoryBucket[] | undefined;
+  loading: boolean;
+  separator?: string;
+}) {
+  const sorted = buckets ?? [];
 
   return (
     <div className="space-y-4" data-testid="prefix-memory-panel">
       <h3 className="text-sm font-semibold">Prefix Memory Breakdown</h3>
-      <p className="text-xs text-muted-foreground">Key distribution by separator-delimited prefix (from current scan results)</p>
+      <p className="text-xs text-muted-foreground">Sampled MEMORY USAGE by separator-delimited prefix</p>
 
       <div className="rounded-lg border">
         <table className="w-full text-sm" data-testid="prefix-memory-table">
@@ -109,29 +155,60 @@ export function PrefixMemoryPanel({ keys, keyTypes, separator = ":" }: { keys: s
             <tr>
               <th className="px-3 py-2 text-left">Prefix</th>
               <th className="px-3 py-2 text-right">Keys</th>
-              <th className="px-3 py-2 text-right">% of Total</th>
-              <th className="px-3 py-2 text-left">Types</th>
+              <th className="px-3 py-2 text-right">Bytes</th>
+              <th className="px-3 py-2 text-right">% of Memory</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map(([prefix, stats]) => (
-              <tr key={prefix} className="border-b last:border-0">
-                <td className="px-3 py-2 font-mono text-xs">{prefix === "(no prefix)" ? prefix : `${prefix}${separator}`}</td>
-                <td className="px-3 py-2 text-right">{stats.count}</td>
-                <td className="px-3 py-2 text-right">{((stats.count / total) * 100).toFixed(1)}%</td>
-                <td className="px-3 py-2 text-xs">
-                  {Array.from(stats.types).map((t) => (
-                    <span key={t} className="mr-1 rounded bg-muted px-1.5 py-0.5 text-xs">{t}</span>
-                  ))}
+            {loading && <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">Sampling memory usage...</td></tr>}
+            {!loading && sorted.map((bucket) => (
+              <tr key={bucket.prefix} className="border-b last:border-0">
+                <td className="px-3 py-2 font-mono text-xs">{bucket.prefix.includes(separator) ? bucket.prefix : `${bucket.prefix}${separator}`}</td>
+                <td className="px-3 py-2 text-right">{bucket.keyCount}</td>
+                <td className="px-3 py-2 text-right">{formatBytes(bucket.totalBytes)}</td>
+                <td className="px-3 py-2 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <div className="h-1.5 w-20 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, bucket.percentage)}%` }} /></div>
+                    {bucket.percentage.toFixed(1)}%
+                  </div>
                 </td>
               </tr>
             ))}
-            {sorted.length === 0 && (
-              <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">No keys scanned yet</td></tr>
+            {!loading && sorted.length === 0 && (
+              <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">No keys sampled yet</td></tr>
             )}
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function HealthFindingRow({
+  finding,
+  onOpenKey,
+}: {
+  finding: RedisHealthFinding;
+  onOpenKey: (key: string) => void;
+}) {
+  const severityClass = finding.severity === "Critical"
+    ? "bg-destructive/15 text-destructive"
+    : finding.severity === "Warning"
+      ? "bg-yellow-500/15 text-yellow-600"
+      : "bg-muted text-muted-foreground";
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 text-sm">
+      <span className={`rounded-full px-2 py-0.5 text-xs ${severityClass}`}>{finding.severity}</span>
+      <span className="min-w-0 flex-1">
+        <span className="font-mono text-xs">{finding.target}</span>
+        <span className="ml-2 text-muted-foreground">{finding.reason}</span>
+      </span>
+      {finding.drillKey && (
+        <button type="button" className="shrink-0 text-xs text-primary hover:underline" onClick={() => onOpenKey(finding.drillKey!)} data-testid={`health-open-${finding.drillKey}`}>
+          Open key
+        </button>
+      )}
     </div>
   );
 }
