@@ -153,6 +153,8 @@ test.describe("Redis", () => {
     await expect(page.getByTestId("health-severity-filters")).toBeVisible();
     await page.getByTestId("health-filter-critical").click();
     await expect(page.getByTestId("health-findings")).toContainText("Critical");
+    await page.locator("[data-testid^='health-open-']").first().click();
+    await expect(page.getByTestId("redis-detail-key-name")).toBeVisible();
   });
 
   test("ops tab shows operational insights", async ({ page }) => {
