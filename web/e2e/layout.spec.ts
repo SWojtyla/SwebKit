@@ -17,6 +17,20 @@ test.describe("Layout", () => {
     await expect(page.getByTestId("status-bar-connection")).toBeVisible();
   });
 
+  test("status bar shows live health for each infrastructure area", async ({ page }) => {
+    await page.goto("/");
+    const areas = ["service-bus", "aks", "redis", "storage"];
+
+    for (const area of areas) {
+      await expect(page.getByTestId(`status-bar-health-${area}`)).toBeVisible();
+    }
+
+    await expect(page.getByTestId("status-bar-health-service-bus")).toHaveAttribute("aria-label", "Service Bus: Connected");
+    await expect(page.getByTestId("status-bar-health-aks")).toHaveAttribute("aria-label", "AKS: Connected");
+    await expect(page.getByTestId("status-bar-health-redis")).toHaveAttribute("aria-label", "Redis: Connected");
+    await expect(page.getByTestId("status-bar-health-storage")).toHaveAttribute("aria-label", "Storage: Connected");
+  });
+
   test("command palette opens via trigger button", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("command-palette-trigger").click();
