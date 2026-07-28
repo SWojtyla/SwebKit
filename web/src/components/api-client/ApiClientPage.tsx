@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Globe, Settings2, GitBranch } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Globe, Settings2, GitBranch, AlertTriangle } from "lucide-react";
 import {
   useCollections,
   useUpdateCollections,
@@ -29,6 +30,7 @@ import type {
   ApiEnvironment,
   CollectionVariable,
   AuthConfig,
+  CollectionsStoreResponse,
 } from "@/lib/types";
 
 function newId() {
@@ -217,6 +219,7 @@ export function ApiClientPage() {
   const updateEnvironments = useUpdateEnvironments();
   const location = useLocation();
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
   const environments = envData?.environments ?? [];
   const uiState = envData?.uiState;
@@ -231,6 +234,8 @@ export function ApiClientPage() {
   const [showColVarEditor, setShowColVarEditor] = useState(false);
   const [exportCollectionId, setExportCollectionId] = useState<string | null>(null);
   const [showGitPanel, setShowGitPanel] = useState(false);
+  const [gitRepoPath, setGitRepoPath] = useState(".");
+  const [conflict, setConflict] = useState<{ message: string } | null>(null);
   const [legacyNoticeDismissed, setLegacyNoticeDismissed] = useState(() =>
     typeof window !== "undefined" && localStorage.getItem("swokit-legacy-secret-notice") === "dismissed"
   );
@@ -442,22 +447,39 @@ export function ApiClientPage() {
     setTabs((prev) => prev.map((t) => t.nodeId === _nodeId ? { ...t, name: newName } : t));
   };
 
-  const handleSave = async () => {
-    if (!activeTabId) return;
+  const saveActiveTab = async (baseCollections?: ApiCollection[]): Promise<boolean> => {
+    if (!activeTabId) return false;
     const tabState = tabStates[activeTabId];
-    if (!tabState) return;
+    if (!tabState) return false;
     const tab = tabs.find((t) => t.id === activeTabId);
-    if (!tab) return;
+    if (!tab) return false;
     // The transient credentialSecret must never be written to collections.json.
     const draftForSave = deepClone(tabState.draft);
     if (draftForSave.auth) {
       draftForSave.auth = { ...draftForSave.auth, credentialSecret: null };
     }
-    const next = updateRequestInCollections(collections, tab.nodeId, draftForSave);
-    await updateCollections.mutateAsync(next);
-    setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], dirty: false } }));
-    setTabs((prev) => prev.map((t) => t.id === activeTabId ? { ...t, dirty: false } : t));
+    const base = baseCollections ?? collections;
+    const next = updateRequestInCollections(base, tab.nodeId, draftForSave);
+    try {
+      await updateCollections.mutateAsync(next);
+      setConflict(null);
+      setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], dirty: false } }));
+      setTabs((prev) => prev.map((t) => t.id === activeTabId ? { ...t, dirty: false } : t));
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("409") || message.toLowerCase().includes("conflict")) {
+        setConflict({
+          message: "The collections file changed on disk. Reload the latest version, overwrite with your changes, or save your request as a copy.",
+        });
+      } else {
+        console.error("Failed to save collections", err);
+      }
+      return false;
+    }
   };
+
+  const handleSave = async () => saveActiveTab();
 
   const handleSend = async () => {
     if (!activeTabId) return;
@@ -465,7 +487,8 @@ export function ApiClientPage() {
     if (!tabState) return;
     const tab = tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
-    await handleSave();
+    const saved = await handleSave();
+    if (!saved) return;
     setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], sending: true, response: null } }));
     try {
       // Resolve the secret from the persisted store if the editor has not already loaded it.
@@ -505,6 +528,69 @@ export function ApiClientPage() {
           },
         },
       }));
+    }
+  };
+
+  const getLatestCollections = () =>
+    qc.getQueryData<CollectionsStoreResponse>(["collections"])?.collections ?? collections;
+
+  const handleReloadConflict = async () => {
+    setConflict(null);
+    await qc.refetchQueries({ queryKey: ["collections"] });
+    const latest = getLatestCollections();
+    if (!activeTabId) return;
+    const tab = tabs.find((t) => t.id === activeTabId);
+    if (!tab) return;
+    for (const col of latest) {
+      const node = findRequestNode(col.nodes, tab.nodeId);
+      if (node?.type === "Request" && node.request) {
+        setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], draft: deepClone(node.request!), dirty: false } }));
+        setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, name: node.request!.name, method: node.request!.method, dirty: false } : t)));
+        break;
+      }
+    }
+  };
+
+  const handleOverwriteConflict = async () => {
+    setConflict(null);
+    await qc.refetchQueries({ queryKey: ["collections"] });
+    const latest = getLatestCollections();
+    await saveActiveTab(latest);
+  };
+
+  const handleSaveAsCopy = async () => {
+    setConflict(null);
+    await qc.refetchQueries({ queryKey: ["collections"] });
+    const latest = getLatestCollections();
+    const tab = tabs.find((t) => t.id === activeTabId);
+    const tabState = activeTabId ? tabStates[activeTabId] : null;
+    if (!tab || !tabState) return;
+    const collection = latest.find((c) => c.id === tab.collectionId);
+    if (!collection) return;
+    const copy = deepClone(tabState.draft);
+    copy.id = newId();
+    copy.name = `${copy.name} (copy)`;
+    copy.createdAt = now();
+    copy.updatedAt = now();
+    const node: ApiCollectionNode = { id: copy.id, type: "Request", name: copy.name, isExpanded: true, children: [], defaultAuth: null, request: copy };
+    const next = insertIntoCollection(latest, collection.id, node);
+    try {
+      await updateCollections.mutateAsync(next);
+      const tabId = newId();
+      setTabs((prev) => [...prev, { id: tabId, nodeId: node.id, collectionId: collection.id, name: node.name, method: copy.method, dirty: false }]);
+      setTabStates((prev) => ({ ...prev, [tabId]: { draft: deepClone(copy), response: null, sending: false, dirty: false } }));
+      setActiveTabId(tabId);
+      setSelectedNodeId(node.id);
+      setSelectedCollectionId(collection.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("409") || message.toLowerCase().includes("conflict")) {
+        setConflict({
+          message: "The collections file changed on disk. Reload the latest version, overwrite with your changes, or save your request as a copy.",
+        });
+      } else {
+        console.error("Failed to save as copy", err);
+      }
     }
   };
 
@@ -616,6 +702,18 @@ export function ApiClientPage() {
         </button>
       </div>
 
+      {/* Conflict-resolution banner */}
+      {conflict && (
+        <div className="flex flex-wrap items-center gap-3 border-b bg-destructive/10 px-4 py-3" data-testid="conflict-banner">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
+          <span className="flex-1 text-sm">{conflict.message}</span>
+          <button onClick={handleReloadConflict} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-reload">Reload</button>
+          <button onClick={handleOverwriteConflict} className="rounded bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:opacity-90" data-testid="conflict-overwrite">Overwrite</button>
+          <button onClick={handleSaveAsCopy} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-copy">Save as copy</button>
+          <button onClick={() => setConflict(null)} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-dismiss">Dismiss</button>
+        </div>
+      )}
+
       {/* Legacy plaintext secret notice */}
       {legacySecretCount > 0 && !legacyNoticeDismissed && (
         <div className="flex items-start gap-2 border-b bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100" data-testid="legacy-secret-notice">
@@ -667,6 +765,8 @@ export function ApiClientPage() {
                 onSave={handleSave}
                 sending={tabStates[activeTabId].sending}
                 variableScope={variableScope}
+                environments={environments}
+                captureWarnings={tabStates[activeTabId]?.response?.captureWarnings ?? []}
               />
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
@@ -732,7 +832,7 @@ export function ApiClientPage() {
       {/* Git side panel */}
       {showGitPanel && (
         <div className="fixed right-0 top-0 bottom-0 z-40 w-96 border-l bg-card shadow-lg" data-testid="api-client-git-panel">
-          <GitPanel repoPath="." />
+          <GitPanel repoPath={gitRepoPath} onRepoPathChange={setGitRepoPath} />
           <button
             onClick={() => setShowGitPanel(false)}
             className="absolute right-2 top-2 rounded p-1 text-muted-foreground hover:bg-accent"

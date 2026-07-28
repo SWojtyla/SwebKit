@@ -228,15 +228,41 @@ app.MapGet("/api/config/collections", (CollectionRepository repo, DemoModeServic
     return Results.Ok(collections);
 });
 
-app.MapPut("/api/config/collections", async (CollectionRepository repo, CollectionsStore store, DemoModeService demo) =>
+app.MapGet("/api/config/collections/store", (CollectionRepository repo, DemoModeService demo) =>
+{
+    var collections = repo.Collections.ToList();
+    if (demo.IsDemoMode)
+    {
+        collections.Insert(0, DemoApiCollectionFactory.CreateDemoCollection());
+    }
+    return Results.Ok(new CollectionsStoreResponse { SchemaVersion = 1, Collections = collections, ConcurrencyToken = repo.GetConcurrencyToken() });
+});
+
+app.MapPut("/api/config/collections", async (CollectionRepository repo, CollectionsStore store, DemoModeService demo, string? concurrencyToken = null) =>
 {
     // Demo collection is synthetic and must not be persisted. Remove it before saving.
     if (demo.IsDemoMode || store.Collections.Any(c => c.Id == DemoApiCollectionFactory.DemoCollectionId))
     {
         store.Collections.RemoveAll(c => c.Id == DemoApiCollectionFactory.DemoCollectionId);
     }
+
+    if (!string.IsNullOrWhiteSpace(concurrencyToken))
+    {
+        var currentToken = repo.GetConcurrencyToken();
+        if (currentToken is not null && !string.Equals(concurrencyToken, currentToken, StringComparison.Ordinal))
+        {
+            return Results.Conflict(new { error = "Collections file changed on disk." });
+        }
+    }
+
     await repo.ReplaceStoreAsync(store);
-    return Results.Ok();
+
+    var collections = repo.Collections.ToList();
+    if (demo.IsDemoMode)
+    {
+        collections.Insert(0, DemoApiCollectionFactory.CreateDemoCollection());
+    }
+    return Results.Ok(new CollectionsStoreResponse { SchemaVersion = 1, Collections = collections, ConcurrencyToken = repo.GetConcurrencyToken() });
 });
 
 // ── Config: User Settings ────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Save, Send, Wand2, Minimize2, Eye, Crosshair } from "lucide-react";
-import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig } from "@/lib/types";
+import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig, CaptureRule, ApiEnvironment } from "@/lib/types";
 import { substituteVariables, previewVariables, isLikelySecret } from "@/lib/variable-utils";
 import { saveSecret, getSecret, deleteSecret } from "@/lib/tauri-bridge";
 import { GraphQlPanel } from "./GraphQlPanel";
@@ -10,9 +10,11 @@ interface RequestEditorProps {
   request: HttpRequestEntry;
   onChange: (request: HttpRequestEntry) => void;
   onSend: () => void;
-  onSave: () => void | Promise<void>;
+  onSave: () => void | Promise<unknown>;
   sending: boolean;
   variableScope?: Record<string, string | null>;
+  environments?: ApiEnvironment[];
+  captureWarnings?: string[];
 }
 
 const methods: ApiRequestMethod[] = [
@@ -78,11 +80,10 @@ function tryMinifyJson(content: string): string {
   }
 }
 
-export function RequestEditor({ request, onChange, onSend, onSave, sending, variableScope = {} }: RequestEditorProps) {
+export function RequestEditor({ request, onChange, onSend, onSave, sending, variableScope = {}, environments = [], captureWarnings = [] }: RequestEditorProps) {
   const [activeTab, setActiveTab] = useState<Tab>("params");
   const [dirty, setDirty] = useState(false);
   const [showVarPreview, setShowVarPreview] = useState(false);
-  const [captureRules, setCaptureRules] = useState<{ name: string; path: string; target: string }[]>([]);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSnapshotRef = useRef<HttpRequestEntry>(request);
   const onSaveRef = useRef(onSave);
@@ -161,6 +162,26 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
     });
   const removeQueryParam = (index: number) =>
     onChange({ ...request, queryParams: request.queryParams.filter((_, i) => i !== index) });
+
+  const setCaptureRules = (rules: CaptureRule[]) => onChange({ ...request, captureRules: rules });
+  const updateCaptureRule = (index: number, patch: Partial<CaptureRule>) => {
+    const next = request.captureRules.map((r, i) => (i === index ? { ...r, ...patch } : r));
+    setCaptureRules(next);
+  };
+  const addCaptureRule = () =>
+    setCaptureRules([
+      ...request.captureRules,
+      {
+        id: crypto.randomUUID(),
+        targetVariable: "",
+        targetScope: "collection",
+        source: "BodyJsonPath",
+        jsonPath: "",
+        headerName: "",
+        isEnabled: true,
+      },
+    ]);
+  const removeCaptureRule = (index: number) => setCaptureRules(request.captureRules.filter((_, i) => i !== index));
 
   const CREDENTIAL_KEY_PREFIX = "sw-secret:";
   const isGeneratedCredentialKey = (key: string | null | undefined) =>
@@ -662,45 +683,73 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
               <span className="text-sm font-medium">Capture Rules</span>
             </div>
             <p className="mb-3 text-xs text-muted-foreground">Extract values from responses and save them to variables automatically.</p>
-            {captureRules.map((rule, i) => (
-              <div key={i} className="mb-2 flex items-center gap-2" data-testid={`capture-rule-row-${i}`}>
+            {request.captureRules.map((rule, i) => (
+              <div key={rule.id} className="mb-2 flex flex-wrap items-center gap-2" data-testid={`capture-rule-row-${i}`}>
                 <input
-                  type="text"
-                  value={rule.name}
-                  onChange={(e) => {
-                    const next = [...captureRules];
-                    next[i] = { ...next[i], name: e.target.value };
-                    setCaptureRules(next);
-                  }}
-                  placeholder="Variable name"
-                  className="w-32 rounded border bg-background px-2 py-1 text-sm"
-                />
-                <input
-                  type="text"
-                  value={rule.path}
-                  onChange={(e) => {
-                    const next = [...captureRules];
-                    next[i] = { ...next[i], path: e.target.value };
-                    setCaptureRules(next);
-                  }}
-                  placeholder="JSONPath (e.g. $.data.id)"
-                  className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
+                  type="checkbox"
+                  checked={rule.isEnabled}
+                  onChange={(e) => updateCaptureRule(i, { isEnabled: e.target.checked })}
+                  data-testid={`capture-rule-enabled-${i}`}
                 />
                 <select
-                  value={rule.target}
-                  onChange={(e) => {
-                    const next = [...captureRules];
-                    next[i] = { ...next[i], target: e.target.value };
-                    setCaptureRules(next);
-                  }}
+                  value={rule.source}
+                  onChange={(e) => updateCaptureRule(i, { source: e.target.value as CaptureRule["source"] })}
                   className="rounded border bg-background px-2 py-1 text-xs"
+                  data-testid={`capture-rule-source-${i}`}
                 >
-                  <option value="env">Environment</option>
+                  <option value="BodyJsonPath">Body (JSONPath)</option>
+                  <option value="ResponseHeader">Header</option>
+                  <option value="StatusCode">Status Code</option>
+                </select>
+                {rule.source === "BodyJsonPath" && (
+                  <input
+                    type="text"
+                    value={rule.jsonPath ?? ""}
+                    onChange={(e) => updateCaptureRule(i, { jsonPath: e.target.value || null })}
+                    placeholder="JSONPath (e.g. $.data.id)"
+                    className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
+                    data-testid={`capture-rule-path-${i}`}
+                  />
+                )}
+                {rule.source === "ResponseHeader" && (
+                  <input
+                    type="text"
+                    value={rule.headerName ?? ""}
+                    onChange={(e) => updateCaptureRule(i, { headerName: e.target.value || null })}
+                    placeholder="Header name (e.g. X-Request-Id)"
+                    className="flex-1 rounded border bg-background px-2 py-1 text-sm"
+                    data-testid={`capture-rule-header-${i}`}
+                  />
+                )}
+                {rule.source === "StatusCode" && (
+                  <span className="flex-1 rounded border bg-background px-2 py-1 text-sm text-muted-foreground" data-testid={`capture-rule-static-${i}`}>
+                    status code
+                  </span>
+                )}
+                <span className="text-sm text-muted-foreground">→</span>
+                <input
+                  type="text"
+                  value={rule.targetVariable}
+                  onChange={(e) => updateCaptureRule(i, { targetVariable: e.target.value })}
+                  placeholder="Variable name"
+                  className="w-32 rounded border bg-background px-2 py-1 text-sm"
+                  data-testid={`capture-rule-target-${i}`}
+                />
+                <select
+                  value={rule.targetScope}
+                  onChange={(e) => updateCaptureRule(i, { targetScope: e.target.value })}
+                  className="rounded border bg-background px-2 py-1 text-xs"
+                  data-testid={`capture-rule-scope-${i}`}
+                >
                   <option value="collection">Collection</option>
+                  {environments.map((env) => (
+                    <option key={env.id} value={env.id}>{env.name}</option>
+                  ))}
                 </select>
                 <button
                   className="text-xs text-destructive"
-                  onClick={() => setCaptureRules(captureRules.filter((_, j) => j !== i))}
+                  onClick={() => removeCaptureRule(i)}
+                  data-testid={`capture-rule-remove-${i}`}
                 >
                   Remove
                 </button>
@@ -708,11 +757,19 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
             ))}
             <button
               className="text-sm text-primary hover:underline"
-              onClick={() => setCaptureRules([...captureRules, { name: "", path: "", target: "env" }])}
+              onClick={addCaptureRule}
               data-testid="add-capture-rule"
             >
               + Add capture rule
             </button>
+            {captureWarnings.length > 0 && (
+              <div className="mt-3 border-t pt-2" data-testid="capture-warnings">
+                <div className="mb-1 text-xs font-medium text-amber-600">Capture warnings</div>
+                {captureWarnings.map((w, i) => (
+                  <div key={i} className="text-xs text-amber-700">{w}</div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

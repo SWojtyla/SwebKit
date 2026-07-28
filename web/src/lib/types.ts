@@ -241,6 +241,12 @@ export interface ApiCollectionNode {
   request: HttpRequestEntry | null;
 }
 
+export interface CollectionsStoreResponse {
+  schemaVersion: number;
+  collections: ApiCollection[];
+  concurrencyToken: string | null;
+}
+
 export interface HttpRequestEntry {
   id: string;
   name: string;

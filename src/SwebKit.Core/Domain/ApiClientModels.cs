@@ -359,6 +359,14 @@ public sealed class CollectionsStore
     public List<ApiCollection> Collections { get; set; } = [];
 }
 
+/// <summary>Response wrapper for the collections store, including a concurrency token for stale-file detection.</summary>
+public sealed class CollectionsStoreResponse
+{
+    public int SchemaVersion { get; set; } = 1;
+    public List<ApiCollection> Collections { get; set; } = [];
+    public string? ConcurrencyToken { get; set; }
+}
+
 /// <summary>Root object stored in <c>environments.json</c>.</summary>
 public sealed class EnvironmentsStore
 {
