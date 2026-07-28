@@ -20,6 +20,7 @@ import {
 import {
   apiFetch,
   apiSend,
+  apiUpload,
   SIDECAR_BASE_URL,
   getMonitoringRules,
   createMonitoringRule,
@@ -66,6 +67,7 @@ import type {
   BlobProperties,
   StorageBlobContent,
   BlobMutationResult,
+  BlobVersionComparison,
   BlobRecoveryResult,
   AgentReply,
   AgentStatus,
@@ -980,11 +982,36 @@ export function useBlobVersions(accountId: string | null, container: string | nu
   });
 }
 
+export function useBlobVersionComparison(
+  accountId: string | null,
+  container: string | null,
+  blobName: string | null,
+  baseVersionId: string | null,
+  compareVersionId: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "versions", "compare", baseVersionId, compareVersionId],
+    queryFn: () => {
+      const params = new URLSearchParams({ baseVersionId: baseVersionId! });
+      if (compareVersionId) params.set("compareVersionId", compareVersionId);
+      return apiFetch<BlobVersionComparison>(
+        `/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/versions/compare?${params}`,
+      );
+    },
+    enabled: enabled && !!accountId && !!container && !!blobName && !!baseVersionId,
+  });
+}
+
 export function useUploadBlob(accountId: string | null, container: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ blobName, content, contentType }: { blobName: string; content: string; contentType?: string }) =>
-      apiSend(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName)}/upload`, "POST", { content, contentType }),
+    mutationFn: ({ blobName, file, onProgress }: { blobName: string; file: File; onProgress?: (percent: number) => void }) =>
+      apiUpload(
+        `/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName)}/upload`,
+        file,
+        onProgress,
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs"] });
     },
@@ -994,10 +1021,25 @@ export function useUploadBlob(accountId: string | null, container: string | null
 export function useCopyBlob(accountId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ sourceContainer, sourceBlob, destContainer, destBlob }: { sourceContainer: string; sourceBlob: string; destContainer: string; destBlob: string }) =>
-      apiSend(`/api/storage/${accountId}/copy`, "POST", { sourceContainer, sourceBlob, destContainer, destBlob }),
+    mutationFn: ({ sourceContainer, sourceBlob, destContainer, destBlob, overwrite }: { sourceContainer: string; sourceBlob: string; destContainer: string; destBlob: string; overwrite: boolean }) =>
+      apiSend(`/api/storage/${accountId}/copy`, "POST", { sourceContainer, sourceBlob, destContainer, destBlob, overwrite }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["storage", accountId] });
+    },
+  });
+}
+
+export function useRestoreBlobVersion(accountId: string | null, container: string | null, blobName: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (versionId: string) =>
+      apiSend<BlobRecoveryResult>(
+        `/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/versions/${encodeURIComponent(versionId)}/restore`,
+        "POST",
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs", blobName] });
+      qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs"] });
     },
   });
 }

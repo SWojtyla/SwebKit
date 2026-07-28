@@ -8,14 +8,18 @@ import {
   useBlobContent,
   useBlobSasUrl,
   useBlobVersions,
+  useBlobVersionComparison,
   useUploadBlob,
   useCopyBlob,
+  useRestoreBlobVersion,
   useDeletedBlobs,
   useSetBlobMetadata,
 } from "@/lib/hooks";
 import type { StorageBlobItem } from "@/lib/types";
 import { Download, Link as LinkIcon, Check, Plus, Trash2, RotateCcw, Upload, Copy as CopyIcon } from "lucide-react";
 import { BlobRecoveryPanel } from "./BlobRecoveryPanel";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { useDropzone } from "react-dropzone";
 
 function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null) return "-";
@@ -60,11 +64,18 @@ export function StoragePage() {
   const [showSasUrl, setShowSasUrl] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [uploadBlobName, setUploadBlobName] = useState("");
-  const [uploadContent, setUploadContent] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [showCopyDialog, setShowCopyDialog] = useState(false);
   const [copyDestContainer, setCopyDestContainer] = useState("");
   const [copyDestBlob, setCopyDestBlob] = useState("");
+  const [copyOverwrite, setCopyOverwrite] = useState(false);
+  const [copyConfirming, setCopyConfirming] = useState(false);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [versionBaseId, setVersionBaseId] = useState<string | null>(null);
+  const [versionCompareId, setVersionCompareId] = useState<string | null>(null);
+  const [versionCompareRequested, setVersionCompareRequested] = useState(false);
+  const [versionRestoreId, setVersionRestoreId] = useState<string | null>(null);
 
   useEffect(() => {
     const state = location.state as { accountId?: string } | null;
@@ -81,10 +92,23 @@ export function StoragePage() {
   const blobContent = useBlobContent(resolvedAccountId, selectedContainer, selectedBlob);
   const sasUrl = useBlobSasUrl(resolvedAccountId, selectedContainer, selectedBlob, 60);
   const blobVersions = useBlobVersions(resolvedAccountId, selectedContainer, selectedBlob);
+  const versionComparison = useBlobVersionComparison(resolvedAccountId, selectedContainer, selectedBlob, versionBaseId, versionCompareId, versionCompareRequested);
   const uploadBlob = useUploadBlob(resolvedAccountId, selectedContainer);
   const copyBlob = useCopyBlob(resolvedAccountId);
+  const restoreBlobVersion = useRestoreBlobVersion(resolvedAccountId, selectedContainer, selectedBlob);
   const setBlobMetadata = useSetBlobMetadata(resolvedAccountId, selectedContainer, selectedBlob);
   const deletedBlobs = useDeletedBlobs(resolvedAccountId, selectedContainer);
+  const uploadDropzone = useDropzone({
+    onDrop: (files: File[]) => {
+      const file = files[0];
+      if (!file) return;
+      setUploadFile(file);
+      setUploadBlobName(file.name);
+      setUploadProgress(0);
+    },
+    multiple: false,
+    disabled: !allowMutations,
+  });
 
   const handleSelectContainer = (name: string) => {
     setSelectedContainer(name);
@@ -121,6 +145,10 @@ export function StoragePage() {
 
   const handleSelectBlob = (name: string) => {
     setSelectedBlob(name);
+    setVersionBaseId(null);
+    setVersionCompareId(null);
+    setVersionCompareRequested(false);
+    setVersionRestoreId(null);
   };
 
   const displayItems = continuationToken === null ? (blobs.data?.items ?? []) : [...allItems, ...(blobs.data?.items ?? [])];
@@ -310,6 +338,22 @@ export function StoragePage() {
                   <div className="border-b p-3" data-testid="storage-upload-panel">
                     <h4 className="mb-2 text-xs font-semibold">Upload Blob</h4>
                     <div className="space-y-2">
+                      <div
+                        {...uploadDropzone.getRootProps()}
+                        className={`cursor-pointer rounded border border-dashed px-3 py-4 text-center text-xs ${
+                          uploadDropzone.isDragActive ? "border-primary bg-primary/10" : "hover:bg-accent"
+                        }`}
+                        data-testid="storage-upload-dropzone"
+                      >
+                        <input {...uploadDropzone.getInputProps()} data-testid="storage-upload-file" />
+                        {uploadFile ? (
+                          <span className="font-mono">{uploadFile.name} ({formatBytes(uploadFile.size)})</span>
+                        ) : uploadDropzone.isDragActive ? (
+                          <span>Drop the file here</span>
+                        ) : (
+                          <span>Drop a file here or click to browse</span>
+                        )}
+                      </div>
                       <input
                         type="text"
                         value={uploadBlobName}
@@ -318,23 +362,31 @@ export function StoragePage() {
                         className="w-full rounded border bg-card px-2 py-1 text-xs"
                         data-testid="storage-upload-name"
                       />
-                      <textarea
-                        value={uploadContent}
-                        onChange={(e) => setUploadContent(e.target.value)}
-                        placeholder="Content..."
-                        className="w-full rounded border bg-card px-2 py-1 text-xs font-mono h-24"
-                        data-testid="storage-upload-content"
-                      />
+                      {uploadBlob.isPending && (
+                        <div className="space-y-1" data-testid="storage-upload-progress">
+                          <div className="h-1.5 overflow-hidden rounded bg-muted">
+                            <div className="h-full bg-primary transition-all" style={{ width: `${uploadProgress}%` }} />
+                          </div>
+                          <div className="text-right text-xs text-muted-foreground">{uploadProgress}%</div>
+                        </div>
+                      )}
                       <button
                         onClick={() => {
-                          if (uploadBlobName.trim() && uploadContent) {
-                            uploadBlob.mutate({ blobName: uploadBlobName.trim(), content: uploadContent });
-                            setUploadBlobName("");
-                            setUploadContent("");
-                            setShowUpload(false);
+                          if (uploadBlobName.trim() && uploadFile) {
+                            uploadBlob.mutate(
+                              { blobName: uploadBlobName.trim(), file: uploadFile, onProgress: setUploadProgress },
+                              {
+                                onSuccess: () => {
+                                  setUploadBlobName("");
+                                  setUploadFile(null);
+                                  setUploadProgress(100);
+                                  setShowUpload(false);
+                                },
+                              },
+                            );
                           }
                         }}
-                        disabled={!uploadBlobName.trim() || !uploadContent || uploadBlob.isPending}
+                        disabled={!uploadBlobName.trim() || !uploadFile || uploadBlob.isPending}
                         className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50"
                         data-testid="storage-upload-confirm"
                       >
@@ -444,7 +496,19 @@ export function StoragePage() {
                         <LinkIcon className="h-3.5 w-3.5" />
                       </button>
                       <span title={allowMutations ? "Copy blob" : "Mutations are disabled for this storage account. Enable allowMutations in Settings."}>
-                        <button onClick={() => setShowCopyDialog(true)} disabled={!allowMutations} className="text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50" data-testid="storage-copy-blob-btn">
+                        <button
+                          onClick={() => {
+                            setCopyDestContainer(selectedContainer ?? "");
+                            setCopyDestBlob(blobProps.data.name);
+                            setCopyOverwrite(false);
+                            setCopyConfirming(false);
+                            setCopyStatus(null);
+                            setShowCopyDialog(true);
+                          }}
+                          disabled={!allowMutations}
+                          className="text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                          data-testid="storage-copy-blob-btn"
+                        >
                           <CopyIcon className="h-3.5 w-3.5" />
                         </button>
                       </span>
@@ -566,31 +630,117 @@ export function StoragePage() {
                       {blobVersions.isLoading && <div className="text-sm text-muted-foreground">Loading versions...</div>}
                       {blobVersions.error && <div className="text-sm text-destructive">Error: {blobVersions.error.message}</div>}
                       {blobVersions.data && (
-                        <div className="rounded-md border overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted">
-                              <tr>
-                                <th className="px-3 py-2 text-left font-medium">Version ID</th>
-                                <th className="px-3 py-2 text-left font-medium">Modified</th>
-                                <th className="px-3 py-2 text-right font-medium">Size</th>
-                                <th className="px-3 py-2 text-center font-medium">Current</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {blobVersions.data.map((v) => (
-                                <tr key={v.versionId} className="border-t">
-                                  <td className="px-3 py-2 font-mono text-xs">{v.versionId}</td>
-                                  <td className="px-3 py-2 text-xs">{formatDate(v.lastModified)}</td>
-                                  <td className="px-3 py-2 text-right text-xs">{formatBytes(v.sizeBytes)}</td>
-                                  <td className="px-3 py-2 text-center">{v.isCurrent && <Check className="inline h-3 w-3 text-green-500" />}</td>
+                        <>
+                          <div className="mb-3 rounded-md border bg-muted/20 p-3" data-testid="storage-version-compare-controls">
+                            <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                              <label className="text-xs">
+                                <span className="mb-1 block text-muted-foreground">Base version</span>
+                                <select
+                                  value={versionBaseId ?? ""}
+                                  onChange={(e) => { setVersionBaseId(e.target.value || null); setVersionCompareRequested(false); }}
+                                  className="w-full rounded border bg-card px-2 py-1.5 font-mono text-xs"
+                                  data-testid="storage-version-base"
+                                >
+                                  <option value="">Select a version</option>
+                                  {blobVersions.data.map((v) => <option key={v.versionId} value={v.versionId}>{v.versionId}{v.isCurrent ? " (current)" : ""}</option>)}
+                                </select>
+                              </label>
+                              <label className="text-xs">
+                                <span className="mb-1 block text-muted-foreground">Compare with</span>
+                                <select
+                                  value={versionCompareId ?? ""}
+                                  onChange={(e) => { setVersionCompareId(e.target.value || null); setVersionCompareRequested(false); }}
+                                  className="w-full rounded border bg-card px-2 py-1.5 font-mono text-xs"
+                                  data-testid="storage-version-compare"
+                                >
+                                  <option value="">Current version</option>
+                                  {blobVersions.data.map((v) => <option key={v.versionId} value={v.versionId}>{v.versionId}{v.isCurrent ? " (current)" : ""}</option>)}
+                                </select>
+                              </label>
+                              <button
+                                onClick={() => setVersionCompareRequested(true)}
+                                disabled={!versionBaseId || versionComparison.isFetching}
+                                className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
+                                data-testid="storage-version-compare-btn"
+                              >
+                                {versionComparison.isFetching ? "Comparing..." : "Compare"}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="rounded-md border overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-medium">Version ID</th>
+                                  <th className="px-3 py-2 text-left font-medium">Modified</th>
+                                  <th className="px-3 py-2 text-right font-medium">Size</th>
+                                  <th className="px-3 py-2 text-center font-medium">Current</th>
+                                  <th className="px-3 py-2 text-right font-medium">Actions</th>
                                 </tr>
-                              ))}
-                              {blobVersions.data.length === 0 && (
-                                <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">No versions available</td></tr>
+                              </thead>
+                              <tbody>
+                                {blobVersions.data.map((v) => (
+                                  <tr key={v.versionId} className="border-t">
+                                    <td className="px-3 py-2 font-mono text-xs">{v.versionId}</td>
+                                    <td className="px-3 py-2 text-xs">{formatDate(v.lastModified)}</td>
+                                    <td className="px-3 py-2 text-right text-xs">{formatBytes(v.sizeBytes)}</td>
+                                    <td className="px-3 py-2 text-center">{v.isCurrent && <Check className="inline h-3 w-3 text-green-500" />}</td>
+                                    <td className="px-3 py-2 text-right">
+                                      {!v.isCurrent && allowMutations && (
+                                        <button
+                                          onClick={() => setVersionRestoreId(v.versionId)}
+                                          className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                                          data-testid={`storage-version-restore-${v.versionId}`}
+                                        >
+                                          Restore
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                                {blobVersions.data.length === 0 && (
+                                  <tr><td colSpan={5} className="px-3 py-4 text-center text-muted-foreground">No versions available</td></tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                          {versionComparison.error && <div className="mt-3 text-sm text-destructive">Error: {versionComparison.error.message}</div>}
+                          {versionComparison.data && (
+                            <div className="mt-3 space-y-3 rounded-md border p-3" data-testid="storage-version-diff-pane">
+                              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                <span>Base: <strong className="font-mono text-foreground">{versionComparison.data.baseVersionId}</strong></span>
+                                <span>Compare: <strong className="font-mono text-foreground">{versionComparison.data.compareVersionId ?? "current"}</strong></span>
+                                <span>Size: {formatBytes(versionComparison.data.baseSizeBytes)} → {formatBytes(versionComparison.data.compareSizeBytes)}</span>
+                              </div>
+                              <div>
+                                <h4 className="mb-1 text-xs font-semibold">Metadata changes</h4>
+                                <div className="text-xs text-muted-foreground">
+                                  Added: {versionComparison.data.metadataDiff.addedKeys.join(", ") || "none"} · Removed: {versionComparison.data.metadataDiff.removedKeys.join(", ") || "none"} · Changed: {versionComparison.data.metadataDiff.changedKeys.join(", ") || "none"}
+                                </div>
+                              </div>
+                              {versionComparison.data.contentComparePossible && versionComparison.data.textDiff && (
+                                <pre className="max-h-60 overflow-auto rounded bg-black p-3 text-xs text-green-400" data-testid="storage-version-text-diff">
+                                  {versionComparison.data.textDiff}
+                                </pre>
                               )}
-                            </tbody>
-                          </table>
-                        </div>
+                            </div>
+                          )}
+                          {versionRestoreId && (
+                            <ConfirmBar
+                              message={`Restore version ${versionRestoreId} to the current blob?`}
+                              confirmLabel="Restore"
+                              onConfirm={() => {
+                                restoreBlobVersion.mutate(versionRestoreId, {
+                                  onSuccess: () => setVersionRestoreId(null),
+                                });
+                              }}
+                              onCancel={() => setVersionRestoreId(null)}
+                              testId="storage-version-restore-confirm"
+                              confirmTestId="storage-version-restore-confirm-yes"
+                              cancelTestId="storage-version-restore-confirm-cancel"
+                            />
+                          )}
+                        </>
                       )}
                     </div>
                   )}
@@ -646,14 +796,17 @@ export function StoragePage() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-muted-foreground">Destination Container</label>
-                  <input
-                    type="text"
+                  <select
                     value={copyDestContainer}
                     onChange={(e) => setCopyDestContainer(e.target.value)}
-                    placeholder="destination-container"
                     className="w-full rounded border bg-card px-3 py-2 text-sm"
                     data-testid="storage-copy-dest-container"
-                  />
+                  >
+                    <option value="">Select a container</option>
+                    {(containers.data ?? []).map((container) => (
+                      <option key={container.name} value={container.name}>{container.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-muted-foreground">Destination Blob Name</label>
@@ -666,6 +819,18 @@ export function StoragePage() {
                     data-testid="storage-copy-dest-blob"
                   />
                 </div>
+                <label className="flex items-start gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={copyOverwrite}
+                    onChange={(e) => { setCopyOverwrite(e.target.checked); setCopyConfirming(false); }}
+                    data-testid="storage-copy-overwrite"
+                  />
+                  <span>
+                    <span className="block font-medium">Allow overwrite</span>
+                    <span className="text-muted-foreground">Only enable this when replacing an existing destination is intentional.</span>
+                  </span>
+                </label>
                 {copyStatus && (
                   <p className="text-xs text-muted-foreground" data-testid="storage-copy-status">{copyStatus}</p>
                 )}
@@ -678,8 +843,12 @@ export function StoragePage() {
                   </button>
                   <button
                     onClick={() => {
+                      if (copyOverwrite) {
+                        setCopyConfirming(true);
+                        return;
+                      }
                       copyBlob.mutate(
-                        { sourceContainer: selectedContainer!, sourceBlob: selectedBlob, destContainer: copyDestContainer, destBlob: copyDestBlob },
+                        { sourceContainer: selectedContainer!, sourceBlob: selectedBlob, destContainer: copyDestContainer, destBlob: copyDestBlob, overwrite: false },
                         {
                           onSuccess: () => { setCopyStatus("Copied successfully"); setTimeout(() => { setShowCopyDialog(false); setCopyStatus(null); }, 2000); },
                           onError: (e) => setCopyStatus(`Error: ${e}`),
@@ -693,6 +862,27 @@ export function StoragePage() {
                     {copyBlob.isPending ? "Copying..." : "Copy"}
                   </button>
                 </div>
+                {copyConfirming && (
+                  <ConfirmBar
+                    message={`Overwrite ${copyDestContainer}/${copyDestBlob} if it already exists?`}
+                    confirmLabel="Overwrite"
+                    requireTypedName={`${copyDestContainer}/${copyDestBlob}`}
+                    onConfirm={() => {
+                      copyBlob.mutate(
+                        { sourceContainer: selectedContainer!, sourceBlob: selectedBlob, destContainer: copyDestContainer, destBlob: copyDestBlob, overwrite: true },
+                        {
+                          onSuccess: () => { setCopyStatus("Copied successfully"); setCopyConfirming(false); setTimeout(() => { setShowCopyDialog(false); setCopyStatus(null); }, 2000); },
+                          onError: (e) => setCopyStatus(`Error: ${e}`),
+                        },
+                      );
+                    }}
+                    onCancel={() => setCopyConfirming(false)}
+                    testId="storage-copy-overwrite-confirm"
+                    confirmTestId="storage-copy-overwrite-confirm-yes"
+                    cancelTestId="storage-copy-overwrite-confirm-cancel"
+                    typedNameTestId="storage-copy-overwrite-confirm-name"
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -701,4 +891,3 @@ export function StoragePage() {
     </div>
   );
 }
-
