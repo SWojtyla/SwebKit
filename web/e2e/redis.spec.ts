@@ -145,7 +145,7 @@ test.describe("Redis", () => {
     await page.goto("/redis");
 
     await page.getByTestId("redis-namespace-toggle-user").click();
-    await expect(page.getByTestId("redis-namespace-user-profile")).toBeVisible();
+    await expect(page.getByTestId("redis-namespace-user:profile")).toBeVisible();
 
     await page.getByTestId("redis-namespace-toggle-user:profile").click();
     await expect(page.getByTestId("redis-namespace-key-user:profile:1001")).toBeVisible();
