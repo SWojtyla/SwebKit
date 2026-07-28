@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { EntityTree } from "./EntityTree";
 import { MessageList } from "./MessageList";
 import { MessageDetail } from "./MessageDetail";
+import { SidePanel } from "./SidePanel";
 import { MessageComposer, type ComposerMode } from "./MessageComposer";
 import { BatchSendPanel } from "./BatchSendPanel";
 import { ScheduledMessages } from "./ScheduledMessages";
@@ -158,7 +159,7 @@ export function ServiceBusPage() {
         )}
 
         {/* Message list */}
-        <div className="flex w-80 flex-col overflow-hidden border-r">
+        <div className="flex flex-1 flex-col overflow-hidden border-r">
           {selectedEntity && (
             <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs" data-testid="sb-breadcrumb">
               <button
@@ -215,18 +216,25 @@ export function ServiceBusPage() {
         </div>
 
         {/* Detail pane */}
-        <div className="flex-1 overflow-auto">
-          <MessageDetail
-            message={selectedMessage}
-            nsId={selectedNsId}
-            entity={selectedEntity}
-            viewMode={viewMode}
+        {selectedMessage && (
+          <SidePanel
+            title="Message details"
             onClose={() => setSelectedMessage(null)}
-            onEditResubmit={(msg) => { setSelectedMessage(msg); setComposerMode("edit"); }}
-            onReplay={(msg) => { setSelectedMessage(msg); setComposerMode("replay"); }}
-            onSchedule={(msg) => { setSelectedMessage(msg); setComposerMode("schedule"); }}
-          />
-        </div>
+            defaultWidth={380}
+            minWidth={240}
+            maxWidth={600}
+          >
+            <MessageDetail
+              message={selectedMessage}
+              nsId={selectedNsId}
+              entity={selectedEntity}
+              viewMode={viewMode}
+              onEditResubmit={(msg) => { setSelectedMessage(msg); setComposerMode("edit"); }}
+              onReplay={(msg) => { setSelectedMessage(msg); setComposerMode("replay"); }}
+              onSchedule={(msg) => { setSelectedMessage(msg); setComposerMode("schedule"); }}
+            />
+          </SidePanel>
+        )}
       </div>
 
       {/* Message composer modal */}
