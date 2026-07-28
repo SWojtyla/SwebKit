@@ -44,6 +44,7 @@ test.describe("Layout & Shell deferred features", () => {
 
   test("shift+? opens keyboard shortcuts", async ({ page }) => {
     await page.goto("/");
+    await page.getByTestId("keyboard-shortcuts-btn").waitFor();
     await page.keyboard.press("Shift+?");
     await expect(page.getByTestId("keyboard-shortcuts-panel")).toBeVisible();
   });

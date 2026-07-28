@@ -745,7 +745,7 @@ export function AksPage() {
             onClick={() => {
               openMultiPodLogs(allPods ?? []);
             }}
-            disabled={!namespaceToken}
+            disabled={!namespaceToken || !allPods || allPods.length === 0}
             className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
             data-testid="aks-multi-pod-logs"
           >

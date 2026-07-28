@@ -105,7 +105,7 @@ export function AppLayout() {
     } else if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
       e.preventDefault();
       setNavCollapsed((prev) => !prev);
-    } else if (e.key === "?" && e.shiftKey && e.target === document.body) {
+    } else if (((e.key === "?" && e.shiftKey) || (e.key === "/" && e.shiftKey)) && (e.target === document.body || e.target === document.documentElement)) {
       e.preventDefault();
       setShortcutsOpen(true);
     }
