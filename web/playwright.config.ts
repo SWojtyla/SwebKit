@@ -20,6 +20,15 @@ const e2eAppDataRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   ".e2e-appdata",
 );
+
+/**
+ * Sidecar/Vite ports default to the values every dev has always used, but can be
+ * overridden so multiple checkouts (e.g. parallel worktrees) can run the suite
+ * at the same time without binding the same two ports.
+ */
+const sidecarPort = process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198";
+const vitePort = process.env.PLAYWRIGHT_VITE_PORT ?? "1419";
+
 export default defineConfig({
   testDir: "./e2e",
   // The first navigation of a run pays for Vite's cold compile of the whole app,
@@ -32,7 +41,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:1419",
+    baseURL: `http://localhost:${vitePort}`,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
@@ -46,15 +55,15 @@ export default defineConfig({
 
   webServer: [
     {
-      command: "dotnet run --project ../src-sidecar/SwebKit.Sidecar.csproj --urls http://127.0.0.1:5198",
-      url: "http://127.0.0.1:5198/health",
+      command: `dotnet run --project ../src-sidecar/SwebKit.Sidecar.csproj --urls http://127.0.0.1:${sidecarPort}`,
+      url: `http://127.0.0.1:${sidecarPort}/health`,
       timeout: 120 * 1000,
       reuseExistingServer: false,
       env: { SWEBKIT_APPDATA_ROOT: e2eAppDataRoot },
     },
     {
-      command: "cross-env VITE_SIDECAR_URL=http://127.0.0.1:5198 npx vite --port 1419",
-      url: "http://localhost:1419",
+      command: `cross-env VITE_SIDECAR_URL=http://127.0.0.1:${sidecarPort} npx vite --port ${vitePort}`,
+      url: `http://localhost:${vitePort}`,
       timeout: 60 * 1000,
       reuseExistingServer: false,
     },
