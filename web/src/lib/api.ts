@@ -167,3 +167,17 @@ export async function getRedisCaches(): Promise<RedisCacheListItem[]> {
   const data = await apiFetch<{ config?: { redisConfig?: { caches?: RedisCacheListItem[] } } }>("/api/config/profiles");
   return data.config?.redisConfig?.caches ?? [];
 }
+
+// ── Redis mutations ────────────────────────────────────────────────────────────
+
+export async function setRedisHashField(cacheId: string, key: string, field: string, value: string): Promise<void> {
+  await apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/hash/field`, "POST", { field, value });
+}
+
+export async function deleteRedisHashField(cacheId: string, key: string, field: string): Promise<void> {
+  await apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/hash/field/delete`, "POST", { field });
+}
+
+export async function updateRedisSortedSetScore(cacheId: string, key: string, member: string, score: number): Promise<void> {
+  await apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/zset/score`, "POST", { member, score });
+}

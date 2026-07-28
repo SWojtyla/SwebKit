@@ -233,6 +233,77 @@ public static class RedisEndpoints
             return Results.Ok();
         });
 
+        // ── Hash field mutations ─────────────────────────────────────────────────
+
+        app.MapPost("/api/redis/{cacheId}/keys/{key}/hash/field", async (
+            string cacheId,
+            string key,
+            SetHashFieldRequest req,
+            ProfileRepository profile,
+            IRedisClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var cache = ResolveCache(cacheId, profile, demo);
+            if (cache is null) return Results.NotFound("Cache not found");
+
+            var client = await CreateClientAsync(cache, factory, demo);
+            await client.SetHashFieldAsync(key, req.Field, req.Value ?? "");
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/redis/{cacheId}/keys/{key}/hash/field/delete", async (
+            string cacheId,
+            string key,
+            DeleteHashFieldRequest req,
+            ProfileRepository profile,
+            IRedisClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var cache = ResolveCache(cacheId, profile, demo);
+            if (cache is null) return Results.NotFound("Cache not found");
+
+            var client = await CreateClientAsync(cache, factory, demo);
+            await client.DeleteHashFieldAsync(key, req.Field);
+            return Results.Ok();
+        });
+
+        // ── Sorted set score mutation ────────────────────────────────────────────
+
+        app.MapPost("/api/redis/{cacheId}/keys/{key}/zset/score", async (
+            string cacheId,
+            string key,
+            UpdateSortedSetScoreRequest req,
+            ProfileRepository profile,
+            IRedisClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var cache = ResolveCache(cacheId, profile, demo);
+            if (cache is null) return Results.NotFound("Cache not found");
+
+            var client = await CreateClientAsync(cache, factory, demo);
+            await client.UpdateSortedSetScoreAsync(key, req.Member, req.Score);
+            return Results.Ok();
+        });
+
+        // ── Paginated set members ────────────────────────────────────────────────
+
+        app.MapGet("/api/redis/{cacheId}/keys/{key}/set/page", async (
+            string cacheId,
+            string key,
+            long? cursor,
+            int? pageSize,
+            ProfileRepository profile,
+            IRedisClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var cache = ResolveCache(cacheId, profile, demo);
+            if (cache is null) return Results.NotFound("Cache not found");
+
+            var client = await CreateClientAsync(cache, factory, demo);
+            var result = await client.GetSetMembersPageAsync(key, cursor ?? 0, pageSize ?? 50);
+            return Results.Ok(result);
+        });
+
         // ── Slowlog ────────────────────────────────────────────────────────────
 
         app.MapGet("/api/redis/{cacheId}/slowlog", async (
@@ -290,5 +361,22 @@ public static class RedisEndpoints
     {
         public string? Value { get; set; }
         public int? TtlSeconds { get; set; }
+    }
+
+    public sealed class SetHashFieldRequest
+    {
+        public string Field { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+    }
+
+    public sealed class DeleteHashFieldRequest
+    {
+        public string Field { get; set; } = string.Empty;
+    }
+
+    public sealed class UpdateSortedSetScoreRequest
+    {
+        public string Member { get; set; } = string.Empty;
+        public double Score { get; set; }
     }
 }
