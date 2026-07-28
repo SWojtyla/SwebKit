@@ -26,6 +26,7 @@ import {
   updateMonitoringRule,
   deleteMonitoringRule,
   getMonitoringHistory,
+  getRedisPubSubSnapshot,
 } from "./api";
 import type {
   MonitoringAlertRule,
@@ -61,6 +62,7 @@ import type {
   RedisSetMembersPage,
   RedisServerInfo,
   RedisSlowLogSummary,
+  RedisPubSubSnapshot,
   StorageContainerItem,
   StorageBlobPage,
   BlobProperties,
@@ -790,6 +792,14 @@ export function useRedisSlowLog(cacheId: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "slowlog"],
     queryFn: () => apiFetch<RedisSlowLogSummary>(`/api/redis/${cacheId}/slowlog?top=50`),
+    enabled: !!cacheId,
+  });
+}
+
+export function useRedisPubSub(cacheId: string | null, pattern: string | null = null) {
+  return useQuery<RedisPubSubSnapshot>({
+    queryKey: ["redis", cacheId, "pubsub", pattern],
+    queryFn: () => getRedisPubSubSnapshot(cacheId!, pattern),
     enabled: !!cacheId,
   });
 }

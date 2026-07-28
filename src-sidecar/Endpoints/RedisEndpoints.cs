@@ -320,6 +320,24 @@ public static class RedisEndpoints
             var slowlog = await client.GetSlowLogAsync(top ?? 50);
             return Results.Ok(slowlog);
         });
+
+        // ── Pub/Sub snapshot ───────────────────────────────────────────────────
+
+        app.MapGet("/api/redis/{cacheId}/pubsub", async (
+            string cacheId,
+            string? pattern,
+            int? maxChannels,
+            ProfileRepository profile,
+            IRedisClientFactory factory,
+            DemoModeService demo) =>
+        {
+            var cache = ResolveCache(cacheId, profile, demo);
+            if (cache is null) return Results.NotFound("Cache not found");
+
+            var client = await CreateClientAsync(cache, factory, demo);
+            var snapshot = await client.GetPubSubSnapshotAsync(pattern, maxChannels ?? 200);
+            return Results.Ok(snapshot);
+        });
     }
 
     private static RedisCacheEntry? ResolveCache(

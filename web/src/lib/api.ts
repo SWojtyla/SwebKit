@@ -4,6 +4,7 @@
 // must be re-resolved at startup (see `initSidecarBaseUrl`) before anything
 // fetches — it can't be a one-shot module-load constant anymore.
 import { getSidecarPort } from "./tauri-bridge";
+import type { RedisPubSubSnapshot } from "./types";
 
 let SIDECAR_BASE_URL = (() => {
   return (import.meta as any).env?.VITE_SIDECAR_URL ?? "http://localhost:5199";
@@ -180,4 +181,13 @@ export async function deleteRedisHashField(cacheId: string, key: string, field: 
 
 export async function updateRedisSortedSetScore(cacheId: string, key: string, member: string, score: number): Promise<void> {
   await apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/zset/score`, "POST", { member, score });
+}
+
+// ── Redis Pub/Sub snapshot ───────────────────────────────────────────────────
+
+export async function getRedisPubSubSnapshot(cacheId: string, pattern: string | null = null): Promise<RedisPubSubSnapshot> {
+  const params = new URLSearchParams();
+  if (pattern) params.set("pattern", pattern);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<RedisPubSubSnapshot>(`/api/redis/${cacheId}/pubsub${query}`);
 }

@@ -699,6 +699,19 @@ export interface RedisSlowLogSummary {
   capability: string;
 }
 
+export interface RedisPubSubChannelInfo {
+  channel: string;
+  subscriberCount: number;
+}
+
+export interface RedisPubSubSnapshot {
+  channels: RedisPubSubChannelInfo[];
+  patternSubscriptionCount: number;
+  truncated: boolean;
+  maxChannels: number;
+  capability: string;
+}
+
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 export interface StorageContainerItem {
