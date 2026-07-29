@@ -998,7 +998,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         }).ConfigureAwait(false);
     }
 
-    public async Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
+    public async Task<HelmReleaseValues> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
     {
         return await WithAuthRetryAsync(async () =>
         {
@@ -1016,7 +1016,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 ?? throw new InvalidOperationException($"Helm release '{releaseName}' not found in namespace '{ns}'.");
 
             if (latest.Data is null || !latest.Data.TryGetValue("release", out var releaseData))
-                return "# No values found";
+                return new HelmReleaseValues { UserValues = "# No values found", ComputedValues = "# No values found" };
 
             // Helm stores release data as base64 -> gzip -> base64 -> protobuf/json
             // The outer base64 is already decoded by the K8s client into byte[].
@@ -1030,19 +1030,76 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 using var reader = new StreamReader(gzipStream, Encoding.UTF8);
                 var json = await reader.ReadToEndAsync(ct).ConfigureAwait(false);
 
-                // Extract the "config" field which contains the user-supplied values
-                using var doc = System.Text.Json.JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("config", out var config))
-                    return System.Text.Json.JsonSerializer.Serialize(config, IndentedJsonOptions);
-
-                return json;
+                return ParseHelmReleaseValues(json);
             }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "Failed to decode Helm release values; returning a placeholder.");
-                return "# Unable to decode release values";
+                return new HelmReleaseValues
+                {
+                    UserValues = "# Unable to decode release values",
+                    ComputedValues = "# Unable to decode release values",
+                };
             }
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Parses a decoded Helm release JSON blob (the "release" secret data after base64+gzip
+    /// decoding — see <see cref="GetHelmReleaseValuesAsync"/>) into its user-supplied override
+    /// values (the release's <c>config</c> field) and its computed/effective values (<c>config</c>
+    /// deep-merged onto the chart's own <c>chart.values</c> defaults, matching what
+    /// <c>helm get values --all</c> shows). Pure and K8s-client-free so it's directly unit
+    /// testable against a hand-built release JSON fixture.
+    /// </summary>
+    internal static HelmReleaseValues ParseHelmReleaseValues(string releaseJson)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(releaseJson);
+
+        // "config" is the user-supplied override values (what `helm get values` shows).
+        var userValuesText = doc.RootElement.TryGetProperty("config", out var config)
+            ? System.Text.Json.JsonSerializer.Serialize(config, IndentedJsonOptions)
+            : "{}";
+
+        // "chart.values" is the chart's own defaults. Deep-merging the user overrides on top of
+        // those defaults reproduces what `helm get values --all` shows — the full effective
+        // values the release is actually running with.
+        var chartDefaults = doc.RootElement.TryGetProperty("chart", out var chart) &&
+            chart.TryGetProperty("values", out var values)
+            ? System.Text.Json.Nodes.JsonNode.Parse(values.GetRawText())
+            : null;
+        var userOverrides = config.ValueKind == System.Text.Json.JsonValueKind.Object
+            ? System.Text.Json.Nodes.JsonNode.Parse(config.GetRawText())
+            : null;
+        var merged = MergeJsonValues(chartDefaults, userOverrides);
+        var computedValuesText = merged is null
+            ? userValuesText
+            : merged.ToJsonString(IndentedJsonOptions);
+
+        return new HelmReleaseValues { UserValues = userValuesText, ComputedValues = computedValuesText };
+    }
+
+    /// <summary>
+    /// Deep-merges <paramref name="overrideNode"/> onto <paramref name="baseNode"/>: nested objects
+    /// are merged key-by-key (recursively); any other value (scalar, array, or a type mismatch
+    /// between the two sides) takes the override's value wholesale, matching Helm's own values
+    /// merge semantics. Either side may be <see langword="null"/> — the other side wins outright.
+    /// </summary>
+    internal static System.Text.Json.Nodes.JsonNode? MergeJsonValues(
+        System.Text.Json.Nodes.JsonNode? baseNode, System.Text.Json.Nodes.JsonNode? overrideNode)
+    {
+        if (overrideNode is null) return baseNode?.DeepClone();
+        if (baseNode is not System.Text.Json.Nodes.JsonObject baseObj ||
+            overrideNode is not System.Text.Json.Nodes.JsonObject overrideObj)
+            return overrideNode.DeepClone();
+
+        var merged = new System.Text.Json.Nodes.JsonObject();
+        foreach (var (key, value) in baseObj)
+            merged[key] = value?.DeepClone();
+        foreach (var (key, value) in overrideObj)
+            merged[key] = MergeJsonValues(merged.TryGetPropertyValue(key, out var existing) ? existing : null, value);
+
+        return merged;
     }
 
     public async Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)

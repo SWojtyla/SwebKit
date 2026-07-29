@@ -87,9 +87,154 @@ src/
   SwebKit.Azure/        # Azure Service Bus + App Insights implementations
   SwebKit.Kubernetes/   # AKS / Kubernetes implementation
   SwebKit.OpenTelemetry/ # OTLP observability provider
+src-sidecar/            # .NET minimal API sidecar for the Tauri/React rewrite
+web/                    # Vite + React + Tailwind frontend
+web/e2e/                # Playwright E2E tests
 tests/
   SwebKit.Agents.Tests/
   SwebKit.Core.Tests/
   SwebKit.Azure.Tests/
   SwebKit.Kubernetes.Tests/
+```
+
+## Web + .NET Sidecar (Tauri/React rewrite)
+
+The `feat/tauri-react-rewrite` branch uses a .NET minimal API sidecar and a Vite/React/Tailwind frontend.
+
+### Prerequisites
+
+- .NET 10 SDK
+- Node.js 20+
+- (optional) Tauri CLI for the desktop shell
+
+### Run the sidecar (backend)
+
+```powershell
+cd src-sidecar
+dotnet run --urls http://127.0.0.1:5199
+```
+
+The sidecar port can be overridden with `--urls` or `ASPNETCORE_URLS`.
+
+### Run the frontend (dev)
+
+```powershell
+cd web
+npm install          # first time only
+npm run dev          # http://localhost:1420
+```
+
+The frontend expects the sidecar at `http://127.0.0.1:5199` unless you override it:
+
+```powershell
+cd web
+$env:VITE_SIDECAR_URL="http://127.0.0.1:5198"; npm run dev
+```
+
+### Build
+
+```powershell
+# Frontend
+cd web
+npm run build
+
+# Sidecar
+cd src-sidecar
+dotnet build
+```
+
+### Build the Tauri desktop app (installer)
+
+The Tauri shell wraps the React frontend into a native Windows desktop app with an MSI/NSIS installer.
+
+#### Prerequisites
+
+- **Rust** (stable): install from https://rustup.rs/
+- **Visual Studio Build Tools 2022** with the **Desktop development with C++** workload
+  - Download from https://visualstudio.microsoft.com/visual-cpp-build-tools/
+  - In the installer, check "Desktop development with C++" (includes MSVC, Windows SDK, and `link.exe`)
+  - VS Code alone is NOT sufficient — you need the Build Tools
+- Node.js 20+ (already required for the frontend)
+- .NET 10 SDK (already required for the sidecar)
+
+#### Build the frontend first
+
+```powershell
+cd web
+npm install
+npm run build
+```
+
+This produces `web/dist/` which Tauri bundles into the app.
+
+#### Publish the sidecar second
+
+The bundle ships the .NET sidecar as a resource (`src-tauri/binaries/sidecar/`). That
+folder is gitignored and starts empty, so it must be populated before bundling — otherwise
+the installer builds fine but the installed app dies at startup with
+"Sidecar binary not found".
+
+```powershell
+dotnet publish src-sidecar\SwebKit.Sidecar.csproj -c Release -r win-x64 --self-contained true -o src-tauri\binaries\sidecar
+```
+
+Self-contained is required: end users are not expected to have the .NET runtime installed.
+
+#### Build the installer
+
+```powershell
+cd src-tauri
+node ../web/node_modules/@tauri-apps/cli/tauri.js build
+```
+
+Or if you have the Tauri CLI globally installed:
+
+```powershell
+cd src-tauri
+tauri build
+```
+
+#### Output
+
+The installers are generated at:
+
+- **MSI**: `src-tauri/target/release/bundle/msi/SwebKit_0.1.0_x64_en-US.msi`
+- **NSIS**: `src-tauri/target/release/bundle/nsis/SwebKit_0.1.0_x64-setup.exe`
+
+Either can be distributed for installation. The MSI is recommended for enterprise deployment (supports silent install via `msiexec`).
+
+#### Dev mode (hot reload)
+
+For development with live reload, start the sidecar and Vite dev server first, then:
+
+```powershell
+cd src-tauri
+node ../web/node_modules/@tauri-apps/cli/tauri.js dev
+```
+
+This opens the native desktop window pointing at `http://localhost:1420` with hot module replacement.
+
+### Run E2E tests
+
+Playwright starts the sidecar and Vite automatically on isolated ports, so you don't need to run them manually.
+
+```powershell
+cd web
+npx playwright test
+```
+
+Useful variations:
+
+```powershell
+npx playwright test --ui            # interactive UI mode
+npx playwright test --headed        # visible browser
+npm run test:e2e                    # same as `playwright test`
+npm run test:e2e:ui
+npm run test:e2e:headed
+```
+
+### Run .NET unit tests
+
+```powershell
+dotnet test
 ```

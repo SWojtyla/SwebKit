@@ -56,6 +56,35 @@ public sealed class CollectionRepository(ILogger<CollectionRepository>? logger =
         await AppDataFileStore.SaveAsync(AppDataPaths.CollectionsJson, json).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Returns a token derived from the current <c>collections.json</c> file metadata.
+    /// Used by the sidecar to detect external (e.g. Git-linked) modifications and return 409 conflicts.
+    /// </summary>
+    public string? GetConcurrencyToken()
+    {
+        var path = AppDataPaths.CollectionsJson;
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            var info = new FileInfo(path);
+            info.Refresh();
+            if (!info.Exists)
+            {
+                return null;
+            }
+
+            return $"{info.LastWriteTimeUtc.Ticks}|{info.Length}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public async Task<ApiCollection> AddCollectionAsync(string name)
     {
         var collection = new ApiCollection

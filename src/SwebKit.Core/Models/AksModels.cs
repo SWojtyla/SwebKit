@@ -177,6 +177,18 @@ public class HelmReleaseInfo
     public DateTimeOffset? Updated { get; set; }
 }
 
+/// <summary>
+/// A Helm release's values in both forms: what the user actually supplied as overrides
+/// (<see cref="UserValues"/>, Helm's release "config"), and the full effective values after
+/// merging those overrides onto the chart's own defaults (<see cref="ComputedValues"/>,
+/// equivalent to <c>helm get values --all</c>).
+/// </summary>
+public sealed class HelmReleaseValues
+{
+    public required string UserValues { get; set; }
+    public required string ComputedValues { get; set; }
+}
+
 public class KubeContextInfo
 {
     public required string Name { get; set; }

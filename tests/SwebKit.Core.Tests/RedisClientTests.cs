@@ -60,6 +60,53 @@ public class RedisClientTests
             () => RedisClient.CreateAsync(entry, NullLogger<RedisClient>.Instance));
     }
 
+    // ── BuildConnectionOptions() ──
+    // GetServerInfoAsync/FlushDatabaseAsync/GetSlowLogAsync issue admin commands, which
+    // StackExchange.Redis rejects with "This operation is not available unless admin mode
+    // is enabled" unless AllowAdmin is set. These lock that in without a live server.
+
+    [Fact]
+    public void BuildConnectionOptions_EnablesAdminMode()
+    {
+        var options = RedisClient.BuildConnectionOptions("localhost:6379");
+
+        Assert.True(options.AllowAdmin);
+    }
+
+    [Fact]
+    public void BuildConnectionOptions_DoesNotAbortOnConnectFail()
+    {
+        var options = RedisClient.BuildConnectionOptions("localhost:6379");
+
+        Assert.False(options.AbortOnConnectFail);
+    }
+
+    [Fact]
+    public void BuildConnectionOptions_PreservesEndpointFromConnectionString()
+    {
+        var options = RedisClient.BuildConnectionOptions("cache.example.net:6380,ssl=true");
+
+        Assert.Single(options.EndPoints);
+        Assert.Contains("cache.example.net", options.EndPoints[0].ToString(), StringComparison.Ordinal);
+        Assert.True(options.Ssl);
+    }
+
+    [Fact]
+    public void BuildConnectionOptions_AdminModeWins_WhenConnectionStringDisablesIt()
+    {
+        // An explicit allowAdmin=false in stored config would otherwise silently
+        // re-break the server-info endpoint.
+        var options = RedisClient.BuildConnectionOptions("localhost:6379,allowAdmin=false");
+
+        Assert.True(options.AllowAdmin);
+    }
+
+    [Fact]
+    public void BuildConnectionOptions_NullConnectionString_Throws()
+    {
+        Assert.ThrowsAny<Exception>(() => RedisClient.BuildConnectionOptions(null!));
+    }
+
     // ── RedisConfig.Validate() ──
     // These cover the validation guard that callers must pass before constructing RedisClient.
 

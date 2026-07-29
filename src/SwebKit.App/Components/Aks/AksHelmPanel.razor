@@ -197,7 +197,9 @@
 
         try
         {
-            _valuesText = await Client.GetHelmReleaseValuesAsync(Namespace, releaseName);
+            // MAUI has only ever shown the user-supplied override values (unchanged behavior);
+            // the computed/merged view is a Tauri+React-only addition, see HelmDetailPanel.tsx.
+            _valuesText = (await Client.GetHelmReleaseValuesAsync(Namespace, releaseName)).UserValues;
             _valuesHighlighted = await HighlightAsync(_valuesText);
         }
         catch (Exception ex) { await OnError.InvokeAsync(ex.Message); }

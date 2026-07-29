@@ -48,7 +48,7 @@ public interface IAksClient
     Task DeleteHttpRouteAsync(string ns, string name, CancellationToken ct = default);
     Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default);
     Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName, CancellationToken ct = default);
-    Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default);
+    Task<HelmReleaseValues> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default);
     Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default);
     Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default);
     Task ApplyResourceYamlAsync(string ns, string kind, string name, string yaml, CancellationToken ct = default);
@@ -141,6 +141,9 @@ public interface IAksClient
     async Task<IReadOnlyList<PodInfo>> GetPodsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
         => await FanOutNamespacesAsync(namespaces, (ns, token) => GetPodsAsync(ns, null, token), ct).ConfigureAwait(false);
 
+    async Task<IReadOnlyList<PodInfo>> GetPodsAsync(IReadOnlyList<string> namespaces, string? labelSelector, CancellationToken ct = default)
+        => await FanOutNamespacesAsync(namespaces, (ns, token) => GetPodsAsync(ns, labelSelector, token), ct).ConfigureAwait(false);
+
     async Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
         => await FanOutNamespacesAsync(namespaces, GetServicesAsync, ct).ConfigureAwait(false);
 
@@ -164,6 +167,38 @@ public interface IAksClient
 
     async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
         => await FanOutNamespacesAsync(namespaces, GetHpasAsync, ct).ConfigureAwait(false);
+
+    async Task<IReadOnlyList<ConfigMapInfo>> GetConfigMapsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+        => await FanOutNamespacesAsync(namespaces, GetConfigMapsAsync, ct).ConfigureAwait(false);
+
+    async Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+        => await FanOutNamespacesAsync(namespaces, GetHelmReleasesAsync, ct).ConfigureAwait(false);
+
+    async Task<(IReadOnlyList<SecretInfo> Secrets, IReadOnlyList<HelmReleaseInfo> HelmReleases)> GetSecretsAndHelmReleasesAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+    {
+        const int maxNamespaceFanOut = 6;
+        using var throttle = new SemaphoreSlim(Math.Min(maxNamespaceFanOut, namespaces.Count));
+        var tasks = namespaces.Select(async ns =>
+        {
+            await throttle.WaitAsync(ct).ConfigureAwait(false);
+            try { return await GetSecretsAndHelmReleasesAsync(ns, ct).ConfigureAwait(false); }
+            finally { throttle.Release(); }
+        });
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+        return (results.SelectMany(r => r.Secrets).ToList(), results.SelectMany(r => r.HelmReleases).ToList());
+    }
+
+    async Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+        => await FanOutNamespacesAsync(namespaces, GetPodMetricsAsync, ct).ConfigureAwait(false);
+
+    async Task<IReadOnlyList<KubernetesEvent>> GetEventsAsync(IReadOnlyList<string> namespaces, int limit, CancellationToken ct = default)
+    {
+        var all = await FanOutNamespacesAsync(namespaces, (ns, token) => GetEventsAsync(ns, limit, token), ct).ConfigureAwait(false);
+        return all.Take(limit).ToList();
+    }
+
+    async Task<IReadOnlyList<KubernetesEvent>> GetEventsAsync(IReadOnlyList<string> namespaces, string? involvedObject, CancellationToken ct = default)
+        => await FanOutNamespacesAsync(namespaces, (ns, token) => GetEventsAsync(ns, involvedObject, token), ct).ConfigureAwait(false);
 
     private static async Task<IReadOnlyList<T>> FanOutNamespacesAsync<T>(
         IReadOnlyList<string> namespaces,

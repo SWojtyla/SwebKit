@@ -6,9 +6,12 @@ This folder is the canonical feature-first map for implementation work.
 
 1. `docs/features/foundation-mvp/`
 2. `docs/features/service-bus/`
-3. `docs/features/observability/`
-4. `docs/features/aks/`
-5. `docs/features/polish-advanced/`
+3. `docs/features/aks/`
+4. `docs/features/polish-advanced/`
+
+**Note (2026-07-26):** Observability and DevOps/Pipelines are dropped from the Tauri + React
+rewrite by product decision — not deferred, not planned for a later pass. See
+`docs/features/active/demo-mode-parity/index.md` for context.
 
 ## Folder Contract
 

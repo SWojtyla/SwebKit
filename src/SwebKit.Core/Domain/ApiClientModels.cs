@@ -258,8 +258,11 @@ public enum EnvironmentVariableSecretSource
 public sealed class AuthConfig
 {
     public AuthType Type { get; set; } = AuthType.None;
-    /// <summary>Reference key into <see cref="SwebKit.Core.Abstractions.ICredentialStore"/>. Never contains the actual secret.</summary>
+    /// <summary>Reference key into the persisted secret store. Never contains the actual secret.</summary>
     public string? CredentialKey { get; set; }
+    /// <summary>Transient secret material provided at execution time. Not persisted when null so <c>collections.json</c> never stores it.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? CredentialSecret { get; set; }
     /// <summary>Header or query-param name for API key auth.</summary>
     public string? ApiKeyParamName { get; set; }
     public ApiKeyLocation ApiKeyLocation { get; set; } = ApiKeyLocation.Header;
@@ -354,6 +357,14 @@ public sealed class CollectionsStore
 {
     public int SchemaVersion { get; set; } = 1;
     public List<ApiCollection> Collections { get; set; } = [];
+}
+
+/// <summary>Response wrapper for the collections store, including a concurrency token for stale-file detection.</summary>
+public sealed class CollectionsStoreResponse
+{
+    public int SchemaVersion { get; set; } = 1;
+    public List<ApiCollection> Collections { get; set; } = [];
+    public string? ConcurrencyToken { get; set; }
 }
 
 /// <summary>Root object stored in <c>environments.json</c>.</summary>

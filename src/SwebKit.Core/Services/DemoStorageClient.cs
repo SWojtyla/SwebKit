@@ -27,8 +27,14 @@ public sealed class DemoStorageClient : IStorageClient
         new("fixtures", DateTimeOffset.UtcNow.AddDays(-60), "None", "unlocked")
     ];
 
-    private static readonly Dictionary<string, IReadOnlyList<StorageBlobItem>> BlobsByContainer =
-        new(StringComparer.OrdinalIgnoreCase)
+    private readonly Dictionary<string, List<StorageBlobItem>> _blobsByContainer;
+    private readonly Dictionary<string, string> _blobContents;
+    private readonly Dictionary<string, Dictionary<string, string>> _blobMetadata;
+    private readonly Dictionary<string, List<DeletedBlobItem>> _deletedBlobsByContainer;
+
+    public DemoStorageClient()
+    {
+        _blobsByContainer = new(StringComparer.OrdinalIgnoreCase)
         {
             ["configs"] =
             [
@@ -63,8 +69,7 @@ public sealed class DemoStorageClient : IStorageClient
             ]
         };
 
-    private static readonly Dictionary<string, string> BlobContents =
-        new(StringComparer.OrdinalIgnoreCase)
+        _blobContents = new(StringComparer.OrdinalIgnoreCase)
         {
             ["configs/app-settings.json"] = """
                 {
@@ -143,6 +148,27 @@ public sealed class DemoStorageClient : IStorageClient
             ["fixtures/readme.txt"] = "This container holds fixture data for automated testing.\nDo not use in production.\n"
         };
 
+        _blobMetadata = new(StringComparer.OrdinalIgnoreCase);
+        foreach (var key in _blobContents.Keys)
+        {
+            _blobMetadata[key] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["demo"] = "true" };
+        }
+
+        _deletedBlobsByContainer = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["configs"] =
+            [
+                new DeletedBlobItem("deleted-config.json", DateTimeOffset.UtcNow.AddDays(-2), 11),
+            ],
+            ["exports"] =
+            [
+                new DeletedBlobItem("deleted-report.csv", DateTimeOffset.UtcNow.AddDays(-1), 12),
+            ],
+            ["fixtures"] =
+            [],
+        };
+    }
+
     public Task<bool> TestConnectionAsync(CancellationToken ct = default) =>
         Task.FromResult(true);
 
@@ -154,14 +180,14 @@ public sealed class DemoStorageClient : IStorageClient
         int pageSize = 100, CancellationToken ct = default)
     {
         var key = string.IsNullOrEmpty(prefix) ? containerName : $"{containerName}/{prefix}";
-        var items = BlobsByContainer.TryGetValue(key, out var blobs) ? blobs : Array.Empty<StorageBlobItem>();
+        var items = _blobsByContainer.TryGetValue(key, out var blobs) ? blobs : [];
         return Task.FromResult(new StorageBlobPage(items, null));
     }
 
     public Task<BlobProperties> GetBlobPropertiesAsync(string containerName, string blobName, CancellationToken ct = default)
     {
         var key = $"{containerName}/{blobName}";
-        var allBlobs = BlobsByContainer.Values.SelectMany(b => b).Where(b => !b.IsPrefix).ToList();
+        var allBlobs = _blobsByContainer.Values.SelectMany(b => b).Where(b => !b.IsPrefix).ToList();
         var blob = allBlobs.FirstOrDefault(b => string.Equals($"{containerName}/{b.Name}", key, StringComparison.OrdinalIgnoreCase));
 
         return Task.FromResult(new BlobProperties(
@@ -175,7 +201,7 @@ public sealed class DemoStorageClient : IStorageClient
             "Hot",
             false,
             null, null, null,
-            new Dictionary<string, string>() { ["demo"] = "true" },
+            new Dictionary<string, string>(_blobMetadata.GetValueOrDefault(key) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["demo"] = "true" }),
             new Dictionary<string, string>()));
     }
 
@@ -183,7 +209,7 @@ public sealed class DemoStorageClient : IStorageClient
         string containerName, string blobName, int maxBytes = 524_288, CancellationToken ct = default)
     {
         var key = $"{containerName}/{blobName}";
-        var content = BlobContents.TryGetValue(key, out var c) ? c : $"(Demo content for {blobName})";
+        var content = _blobContents.TryGetValue(key, out var c) ? c : $"(Demo content for {blobName})";
         var bytes = Encoding.UTF8.GetByteCount(content);
         var isBinary = false;
 
@@ -208,7 +234,7 @@ public sealed class DemoStorageClient : IStorageClient
         CancellationToken ct = default)
     {
         var key = $"{containerName}/{blobName}";
-        var content = BlobContents.TryGetValue(key, out var c) ? c : $"(Demo content for {blobName})";
+        var content = _blobContents.TryGetValue(key, out var c) ? c : $"(Demo content for {blobName})";
         var bytes = Encoding.UTF8.GetBytes(content);
 
         return WriteAsync(destination, bytes, progress, ct);
@@ -240,16 +266,101 @@ public sealed class DemoStorageClient : IStorageClient
             CanRestore: true));
 
     public Task<BlobMutationResult> UploadBlobAsync(
-        BlobUploadOptions options, Stream source, IProgress<long>? progress = null, CancellationToken ct = default) =>
-        Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{options.ContainerName}/{options.BlobName}"));
+        BlobUploadOptions options, Stream source, IProgress<long>? progress = null, CancellationToken ct = default)
+    {
+        var key = $"{options.ContainerName}/{options.BlobName}";
+        using var reader = new StreamReader(source, Encoding.UTF8, leaveOpen: true);
+        var content = reader.ReadToEnd();
+        _blobContents[key] = content;
+        var bytes = Encoding.UTF8.GetByteCount(content);
 
-    public Task<BlobMutationResult> CopyBlobAsync(BlobCopyOptions options, CancellationToken ct = default) =>
-        Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{options.DestinationContainer}/{options.DestinationBlobName}"));
+        var list = _blobsByContainer.GetValueOrDefault(options.ContainerName);
+        if (list is null)
+        {
+            list = [];
+            _blobsByContainer[options.ContainerName] = list;
+        }
+
+        var existing = list.FindIndex(b => string.Equals(b.Name, options.BlobName, StringComparison.OrdinalIgnoreCase));
+        var newItem = new StorageBlobItem(options.BlobName, false, bytes, options.ContentType ?? "text/plain", DateTimeOffset.UtcNow, "\"demo-etag-new\"");
+        if (existing >= 0)
+        {
+            list[existing] = newItem;
+        }
+        else
+        {
+            list.Add(newItem);
+        }
+
+        progress?.Report(bytes);
+        return Task.FromResult(new BlobMutationResult(true, ResultBlobPath: key));
+    }
+
+    public Task<BlobMutationResult> CopyBlobAsync(BlobCopyOptions options, CancellationToken ct = default)
+    {
+        var sourceKey = $"{options.SourceContainer}/{options.SourceBlobName}";
+        if (!_blobContents.TryGetValue(sourceKey, out var content))
+        {
+            return Task.FromResult(new BlobMutationResult(false, ErrorMessage: $"Source blob not found: {sourceKey}"));
+        }
+
+        var destKey = $"{options.DestinationContainer}/{options.DestinationBlobName}";
+        _blobContents[destKey] = content;
+        var bytes = Encoding.UTF8.GetByteCount(content);
+
+        var destList = _blobsByContainer.GetValueOrDefault(options.DestinationContainer);
+        if (destList is null)
+        {
+            destList = [];
+            _blobsByContainer[options.DestinationContainer] = destList;
+        }
+
+        var contentType = options.DestinationBlobName.EndsWith(".json", StringComparison.Ordinal) ? "application/json"
+            : options.DestinationBlobName.EndsWith(".csv", StringComparison.Ordinal) ? "text/csv"
+            : "text/plain";
+
+        var existing = destList.FindIndex(b => string.Equals(b.Name, options.DestinationBlobName, StringComparison.OrdinalIgnoreCase));
+        var newItem = new StorageBlobItem(options.DestinationBlobName, false, bytes, contentType, DateTimeOffset.UtcNow, "\"demo-etag-copy\"");
+        if (existing >= 0)
+        {
+            destList[existing] = newItem;
+        }
+        else
+        {
+            destList.Add(newItem);
+        }
+
+        return Task.FromResult(new BlobMutationResult(true, ResultBlobPath: destKey));
+    }
 
     public Task<BlobMutationResult> SetBlobMetadataAsync(
         string containerName, string blobName, IDictionary<string, string> metadata,
-        string? ifMatchEtag = null, CancellationToken ct = default) =>
-        Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{containerName}/{blobName}"));
+        string? ifMatchEtag = null, CancellationToken ct = default)
+    {
+        var key = $"{containerName}/{blobName}";
+
+        // Ensure a backing blob record exists; if it doesn't, the metadata update is a no-op failure.
+        var allBlobs = _blobsByContainer.Values.SelectMany(b => b).Where(b => !b.IsPrefix).ToList();
+        var exists = allBlobs.Any(b => string.Equals($"{containerName}/{b.Name}", key, StringComparison.OrdinalIgnoreCase));
+        if (!exists)
+        {
+            return Task.FromResult(new BlobMutationResult(false, ErrorMessage: $"Blob not found: {key}"));
+        }
+
+        if (!_blobMetadata.TryGetValue(key, out var current))
+        {
+            current = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            _blobMetadata[key] = current;
+        }
+
+        current.Clear();
+        foreach (var kvp in metadata)
+        {
+            current[kvp.Key] = kvp.Value;
+        }
+
+        return Task.FromResult(new BlobMutationResult(true, ResultBlobPath: key));
+    }
 
     public Task<BlobVersionComparison> GetVersionComparisonAsync(
         string containerName, string blobName, string baseVersionId,
@@ -279,10 +390,64 @@ public sealed class DemoStorageClient : IStorageClient
             ResultBlobPath: $"{containerName}/{blobName}"));
 
     public Task<BlobRecoveryResult> UndeleteBlobAsync(
-        string containerName, string blobName, CancellationToken ct = default) =>
-        Task.FromResult(new BlobRecoveryResult(
+        string containerName, string blobName, CancellationToken ct = default)
+    {
+        var deletedList = _deletedBlobsByContainer.GetValueOrDefault(containerName);
+        if (deletedList is null)
+        {
+            return Task.FromResult(new BlobRecoveryResult(BlobRecoveryState.Unsupported, ErrorMessage: "Soft delete is not enabled or the blob was not found."));
+        }
+
+        var index = deletedList.FindIndex(b => string.Equals(b.Name, blobName, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+        {
+            return Task.FromResult(new BlobRecoveryResult(BlobRecoveryState.Unsupported, ErrorMessage: $"Deleted blob not found: {blobName}"));
+        }
+
+        var deleted = deletedList[index];
+        deletedList.RemoveAt(index);
+
+        var key = $"{containerName}/{blobName}";
+        var content = _blobContents.GetValueOrDefault(key) ?? "";
+        var bytes = Encoding.UTF8.GetByteCount(content);
+        var contentType = blobName.EndsWith(".json", StringComparison.Ordinal) ? "application/json"
+            : blobName.EndsWith(".csv", StringComparison.Ordinal) ? "text/csv"
+            : "text/plain";
+
+        var list = _blobsByContainer.GetValueOrDefault(containerName);
+        if (list is null)
+        {
+            list = [];
+            _blobsByContainer[containerName] = list;
+        }
+
+        var existing = list.FindIndex(b => string.Equals(b.Name, blobName, StringComparison.OrdinalIgnoreCase));
+        var newItem = new StorageBlobItem(blobName, false, bytes, contentType, DateTimeOffset.UtcNow, "\"demo-etag-restored\"");
+        if (existing >= 0)
+        {
+            list[existing] = newItem;
+        }
+        else
+        {
+            list.Add(newItem);
+        }
+
+        return Task.FromResult(new BlobRecoveryResult(
             BlobRecoveryState.Undeleted,
-            ResultBlobPath: $"{containerName}/{blobName}"));
+            ResultBlobPath: key));
+    }
+
+    public Task<IReadOnlyList<DeletedBlobItem>> ListDeletedBlobsAsync(string containerName, string? prefix = null, CancellationToken ct = default)
+    {
+        var list = _deletedBlobsByContainer.GetValueOrDefault(containerName) ?? [];
+        if (string.IsNullOrEmpty(prefix))
+        {
+            return Task.FromResult<IReadOnlyList<DeletedBlobItem>>(list);
+        }
+
+        return Task.FromResult<IReadOnlyList<DeletedBlobItem>>(
+            list.Where(b => b.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList());
+    }
 
     private static async Task WriteAsync(
         Stream destination,

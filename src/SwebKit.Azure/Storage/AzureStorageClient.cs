@@ -453,6 +453,43 @@ public class AzureStorageClient : IStorageClient
         }
     }
 
+    public async Task<IReadOnlyList<DeletedBlobItem>> ListDeletedBlobsAsync(
+        string containerName, string? prefix = null, CancellationToken ct = default)
+    {
+        int retentionDays = 7;
+        try
+        {
+            var serviceProps = await _blobService.GetPropertiesAsync(ct).ConfigureAwait(false);
+            if (serviceProps.Value.DeleteRetentionPolicy?.Enabled == true && serviceProps.Value.DeleteRetentionPolicy.Days.HasValue)
+            {
+                retentionDays = serviceProps.Value.DeleteRetentionPolicy.Days.Value;
+            }
+        }
+        catch (RequestFailedException)
+        {
+            // Best-effort retention; fall back to default 7 days.
+        }
+
+        var container = _blobService.GetBlobContainerClient(containerName);
+        var result = new List<DeletedBlobItem>();
+
+        await foreach (var page in container.GetBlobsAsync(BlobTraits.None, BlobStates.Deleted, prefix ?? string.Empty, ct).AsPages().ConfigureAwait(false))
+        {
+            foreach (var item in page.Values)
+            {
+                if (item.Properties.DeletedOn is null)
+                    continue;
+
+                var deletedOn = item.Properties.DeletedOn.Value;
+                var remaining = (int)Math.Ceiling((deletedOn.AddDays(retentionDays) - DateTimeOffset.UtcNow).TotalDays);
+                result.Add(new DeletedBlobItem(item.Name, deletedOn, Math.Max(0, remaining)));
+            }
+            break; // only first page
+        }
+
+        return result;
+    }
+
     private static string ProduceSimpleLineDiff(string baseText, string compareText)
     {
         var baseLines = baseText.Split('\n');

@@ -119,9 +119,9 @@ public class StorageMutationContractTests
     {
         var client = CreateClient();
 
-        var result = await client.UndeleteBlobAsync("configs", "app-settings.json");
+        var result = await client.UndeleteBlobAsync("configs", "deleted-config.json");
 
         Assert.Equal(BlobRecoveryState.Undeleted, result.State);
-        Assert.Equal("configs/app-settings.json", result.ResultBlobPath);
+        Assert.Equal("configs/deleted-config.json", result.ResultBlobPath);
     }
 }

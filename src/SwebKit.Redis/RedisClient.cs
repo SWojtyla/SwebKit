@@ -28,11 +28,33 @@ public sealed class RedisClient : IRedisClient
         _server = _mux.GetServer(endpoint);
     }
 
+    /// <summary>
+    /// Builds the multiplexer options used to connect to a cache.
+    /// </summary>
+    /// <remarks>
+    /// Extracted from <see cref="CreateAsync"/> so the admin-mode requirement is
+    /// unit-testable without a live Redis server.
+    /// </remarks>
+    /// <param name="connectionString">The StackExchange.Redis connection string.</param>
+    /// <returns>Options with admin mode enabled and connect-failure aborts disabled.</returns>
+    public static ConfigurationOptions BuildConnectionOptions(string connectionString)
+    {
+        var options = ConfigurationOptions.Parse(connectionString);
+        options.AbortOnConnectFail = false;
+
+        // INFO, FLUSHDB and SLOWLOG are admin commands; StackExchange.Redis refuses
+        // them outright ("This operation is not available unless admin mode is
+        // enabled: INFO") unless this is set. GetServerInfoAsync, FlushDatabaseAsync
+        // and GetSlowLogAsync all depend on it, so the app is half-broken without it.
+        options.AllowAdmin = true;
+
+        return options;
+    }
+
     public static async Task<RedisClient> CreateAsync(RedisCacheEntry cacheEntry, ILogger<RedisClient>? logger = null)
     {
         logger ??= NullLogger<RedisClient>.Instance;
-        var options = ConfigurationOptions.Parse(cacheEntry.ConnectionString);
-        options.AbortOnConnectFail = false;
+        var options = BuildConnectionOptions(cacheEntry.ConnectionString);
         var mux = await ConnectionMultiplexer.ConnectAsync(options).ConfigureAwait(false);
         return new RedisClient(cacheEntry, mux, logger);
     }

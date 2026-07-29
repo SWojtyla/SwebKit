@@ -324,6 +324,9 @@ public class StorageDownloadProgressTests : TestContext
 
         public Task<BlobRecoveryResult> UndeleteBlobAsync(string containerName, string blobName, CancellationToken ct = default) =>
             Task.FromResult(new BlobRecoveryResult(BlobRecoveryState.Unsupported));
+
+        public Task<IReadOnlyList<DeletedBlobItem>> ListDeletedBlobsAsync(string containerName, string? prefix = null, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<DeletedBlobItem>>([]);
     }
 
     private sealed class TestNotificationService : INotificationService

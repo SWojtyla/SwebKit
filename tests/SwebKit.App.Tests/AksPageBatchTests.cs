@@ -1505,8 +1505,8 @@ public sealed class AksPageBatchTests : TestContext
             CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<HelmRevisionInfo>>(_helmHistoryByRelease[(ns, releaseName)].ToList());
 
-        public Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
-            => Task.FromResult(string.Empty);
+        public Task<HelmReleaseValues> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
+            => Task.FromResult(new HelmReleaseValues { UserValues = string.Empty, ComputedValues = string.Empty });
 
         public Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)
         {

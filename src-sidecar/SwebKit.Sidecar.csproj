@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SwebKit.Sidecar</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\SwebKit.Core\SwebKit.Core.csproj" />
+    <ProjectReference Include="..\src\SwebKit.Azure\SwebKit.Azure.csproj" />
+    <ProjectReference Include="..\src\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />
+    <ProjectReference Include="..\src\SwebKit.Redis\SwebKit.Redis.csproj" />
+    <ProjectReference Include="..\src\SwebKit.Agents\SwebKit.Agents.csproj" />
+    <PackageReference Include="keyring-dotnet" />
+  </ItemGroup>
+  <!--
+    SwebKit.Observability and SwebKit.DevOps are deliberately NOT ported to the
+    sidecar — dropped per product decision (2026-07-26), not deferred. The
+    MAUI app's Observability/Pipelines features are not being carried into the
+    Tauri rewrite.
+  -->
+
+</Project>

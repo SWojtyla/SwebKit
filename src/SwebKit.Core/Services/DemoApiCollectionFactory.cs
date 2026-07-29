@@ -9,7 +9,7 @@ namespace SwebKit.Core.Services;
 /// </summary>
 public static class DemoApiCollectionFactory
 {
-    private const string DemoCollectionId = "__demo__samples";
+    public const string DemoCollectionId = "__demo__samples";
     private const string DemoCollectionName = "Demo API Samples";
 
     /// <summary>
