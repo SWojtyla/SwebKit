@@ -21,6 +21,14 @@ jobs:
       sidecar: ${{ steps.filter.outputs.sidecar }}
       web: ${{ steps.filter.outputs.web }}
     steps:
+      # dorny/paths-filter needs real git history to diff against for push events
+      # (not just the PR merge ref) — a shallow default checkout leaves it with
+      # no parent commit to compare, which is what crashed the first run
+      # ("Get current git ref" -> git exit 128, no checkout had happened at all).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: dorny/paths-filter@v3
         id: filter
         with:
