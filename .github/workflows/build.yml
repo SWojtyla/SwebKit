@@ -2,13 +2,57 @@ name: Build & Test
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/tauri-react-rewrite]
   pull_request:
-    branches: [main]
+    branches: [main, feat/tauri-react-rewrite]
 
 jobs:
+  # Inspects the diff and flags which areas of the repo actually changed, so
+  # every job below only runs when it could plausibly be affected — e.g. a
+  # web/-only change skips the MAUI build entirely, and vice versa. Shared
+  # .NET libraries (SwebKit.Core, SwebKit.Azure, ...) are consumed by both the
+  # MAUI app and the sidecar, so a change there fans out to both.
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      shared_dotnet: ${{ steps.filter.outputs.shared_dotnet }}
+      maui: ${{ steps.filter.outputs.maui }}
+      sidecar: ${{ steps.filter.outputs.sidecar }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared_dotnet:
+              - 'src/SwebKit.Core/**'
+              - 'src/SwebKit.Azure/**'
+              - 'src/SwebKit.Kubernetes/**'
+              - 'src/SwebKit.Redis/**'
+              - 'src/SwebKit.DevOps/**'
+              - 'src/SwebKit.Observability/**'
+              - 'src/SwebKit.Agents/**'
+              - 'tests/SwebKit.Core.Tests/**'
+              - 'tests/SwebKit.Azure.Tests/**'
+              - 'tests/SwebKit.Kubernetes.Tests/**'
+              - 'tests/SwebKit.DevOps.Tests/**'
+              - 'tests/SwebKit.Agents.Tests/**'
+              - 'Directory.Packages.props'
+              - 'global.json'
+            maui:
+              - 'src/SwebKit.App/**'
+              - 'tests/SwebKit.App.Tests/**'
+            sidecar:
+              - 'src-sidecar/**'
+              - 'tests/SwebKit.Sidecar.Tests/**'
+            web:
+              - 'web/**'
+
   core:
     name: Core Build & Test
+    needs: changes
+    if: needs.changes.outputs.shared_dotnet == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +99,8 @@ jobs:
 
   maui:
     name: MAUI Build (Windows)
+    needs: changes
+    if: needs.changes.outputs.maui == 'true' || needs.changes.outputs.shared_dotnet == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,3 +123,93 @@ jobs:
 
       - name: Test App
         run: dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj --no-build --verbosity normal
+
+  sidecar:
+    name: Sidecar Build & Test
+    needs: changes
+    if: needs.changes.outputs.sidecar == 'true' || needs.changes.outputs.shared_dotnet == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build sidecar
+        run: dotnet build src-sidecar/SwebKit.Sidecar.csproj
+
+      - name: Test sidecar
+        run: dotnet test tests/SwebKit.Sidecar.Tests/SwebKit.Sidecar.Tests.csproj --verbosity normal
+
+  frontend:
+    name: Web Frontend Build
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm install
+
+      - name: Build (typecheck + bundle)
+        working-directory: web
+        run: npm run build
+
+  e2e:
+    name: Playwright E2E (demo mode)
+    needs: [changes, sidecar, frontend]
+    # Runs whenever anything the suite actually exercises changed, but must not
+    # be silently skipped just because `sidecar`/`frontend` were themselves
+    # skipped for an unrelated change — only a real failure in either should
+    # block this.
+    if: |
+      always() &&
+      (needs.changes.outputs.web == 'true' || needs.changes.outputs.sidecar == 'true' || needs.changes.outputs.shared_dotnet == 'true') &&
+      needs.sidecar.result != 'failure' &&
+      needs.frontend.result != 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm install
+
+      - name: Install Playwright browsers
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E suite
+        working-directory: web
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        # playwright.config.ts uses the "list" reporter (no HTML report file) by
+        # design for fast local runs; this only picks one up if a future change
+        # adds a file-based reporter. Never fail the job over a missing report.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
