@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAksHpas, useAksScaleHpa, useAksDeleteHpa, useAksSetHpaScalingEnabled } from "@/lib/hooks";
 import { YamlViewer } from "./YamlViewer";
 import type { HpaInfo } from "@/lib/types";
 
 export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
+  const queryClient = useQueryClient();
   const { data: hpas, isLoading } = useAksHpas(ns);
   const scaleMutation = useAksScaleHpa();
   const deleteMutation = useAksDeleteHpa();
@@ -16,22 +18,25 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   if (!hpas || hpas.length === 0)
     return <div className="p-4 text-sm text-muted-foreground">No HPAs found</div>;
 
-  const handleScale = (min: number, max: number) => {
+  const handleScale = async (min: number, max: number) => {
     if (!scaleTarget) return;
-    scaleMutation.mutate({ ns, name: scaleTarget.name, minReplicas: min, maxReplicas: max });
+    await scaleMutation.mutateAsync({ ns, name: scaleTarget.name, minReplicas: min, maxReplicas: max });
+    await queryClient.refetchQueries({ queryKey: ["aks-hpas", ns] });
     setScaleTarget(null);
   };
 
-  const handleDelete = (hpa: HpaInfo) => {
+  const handleDelete = async (hpa: HpaInfo) => {
     if (!confirm(`Delete HPA ${hpa.name} in ${hpa.namespace}?`)) return;
-    deleteMutation.mutate({ ns, name: hpa.name });
+    await deleteMutation.mutateAsync({ ns, name: hpa.name });
+    await queryClient.refetchQueries({ queryKey: ["aks-hpas", ns] });
   };
 
-  const handleToggleScaling = (hpa: HpaInfo) => {
+  const handleToggleScaling = async (hpa: HpaInfo) => {
     const next = !hpa.isScalingDisabled;
     const action = next ? "disable" : "enable";
     if (!confirm(`${action === "disable" ? "Disable" : "Enable"} scaling for ${hpa.name}?`)) return;
-    toggleMutation.mutate({ ns, name: hpa.name, enabled: !next });
+    await toggleMutation.mutateAsync({ ns, name: hpa.name, enabled: !next });
+    await queryClient.refetchQueries({ queryKey: ["aks-hpas", ns] });
   };
 
   return (
@@ -72,14 +77,16 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                 ) : "—"}
               </td>
               <td className="py-2 pr-4">
-                {hpa.isKedaManaged ? (
-                  <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-xs text-purple-500">KEDA</span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">HPA</span>
-                )}
-                {hpa.isScalingDisabled && (
-                  <span className="ml-1 rounded bg-red-500/20 px-1.5 py-0.5 text-xs text-red-500">Disabled</span>
-                )}
+                <div className="flex flex-wrap gap-1">
+                  {hpa.isKedaManaged ? (
+                    <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-xs text-purple-500">KEDA</span>
+                  ) : (
+                    <span className="rounded px-1.5 py-0.5 text-xs text-muted-foreground">HPA</span>
+                  )}
+                  {hpa.isScalingDisabled && (
+                    <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs text-red-500">Disabled</span>
+                  )}
+                </div>
               </td>
               <td className="py-2 pr-4">
                 <div className="flex flex-wrap gap-1">
