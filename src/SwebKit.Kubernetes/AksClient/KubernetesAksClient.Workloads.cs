@@ -553,6 +553,44 @@ public partial class KubernetesAksClient
         }).ConfigureAwait(false);
     }
 
+    public async Task ScaleHpaAsync(string ns, string hpaName, int minReplicas, int maxReplicas, CancellationToken ct = default)
+    {
+        await WithAuthRetryAsync(async () =>
+        {
+            var (v2, v1) = await ReadHpaAsync(ns, hpaName, ct).ConfigureAwait(false);
+            var patchJson = JsonSerializer.Serialize(new { spec = new { minReplicas, maxReplicas } });
+            var patch = new V1Patch(patchJson, V1Patch.PatchType.MergePatch);
+            if (v2 is not null)
+            {
+                await _client.AutoscalingV2.PatchNamespacedHorizontalPodAutoscalerAsync(
+                    patch, hpaName, ns, cancellationToken: ct).ConfigureAwait(false);
+            }
+            else
+            {
+                await _client.AutoscalingV1.PatchNamespacedHorizontalPodAutoscalerAsync(
+                    patch, hpaName, ns, cancellationToken: ct).ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
+    }
+
+    public async Task DeleteHpaAsync(string ns, string hpaName, CancellationToken ct = default)
+    {
+        await WithAuthRetryAsync(async () =>
+        {
+            var (v2, v1) = await ReadHpaAsync(ns, hpaName, ct).ConfigureAwait(false);
+            if (v2 is not null)
+            {
+                await _client.AutoscalingV2.DeleteNamespacedHorizontalPodAutoscalerAsync(
+                    hpaName, ns, cancellationToken: ct).ConfigureAwait(false);
+            }
+            else
+            {
+                await _client.AutoscalingV1.DeleteNamespacedHorizontalPodAutoscalerAsync(
+                    hpaName, ns, cancellationToken: ct).ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Reads an HPA preferring <c>autoscaling/v2</c>, falling back to <c>v1</c> when v2 is unavailable.
     /// Returns exactly one of the two typed objects (the other is <c>null</c>).

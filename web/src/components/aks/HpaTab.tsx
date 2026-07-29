@@ -1,11 +1,38 @@
-import { useAksHpas } from "@/lib/hooks";
+import { useState } from "react";
+import { useAksHpas, useAksScaleHpa, useAksDeleteHpa, useAksSetHpaScalingEnabled } from "@/lib/hooks";
+import { YamlViewer } from "./YamlViewer";
+import type { HpaInfo } from "@/lib/types";
 
 export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   const { data: hpas, isLoading } = useAksHpas(ns);
+  const scaleMutation = useAksScaleHpa();
+  const deleteMutation = useAksDeleteHpa();
+  const toggleMutation = useAksSetHpaScalingEnabled();
+
+  const [scaleTarget, setScaleTarget] = useState<HpaInfo | null>(null);
+  const [yamlTarget, setYamlTarget] = useState<HpaInfo | null>(null);
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
   if (!hpas || hpas.length === 0)
     return <div className="p-4 text-sm text-muted-foreground">No HPAs found</div>;
+
+  const handleScale = (min: number, max: number) => {
+    if (!scaleTarget) return;
+    scaleMutation.mutate({ ns, name: scaleTarget.name, minReplicas: min, maxReplicas: max });
+    setScaleTarget(null);
+  };
+
+  const handleDelete = (hpa: HpaInfo) => {
+    if (!confirm(`Delete HPA ${hpa.name} in ${hpa.namespace}?`)) return;
+    deleteMutation.mutate({ ns, name: hpa.name });
+  };
+
+  const handleToggleScaling = (hpa: HpaInfo) => {
+    const next = !hpa.isScalingDisabled;
+    const action = next ? "disable" : "enable";
+    if (!confirm(`${action === "disable" ? "Disable" : "Enable"} scaling for ${hpa.name}?`)) return;
+    toggleMutation.mutate({ ns, name: hpa.name, enabled: !next });
+  };
 
   return (
     <div className="p-4">
@@ -21,6 +48,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
             <th className="py-2 pr-4">Desired</th>
             <th className="py-2 pr-4">CPU%</th>
             <th className="py-2 pr-4">Type</th>
+            <th className="py-2 pr-4">Actions</th>
           </tr>
         </thead>
         <tbody data-testid="hpas-table-body">
@@ -53,10 +81,117 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                   <span className="ml-1 rounded bg-red-500/20 px-1.5 py-0.5 text-xs text-red-500">Disabled</span>
                 )}
               </td>
+              <td className="py-2 pr-4">
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    onClick={() => setScaleTarget(hpa)}
+                    className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
+                  >
+                    Scale
+                  </button>
+                  <button
+                    onClick={() => handleToggleScaling(hpa)}
+                    disabled={toggleMutation.isPending}
+                    className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
+                  >
+                    {hpa.isScalingDisabled ? "Enable" : "Disable"}
+                  </button>
+                  <button
+                    onClick={() => setYamlTarget(hpa)}
+                    className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
+                  >
+                    YAML
+                  </button>
+                  <button
+                    onClick={() => handleDelete(hpa)}
+                    disabled={deleteMutation.isPending}
+                    className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {scaleTarget && (
+        <ScaleHpaForm
+          hpa={scaleTarget}
+          onCancel={() => setScaleTarget(null)}
+          onSave={handleScale}
+          isSaving={scaleMutation.isPending}
+        />
+      )}
+
+      {yamlTarget && (
+        <div className="mt-4 rounded border">
+          <YamlViewer
+            ns={yamlTarget.namespace}
+            kind="HorizontalPodAutoscaler"
+            name={yamlTarget.name}
+            onClose={() => setYamlTarget(null)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScaleHpaForm({
+  hpa,
+  onCancel,
+  onSave,
+  isSaving,
+}: {
+  hpa: HpaInfo;
+  onCancel: () => void;
+  onSave: (min: number, max: number) => void;
+  isSaving: boolean;
+}) {
+  const [min, setMin] = useState(hpa.minReplicas);
+  const [max, setMax] = useState(hpa.maxReplicas);
+
+  return (
+    <div className="mt-4 rounded border p-4">
+      <h4 className="mb-2 text-sm font-medium">Scale {hpa.name}</h4>
+      <div className="flex items-end gap-2">
+        <label className="text-xs">
+          Min replicas
+          <input
+            type="number"
+            min={1}
+            value={min}
+            onChange={(e) => setMin(Math.max(1, parseInt(e.target.value, 10) || 0))}
+            className="mt-1 block w-24 rounded border bg-background px-2 py-1 text-sm"
+          />
+        </label>
+        <label className="text-xs">
+          Max replicas
+          <input
+            type="number"
+            min={1}
+            value={max}
+            onChange={(e) => setMax(Math.max(1, parseInt(e.target.value, 10) || 0))}
+            className="mt-1 block w-24 rounded border bg-background px-2 py-1 text-sm"
+          />
+        </label>
+        <button
+          onClick={() => onSave(min, max)}
+          disabled={isSaving || min > max}
+          className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50"
+        >
+          Save
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={isSaving}
+          className="rounded border border-border px-3 py-1 text-xs hover:bg-accent/50"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

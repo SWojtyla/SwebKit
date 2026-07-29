@@ -49,6 +49,10 @@ public interface IAksClient
     Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default);
     Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName, CancellationToken ct = default);
     Task<HelmReleaseValues> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default);
+    Task<string> GetHelmReleaseNotesAsync(string ns, string releaseName, CancellationToken ct = default)
+        => Task.FromResult<string>("Notes are not supported by this AKS client.");
+    Task<string> GetHelmReleaseManifestAsync(string ns, string releaseName, CancellationToken ct = default)
+        => Task.FromResult<string>("Manifest is not supported by this AKS client.");
     Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default);
     Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default);
     Task ApplyResourceYamlAsync(string ns, string kind, string name, string yaml, CancellationToken ct = default);
@@ -112,6 +116,15 @@ public interface IAksClient
     Task SetHpaScalingEnabledAsync(string ns, string hpaName, bool enabled, CancellationToken ct = default)
         => Task.FromException(
             new NotSupportedException("This AKS client does not support toggling HPA autoscaling."));
+
+    Task ScaleHpaAsync(string ns, string hpaName, int minReplicas, int maxReplicas, CancellationToken ct = default)
+        => Task.FromException(
+            new NotSupportedException("This AKS client does not support scaling HPAs."));
+
+    Task DeleteHpaAsync(string ns, string hpaName, CancellationToken ct = default)
+        => Task.FromException(
+            new NotSupportedException("This AKS client does not support deleting HPAs."));
+
     // ── Jobs and CronJobs ───────────────────────────────────────────────────────
     Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<JobInfo>> GetJobsAsync(string ns, CancellationToken ct = default)

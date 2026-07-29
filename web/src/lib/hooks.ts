@@ -31,6 +31,14 @@ import {
   exportRedisKeys,
   analyzeRedisKeyspace,
   getRedisPrefixMemory,
+  exportSettings,
+  importSettings,
+  scaleHpa,
+  deleteHpa,
+  setHpaScalingEnabled,
+  suspendCronJob,
+  getHelmReleaseNotes,
+  getHelmReleaseManifest,
 } from "./api";
 import type {
   MonitoringAlertRule,
@@ -47,6 +55,7 @@ import type {
   ApiClientExecutionResponse,
   HttpRequestEntry,
   SbEntityInfo,
+  SbEntityStats,
   SbMessage,
   SbNamespaceInfo,
   DeploymentInfo,
@@ -158,6 +167,22 @@ export function useUpdateUserSettings() {
     mutationFn: (data: UserSettings) =>
       apiSend("/api/config/user-settings", "PUT", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["user-settings"] }),
+  });
+}
+
+export function useExportSettings() {
+  return useMutation({ mutationFn: exportSettings });
+}
+
+export function useImportSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: importSettings,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["user-settings"] });
+      qc.invalidateQueries({ queryKey: ["config"] });
+    },
   });
 }
 
@@ -280,6 +305,15 @@ export function useSbPeekDlq(nsId: string | null, entityPath: string | null, cou
       apiFetch<SbMessage[]>(
         `/api/servicebus/${nsId}/entities/${entityPath}/dlq?count=${count}`,
       ),
+    enabled: !!nsId && !!entityPath,
+  });
+}
+
+export function useSbEntityStats(nsId: string | null, entityPath: string | null) {
+  return useQuery({
+    queryKey: ["sb-entity-stats", nsId, entityPath],
+    queryFn: () =>
+      apiFetch<SbEntityStats>(`/api/servicebus/${nsId}/entities/${encodeURIComponent(entityPath!)}/stats`),
     enabled: !!nsId && !!entityPath,
   });
 }
@@ -545,11 +579,54 @@ export function useAksHpas(ns: string | null) {
   });
 }
 
+export function useAksScaleHpa() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { ns: string; name: string; minReplicas: number; maxReplicas: number }) =>
+      scaleHpa(vars.ns, vars.name, vars.minReplicas, vars.maxReplicas),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["aks-hpas", vars.ns] });
+    },
+  });
+}
+
+export function useAksDeleteHpa() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { ns: string; name: string }) => deleteHpa(vars.ns, vars.name),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["aks-hpas", vars.ns] });
+    },
+  });
+}
+
+export function useAksSetHpaScalingEnabled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { ns: string; name: string; enabled: boolean }) =>
+      setHpaScalingEnabled(vars.ns, vars.name, vars.enabled),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["aks-hpas", vars.ns] });
+    },
+  });
+}
+
 export function useAksCronJobs(ns: string | null) {
   return useQuery({
     queryKey: ["aks-cronjobs", ns],
     queryFn: () => apiFetch<CronJobInfo[]>(`/api/aks/${ns}/cronjobs`),
     enabled: !!ns,
+  });
+}
+
+export function useAksSuspendCronJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { ns: string; name: string; suspend: boolean }) =>
+      suspendCronJob(vars.ns, vars.name, vars.suspend),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["aks-cronjobs", vars.ns] });
+    },
   });
 }
 
@@ -638,6 +715,22 @@ export function useAksHelmValues(ns: string | null, release: string | null) {
   return useQuery({
     queryKey: ["aks-helm-values", ns, release],
     queryFn: () => apiFetch<HelmValuesResponse>(`/api/aks/${ns}/helm-releases/${release}/values`),
+    enabled: !!ns && !!release,
+  });
+}
+
+export function useAksHelmNotes(ns: string | null, release: string | null) {
+  return useQuery({
+    queryKey: ["aks-helm-notes", ns, release],
+    queryFn: () => getHelmReleaseNotes(ns!, release!),
+    enabled: !!ns && !!release,
+  });
+}
+
+export function useAksHelmManifest(ns: string | null, release: string | null) {
+  return useQuery({
+    queryKey: ["aks-helm-manifest", ns, release],
+    queryFn: () => getHelmReleaseManifest(ns!, release!),
     enabled: !!ns && !!release,
   });
 }

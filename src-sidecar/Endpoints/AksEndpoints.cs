@@ -216,6 +216,20 @@ public static class AksEndpoints
             return Results.Ok(values);
         });
 
+        app.MapGet("/api/aks/{ns}/helm-releases/{release}/notes", async (string ns, string release, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            var notes = await client.GetHelmReleaseNotesAsync(ns, release, ct);
+            return Results.Ok(new { notes });
+        });
+
+        app.MapGet("/api/aks/{ns}/helm-releases/{release}/manifest", async (string ns, string release, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            var manifest = await client.GetHelmReleaseManifestAsync(ns, release, ct);
+            return Results.Ok(new { manifest });
+        });
+
         app.MapPost("/api/aks/{ns}/helm-releases/{release}/rollback", async (string ns, string release, int targetRevision, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
         {
             var client = GetClient(profile, demo);
@@ -311,6 +325,30 @@ public static class AksEndpoints
             return Results.Ok(hpas);
         });
 
+        app.MapPost("/api/aks/{ns}/hpas/{name}/scale", async (string ns, string name, ScaleHpaRequest dto, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            await Task.WhenAll(namespaces.Select(n => client.ScaleHpaAsync(n, name, dto.MinReplicas, dto.MaxReplicas, ct)));
+            return Results.Ok();
+        });
+
+        app.MapDelete("/api/aks/{ns}/hpas/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            await Task.WhenAll(namespaces.Select(n => client.DeleteHpaAsync(n, name, ct)));
+            return Results.NoContent();
+        });
+
+        app.MapPost("/api/aks/{ns}/hpas/{name}/scaling-enabled", async (string ns, string name, SetScalingEnabledRequest dto, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            await Task.WhenAll(namespaces.Select(n => client.SetHpaScalingEnabledAsync(n, name, dto.Enabled, ct)));
+            return Results.Ok();
+        });
+
         // ── Jobs & CronJobs ────────────────────────────────────────────────────
 
         app.MapGet("/api/aks/{ns}/cronjobs", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
@@ -319,6 +357,14 @@ public static class AksEndpoints
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
             var cronJobs = await client.GetCronJobsAsync(namespaces, ct);
             return Results.Ok(cronJobs);
+        });
+
+        app.MapPost("/api/aks/{ns}/cronjobs/{name}/suspend", async (string ns, string name, SuspendCronJobRequest dto, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            await Task.WhenAll(namespaces.Select(n => client.SuspendCronJobAsync(n, name, dto.Suspend, ct)));
+            return Results.Ok();
         });
 
         app.MapGet("/api/aks/{ns}/jobs", async (string ns, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
@@ -442,3 +488,6 @@ public static class AksEndpoints
 }
 
 public sealed record SetContextRequest(string Context, string? DefaultNamespace = null);
+public sealed record ScaleHpaRequest(int MinReplicas, int MaxReplicas);
+public sealed record SetScalingEnabledRequest(bool Enabled);
+public sealed record SuspendCronJobRequest(bool Suspend);

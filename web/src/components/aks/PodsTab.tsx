@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import { useAksPods, useAksDeletePod, useAksPodMetrics } from "@/lib/hooks";
 import { showNotification } from "@/lib/tauri-bridge";
 import type { PodInfo, PodMetricInfo } from "@/lib/types";
@@ -94,6 +94,7 @@ function PodMetricCell({ pod, metrics }: { pod: PodInfo; metrics: PodMetricInfo[
 export function PodsTab({ ns, isMulti, onPodClick, onContextMenu, onDeletePod }: PodsTabProps) {
   const { data: pods, isLoading } = useAksPods(ns);
   const { data: metrics } = useAksPodMetrics(ns);
+  const [hideCompleted, setHideCompleted] = useState(true);
   const deleteMutation = useAksDeletePod();
   const prevStatusesRef = useRef<Map<string, string>>(new Map());
   const prevNsRef = useRef(ns);
@@ -119,9 +120,26 @@ export function PodsTab({ ns, isMulti, onPodClick, onContextMenu, onDeletePod }:
     prevStatusesRef.current = new Map(pods.map((p) => [p.name, p.status]));
   }, [pods, ns]);
 
+  const isCompletedPod = (pod: PodInfo) =>
+    pod.phase === "Succeeded" || pod.status?.toLowerCase() === "completed";
+
+  const visiblePods = hideCompleted ? pods?.filter((p) => !isCompletedPod(p)) : pods;
+
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
-  if (!pods || pods.length === 0)
-    return <div className="p-4 text-sm text-muted-foreground">No pods found</div>;
+  if (!visiblePods || visiblePods.length === 0)
+    return (
+      <div className="p-4 text-sm text-muted-foreground">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={hideCompleted}
+            onChange={(e) => setHideCompleted(e.target.checked)}
+          />
+          Hide completed pods
+        </label>
+        <p className="mt-2">No pods found</p>
+      </div>
+    );
 
   const handleDelete = (pod: PodInfo) => {
     if (onDeletePod) {
@@ -134,6 +152,16 @@ export function PodsTab({ ns, isMulti, onPodClick, onContextMenu, onDeletePod }:
 
   return (
     <div className="p-4">
+      <div className="mb-2 flex items-center gap-2 px-4 pt-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={hideCompleted}
+            onChange={(e) => setHideCompleted(e.target.checked)}
+          />
+          Hide completed pods
+        </label>
+      </div>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
@@ -150,7 +178,7 @@ export function PodsTab({ ns, isMulti, onPodClick, onContextMenu, onDeletePod }:
           </tr>
         </thead>
         <tbody data-testid="pods-table-body">
-          {pods.map((pod) => (
+          {visiblePods.map((pod) => (
             <tr key={`${pod.namespace}/${pod.name}`} data-testid={`pod-row-${pod.name}`} className={`border-b last:border-0 ${onPodClick ? "cursor-pointer hover:bg-accent/50" : ""}`} onClick={() => onPodClick?.(pod)} onContextMenu={(e) => onContextMenu?.(e, pod)}>
               <td className="py-2 pr-4 font-medium">{pod.name}</td>
               {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{pod.namespace}</td>}

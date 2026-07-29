@@ -1,4 +1,4 @@
-import { useAksCronJobs } from "@/lib/hooks";
+import { useAksCronJobs, useAksSuspendCronJob } from "@/lib/hooks";
 import type { CronJobInfo } from "@/lib/types";
 
 interface CronJobsTabProps {
@@ -9,10 +9,18 @@ interface CronJobsTabProps {
 
 export function CronJobsTab({ ns, isMulti, onContextMenu }: CronJobsTabProps) {
   const { data: cronjobs, isLoading } = useAksCronJobs(ns);
+  const suspendMutation = useAksSuspendCronJob();
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
   if (!cronjobs || cronjobs.length === 0)
     return <div className="p-4 text-sm text-muted-foreground">No cron jobs found</div>;
+
+  const handleToggle = (cj: CronJobInfo) => {
+    const next = !cj.suspend;
+    const action = next ? "suspend" : "resume";
+    if (!confirm(`${action === "suspend" ? "Suspend" : "Resume"} cronjob ${cj.name}?`)) return;
+    suspendMutation.mutate({ ns, name: cj.name, suspend: next });
+  };
 
   return (
     <div className="p-4">
@@ -26,6 +34,7 @@ export function CronJobsTab({ ns, isMulti, onContextMenu }: CronJobsTabProps) {
             <th className="py-2 pr-4">Active</th>
             <th className="py-2 pr-4">Last Schedule</th>
             <th className="py-2 pr-4">Last Success</th>
+            <th className="py-2 pr-4">Actions</th>
           </tr>
         </thead>
         <tbody data-testid="cronjobs-table-body">
@@ -43,6 +52,15 @@ export function CronJobsTab({ ns, isMulti, onContextMenu }: CronJobsTabProps) {
               </td>
               <td className="py-2 pr-4 text-xs text-muted-foreground">
                 {cj.lastSuccessfulTime ? new Date(cj.lastSuccessfulTime).toLocaleString() : "—"}
+              </td>
+              <td className="py-2 pr-4">
+                <button
+                  onClick={() => handleToggle(cj)}
+                  disabled={suspendMutation.isPending}
+                  className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
+                >
+                  {cj.suspend ? "Resume" : "Suspend"}
+                </button>
               </td>
             </tr>
           ))}

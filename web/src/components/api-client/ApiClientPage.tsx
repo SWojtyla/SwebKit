@@ -736,7 +736,7 @@ export function ApiClientPage() {
 
       {/* Main 3-pane layout */}
       <div className="flex min-w-0 flex-1 overflow-hidden">
-        <ResizablePanels initialWidths={[260, 360, null]} minWidths={[180, 260, 260]} className="w-full min-w-0">
+        <ResizablePanels initialWidths={[260, 540, null]} minWidths={[180, 360, 260]} className="w-full min-w-0">
           <CollectionTree
             collections={collections}
             selectedNodeId={selectedNodeId}

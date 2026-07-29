@@ -132,25 +132,22 @@ test.describe("Redis", () => {
     expect(exported["session:abc123"]).not.toEqual(exported["user:1001"]);
   });
 
-  test("namespace tree shows key prefixes", async ({ page }) => {
+  test("single key list shows all keys and loaded count", async ({ page }) => {
     await page.goto("/redis");
-    await expect(page.getByTestId("redis-namespace-tree")).toBeVisible();
-    // Should have namespace buttons for user, session, etc.
-    const nsButtons = page.locator("[data-testid^='redis-namespace-']");
-    const count = await nsButtons.count();
-    expect(count).toBeGreaterThan(0);
+    // Namespace tree removed; keys render directly in the browser list.
+    await expect(page.getByTestId("redis-key-browser")).toBeVisible();
+    await expect(page.getByTestId("redis-key-user:1001")).toBeVisible();
+    await expect(page.getByTestId("redis-key-count")).toContainText(/keys loaded/);
   });
 
-  test("namespace tree expands recursively", async ({ page }) => {
+  test("separator control filters namespace grouping in health/prefix tabs", async ({ page }) => {
     await page.goto("/redis");
-
-    await page.getByTestId("redis-namespace-toggle-user").click();
-    await expect(page.getByTestId("redis-namespace-user:profile")).toBeVisible();
-
-    await page.getByTestId("redis-namespace-toggle-user:profile").click();
-    await expect(page.getByTestId("redis-namespace-key-user:profile:1001")).toBeVisible();
-    await page.getByTestId("redis-namespace-key-user:profile:1001").click();
-    await expect(page.getByTestId("redis-detail-key-name")).toHaveText("user:profile:1001");
+    await expect(page.getByTestId("redis-separator-input")).toBeVisible();
+    await page.getByTestId("redis-separator-input").fill(":");
+    await page.getByTestId("redis-tab-keyspace").click();
+    await expect(page.getByTestId("keyspace-health-panel")).toBeVisible();
+    await page.getByTestId("redis-tab-prefix").click();
+    await expect(page.getByTestId("prefix-memory-panel")).toBeVisible();
   });
 
   test("keyspace tab shows health panel", async ({ page }) => {

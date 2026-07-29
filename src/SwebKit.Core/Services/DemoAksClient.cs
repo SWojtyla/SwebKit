@@ -23,6 +23,9 @@ public class DemoAksClient : IAksClient
     private readonly Dictionary<string, int> _jobParallelismOverrides = new(StringComparer.Ordinal);
     // Keys ("{ns}/{hpaName}") whose autoscaling the operator has disabled this session.
     private readonly HashSet<string> _disabledHpaKeys = new(StringComparer.Ordinal);
+    // Keys ("{ns}/{hpaName}") -> (min, max) overrides applied this session.
+    private readonly Dictionary<string, (int Min, int Max)> _hpaReplicaOverrides = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _deletedHpas = new(StringComparer.Ordinal);
     private readonly Lock _scalingLock = new();
     private int _jobSequence;
 
@@ -1289,6 +1292,18 @@ public class DemoAksClient : IAksClient
         return new HelmReleaseValues { UserValues = userValues, ComputedValues = computedValues };
     }
 
+    public async Task<string> GetHelmReleaseNotesAsync(string ns, string releaseName, CancellationToken ct = default)
+    {
+        await Task.Delay(250, ct).ConfigureAwait(false);
+        return $"# {releaseName}\n\nSample release notes for the '{releaseName}' Helm release in namespace '{ns}'.";
+    }
+
+    public async Task<string> GetHelmReleaseManifestAsync(string ns, string releaseName, CancellationToken ct = default)
+    {
+        await Task.Delay(300, ct).ConfigureAwait(false);
+        return $"# Manifest: {releaseName}\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {releaseName}-config\n  namespace: {ns}\ndata:\n  release: \"{releaseName}\"\n";
+    }
+
     public async Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)
     {
         await Task.Delay(800, ct).ConfigureAwait(false); // simulate rollback
@@ -1681,9 +1696,21 @@ public class DemoAksClient : IAksClient
 
         lock (_scalingLock)
         {
-            foreach (var hpa in hpas)
+            for (var i = hpas.Count - 1; i >= 0; i--)
             {
-                if (_disabledHpaKeys.Contains($"{hpa.Namespace}/{hpa.Name}"))
+                var hpa = hpas[i];
+                var key = $"{hpa.Namespace}/{hpa.Name}";
+                if (_deletedHpas.Contains(key))
+                {
+                    hpas.RemoveAt(i);
+                    continue;
+                }
+                if (_hpaReplicaOverrides.TryGetValue(key, out var bounds))
+                {
+                    hpa.MinReplicas = bounds.Min;
+                    hpa.MaxReplicas = bounds.Max;
+                }
+                if (_disabledHpaKeys.Contains(key))
                 {
                     hpa.IsScalingDisabled = true;
                 }
@@ -1704,6 +1731,26 @@ public class DemoAksClient : IAksClient
                 _disabledHpaKeys.Add(key);
         }
 
+        return Task.CompletedTask;
+    }
+
+    public Task ScaleHpaAsync(string ns, string hpaName, int minReplicas, int maxReplicas, CancellationToken ct = default)
+    {
+        var key = $"{ns}/{hpaName}";
+        lock (_scalingLock)
+        {
+            _hpaReplicaOverrides[key] = (minReplicas, maxReplicas);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteHpaAsync(string ns, string hpaName, CancellationToken ct = default)
+    {
+        var key = $"{ns}/{hpaName}";
+        lock (_scalingLock)
+        {
+            _deletedHpas.Add(key);
+        }
         return Task.CompletedTask;
     }
 
