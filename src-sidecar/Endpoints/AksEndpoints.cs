@@ -213,7 +213,14 @@ public static class AksEndpoints
         {
             var client = GetClient(profile, demo);
             var values = await client.GetHelmReleaseValuesAsync(ns, release, ct);
-            return Results.Text(values, "text/yaml");
+            return Results.Ok(values);
+        });
+
+        app.MapPost("/api/aks/{ns}/helm-releases/{release}/rollback", async (string ns, string release, int targetRevision, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            await client.RollbackHelmReleaseAsync(ns, release, targetRevision, ct);
+            return Results.Ok();
         });
 
         // ── ConfigMaps & Secrets ───────────────────────────────────────────────

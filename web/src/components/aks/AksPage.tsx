@@ -910,6 +910,7 @@ export function AksPage() {
               ns={helmRelease.namespace}
               release={helmRelease.name}
               onClose={() => setHelmRelease(null)}
+              onRequestConfirm={requestConfirm}
             />
           </ResizablePanel>
         )}

@@ -1,18 +1,34 @@
 import { useState } from "react";
 import { X, History, Settings2, RotateCcw } from "lucide-react";
-import { useAksHelmHistory, useAksHelmValues } from "@/lib/hooks";
+import { useAksHelmHistory, useAksHelmValues, useAksHelmRollback } from "@/lib/hooks";
 
 interface HelmDetailPanelProps {
   ns: string;
   release: string;
   onClose: () => void;
+  onRequestConfirm: (opts: { message: string; resourceName: string; onConfirm: () => void }) => void;
+  onError?: (message: string) => void;
 }
 
-export function HelmDetailPanel({ ns, release, onClose }: HelmDetailPanelProps) {
+export function HelmDetailPanel({ ns, release, onClose, onRequestConfirm, onError }: HelmDetailPanelProps) {
   const [tab, setTab] = useState<"history" | "values">("history");
   const { data: history, isLoading: historyLoading } = useAksHelmHistory(ns, release);
   const { data: values, isLoading: valuesLoading } = useAksHelmValues(ns, release);
   const [valuesTab, setValuesTab] = useState<"user" | "computed">("user");
+  const rollback = useAksHelmRollback();
+
+  const requestRollback = (targetRevision: number) => {
+    onRequestConfirm({
+      message: `Rollback "${release}" to revision ${targetRevision}? This will re-deploy that revision's chart and values.`,
+      resourceName: release,
+      onConfirm: () => {
+        rollback.mutate(
+          { ns, release, targetRevision },
+          { onError: (err) => onError?.(err instanceof Error ? err.message : String(err)) },
+        );
+      },
+    });
+  };
 
   return (
     <div className="flex h-full flex-col" data-testid="helm-detail-panel">
@@ -61,7 +77,7 @@ export function HelmDetailPanel({ ns, release, onClose }: HelmDetailPanelProps) 
                     <th className="py-2 pr-4">Chart</th>
                     <th className="py-2 pr-4">App Version</th>
                     <th className="py-2 pr-4">Description</th>
-                    <th className="py-2 pr-4">Age</th>
+                    <th className="py-2 pr-4">Updated</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -76,16 +92,20 @@ export function HelmDetailPanel({ ns, release, onClose }: HelmDetailPanelProps) 
                       <td className="py-2 pr-4 text-xs text-muted-foreground">{h.chart}</td>
                       <td className="py-2 pr-4 text-xs text-muted-foreground">{h.appVersion}</td>
                       <td className="py-2 pr-4 text-xs text-muted-foreground">{h.description}</td>
-                      <td className="py-2 pr-4 text-xs text-muted-foreground">{h.age}</td>
+                      <td className="py-2 pr-4 text-xs text-muted-foreground">
+                        {h.updated ? new Date(h.updated).toLocaleDateString() : "—"}
+                      </td>
                       <td className="py-2 pr-4">
                         {h.status !== "deployed" && (
                           <button
-                            disabled
-                            title="Coming soon — rolling back needs a sidecar POST endpoint"
-                            className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs opacity-50 cursor-not-allowed"
+                            onClick={() => requestRollback(h.revision)}
+                            disabled={rollback.isPending}
+                            title={`Rollback to revision ${h.revision}`}
+                            className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                             data-testid={`helm-rollback-rev-${h.revision}`}
                           >
-                            <RotateCcw className="h-3 w-3" /> Rollback
+                            <RotateCcw className="h-3 w-3" />
+                            {rollback.isPending && rollback.variables?.targetRevision === h.revision ? "Rolling back…" : "Rollback"}
                           </button>
                         )}
                       </td>

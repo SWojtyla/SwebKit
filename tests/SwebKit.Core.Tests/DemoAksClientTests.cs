@@ -85,13 +85,21 @@ public class DemoAksClientTests
     }
 
     [Fact]
-    public async Task GetHelmReleaseValuesAsync_ReturnsYamlString()
+    public async Task GetHelmReleaseValuesAsync_ReturnsUserAndComputedYamlStrings()
     {
         var values = await _client.GetHelmReleaseValuesAsync("default", "order-api");
 
-        Assert.Contains("replicaCount", values);
-        Assert.Contains("order-api", values);
-        Assert.Contains("image", values);
+        Assert.Contains("replicaCount", values.UserValues);
+        Assert.Contains("order-api", values.UserValues);
+
+        Assert.Contains("replicaCount", values.ComputedValues);
+        Assert.Contains("order-api", values.ComputedValues);
+        Assert.Contains("image", values.ComputedValues);
+
+        // Computed values are the fuller, merged view — the chart defaults it adds on top of the
+        // user's overrides (service/resources/autoscaling) shouldn't appear in the user-only view.
+        Assert.DoesNotContain("autoscaling", values.UserValues);
+        Assert.Contains("autoscaling", values.ComputedValues);
     }
 
     [Fact]

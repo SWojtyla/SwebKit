@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using k8s.Models;
 using SwebKit.Kubernetes.AksClient;
 
@@ -123,7 +124,117 @@ public sealed class KubernetesAksClientSecretsHelmEventsTests
         Assert.Equal("Normal", Assert.Single(result).Type);
     }
 
+    // ── ParseHelmReleaseValues ────────────────────────────────────────────────────
+
+    [Fact]
+    public void ParseHelmReleaseValues_UserValues_OnlyContainsConfigOverrides()
+    {
+        var releaseJson = ReleaseJson(
+            config: """{ "replicaCount": 3 }""",
+            chartValues: """{ "replicaCount": 1, "image": { "tag": "latest" } }""");
+
+        var result = KubernetesAksClient.ParseHelmReleaseValues(releaseJson);
+
+        Assert.Contains("replicaCount", result.UserValues);
+        Assert.Contains("3", result.UserValues);
+        Assert.DoesNotContain("image", result.UserValues);
+    }
+
+    [Fact]
+    public void ParseHelmReleaseValues_ComputedValues_MergesChartDefaultsWithUserOverrides()
+    {
+        var releaseJson = ReleaseJson(
+            config: """{ "replicaCount": 3 }""",
+            chartValues: """{ "replicaCount": 1, "image": { "tag": "latest" } }""");
+
+        var result = KubernetesAksClient.ParseHelmReleaseValues(releaseJson);
+
+        // Override wins on the conflicting key...
+        Assert.Contains("\"replicaCount\": 3", result.ComputedValues);
+        // ...but the chart's own default the user never touched still shows up.
+        Assert.Contains("image", result.ComputedValues);
+        Assert.Contains("latest", result.ComputedValues);
+    }
+
+    [Fact]
+    public void ParseHelmReleaseValues_ComputedValues_FallsBackToUserValues_WhenChartHasNoDefaults()
+    {
+        var releaseJson = ReleaseJson(config: """{ "replicaCount": 3 }""", chartValues: null);
+
+        var result = KubernetesAksClient.ParseHelmReleaseValues(releaseJson);
+
+        Assert.Equal(result.UserValues, result.ComputedValues);
+    }
+
+    [Fact]
+    public void ParseHelmReleaseValues_UserValues_DefaultsToEmptyObject_WhenNoConfigWasSupplied()
+    {
+        // A release installed with no --set/-f overrides at all has no "config" key.
+        var releaseJson = """{ "chart": { "values": { "replicaCount": 1 } } }""";
+
+        var result = KubernetesAksClient.ParseHelmReleaseValues(releaseJson);
+
+        Assert.Equal("{}", result.UserValues);
+        Assert.Contains("replicaCount", result.ComputedValues);
+    }
+
+    // ── MergeJsonValues ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void MergeJsonValues_DeepMergesNestedObjects_OverrideWinsOnConflict()
+    {
+        var baseNode = JsonNode.Parse("""{ "a": { "x": 1, "y": 2 } }""");
+        var overrideNode = JsonNode.Parse("""{ "a": { "y": 3, "z": 4 } }""");
+
+        var merged = KubernetesAksClient.MergeJsonValues(baseNode, overrideNode);
+
+        Assert.Equal(1, (int)merged!["a"]!["x"]!);
+        Assert.Equal(3, (int)merged["a"]!["y"]!);
+        Assert.Equal(4, (int)merged["a"]!["z"]!);
+    }
+
+    [Fact]
+    public void MergeJsonValues_OverrideArray_ReplacesBaseArrayWholesale()
+    {
+        // Helm doesn't merge arrays element-by-element — an override array replaces the base
+        // array entirely, it never splices/concatenates.
+        var baseNode = JsonNode.Parse("""{ "list": [1, 2, 3] }""");
+        var overrideNode = JsonNode.Parse("""{ "list": [9] }""");
+
+        var merged = KubernetesAksClient.MergeJsonValues(baseNode, overrideNode);
+
+        var list = Assert.IsType<JsonArray>(merged!["list"]);
+        Assert.Single(list);
+        Assert.Equal(9, (int)list[0]!);
+    }
+
+    [Fact]
+    public void MergeJsonValues_ReturnsBaseUntouched_WhenOverrideIsNull()
+    {
+        var baseNode = JsonNode.Parse("""{ "a": 1 }""");
+
+        var merged = KubernetesAksClient.MergeJsonValues(baseNode, null);
+
+        Assert.Equal(1, (int)merged!["a"]!);
+    }
+
+    [Fact]
+    public void MergeJsonValues_ReturnsOverride_WhenBaseIsNull()
+    {
+        var overrideNode = JsonNode.Parse("""{ "a": 1 }""");
+
+        var merged = KubernetesAksClient.MergeJsonValues(null, overrideNode);
+
+        Assert.Equal(1, (int)merged!["a"]!);
+    }
+
     // ── Fixture helpers ───────────────────────────────────────────────────────────
+
+    private static string ReleaseJson(string config, string? chartValues) =>
+        chartValues is null
+            ? $$"""{ "config": {{config}} }"""
+            : $$"""{ "config": {{config}}, "chart": { "values": {{chartValues}} } }""";
+
 
     private static V1Secret PlainSecret(string name, string? ns) => new()
     {

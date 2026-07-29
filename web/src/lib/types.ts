@@ -637,7 +637,7 @@ export interface HelmHistoryEntry {
   chart: string;
   appVersion: string;
   description: string;
-  age: string;
+  updated: string | null;
 }
 
 export interface HelmValuesResponse {

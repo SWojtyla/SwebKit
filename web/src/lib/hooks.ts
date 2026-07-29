@@ -642,6 +642,19 @@ export function useAksHelmValues(ns: string | null, release: string | null) {
   });
 }
 
+export function useAksHelmRollback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { ns: string; release: string; targetRevision: number }) =>
+      apiSend(`/api/aks/${vars.ns}/helm-releases/${vars.release}/rollback?targetRevision=${vars.targetRevision}`, "POST"),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["aks-helm-history", vars.ns, vars.release] });
+      qc.invalidateQueries({ queryKey: ["aks-helm-values", vars.ns, vars.release] });
+      qc.invalidateQueries({ queryKey: ["aks-helm", vars.ns] });
+    },
+  });
+}
+
 export function useAksPodLogs(ns: string | null, pod: string | null, container?: string, tail = 100) {
   return useQuery({
     queryKey: ["aks-pod-logs", ns, pod, container, tail],

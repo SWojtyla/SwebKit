@@ -1239,10 +1239,23 @@ public class DemoAksClient : IAksClient
         };
     }
 
-    public async Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
+    public async Task<HelmReleaseValues> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
     {
         await Task.Delay(250, ct).ConfigureAwait(false);
-        return $"""
+
+        // User values: only what someone actually overrode at install/upgrade time.
+        var userValues = $"""
+            replicaCount: 3
+            image:
+              tag: "1.3.0"
+            ingress:
+              hosts:
+                - host: {releaseName}.example.com
+            """;
+
+        // Computed values: those overrides merged onto the chart's own defaults — what the
+        // release is actually running with (matches `helm get values --all`).
+        var computedValues = $"""
             replicaCount: 3
             image:
               repository: acr.azurecr.io/{releaseName}
@@ -1272,6 +1285,8 @@ public class DemoAksClient : IAksClient
               maxReplicas: 10
               targetCPUUtilizationPercentage: 75
             """;
+
+        return new HelmReleaseValues { UserValues = userValues, ComputedValues = computedValues };
     }
 
     public async Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)
