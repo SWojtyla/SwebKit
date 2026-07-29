@@ -1,0 +1,65 @@
+name: Release (Tauri desktop app)
+
+# Builds the Tauri/React desktop installer and publishes it as a GitHub Release.
+# Triggered by pushing a tag like v0.1.0 — release assets are only visible to
+# people with access to this repo, same as the rest of the repo's contents.
+#
+# Steps mirror the manual build recipe documented in README.md's
+# "Build the Tauri desktop app (installer)" section — keep the two in sync.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag to build and release (e.g. v0.1.0). Must already exist."
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & publish Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag_name || github.ref }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build frontend
+        working-directory: web
+        run: |
+          npm install
+          npm run build
+
+      - name: Publish self-contained sidecar
+        run: >
+          dotnet publish src-sidecar/SwebKit.Sidecar.csproj
+          -c Release -r win-x64 --self-contained true
+          -o src-tauri/binaries/sidecar
+
+      - name: Build Tauri installer
+        working-directory: src-tauri
+        run: node ../web/node_modules/@tauri-apps/cli/tauri.js build
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
+          name: SwebKit ${{ inputs.tag_name || github.ref_name }}
+          draft: true
+          files: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
