@@ -1,21 +1,27 @@
-# run-swebkit.ps1 - one-click SwebKit dev launcher (PowerShell)
+# run-dev.ps1 - one-click SwebKit (Tauri) dev launcher, hot reload (PowerShell)
 #
 # Starts the three dev tiers in separate windows:
 #   1. .NET sidecar  (http://127.0.0.1:5199)
 #   2. Vite frontend (http://localhost:1420)
 #   3. Tauri window  (opens the desktop app)
 #
-# If a tier is already running it is skipped. Close the spawned console
-# windows to stop. Logs: scripts\sidecar.log, scripts\vite.log, scripts\tauri.log
+# If a tier is already running it is skipped. Close the spawned console windows
+# to stop. Logs land in scripts\logs\{sidecar,vite,tauri}.log.
 #
-# Run with:  powershell -ExecutionPolicy Bypass -File .\run-swebkit.ps1
+# This is the *debug* path: the sidecar runs from source via `dotnet run` and the
+# frontend is served by Vite with HMR. To exercise the same artifacts the
+# installer ships (published sidecar + production frontend bundle) use
+# scripts\tauri\test-frontend.ps1 instead.
+#
+# Run with:  powershell -ExecutionPolicy Bypass -File .\run-dev.ps1
 #            (or right-click the file -> "Run with PowerShell")
 
-$repo        = Resolve-Path (Join-Path $PSScriptRoot '..')
+$repo        = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $sidecarDir  = Join-Path $repo 'src-sidecar'
 $viteDir     = Join-Path $repo 'web'
 $tauriBin    = Join-Path $repo 'web\node_modules\.bin\tauri.cmd'
-$logDir      = Join-Path $repo 'scripts'
+$logDir      = Join-Path $repo 'scripts\logs'
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 $sidecarLog  = Join-Path $logDir 'sidecar.log'
 $viteLog     = Join-Path $logDir 'vite.log'
 $tauriLog    = Join-Path $logDir 'tauri.log'
@@ -81,4 +87,4 @@ Start-Process powershell -WorkingDirectory $repo `
     -WindowStyle Normal
 
 Write-Host "`n[done]  SwebKit launching. Close the three console windows to stop." -ForegroundColor Cyan
-Write-Host "        Logs: scripts\sidecar.log, scripts\vite.log, scripts\tauri.log" -ForegroundColor Cyan
+Write-Host "        Logs: scripts\logs\sidecar.log, scripts\logs\vite.log, scripts\logs\tauri.log" -ForegroundColor Cyan

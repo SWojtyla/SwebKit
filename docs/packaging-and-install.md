@@ -1,5 +1,9 @@
 # Packaging & Local Installation (MSIX)
 
+**This page covers the legacy MAUI app only** (`src/SwebKit.App`, MSIX, self-signed
+sideload). For the Tauri rewrite's MSI/NSIS installer see
+[scripts/README.md](../scripts/README.md) — `pwsh -File scripts/tauri/build-msi.ps1`.
+
 SwebKit is distributed as a self-signed MSIX package for Windows — there is no public
 distribution yet, so every machine (yours, a teammate's, or an AI agent acting on your
 behalf) signs its own local build with its own certificate.
@@ -9,7 +13,7 @@ behalf) signs its own local build with its own certificate.
 From a full clone of the repo, in PowerShell:
 
 ```powershell
-pwsh -File scripts/install.ps1
+pwsh -File scripts/maui/install.ps1
 ```
 
 This single command:
@@ -66,7 +70,7 @@ launch — is fully scripted with no prompts.
 <PackageCertificateThumbprint>...</PackageCertificateThumbprint>
 ```
 
-`scripts/install.ps1` keeps `PackageCertificateThumbprint` in sync with whatever
+`scripts/maui/install.ps1` keeps `PackageCertificateThumbprint` in sync with whatever
 certificate exists on the current machine — you should never need to edit this by hand.
 
 ### 3. Package manifest
@@ -200,7 +204,7 @@ Or just double-click the `.msix` file.
   trust it. It is **not** suitable for Microsoft Store distribution — see
   [MICROSOFT_STORE_SUBMISSION_GUIDE.md](../MICROSOFT_STORE_SUBMISSION_GUIDE.md) for that
   path when SwebKit is ready to publish for real.
-- Certificates expire after 1 year. `scripts/install.ps1` detects an expired/missing
+- Certificates expire after 1 year. `scripts/maui/install.ps1` detects an expired/missing
   certificate and generates a fresh one automatically — nothing to remember.
 - The package version bump (previous section) touches the tracked
   `Package.appxmanifest` file, the same way the certificate thumbprint sync touches

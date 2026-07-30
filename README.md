@@ -39,7 +39,7 @@ it, installs it, and launches it.
 ```powershell
 git clone <this-repo-url>
 cd SwebKit
-pwsh -File scripts/install.ps1
+pwsh -File scripts/maui/install.ps1
 ```
 
 That's it. You'll get a single UAC prompt (to trust the certificate for sideloading)
@@ -101,6 +101,11 @@ tests/
 
 The `feat/tauri-react-rewrite` branch uses a .NET minimal API sidecar and a Vite/React/Tailwind frontend.
 
+Every step below is also scripted under [scripts/tauri/](scripts/tauri/) — one command each
+for the dev loop, a browser test run against the real production artifacts, and a fresh
+installer. See [scripts/README.md](scripts/README.md); the manual recipes here document
+what those scripts do.
+
 ### Prerequisites
 
 - .NET 10 SDK
@@ -146,6 +151,18 @@ dotnet build
 ### Build the Tauri desktop app (installer)
 
 The Tauri shell wraps the React frontend into a native Windows desktop app with an MSI/NSIS installer.
+
+#### Quick start
+
+```powershell
+pwsh -File scripts/tauri/build-msi.ps1
+```
+
+Cleans the previous output and runs all four steps below in order, verifying each one —
+including that the sidecar actually landed in the bundle, which is the easiest thing to
+get wrong. Output: `src-tauri/target/release/bundle/msi/SwebKit_<version>_x64_en-US.msi`.
+Flags (`-Bundles all`, `-FullClean`, `-NoClean`, `-Install`, …) are documented in
+[scripts/README.md](scripts/README.md).
 
 #### Prerequisites
 
@@ -205,7 +222,13 @@ Either can be distributed for installation. The MSI is recommended for enterpris
 
 #### Dev mode (hot reload)
 
-For development with live reload, start the sidecar and Vite dev server first, then:
+```powershell
+pwsh -File scripts/tauri/run-dev.ps1     # or double-click scripts/tauri/run-dev.cmd
+```
+
+Starts the sidecar, the Vite dev server and the Tauri window, each in its own console,
+skipping any tier already running. The manual equivalent — start the sidecar and Vite dev
+server first, then:
 
 ```powershell
 cd src-tauri
@@ -213,6 +236,17 @@ node ../web/node_modules/@tauri-apps/cli/tauri.js dev
 ```
 
 This opens the native desktop window pointing at `http://localhost:1420` with hot module replacement.
+
+#### Test the production bundle without building an installer
+
+```powershell
+pwsh -File scripts/tauri/test-frontend.ps1
+```
+
+Rebuilds the production frontend bundle and the published sidecar from scratch, runs them
+together at `http://127.0.0.1:1421`, and opens a browser. Same artifacts the MSI ships,
+seconds instead of minutes, and the sidecar's config is redirected to a throwaway folder
+so your real profiles and templates are untouched.
 
 ### Run E2E tests
 

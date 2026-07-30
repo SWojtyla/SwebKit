@@ -38,7 +38,7 @@ Update this file when project/folder structure changes, entry points move, or na
 | Pipeline run failure classification                                        | `src/SwebKit.Core/Services/PipelineFailureClassifier.cs` and `src/SwebKit.Core/Models/DeploymentAssuranceModels.cs`                                                                                                  |
 | Observability queries and App Insights discovery                           | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/AzureAppInsightsProvider.cs`, `src/SwebKit.Observability/AppInsightsDiscoveryService.cs`                                       |
 | Global commands and keyboard shortcuts                                     | `src/SwebKit.App/Services/CommandRegistry.cs` and `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`                                                                                                                  |
-| Styling system, design tokens, and shared UI primitives                    | `src/SwebKit.App/wwwroot/app.css`, `src/SwebKit.App/Components/Shared/`, and `scripts/style-inventory.ps1`                                                                                                           |
+| Styling system, design tokens, and shared UI primitives                    | `src/SwebKit.App/wwwroot/app.css`, `src/SwebKit.App/Components/Shared/`, and `scripts/maui/style-inventory.ps1`                                                                                                           |
 | API Client UI, collections, environments, linked roots, Git panel          | `src/SwebKit.App/Components/ApiClient/ApiClientPage.razor`, `src/SwebKit.App/Components/ApiClient/CollectionTree.razor`, and `src/SwebKit.Core/Services/LinkedGitService.cs`                                         |
 | API Client domain, persistence, variables, export/import                   | `src/SwebKit.Core/Domain/ApiClientModels.cs`, `src/SwebKit.Core/Configuration/CollectionRepository.cs`, `src/SwebKit.Core/Services/VariableSubstitutionService.cs`                                                   |
 
@@ -131,7 +131,7 @@ tests/
 | Notifications                          | `src/SwebKit.App/Services/NotificationService.cs` and `src/SwebKit.App/Components/Notifications/`                                                                   |
 | HTTP resilience for Azure DevOps       | `src/SwebKit.App/MauiProgram.cs` (`AddStandardResilienceHandler`)                                                                                                   |
 | Demo mode behavior                     | `src/SwebKit.Core/Services/Demo*` and page-level `AppState.UseDemoData` checks                                                                                      |
-| Styling system                         | `src/SwebKit.App/wwwroot/app.css`, `src/SwebKit.App/Components/Shared/`, and `scripts/style-inventory.ps1`                                                          |
+| Styling system                         | `src/SwebKit.App/wwwroot/app.css`, `src/SwebKit.App/Components/Shared/`, and `scripts/maui/style-inventory.ps1`                                                          |
 
 ## Styling System Navigation
 
@@ -166,7 +166,7 @@ Canonical control semantics:
 | Toolbar layout       | `PageToolbar` for shared page-level action rows; feature-local layout only when the toolbar has domain-specific structure                                 |
 | Status/chip/badge    | Existing `shell-pill` and `status-badge` patterns until a shared badge/chip primitive replaces them                                                       |
 
-Before broad style migrations, run `scripts/style-inventory.ps1` from the repository root to measure global CSS size, scoped CSS weight, repeated button/select class families, shared primitive adoption, and remaining legacy token references.
+Before broad style migrations, run `scripts/maui/style-inventory.ps1` from the repository root to measure global CSS size, scoped CSS weight, repeated button/select class families, shared primitive adoption, and remaining legacy token references.
 
 ## Feature-to-File Quick Lookup
 
