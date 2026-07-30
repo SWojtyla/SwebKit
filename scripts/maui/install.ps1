@@ -22,7 +22,7 @@
     Install the app but don't launch it afterwards.
 
 .EXAMPLE
-    pwsh -File scripts/install.ps1
+    pwsh -File scripts/maui/install.ps1
 #>
 [CmdletBinding()]
 param(
@@ -32,7 +32,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $csprojPath = Join-Path $repoRoot "src/SwebKit.App/SwebKit.App.csproj"
 $targetFramework = "net10.0-windows10.0.19041.0"
 $certSubject = "CN=SwebKit"
