@@ -16,6 +16,7 @@ import {
   PanelLeftOpen,
   Sun,
   Moon,
+  Sparkles,
   Beaker,
   Keyboard,
 } from "lucide-react";
@@ -171,7 +172,7 @@ export function AppLayout() {
               data-testid="theme-toggle"
               title="Toggle theme"
             >
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : theme === "fancy" ? <Sparkles className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <button
               onClick={() => toggleDemoMode.mutate(!isDemoMode)}
@@ -241,7 +242,7 @@ export function AppLayout() {
           {isDemoMode && (
             <span className="text-warning" data-testid="status-bar-demo">Demo Mode</span>
           )}
-          <span className="ml-auto">{theme === "dark" ? "Dark" : "Light"} theme</span>
+          <span className="ml-auto">{theme === "dark" ? "Dark" : theme === "fancy" ? "✨ Fancy ✨" : "Light"} theme</span>
           <span>SwebKit</span>
         </footer>
       </div>

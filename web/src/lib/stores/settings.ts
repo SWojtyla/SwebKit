@@ -1,20 +1,31 @@
 import { create } from "zustand";
 
+export type Theme = "light" | "dark" | "fancy";
+
+const THEME_CYCLE: Theme[] = ["dark", "light", "fancy"];
+
 interface SettingsState {
-  theme: "light" | "dark";
+  theme: Theme;
   toggleTheme: () => void;
-  setTheme: (theme: "light" | "dark") => void;
+  setTheme: (theme: Theme) => void;
+}
+
+function applyThemeClass(theme: Theme) {
+  document.documentElement.classList.remove("dark", "fancy");
+  if (theme !== "light") {
+    document.documentElement.classList.add(theme);
+  }
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   theme: "dark",
   toggleTheme: () => {
-    const next = get().theme === "dark" ? "light" : "dark";
+    const next = THEME_CYCLE[(THEME_CYCLE.indexOf(get().theme) + 1) % THEME_CYCLE.length];
     set({ theme: next });
-    document.documentElement.classList.toggle("dark", next === "dark");
+    applyThemeClass(next);
   },
   setTheme: (theme) => {
     set({ theme });
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    applyThemeClass(theme);
   },
 }));
