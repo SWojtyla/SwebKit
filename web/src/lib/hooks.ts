@@ -520,14 +520,14 @@ export function useAksDeployments(ns: string | null) {
   });
 }
 
-export function useAksPods(ns: string | null, labelSelector?: string) {
+export function useAksPods(ns: string | null, labelSelector?: string, enabled = true) {
   return useQuery({
     queryKey: ["aks-pods", ns, labelSelector],
     queryFn: () =>
       apiFetch<PodInfo[]>(
         `/api/aks/${ns}/pods${labelSelector ? `?labelSelector=${labelSelector}` : ""}`,
       ),
-    enabled: !!ns,
+    enabled: !!ns && enabled,
   });
 }
 
@@ -584,8 +584,8 @@ export function useAksScaleHpa() {
   return useMutation({
     mutationFn: (vars: { ns: string; name: string; minReplicas: number; maxReplicas: number }) =>
       scaleHpa(vars.ns, vars.name, vars.minReplicas, vars.maxReplicas),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["aks-hpas", vars.ns] });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aks-hpas"] });
     },
   });
 }
@@ -594,8 +594,8 @@ export function useAksDeleteHpa() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { ns: string; name: string }) => deleteHpa(vars.ns, vars.name),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["aks-hpas", vars.ns] });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aks-hpas"] });
     },
   });
 }
@@ -605,8 +605,8 @@ export function useAksSetHpaScalingEnabled() {
   return useMutation({
     mutationFn: (vars: { ns: string; name: string; enabled: boolean }) =>
       setHpaScalingEnabled(vars.ns, vars.name, vars.enabled),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["aks-hpas", vars.ns] });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aks-hpas"] });
     },
   });
 }
@@ -624,8 +624,8 @@ export function useAksSuspendCronJob() {
   return useMutation({
     mutationFn: (vars: { ns: string; name: string; suspend: boolean }) =>
       suspendCronJob(vars.ns, vars.name, vars.suspend),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["aks-cronjobs", vars.ns] });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aks-cronjobs"] });
     },
   });
 }
@@ -643,9 +643,9 @@ export function useAksRestartDeployment() {
   return useMutation({
     mutationFn: (vars: { ns: string; name: string }) =>
       apiSend(`/api/aks/${vars.ns}/deployments/${vars.name}/restart`, "POST"),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["aks-deployments", vars.ns] });
-      qc.invalidateQueries({ queryKey: ["aks-pods", vars.ns] });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aks-deployments"] });
+      qc.invalidateQueries({ queryKey: ["aks-pods"] });
     },
   });
 }
@@ -655,8 +655,8 @@ export function useAksScaleDeployment() {
   return useMutation({
     mutationFn: (vars: { ns: string; name: string; replicas: number }) =>
       apiSend(`/api/aks/${vars.ns}/deployments/${vars.name}/scale?replicas=${vars.replicas}`, "POST"),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["aks-deployments", vars.ns] });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aks-deployments"] });
     },
   });
 }
@@ -666,8 +666,8 @@ export function useAksDeletePod() {
   return useMutation({
     mutationFn: (vars: { ns: string; name: string }) =>
       apiSend(`/api/aks/${vars.ns}/pods/${vars.name}/delete`, "POST"),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["aks-pods", vars.ns] });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aks-pods"] });
     },
   });
 }
@@ -740,10 +740,10 @@ export function useAksHelmRollback() {
   return useMutation({
     mutationFn: (vars: { ns: string; release: string; targetRevision: number }) =>
       apiSend(`/api/aks/${vars.ns}/helm-releases/${vars.release}/rollback?targetRevision=${vars.targetRevision}`, "POST"),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["aks-helm-history", vars.ns, vars.release] });
-      qc.invalidateQueries({ queryKey: ["aks-helm-values", vars.ns, vars.release] });
-      qc.invalidateQueries({ queryKey: ["aks-helm", vars.ns] });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aks-helm-history"] });
+      qc.invalidateQueries({ queryKey: ["aks-helm-values"] });
+      qc.invalidateQueries({ queryKey: ["aks-helm"] });
     },
   });
 }
@@ -1106,7 +1106,10 @@ export function useStorageBlobs(accountId: string | null, container: string | nu
 export function useBlobProperties(accountId: string | null, container: string | null, blobName: string | null) {
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "properties"],
-    queryFn: () => apiFetch<BlobProperties>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/properties`),
+    queryFn: () => {
+      const params = new URLSearchParams({ blobName: blobName! });
+      return apiFetch<BlobProperties>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/properties?${params}`);
+    },
     enabled: !!accountId && !!container && !!blobName,
   });
 }
@@ -1114,15 +1117,21 @@ export function useBlobProperties(accountId: string | null, container: string | 
 export function useBlobContent(accountId: string | null, container: string | null, blobName: string | null) {
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "content"],
-    queryFn: () => apiFetch<StorageBlobContent>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/content`),
+    queryFn: () => {
+      const params = new URLSearchParams({ blobName: blobName! });
+      return apiFetch<StorageBlobContent>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/content?${params}`);
+    },
     enabled: !!accountId && !!container && !!blobName,
   });
 }
 
 export function useBlobSasUrl(accountId: string | null, container: string | null, blobName: string | null, expiryMinutes: number = 60) {
   return useQuery({
-    queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "sas"],
-    queryFn: () => apiFetch<{ sasUrl: string }>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/sas?expiryMinutes=${expiryMinutes}`),
+    queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "sas", expiryMinutes],
+    queryFn: () => {
+      const params = new URLSearchParams({ blobName: blobName!, expiryMinutes: String(expiryMinutes) });
+      return apiFetch<{ sasUrl: string }>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/sas?${params}`);
+    },
     enabled: !!accountId && !!container && !!blobName,
   });
 }
@@ -1130,7 +1139,10 @@ export function useBlobSasUrl(accountId: string | null, container: string | null
 export function useBlobVersions(accountId: string | null, container: string | null, blobName: string | null) {
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "versions"],
-    queryFn: () => apiFetch<{ versionId: string; lastModified: string; sizeBytes: number; isCurrent: boolean }[]>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/versions`),
+    queryFn: () => {
+      const params = new URLSearchParams({ blobName: blobName! });
+      return apiFetch<{ versionId: string; lastModified: string; sizeBytes: number; isCurrent: boolean }[]>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/versions?${params}`);
+    },
     enabled: !!accountId && !!container && !!blobName,
   });
 }
@@ -1146,10 +1158,10 @@ export function useBlobVersionComparison(
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "versions", "compare", baseVersionId, compareVersionId],
     queryFn: () => {
-      const params = new URLSearchParams({ baseVersionId: baseVersionId! });
+      const params = new URLSearchParams({ blobName: blobName!, baseVersionId: baseVersionId! });
       if (compareVersionId) params.set("compareVersionId", compareVersionId);
       return apiFetch<BlobVersionComparison>(
-        `/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/versions/compare?${params}`,
+        `/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/versions/compare?${params}`,
       );
     },
     enabled: enabled && !!accountId && !!container && !!blobName && !!baseVersionId,
@@ -1161,7 +1173,7 @@ export function useUploadBlob(accountId: string | null, container: string | null
   return useMutation({
     mutationFn: ({ blobName, file, onProgress }: { blobName: string; file: File; onProgress?: (percent: number) => void }) =>
       apiUpload(
-        `/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName)}/upload`,
+        `/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/upload?${new URLSearchParams({ blobName })}`,
         file,
         onProgress,
       ),
@@ -1187,7 +1199,7 @@ export function useRestoreBlobVersion(accountId: string | null, container: strin
   return useMutation({
     mutationFn: (versionId: string) =>
       apiSend<BlobRecoveryResult>(
-        `/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/versions/${encodeURIComponent(versionId)}/restore`,
+        `/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/versions/${encodeURIComponent(versionId)}/restore?${new URLSearchParams({ blobName: blobName! })}`,
         "POST",
       ),
     onSuccess: () => {
@@ -1209,7 +1221,7 @@ export function useSetBlobMetadata(accountId: string | null, container: string |
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (metadata: Record<string, string>) =>
-      apiSend<BlobMutationResult>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName!)}/metadata`, "POST", metadata),
+      apiSend<BlobMutationResult>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/metadata?${new URLSearchParams({ blobName: blobName! })}`, "POST", metadata),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "properties"] });
     },
@@ -1220,7 +1232,7 @@ export function useUndeleteBlob(accountId: string | null, container: string | nu
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (blobName: string) =>
-      apiSend<BlobRecoveryResult>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/${encodeURIComponent(blobName)}/undelete`, "POST"),
+      apiSend<BlobRecoveryResult>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/undelete?${new URLSearchParams({ blobName })}`, "POST"),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "deleted-blobs"] });
       qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs"] });

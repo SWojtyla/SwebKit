@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAksDeployments, useAksRestartDeployment, useAksScaleDeployment } from "@/lib/hooks";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type { DeploymentInfo } from "@/lib/types";
 
 interface DeploymentsTabProps {
@@ -12,6 +13,7 @@ export function DeploymentsTab({ ns, isMulti, onContextMenu }: DeploymentsTabPro
   const { data: deployments, isLoading } = useAksDeployments(ns);
   const restartMutation = useAksRestartDeployment();
   const scaleMutation = useAksScaleDeployment();
+  const { notify } = useNotification();
   const [scaling, setScaling] = useState<string | null>(null);
   const [scaleValue, setScaleValue] = useState(0);
 
@@ -21,11 +23,17 @@ export function DeploymentsTab({ ns, isMulti, onContextMenu }: DeploymentsTabPro
 
   const handleRestart = (dep: DeploymentInfo) => {
     if (!confirm(`Restart deployment ${dep.name}?`)) return;
-    restartMutation.mutate({ ns: dep.namespace, name: dep.name });
+    restartMutation.mutate({ ns: dep.namespace, name: dep.name }, {
+      onSuccess: () => notify("success", "Deployment restarted", `${dep.namespace}/${dep.name}`),
+      onError: (e) => notify("error", "Restart failed", String(e)),
+    });
   };
 
   const handleScale = (dep: DeploymentInfo) => {
-    scaleMutation.mutate({ ns: dep.namespace, name: dep.name, replicas: scaleValue });
+    scaleMutation.mutate({ ns: dep.namespace, name: dep.name, replicas: scaleValue }, {
+      onSuccess: () => notify("success", "Deployment scaled", `${dep.namespace}/${dep.name} → ${scaleValue} replicas`),
+      onError: (e) => notify("error", "Scale failed", String(e)),
+    });
     setScaling(null);
   };
 

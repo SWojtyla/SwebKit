@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { CheckCircle2, Circle, Download, Upload } from "lucide-react";
 import { useProfile, useUserSettings, useUpdateUserSettings, useExportSettings, useImportSettings } from "@/lib/hooks";
 import { useSettingsStore } from "@/lib/stores/settings";
+import { useNotification } from "@/components/layout/NotificationSystem";
 
 export function GeneralSettings() {
   const { data: settings, isLoading } = useUserSettings();
@@ -12,6 +13,7 @@ export function GeneralSettings() {
   const { theme, toggleTheme } = useSettingsStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const { notify } = useNotification();
 
   if (isLoading || !settings) {
     return <div className="text-muted-foreground">Loading...</div>;
@@ -127,8 +129,10 @@ export function GeneralSettings() {
                 a.download = `swebkit-settings-${new Date().toISOString().slice(0, 10)}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
+                notify("success", "Settings exported", a.download);
               } catch {
                 setImportStatus("Export failed");
+                notify("error", "Export failed");
               }
             }}
             disabled={exportSettings.isPending}
@@ -158,10 +162,12 @@ export function GeneralSettings() {
                 const bundle = JSON.parse(text);
                 if (window.confirm("Importing will replace your current profiles, collections, environments, and settings. Continue?")) {
                   await importSettings.mutateAsync(bundle);
+                  notify("success", "Settings imported", "Restart the app to ensure all changes are loaded.");
                   setImportStatus("Import successful. Restart the app to ensure all changes are loaded.");
                 }
               } catch {
                 setImportStatus("Import failed: invalid file");
+                notify("error", "Import failed", "Invalid settings file");
               } finally {
                 e.target.value = "";
               }

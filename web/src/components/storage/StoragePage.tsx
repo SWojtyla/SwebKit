@@ -19,6 +19,7 @@ import type { StorageBlobItem } from "@/lib/types";
 import { Download, Link as LinkIcon, Check, Plus, Trash2, RotateCcw, Upload, Copy as CopyIcon } from "lucide-react";
 import { BlobRecoveryPanel } from "./BlobRecoveryPanel";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import { useDropzone } from "react-dropzone";
 
 function formatBytes(bytes: number | null | undefined): string {
@@ -46,6 +47,7 @@ export function StoragePage() {
   const resolvedAccountId = activeAccountId ?? accounts[0]?.id ?? null;
   const activeAccount = accounts.find((a) => a.id === resolvedAccountId);
   const allowMutations = activeAccount?.allowMutations ?? false;
+  const { notify } = useNotification();
 
   const [selectedContainer, setSelectedContainer] = useState<string | null>(null);
   const [currentPrefix, setCurrentPrefix] = useState("");
@@ -166,7 +168,9 @@ export function StoragePage() {
 
   const handleDownloadBlob = async (blobName: string) => {
     try {
-      const response = await fetch(`/api/storage/${resolvedAccountId}/containers/${selectedContainer}/blobs/${encodeURIComponent(blobName)}/content`);
+      const params = new URLSearchParams({ blobName });
+      const response = await fetch(`/api/storage/${resolvedAccountId}/containers/${selectedContainer}/blobs/content?${params}`);
+      if (!response.ok) throw new Error(`API ${response.status}`);
       const data = await response.json();
       if (data.content) {
         const blob = new Blob([data.content], { type: data.contentType || "text/plain" });
@@ -176,9 +180,11 @@ export function StoragePage() {
         a.download = blobName.split("/").pop() || blobName;
         a.click();
         URL.revokeObjectURL(url);
+        notify("success", "Download started", blobName);
       }
     } catch (e) {
       console.error("Download failed:", e);
+      notify("error", "Download failed", String(e));
     }
   };
 
@@ -377,11 +383,13 @@ export function StoragePage() {
                               { blobName: uploadBlobName.trim(), file: uploadFile, onProgress: setUploadProgress },
                               {
                                 onSuccess: () => {
+                                  notify("success", "Blob uploaded", uploadBlobName.trim());
                                   setUploadBlobName("");
                                   setUploadFile(null);
                                   setUploadProgress(100);
                                   setShowUpload(false);
                                 },
+                                onError: (e) => notify("error", "Upload failed", String(e)),
                               },
                             );
                           }
@@ -561,7 +569,7 @@ export function StoragePage() {
                       <h3 className="text-sm font-semibold">Metadata</h3>
                       {metadataEditing ? (
                         <div className="flex items-center gap-2">
-                          <button onClick={() => { setBlobMetadata.mutate(metadataDraft, { onSuccess: () => setMetadataEditing(false) }); }} disabled={setBlobMetadata.isPending} className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50" data-testid="storage-metadata-save">{setBlobMetadata.isPending ? "Saving..." : "Save"}</button>
+                          <button onClick={() => { setBlobMetadata.mutate(metadataDraft, { onSuccess: () => { notify("success", "Metadata saved"); setMetadataEditing(false); }, onError: (e) => notify("error", "Metadata save failed", String(e)) }); }} disabled={setBlobMetadata.isPending} className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50" data-testid="storage-metadata-save">{setBlobMetadata.isPending ? "Saving..." : "Save"}</button>
                           <button onClick={() => { setMetadataEditing(false); setMetadataDraft({}); }} className="rounded border px-2 py-1 text-xs" data-testid="storage-metadata-cancel">Cancel</button>
                         </div>
                       ) : (
@@ -731,7 +739,11 @@ export function StoragePage() {
                               confirmLabel="Restore"
                               onConfirm={() => {
                                 restoreBlobVersion.mutate(versionRestoreId, {
-                                  onSuccess: () => setVersionRestoreId(null),
+                                  onSuccess: () => {
+                                    notify("success", "Version restored", versionRestoreId);
+                                    setVersionRestoreId(null);
+                                  },
+                                  onError: (e) => notify("error", "Restore failed", String(e)),
                                 });
                               }}
                               onCancel={() => setVersionRestoreId(null)}
@@ -850,8 +862,12 @@ export function StoragePage() {
                       copyBlob.mutate(
                         { sourceContainer: selectedContainer!, sourceBlob: selectedBlob, destContainer: copyDestContainer, destBlob: copyDestBlob, overwrite: false },
                         {
-                          onSuccess: () => { setCopyStatus("Copied successfully"); setTimeout(() => { setShowCopyDialog(false); setCopyStatus(null); }, 2000); },
-                          onError: (e) => setCopyStatus(`Error: ${e}`),
+                          onSuccess: () => {
+                            notify("success", "Blob copied", `${copyDestContainer}/${copyDestBlob}`);
+                            setCopyStatus("Copied successfully");
+                            setTimeout(() => { setShowCopyDialog(false); setCopyStatus(null); }, 2000);
+                          },
+                          onError: (e) => { setCopyStatus(`Error: ${e}`); notify("error", "Copy failed", String(e)); }
                         },
                       );
                     }}
@@ -871,8 +887,13 @@ export function StoragePage() {
                       copyBlob.mutate(
                         { sourceContainer: selectedContainer!, sourceBlob: selectedBlob, destContainer: copyDestContainer, destBlob: copyDestBlob, overwrite: true },
                         {
-                          onSuccess: () => { setCopyStatus("Copied successfully"); setCopyConfirming(false); setTimeout(() => { setShowCopyDialog(false); setCopyStatus(null); }, 2000); },
-                          onError: (e) => setCopyStatus(`Error: ${e}`),
+                          onSuccess: () => {
+                            notify("success", "Blob copied", `${copyDestContainer}/${copyDestBlob}`);
+                            setCopyStatus("Copied successfully");
+                            setCopyConfirming(false);
+                            setTimeout(() => { setShowCopyDialog(false); setCopyStatus(null); }, 2000);
+                          },
+                          onError: (e) => { setCopyStatus(`Error: ${e}`); notify("error", "Copy failed", String(e)); }
                         },
                       );
                     }}

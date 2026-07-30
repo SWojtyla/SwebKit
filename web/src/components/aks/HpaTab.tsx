@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useAksHpas, useAksScaleHpa, useAksDeleteHpa, useAksSetHpaScalingEnabled } from "@/lib/hooks";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import { YamlViewer } from "./YamlViewer";
 import type { HpaInfo } from "@/lib/types";
 
 export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
-  const queryClient = useQueryClient();
+  const { notify } = useNotification();
   const { data: hpas, isLoading } = useAksHpas(ns);
   const scaleMutation = useAksScaleHpa();
   const deleteMutation = useAksDeleteHpa();
@@ -20,23 +20,35 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
 
   const handleScale = async (min: number, max: number) => {
     if (!scaleTarget) return;
-    await scaleMutation.mutateAsync({ ns, name: scaleTarget.name, minReplicas: min, maxReplicas: max });
-    await queryClient.refetchQueries({ queryKey: ["aks-hpas", ns] });
-    setScaleTarget(null);
+    try {
+      await scaleMutation.mutateAsync({ ns: scaleTarget.namespace, name: scaleTarget.name, minReplicas: min, maxReplicas: max });
+      notify("success", "HPA scaled", `${scaleTarget.namespace}/${scaleTarget.name}: ${min}–${max} replicas`);
+      setScaleTarget(null);
+    } catch (e) {
+      notify("error", "Scale HPA failed", String(e));
+    }
   };
 
   const handleDelete = async (hpa: HpaInfo) => {
     if (!confirm(`Delete HPA ${hpa.name} in ${hpa.namespace}?`)) return;
-    await deleteMutation.mutateAsync({ ns, name: hpa.name });
-    await queryClient.refetchQueries({ queryKey: ["aks-hpas", ns] });
+    try {
+      await deleteMutation.mutateAsync({ ns: hpa.namespace, name: hpa.name });
+      notify("success", "HPA deleted", `${hpa.namespace}/${hpa.name}`);
+    } catch (e) {
+      notify("error", "Delete HPA failed", String(e));
+    }
   };
 
   const handleToggleScaling = async (hpa: HpaInfo) => {
     const next = !hpa.isScalingDisabled;
     const action = next ? "disable" : "enable";
     if (!confirm(`${action === "disable" ? "Disable" : "Enable"} scaling for ${hpa.name}?`)) return;
-    await toggleMutation.mutateAsync({ ns, name: hpa.name, enabled: !next });
-    await queryClient.refetchQueries({ queryKey: ["aks-hpas", ns] });
+    try {
+      await toggleMutation.mutateAsync({ ns: hpa.namespace, name: hpa.name, enabled: !next });
+      notify("success", `Scaling ${action}d`, `${hpa.namespace}/${hpa.name}`);
+    } catch (e) {
+      notify("error", `Scale ${action} failed`, String(e));
+    }
   };
 
   return (

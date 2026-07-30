@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,7 +25,7 @@ import {
 } from "@/lib/hooks";
 import { formatTtl, parseTtl, getTtlColorClass } from "@/lib/redis-format";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
-import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw, Plus } from "lucide-react";
+import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw, Plus, ChevronRight, ChevronDown } from "lucide-react";
 import { KeyspaceHealthPanel, PrefixMemoryPanel, OpsInsightsPanel } from "./AdvancedPanels";
 import { PubSubPanel } from "./PubSubPanel";
 
@@ -56,7 +56,51 @@ function formatBytes(bytes: number | null | undefined): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
+type NamespaceNode = {
+  name: string;
+  path: string;
+  children: Map<string, NamespaceNode>;
+  keys: string[];
+  keyCount: number;
+};
 
+function buildNamespaceTree(keys: string[], separator: string): NamespaceNode[] {
+  const roots = new Map<string, NamespaceNode>();
+
+  for (const key of keys) {
+    const parts = key.split(separator);
+
+    if (parts.length < 2) {
+      let fallback = roots.get("(no prefix)");
+      if (!fallback) {
+        fallback = { name: "(no prefix)", path: "(no prefix)", children: new Map(), keys: [], keyCount: 0 };
+        roots.set("(no prefix)", fallback);
+      }
+      fallback.keys.push(key);
+      fallback.keyCount += 1;
+      continue;
+    }
+
+    const namespaceParts = parts.slice(0, -1);
+    let nodes = roots;
+    let path = "";
+    namespaceParts.forEach((name, index) => {
+      path = index === 0 ? name : `${path}${separator}${name}`;
+      let node = nodes.get(name);
+      if (!node) {
+        node = { name, path, children: new Map(), keys: [], keyCount: 0 };
+        nodes.set(name, node);
+      }
+      node.keyCount += 1;
+      nodes = node.children;
+      if (index === namespaceParts.length - 1) {
+        node.keys.push(key);
+      }
+    });
+  }
+
+  return [...roots.values()];
+}
 
 export function RedisPage() {
   const { data: profile } = useProfile();
@@ -94,6 +138,8 @@ export function RedisPage() {
   const [refreshInterval, setRefreshInterval] = useState(10);
   const [pendingConfirm, setPendingConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [loadAllActive, setLoadAllActive] = useState(false);
+  const [namespaceFilter, setNamespaceFilter] = useState<string | null>(null);
+  const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(new Set());
   const [hashAdding, setHashAdding] = useState(false);
   const [newHashField, setNewHashField] = useState("");
   const [newHashValue, setNewHashValue] = useState("");
@@ -155,6 +201,8 @@ export function RedisPage() {
     setPattern(searchInput);
     setCursor(0);
     setAllKeys([]);
+    setNamespaceFilter(null);
+    setExpandedNamespaces(new Set());
   };
 
   const handleLoadMore = () => {
@@ -182,6 +230,38 @@ export function RedisPage() {
   const displayKeys = cursor === 0 ? scanKeys : allKeys.length > 0 ? [...allKeys, ...scanKeys] : scanKeys;
   const health = useRedisKeyspaceHealth(resolvedCacheId, displayKeys, separator);
   const prefixMemory = useRedisPrefixMemory(resolvedCacheId, displayKeys, separator);
+
+  const filteredKeys = useMemo(() => {
+    if (!namespaceFilter) return displayKeys;
+    return displayKeys.filter((k) => k === namespaceFilter || k.startsWith(namespaceFilter + separator));
+  }, [displayKeys, namespaceFilter, separator]);
+
+  const namespaceTree = useMemo(
+    () => buildNamespaceTree(filteredKeys, separator),
+    [filteredKeys, separator],
+  );
+
+  useEffect(() => {
+    if (namespaceTree.length === 0) return;
+    const allPaths = new Set<string>();
+    const collect = (nodes: NamespaceNode[]) => {
+      for (const node of nodes) {
+        allPaths.add(node.path);
+        collect([...node.children.values()]);
+      }
+    };
+    collect(namespaceTree);
+    setExpandedNamespaces((prev) => (prev.size === 0 ? allPaths : prev));
+  }, [namespaceTree]);
+
+  const toggleNamespace = (path: string) => {
+    setExpandedNamespaces((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
 
   const handleDeleteKey = (key: string) => {
     deleteKey.mutate(key, {
@@ -315,7 +395,59 @@ export function RedisPage() {
     });
   };
 
-
+  const renderNamespaceNode = (node: NamespaceNode, depth = 0): ReactNode => {
+    const isExpanded = expandedNamespaces.has(node.path);
+    return (
+      <div key={node.path} style={{ paddingLeft: `${depth * 0.75}rem` }}>
+        <div className="flex items-center">
+          <button
+            onClick={() => toggleNamespace(node.path)}
+            className="p-0.5 text-muted-foreground hover:text-foreground"
+            data-testid={`redis-namespace-toggle-${node.path}`}
+            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${node.path}`}
+          >
+            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          </button>
+          <button
+            onClick={() => setNamespaceFilter(namespaceFilter === node.path ? null : node.path)}
+            className={`flex-1 rounded px-2 py-0.5 text-left text-xs font-mono ${namespaceFilter === node.path ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+            data-testid={`redis-namespace-${node.path}`}
+          >
+            {node.name} ({node.keyCount})
+          </button>
+        </div>
+        {isExpanded && (
+          <div data-testid={`redis-namespace-children-${node.path}`}>
+            {[...node.children.values()].map((child) => renderNamespaceNode(child, depth + 1))}
+            {node.keys.map((key) => (
+              <div
+                key={key}
+                data-testid={`redis-key-${key}`}
+                onClick={() => (batchMode ? toggleKeySelection(key) : setSelectedKey(key))}
+                className={`flex w-full items-center gap-2 rounded px-2 py-0.5 text-left text-xs font-mono cursor-pointer ${
+                  batchMode ? (selectedKeys.has(key) ? "bg-primary/20" : "") : selectedKey === key ? "bg-accent" : "hover:bg-accent"
+                }`}
+              >
+                {batchMode && (
+                  <input
+                    type="checkbox"
+                    checked={selectedKeys.has(key)}
+                    onChange={() => toggleKeySelection(key)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-3.5 w-3.5"
+                    data-testid={`redis-key-checkbox-${key}`}
+                  />
+                )}
+                <span className="truncate">
+                  {node.name === "(no prefix)" ? key : key.slice(node.path.length + separator.length) || key}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (!resolvedCacheId) {
     return (
@@ -343,6 +475,8 @@ export function RedisPage() {
               setCursor(0);
               setAllKeys([]);
               setSelectedKey(null);
+              setNamespaceFilter(null);
+              setExpandedNamespaces(new Set());
             }}
           >
             {caches.map((c) => (
@@ -488,31 +622,19 @@ export function RedisPage() {
                     Error: {scanResult.error.message}
                   </div>
                 )}
-                {displayKeys.length === 0 && !scanResult.isLoading && (
+                {namespaceTree.length === 0 && !scanResult.isLoading && (
                   <div className="p-3 text-sm text-muted-foreground">No keys found</div>
                 )}
-                {displayKeys.map((key) => (
-                  <div
-                    key={key}
-                    data-testid={`redis-key-${key}`}
-                    onClick={() => batchMode ? toggleKeySelection(key) : setSelectedKey(key)}
-                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent cursor-pointer ${
-                      batchMode ? selectedKeys.has(key) ? "bg-primary/20" : "" : selectedKey === key ? "bg-accent" : ""
-                    }`}
+                {namespaceTree.length > 0 && namespaceFilter && (
+                  <button
+                    onClick={() => setNamespaceFilter(null)}
+                    className="mb-2 w-full rounded px-2 py-1 text-left text-xs font-mono hover:bg-accent"
+                    data-testid="redis-namespace-clear-filter"
                   >
-                    {batchMode && (
-                      <input
-                        type="checkbox"
-                        checked={selectedKeys.has(key)}
-                        onChange={() => toggleKeySelection(key)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="h-3.5 w-3.5"
-                        data-testid={`redis-key-checkbox-${key}`}
-                      />
-                    )}
-                    <span className="truncate font-mono">{key}</span>
-                  </div>
-                ))}
+                    ← All namespaces ({displayKeys.length})
+                  </button>
+                )}
+                {namespaceTree.map((node) => renderNamespaceNode(node))}
                 {scanResult.data && !scanResult.data.isComplete && (
                   <div className="flex gap-2 border-t px-3 py-2">
                     <button

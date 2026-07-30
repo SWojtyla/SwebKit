@@ -106,6 +106,11 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     private readonly Lock _rebuildLock = new();
     private DateTime _lastRebuild = DateTime.MinValue;
 
+    private readonly Lock _namespaceCacheLock = new();
+    private IReadOnlyList<string>? _namespaceCache;
+    private DateTime _namespaceCacheExpires = DateTime.MinValue;
+    private static readonly TimeSpan NamespaceCacheTtl = TimeSpan.FromSeconds(30);
+
     public KubernetesAksClient(
         string? kubeconfigContext = null,
         string? kubeconfigPath = null,
@@ -590,10 +595,24 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public async Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default)
     {
+        lock (_namespaceCacheLock)
+        {
+            if (_namespaceCache is not null && DateTime.UtcNow < _namespaceCacheExpires)
+            {
+                return _namespaceCache;
+            }
+        }
+
         return await WithAuthRetryAsync(async () =>
         {
             var result = await _client.CoreV1.ListNamespaceAsync(cancellationToken: ct).ConfigureAwait(false);
-            return result.Items.Select(n => n.Metadata.Name).OrderBy(n => n).ToList();
+            var list = result.Items.Select(n => n.Metadata.Name).OrderBy(n => n).ToList();
+            lock (_namespaceCacheLock)
+            {
+                _namespaceCache = list;
+                _namespaceCacheExpires = DateTime.UtcNow.Add(NamespaceCacheTtl);
+            }
+            return list;
         }).ConfigureAwait(false);
     }
 
