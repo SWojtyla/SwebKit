@@ -28,7 +28,7 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
   const all = namespaces ?? [];
   const filtered = all.filter((ns) => ns.toLowerCase().includes(search.toLowerCase()));
 
-  const isAllSelected = all.length > 0 && selected.length === all.length;
+  const isAllSelected = all.length > 0 && (selected.includes("*") || selected.length === all.length);
   const display = isAllSelected
     ? "All namespaces"
     : selected.length === 0
@@ -41,10 +41,12 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
     setPending((prev) => (prev.includes(ns) ? prev.filter((n) => n !== ns) : [...prev, ns]));
   };
 
+  const hasChanges = pending.length !== selected.length || pending.some((ns) => !selected.includes(ns));
   const apply = () => {
     const result = all.length > 0 && pending.length === all.length ? all : pending;
     onChange(result);
     setOpen(false);
+    setSearch("");
   };
 
   const selectAll = () => setPending(all);
@@ -81,7 +83,10 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
         type="button"
         onClick={() => !isLoading && setOpen((v) => !v)}
         disabled={isLoading}
-        className="flex min-w-[12rem] items-center justify-between rounded-md border bg-card px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={display}
+        className="flex min-w-[14rem] max-w-[24rem] items-center justify-between rounded-md border bg-card px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
         data-testid="aks-namespace-dropdown"
       >
         <span className="truncate">{display}</span>
@@ -95,17 +100,33 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
       )}
 
       {open && (
-        <div className="absolute top-full z-50 mt-1 w-80 rounded-md border bg-popover shadow-md">
+        <div className="absolute top-full z-50 mt-1 w-96 rounded-md border bg-popover shadow-md">
           <div className="border-b p-2">
-            <input
-              autoFocus
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter namespaces..."
-              className="w-full rounded border bg-background px-2 py-1 text-xs"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search namespaces..."
+                className="flex-1 rounded border bg-background px-2 py-1 text-xs"
+                aria-label="Filter namespaces"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
+              <span>{all.length} total</span>
+              {filtered.length !== all.length && <span>· {filtered.length} matching</span>}
+            </div>
           </div>
-          <div className="max-h-60 overflow-auto p-1">
+          <div className="max-h-72 overflow-auto p-1">
             {filtered.length === 0 && (
               <div className="px-2 py-2 text-xs text-muted-foreground">No namespaces found</div>
             )}
@@ -136,9 +157,10 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
             <button
               type="button"
               onClick={apply}
-              className="rounded bg-primary px-3 py-1 text-primary-foreground hover:bg-primary/90"
+              disabled={!hasChanges}
+              className="rounded bg-primary px-3 py-1 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              Apply
+              Apply {pending.length > 0 && `(${pending.length})`}
             </button>
           </div>
         </div>

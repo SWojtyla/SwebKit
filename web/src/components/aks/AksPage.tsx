@@ -43,6 +43,7 @@ import { ContextSelector } from "./ContextSelector";
 import type { PodInfo, SecretInfo, DeploymentInfo, ServiceInfo, IngressInfo, StatefulSetInfo, ConfigMapInfo, HelmReleaseInfo, CronJobInfo, JobInfo, HttpRouteInfo, GatewayClassInfo, GatewayInfo } from "@/lib/types";
 import { RefreshCw, Clock } from "lucide-react";
 import { apiFetch, SIDECAR_BASE_URL } from "@/lib/api";
+import { useNotification } from "@/components/layout/NotificationSystem";
 
 const directTabs = [
   { id: "deployments", label: "Deployments" },
@@ -135,6 +136,7 @@ export function AksPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { notify } = useNotification();
   const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(10);
@@ -179,9 +181,14 @@ export function AksPage() {
 
   const isMultiNamespace = namespaceToken === "*" || selectedNamespaces.length > 1;
 
-  const { data: allPods } = useAksPods(namespaceToken);
-
   const podParam = searchParams.get("pod");
+  const logsParam = searchParams.get("logs");
+  const logsNsParam = searchParams.get("logsNs");
+  const showMultiPodLogs = !!logsParam && !!logsNsParam;
+  const podsQueryEnabled = activeTab === "pods" || !!podParam || showMultiPodLogs || activeTab === "portforward";
+
+  const { data: allPods, refetch: refetchPods, isFetching: podsFetching } = useAksPods(namespaceToken, undefined, podsQueryEnabled);
+
   const selectedPod = useMemo(() => {
     if (!podParam || !allPods) return null;
     return allPods.find((p) => makeKey(p.namespace, p.name) === podParam) ?? null;
@@ -241,9 +248,6 @@ export function AksPage() {
     [updateParams],
   );
 
-  const logsParam = searchParams.get("logs");
-  const logsNsParam = searchParams.get("logsNs");
-  const showMultiPodLogs = !!logsParam && !!logsNsParam;
   const multiPodNames = useMemo(() => logsParam?.split(",").filter(Boolean) ?? [], [logsParam]);
   const multiPodNamespace = logsNsParam;
 
@@ -294,6 +298,7 @@ export function AksPage() {
             refetchNamespaces();
             refetchTest();
             queryClient.invalidateQueries({ queryKey: ["aks-"] });
+            notify("success", "AKS context switched", context);
           },
         },
       );
@@ -405,7 +410,10 @@ export function AksPage() {
     requestConfirm({
       message: `Delete pod "${pod.name}"? This is irreversible.`,
       resourceName: pod.name,
-      onConfirm: () => deletePodMutation.mutate({ ns: pod.namespace, name: pod.name }),
+      onConfirm: () => deletePodMutation.mutate({ ns: pod.namespace, name: pod.name }, {
+        onSuccess: () => notify("success", "Pod deleted", `${pod.namespace}/${pod.name}`),
+        onError: (e) => notify("error", "Delete pod failed", String(e)),
+      }),
     });
   };
 
@@ -413,7 +421,10 @@ export function AksPage() {
     requestConfirm({
       message: `Delete pod "${pod.name}"? The controller will recreate it.`,
       resourceName: pod.name,
-      onConfirm: () => deletePodMutation.mutate({ ns: pod.namespace, name: pod.name }),
+      onConfirm: () => deletePodMutation.mutate({ ns: pod.namespace, name: pod.name }, {
+        onSuccess: () => notify("success", "Pod deleted", `${pod.namespace}/${pod.name}`),
+        onError: (e) => notify("error", "Delete pod failed", String(e)),
+      }),
     });
   };
 
@@ -421,7 +432,10 @@ export function AksPage() {
     requestConfirm({
       message: `Restart deployment "${dep.name}"?`,
       resourceName: dep.name,
-      onConfirm: () => restartMutation.mutate({ ns: dep.namespace, name: dep.name }),
+      onConfirm: () => restartMutation.mutate({ ns: dep.namespace, name: dep.name }, {
+        onSuccess: () => notify("success", "Deployment restarted", `${dep.namespace}/${dep.name}`),
+        onError: (e) => notify("error", "Restart failed", String(e)),
+      }),
     });
   };
 
@@ -433,7 +447,10 @@ export function AksPage() {
     requestConfirm({
       message: `Scale deployment "${dep.name}" to ${n} replicas?`,
       resourceName: dep.name,
-      onConfirm: () => scaleMutation.mutate({ ns: dep.namespace, name: dep.name, replicas: n }),
+      onConfirm: () => scaleMutation.mutate({ ns: dep.namespace, name: dep.name, replicas: n }, {
+        onSuccess: () => notify("success", "Deployment scaled", `${dep.namespace}/${dep.name} → ${n} replicas`),
+        onError: (e) => notify("error", "Scale failed", String(e)),
+      }),
     });
   };
 
@@ -517,7 +534,9 @@ export function AksPage() {
             message: `Delete ingress "${ing.name}"?`,
             resourceName: ing.name,
             onConfirm: () => {
-              fetch(`${SIDECAR_BASE_URL}/api/aks/${ing.namespace}/ingresses/${ing.name}`, { method: "DELETE" }).then(() => queryClient.invalidateQueries({ queryKey: ["aks-ingresses"] }));
+              fetch(`${SIDECAR_BASE_URL}/api/aks/${ing.namespace}/ingresses/${ing.name}`, { method: "DELETE" })
+                .then((res) => { if (!res.ok) throw new Error(`API ${res.status}`); notify("success", "Ingress deleted", `${ing.namespace}/${ing.name}`); queryClient.invalidateQueries({ queryKey: ["aks-ingresses"] }); })
+                .catch((e) => notify("error", "Delete ingress failed", String(e)));
             },
           });
         }, destructive: true },
@@ -542,7 +561,9 @@ export function AksPage() {
             message: `Delete HTTPRoute "${route.name}"?`,
             resourceName: route.name,
             onConfirm: () => {
-              fetch(`${SIDECAR_BASE_URL}/api/aks/${route.namespace}/httproutes/${route.name}`, { method: "DELETE" }).then(() => queryClient.invalidateQueries({ queryKey: ["aks-httproutes"] }));
+              fetch(`${SIDECAR_BASE_URL}/api/aks/${route.namespace}/httproutes/${route.name}`, { method: "DELETE" })
+                .then((res) => { if (!res.ok) throw new Error(`API ${res.status}`); notify("success", "HTTPRoute deleted", `${route.namespace}/${route.name}`); queryClient.invalidateQueries({ queryKey: ["aks-httproutes"] }); })
+                .catch((e) => notify("error", "Delete HTTPRoute failed", String(e)));
             },
           });
         }, destructive: true },
@@ -595,7 +616,9 @@ export function AksPage() {
             message: `Restart stateful set "${sts.name}"?`,
             resourceName: sts.name,
             onConfirm: () => {
-              fetch(`${SIDECAR_BASE_URL}/api/aks/${sts.namespace}/statefulsets/${sts.name}/restart`, { method: "POST" }).then(() => queryClient.invalidateQueries({ queryKey: ["aks-statefulsets"] }));
+              fetch(`${SIDECAR_BASE_URL}/api/aks/${sts.namespace}/statefulsets/${sts.name}/restart`, { method: "POST" })
+                .then((res) => { if (!res.ok) throw new Error(`API ${res.status}`); notify("success", "StatefulSet restarted", `${sts.namespace}/${sts.name}`); queryClient.invalidateQueries({ queryKey: ["aks-statefulsets"] }); })
+                .catch((e) => notify("error", "Restart StatefulSet failed", String(e)));
             },
           });
         }},
@@ -608,7 +631,9 @@ export function AksPage() {
             message: `Scale stateful set "${sts.name}" to ${n} replicas?`,
             resourceName: sts.name,
             onConfirm: () => {
-              fetch(`${SIDECAR_BASE_URL}/api/aks/${sts.namespace}/statefulsets/${sts.name}/scale?replicas=${n}`, { method: "POST" }).then(() => queryClient.invalidateQueries({ queryKey: ["aks-statefulsets"] }));
+              fetch(`${SIDECAR_BASE_URL}/api/aks/${sts.namespace}/statefulsets/${sts.name}/scale?replicas=${n}`, { method: "POST" })
+                .then((res) => { if (!res.ok) throw new Error(`API ${res.status}`); notify("success", "StatefulSet scaled", `${sts.namespace}/${sts.name} → ${n} replicas`); queryClient.invalidateQueries({ queryKey: ["aks-statefulsets"] }); })
+                .catch((e) => notify("error", "Scale StatefulSet failed", String(e)));
             },
           });
         }},
@@ -653,7 +678,9 @@ export function AksPage() {
           if (rev === null) return;
           const n = parseInt(rev, 10);
           if (isNaN(n)) return;
-          fetch(`${SIDECAR_BASE_URL}/api/aks/${rel.namespace}/helm-releases/${rel.name}/rollback?targetRevision=${n}`, { method: "POST" }).then(() => queryClient.invalidateQueries({ queryKey: ["aks-helm"] }));
+          fetch(`${SIDECAR_BASE_URL}/api/aks/${rel.namespace}/helm-releases/${rel.name}/rollback?targetRevision=${n}`, { method: "POST" })
+            .then((res) => { if (!res.ok) throw new Error(`API ${res.status}`); notify("success", "Helm rollback requested", `${rel.namespace}/${rel.name} → revision ${n}`); queryClient.invalidateQueries({ queryKey: ["aks-helm"] }); })
+            .catch((e) => notify("error", "Helm rollback failed", String(e)));
         }, disabled: true },
       ],
     });
@@ -667,7 +694,9 @@ export function AksPage() {
         { label: "Copy name", icon: "📋", onClick: () => copyToClipboard(cj.name) },
         { label: "View YAML", icon: "{ }", onClick: () => openYaml("cronjob", cj.name, cj.namespace) },
         { label: "Trigger", icon: "▶", onClick: () => {
-          fetch(`${SIDECAR_BASE_URL}/api/aks/${cj.namespace}/cronjobs/${cj.name}/trigger`, { method: "POST" }).then(() => queryClient.invalidateQueries({ queryKey: ["aks-cronjobs"] }));
+          fetch(`${SIDECAR_BASE_URL}/api/aks/${cj.namespace}/cronjobs/${cj.name}/trigger`, { method: "POST" })
+            .then((res) => { if (!res.ok) throw new Error(`API ${res.status}`); notify("success", "CronJob triggered", `${cj.namespace}/${cj.name}`); queryClient.invalidateQueries({ queryKey: ["aks-cronjobs"] }); })
+            .catch((e) => notify("error", "Trigger CronJob failed", String(e)));
         }, disabled: true },
       ],
     });
@@ -742,10 +771,11 @@ export function AksPage() {
             Refresh
           </button>
           <button
-            onClick={() => {
-              openMultiPodLogs(allPods ?? []);
+            onClick={async () => {
+              const pods = allPods ?? (await refetchPods()).data ?? [];
+              openMultiPodLogs(pods);
             }}
-            disabled={!namespaceToken || !allPods || allPods.length === 0}
+            disabled={!namespaceToken || podsFetching}
             className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
             data-testid="aks-multi-pod-logs"
           >

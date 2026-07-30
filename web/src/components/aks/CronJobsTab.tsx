@@ -1,4 +1,5 @@
 import { useAksCronJobs, useAksSuspendCronJob } from "@/lib/hooks";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type { CronJobInfo } from "@/lib/types";
 
 interface CronJobsTabProps {
@@ -10,6 +11,7 @@ interface CronJobsTabProps {
 export function CronJobsTab({ ns, isMulti, onContextMenu }: CronJobsTabProps) {
   const { data: cronjobs, isLoading } = useAksCronJobs(ns);
   const suspendMutation = useAksSuspendCronJob();
+  const { notify } = useNotification();
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
   if (!cronjobs || cronjobs.length === 0)
@@ -19,7 +21,10 @@ export function CronJobsTab({ ns, isMulti, onContextMenu }: CronJobsTabProps) {
     const next = !cj.suspend;
     const action = next ? "suspend" : "resume";
     if (!confirm(`${action === "suspend" ? "Suspend" : "Resume"} cronjob ${cj.name}?`)) return;
-    suspendMutation.mutate({ ns, name: cj.name, suspend: next });
+    suspendMutation.mutate({ ns: cj.namespace, name: cj.name, suspend: next }, {
+      onSuccess: () => notify("success", `Cronjob ${action}d`, `${cj.namespace}/${cj.name}`),
+      onError: (e) => notify("error", `Cronjob ${action} failed`, String(e)),
+    });
   };
 
   return (

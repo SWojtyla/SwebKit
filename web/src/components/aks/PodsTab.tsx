@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo, useState } from "react";
 import { useAksPods, useAksDeletePod, useAksPodMetrics } from "@/lib/hooks";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import { showNotification } from "@/lib/tauri-bridge";
 import type { PodInfo, PodMetricInfo } from "@/lib/types";
 
@@ -32,6 +33,18 @@ function memoryClass(mi: number): string {
   if (mi > 400) return "text-destructive";
   if (mi > 200) return "text-yellow-500";
   return "text-green-500";
+}
+
+function formatAge(startTime: string | null | undefined): string {
+  if (!startTime) return "—";
+  const start = new Date(startTime);
+  if (Number.isNaN(start.getTime())) return "—";
+  const minutes = Math.floor((Date.now() - start.getTime()) / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days >= 1) return `${days}d`;
+  if (hours >= 1) return `${hours}h`;
+  return `${Math.max(0, minutes)}m`;
 }
 
 function MetricBar({ value, className }: { value: number; className: string }) {
@@ -96,6 +109,7 @@ export function PodsTab({ ns, isMulti, onPodClick, onContextMenu, onDeletePod }:
   const { data: metrics } = useAksPodMetrics(ns);
   const [hideCompleted, setHideCompleted] = useState(true);
   const deleteMutation = useAksDeletePod();
+  const { notify } = useNotification();
   const prevStatusesRef = useRef<Map<string, string>>(new Map());
   const prevNsRef = useRef(ns);
 
@@ -147,7 +161,10 @@ export function PodsTab({ ns, isMulti, onPodClick, onContextMenu, onDeletePod }:
       return;
     }
     if (!confirm(`Delete pod ${pod.name}? The controller will recreate it.`)) return;
-    deleteMutation.mutate({ ns: pod.namespace, name: pod.name });
+    deleteMutation.mutate({ ns: pod.namespace, name: pod.name }, {
+      onSuccess: () => notify("success", "Pod deleted", `${pod.namespace}/${pod.name}`),
+      onError: (e) => notify("error", "Delete pod failed", String(e)),
+    });
   };
 
   return (
@@ -200,7 +217,7 @@ export function PodsTab({ ns, isMulti, onPodClick, onContextMenu, onDeletePod }:
               </td>
               <td className="py-2 pr-4 text-xs text-muted-foreground">{pod.nodeName ?? "—"}</td>
               <td className="py-2 pr-4 text-xs text-muted-foreground">
-                {pod.startTime ? new Date(pod.startTime).toLocaleDateString() : "—"}
+                {formatAge(pod.startTime)}
               </td>
               <td className="py-2 pr-4" onClick={(e) => e.stopPropagation()}>
                 <button
