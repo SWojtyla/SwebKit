@@ -10,11 +10,17 @@ test.describe("Redis deferred features", () => {
     await setDemoMode(page, false);
   });
 
-  test("namespace tree expand/collapse works", async ({ page }) => {
+  test("key count is shown and load controls appear when more keys are available", async ({ page }) => {
     await page.goto("/redis");
     await expect(page.getByTestId("redis-page")).toBeVisible();
     await page.getByTestId("redis-key-search-btn").click();
-    await expect(page.getByTestId("redis-namespace-tree")).toBeVisible();
+    await expect(page.getByTestId("redis-key-count")).toContainText(/keys loaded/);
+    const countText = await page.getByTestId("redis-key-count").textContent();
+    // When the scan completes on a small dataset no load buttons are rendered.
+    if (!countText?.includes("(all)")) {
+      const loadAll = page.getByTestId("redis-load-all");
+      await expect(loadAll.or(page.getByTestId("redis-load-more"))).toBeVisible();
+    }
   });
 
   test("pubsub tab is visible and snapshot summary loads", async ({ page }) => {

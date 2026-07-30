@@ -255,3 +255,48 @@ export async function getRedisPrefixMemory(
     separator,
   });
 }
+
+// ── Settings import/export ─────────────────────────────────────────────────────
+
+export async function exportSettings(): Promise<unknown> {
+  return apiFetch<unknown>("/api/config/export");
+}
+
+export async function importSettings(bundle: unknown): Promise<void> {
+  return apiSend("/api/config/import", "POST", bundle);
+}
+
+// ── AKS mutations ────────────────────────────────────────────────────────────────
+
+export async function scaleHpa(ns: string, name: string, minReplicas: number, maxReplicas: number): Promise<void> {
+  return apiSend(`/api/aks/${encodeURIComponent(ns)}/hpas/${encodeURIComponent(name)}/scale`, "POST", { minReplicas, maxReplicas });
+}
+
+export async function deleteHpa(ns: string, name: string): Promise<void> {
+  return apiSend(`/api/aks/${encodeURIComponent(ns)}/hpas/${encodeURIComponent(name)}`, "DELETE");
+}
+
+export async function setHpaScalingEnabled(ns: string, name: string, enabled: boolean): Promise<void> {
+  return apiSend(`/api/aks/${encodeURIComponent(ns)}/hpas/${encodeURIComponent(name)}/scaling-enabled`, "POST", { enabled });
+}
+
+export async function suspendCronJob(ns: string, name: string, suspend: boolean): Promise<void> {
+  return apiSend(`/api/aks/${encodeURIComponent(ns)}/cronjobs/${encodeURIComponent(name)}/suspend`, "POST", { suspend });
+}
+
+export async function getHelmReleaseNotes(ns: string, release: string): Promise<{ notes: string }> {
+  return apiFetch<{ notes: string }>(`/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/notes`);
+}
+
+export async function getHelmReleaseManifest(ns: string, release: string): Promise<{ manifest: string }> {
+  return apiFetch<{ manifest: string }>(`/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/manifest`);
+}
+
+export async function getAksResourceYaml(ns: string, kind: string, name: string): Promise<string> {
+  const response = await fetch(`${SIDECAR_BASE_URL}/api/aks/${encodeURIComponent(ns)}/yaml/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Failed to load YAML for ${kind}/${name}`);
+  }
+  return response.text();
+}

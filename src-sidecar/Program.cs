@@ -23,6 +23,11 @@ builder.Services.AddSingleton<ProfileRepository>();
 builder.Services.AddSingleton<EnvironmentRepository>();
 builder.Services.AddSingleton<CollectionRepository>();
 builder.Services.AddSingleton<UserSettingsRepository>();
+builder.Services.AddSingleton<UiStateRepository>();
+builder.Services.AddSingleton<ReleaseRepository>();
+builder.Services.AddSingleton<SwebKit.Core.Services.AppStateService>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAppEventBus, SwebKit.Core.Services.AppEventBus>();
+builder.Services.AddSingleton<ConfigurationBundleService>();
 builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
 builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
 builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
@@ -279,6 +284,10 @@ app.MapPut("/api/config/user-settings", async (UserSettingsRepository repo, User
     await repo.SaveAsync();
     return Results.Ok();
 });
+
+// ── Config: Import / Export ──────────────────────────────────────────────────
+
+app.MapConfigEndpoints();
 
 // ── Service Bus ──────────────────────────────────────────────────────────────
 

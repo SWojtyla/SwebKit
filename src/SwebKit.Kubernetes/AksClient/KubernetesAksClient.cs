@@ -291,7 +291,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 Namespace = d.Metadata.NamespaceProperty ?? ns,
                 Replicas = d.Spec?.Replicas ?? 0,
                 ReadyReplicas = d.Status?.ReadyReplicas ?? 0,
-                Status = d.Status?.Conditions?.FirstOrDefault(c => c.Type == "Available")?.Status ?? "Unknown",
+                Status = DeriveDeploymentStatus(d.Status?.Conditions),
                 ImageTag = ExtractImageTag(d.Spec?.Template?.Spec?.Containers?.FirstOrDefault()?.Image),
                 Labels = d.Metadata.Labels is not null ? new Dictionary<string, string>(d.Metadata.Labels) : [],
                 SelectorLabels = d.Spec?.Selector?.MatchLabels is not null
@@ -299,6 +299,22 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                     : []
             }).ToList();
         }).ConfigureAwait(false);
+    }
+
+    private static string DeriveDeploymentStatus(IEnumerable<k8s.Models.V1DeploymentCondition>? conditions)
+    {
+        if (conditions is null) return "Unknown";
+        var byType = conditions.ToDictionary(c => c.Type, c => c, StringComparer.OrdinalIgnoreCase);
+        if (byType.TryGetValue("Available", out var available)
+            && string.Equals(available.Status, "True", StringComparison.OrdinalIgnoreCase))
+            return "Available";
+        if (byType.TryGetValue("Progressing", out var progressing)
+            && string.Equals(progressing.Status, "True", StringComparison.OrdinalIgnoreCase))
+            return "Progressing";
+        if (byType.TryGetValue("Available", out var unavailable)
+            && string.Equals(unavailable.Status, "False", StringComparison.OrdinalIgnoreCase))
+            return "Unavailable";
+        return "Unknown";
     }
 
     public async Task<IReadOnlyList<PodInfo>> GetPodsAsync(string ns, string? labelSelector = null, CancellationToken ct = default)
@@ -731,6 +747,88 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
             };
 
             return CleanEditableYaml(KubernetesYaml.Serialize(resource));
+        }).ConfigureAwait(false);
+    }
+
+    public async Task<string> GetHelmReleaseManifestAsync(string ns, string releaseName, CancellationToken ct = default)
+    {
+        return await GetHelmManifestAsync(ns, releaseName, ct).ConfigureAwait(false);
+    }
+
+    public async Task<string> GetHelmReleaseNotesAsync(string ns, string releaseName, CancellationToken ct = default)
+    {
+        return await WithAuthRetryAsync(async () =>
+        {
+            var helmArgs = new KubectlArgumentBuilder()
+                .WithHelmGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+                .Add("get").Add("notes").Add(releaseName)
+                .Add("--namespace").Add(ns)
+                .Build();
+
+            var psi = new ProcessStartInfo("helm")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            foreach (var a in helmArgs) psi.ArgumentList.Add(a);
+
+            Process process;
+            try
+            {
+                process = Process.Start(psi)
+                    ?? throw new InvalidOperationException("Failed to start helm process.");
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == 2 /* ERROR_FILE_NOT_FOUND */)
+            {
+                throw new InvalidOperationException(
+                    "helm CLI is not installed or not on PATH. " +
+                    "Install helm (https://helm.sh/docs/intro/install/) and restart the app.");
+            }
+            var stdout = await process.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
+            var stderr = await process.StandardError.ReadToEndAsync(ct).ConfigureAwait(false);
+            await process.WaitForExitAsync(ct).ConfigureAwait(false);
+
+            if (process.ExitCode != 0)
+            {
+                if (IsForbiddenError(stderr))
+                {
+                    var token = TryAcquireFreshAzureToken();
+                    if (token is not null)
+                    {
+                        var retryArgs = new KubectlArgumentBuilder()
+                            .WithHelmGlobalFlags(_kubeconfigPath, _kubeconfigContext)
+                            .Add("get").Add("notes").Add(releaseName)
+                            .Add("--namespace").Add(ns)
+                            .Add("--kube-token").Add(token)
+                            .Build();
+                        var retryPsi = new ProcessStartInfo("helm")
+                        {
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        foreach (var a in retryArgs) retryPsi.ArgumentList.Add(a);
+
+                        var retryProcess = Process.Start(retryPsi)
+                            ?? throw new InvalidOperationException("Failed to start helm process.");
+                        var retryStdout = await retryProcess.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
+                        var retryStderr = await retryProcess.StandardError.ReadToEndAsync(ct).ConfigureAwait(false);
+                        await retryProcess.WaitForExitAsync(ct).ConfigureAwait(false);
+
+                        if (retryProcess.ExitCode != 0)
+                            throw new InvalidOperationException($"helm get notes failed after credential refresh (exit {retryProcess.ExitCode}): {retryStderr}");
+
+                        return retryStdout;
+                    }
+                }
+
+                throw new InvalidOperationException($"helm get notes failed (exit {process.ExitCode}): {stderr}");
+            }
+
+            return stdout;
         }).ConfigureAwait(false);
     }
 

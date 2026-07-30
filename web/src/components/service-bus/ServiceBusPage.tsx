@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft } from "lucide-react";
-import { useProfile, useSbPeekMessages, useSbPeekDlq } from "@/lib/hooks";
+import { useProfile, useSbPeekMessages, useSbPeekDlq, useSbEntityStats } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { EntityTree } from "./EntityTree";
 import { MessageList } from "./MessageList";
@@ -49,12 +49,19 @@ export function ServiceBusPage() {
     [updateParams],
   );
 
-  const selectedEntity = useMemo<SbEntityInfo | null>(() => {
+  const urlEntity = useMemo<SbEntityInfo | null>(() => {
     const entityPath = searchParams.get("entity");
     if (!entityPath) return null;
     const name = searchParams.get("entityName") || entityPath;
     return { entityPath, name } as SbEntityInfo;
   }, [searchParams]);
+
+  const entityStats = useSbEntityStats(selectedNsId, urlEntity?.entityPath ?? null);
+
+  const selectedEntity = useMemo<SbEntityInfo | null>(() => {
+    if (!urlEntity) return null;
+    return { ...urlEntity, stats: entityStats.data ?? null };
+  }, [urlEntity, entityStats.data]);
   const setSelectedEntity = useCallback(
     (entity: SbEntityInfo | null) =>
       updateParams({

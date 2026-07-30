@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
@@ -100,6 +101,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -117,6 +119,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -134,6 +137,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -150,6 +154,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -166,6 +171,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -183,6 +189,7 @@ public static class ServiceBusEndpoints
             DemoModeService demo,
             ScheduledMessageRepository schedRepo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -209,6 +216,7 @@ public static class ServiceBusEndpoints
             string entityPath,
             ScheduledMessageRepository schedRepo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             if (!Guid.TryParse(nsId, out var id))
                 return Results.BadRequest("Invalid namespace ID");
 
@@ -225,6 +233,7 @@ public static class ServiceBusEndpoints
             DemoModeService demo,
             ScheduledMessageRepository schedRepo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -247,6 +256,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -263,6 +273,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -279,6 +290,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -295,6 +307,7 @@ public static class ServiceBusEndpoints
             IServiceBusClientFactory factory,
             DemoModeService demo) =>
         {
+            entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
@@ -322,6 +335,8 @@ public static class ServiceBusEndpoints
             return Results.Ok();
         });
     }
+
+    private static string DecodeEntityPath(string entityPath) => Uri.UnescapeDataString(entityPath);
 
     private static ServiceBusNamespace? ResolveNamespace(
         string nsId,

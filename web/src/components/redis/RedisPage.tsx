@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,7 +25,7 @@ import {
 } from "@/lib/hooks";
 import { formatTtl, parseTtl, getTtlColorClass } from "@/lib/redis-format";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
-import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw, ChevronRight, ChevronDown, Plus } from "lucide-react";
+import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw, Plus } from "lucide-react";
 import { KeyspaceHealthPanel, PrefixMemoryPanel, OpsInsightsPanel } from "./AdvancedPanels";
 import { PubSubPanel } from "./PubSubPanel";
 
@@ -56,41 +56,7 @@ function formatBytes(bytes: number | null | undefined): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
-type NamespaceNode = {
-  name: string;
-  path: string;
-  children: Map<string, NamespaceNode>;
-  keys: string[];
-  keyCount: number;
-};
 
-function buildNamespaceTree(keys: string[], separator: string): NamespaceNode[] {
-  const roots = new Map<string, NamespaceNode>();
-
-  for (const key of keys) {
-    const parts = key.split(separator);
-    if (parts.length < 2) continue;
-
-    let nodes = roots;
-    let path = "";
-    const namespaceParts = parts.slice(0, -1);
-    namespaceParts.forEach((name, index) => {
-      path = index === 0 ? name : `${path}${separator}${name}`;
-      let node = nodes.get(name);
-      if (!node) {
-        node = { name, path, children: new Map(), keys: [], keyCount: 0 };
-        nodes.set(name, node);
-      }
-      node.keyCount += 1;
-      nodes = node.children;
-      if (index === namespaceParts.length - 1) {
-        node.keys.push(key);
-      }
-    });
-  }
-
-  return [...roots.values()];
-}
 
 export function RedisPage() {
   const { data: profile } = useProfile();
@@ -124,11 +90,10 @@ export function RedisPage() {
   const [ttlSeconds, setTtlSeconds] = useState(0);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [batchMode, setBatchMode] = useState(false);
-  const [namespaceFilter, setNamespaceFilter] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(10);
-  const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(new Set());
   const [pendingConfirm, setPendingConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [loadAllActive, setLoadAllActive] = useState(false);
   const [hashAdding, setHashAdding] = useState(false);
   const [newHashField, setNewHashField] = useState("");
   const [newHashValue, setNewHashValue] = useState("");
@@ -138,7 +103,7 @@ export function RedisPage() {
   const [zsetEditingMember, setZsetEditingMember] = useState<string | null>(null);
   const [zsetEditScore, setZsetEditScore] = useState("");
 
-  const namespaceSeparator = redisConfig?.namespaceSeparator?.trim() || ":";
+  const [separator, setSeparator] = useState(redisConfig?.namespaceSeparator?.trim() || ":");
   const listPageSize = 5;
   const setPageSize = 2;
 
@@ -199,10 +164,24 @@ export function RedisPage() {
     }
   };
 
+  const handleLoadAll = () => {
+    if (scanResult.data && !scanResult.data.isComplete) {
+      setLoadAllActive(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!loadAllActive || !scanResult.data || scanResult.data.isComplete) {
+      setLoadAllActive(false);
+      return;
+    }
+    handleLoadMore();
+  }, [loadAllActive, scanResult.data]);
+
   const scanKeys = scanResult.data?.keys ?? [];
   const displayKeys = cursor === 0 ? scanKeys : allKeys.length > 0 ? [...allKeys, ...scanKeys] : scanKeys;
-  const health = useRedisKeyspaceHealth(resolvedCacheId, displayKeys, namespaceSeparator);
-  const prefixMemory = useRedisPrefixMemory(resolvedCacheId, displayKeys, namespaceSeparator);
+  const health = useRedisKeyspaceHealth(resolvedCacheId, displayKeys, separator);
+  const prefixMemory = useRedisPrefixMemory(resolvedCacheId, displayKeys, separator);
 
   const handleDeleteKey = (key: string) => {
     deleteKey.mutate(key, {
@@ -336,67 +315,7 @@ export function RedisPage() {
     });
   };
 
-  const namespaceTree = useMemo(
-    () => buildNamespaceTree(displayKeys, namespaceSeparator),
-    [displayKeys, namespaceSeparator],
-  );
 
-  const filteredKeys = namespaceFilter
-    ? displayKeys.filter((k) => k === namespaceFilter || k.startsWith(namespaceFilter + namespaceSeparator))
-    : displayKeys;
-
-  const toggleNamespace = (ns: string) => {
-    setExpandedNamespaces((prev) => {
-      const next = new Set(prev);
-      if (next.has(ns)) next.delete(ns);
-      else next.add(ns);
-      return next;
-    });
-  };
-
-  const renderNamespaceNode = (node: NamespaceNode, depth = 0): ReactNode => {
-    const isExpanded = expandedNamespaces.has(node.path);
-    return (
-      <div key={node.path}>
-        <div className="flex items-center">
-          <button
-            onClick={() => toggleNamespace(node.path)}
-            className="p-0.5 text-muted-foreground hover:text-foreground"
-            data-testid={`redis-namespace-toggle-${node.path}`}
-            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${node.path}`}
-          >
-            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-          </button>
-          <button
-            onClick={() => setNamespaceFilter(namespaceFilter === node.path ? null : node.path)}
-            className={`flex-1 rounded px-2 py-0.5 text-left text-xs font-mono ${namespaceFilter === node.path ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-            data-testid={`redis-namespace-${node.path}`}
-          >
-            {node.name} ({node.keyCount})
-          </button>
-        </div>
-        {isExpanded && (
-          <div
-            className="border-l pl-1"
-            style={{ marginLeft: `${(depth + 1) * 1.25}rem` }}
-            data-testid={`redis-namespace-children-${node.path}`}
-          >
-            {[...node.children.values()].map((child) => renderNamespaceNode(child, depth + 1))}
-            {node.keys.map((key) => (
-              <button
-                key={key}
-                onClick={() => setSelectedKey(key)}
-                className={`block w-full truncate rounded px-2 py-0.5 text-left text-xs font-mono ${selectedKey === key ? "bg-accent" : "hover:bg-accent"}`}
-                data-testid={`redis-namespace-key-${key}`}
-              >
-                {key.slice(node.path.length + namespaceSeparator.length) || key}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   if (!resolvedCacheId) {
     return (
@@ -528,6 +447,20 @@ export function RedisPage() {
                   </button>
                 </div>
                 <div className="mt-2 flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    Separator
+                    <input
+                      type="text"
+                      value={separator}
+                      onChange={(e) => setSeparator(e.target.value || ":")}
+                      className="w-16 rounded border bg-card px-1.5 py-0.5 font-mono text-xs"
+                      data-testid="redis-separator-input"
+                    />
+                  </label>
+                  <span className="ml-auto text-xs text-muted-foreground" data-testid="redis-key-count">
+                    {displayKeys.length} keys loaded
+                    {scanResult.data?.isComplete ? " (all)" : ""}
+                  </span>
                   <button
                     onClick={() => { setBatchMode(!batchMode); setSelectedKeys(new Set()); }}
                     className={`rounded border px-2 py-1 text-xs ${batchMode ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
@@ -546,22 +479,6 @@ export function RedisPage() {
                 </div>
               </div>
 
-              {/* Namespace tree with expand/collapse */}
-              {namespaceTree.length > 0 && (
-                <div className="border-b p-2" data-testid="redis-namespace-tree">
-                  <div className="mb-1 text-xs font-medium text-muted-foreground">Namespaces</div>
-                  <div className="space-y-0.5">
-                    <button
-                      onClick={() => setNamespaceFilter(null)}
-                      className={`flex w-full items-center rounded px-2 py-0.5 text-xs ${!namespaceFilter ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-                    >
-                      All ({displayKeys.length})
-                    </button>
-                    {namespaceTree.map((node) => renderNamespaceNode(node))}
-                  </div>
-                </div>
-              )}
-
               <div className="flex-1 overflow-auto">
                 {scanResult.isLoading && (
                   <div className="p-3 text-sm text-muted-foreground">Loading keys...</div>
@@ -574,7 +491,7 @@ export function RedisPage() {
                 {displayKeys.length === 0 && !scanResult.isLoading && (
                   <div className="p-3 text-sm text-muted-foreground">No keys found</div>
                 )}
-                {filteredKeys.map((key) => (
+                {displayKeys.map((key) => (
                   <div
                     key={key}
                     data-testid={`redis-key-${key}`}
@@ -597,13 +514,25 @@ export function RedisPage() {
                   </div>
                 ))}
                 {scanResult.data && !scanResult.data.isComplete && (
-                  <button
-                    data-testid="redis-load-more"
-                    onClick={handleLoadMore}
-                    className="w-full px-3 py-2 text-sm text-primary hover:bg-accent"
-                  >
-                    Load more...
-                  </button>
+                  <div className="flex gap-2 border-t px-3 py-2">
+                    <button
+                      data-testid="redis-load-more"
+                      onClick={handleLoadMore}
+                      className="flex-1 rounded border px-3 py-1.5 text-sm text-primary hover:bg-accent"
+                    >
+                      Load more
+                    </button>
+                    {displayKeys.length < 1000 && (
+                      <button
+                        data-testid="redis-load-all"
+                        onClick={handleLoadAll}
+                        disabled={loadAllActive}
+                        className="flex-1 rounded border px-3 py-1.5 text-sm text-primary hover:bg-accent disabled:opacity-50"
+                      >
+                        {loadAllActive ? "Loading all..." : "Load all"}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -1105,7 +1034,7 @@ export function RedisPage() {
             <PrefixMemoryPanel
               buckets={prefixMemory.data}
               loading={prefixMemory.isLoading}
-              separator={namespaceSeparator}
+              separator={separator}
             />
           </div>
         )}

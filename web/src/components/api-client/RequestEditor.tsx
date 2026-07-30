@@ -375,7 +375,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
           value={request.url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://api.example.com/resource"
-          className="min-w-0 flex-1 rounded border bg-background px-3 py-1.5 text-sm"
+          className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded border bg-background px-3 py-1.5 text-sm"
         />
         <button
           data-testid="request-var-preview"

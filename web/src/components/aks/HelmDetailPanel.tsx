@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { X, History, Settings2, RotateCcw } from "lucide-react";
-import { useAksHelmHistory, useAksHelmValues, useAksHelmRollback } from "@/lib/hooks";
+import { X, History, Settings2, RotateCcw, FileText, Package } from "lucide-react";
+import { useAksHelmHistory, useAksHelmValues, useAksHelmNotes, useAksHelmManifest, useAksHelmRollback } from "@/lib/hooks";
+import { highlightYaml } from "@/lib/yamlHighlight";
 
 interface HelmDetailPanelProps {
   ns: string;
@@ -10,10 +11,14 @@ interface HelmDetailPanelProps {
   onError?: (message: string) => void;
 }
 
+type HelmTab = "history" | "values" | "notes" | "manifest";
+
 export function HelmDetailPanel({ ns, release, onClose, onRequestConfirm, onError }: HelmDetailPanelProps) {
-  const [tab, setTab] = useState<"history" | "values">("history");
+  const [tab, setTab] = useState<HelmTab>("history");
   const { data: history, isLoading: historyLoading } = useAksHelmHistory(ns, release);
   const { data: values, isLoading: valuesLoading } = useAksHelmValues(ns, release);
+  const { data: notes, isLoading: notesLoading } = useAksHelmNotes(ns, release);
+  const { data: manifest, isLoading: manifestLoading } = useAksHelmManifest(ns, release);
   const [valuesTab, setValuesTab] = useState<"user" | "computed">("user");
   const rollback = useAksHelmRollback();
 
@@ -30,6 +35,19 @@ export function HelmDetailPanel({ ns, release, onClose, onRequestConfirm, onErro
     });
   };
 
+  const tabButton = (id: HelmTab, label: string, icon: React.ReactNode) => (
+    <button
+      key={id}
+      onClick={() => setTab(id)}
+      data-testid={`helm-tab-${id}`}
+      className={`flex items-center gap-1 px-4 py-2 text-sm font-medium ${
+        tab === id ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {icon} {label}
+    </button>
+  );
+
   return (
     <div className="flex h-full flex-col" data-testid="helm-detail-panel">
       <div className="flex items-center gap-2 border-b px-4 py-2">
@@ -41,24 +59,10 @@ export function HelmDetailPanel({ ns, release, onClose, onRequestConfirm, onErro
       </div>
 
       <div className="flex border-b">
-        <button
-          onClick={() => setTab("history")}
-          data-testid="helm-tab-history"
-          className={`flex items-center gap-1 px-4 py-2 text-sm font-medium ${
-            tab === "history" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <History className="h-3.5 w-3.5" /> History
-        </button>
-        <button
-          onClick={() => setTab("values")}
-          data-testid="helm-tab-values"
-          className={`flex items-center gap-1 px-4 py-2 text-sm font-medium ${
-            tab === "values" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Settings2 className="h-3.5 w-3.5" /> Values
-        </button>
+        {tabButton("history", "History", <History className="h-3.5 w-3.5" />)}
+        {tabButton("values", "Values", <Settings2 className="h-3.5 w-3.5" />)}
+        {tabButton("notes", "Notes", <FileText className="h-3.5 w-3.5" />)}
+        {tabButton("manifest", "Manifest", <Package className="h-3.5 w-3.5" />)}
       </div>
 
       <div className="flex-1 overflow-auto">
@@ -138,10 +142,44 @@ export function HelmDetailPanel({ ns, release, onClose, onRequestConfirm, onErro
                     Computed Values
                   </button>
                 </div>
-                <pre className="overflow-auto rounded border bg-black p-3 text-xs font-mono text-green-400" data-testid="helm-values-content">
-                  {valuesTab === "user" ? values.userValues : values.computedValues}
-                </pre>
+                <pre
+                  className="overflow-auto rounded border bg-card p-3 text-xs font-mono"
+                  data-testid="helm-values-content"
+                  dangerouslySetInnerHTML={{
+                    __html: highlightYaml(valuesTab === "user" ? values.userValues : values.computedValues),
+                  }}
+                />
               </div>
+            )}
+          </div>
+        )}
+        {tab === "notes" && (
+          <div className="p-4">
+            {notesLoading ? (
+              <div className="text-sm text-muted-foreground">Loading notes...</div>
+            ) : !notes ? (
+              <div className="text-sm text-muted-foreground">No notes available</div>
+            ) : (
+              <pre className="overflow-auto rounded border bg-card p-3 text-xs font-mono whitespace-pre-wrap" data-testid="helm-notes-content">
+                {notes.notes || "No release notes provided."}
+              </pre>
+            )}
+          </div>
+        )}
+        {tab === "manifest" && (
+          <div className="p-4">
+            {manifestLoading ? (
+              <div className="text-sm text-muted-foreground">Loading manifest...</div>
+            ) : !manifest ? (
+              <div className="text-sm text-muted-foreground">No manifest available</div>
+            ) : (
+              <pre
+                className="overflow-auto rounded border bg-card p-3 text-xs font-mono"
+                data-testid="helm-manifest-content"
+                dangerouslySetInnerHTML={{
+                  __html: highlightYaml(manifest.manifest),
+                }}
+              />
             )}
           </div>
         )}

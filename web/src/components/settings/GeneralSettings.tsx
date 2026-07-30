@@ -1,12 +1,17 @@
-import { CheckCircle2, Circle } from "lucide-react";
-import { useProfile, useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
+import { useRef, useState } from "react";
+import { CheckCircle2, Circle, Download, Upload } from "lucide-react";
+import { useProfile, useUserSettings, useUpdateUserSettings, useExportSettings, useImportSettings } from "@/lib/hooks";
 import { useSettingsStore } from "@/lib/stores/settings";
 
 export function GeneralSettings() {
   const { data: settings, isLoading } = useUserSettings();
   const { data: profile } = useProfile();
   const updateSettings = useUpdateUserSettings();
+  const exportSettings = useExportSettings();
+  const importSettings = useImportSettings();
   const { theme, toggleTheme } = useSettingsStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
 
   if (isLoading || !settings) {
     return <div className="text-muted-foreground">Loading...</div>;
@@ -106,6 +111,66 @@ export function GeneralSettings() {
           />
           Warm up connections on startup
         </label>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Backup & Restore</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                const data = await exportSettings.mutateAsync();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `swebkit-settings-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch {
+                setImportStatus("Export failed");
+              }
+            }}
+            disabled={exportSettings.isPending}
+            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            Export settings
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importSettings.isPending}
+            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+          >
+            <Upload className="h-4 w-4" />
+            Import settings
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              try {
+                const text = await file.text();
+                const bundle = JSON.parse(text);
+                if (window.confirm("Importing will replace your current profiles, collections, environments, and settings. Continue?")) {
+                  await importSettings.mutateAsync(bundle);
+                  setImportStatus("Import successful. Restart the app to ensure all changes are loaded.");
+                }
+              } catch {
+                setImportStatus("Import failed: invalid file");
+              } finally {
+                e.target.value = "";
+              }
+            }}
+          />
+        </div>
+        {importStatus && (
+          <p className="mt-2 text-xs text-muted-foreground">{importStatus}</p>
+        )}
       </section>
     </div>
   );

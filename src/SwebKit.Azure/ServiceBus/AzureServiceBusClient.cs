@@ -77,7 +77,6 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
                 Name = q.Name,
                 EntityPath = q.Name,
                 IsDisabled = IsEntityDisabled(q.Status)
-                // Stats intentionally null — caller loads them in the background
             });
         }
 
@@ -86,6 +85,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             await TryAddScopedQueueAsync(result, ct).ConfigureAwait(false);
         }
 
+        await PopulateStatsAsync(result, ct).ConfigureAwait(false);
         return result;
     }
 
@@ -118,12 +118,14 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         try
         {
             var q = await _adminClient.GetQueueAsync(_scopedEntityPath, ct).ConfigureAwait(false);
-            result.Add(new SbEntityInfo
+            var entity = new SbEntityInfo
             {
                 Name = q.Value.Name,
                 EntityPath = q.Value.Name,
                 IsDisabled = IsEntityDisabled(q.Value.Status)
-            });
+            };
+            entity.Stats = await GetEntityStatsAsync(entity.EntityPath, ct).ConfigureAwait(false);
+            result.Add(entity);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -160,6 +162,27 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         }
     }
 
+    private async Task PopulateStatsAsync(IReadOnlyList<SbEntityInfo> entities, CancellationToken ct)
+    {
+        await Parallel.ForEachAsync(entities,
+            new ParallelOptions { MaxDegreeOfParallelism = 5, CancellationToken = ct },
+            async (entity, token) =>
+            {
+                try
+                {
+                    entity.Stats = await GetEntityStatsAsync(entity.EntityPath, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Leave Stats null if the runtime properties cannot be read.
+                }
+            }).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default)
     {
         var result = new List<SbEntityInfo>();
@@ -172,9 +195,10 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
                 IsSubscription = true,
                 TopicName = topicName,
                 IsDisabled = IsEntityDisabled(s.Status)
-                // Stats intentionally null — caller loads them in the background
             });
         }
+
+        await PopulateStatsAsync(result, ct).ConfigureAwait(false);
         return result;
     }
 
