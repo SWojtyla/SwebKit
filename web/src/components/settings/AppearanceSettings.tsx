@@ -3,9 +3,10 @@ import { useSettingsStore } from "@/lib/stores/settings";
 export function AppearanceSettings() {
   const { theme, setTheme } = useSettingsStore();
 
-  const themes: { id: "dark" | "light"; label: string; desc: string }[] = [
+  const themes: { id: "dark" | "light" | "fancy"; label: string; desc: string }[] = [
     { id: "dark", label: "Aurora Dark", desc: "Deep navy with indigo glows" },
     { id: "light", label: "Aurora Light", desc: "Soft lavender with vibrant accents" },
+    { id: "fancy", label: "✨ Fancy ✨", desc: "Maximum vibes. Zero professionalism." },
   ];
 
   return (
@@ -20,7 +21,7 @@ export function AppearanceSettings() {
       {/* Theme cards */}
       <div>
         <label className="text-sm font-medium">Theme</label>
-        <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="mt-3 grid grid-cols-3 gap-3">
           {themes.map((t) => (
             <button
               key={t.id}
@@ -37,14 +38,20 @@ export function AppearanceSettings() {
                 className={`mb-3 flex h-16 items-center justify-center rounded-lg ${
                   t.id === "dark"
                     ? "bg-[oklch(0.16_0.018_260)]"
-                    : "bg-[oklch(0.98_0.008_250)]"
+                    : t.id === "fancy"
+                      ? "bg-[linear-gradient(120deg,#ff00cc,#3333ff,#00e5ff,#ff00cc)] bg-[length:300%_300%] animate-[fancy-rainbow_3s_ease_infinite]"
+                      : "bg-[oklch(0.98_0.008_250)]"
                 }`}
               >
-                <div className="flex gap-1.5">
-                  <div className="h-6 w-6 rounded-full bg-[oklch(0.65_0.24_265)]" />
-                  <div className="h-6 w-6 rounded-full bg-[oklch(0.62_0.22_295)]" />
-                  <div className="h-6 w-6 rounded-full bg-[oklch(0.58_0.20_200)]" />
-                </div>
+                {t.id === "fancy" ? (
+                  <span className="text-2xl drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">✨🌈💅</span>
+                ) : (
+                  <div className="flex gap-1.5">
+                    <div className="h-6 w-6 rounded-full bg-[oklch(0.65_0.24_265)]" />
+                    <div className="h-6 w-6 rounded-full bg-[oklch(0.62_0.22_295)]" />
+                    <div className="h-6 w-6 rounded-full bg-[oklch(0.58_0.20_200)]" />
+                  </div>
+                )}
               </div>
               <div className="text-sm font-medium">{t.label}</div>
               <div className="text-xs text-muted-foreground">{t.desc}</div>

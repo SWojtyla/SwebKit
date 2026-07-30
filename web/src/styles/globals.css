@@ -90,6 +90,100 @@
   --aurora-3: oklch(0.58 0.20 200);
 }
 
+/* ── Fancy Theme (✨ pure vibes, zero professionalism ✨) ──────────────── */
+.fancy {
+  --background: oklch(0.14 0.05 300);
+  --foreground: oklch(0.97 0.02 90);
+  --card: oklch(0.20 0.08 300);
+  --card-foreground: oklch(0.97 0.02 90);
+  --primary: oklch(0.72 0.28 330);
+  --primary-foreground: oklch(0.12 0.02 300);
+  --primary-glow: oklch(0.72 0.28 330 / 45%);
+  --secondary: oklch(0.30 0.10 260);
+  --secondary-foreground: oklch(0.95 0.02 90);
+  --muted: oklch(0.26 0.06 290);
+  --muted-foreground: oklch(0.78 0.05 280);
+  --accent: oklch(0.35 0.12 200);
+  --accent-foreground: oklch(0.95 0.05 200);
+  --destructive: oklch(0.65 0.26 25);
+  --destructive-foreground: oklch(0.98 0.01 250);
+  --success: oklch(0.78 0.22 150);
+  --success-foreground: oklch(0.12 0.02 150);
+  --warning: oklch(0.85 0.20 95);
+  --warning-foreground: oklch(0.18 0.04 95);
+  --info: oklch(0.75 0.22 220);
+  --info-foreground: oklch(0.12 0.02 220);
+  --border: oklch(0.75 0.25 320 / 55%);
+  --input: oklch(0.30 0.10 290 / 70%);
+  --ring: oklch(0.80 0.25 190);
+  --sidebar: oklch(0.16 0.06 300);
+  --sidebar-foreground: oklch(0.85 0.05 280);
+  --sidebar-active: oklch(0.72 0.28 330 / 25%);
+  --header: oklch(0.16 0.06 300 / 75%);
+  --popover: oklch(0.20 0.08 300);
+  --popover-foreground: oklch(0.97 0.02 90);
+  --radius: 1.25rem;
+  --shadow-sm: 0 0 8px oklch(0.72 0.28 330 / 40%);
+  --shadow-md: 0 0 20px oklch(0.80 0.25 190 / 35%), 0 0 8px oklch(0.72 0.28 330 / 30%);
+  --shadow-lg: 0 0 40px oklch(0.72 0.28 330 / 35%), 0 0 16px oklch(0.80 0.25 190 / 30%);
+  --shadow-glow: 0 0 32px oklch(0.80 0.25 190 / 55%), 0 0 60px oklch(0.72 0.28 330 / 35%);
+  --aurora-1: oklch(0.80 0.25 190);
+  --aurora-2: oklch(0.72 0.28 330);
+  --aurora-3: oklch(0.85 0.22 95);
+}
+
+/* Comic Sans. On purpose. This is not a professional theme. */
+.fancy body {
+  font-family: "Comic Sans MS", "Comic Sans", "Chalkboard SE", cursive, system-ui, sans-serif;
+}
+
+.fancy .aurora-bg::before {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 0%, oklch(0.80 0.25 190 / 30%), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 10%, oklch(0.72 0.28 330 / 25%), transparent 55%),
+    radial-gradient(ellipse 50% 30% at 50% 100%, oklch(0.85 0.22 95 / 18%), transparent 50%);
+  animation: fancy-hue-shift 8s linear infinite;
+}
+
+.fancy .glass,
+.fancy .glass-card {
+  box-shadow: 0 0 24px oklch(0.72 0.28 330 / 20%), var(--shadow-md);
+}
+
+.fancy .gradient-text {
+  background: linear-gradient(90deg, var(--aurora-1), var(--aurora-2), var(--aurora-3), var(--aurora-1));
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: fancy-rainbow 4s ease infinite;
+}
+
+.fancy .glow {
+  animation: fancy-pulse-glow 1.6s ease-in-out infinite;
+}
+
+.fancy ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, oklch(0.72 0.28 330), oklch(0.80 0.25 190));
+  opacity: 0.8;
+}
+
+@keyframes fancy-hue-shift {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+
+@keyframes fancy-rainbow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes fancy-pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px oklch(0.72 0.28 330 / 50%), 0 0 40px oklch(0.80 0.25 190 / 30%); }
+  50% { box-shadow: 0 0 36px oklch(0.80 0.25 190 / 70%), 0 0 60px oklch(0.72 0.28 330 / 50%); }
+}
+
 /* ── Theme Tokens ────────────────────────────────────────────────────── */
 @theme inline {
   --color-background: var(--background);

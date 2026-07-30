@@ -48,7 +48,7 @@ export function GeneralSettings() {
             onClick={toggleTheme}
             className="rounded-md border bg-card px-3 py-1.5 text-sm hover:bg-accent"
           >
-            {theme === "dark" ? "Dark" : "Light"}
+            {theme === "dark" ? "Dark" : theme === "fancy" ? "✨ Fancy ✨" : "Light"}
           </button>
         </div>
       </section>

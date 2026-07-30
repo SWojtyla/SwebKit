@@ -48,7 +48,21 @@ test.describe("Settings", () => {
     await page.getByTestId("settings-tab-appearance").click();
     await expect(page.getByTestId("appearance-settings")).toBeVisible();
     await expect(page.getByTestId("appearance-theme-dark")).toBeVisible();
+    await expect(page.getByTestId("appearance-theme-light")).toBeVisible();
+    await expect(page.getByTestId("appearance-theme-fancy")).toBeVisible();
     await expect(page.getByTestId("appearance-font-size")).toBeVisible();
     await expect(page.getByTestId("appearance-density")).toBeVisible();
+  });
+
+  test("selecting the fancy theme applies it to the document", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-appearance").click();
+    await page.getByTestId("appearance-theme-fancy").click();
+    await expect(page.locator("html")).toHaveClass(/fancy/);
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
+
+    await page.getByTestId("appearance-theme-dark").click();
+    await expect(page.locator("html")).toHaveClass(/dark/);
+    await expect(page.locator("html")).not.toHaveClass(/fancy/);
   });
 });
