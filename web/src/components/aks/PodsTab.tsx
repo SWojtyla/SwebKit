@@ -1,15 +1,14 @@
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAksPods, useAksDeletePod, useAksPodMetrics } from "@/lib/hooks";
-import { useNotification } from "@/components/layout/NotificationSystem";
 import { showNotification } from "@/lib/tauri-bridge";
+import { ResourceTable } from "./shared/ResourceTable";
+import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import type { ContextMenuItem } from "./ContextMenu";
 import type { PodInfo, PodMetricInfo } from "@/lib/types";
 
 interface PodsTabProps {
   ns: string;
   isMulti?: boolean;
-  onPodClick?: (pod: PodInfo) => void;
-  onContextMenu?: (e: React.MouseEvent, pod: PodInfo) => void;
-  onDeletePod?: (pod: PodInfo) => void;
 }
 
 const CPU_CEILING_MILLICORES = 500;
@@ -51,10 +50,7 @@ function MetricBar({ value, className }: { value: number; className: string }) {
   const pct = Math.min(100, Math.max(0, value * 100));
   return (
     <div className="h-1.5 w-16 rounded-full bg-muted">
-      <div
-        className={`h-1.5 rounded-full ${className}`}
-        style={{ width: `${pct}%` }}
-      />
+      <div className={`h-1.5 rounded-full ${className}`} style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -70,46 +66,21 @@ function aggregatePodUsage(metric: PodMetricInfo | undefined) {
   return { cpu, memory };
 }
 
-function PodMetricCell({ pod, metrics }: { pod: PodInfo; metrics: PodMetricInfo[] | undefined }) {
-  const usage = useMemo(() => aggregatePodUsage(getPodMetrics(metrics, pod)), [metrics, pod]);
-
-  if (!usage) {
-    return (
-      <>
-        <td className="py-2 pr-4 text-xs text-muted-foreground" title="Metrics unavailable — metrics-server may not be installed or pod has no resource data">—</td>
-        <td className="py-2 pr-4 text-xs text-muted-foreground" title="Metrics unavailable — metrics-server may not be installed or pod has no resource data">—</td>
-      </>
-    );
-  }
-
-  const cpuPct = (usage.cpu * 1000) / CPU_CEILING_MILLICORES;
-  const memoryMi = usage.memory / (1024 * 1024);
-  const memoryPct = memoryMi / MEMORY_CEILING_MI;
-
-  return (
-    <>
-      <td className="py-2 pr-4">
-        <div className="flex items-center gap-2" title={`${formatCpu(usage.cpu)} / ~${CPU_CEILING_MILLICORES}m`}>
-          <span className={`text-xs font-mono ${cpuClass(usage.cpu)}`}>{formatCpu(usage.cpu)}</span>
-          <MetricBar value={cpuPct} className={cpuClass(usage.cpu).replace("text-", "bg-")} />
-        </div>
-      </td>
-      <td className="py-2 pr-4">
-        <div className="flex items-center gap-2" title={`${formatMemory(usage.memory)} / ~${MEMORY_CEILING_MI}Mi`}>
-          <span className={`text-xs font-mono ${memoryClass(memoryMi)}`}>{formatMemory(usage.memory)}</span>
-          <MetricBar value={memoryPct} className={memoryClass(memoryMi).replace("text-", "bg-")} />
-        </div>
-      </td>
-    </>
-  );
+function PodStatusBadge({ status }: { status: string }) {
+  const color =
+    status === "Running" ? "text-green-500" :
+    status === "Pending" ? "text-yellow-500" :
+    status === "Failed" || status.includes("BackOff") || status.includes("Error") ? "text-destructive" :
+    "text-muted-foreground";
+  return <span className={color}>{status}</span>;
 }
 
-export function PodsTab({ ns, isMulti, onPodClick, onContextMenu, onDeletePod }: PodsTabProps) {
+export function PodsTab({ ns, isMulti }: PodsTabProps) {
   const { data: pods, isLoading } = useAksPods(ns);
   const { data: metrics } = useAksPodMetrics(ns);
   const [hideCompleted, setHideCompleted] = useState(true);
   const deleteMutation = useAksDeletePod();
-  const { notify } = useNotification();
+  const ws = useAksWorkspace();
   const prevStatusesRef = useRef<Map<string, string>>(new Map());
   const prevNsRef = useRef(ns);
 
@@ -139,33 +110,36 @@ export function PodsTab({ ns, isMulti, onPodClick, onContextMenu, onDeletePod }:
 
   const visiblePods = hideCompleted ? pods?.filter((p) => !isCompletedPod(p)) : pods;
 
-  if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
-  if (!visiblePods || visiblePods.length === 0)
-    return (
-      <div className="p-4 text-sm text-muted-foreground">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={hideCompleted}
-            onChange={(e) => setHideCompleted(e.target.checked)}
-          />
-          Hide completed pods
-        </label>
-        <p className="mt-2">No pods found</p>
-      </div>
-    );
+  const usageFor = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof aggregatePodUsage>>();
+    if (!metrics) return map;
+    for (const pod of visiblePods ?? []) {
+      const metric = getPodMetrics(metrics, pod);
+      map.set(`${pod.namespace}/${pod.name}`, aggregatePodUsage(metric));
+    }
+    return map;
+  }, [metrics, visiblePods]);
 
   const handleDelete = (pod: PodInfo) => {
-    if (onDeletePod) {
-      onDeletePod(pod);
-      return;
-    }
-    if (!confirm(`Delete pod ${pod.name}? The controller will recreate it.`)) return;
-    deleteMutation.mutate({ ns: pod.namespace, name: pod.name }, {
-      onSuccess: () => notify("success", "Pod deleted", `${pod.namespace}/${pod.name}`),
-      onError: (e) => notify("error", "Delete pod failed", String(e)),
+    ws.requestConfirm({
+      message: `Delete pod "${pod.name}"? The controller will recreate it.`,
+      resourceName: pod.name,
+      onConfirm: () => deleteMutation.mutate({ ns: pod.namespace, name: pod.name }),
     });
   };
+
+  const buildMenu = (pod: PodInfo): ContextMenuItem[] => [
+    { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(pod.name) },
+    { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("pod", pod.name, pod.namespace) },
+    { label: "View Logs", icon: "☰", onClick: () => ws.openLogs(pod) },
+    { label: "Container Details", icon: "⚙", onClick: () => ws.openContainerDetails(pod.name, pod.namespace) },
+    { label: "Analyze network", icon: "📶", onClick: () => ws.navigateToAnalysis() },
+    { label: "", separator: true, onClick: () => {} },
+    { label: "Open shell in pod", icon: ">", onClick: () => {}, disabled: true },
+    { label: "Port-forward…", icon: "→", onClick: () => ws.openPortForward(pod) },
+    { label: "", separator: true, onClick: () => {} },
+    { label: "Delete Pod", icon: "✕", onClick: () => handleDelete(pod), destructive: true },
+  ];
 
   return (
     <div className="p-4">
@@ -179,68 +153,71 @@ export function PodsTab({ ns, isMulti, onPodClick, onContextMenu, onDeletePod }:
           Hide completed pods
         </label>
       </div>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs text-muted-foreground">
-            <th className="py-2 pr-4">Name</th>
-            {isMulti && <th className="py-2 pr-4">Namespace</th>}
-            <th className="py-2 pr-4">Status</th>
-            <th className="py-2 pr-4">Ready</th>
-            <th className="py-2 pr-4">CPU</th>
-            <th className="py-2 pr-4">Memory</th>
-            <th className="py-2 pr-4">Restarts</th>
-            <th className="py-2 pr-4">Node</th>
-            <th className="py-2 pr-4">Age</th>
-            <th className="py-2 pr-4">Actions</th>
-          </tr>
-        </thead>
-        <tbody data-testid="pods-table-body">
-          {visiblePods.map((pod) => (
-            <tr key={`${pod.namespace}/${pod.name}`} data-testid={`pod-row-${pod.name}`} className={`border-b last:border-0 ${onPodClick ? "cursor-pointer hover:bg-accent/50" : ""}`} onClick={() => onPodClick?.(pod)} onContextMenu={(e) => onContextMenu?.(e, pod)}>
-              <td className="py-2 pr-4 font-medium">{pod.name}</td>
-              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{pod.namespace}</td>}
-              <td className="py-2 pr-4">
-                <PodStatusBadge status={pod.status} />
-              </td>
-              <td className="py-2 pr-4">
-                <span className={pod.ready ? "text-green-500" : "text-yellow-500"}>
-                  {pod.readyDisplay}
-                </span>
-              </td>
-              <PodMetricCell pod={pod} metrics={metrics} />
-              <td className="py-2 pr-4">
-                {pod.restartCount > 0 ? (
-                  <span className="text-yellow-500">{pod.restartCount}</span>
-                ) : (
-                  <span className="text-muted-foreground">0</span>
-                )}
-              </td>
-              <td className="py-2 pr-4 text-xs text-muted-foreground">{pod.nodeName ?? "—"}</td>
-              <td className="py-2 pr-4 text-xs text-muted-foreground">
-                {formatAge(pod.startTime)}
-              </td>
-              <td className="py-2 pr-4" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => handleDelete(pod)}
-                  disabled={deleteMutation.isPending}
-                  className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <ResourceTable
+        data={visiblePods}
+        isLoading={isLoading}
+        isMulti={isMulti}
+        testIdPrefix="pod"
+        tableBodyTestId="pods-table-body"
+        emptyMessage="No pods found"
+        onRowClick={(pod) => ws.setPodKey(pod)}
+        onRowContextMenu={(e, pod) => ws.showContextMenu(e, buildMenu(pod))}
+        columns={[
+          { header: "Status", cell: (pod) => <PodStatusBadge status={pod.status} /> },
+          { header: "Ready", cell: (pod) => (
+            <span className={pod.ready ? "text-green-500" : "text-yellow-500"}>
+              {pod.readyDisplay}
+            </span>
+          )},
+          {
+            header: "CPU",
+            cell: (pod) => {
+              const usage = usageFor.get(`${pod.namespace}/${pod.name}`);
+              if (!usage) return <span className="text-xs text-muted-foreground" title="Metrics unavailable — metrics-server may not be installed or pod has no resource data">—</span>;
+              const cpuPct = (usage.cpu * 1000) / CPU_CEILING_MILLICORES;
+              return (
+                <div className="flex items-center gap-2" title={`${formatCpu(usage.cpu)} / ~${CPU_CEILING_MILLICORES}m`}>
+                  <span className={`text-xs font-mono ${cpuClass(usage.cpu)}`}>{formatCpu(usage.cpu)}</span>
+                  <MetricBar value={cpuPct} className={cpuClass(usage.cpu).replace("text-", "bg-")} />
+                </div>
+              );
+            },
+          },
+          {
+            header: "Memory",
+            cell: (pod) => {
+              const usage = usageFor.get(`${pod.namespace}/${pod.name}`);
+              if (!usage) return <span className="text-xs text-muted-foreground" title="Metrics unavailable — metrics-server may not be installed or pod has no resource data">—</span>;
+              const memoryMi = usage.memory / (1024 * 1024);
+              const memoryPct = memoryMi / MEMORY_CEILING_MI;
+              return (
+                <div className="flex items-center gap-2" title={`${formatMemory(usage.memory)} / ~${MEMORY_CEILING_MI}Mi`}>
+                  <span className={`text-xs font-mono ${memoryClass(memoryMi)}`}>{formatMemory(usage.memory)}</span>
+                  <MetricBar value={memoryPct} className={memoryClass(memoryMi).replace("text-", "bg-")} />
+                </div>
+              );
+            },
+          },
+          { header: "Restarts", cell: (pod) => (
+            pod.restartCount > 0 ? (
+              <span className="text-yellow-500">{pod.restartCount}</span>
+            ) : (
+              <span className="text-muted-foreground">0</span>
+            )
+          )},
+          { header: "Node", cell: (pod) => <span className="text-xs text-muted-foreground">{pod.nodeName ?? "—"}</span> },
+          { header: "Age", cell: (pod) => <span className="text-xs text-muted-foreground">{formatAge(pod.startTime)}</span> },
+          { header: "Actions", cell: (pod) => (
+            <button
+              onClick={() => handleDelete(pod)}
+              disabled={deleteMutation.isPending}
+              className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+            >
+              Delete
+            </button>
+          )},
+        ]}
+      />
     </div>
   );
-}
-
-function PodStatusBadge({ status }: { status: string }) {
-  const color =
-    status === "Running" ? "text-green-500" :
-    status === "Pending" ? "text-yellow-500" :
-    status === "Failed" || status.includes("BackOff") || status.includes("Error") ? "text-destructive" :
-    "text-muted-foreground";
-  return <span className={color}>{status}</span>;
 }

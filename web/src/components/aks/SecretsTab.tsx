@@ -1,43 +1,41 @@
 import { useAksSecrets } from "@/lib/hooks";
+import { ResourceTable } from "./shared/ResourceTable";
+import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import type { ContextMenuItem } from "./ContextMenu";
 import type { SecretInfo } from "@/lib/types";
 
 interface SecretsTabProps {
   ns: string;
   isMulti?: boolean;
-  onContextMenu?: (e: React.MouseEvent, secret: SecretInfo) => void;
 }
 
-export function SecretsTab({ ns, isMulti, onContextMenu }: SecretsTabProps) {
+export function SecretsTab({ ns, isMulti }: SecretsTabProps) {
   const { data: secrets, isLoading } = useAksSecrets(ns);
+  const ws = useAksWorkspace();
 
-  if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
-  if (!secrets || secrets.length === 0)
-    return <div className="p-4 text-sm text-muted-foreground">No secrets found</div>;
+  const buildMenu = (secret: SecretInfo): ContextMenuItem[] => [
+    { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(secret.name) },
+    { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("secret", secret.name, secret.namespace) },
+    { label: "View keys", icon: "🔑", onClick: () => ws.setSelectedSecret(secret) },
+  ];
 
   return (
-    <div className="p-4">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs text-muted-foreground">
-            <th className="py-2 pr-4">Name</th>
-            {isMulti && <th className="py-2 pr-4">Namespace</th>}
-            <th className="py-2 pr-4">Type</th>
-            <th className="py-2 pr-4">Keys</th>
-          </tr>
-        </thead>
-        <tbody data-testid="secrets-table-body">
-          {secrets.map((secret) => (
-            <tr key={`${secret.namespace}/${secret.name}`} data-testid={`secret-row-${secret.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, secret)}>
-              <td className="py-2 pr-4 font-medium">{secret.name}</td>
-              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{secret.namespace}</td>}
-              <td className="py-2 pr-4 text-muted-foreground">{secret.type}</td>
-              <td className="py-2 pr-4 text-xs text-muted-foreground">
-                {secret.keys.length > 0 ? secret.keys.join(", ") : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <ResourceTable
+      data={secrets}
+      isLoading={isLoading}
+      isMulti={isMulti}
+      testIdPrefix="secret"
+      tableBodyTestId="secrets-table-body"
+      emptyMessage="No secrets found"
+      onRowContextMenu={(e, secret) => ws.showContextMenu(e, buildMenu(secret))}
+      columns={[
+        { header: "Type", cell: (secret) => <span className="text-muted-foreground">{secret.type}</span> },
+        { header: "Keys", cell: (secret) => (
+          <span className="text-xs text-muted-foreground">
+            {secret.keys.length > 0 ? secret.keys.join(", ") : "—"}
+          </span>
+        )},
+      ]}
+    />
   );
 }

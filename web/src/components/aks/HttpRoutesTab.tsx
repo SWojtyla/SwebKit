@@ -1,64 +1,67 @@
-import { useAksHttpRoutes } from "@/lib/hooks";
+import { useAksHttpRoutes, useAksDeleteHttpRoute } from "@/lib/hooks";
+import { ResourceTable } from "./shared/ResourceTable";
+import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import type { ContextMenuItem } from "./ContextMenu";
 import type { HttpRouteInfo } from "@/lib/types";
 
 interface HttpRoutesTabProps {
   ns: string;
   isMulti?: boolean;
-  onContextMenu?: (e: React.MouseEvent, route: HttpRouteInfo) => void;
 }
 
-export function HttpRoutesTab({ ns, isMulti, onContextMenu }: HttpRoutesTabProps) {
+export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
   const { data: routes, isLoading } = useAksHttpRoutes(ns);
+  const ws = useAksWorkspace();
+  const deleteHttpRoute = useAksDeleteHttpRoute();
 
-  if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
-  if (!routes || routes.length === 0)
-    return <div className="p-4 text-sm text-muted-foreground">No HTTP routes found</div>;
+  const buildMenu = (route: HttpRouteInfo): ContextMenuItem[] => {
+    const host = route.hostnames[0];
+    return [
+      { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(route.name) },
+      { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("httproute", route.name, route.namespace) },
+      { label: "Edit YAML", icon: "✎", onClick: () => ws.openYaml("httproute", route.name, route.namespace) },
+      { label: "Open URL in browser", icon: "🔗", onClick: () => { if (host) window.open(`https://${host}`, "_blank"); }, disabled: !host },
+      { label: "Copy URL", icon: "📋", onClick: () => { if (host) ws.copyToClipboard(`https://${host}`); }, disabled: !host },
+      { label: "", separator: true, onClick: () => {} },
+      { label: "Delete HTTPRoute", icon: "✕", onClick: () => {
+        ws.requestConfirm({
+          message: `Delete HTTPRoute "${route.name}"?`,
+          resourceName: route.name,
+          onConfirm: () => deleteHttpRoute.mutate({ ns: route.namespace, name: route.name }),
+        });
+      }, destructive: true },
+    ];
+  };
 
   return (
-    <div className="p-4">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs text-muted-foreground">
-            <th className="py-2 pr-4">Name</th>
-            {isMulti && <th className="py-2 pr-4">Namespace</th>}
-            <th className="py-2 pr-4">Hosts</th>
-            <th className="py-2 pr-4">Parents</th>
-            <th className="py-2 pr-4">Backends</th>
-            <th className="py-2 pr-4">Status</th>
-          </tr>
-        </thead>
-        <tbody data-testid="httproutes-table-body">
-          {routes.map((route) => (
-            <tr
-              key={`${route.namespace}/${route.name}`}
-              data-testid={`httproute-row-${route.name}`}
-              className="border-b last:border-0 hover:bg-accent/30"
-              onContextMenu={(e) => onContextMenu?.(e, route)}
-            >
-              <td className="py-2 pr-4 font-medium">{route.name}</td>
-              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{route.namespace}</td>}
-              <td className="py-2 pr-4 text-xs">
-                {route.hostnames.length > 0 ? route.hostnames.join(", ") : "—"}
-              </td>
-              <td className="py-2 pr-4 text-xs text-muted-foreground">
-                {route.parentRefs.length > 0 ? route.parentRefs.join(", ") : "—"}
-              </td>
-              <td className="py-2 pr-4 text-xs text-muted-foreground">
-                {route.backendRefs.length > 0 ? route.backendRefs.join(", ") : "—"}
-              </td>
-              <td className="py-2 pr-4">
-                <span className={
-                  route.status === "Accepted" ? "text-green-500" :
-                  route.status === "Pending" ? "text-yellow-500" :
-                  "text-muted-foreground"
-                }>
-                  {route.status}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <ResourceTable
+      data={routes}
+      isLoading={isLoading}
+      isMulti={isMulti}
+      testIdPrefix="httproute"
+      tableBodyTestId="httproutes-table-body"
+      emptyMessage="No HTTP routes found"
+      onRowContextMenu={(e, route) => ws.showContextMenu(e, buildMenu(route))}
+      columns={[
+        { header: "Hosts", cell: (route) => (
+          <span className="text-xs">{route.hostnames.length > 0 ? route.hostnames.join(", ") : "—"}</span>
+        )},
+        { header: "Parents", cell: (route) => (
+          <span className="text-xs text-muted-foreground">{route.parentRefs.length > 0 ? route.parentRefs.join(", ") : "—"}</span>
+        )},
+        { header: "Backends", cell: (route) => (
+          <span className="text-xs text-muted-foreground">{route.backendRefs.length > 0 ? route.backendRefs.join(", ") : "—"}</span>
+        )},
+        { header: "Status", cell: (route) => (
+          <span className={
+            route.status === "Accepted" ? "text-green-500" :
+            route.status === "Pending" ? "text-yellow-500" :
+            "text-muted-foreground"
+          }>
+            {route.status}
+          </span>
+        )},
+      ]}
+    />
   );
 }
