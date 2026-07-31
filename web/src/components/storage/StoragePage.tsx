@@ -491,7 +491,7 @@ export function StoragePage() {
                   {blobDetailTab === "properties" && (
                   <>
                     <div className="flex items-center gap-2">
-                      <div className="text-lg font-mono font-semibold" data-testid="storage-blob-name">
+                      <div className="text-lg font-mono font-semibold break-all" data-testid="storage-blob-name">
                         {blobProps.data.name}
                       </div>
                       <button onClick={() => handleCopyUrl(blobProps.data.name)} className="text-muted-foreground hover:text-foreground" data-testid="storage-copy-url-btn" title="Copy URL">
@@ -609,18 +609,18 @@ export function StoragePage() {
                       </div>
                     ) : Object.keys(blobProps.data.metadata).length > 0 ? (
                       <div className="rounded-md border overflow-hidden">
-                        <table className="w-full text-sm">
+                        <table className="w-full table-fixed text-sm">
                           <thead className="bg-muted">
                             <tr>
-                              <th className="px-3 py-2 text-left font-medium">Key</th>
+                              <th className="w-1/3 px-3 py-2 text-left font-medium">Key</th>
                               <th className="px-3 py-2 text-left font-medium">Value</th>
                             </tr>
                           </thead>
                           <tbody>
                             {Object.entries(blobProps.data.metadata).map(([k, v]) => (
                               <tr key={k} className="border-t">
-                                <td className="px-3 py-2 font-mono">{k}</td>
-                                <td className="px-3 py-2 font-mono">{v}</td>
+                                <td className="px-3 py-2 font-mono break-all">{k}</td>
+                                <td className="px-3 py-2 font-mono break-all">{v}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -676,7 +676,7 @@ export function StoragePage() {
                             </div>
                           </div>
                           <div className="rounded-md border overflow-hidden">
-                            <table className="w-full text-sm">
+                            <table className="w-full table-fixed text-sm">
                               <thead className="bg-muted">
                                 <tr>
                                   <th className="px-3 py-2 text-left font-medium">Version ID</th>
@@ -689,7 +689,7 @@ export function StoragePage() {
                               <tbody>
                                 {blobVersions.data.map((v) => (
                                   <tr key={v.versionId} className="border-t">
-                                    <td className="px-3 py-2 font-mono text-xs">{v.versionId}</td>
+                                    <td className="px-3 py-2 font-mono text-xs break-all">{v.versionId}</td>
                                     <td className="px-3 py-2 text-xs">{formatDate(v.lastModified)}</td>
                                     <td className="px-3 py-2 text-right text-xs">{formatBytes(v.sizeBytes)}</td>
                                     <td className="px-3 py-2 text-center">{v.isCurrent && <Check className="inline h-3 w-3 text-green-500" />}</td>
@@ -716,8 +716,8 @@ export function StoragePage() {
                           {versionComparison.data && (
                             <div className="mt-3 space-y-3 rounded-md border p-3" data-testid="storage-version-diff-pane">
                               <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                                <span>Base: <strong className="font-mono text-foreground">{versionComparison.data.baseVersionId}</strong></span>
-                                <span>Compare: <strong className="font-mono text-foreground">{versionComparison.data.compareVersionId ?? "current"}</strong></span>
+                                <span className="break-all">Base: <strong className="font-mono text-foreground">{versionComparison.data.baseVersionId}</strong></span>
+                                <span className="break-all">Compare: <strong className="font-mono text-foreground">{versionComparison.data.compareVersionId ?? "current"}</strong></span>
                                 <span>Size: {formatBytes(versionComparison.data.baseSizeBytes)} → {formatBytes(versionComparison.data.compareSizeBytes)}</span>
                               </div>
                               <div>
@@ -727,7 +727,7 @@ export function StoragePage() {
                                 </div>
                               </div>
                               {versionComparison.data.contentComparePossible && versionComparison.data.textDiff && (
-                                <pre className="max-h-60 overflow-auto rounded bg-black p-3 text-xs text-green-400" data-testid="storage-version-text-diff">
+                                <pre className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words rounded bg-black p-3 text-xs text-green-400" data-testid="storage-version-text-diff">
                                   {versionComparison.data.textDiff}
                                 </pre>
                               )}
@@ -770,7 +770,7 @@ export function StoragePage() {
                           ) : (
                             <>
                               <pre
-                                className="rounded-md border bg-black p-4 text-sm font-mono overflow-auto max-h-96 text-green-400"
+                                className="rounded-md border bg-black p-4 text-sm font-mono overflow-y-auto max-h-96 whitespace-pre-wrap break-words text-green-400"
                                 data-testid="storage-blob-content"
                               >
                                 {blobContent.data.content}
