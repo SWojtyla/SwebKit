@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { MethodBadge } from "./method-badge";
 
 export interface RequestTab {
   id: string;
@@ -15,18 +16,6 @@ interface RequestTabStripProps {
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
 }
-
-const methodColors: Record<string, string> = {
-  Get: "text-blue-500",
-  Post: "text-green-500",
-  Put: "text-yellow-500",
-  Patch: "text-orange-500",
-  Delete: "text-red-500",
-  Head: "text-purple-500",
-  Options: "text-gray-500",
-  GraphQL: "text-pink-500",
-  WebSocket: "text-cyan-500",
-};
 
 export function RequestTabStrip({ tabs, activeTabId, onSelectTab, onCloseTab }: RequestTabStripProps) {
   if (tabs.length === 0) return null;
@@ -47,11 +36,11 @@ export function RequestTabStrip({ tabs, activeTabId, onSelectTab, onCloseTab }: 
           onClick={() => onSelectTab(tab.id)}
           data-testid={`open-tab-${tab.id}`}
         >
-          <span className={`font-semibold ${methodColors[tab.method] ?? ""}`}>
-            {tab.method.toUpperCase()}
-          </span>
+          <MethodBadge method={tab.method} variant="text" />
           <span className="max-w-[120px] truncate">{tab.name}</span>
-          {tab.dirty && <span className="text-yellow-500" data-testid={`tab-dirty-${tab.id}`}>●</span>}
+          {tab.dirty && (
+            <span style={{ color: "var(--warning)" }} data-testid={`tab-dirty-${tab.id}`}>●</span>
+          )}
           <button
             className="ml-1 rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-destructive"
             onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}

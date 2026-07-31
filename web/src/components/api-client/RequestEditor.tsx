@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Save, Send, Wand2, Minimize2, Eye, Crosshair } from "lucide-react";
+import { Save, Send, Wand2, Minimize2, Eye, Crosshair, Pencil } from "lucide-react";
 import { EditorState, Compartment } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { json } from "@codemirror/lang-json";
 import { xml } from "@codemirror/lang-xml";
-import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+import { bracketMatching, foldGutter, foldKeymap, codeFolding } from "@codemirror/language";
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from "@codemirror/view";
 import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig, CaptureRule, ApiEnvironment } from "@/lib/types";
 import { substituteVariables, previewVariables, isLikelySecret } from "@/lib/variable-utils";
 import { saveSecret, getSecret, deleteSecret } from "@/lib/tauri-bridge";
+import { swebkitHighlighting } from "@/lib/codemirror-theme";
+import { METHOD_META, methodMeta, toneTextStyle, CountBadge } from "./method-badge";
 import { GraphQlPanel } from "./GraphQlPanel";
 import { WebSocketPanel } from "./WebSocketPanel";
 
@@ -38,18 +41,6 @@ const authTypes: { value: AuthType; label: string }[] = [
   { value: "OAuth2", label: "OAuth 2.0" },
 ];
 
-const methodColors: Record<string, string> = {
-  Get: "text-blue-500",
-  Post: "text-green-500",
-  Put: "text-yellow-500",
-  Patch: "text-orange-500",
-  Delete: "text-red-500",
-  Head: "text-purple-500",
-  Options: "text-gray-500",
-  GraphQl: "text-pink-500",
-  WebSocket: "text-cyan-500",
-};
-
 type Tab = "params" | "headers" | "body" | "auth" | "graphql" | "websocket" | "capture";
 
 function bodyLanguage(mode: RequestBodyMode) {
@@ -78,18 +69,28 @@ function BodyCodeEditor({ value, mode, onChange }: BodyCodeEditorProps) {
         doc: value,
         extensions: [
           lineNumbers(),
+          codeFolding(),
+          foldGutter(),
+          highlightActiveLine(),
+          highlightActiveLineGutter(),
+          bracketMatching(),
+          closeBrackets(),
           history(),
-          keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-          syntaxHighlighting(defaultHighlightStyle),
+          keymap.of([
+            ...closeBracketsKeymap,
+            ...defaultKeymap,
+            ...historyKeymap,
+            ...foldKeymap,
+            indentWithTab,
+          ]),
           languageRef.current.of(bodyLanguage(mode)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
           }),
-          EditorView.theme({
-            "&": { height: "12rem", fontSize: "0.875rem", backgroundColor: "transparent" },
-            ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" },
-            ".cm-gutters": { backgroundColor: "transparent", border: "none" },
-          }),
+          // Replaces CodeMirror's light-only `defaultHighlightStyle`, whose dark
+          // blues and reds were effectively invisible against the dark theme's
+          // near-black background — the reason body highlighting read as absent.
+          swebkitHighlighting(),
         ],
       }),
       parent: containerRef.current,
@@ -114,8 +115,11 @@ function BodyCodeEditor({ value, mode, onChange }: BodyCodeEditorProps) {
   }, [value]);
 
   return (
-    <div className="relative rounded border bg-background" data-testid="request-body-codemirror">
-      <div ref={containerRef} />
+    <div
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded border bg-background"
+      data-testid="request-body-codemirror"
+    >
+      <div ref={containerRef} className="min-h-0 flex-1" />
       <textarea
         data-testid="request-body-editor"
         aria-hidden="true"
@@ -125,6 +129,66 @@ function BodyCodeEditor({ value, mode, onChange }: BodyCodeEditorProps) {
         className="absolute left-0 top-0 z-20 h-4 w-4 opacity-0"
       />
     </div>
+  );
+}
+
+interface RequestNameHeadingProps {
+  name: string;
+  onRename: (name: string) => void;
+}
+
+/**
+ * The request name as a title that becomes an input on click or F2, rather than a
+ * permanently visible form field.
+ */
+function RequestNameHeading({ name, onRename }: RequestNameHeadingProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== name) onRename(trimmed);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        data-testid="request-name-input"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") { setDraft(name); setEditing(false); }
+        }}
+        className="mr-2 w-48 shrink-0 rounded border bg-background px-2 py-1 text-sm"
+        placeholder="Request name"
+      />
+    );
+  }
+
+  return (
+    <button
+      data-testid="request-name-heading"
+      onClick={() => { setDraft(name); setEditing(true); }}
+      onKeyDown={(e) => { if (e.key === "F2") { setDraft(name); setEditing(true); } }}
+      title="Click to rename"
+      className="group mr-2 flex max-w-[14rem] shrink-0 items-center gap-1.5 rounded px-2 py-1 text-sm font-semibold hover:bg-accent"
+    >
+      <span className="truncate">{name}</span>
+      <Pencil className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
+    </button>
   );
 }
 
@@ -361,30 +425,36 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
           data-testid="request-method-select"
           value={request.method}
           onChange={(e) => setMethod(e.target.value as ApiRequestMethod)}
-          className={`shrink-0 rounded border bg-background px-2 py-1.5 text-sm font-semibold ${methodColors[request.method] ?? ""}`}
+          className="shrink-0 rounded border bg-background px-2 py-1.5 text-sm font-semibold"
+          style={toneTextStyle(methodMeta(request.method).tone)}
         >
           {methods.map((m) => (
             <option key={m} value={m}>
-              {m.toUpperCase()}
+              {METHOD_META[m].short}
             </option>
           ))}
         </select>
-        <input
-          data-testid="request-url-input"
-          type="text"
-          value={request.url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://api.example.com/resource"
-          className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded border bg-background px-3 py-1.5 text-sm"
-        />
-        <button
-          data-testid="request-var-preview"
-          onClick={() => setShowVarPreview(!showVarPreview)}
-          title="Preview variable substitution"
-          className={`shrink-0 flex items-center gap-1 rounded border px-2 py-1.5 text-xs ${showVarPreview ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
-        >
-          <Eye className="h-3.5 w-3.5" />
-        </button>
+        {/* The variable-preview toggle belongs to the URL field, so they are
+            grouped together rather than sitting as a peer of Send/Save. */}
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <input
+            data-testid="request-url-input"
+            type="text"
+            value={request.url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://api.example.com/resource"
+            className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded border bg-background px-3 py-1.5 text-sm"
+          />
+          <button
+            data-testid="request-var-preview"
+            onClick={() => setShowVarPreview(!showVarPreview)}
+            title="Preview variable substitution"
+            aria-pressed={showVarPreview}
+            className={`flex shrink-0 items-center gap-1 rounded border px-2 py-1.5 text-xs ${showVarPreview ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+          >
+            <Eye className="h-3.5 w-3.5" />
+          </button>
+        </div>
         <button
           data-testid="request-send-button"
           className="shrink-0 flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
@@ -396,11 +466,20 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
         </button>
         <button
           data-testid="request-save-button"
-          className="shrink-0 flex items-center gap-1 rounded border px-3 py-1.5 text-sm font-medium hover:bg-accent"
+          className="shrink-0 flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm font-medium hover:bg-accent"
           onClick={() => { onSave(); setDirty(false); }}
+          title={dirty ? "Unsaved changes" : "Saved"}
         >
           <Save className="h-4 w-4" />
-          {dirty ? "Save*" : "Save"}
+          Save
+          {dirty && (
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: "var(--warning)" }}
+              data-testid="request-dirty-dot"
+              aria-label="Unsaved changes"
+            />
+          )}
         </button>
       </div>
 
@@ -426,20 +505,13 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
         </div>
       )}
 
-      {/* Request name */}
-      <div className="border-b px-3 py-1.5">
-        <input
-          type="text"
-          data-testid="request-name-input"
-          value={request.name}
-          onChange={(e) => onChange({ ...request, name: e.target.value })}
-          className="w-full rounded border bg-background px-2 py-1 text-sm"
-          placeholder="Request name"
-        />
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b">
+      {/* Tabs, with the request name as an inline-editable heading on the same
+          row — a full-width input in the middle of the pane read as a form field
+          and made the name the third echo of the same string. */}
+      <div className="flex items-center border-b">
+        {/* The tab strip scrolls rather than overflowing, so a long request name
+            can never end up rendered on top of the tab buttons. */}
+        <div className="flex min-w-0 flex-1 overflow-x-auto">
         {(() => {
           const tabs: Tab[] = request.method === "GraphQl"
             ? ["params", "headers", "graphql", "auth", "capture"]
@@ -450,25 +522,27 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
             <button
               key={tab}
               data-testid={`request-tab-${tab}`}
-              className={`px-4 py-2 text-sm font-medium capitalize ${
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-2 text-sm font-medium capitalize ${
                 activeTab === tab ? "border-b-2 border-primary text-foreground" : "text-muted-foreground"
               }`}
               onClick={() => setActiveTab(tab)}
             >
               {tab === "params" ? "Params" : tab === "headers" ? "Headers" : tab === "body" ? "Body" : tab === "auth" ? "Auth" : tab === "graphql" ? "GraphQL" : tab === "capture" ? "Capture" : "WebSocket"}
-              {tab === "params" && request.queryParams.length > 0 && (
-                <span className="ml-1 text-xs text-muted-foreground">({request.queryParams.length})</span>
-              )}
-              {tab === "headers" && request.headers.length > 0 && (
-                <span className="ml-1 text-xs text-muted-foreground">({request.headers.length})</span>
-              )}
+              {tab === "params" && <CountBadge count={request.queryParams.length} />}
+              {tab === "headers" && <CountBadge count={request.headers.length} />}
+              {tab === "capture" && <CountBadge count={request.captureRules.length} />}
             </button>
           ));
         })()}
+        </div>
+        <RequestNameHeading
+          name={request.name}
+          onRename={(name) => onChange({ ...request, name })}
+        />
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4">
         {/* Params tab */}
         {activeTab === "params" && (
           <div data-testid="params-tab">
@@ -549,7 +623,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
 
         {/* Body tab */}
         {activeTab === "body" && (
-          <div data-testid="body-tab">
+          <div className="flex min-h-0 flex-1 flex-col" data-testid="body-tab">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">Body</span>
               <select
@@ -844,9 +918,9 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
             </button>
             {captureWarnings.length > 0 && (
               <div className="mt-3 border-t pt-2" data-testid="capture-warnings">
-                <div className="mb-1 text-xs font-medium text-amber-600">Capture warnings</div>
+                <div className="mb-1 text-xs font-medium" style={{ color: "var(--warning)" }}>Capture warnings</div>
                 {captureWarnings.map((w, i) => (
-                  <div key={i} className="text-xs text-amber-700">{w}</div>
+                  <div key={i} className="text-xs" style={{ color: "var(--warning)" }}>{w}</div>
                 ))}
               </div>
             )}

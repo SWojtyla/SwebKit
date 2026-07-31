@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { fileURLToPath } from "node:url";
+import fs from "node:fs";
 import path from "node:path";
 
 /**
@@ -20,6 +21,19 @@ const e2eAppDataRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   ".e2e-appdata",
 );
+
+/**
+ * Reset the throwaway appdata here rather than in the `webServer` command.
+ *
+ * Playwright runs `webServer.command` through the platform shell, which on
+ * Windows is cmd.exe — where `rm -rf` does not exist and `mkdir -p <dir>` creates
+ * a literal `-p` directory alongside the target. The stray `-p` then made every
+ * subsequent run fail with "A subdirectory or file -p already exists", so the
+ * suite could only ever be run once per checkout. Doing it in Node is
+ * cross-platform and runs before the servers start.
+ */
+fs.rmSync(e2eAppDataRoot, { recursive: true, force: true });
+fs.mkdirSync(e2eAppDataRoot, { recursive: true });
 
 /**
  * Sidecar/Vite ports default to the values every dev has always used, but can be
@@ -55,7 +69,7 @@ export default defineConfig({
 
   webServer: [
     {
-      command: `rm -rf "${e2eAppDataRoot}" && mkdir -p "${e2eAppDataRoot}" && dotnet run --project ../src-sidecar/SwebKit.Sidecar.csproj --urls http://127.0.0.1:${sidecarPort}`,
+      command: `dotnet run --project ../src-sidecar/SwebKit.Sidecar.csproj --urls http://127.0.0.1:${sidecarPort}`,
       url: `http://127.0.0.1:${sidecarPort}/health`,
       timeout: 120 * 1000,
       reuseExistingServer: false,

@@ -1,8 +1,15 @@
-import { useState, useEffect, useRef } from "react";
-import { Copy, Check, Terminal, History, Save, TrendingUp, AlertCircle } from "lucide-react";
-import type { ApiClientExecutionResponse, HttpRequestEntry } from "@/lib/types";
+import { useState, useEffect, useMemo } from "react";
+import {
+  Copy, Check, Terminal, History, Save, TrendingUp, AlertCircle, Download, WrapText, ArrowLeft,
+} from "lucide-react";
+import type { ApiClientExecutionResponse, HttpRequestEntry, ResponseExample } from "@/lib/types";
+import { formatBytes, formatElapsed } from "@/lib/api-client-format";
+import { statusTone, toneChipStyle, CountBadge } from "./method-badge";
+import { selectBodyLanguage, downloadExtension } from "@/lib/response-body";
+import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
+import { ResponseBodyViewer } from "./ResponseBodyViewer";
 
-interface ResponseHistoryEntry {
+export interface ResponseHistoryEntry {
   id: number;
   response: ApiClientExecutionResponse;
   timestamp: number;
@@ -12,17 +19,14 @@ interface ResponseViewerProps {
   response: ApiClientExecutionResponse | null;
   sending: boolean;
   request?: HttpRequestEntry | null;
+  /** Owned by the page so it survives remount and stays per-tab. */
+  history?: ResponseHistoryEntry[];
+  onSaveExample?: (name: string, response: ApiClientExecutionResponse) => void;
 }
 
 type Tab = "body" | "headers" | "history";
 
-function statusColor(code: number): string {
-  if (code === 0) return "bg-destructive/10 text-destructive";
-  if (code >= 200 && code < 300) return "bg-green-500/10 text-green-500";
-  if (code >= 300 && code < 400) return "bg-blue-500/10 text-blue-500";
-  if (code >= 400 && code < 500) return "bg-yellow-500/10 text-yellow-500";
-  return "bg-red-500/10 text-red-500";
-}
+const WRAP_PREF_KEY = "api-client-response-wrap";
 
 function tryPrettyPrint(content: string, contentType: string | null): string {
   if (contentType?.includes("json") || content.trim().startsWith("{") || content.trim().startsWith("[")) {
@@ -63,30 +67,40 @@ function buildCurl(request: HttpRequestEntry, response: ApiClientExecutionRespon
   return parts.join(" \\\n  ");
 }
 
-export function ResponseViewer({ response, sending, request }: ResponseViewerProps) {
+export function ResponseViewer({
+  response,
+  sending,
+  request,
+  history = [],
+  onSaveExample,
+}: ResponseViewerProps) {
   const [activeTab, setActiveTab] = useState<Tab>("body");
   const [copied, setCopied] = useState(false);
   const [prettyPrinted, setPrettyPrinted] = useState(false);
   const [showCurl, setShowCurl] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
-  const [history, setHistory] = useState<ResponseHistoryEntry[]>([]);
-  const [savedExamples, setSavedExamples] = useState<{ name: string; body: string }[]>([]);
   const [showSaveExample, setShowSaveExample] = useState(false);
   const [exampleName, setExampleName] = useState("");
-  const historyIdRef = useRef(0);
+  /** `null` = viewing the live response; otherwise a saved example id. */
+  const [viewingExampleId, setViewingExampleId] = useState<string | null>(null);
+  const [wrap, setWrap] = useState<boolean>(() => loadViewPreference<boolean>(WRAP_PREF_KEY, true));
+
+  const savedExamples: ResponseExample[] = request?.responseExamples ?? [];
 
   useEffect(() => {
     setPrettyPrinted(false);
     setCopied(false);
     setShowCurl(false);
+    setViewingExampleId(null);
   }, [response]);
 
-  useEffect(() => {
-    if (response && !sending) {
-      const id = ++historyIdRef.current;
-      setHistory((prev) => [{ id, response, timestamp: Date.now() }, ...prev].slice(0, 20));
-    }
-  }, [response, sending]);
+  const toggleWrap = () => {
+    // Computed outside the updater: React may invoke an updater twice in
+    // StrictMode, and updaters must stay free of side effects.
+    const next = !wrap;
+    setWrap(next);
+    saveViewPreference(WRAP_PREF_KEY, next);
+  };
 
   if (sending) {
     return (
@@ -105,14 +119,20 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
   }
 
   const isError = !!response.errorMessage;
-  const rawBody = isError ? response.errorMessage ?? "" : response.responseBody ?? "";
-  const displayBody = prettyPrinted ? tryPrettyPrint(rawBody, response.contentType) : rawBody;
+  const viewingExample = viewingExampleId
+    ? savedExamples.find((e) => e.id === viewingExampleId) ?? null
+    : null;
 
-  const isGraphQlError = !isError && response.contentType?.includes("json") && rawBody.includes("errors");
+  const liveBody = isError ? response.errorMessage ?? "" : response.responseBody ?? "";
+  const rawBody = viewingExample ? viewingExample.body ?? "" : liveBody;
+  const bodyContentType = viewingExample ? viewingExample.contentType : response.contentType;
+  const displayBody = prettyPrinted ? tryPrettyPrint(rawBody, bodyContentType) : rawBody;
+
+  const isGraphQlError = !isError && response.contentType?.includes("json") && liveBody.includes("errors");
   let graphQlErrors: string[] = [];
   if (isGraphQlError) {
     try {
-      const parsed = JSON.parse(rawBody);
+      const parsed = JSON.parse(liveBody);
       if (parsed.errors && Array.isArray(parsed.errors)) {
         graphQlErrors = parsed.errors.map((e: any) => e.message || String(e));
       }
@@ -134,24 +154,44 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
     }
   };
 
+  const downloadBody = () => {
+    const ext = downloadExtension(selectBodyLanguage(bodyContentType, rawBody));
+    const blob = new Blob([rawBody], { type: bodyContentType ?? "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `response.${ext}`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const submitExample = () => {
+    const name = exampleName.trim();
+    if (!name || !onSaveExample) return;
+    onSaveExample(name, response);
+    setShowSaveExample(false);
+    setExampleName("");
+  };
+
   return (
     <div className="flex h-full min-w-0 flex-col bg-card" data-testid="response-viewer">
       {/* Status bar */}
       <div className="flex items-center gap-3 border-b p-3">
         <span
           data-testid="response-status"
-          className={`rounded px-2 py-1 text-sm font-semibold ${statusColor(response.statusCode)}`}
+          className="rounded px-2 py-1 text-sm font-semibold"
+          style={toneChipStyle(isError ? "destructive" : statusTone(response.statusCode))}
         >
           {isError ? "ERROR" : (response.statusText || response.statusCode.toString())}
         </span>
         <span data-testid="response-elapsed" className="text-xs text-muted-foreground">
-          {response.elapsedMs.toFixed(0)} ms
+          {formatElapsed(response.elapsedMs)}
         </span>
         <span data-testid="response-size" className="text-xs text-muted-foreground">
-          {response.contentLength >= 0 ? `${response.contentLength} bytes` : "size unknown"}
+          {formatBytes(response.contentLength)}
         </span>
         {response.responseBodyTruncated && (
-          <span className="text-xs text-yellow-500">(truncated)</span>
+          <span className="text-xs" style={{ color: "var(--warning)" }}>(truncated)</span>
         )}
         <div className="flex-1" />
         {request && !isError && (
@@ -167,12 +207,16 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
 
       {/* Capture warnings */}
       {response.captureWarnings && response.captureWarnings.length > 0 && (
-        <div className="border-b bg-yellow-500/10 p-3" data-testid="response-capture-warnings">
-          <div className="flex items-center gap-2 text-xs font-medium text-yellow-500">
+        <div
+          className="border-b p-3"
+          style={{ backgroundColor: "color-mix(in oklch, var(--warning) 10%, transparent)" }}
+          data-testid="response-capture-warnings"
+        >
+          <div className="flex items-center gap-2 text-xs font-medium" style={{ color: "var(--warning)" }}>
             <AlertCircle className="h-4 w-4" />
             Capture warnings
           </div>
-          <ul className="mt-1 list-disc list-inside text-xs text-yellow-500/90">
+          <ul className="mt-1 list-inside list-disc text-xs" style={{ color: "var(--warning)" }}>
             {response.captureWarnings.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
@@ -213,50 +257,80 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
         </button>
         <button
           data-testid="response-tab-headers"
-          className={`px-4 py-2 text-sm font-medium ${
+          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium ${
             activeTab === "headers" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground"
           }`}
           onClick={() => setActiveTab("headers")}
         >
           Headers
+          <CountBadge count={response.headers.length} />
         </button>
         <button
           data-testid="response-tab-history"
-          className={`flex items-center gap-1 px-4 py-2 text-sm font-medium ${
+          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium ${
             activeTab === "history" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground"
           }`}
           onClick={() => setActiveTab("history")}
         >
           <History className="h-3.5 w-3.5" />
-          History ({history.length})
+          History
+          <CountBadge count={history.length} />
         </button>
       </div>
 
       {/* Tab content */}
-      <div className="flex min-w-0 flex-1 overflow-auto p-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3">
         {activeTab === "body" && (
-          <div className="min-w-0 flex-1" data-testid="response-body-container">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="response-body-container">
             {/* GraphQL errors */}
             {graphQlErrors.length > 0 && (
-              <div className="mb-3 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3" data-testid="graphql-errors">
-                <div className="flex items-center gap-2 mb-1">
-                  <AlertCircle className="h-4 w-4 text-yellow-500" />
-                  <span className="text-sm font-medium text-yellow-500">GraphQL Errors</span>
+              <div
+                className="mb-3 rounded-md border p-3"
+                style={{
+                  borderColor: "color-mix(in oklch, var(--warning) 30%, transparent)",
+                  backgroundColor: "color-mix(in oklch, var(--warning) 10%, transparent)",
+                }}
+                data-testid="graphql-errors"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" style={{ color: "var(--warning)" }} />
+                  <span className="text-sm font-medium" style={{ color: "var(--warning)" }}>GraphQL Errors</span>
                 </div>
-                <ul className="list-disc list-inside text-xs space-y-1">
+                <ul className="list-inside list-disc space-y-1 text-xs">
                   {graphQlErrors.map((err, i) => (
                     <li key={i}>{err}</li>
                   ))}
                 </ul>
               </div>
             )}
-            <div className="mb-2 flex items-center gap-2">
+
+            {/* Body toolbar */}
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <div className="flex overflow-hidden rounded border" role="group" aria-label="Body formatting">
+                <button
+                  onClick={() => setPrettyPrinted(true)}
+                  aria-pressed={prettyPrinted}
+                  className={`px-2 py-0.5 text-xs ${prettyPrinted ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                  data-testid="response-pretty-toggle"
+                >
+                  Pretty
+                </button>
+                <button
+                  onClick={() => setPrettyPrinted(false)}
+                  aria-pressed={!prettyPrinted}
+                  className={`border-l px-2 py-0.5 text-xs ${!prettyPrinted ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                  data-testid="response-raw-toggle"
+                >
+                  Raw
+                </button>
+              </div>
               <button
-                onClick={() => setPrettyPrinted(!prettyPrinted)}
-                className="rounded border px-2 py-0.5 text-xs hover:bg-accent"
-                data-testid="response-pretty-toggle"
+                onClick={toggleWrap}
+                aria-pressed={wrap}
+                className={`flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${wrap ? "border-primary text-primary" : "hover:bg-accent"}`}
+                data-testid="response-wrap-toggle"
               >
-                {prettyPrinted ? "Raw" : "Pretty"}
+                <WrapText className="h-3 w-3" /> Wrap
               </button>
               <button
                 onClick={copyBody}
@@ -267,89 +341,111 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
                 {copied ? "Copied!" : "Copy"}
               </button>
               <button
-                onClick={() => setShowSaveExample(!showSaveExample)}
+                onClick={downloadBody}
                 className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent"
-                data-testid="response-save-example"
+                data-testid="response-download-body"
               >
-                <Save className="h-3 w-3" /> Save Example
+                <Download className="h-3 w-3" /> Download
               </button>
+              {onSaveExample && !viewingExample && (
+                <button
+                  onClick={() => setShowSaveExample(!showSaveExample)}
+                  className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent"
+                  data-testid="response-save-example"
+                >
+                  <Save className="h-3 w-3" /> Save Example
+                </button>
+              )}
             </div>
+
             {showSaveExample && (
               <div className="mb-2 flex items-center gap-2" data-testid="save-example-form">
                 <input
                   type="text"
                   value={exampleName}
                   onChange={(e) => setExampleName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") submitExample(); }}
                   placeholder="Example name..."
                   className="flex-1 rounded border bg-background px-2 py-1 text-xs"
                   autoFocus
                 />
                 <button
-                  onClick={() => {
-                    if (exampleName.trim()) {
-                      setSavedExamples((prev) => [...prev, { name: exampleName, body: rawBody }]);
-                      setShowSaveExample(false);
-                      setExampleName("");
-                    }
-                  }}
+                  onClick={submitExample}
                   className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground"
+                  data-testid="save-example-confirm"
                 >
                   Save
                 </button>
                 <button onClick={() => setShowSaveExample(false)} className="rounded border px-2 py-1 text-xs">Cancel</button>
               </div>
             )}
+
             {savedExamples.length > 0 && (
-              <div className="mb-2" data-testid="saved-examples">
-                <span className="text-xs text-muted-foreground">Saved examples: </span>
-                {savedExamples.map((ex, i) => (
-                  <button key={i} className="ml-1 text-xs text-primary hover:underline">{ex.name}</button>
+              <div className="mb-2 flex flex-wrap items-center gap-1" data-testid="saved-examples">
+                <span className="text-xs text-muted-foreground">Saved examples:</span>
+                {savedExamples.map((ex) => (
+                  <button
+                    key={ex.id}
+                    onClick={() => setViewingExampleId(ex.id)}
+                    className={`rounded border px-1.5 py-0.5 text-xs hover:bg-accent ${
+                      viewingExampleId === ex.id ? "border-primary text-primary" : ""
+                    }`}
+                    data-testid={`saved-example-${ex.name}`}
+                  >
+                    {ex.name}
+                  </button>
                 ))}
               </div>
             )}
-            <pre
-              data-testid="response-body"
-              className="min-w-0 w-full whitespace-pre-wrap break-words font-mono text-sm"
-            >
-              {displayBody}
-            </pre>
+
+            {viewingExample && (
+              <div
+                className="mb-2 flex items-center gap-2 rounded border px-2 py-1 text-xs"
+                style={{ borderColor: "var(--primary)", color: "var(--primary)" }}
+                data-testid="viewing-example-banner"
+              >
+                <span className="flex-1">
+                  Viewing saved example “{viewingExample.name}” ({viewingExample.statusCode})
+                </span>
+                <button
+                  onClick={() => setViewingExampleId(null)}
+                  className="flex items-center gap-1 rounded border px-1.5 py-0.5 hover:bg-accent"
+                  data-testid="viewing-example-return"
+                >
+                  <ArrowLeft className="h-3 w-3" /> Back to live response
+                </button>
+              </div>
+            )}
+
+            <ResponseBodyViewer body={displayBody} contentType={bodyContentType} wrap={wrap} />
           </div>
         )}
+
         {activeTab === "headers" && (
-          <table className="min-w-0 w-full text-sm" data-testid="response-headers-table">
-            <tbody>
-              {response.headers.map((h, i) => (
-                <tr key={i} data-testid={`response-header-row-${i}`}>
-                  <td className="py-1 pr-4 font-medium text-muted-foreground align-top">{h.name}</td>
-                  <td className="py-1 break-all">{h.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="min-h-0 flex-1 overflow-auto">
+            <table className="w-full min-w-0 text-sm" data-testid="response-headers-table">
+              <tbody>
+                {response.headers.map((h, i) => (
+                  <tr key={i} data-testid={`response-header-row-${i}`}>
+                    <td className="py-1 pr-4 align-top font-medium text-muted-foreground">{h.name}</td>
+                    <td className="break-all py-1">{h.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
+
         {activeTab === "history" && (
-          <div className="min-w-0 w-full" data-testid="response-history-panel">
+          <div className="min-h-0 w-full min-w-0 flex-1 overflow-auto" data-testid="response-history-panel">
             {/* Response time sparkline */}
             {history.length > 1 && (
               <div className="mb-4" data-testid="response-time-sparkline">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="mb-1 flex items-center gap-2">
                   <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-xs font-medium text-muted-foreground">Response times</span>
                 </div>
-                <div className="flex items-end gap-1 h-12">
-                  {history.slice(0, 20).reverse().map((h) => {
-                    const maxMs = Math.max(...history.map((x) => x.response.elapsedMs), 1);
-                    const height = Math.max(2, (h.response.elapsedMs / maxMs) * 100);
-                    return (
-                      <div
-                        key={h.id}
-                        className="flex-1 bg-primary/30 rounded-sm"
-                        style={{ height: `${height}%` }}
-                        title={`${h.response.elapsedMs.toFixed(0)}ms`}
-                      />
-                    );
-                  })}
-                </div>
+                <SparkLine history={history} />
               </div>
             )}
             {/* History list */}
@@ -359,10 +455,13 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
               <div className="space-y-1">
                 {history.map((h) => (
                   <div key={h.id} className="flex items-center gap-3 rounded border px-3 py-2 text-xs" data-testid={`response-history-item-${h.id}`}>
-                    <span className={`rounded px-1.5 py-0.5 font-semibold ${statusColor(h.response.statusCode)}`}>
+                    <span
+                      className="rounded px-1.5 py-0.5 font-semibold"
+                      style={toneChipStyle(statusTone(h.response.statusCode))}
+                    >
                       {h.response.statusCode}
                     </span>
-                    <span className="text-muted-foreground">{h.response.elapsedMs.toFixed(0)}ms</span>
+                    <span className="text-muted-foreground">{formatElapsed(h.response.elapsedMs)}</span>
                     <span className="text-muted-foreground">{new Date(h.timestamp).toLocaleTimeString()}</span>
                     <span className="flex-1 truncate text-muted-foreground">{h.response.resolvedUrl}</span>
                   </div>
@@ -372,6 +471,31 @@ export function ResponseViewer({ response, sending, request }: ResponseViewerPro
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function SparkLine({ history }: { history: ResponseHistoryEntry[] }) {
+  const bars = useMemo(() => {
+    const recent = history.slice(0, 20);
+    const maxMs = Math.max(...recent.map((x) => x.response.elapsedMs), 1);
+    return [...recent].reverse().map((h) => ({
+      id: h.id,
+      elapsedMs: h.response.elapsedMs,
+      height: Math.max(2, (h.response.elapsedMs / maxMs) * 100),
+    }));
+  }, [history]);
+
+  return (
+    <div className="flex h-12 items-end gap-1">
+      {bars.map((bar) => (
+        <div
+          key={bar.id}
+          className="flex-1 rounded-sm bg-primary/30"
+          style={{ height: `${bar.height}%` }}
+          title={formatElapsed(bar.elapsedMs)}
+        />
+      ))}
     </div>
   );
 }

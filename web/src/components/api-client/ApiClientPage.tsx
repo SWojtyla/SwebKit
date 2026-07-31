@@ -11,16 +11,17 @@ import {
 } from "@/lib/hooks";
 import { CollectionTree } from "./CollectionTree";
 import { RequestEditor } from "./RequestEditor";
-import { ResponseViewer } from "./ResponseViewer";
+import { ResponseViewer, type ResponseHistoryEntry } from "./ResponseViewer";
 import { NameDialog, ConfirmDialog } from "./Dialogs";
 import { EnvironmentManager } from "./EnvironmentManager";
 import { CollectionVariableEditor } from "./CollectionVariableEditor";
 import { RequestTabStrip, type RequestTab } from "./RequestTabStrip";
 import { CollectionExportDialog } from "./CollectionExportDialog";
-import { GitPanel } from "./GitPanel";
+import { GitDrawer } from "./GitDrawer";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
 import { buildVariableScope } from "@/lib/variable-utils";
 import { getSecret } from "@/lib/tauri-bridge";
+import { buildResponseExample } from "@/lib/response-example";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -204,11 +205,30 @@ function renameNodeInNodes(
   });
 }
 
+/** Newest-first cap on per-tab response history. Session-only, as documented. */
+const HISTORY_LIMIT = 20;
+
 interface TabState {
   draft: HttpRequestEntry;
   response: ApiClientExecutionResponse | null;
   sending: boolean;
   dirty: boolean;
+  /**
+   * Owned here rather than in `ResponseViewer` so history survives a remount and
+   * is scoped per tab instead of per mounted component.
+   */
+  history: ResponseHistoryEntry[];
+}
+
+function emptyTabState(draft: HttpRequestEntry): TabState {
+  return { draft, response: null, sending: false, dirty: false, history: [] };
+}
+
+/** Prepends a response to a tab's history, newest first, capped. */
+function appendHistory(state: TabState | undefined, response: ApiClientExecutionResponse): ResponseHistoryEntry[] {
+  const existing = state?.history ?? [];
+  const nextId = (existing[0]?.id ?? 0) + 1;
+  return [{ id: nextId, response, timestamp: Date.now() }, ...existing].slice(0, HISTORY_LIMIT);
 }
 
 export function ApiClientPage() {
@@ -234,7 +254,6 @@ export function ApiClientPage() {
   const [showColVarEditor, setShowColVarEditor] = useState(false);
   const [exportCollectionId, setExportCollectionId] = useState<string | null>(null);
   const [showGitPanel, setShowGitPanel] = useState(false);
-  const [gitRepoPath, setGitRepoPath] = useState(".");
   const [conflict, setConflict] = useState<{ message: string } | null>(null);
   const [legacyNoticeDismissed, setLegacyNoticeDismissed] = useState(() =>
     typeof window !== "undefined" && localStorage.getItem("swokit-legacy-secret-notice") === "dismissed"
@@ -271,7 +290,7 @@ export function ApiClientPage() {
     setTabs((prev) => [...prev, tab]);
     setTabStates((prev) => ({
       ...prev,
-      [tabId]: { draft: deepClone(node.request!), response: null, sending: false, dirty: false },
+      [tabId]: emptyTabState(deepClone(node.request!)),
     }));
     setActiveTabId(tabId);
   }, [tabs]);
@@ -382,7 +401,7 @@ export function ApiClientPage() {
             setTabs((prev) => [...prev, tab]);
             setTabStates((prev) => ({
               ...prev,
-              [tabId]: { draft: deepClone(request), response: null, sending: false, dirty: false },
+              [tabId]: emptyTabState(deepClone(request)),
             }));
             setActiveTabId(tabId);
           },
@@ -504,30 +523,64 @@ export function ApiClientPage() {
         collectionId: tab.collectionId ?? undefined,
         environmentId: activeEnvironmentId ?? undefined,
       });
-      setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], response: result, sending: false } }));
+      setTabStates((prev) => ({
+        ...prev,
+        [activeTabId]: { ...prev[activeTabId], response: result, sending: false, history: appendHistory(prev[activeTabId], result) },
+      }));
     } catch (err) {
+      const failure: ApiClientExecutionResponse = {
+        resolvedUrl: tabState.draft.url,
+        method: tabState.draft.method,
+        statusCode: 0,
+        statusText: "Request Failed",
+        errorMessage: err instanceof Error ? err.message : "Unknown error",
+        elapsedMs: 0,
+        contentLength: -1,
+        contentType: null,
+        responseBody: null,
+        responseBodyTruncated: false,
+        headers: [],
+        captureWarnings: [],
+        graphQlErrors: null,
+      };
       setTabStates((prev) => ({
         ...prev,
         [activeTabId]: {
           ...prev[activeTabId],
           sending: false,
-          response: {
-            resolvedUrl: tabState.draft.url,
-            method: tabState.draft.method,
-            statusCode: 0,
-            statusText: "Request Failed",
-            errorMessage: err instanceof Error ? err.message : "Unknown error",
-            elapsedMs: 0,
-            contentLength: -1,
-            contentType: null,
-            responseBody: null,
-            responseBodyTruncated: false,
-            headers: [],
-            captureWarnings: [],
-            graphQlErrors: null,
-          },
+          response: failure,
+          history: appendHistory(prev[activeTabId], failure),
         },
       }));
+    }
+  };
+
+  /** Saves a scrubbed example onto the active request and persists it. */
+  const handleSaveExample = async (name: string, response: ApiClientExecutionResponse) => {
+    if (!activeTabId) return;
+    const tabState = tabStates[activeTabId];
+    const tab = tabs.find((t) => t.id === activeTabId);
+    if (!tabState || !tab) return;
+
+    const example = buildResponseExample(newId(), name, response, now());
+    const draft: HttpRequestEntry = {
+      ...tabState.draft,
+      responseExamples: [...tabState.draft.responseExamples, example],
+    };
+
+    setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], draft } }));
+
+    // Same rule as saveActiveTab: the transient credentialSecret must never reach
+    // collections.json.
+    const draftForSave = deepClone(draft);
+    if (draftForSave.auth) {
+      draftForSave.auth = { ...draftForSave.auth, credentialSecret: null };
+    }
+    const next = updateRequestInCollections(collections, tab.nodeId, draftForSave);
+    try {
+      await updateCollections.mutateAsync(next);
+    } catch (err) {
+      console.error("Failed to save response example", err);
     }
   };
 
@@ -578,7 +631,7 @@ export function ApiClientPage() {
       await updateCollections.mutateAsync(next);
       const tabId = newId();
       setTabs((prev) => [...prev, { id: tabId, nodeId: node.id, collectionId: collection.id, name: node.name, method: copy.method, dirty: false }]);
-      setTabStates((prev) => ({ ...prev, [tabId]: { draft: deepClone(copy), response: null, sending: false, dirty: false } }));
+      setTabStates((prev) => ({ ...prev, [tabId]: emptyTabState(deepClone(copy)) }));
       setActiveTabId(tabId);
       setSelectedNodeId(node.id);
       setSelectedCollectionId(collection.id);
@@ -656,7 +709,9 @@ export function ApiClientPage() {
   }
 
   return (
-    <div className="flex h-full min-w-0 flex-col" data-testid="api-client-page">
+    // `relative` anchors the Git drawer to the page content area instead of the
+    // whole viewport, so it no longer covers the app titlebar and status bar.
+    <div className="relative flex h-full min-w-0 flex-col" data-testid="api-client-page">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 bg-card">
         <Globe className="h-4 w-4 text-muted-foreground" />
@@ -716,7 +771,12 @@ export function ApiClientPage() {
 
       {/* Legacy plaintext secret notice */}
       {legacySecretCount > 0 && !legacyNoticeDismissed && (
-        <div className="flex items-start gap-2 border-b bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100" data-testid="legacy-secret-notice">
+        <div className="flex items-start gap-2 border-b px-3 py-2 text-xs"
+          style={{
+            color: "var(--warning)",
+            backgroundColor: "color-mix(in oklch, var(--warning) 12%, transparent)",
+          }}
+          data-testid="legacy-secret-notice">
           <span className="flex-1">
             {legacySecretCount} API Client auth value{legacySecretCount === 1 ? "" : "s"} look{legacySecretCount === 1 ? "s" : ""} like a raw secret stored in collections.json.
             Re-enter {legacySecretCount === 1 ? "it" : "them"} to move {legacySecretCount === 1 ? "it" : "them"} to the secure store.
@@ -726,7 +786,7 @@ export function ApiClientPage() {
               localStorage.setItem("swokit-legacy-secret-notice", "dismissed");
               setLegacyNoticeDismissed(true);
             }}
-            className="shrink-0 rounded border px-2 py-0.5 hover:bg-amber-100 dark:hover:bg-amber-900"
+            className="shrink-0 rounded border px-2 py-0.5 hover:bg-accent"
             data-testid="legacy-secret-notice-dismiss"
           >
             Dismiss
@@ -736,7 +796,20 @@ export function ApiClientPage() {
 
       {/* Main 3-pane layout */}
       <div className="flex min-w-0 flex-1 overflow-hidden">
-        <ResizablePanels initialWidths={[260, 540, null]} minWidths={[180, 360, 260]} className="w-full min-w-0">
+        {/* The tree's useful width does not scale with the window, so it stays
+            roughly fixed while request and response split the leftover space —
+            previously the response pane was the only `flex: 1` child and absorbed
+            every spare pixel on a wide monitor. */}
+        {/* Minimums are sized so all three panes still fit — and stay draggable —
+            at a 1280px-wide window; larger values pinned every pane to its
+            minimum on a laptop and overflowed the container. */}
+        <ResizablePanels
+          initialWidths={[300, "1fr", "1fr"]}
+          minWidths={[200, 340, 320]}
+          storageKey="api-client-panels"
+          panelLabels={["collections", "request", "response"]}
+          className="w-full min-w-0"
+        >
           <CollectionTree
             collections={collections}
             selectedNodeId={selectedNodeId}
@@ -750,7 +823,9 @@ export function ApiClientPage() {
             onExportCollection={setExportCollectionId}
           />
 
-          <div className="flex h-full w-full flex-col border-r">
+          {/* No `border-r` here — RequestEditor already carries one, and the
+              resizer provides the visual divider. */}
+          <div className="flex h-full w-full flex-col">
             <RequestTabStrip
               tabs={tabs}
               activeTabId={activeTabId}
@@ -782,6 +857,8 @@ export function ApiClientPage() {
               response={activeTabId ? tabStates[activeTabId]?.response ?? null : null}
               sending={activeTabId ? tabStates[activeTabId]?.sending ?? false : false}
               request={activeTabId ? tabStates[activeTabId]?.draft ?? null : null}
+              history={activeTabId ? tabStates[activeTabId]?.history ?? [] : []}
+              onSaveExample={handleSaveExample}
             />
           </div>
         </ResizablePanels>
@@ -829,18 +906,10 @@ export function ApiClientPage() {
         />
       )}
 
-      {/* Git side panel */}
+      {/* Git drawer — sits inside the page content area rather than covering the
+          app titlebar and status bar as the previous fixed overlay did. */}
       {showGitPanel && (
-        <div className="fixed right-0 top-0 bottom-0 z-40 w-96 border-l bg-card shadow-lg" data-testid="api-client-git-panel">
-          <GitPanel repoPath={gitRepoPath} onRepoPathChange={setGitRepoPath} />
-          <button
-            onClick={() => setShowGitPanel(false)}
-            className="absolute right-2 top-2 rounded p-1 text-muted-foreground hover:bg-accent"
-            data-testid="api-client-git-close"
-          >
-            ✕
-          </button>
-        </div>
+        <GitDrawer onClose={() => setShowGitPanel(false)} />
       )}
     </div>
   );

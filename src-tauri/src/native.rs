@@ -9,7 +9,7 @@ use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-fn hidden_command(program: &str) -> std::process::Command {
+pub(crate) fn hidden_command(program: &str) -> std::process::Command {
     let mut cmd = std::process::Command::new(program);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -29,17 +29,39 @@ impl AllowedRoots {
         Self { roots: Mutex::new(Vec::new()) }
     }
 
-    fn allow(&self, root: PathBuf) {
+    pub(crate) fn allow(&self, root: PathBuf) {
         let mut roots = self.roots.lock().unwrap();
         if !roots.iter().any(|r| r == &root) {
             roots.push(root);
         }
     }
 
-    fn is_allowed(&self, candidate: &Path) -> bool {
+    pub(crate) fn is_allowed(&self, candidate: &Path) -> bool {
         let roots = self.roots.lock().unwrap();
         roots.iter().any(|root| candidate.starts_with(root))
     }
+}
+
+/// Resolves and validates a *directory* inside an allowed root.
+///
+/// `validate_within_roots` canonicalizes the parent because it is written for
+/// files that may not exist yet; a repository directory must be canonicalized
+/// itself. Git commands use this so they are gated exactly like file access —
+/// without it, any script in the webview could run `git push` in an arbitrary
+/// directory.
+pub(crate) fn validate_dir_within_roots(
+    path: &str,
+    roots: &AllowedRoots,
+) -> Result<PathBuf, String> {
+    let canonical = std::fs::canonicalize(path)
+        .map_err(|e| format!("Invalid directory: {e}"))?;
+    if !canonical.is_dir() {
+        return Err("Path is not a directory".to_string());
+    }
+    if !roots.is_allowed(&canonical) {
+        return Err("Path is outside the allowed workspace".to_string());
+    }
+    Ok(canonical)
 }
 
 /// Resolves `path` to a canonical, validated target inside an allowed root.
@@ -207,6 +229,9 @@ pub async fn pick_directory(
 
     if let Some(dir_str) = &result {
         if let Ok(canonical) = std::fs::canonicalize(dir_str) {
+            // Recorded on disk as well so the grant survives a restart and the
+            // frontend never has to be trusted as the source of authorization.
+            persist_granted_root(&app, &canonical);
             roots.allow(canonical);
         }
     }
@@ -271,156 +296,79 @@ pub async fn read_clipboard(app: tauri::AppHandle) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
-// ── Git Operations ───────────────────────────────────────────────────────────
+// ── Granted repository roots ─────────────────────────────────────────
+//
+//  is in-memory and is populated only by the native pick dialogs,
+// so the frontend can never grant itself access to a path. Persisting the chosen
+// repository in localStorage and handing it back after a restart would break that
+// property outright — any script in the webview could write an arbitrary path
+// there. Instead the *authority list* lives here, on disk, and the frontend only
+// ever names a root it wants restored from it.
+//
+// See docs/features/active/api-client-git-completion/decisions.md DEC-G3.
 
-#[derive(serde::Serialize)]
-pub struct GitStatus {
-    pub branch: String,
-    pub ahead: u32,
-    pub behind: u32,
-    pub staged: u32,
-    pub modified: u32,
-    pub untracked: u32,
+fn granted_roots_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("Cannot resolve config directory: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create config directory: {e}"))?;
+    Ok(dir.join("granted-roots.json"))
 }
 
-#[derive(serde::Serialize)]
-pub struct GitBranch {
-    pub name: String,
-    pub current: bool,
+fn load_granted_roots(app: &tauri::AppHandle) -> Vec<PathBuf> {
+    let Ok(file) = granted_roots_file(app) else {
+        return Vec::new();
+    };
+    let Ok(text) = std::fs::read_to_string(file) else {
+        return Vec::new();
+    };
+    serde_json::from_str::<Vec<String>>(&text)
+        .unwrap_or_default()
+        .into_iter()
+        .map(PathBuf::from)
+        .collect()
 }
 
-/// Tauri command: get git status for a repository
-#[tauri::command]
-pub async fn git_status(path: String) -> Result<GitStatus, String> {
-    let output = hidden_command("git")
-        .args(["status", "--porcelain=v2", "--branch"])
-        .current_dir(&path)
-        .output()
-        .map_err(|e| format!("Failed to run git: {}", e))?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+fn persist_granted_root(app: &tauri::AppHandle, root: &Path) {
+    let mut roots = load_granted_roots(app);
+    if roots.iter().any(|r| r == root) {
+        return;
     }
+    roots.push(root.to_path_buf());
 
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut branch = String::new();
-    let mut ahead = 0u32;
-    let mut behind = 0u32;
-    let mut staged = 0u32;
-    let mut modified = 0u32;
-    let mut untracked = 0u32;
-
-    for line in text.lines() {
-        if line.starts_with("# branch.head ") {
-            branch = line["# branch.head ".len()..].to_string();
-        } else if line.starts_with("# branch.ab ") {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 3 {
-                ahead = parts[1].trim_start_matches('+').parse().unwrap_or(0);
-                behind = parts[2].trim_start_matches('-').parse().unwrap_or(0);
-            }
-        } else if line.starts_with('1') || line.starts_with('2') {
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            if fields.len() >= 2 {
-                let staged_field = fields[1];
-                if staged_field != "." { staged += 1; }
-                else { modified += 1; }
-            }
-        } else if line.starts_with('u') {
-            modified += 1;
-        } else if line.starts_with("? ") {
-            untracked += 1;
-        }
-    }
-
-    Ok(GitStatus { branch, ahead, behind, staged, modified, untracked })
-}
-
-/// Tauri command: list git branches
-#[tauri::command]
-pub async fn git_branches(path: String) -> Result<Vec<GitBranch>, String> {
-    let output = hidden_command("git")
-        .args(["branch", "--list", "--format=%(HEAD) %(refname:short)"])
-        .current_dir(&path)
-        .output()
-        .map_err(|e| format!("Failed to run git: {}", e))?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
-    }
-
-    let text = String::from_utf8_lossy(&output.stdout);
-    let branches: Vec<GitBranch> = text
-        .lines()
-        .filter(|l| !l.is_empty())
-        .map(|l| {
-            let current = l.starts_with('*');
-            let name = l.trim_start_matches('*').trim().to_string();
-            GitBranch { name, current }
-        })
+    let Ok(file) = granted_roots_file(app) else {
+        return;
+    };
+    let payload: Vec<String> = roots
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
         .collect();
-
-    Ok(branches)
+    if let Ok(json) = serde_json::to_string_pretty(&payload) {
+        // Best-effort: losing the grant means the user re-picks the folder.
+        let _ = std::fs::write(file, json);
+    }
 }
 
-/// Tauri command: git commit
+/// Re-admits a path the user previously picked through an OS dialog.
+///
+/// Rejects anything not on the persisted grant list, so this is a restore
+/// mechanism, not a way for the frontend to authorize a new path.
 #[tauri::command]
-pub async fn git_commit(path: String, message: String) -> Result<(), String> {
-    let output = hidden_command("git")
-        .args(["commit", "-m", &message])
-        .current_dir(&path)
-        .output()
-        .map_err(|e| format!("Failed to run git: {}", e))?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+pub async fn restore_allowed_root(
+    app: tauri::AppHandle,
+    path: String,
+    roots: State<'_, AllowedRoots>,
+) -> Result<bool, String> {
+    let Ok(canonical) = std::fs::canonicalize(&path) else {
+        return Ok(false);
+    };
+    if !load_granted_roots(&app).iter().any(|r| r == &canonical) {
+        return Ok(false);
     }
-    Ok(())
-}
-
-/// Tauri command: git push
-#[tauri::command]
-pub async fn git_push(path: String) -> Result<String, String> {
-    let output = hidden_command("git")
-        .args(["push"])
-        .current_dir(&path)
-        .output()
-        .map_err(|e| format!("Failed to run git: {}", e))?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
-/// Tauri command: git pull
-#[tauri::command]
-pub async fn git_pull(path: String) -> Result<String, String> {
-    let output = hidden_command("git")
-        .args(["pull"])
-        .current_dir(&path)
-        .output()
-        .map_err(|e| format!("Failed to run git: {}", e))?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
-/// Tauri command: git stage all
-#[tauri::command]
-pub async fn git_stage_all(path: String) -> Result<(), String> {
-    let output = hidden_command("git")
-        .args(["add", "--all"])
-        .current_dir(&path)
-        .output()
-        .map_err(|e| format!("Failed to run git: {}", e))?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
-    }
-    Ok(())
+    roots.allow(canonical);
+    Ok(true)
 }
 
 // ── Filesystem ───────────────────────────────────────────────────────────────

@@ -120,6 +120,7 @@ export interface GitStatus {
   staged: number;
   modified: number;
   untracked: number;
+  conflicted: number;
 }
 
 export interface GitBranch {
@@ -127,47 +128,133 @@ export interface GitBranch {
   current: boolean;
 }
 
-export async function gitStatus(path: string): Promise<GitStatus | null> {
-  if (isTauri()) {
-    return invoke<GitStatus>("git_status", { path });
+export interface GitFileChange {
+  path: string;
+  indexState: string;
+  worktreeState: string;
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+  conflicted: boolean;
+  origPath: string | null;
+}
+
+export interface GitFileDiff {
+  original: string | null;
+  current: string;
+  isBinary: boolean;
+}
+
+/**
+ * Thrown when git is simply unreachable because the app is running in a browser.
+ * Distinct from a command failure so the panel can tell the two apart instead of
+ * showing "requires the desktop app" for every error, as it used to.
+ */
+export class GitUnavailableError extends Error {
+  constructor() {
+    super("Git actions need the SwebKit desktop app");
+    this.name = "GitUnavailableError";
   }
-  return null;
+}
+
+/** A git command ran and failed. `message` is git's own stderr. */
+export class GitCommandError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GitCommandError";
+  }
+}
+
+async function gitInvoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
+  if (!isTauri()) throw new GitUnavailableError();
+  try {
+    return await invoke<T>(cmd, args);
+  } catch (err) {
+    throw new GitCommandError(err instanceof Error ? err.message : String(err));
+  }
+}
+
+export function isGitAvailable(): boolean {
+  return isTauri();
+}
+
+export async function gitIsRepo(path: string): Promise<boolean> {
+  return gitInvoke<boolean>("git_is_repo", { path });
+}
+
+export async function gitStatus(path: string): Promise<GitStatus> {
+  return gitInvoke<GitStatus>("git_status", { path });
+}
+
+export async function gitChangedFiles(
+  path: string,
+  subpath?: string | null,
+): Promise<GitFileChange[]> {
+  return gitInvoke<GitFileChange[]>("git_changed_files", { path, subpath: subpath ?? null });
 }
 
 export async function gitBranches(path: string): Promise<GitBranch[]> {
-  if (isTauri()) {
-    return invoke<GitBranch[]>("git_branches", { path });
-  }
-  return [];
+  return gitInvoke<GitBranch[]>("git_branches", { path });
 }
 
-export async function gitCommit(path: string, message: string): Promise<void> {
-  if (isTauri()) {
-    await invoke("git_commit", { path, message });
-  } else {
-    throw new Error("Git operations require the Tauri desktop app");
-  }
+export async function gitStagePaths(path: string, paths: string[]): Promise<void> {
+  await gitInvoke<void>("git_stage_paths", { path, paths });
+}
+
+export async function gitUnstagePaths(path: string, paths: string[]): Promise<void> {
+  await gitInvoke<void>("git_unstage_paths", { path, paths });
+}
+
+export async function gitRevertPaths(path: string, paths: string[]): Promise<void> {
+  await gitInvoke<void>("git_revert_paths", { path, paths });
+}
+
+export async function gitDiffFile(path: string, file: string): Promise<GitFileDiff> {
+  return gitInvoke<GitFileDiff>("git_diff_file", { path, file });
+}
+
+export async function gitCommit(
+  path: string,
+  message: string,
+  subpath?: string | null,
+): Promise<void> {
+  await gitInvoke<void>("git_commit", { path, message, subpath: subpath ?? null });
 }
 
 export async function gitPush(path: string): Promise<string> {
-  if (isTauri()) {
-    return invoke<string>("git_push", { path });
-  }
-  throw new Error("Git operations require the Tauri desktop app");
+  return gitInvoke<string>("git_push", { path });
 }
 
 export async function gitPull(path: string): Promise<string> {
-  if (isTauri()) {
-    return invoke<string>("git_pull", { path });
-  }
-  throw new Error("Git operations require the Tauri desktop app");
+  return gitInvoke<string>("git_pull", { path });
 }
 
-export async function gitStageAll(path: string): Promise<void> {
-  if (isTauri()) {
-    await invoke("git_stage_all", { path });
-  } else {
-    throw new Error("Git operations require the Tauri desktop app");
+export async function gitCheckoutBranch(path: string, branch: string): Promise<void> {
+  await gitInvoke<void>("git_checkout_branch", { path, branch });
+}
+
+export async function gitCreateBranch(
+  path: string,
+  branch: string,
+  checkout = true,
+): Promise<void> {
+  await gitInvoke<void>("git_create_branch", { path, branch, checkout });
+}
+
+export async function gitRemoteUrl(path: string): Promise<string | null> {
+  return gitInvoke<string | null>("git_remote_url", { path });
+}
+
+/**
+ * Re-admits a repository the user previously picked through an OS dialog.
+ * Returns false when the path is not on the persisted grant list.
+ */
+export async function restoreAllowedRoot(path: string): Promise<boolean> {
+  if (!isTauri()) return false;
+  try {
+    return await invoke<boolean>("restore_allowed_root", { path });
+  } catch {
+    return false;
   }
 }
 
