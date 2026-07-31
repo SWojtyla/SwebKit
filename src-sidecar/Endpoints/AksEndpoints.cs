@@ -271,6 +271,20 @@ public static class AksEndpoints
             return Results.Text(yaml, "text/yaml");
         });
 
+        app.MapPost("/api/aks/{ns}/yaml/{kind}/{name}", async (string ns, string kind, string name, YamlApplyRequest req, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            await client.ApplyResourceYamlAsync(ns, kind, name, req.Yaml, ct);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/aks/{ns}/yaml/validate", async (string ns, YamlValidateRequest req, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+        {
+            var client = GetClient(profile, demo);
+            var error = await client.ValidateResourceYamlAsync(ns, req.Yaml, ct);
+            return Results.Ok(new { valid = error is null, error });
+        });
+
         // ── Actions ────────────────────────────────────────────────────────────
 
         app.MapPost("/api/aks/{ns}/deployments/{name}/restart", async (string ns, string name, ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
@@ -491,3 +505,5 @@ public sealed record SetContextRequest(string Context, string? DefaultNamespace 
 public sealed record ScaleHpaRequest(int MinReplicas, int MaxReplicas);
 public sealed record SetScalingEnabledRequest(bool Enabled);
 public sealed record SuspendCronJobRequest(bool Suspend);
+public sealed record YamlApplyRequest(string Yaml);
+public sealed record YamlValidateRequest(string Yaml);

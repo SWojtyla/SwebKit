@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { Check } from "lucide-react";
 
 interface NamespaceSelectorProps {
   namespaces: string[] | undefined;
@@ -27,6 +28,17 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
 
   const all = namespaces ?? [];
   const filtered = all.filter((ns) => ns.toLowerCase().includes(search.toLowerCase()));
+
+  const sortedFiltered = useMemo(() => {
+    const selectedSet = new Set(pending);
+    return [...filtered].sort((a, b) => {
+      const aSelected = selectedSet.has(a);
+      const bSelected = selectedSet.has(b);
+      if (aSelected && !bSelected) return -1;
+      if (!aSelected && bSelected) return 1;
+      return a.localeCompare(b);
+    });
+  }, [filtered, pending]);
 
   const isAllSelected = all.length > 0 && (selected.includes("*") || selected.length === all.length);
   const display = isAllSelected
@@ -127,23 +139,27 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
             </div>
           </div>
           <div className="max-h-72 overflow-auto p-1">
-            {filtered.length === 0 && (
+            {sortedFiltered.length === 0 && (
               <div className="px-2 py-2 text-xs text-muted-foreground">No namespaces found</div>
             )}
-            {filtered.map((ns) => (
-              <label
-                key={ns}
-                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
-              >
-                <input
-                  type="checkbox"
-                  checked={pending.includes(ns)}
-                  onChange={() => toggleNs(ns)}
-                  className="h-4 w-4"
-                />
-                <span className="truncate">{ns}</span>
-              </label>
-            ))}
+            {sortedFiltered.map((ns) => {
+              const isSelected = pending.includes(ns);
+              return (
+                <label
+                  key={ns}
+                  className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent ${isSelected ? "bg-accent/40" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleNs(ns)}
+                    className="h-4 w-4"
+                  />
+                  <span className="flex-1 truncate">{ns}</span>
+                  {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
+                </label>
+              );
+            })}
           </div>
           <div className="flex items-center justify-between border-t p-2 text-xs">
             <div className="flex gap-2">
