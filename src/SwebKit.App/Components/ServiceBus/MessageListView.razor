@@ -1,9 +1,11 @@
 @using System.Globalization
 @using System.Text.RegularExpressions
+@using System.IO.Compression
 @implements IAsyncDisposable
 @inject AppStateService AppState
 @inject UiStateRepository UiState
 @inject IJSRuntime JS
+@inject INotificationService Notifications
 
 <div class="message-list-host message-list-view">
     @if (_showComposer && ShowCompose)
@@ -245,6 +247,11 @@
                            CssClass="message-list-view__toolbar-button" Disabled="@(FilteredMessages.Count == 0)"
                            Title="Export currently visible messages as JSON">
                     ⬇ Export JSON
+                </AppButton>
+                <AppButton OnClick="ExportSelectedOrFilteredZipAsync" Size="Small" Variant="Secondary"
+                           CssClass="message-list-view__toolbar-button" Disabled="@(FilteredMessages.Count == 0)"
+                           Title="Download selected messages as ZIP, or all filtered messages if none are selected">
+                    ⬇ ZIP
                 </AppButton>
                 <AppButton OnClick="ToggleNsbMode" Size="Small" Variant="Secondary"
                            CssClass="@($"message-list-view__toolbar-button message-list-view__toolbar-button--nsb {(_nsbMode ? "message-list-view__toolbar-button--active" : string.Empty)}")"
@@ -1577,6 +1584,73 @@ sequenceNumber)
             // Log but don't crash — download is a non-critical operation
             Console.Error.WriteLine($"Download failed: {ex.Message}");
         }
+    }
+
+    private async Task ExportSelectedOrFilteredZipAsync()
+    {
+        var messages = _selection.Any
+            ? Messages.Where(m => _selection.IsSelected(m.MessageId)).ToList()
+            : FilteredMessages;
+        if (messages.Count == 0) return;
+
+        var ts = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var entitySlug = (EntityPath ?? "messages").Replace('/', '-');
+        var scope = _selection.Any ? "selected" : "filtered";
+        var fileName = $"{entitySlug}-{scope}-{ts}.zip";
+        var base64 = BuildZipBase64(messages);
+
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKitUi.downloadBinaryFile", fileName, base64, "application/zip");
+            Notifications.ShowSuccess($"Downloaded {messages.Count} message(s) as ZIP");
+        }
+        catch (Exception ex)
+        {
+            // Log but don't crash — download is a non-critical operation
+            Console.Error.WriteLine($"ZIP download failed: {ex.Message}");
+        }
+    }
+
+    private static object CreateDownloadPayload(SbMessage m) => new
+    {
+        messageId = m.MessageId,
+        correlationId = m.CorrelationId,
+        subject = m.Subject,
+        contentType = m.ContentType,
+        body = m.Body,
+        applicationProperties = m.ApplicationProperties,
+        systemProperties = m.SystemProperties,
+        enqueuedAt = m.EnqueuedAt,
+        deliveryCount = m.DeliveryCount,
+        sequenceNumber = m.SequenceNumber,
+        sessionId = m.SessionId,
+        deadLetterReason = m.DeadLetterReason,
+        deadLetterErrorDescription = m.DeadLetterErrorDescription,
+    };
+
+    private static string SafeFileName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "unknown";
+        var safe = new string(value.Where(char.IsLetterOrDigit).ToArray());
+        return string.IsNullOrEmpty(safe) ? "unknown" : safe[..Math.Min(safe.Length, 80)];
+    }
+
+    private static string BuildZipBase64(IReadOnlyList<SbMessage> messages)
+    {
+        using var ms = new MemoryStream();
+        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, true))
+        {
+            for (int i = 0; i < messages.Count; i++)
+            {
+                var m = messages[i];
+                var entryName = $"message-{i + 1:000}-{SafeFileName(m.MessageId)}.json";
+                var entry = zip.CreateEntry(entryName);
+                using var entryStream = entry.Open();
+                using var writer = new StreamWriter(entryStream);
+                writer.Write(System.Text.Json.JsonSerializer.Serialize(CreateDownloadPayload(m), new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            }
+        }
+        return Convert.ToBase64String(ms.ToArray());
     }
 
     // ── Filtering engine ─────────────────────────────────────────────────────

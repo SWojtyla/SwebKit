@@ -1,8 +1,12 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Search, Filter, X, Columns, Pin, Plus, RotateCw, Check, AlertCircle, ArrowUpRight, Bookmark } from "lucide-react";
-import { useSbPeekMessages, useSbPeekDlq, useSbCompleteMessages, useSbCompleteDlq, useSbResubmitDlq } from "@/lib/hooks";
+import { Search, Filter, X, Columns, Pin, Plus, RotateCw, Check, AlertCircle, ArrowUpRight, Bookmark, Download, Loader2 } from "lucide-react";
+import { useSbCompleteMessages, useSbCompleteDlq, useSbResubmitDlq } from "@/lib/hooks";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
+import { downloadBlob } from "@/lib/download";
+import { buildZip } from "@/lib/zip";
+import { useNotification } from "@/components/layout/NotificationSystem";
+import { messageToDownloadObject, safeFileName, messageKey as sbMessageKey } from "./exportHelpers";
 import { applyFilters } from "./filterLogic";
 import { AdvancedFilterPanel } from "./AdvancedFilterPanel";
 import type { AdvancedFilterRule } from "./filterTypes";
@@ -27,8 +31,14 @@ interface Props {
   nsId: string | null;
   entity: SbEntityInfo | null;
   viewMode: "active" | "dlq";
+  messages: SbMessage[];
+  isLoading: boolean;
+  isLoadingMore: boolean;
+  canLoadMore: boolean;
+  totalAvailable: number | null;
   selectedMessage: SbMessage | null;
   onSelectMessage: (message: SbMessage) => void;
+  onLoadMore: () => void;
 }
 
 const densityClass: Record<RowDensity, string> = {
@@ -83,8 +93,23 @@ function truncateNsbType(value: string): string {
   return lastDot >= 0 ? typePart.slice(lastDot + 1) : typePart;
 }
 
-export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectMessage }: Props) {
+export function MessageList({
+  nsId,
+  entity,
+  viewMode,
+  messages,
+  isLoading,
+  isLoadingMore,
+  canLoadMore,
+  totalAvailable,
+  selectedMessage,
+  onSelectMessage,
+  onLoadMore,
+}: Props) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
+  const listRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const [textFilter, setTextFilter] = useState("");
   const [advancedRules, setAdvancedRules] = useState<AdvancedFilterRule[]>([]);
   const [advancedEnabled, setAdvancedEnabled] = useState(false);
@@ -137,29 +162,29 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
     }
   }, [nsId, entity?.entityPath]);
 
-  const activeQuery = useSbPeekMessages(
-    viewMode === "active" ? nsId : null,
-    entity?.entityPath ?? null,
-    prefs.peekCount,
-  );
-  const dlqQuery = useSbPeekDlq(
-    viewMode === "dlq" ? nsId : null,
-    entity?.entityPath ?? null,
-    prefs.peekCount,
-  );
-
-  const messages = viewMode === "active" ? activeQuery.data : dlqQuery.data;
-  const isLoading = viewMode === "active" ? activeQuery.isLoading : dlqQuery.isLoading;
-
   // Auto-refresh
   useEffect(() => {
     if (prefs.autoRefreshInterval === 0 || !nsId || !entity) return;
     const id = setInterval(() => {
       qc.invalidateQueries({ queryKey: ["sb-peek", nsId, entity.entityPath] });
       qc.invalidateQueries({ queryKey: ["sb-dlq", nsId, entity.entityPath] });
+      qc.invalidateQueries({ queryKey: ["sb-entity-stats", nsId, entity.entityPath] });
     }, prefs.autoRefreshInterval * 1000);
     return () => clearInterval(id);
   }, [prefs.autoRefreshInterval, nsId, entity, qc]);
+
+  // Infinite-scroll sentinel
+  useEffect(() => {
+    if (!sentinelRef.current || !listRef.current || !canLoadMore || isLoadingMore) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) onLoadMore();
+      },
+      { root: listRef.current, threshold: 0 },
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [canLoadMore, isLoadingMore, onLoadMore]);
 
   // Bulk action mutations
   const completeMutation = useSbCompleteMessages();
@@ -169,9 +194,9 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
   const handleBulkComplete = useCallback(() => {
     if (!nsId || !entity || selectedMsgs.size === 0) return;
     const seqNumbers = messages
-      ?.filter((m) => selectedMsgs.has(`${m.messageId}-${m.sequenceNumber}`))
+      .filter((m) => selectedMsgs.has(sbMessageKey(m)))
       .map((m) => m.sequenceNumber)
-      .filter((n): n is number => n !== null) ?? [];
+      .filter((n): n is number => n !== null);
     if (seqNumbers.length === 0) return;
     if (!confirm(`Complete ${seqNumbers.length} message(s)?`)) return;
     if (viewMode === "active") {
@@ -185,9 +210,9 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
   const handleBulkResubmit = useCallback(() => {
     if (!nsId || !entity || selectedMsgs.size === 0) return;
     const seqNumbers = messages
-      ?.filter((m) => selectedMsgs.has(`${m.messageId}-${m.sequenceNumber}`))
+      .filter((m) => selectedMsgs.has(sbMessageKey(m)))
       .map((m) => m.sequenceNumber)
-      .filter((n): n is number => n !== null) ?? [];
+      .filter((n): n is number => n !== null);
     if (seqNumbers.length === 0) return;
     if (!confirm(`Resubmit ${seqNumbers.length} message(s)?`)) return;
     resubmitDlqMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers.map(String), targetEntityPath: null });
@@ -195,7 +220,7 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
   }, [nsId, entity, selectedMsgs, messages, resubmitDlqMutation]);
 
   const toggleSelect = (msg: SbMessage) => {
-    const key = `${msg.messageId}-${msg.sequenceNumber}`;
+    const key = sbMessageKey(msg);
     setSelectedMsgs((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
@@ -208,7 +233,7 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
     if (selectedMsgs.size === filteredMessages.length) {
       setSelectedMsgs(new Set());
     } else {
-      setSelectedMsgs(new Set(filteredMessages.map((m) => `${m.messageId}-${m.sequenceNumber}`)));
+      setSelectedMsgs(new Set(filteredMessages.map((m) => sbMessageKey(m))));
     }
   };
 
@@ -234,15 +259,15 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
 
   // Suggested custom columns from loaded messages
   const suggestedColumns = useMemo(() => {
-    if (!messages) return [];
+    if (messages.length === 0) return [];
     const allKeys = new Set<string>();
     messages.forEach((m) => Object.keys(m.applicationProperties).forEach((k) => allKeys.add(k)));
     return [...allKeys].filter((k) => !prefs.customColumns.includes(k)).slice(0, 10);
   }, [messages, prefs.customColumns]);
 
   const filteredMessages = useMemo(() => {
-    if (!filtersEnabled) return messages ?? [];
-    return applyFilters(messages ?? [], textFilter, advancedRules, advancedEnabled, pinnedSessionId);
+    if (!filtersEnabled) return messages;
+    return applyFilters(messages, textFilter, advancedRules, advancedEnabled, pinnedSessionId);
   }, [messages, textFilter, advancedRules, advancedEnabled, pinnedSessionId, filtersEnabled]);
 
   const activeRuleCount = advancedRules.filter((r) => r.enabled && isRuleConfigured(r)).length;
@@ -264,6 +289,28 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
     setShowSaveFilterInput(false);
     setSaveFilterName("");
   };
+
+  const handleDownloadZip = useCallback(async () => {
+    if (!entity) return;
+    const messagesToDownload =
+      selectedMsgs.size > 0
+        ? messages.filter((m) => selectedMsgs.has(sbMessageKey(m)))
+        : filteredMessages;
+    if (messagesToDownload.length === 0) return;
+    const files: Record<string, string> = {};
+    messagesToDownload.forEach((m, i) => {
+      const seq = m.sequenceNumber != null ? `-${m.sequenceNumber}` : "";
+      const name = `message-${String(i + 1).padStart(3, "0")}-${safeFileName(m.messageId)}${seq}.json`;
+      files[name] = JSON.stringify(messageToDownloadObject(m), null, 2);
+    });
+    const zipped = await buildZip(files);
+    const scope = selectedMsgs.size > 0 ? "selected" : "filtered";
+    const entitySlug = safeFileName(entity.name || entity.entityPath || "messages");
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    const fileName = `${entitySlug}-${scope}-${timestamp}.zip`;
+    downloadBlob(fileName, zipped);
+    notify("success", `Downloaded ${messagesToDownload.length} message(s) as ZIP`);
+  }, [entity, messages, filteredMessages, selectedMsgs, notify]);
 
   if (!entity) {
     return (
@@ -480,6 +527,16 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
           <Columns className="h-3.5 w-3.5" />
         </button>
         <button
+          data-testid="message-download-zip"
+          onClick={handleDownloadZip}
+          disabled={filteredMessages.length === 0 || isLoadingMore}
+          title="Download selected or filtered messages as ZIP"
+          className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent disabled:opacity-50"
+        >
+          <Download className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">ZIP</span>
+        </button>
+        <button
           data-testid="toggle-nsb-mode"
           onClick={() => setPrefs((p) => ({ ...p, nsbMode: !nsbMode }))}
           title="Toggle NServiceBus view — shows endpoint, message type, conversation ID"
@@ -642,14 +699,14 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
       {filteredMessages.length === 0 ? (
         <div
           className="flex h-full items-center justify-center text-sm text-muted-foreground"
-          data-testid={messages && messages.length === 0 ? "message-list-no-messages" : "message-list-no-matches"}
+          data-testid={messages.length === 0 ? "message-list-no-messages" : "message-list-no-matches"}
         >
-          {messages && messages.length === 0
+          {messages.length === 0
             ? `No ${viewMode === "dlq" ? "dead-lettered" : "active"} messages`
             : "No messages match the current filters"}
         </div>
       ) : (
-        <div className="flex-1 overflow-auto" data-testid="message-list">
+        <div ref={listRef} className="flex-1 min-h-0 overflow-auto" data-testid="message-list">
           <table className="w-full border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-card">
               <tr className="border-b">
@@ -680,7 +737,7 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
             </thead>
             <tbody>
               {filteredMessages.map((msg) => {
-                const msgKey = `${msg.messageId}-${msg.sequenceNumber}`;
+                const msgKey = sbMessageKey(msg);
                 const isSelected = selectedMsgs.has(msgKey);
                 const isActive =
                   selectedMessage?.messageId === msg.messageId &&
@@ -741,12 +798,26 @@ export function MessageList({ nsId, entity, viewMode, selectedMessage, onSelectM
               })}
             </tbody>
           </table>
+          <div ref={sentinelRef} className="h-1" data-testid="message-load-sentinel" />
         </div>
       )}
 
       {/* Filter result count */}
-      <div className="border-t px-3 py-1 text-xs text-muted-foreground" data-testid="message-filter-count">
-        {filteredMessages.length} of {messages?.length ?? 0} messages
+      <div className="flex items-center justify-between border-t px-3 py-1 text-xs text-muted-foreground">
+        <span data-testid="message-filter-count">
+          {totalAvailable != null
+            ? `Showing ${filteredMessages.length} of ${totalAvailable} message(s)`
+            : `Showing ${filteredMessages.length} message(s)`}
+          {isLoadingMore && <Loader2 className="ml-2 inline h-3 w-3 animate-spin" />}
+        </span>
+        <button
+          data-testid="load-more-button"
+          onClick={onLoadMore}
+          disabled={!canLoadMore || isLoadingMore}
+          className="rounded border px-2 py-0.5 text-xs hover:bg-accent disabled:opacity-50"
+        >
+          {isLoadingMore ? "Loading…" : canLoadMore ? `Load more (+${prefs.peekCount})` : "All loaded"}
+        </button>
         {prefs.autoRefreshInterval > 0 && (
           <span className="ml-2 flex items-center gap-1 text-green-500" data-testid="auto-refresh-indicator">
             <RotateCw className="h-3 w-3 animate-spin" /> {prefs.autoRefreshInterval}s

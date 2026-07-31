@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Copy, Check, AlertTriangle, Save, Pencil, RotateCcw, Clock, Search, X } from "lucide-react";
+import { Copy, Check, AlertTriangle, Save, Pencil, RotateCcw, Clock, Search, X, Download, FileArchive } from "lucide-react";
 import {
   useSbCompleteMessages,
   useSbCompleteDlq,
@@ -7,7 +7,11 @@ import {
   useSbPurgeMessages,
   useSbSaveTemplate,
 } from "@/lib/hooks";
+import { downloadText, downloadBlob } from "@/lib/download";
+import { buildZip } from "@/lib/zip";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
+import { messageToDownloadObject, safeFileName } from "./exportHelpers";
 
 interface Props {
   message: SbMessage | null;
@@ -23,6 +27,7 @@ interface Props {
 type DetailTab = "body" | "properties" | "system" | "dlq";
 
 export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEditResubmit, onReplay, onSchedule }: Props) {
+  const { notify } = useNotification();
   const completeMutation = useSbCompleteMessages();
   const completeDlqMutation = useSbCompleteDlq();
   const resubmitMutation = useSbResubmitDlq();
@@ -98,22 +103,26 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
   const copyBody = () => copyToClipboard(message.body, "body");
 
   const copyFullMessage = () => {
-    const full = {
-      messageId: message.messageId,
-      correlationId: message.correlationId,
-      subject: message.subject,
-      contentType: message.contentType,
-      body: message.body,
-      applicationProperties: message.applicationProperties,
-      systemProperties: message.systemProperties,
-      enqueuedAt: message.enqueuedAt,
-      deliveryCount: message.deliveryCount,
-      sequenceNumber: message.sequenceNumber,
-      sessionId: message.sessionId,
-      deadLetterReason: message.deadLetterReason,
-      deadLetterErrorDescription: message.deadLetterErrorDescription,
+    copyToClipboard(JSON.stringify(messageToDownloadObject(message), null, 2), "full");
+  };
+
+  const baseFileName = useMemo(() => {
+    const seq = message.sequenceNumber != null ? `-${message.sequenceNumber}` : "";
+    return `message-${safeFileName(message.messageId)}${seq}`;
+  }, [message]);
+
+  const downloadJson = () => {
+    downloadText(`${baseFileName}.json`, JSON.stringify(messageToDownloadObject(message), null, 2));
+    notify("success", "Message downloaded as JSON");
+  };
+
+  const downloadZip = async () => {
+    const files: Record<string, string> = {
+      [`${baseFileName}.json`]: JSON.stringify(messageToDownloadObject(message), null, 2),
     };
-    copyToClipboard(JSON.stringify(full, null, 2), "full");
+    const zipped = await buildZip(files);
+    downloadBlob(`${baseFileName}.zip`, zipped);
+    notify("success", "Message downloaded as ZIP");
   };
 
   const onComplete = () => {
@@ -271,6 +280,22 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
             ) : (
               <><Copy className="h-3 w-3" /> Copy Full Message</>
             )}
+          </button>
+          <button
+            data-testid="message-download-json"
+            onClick={downloadJson}
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+            title="Download message as JSON"
+          >
+            <Download className="h-3 w-3" /> JSON
+          </button>
+          <button
+            data-testid="message-download-zip"
+            onClick={downloadZip}
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+            title="Download message as ZIP"
+          >
+            <FileArchive className="h-3 w-3" /> ZIP
           </button>
           <button
             data-testid="message-save-template"
