@@ -1,4 +1,4 @@
-import type { ReactNode, MouseEvent, JSX } from "react";
+import { memo, type ReactNode, type MouseEvent, type JSX } from "react";
 
 export interface Column<T> {
   header: ReactNode;
@@ -21,7 +21,7 @@ export interface ResourceTableProps<T extends { name: string; namespace?: string
   getRowClassName?: (row: T) => string;
 }
 
-export function ResourceTable<T extends { name: string; namespace?: string }>({
+function ResourceTableInner<T extends { name: string; namespace?: string }>({
   data,
   isLoading,
   isMulti,
@@ -99,3 +99,5 @@ export function ResourceTable<T extends { name: string; namespace?: string }>({
     </div>
   );
 }
+
+export const ResourceTable = memo(ResourceTableInner) as typeof ResourceTableInner;

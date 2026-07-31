@@ -1,12 +1,13 @@
 import { useRef, useState } from "react";
 import { CheckCircle2, Circle, Download, Upload } from "lucide-react";
-import { useProfile, useUserSettings, useUpdateUserSettings, useExportSettings, useImportSettings } from "@/lib/hooks";
+import { useProfile, useUpdateProfile, useUserSettings, useUpdateUserSettings, useExportSettings, useImportSettings } from "@/lib/hooks";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { useNotification } from "@/components/layout/NotificationSystem";
 
 export function GeneralSettings() {
   const { data: settings, isLoading } = useUserSettings();
   const { data: profile } = useProfile();
+  const updateProfile = useUpdateProfile();
   const updateSettings = useUpdateUserSettings();
   const exportSettings = useExportSettings();
   const importSettings = useImportSettings();
@@ -96,6 +97,61 @@ export function GeneralSettings() {
           />
           Auto-save request changes
         </label>
+
+        {profile && (
+          <div className="mt-5" data-testid="key-vaults-section">
+            <h3 className="mb-1 text-sm font-medium">Azure Key Vaults</h3>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Named vaults used by environment variables of type "Key Vault". Authentication uses your Azure CLI identity.
+            </p>
+            {profile.config.keyVaults.map((kv, i) => (
+              <div key={kv.id} className="mb-2 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={kv.name}
+                  onChange={(e) => {
+                    const next = { ...profile, config: { ...profile.config, keyVaults: profile.config.keyVaults.map((v) => (v.id === kv.id ? { ...v, name: e.target.value } : v)) } };
+                    updateProfile.mutate(next);
+                  }}
+                  placeholder="Name"
+                  className="w-40 rounded border bg-background px-2 py-1 text-sm"
+                  data-testid={`kv-name-${i}`}
+                />
+                <input
+                  type="text"
+                  value={kv.url}
+                  onChange={(e) => {
+                    const next = { ...profile, config: { ...profile.config, keyVaults: profile.config.keyVaults.map((v) => (v.id === kv.id ? { ...v, url: e.target.value } : v)) } };
+                    updateProfile.mutate(next);
+                  }}
+                  placeholder="https://my-vault.vault.azure.net/"
+                  className="flex-1 rounded border bg-background px-2 py-1 text-sm"
+                  data-testid={`kv-url-${i}`}
+                />
+                <button
+                  onClick={() => {
+                    const next = { ...profile, config: { ...profile.config, keyVaults: profile.config.keyVaults.filter((v) => v.id !== kv.id) } };
+                    updateProfile.mutate(next);
+                  }}
+                  className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                  data-testid={`kv-remove-${i}`}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => {
+                const next = { ...profile, config: { ...profile.config, keyVaults: [...profile.config.keyVaults, { id: crypto.randomUUID(), name: "", url: "" }] } };
+                updateProfile.mutate(next);
+              }}
+              className="mt-1 rounded border px-2 py-1 text-xs hover:bg-accent"
+              data-testid="kv-add"
+            >
+              + Add Key Vault
+            </button>
+          </div>
+        )}
       </section>
 
       <section>

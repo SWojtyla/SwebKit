@@ -40,6 +40,33 @@ public static class ApiClientEndpoints
                 return Results.Problem($"Request failed: {ex.Message}");
             }
         });
+
+        app.MapPost("/api/api-client/preview-keyvault-secret", async (
+            PreviewKeyVaultSecretRequest req,
+            IKeyVaultSecretResolver resolver,
+            CancellationToken cancellationToken) =>
+        {
+            if (string.IsNullOrWhiteSpace(req.SecretName))
+                return Results.BadRequest(new { error = "Secret name is required" });
+
+            if (!resolver.IsAvailable)
+                return Results.Problem("No key vaults are configured");
+
+            var raw = await resolver.GetSecretAsync(req.SecretName, req.KeyVaultName, cancellationToken).ConfigureAwait(false);
+
+            if (raw.StartsWith("[KV_ERROR:", StringComparison.Ordinal) || raw.StartsWith("[KV_UNAVAILABLE:", StringComparison.Ordinal))
+            {
+                return Results.Ok(new KeyVaultPreviewResponse("error", null, 0, raw));
+            }
+
+            return Results.Ok(new KeyVaultPreviewResponse("ok", MaskSecret(raw), raw.Length, null));
+        });
+    }
+
+    private static string MaskSecret(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return "••••••••";
     }
 
     private static async Task<ApiCollection?> ResolveCollectionAsync(string? collectionId, CollectionRepository collections, DemoModeService demo)
@@ -95,3 +122,11 @@ public sealed record ApiClientExecutionResponse(
     IReadOnlyList<GraphQlError>? GraphQlErrors);
 
 public sealed record ResponseHeaderDto(string Name, string Value);
+
+public sealed record PreviewKeyVaultSecretRequest(string? KeyVaultName, string SecretName);
+
+public sealed record KeyVaultPreviewResponse(
+    string Status,
+    string? MaskedValue,
+    int Length,
+    string? Error);

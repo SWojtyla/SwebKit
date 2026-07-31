@@ -86,7 +86,7 @@ builder.Services.AddHttpClient();
 
 // API client request execution pipeline
 builder.Services.AddSingleton<ICredentialStore, SidecarCredentialStore>();
-builder.Services.AddSingleton<IKeyVaultSecretResolver, NoopKeyVaultSecretResolver>();
+builder.Services.AddSingleton<IKeyVaultSecretResolver, SidecarKeyVaultResolver>();
 builder.Services.AddSingleton<IVariableGeneratorService, VariableGeneratorService>();
 builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
 builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();

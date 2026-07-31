@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Plus, Trash2, Globe, Folder, X, Check } from "lucide-react";
-import type { ApiEnvironment, EnvironmentVariable, ApiCollection } from "@/lib/types";
+import { useProfile } from "@/lib/hooks";
+import { previewKeyVaultSecret } from "@/lib/api";
+import { useNotification } from "@/components/layout/NotificationSystem";
+import type { ApiEnvironment, EnvironmentVariable, ApiCollection, KeyVaultEntry } from "@/lib/types";
 
 interface EnvironmentManagerProps {
   environments: ApiEnvironment[];
@@ -165,7 +168,24 @@ interface EnvironmentEditorProps {
   onSetActive: () => void;
 }
 
+const sourceLabels: Record<EnvironmentVariable["secretSource"], string> = {
+  Plain: "Plain",
+  WindowsCredentialStore: "Secret Store",
+  AzureKeyVault: "Key Vault",
+  Generated: "Generated",
+};
+
+interface PreviewState {
+  status: "loading" | "ok" | "error";
+  message: string;
+}
+
 function EnvironmentEditor({ environment, collections, isActive, onChange, onSetActive }: EnvironmentEditorProps) {
+  const { data: profile } = useProfile();
+  const { notify } = useNotification();
+  const [previews, setPreviews] = useState<Record<number, PreviewState>>({});
+  const keyVaults = profile?.config.keyVaults ?? [];
+
   const setName = (name: string) => onChange({ ...environment, name });
   const setScope = (collectionId: string | null) => onChange({ ...environment, collectionId });
 
@@ -181,11 +201,50 @@ function EnvironmentEditor({ environment, collections, isActive, onChange, onSet
       variables: environment.variables.map((v, i) => (i === index ? { ...v, ...patch } : v)),
     });
 
-  const removeVariable = (index: number) =>
+  const removeVariable = (index: number) => {
     onChange({
       ...environment,
       variables: environment.variables.filter((_, i) => i !== index),
     });
+    setPreviews((prev) => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  };
+
+  const setSource = (index: number, secretSource: EnvironmentVariable["secretSource"]) => {
+    const base: Partial<EnvironmentVariable> = { secretSource };
+    if (secretSource === "Plain") {
+      base.credentialKey = null;
+      base.keyVaultName = null;
+    } else if (secretSource === "AzureKeyVault") {
+      base.value = null;
+      base.credentialKey = "";
+    } else {
+      base.value = null;
+      base.credentialKey = "";
+      base.keyVaultName = null;
+    }
+    updateVariable(index, base);
+  };
+
+  const handlePreview = async (index: number, v: EnvironmentVariable) => {
+    if (!v.credentialKey) return;
+    setPreviews((prev) => ({ ...prev, [index]: { status: "loading", message: "Checking…" } }));
+    try {
+      const result = await previewKeyVaultSecret(v.keyVaultName ?? null, v.credentialKey);
+      if (result.status === "ok") {
+        setPreviews((prev) => ({ ...prev, [index]: { status: "ok", message: `Present (${result.length} chars)` } }));
+      } else {
+        setPreviews((prev) => ({ ...prev, [index]: { status: "error", message: result.error ?? "Not found" } }));
+      }
+    } catch (ex) {
+      const message = ex instanceof Error ? ex.message : "Preview failed";
+      setPreviews((prev) => ({ ...prev, [index]: { status: "error", message } }));
+      notify("error", "Key Vault preview failed", message);
+    }
+  };
 
   return (
     <div data-testid="env-editor" className="space-y-4">
@@ -253,39 +312,127 @@ function EnvironmentEditor({ environment, collections, isActive, onChange, onSet
           <div className="text-xs text-muted-foreground py-2">No variables defined.</div>
         )}
         {environment.variables.map((v, i) => (
-          <div key={i} className="mb-1 flex items-center gap-2" data-testid={`env-var-row-${i}`}>
-            <input
-              type="checkbox"
-              checked={v.isEnabled}
-              onChange={(e) => updateVariable(i, { isEnabled: e.target.checked })}
-            />
-            <input
-              type="text"
-              value={v.key}
-              onChange={(e) => updateVariable(i, { key: e.target.value })}
-              placeholder="Key"
-              className="w-32 rounded border bg-background px-2 py-1 text-sm font-mono"
-              data-testid={`env-var-key-${i}`}
-            />
-            <span className="text-xs text-muted-foreground">=</span>
-            <input
-              type="text"
-              value={v.value ?? ""}
-              onChange={(e) => updateVariable(i, { value: e.target.value })}
-              placeholder="Value"
-              className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
-              data-testid={`env-var-value-${i}`}
-            />
-            <button
-              className="p-1 text-destructive"
-              onClick={() => removeVariable(i)}
-              data-testid={`env-var-remove-${i}`}
-            >
-              <Trash2 className="h-3 w-3" />
-            </button>
+          <div key={i} className="mb-2" data-testid={`env-var-row-${i}`}>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={v.isEnabled}
+                onChange={(e) => updateVariable(i, { isEnabled: e.target.checked })}
+              />
+              <input
+                type="text"
+                value={v.key}
+                onChange={(e) => updateVariable(i, { key: e.target.value })}
+                placeholder="Key"
+                className="w-32 rounded border bg-background px-2 py-1 text-sm font-mono"
+                data-testid={`env-var-key-${i}`}
+              />
+              <select
+                value={v.secretSource}
+                onChange={(e) => setSource(i, e.target.value as EnvironmentVariable["secretSource"])}
+                className="w-28 rounded border bg-background px-2 py-1 text-xs"
+                data-testid={`env-var-source-${i}`}
+              >
+                {Object.entries(sourceLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <ValueField
+                variable={v}
+                keyVaults={keyVaults}
+                index={i}
+                onChange={(patch) => updateVariable(i, patch)}
+                onPreview={() => handlePreview(i, v)}
+                isLoading={previews[i]?.status === "loading"}
+              />
+              <button
+                className="p-1 text-destructive"
+                onClick={() => removeVariable(i)}
+                data-testid={`env-var-remove-${i}`}
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+            {previews[i] && (
+              <div
+                className={`ml-48 mt-1 text-xs ${
+                  previews[i].status === "ok"
+                    ? "text-success"
+                    : previews[i].status === "error"
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                }`}
+                data-testid={`env-var-preview-${i}`}
+              >
+                {previews[i].message}
+              </div>
+            )}
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+interface ValueFieldProps {
+  variable: EnvironmentVariable;
+  keyVaults: KeyVaultEntry[];
+  index: number;
+  onChange: (patch: Partial<EnvironmentVariable>) => void;
+  onPreview: () => void;
+  isLoading: boolean;
+}
+
+function ValueField({ variable, keyVaults, onChange, onPreview, isLoading }: ValueFieldProps) {
+  if (variable.secretSource === "AzureKeyVault") {
+    return (
+      <>
+        {keyVaults.length === 0 ? (
+          <span className="flex-1 text-xs text-muted-foreground">No vaults configured</span>
+        ) : (
+          <select
+            value={variable.keyVaultName ?? ""}
+            onChange={(e) => onChange({ keyVaultName: e.target.value || null })}
+            className="w-36 rounded border bg-background px-2 py-1 text-xs"
+          >
+            <option value="">Default vault</option>
+            {keyVaults.map((kv) => (
+              <option key={kv.id} value={kv.name}>{kv.name}</option>
+            ))}
+          </select>
+        )}
+        <input
+          type="text"
+          value={variable.credentialKey ?? ""}
+          onChange={(e) => onChange({ credentialKey: e.target.value })}
+          placeholder="Secret name"
+          className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
+        />
+        <button
+          onClick={onPreview}
+          disabled={!variable.credentialKey || isLoading || keyVaults.length === 0}
+          className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+        >
+          {isLoading ? "…" : "Preview"}
+        </button>
+      </>
+    );
+  }
+
+  const placeholder = variable.secretSource === "WindowsCredentialStore" ? "Credential key" : "Value";
+  return (
+    <input
+      type="text"
+      value={variable.value ?? variable.credentialKey ?? ""}
+      onChange={(e) => {
+        if (variable.secretSource === "WindowsCredentialStore") {
+          onChange({ credentialKey: e.target.value });
+        } else {
+          onChange({ value: e.target.value });
+        }
+      }}
+      placeholder={placeholder}
+      className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
+    />
   );
 }

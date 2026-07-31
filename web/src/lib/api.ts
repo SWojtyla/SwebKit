@@ -312,3 +312,17 @@ export async function applyAksResourceYaml(ns: string, kind: string, name: strin
 export async function validateAksResourceYaml(ns: string, yaml: string): Promise<{ error?: string }> {
   return apiSend<{ error?: string }>(`/api/aks/${encodeURIComponent(ns)}/yaml/validate`, "POST", { yaml });
 }
+
+export interface KeyVaultPreviewResult {
+  status: "ok" | "error";
+  maskedValue: string | null;
+  length: number;
+  error: string | null;
+}
+
+export async function previewKeyVaultSecret(keyVaultName: string | null, secretName: string): Promise<KeyVaultPreviewResult> {
+  return apiSend<KeyVaultPreviewResult>("/api/api-client/preview-keyvault-secret", "POST", {
+    keyVaultName: keyVaultName || null,
+    secretName,
+  });
+}
