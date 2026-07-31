@@ -72,7 +72,10 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                 <span className="rounded px-1.5 py-0.5 text-xs text-muted-foreground">HPA</span>
               )}
               {hpa.isScalingDisabled && (
-                <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs text-red-500">Disabled</span>
+                <>
+                  {" "}
+                  <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs text-red-500">Disabled</span>
+                </>
               )}
             </div>
           )},

@@ -57,7 +57,7 @@ public class DemoAksClient : IAksClient
         return s;
     }
 
-    private static readonly (string Name, int Replicas, int Ready, string Status, string ImageTag)[] DemoDeployments =
+    private static (string Name, int Replicas, int Ready, string Status, string ImageTag)[] DemoDeployments =
     [
         ("order-api", 3, 3, "Available", "3.14.2"),
         ("product-catalog", 2, 2, "Available", "2.9.0-alpha.1"),
@@ -1227,6 +1227,16 @@ public class DemoAksClient : IAksClient
     public async Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default)
     {
         await Task.Delay(400, ct).ConfigureAwait(false); // simulate scale
+
+        for (var i = 0; i < DemoDeployments.Length; i++)
+        {
+            if (DemoDeployments[i].Name.Equals(deploymentName, StringComparison.OrdinalIgnoreCase))
+            {
+                var current = DemoDeployments[i];
+                DemoDeployments[i] = (current.Name, replicas, replicas, current.Status, current.ImageTag);
+                break;
+            }
+        }
     }
 
     public async Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName, CancellationToken ct = default)
