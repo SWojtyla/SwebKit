@@ -4,6 +4,7 @@ import {
   Search, MoreVertical, Pencil, FolderPlus, FilePlus, Download,
 } from "lucide-react";
 import type { ApiCollection, ApiCollectionNode } from "@/lib/types";
+import { MethodBadge } from "./method-badge";
 
 interface CollectionTreeProps {
   collections: ApiCollection[];
@@ -17,18 +18,6 @@ interface CollectionTreeProps {
   onRenameNode: (nodeId: string, collectionId: string, newName: string) => void;
   onExportCollection: (collectionId: string) => void;
 }
-
-const methodColors: Record<string, string> = {
-  Get: "text-blue-500",
-  Post: "text-green-500",
-  Put: "text-yellow-500",
-  Patch: "text-orange-500",
-  Delete: "text-red-500",
-  Head: "text-purple-500",
-  Options: "text-gray-500",
-  GraphQl: "text-pink-500",
-  WebSocket: "text-cyan-500",
-};
 
 function matchesSearch(node: ApiCollectionNode, query: string): boolean {
   if (!query) return true;
@@ -206,11 +195,7 @@ export function CollectionTree({
           {node.type === "Folder" && <Folder className="h-4 w-4 shrink-0" />}
           {node.type === "Request" && (
             <>
-              {method && (
-                <span className={`shrink-0 font-mono text-[10px] font-bold ${methodColors[method] ?? ""}`}>
-                  {method.toUpperCase().slice(0, 4)}
-                </span>
-              )}
+              {method && <MethodBadge method={method} variant="text" className="w-10 text-right" />}
               <FileText className="h-3.5 w-3.5 shrink-0 opacity-50" />
             </>
           )}

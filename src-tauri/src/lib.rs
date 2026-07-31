@@ -1,6 +1,7 @@
 mod sidecar;
 mod native;
 mod secrets;
+mod git;
 
 use tauri::Manager;
 use sidecar::{get_sidecar_port, restart_sidecar};
@@ -9,10 +10,16 @@ use native::{
     start_port_forward, stop_port_forward, list_port_forwards,
     pick_file, pick_directory, confirm_dialog, alert_dialog,
     write_clipboard, read_clipboard,
-    git_status, git_branches, git_commit, git_push, git_pull, git_stage_all,
     show_notification,
     read_file, write_file, list_dir,
+    restore_allowed_root,
     AllowedRoots,
+};
+use git::{
+    git_is_repo, git_status, git_changed_files, git_branches,
+    git_stage_paths, git_unstage_paths, git_revert_paths,
+    git_diff_file, git_commit, git_push, git_pull,
+    git_checkout_branch, git_create_branch, git_remote_url,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -43,16 +50,25 @@ pub fn run() {
             alert_dialog,
             write_clipboard,
             read_clipboard,
+            git_is_repo,
             git_status,
+            git_changed_files,
             git_branches,
+            git_stage_paths,
+            git_unstage_paths,
+            git_revert_paths,
+            git_diff_file,
             git_commit,
             git_push,
             git_pull,
-            git_stage_all,
+            git_checkout_branch,
+            git_create_branch,
+            git_remote_url,
             show_notification,
             read_file,
             write_file,
             list_dir,
+            restore_allowed_root,
             save_secret,
             get_secret,
             delete_secret,

@@ -4,6 +4,7 @@ Quick-reference files for recurring bugs in this codebase. Add an entry to the r
 
 | File                                   | Covers                                                                                                |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [react-frontend.md](react-frontend.md) | React/Tauri frontend: CodeMirror theming, Tauri serialization boundary, `AllowedRoots`, panel layout, Playwright traps |
 | [blazor-maui.md](blazor-maui.md)       | Blazor component lifecycle, rendering, JS interop, MAUI Hybrid threading, CSS isolation, line endings |
 | [azure-sdk.md](azure-sdk.md)           | Azure SDK auth, connection strings, `AsyncPageable` resource management                               |
 | [dotnet-csharp.md](dotnet-csharp.md)   | General .NET / C# traps (`required`, cancellation, nullability)                                       |

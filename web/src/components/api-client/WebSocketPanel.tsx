@@ -138,7 +138,8 @@ export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
           <button
             onClick={connect}
             disabled={!request.url.trim()}
-            className="flex items-center gap-1 rounded bg-green-500 px-3 py-1 text-xs text-white hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-1 rounded px-3 py-1 text-xs hover:opacity-90 disabled:opacity-50"
+            style={{ backgroundColor: "var(--success)", color: "var(--success-foreground)" }}
             data-testid="ws-connect-button"
           >
             <Play className="h-3 w-3" /> Connect
@@ -146,13 +147,18 @@ export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
         ) : (
           <button
             onClick={disconnect}
-            className="flex items-center gap-1 rounded bg-red-500 px-3 py-1 text-xs text-white hover:opacity-90"
+            className="flex items-center gap-1 rounded px-3 py-1 text-xs hover:opacity-90"
+            style={{ backgroundColor: "var(--destructive)", color: "var(--destructive-foreground)" }}
             data-testid="ws-disconnect-button"
           >
             <Square className="h-3 w-3" /> Disconnect
           </button>
         )}
-        <span className={`text-xs ${connected ? "text-green-500" : "text-muted-foreground"}`} data-testid="ws-status">
+        <span
+          className="text-xs"
+          style={connected ? { color: "var(--success)" } : undefined}
+          data-testid="ws-status"
+        >
           {connected ? "Connected" : "Disconnected"}
         </span>
         <input
@@ -173,11 +179,13 @@ export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`mb-1 rounded p-2 text-xs ${
-              msg.direction === "sent"
-                ? "bg-blue-500/10 border-l-2 border-blue-500"
-                : "bg-green-500/10 border-l-2 border-green-500"
-            }`}
+            className="mb-1 rounded border-l-2 p-2 text-xs"
+            style={{
+              borderLeftColor: msg.direction === "sent" ? "var(--info)" : "var(--success)",
+              backgroundColor: `color-mix(in oklch, var(${
+                msg.direction === "sent" ? "--info" : "--success"
+              }) 10%, transparent)`,
+            }}
             data-testid={`ws-message-${msg.id}`}
           >
             <div className="flex items-center justify-between">

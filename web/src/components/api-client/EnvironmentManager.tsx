@@ -96,7 +96,11 @@ export function EnvironmentManager({
                 )}
                 <span className="flex-1 truncate">{env.name}</span>
                 {activeId === env.id && (
-                  <Check className="h-3 w-3 text-green-500" data-testid={`env-active-${env.id}`} />
+                  <Check
+                    className="h-3 w-3"
+                    style={{ color: "var(--success)" }}
+                    data-testid={`env-active-${env.id}`}
+                  />
                 )}
                 <button
                   className="p-0.5 opacity-0 group-hover:opacity-100 hover:text-destructive"
@@ -217,7 +221,16 @@ function EnvironmentEditor({ environment, collections, isActive, onChange, onSet
       <div>
         <button
           onClick={onSetActive}
-          className={`rounded border px-3 py-1.5 text-xs ${isActive ? "bg-green-500/10 text-green-500 border-green-500/30" : "hover:bg-accent"}`}
+          className={`rounded border px-3 py-1.5 text-xs ${isActive ? "" : "hover:bg-accent"}`}
+          style={
+            isActive
+              ? {
+                  color: "var(--success)",
+                  backgroundColor: "color-mix(in oklch, var(--success) 10%, transparent)",
+                  borderColor: "color-mix(in oklch, var(--success) 30%, transparent)",
+                }
+              : undefined
+          }
           data-testid="env-toggle-active"
         >
           {isActive ? "✓ Active environment" : "Set as active"}
