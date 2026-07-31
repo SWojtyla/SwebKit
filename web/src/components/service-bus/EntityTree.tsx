@@ -53,12 +53,22 @@ function EntityStatsBadges({
     );
   };
 
-  if (entity.isTopic || !entity.stats) {
+  if (entity.isTopic) {
     return (
       <span className="ml-auto flex gap-1 text-xs text-muted-foreground">
         <span className="rounded px-1.5 py-0.5">–</span>
         <span className="rounded px-1.5 py-0.5">–</span>
         <span className="rounded px-1.5 py-0.5">–</span>
+      </span>
+    );
+  }
+
+  if (!entity.stats) {
+    return (
+      <span className="ml-auto flex gap-1 text-xs text-muted-foreground">
+        <span className="rounded px-1.5 py-0.5">·</span>
+        <span className="rounded px-1.5 py-0.5">·</span>
+        <span className="rounded px-1.5 py-0.5">·</span>
       </span>
     );
   }

@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft } from "lucide-react";
 import { useProfile, useSbPeekMessages, useSbPeekDlq, useSbEntityStats } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import { EntityTree } from "./EntityTree";
 import { MessageList } from "./MessageList";
 import { MessageDetail } from "./MessageDetail";
@@ -14,6 +15,16 @@ import { EntityCommandPalette, type EntityAction } from "./EntityCommandPalette"
 import { BatchReplayPanel } from "./BatchReplayPanel";
 import { loadSbPreferences } from "@/lib/stores/sb-preferences";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
+
+function maxSequenceNumber(messages: SbMessage[]): number | null {
+  const values = messages.map((m) => m.sequenceNumber).filter((n): n is number => n != null);
+  if (values.length === 0) return null;
+  return Math.max(...values);
+}
+
+function messageKey(m: SbMessage): string {
+  return `${m.messageId}-${m.sequenceNumber ?? ""}`;
+}
 
 export function ServiceBusPage() {
   const { data: profile } = useProfile();
@@ -97,15 +108,57 @@ export function ServiceBusPage() {
     selectedEntity?.entityPath ?? null,
     prefs.peekCount,
   );
-  const messages = viewMode === "active" ? activeMessagesQuery.data : dlqMessagesQuery.data;
+  const peekData = viewMode === "active" ? activeMessagesQuery.data : dlqMessagesQuery.data;
+
+  const [messageWindow, setMessageWindow] = useState<SbMessage[]>([]);
+  const [lastSeq, setLastSeq] = useState<number | null>(null);
+  const [lastBatchLength, setLastBatchLength] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  useEffect(() => {
+    if (peekData) {
+      setMessageWindow(peekData);
+      setLastSeq(maxSequenceNumber(peekData));
+      setLastBatchLength(peekData.length);
+    }
+  }, [peekData]);
+
+  const loadMore = useCallback(async () => {
+    if (!selectedNsId || !selectedEntity || lastSeq == null || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const mode = viewMode === "active" ? "peek" : "dlq";
+      const next = await apiFetch<SbMessage[]>(
+        `/api/servicebus/${selectedNsId}/entities/${encodeURIComponent(selectedEntity.entityPath)}/${mode}?count=${prefs.peekCount}&fromSeq=${lastSeq + 1}`,
+      );
+      setMessageWindow((prev) => {
+        const seen = new Set(prev.map(messageKey));
+        return [...prev, ...next.filter((m) => !seen.has(messageKey(m)))];
+      });
+      setLastSeq((prev) => Math.max(prev ?? 0, maxSequenceNumber(next) ?? 0));
+      setLastBatchLength(next.length);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [selectedNsId, selectedEntity, viewMode, lastSeq, prefs.peekCount, isLoadingMore]);
+
+  const totalAvailable = selectedEntity?.stats
+    ? viewMode === "active"
+      ? selectedEntity.stats.activeMessageCount
+      : selectedEntity.stats.deadLetterMessageCount
+    : null;
+
+  const canLoadMore =
+    (totalAvailable != null && messageWindow.length < totalAvailable) ||
+    lastBatchLength === prefs.peekCount;
 
   const selectedMessage = useMemo<SbMessage | null>(() => {
     const msgId = searchParams.get("msg");
     const seq = searchParams.get("seq");
-    if (!msgId || seq === null || !messages) return null;
+    if (!msgId || seq === null || !messageWindow.length) return null;
     const seqNum = parseInt(seq, 10);
-    return messages.find((m) => m.messageId === msgId && m.sequenceNumber === seqNum) ?? null;
-  }, [searchParams, messages]);
+    return messageWindow.find((m) => m.messageId === msgId && m.sequenceNumber === seqNum) ?? null;
+  }, [searchParams, messageWindow]);
   const selectMessage = useCallback(
     (message: SbMessage | null) =>
       updateParams({
@@ -303,8 +356,14 @@ export function ServiceBusPage() {
             nsId={selectedNsId}
             entity={selectedEntity}
             viewMode={viewMode}
+            messages={messageWindow}
+            isLoading={viewMode === "active" ? activeMessagesQuery.isLoading : dlqMessagesQuery.isLoading}
+            isLoadingMore={isLoadingMore}
+            canLoadMore={canLoadMore}
+            totalAvailable={totalAvailable}
             selectedMessage={selectedMessage}
             onSelectMessage={selectMessage}
+            onLoadMore={loadMore}
           />
         </div>
 

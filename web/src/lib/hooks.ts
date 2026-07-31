@@ -3,6 +3,7 @@ import {
   useMutation,
   useQueryClient,
   useInfiniteQuery,
+  type QueryClient,
 } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -319,15 +320,23 @@ export function useSbEntityStats(nsId: string | null, entityPath: string | null)
   });
 }
 
+function invalidateServiceBusQueries(qc: QueryClient, nsId: string, entityPath: string) {
+  qc.invalidateQueries({ queryKey: ["sb-peek", nsId, entityPath] });
+  qc.invalidateQueries({ queryKey: ["sb-dlq", nsId, entityPath] });
+  qc.invalidateQueries({ queryKey: ["sb-entity-stats", nsId, entityPath] });
+  qc.invalidateQueries({ queryKey: ["sb-queues", nsId] });
+  qc.invalidateQueries({ queryKey: ["sb-topics", nsId] });
+  qc.invalidateQueries({ queryKey: ["sb-subs", nsId] });
+  qc.invalidateQueries({ queryKey: ["sb-scheduled", nsId, entityPath] });
+}
+
 export function useSbSendMessage() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { nsId: string; entityPath: string; message: SbMessage }) =>
       apiSend(`/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/send`, "POST", vars.message),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["sb-peek", vars.nsId, vars.entityPath] });
-      qc.invalidateQueries({ queryKey: ["sb-queues", vars.nsId] });
-      qc.invalidateQueries({ queryKey: ["sb-topics", vars.nsId] });
+      invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
   });
 }
@@ -342,8 +351,7 @@ export function useSbScheduleMessage() {
         { message: vars.message, scheduledEnqueueTime: vars.scheduledEnqueueTime },
       ),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["sb-peek", vars.nsId, vars.entityPath] });
-      qc.invalidateQueries({ queryKey: ["sb-queues", vars.nsId] });
+      invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
   });
 }
@@ -358,8 +366,7 @@ export function useSbBatchSend() {
         vars.messages,
       ),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["sb-peek", vars.nsId, vars.entityPath] });
-      qc.invalidateQueries({ queryKey: ["sb-queues", vars.nsId] });
+      invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
   });
 }
@@ -384,7 +391,7 @@ export function useSbCancelScheduled() {
         "DELETE",
       ),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["sb-scheduled", vars.nsId, vars.entityPath] });
+      invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
   });
 }
@@ -423,7 +430,7 @@ export function useSbCompleteMessages() {
     mutationFn: (vars: { nsId: string; entityPath: string; sequenceNumbers: number[] }) =>
       apiSend(`/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/complete`, "POST", vars.sequenceNumbers),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["sb-peek", vars.nsId, vars.entityPath] });
+      invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
   });
 }
@@ -434,8 +441,7 @@ export function useSbPurgeMessages() {
     mutationFn: (vars: { nsId: string; entityPath: string; deadLetter: boolean }) =>
       apiSend(`/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/purge`, "POST", { deadLetter: vars.deadLetter }),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["sb-peek", vars.nsId, vars.entityPath] });
-      qc.invalidateQueries({ queryKey: ["sb-dlq", vars.nsId, vars.entityPath] });
+      invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
   });
 }
@@ -446,7 +452,7 @@ export function useSbCompleteDlq() {
     mutationFn: (vars: { nsId: string; entityPath: string; sequenceNumbers: string[] }) =>
       apiSend(`/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/dlq/complete`, "POST", vars.sequenceNumbers),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["sb-dlq", vars.nsId, vars.entityPath] });
+      invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
   });
 }
@@ -466,7 +472,7 @@ export function useSbResubmitDlq() {
         remapRules: null,
       }),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["sb-dlq", vars.nsId, vars.entityPath] });
+      invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
   });
 }

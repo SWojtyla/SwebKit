@@ -2,6 +2,7 @@
 @inject INotificationService Notifications
 @inject AppStateService AppState
 @inject IncidentInvestigationLauncher InvestigationLauncher
+@using System.IO.Compression
 
 @if (Message is null)
 {
@@ -47,6 +48,14 @@ else
                     <AppButton OnClick="CopyFullMessage" CssClass="mdp-btn" Size="Small" Variant="Secondary"
                                Title="Copy full message (all properties + body) as JSON">
                         @(_copyFeedback == "full" ? "Copied!" : "Copy Full Message")
+                    </AppButton>
+                    <AppButton OnClick="DownloadMessageJsonAsync" CssClass="mdp-btn" Size="Small" Variant="Secondary"
+                               Title="Download message as JSON">
+                        JSON
+                    </AppButton>
+                    <AppButton OnClick="DownloadMessageZipAsync" CssClass="mdp-btn" Size="Small" Variant="Secondary"
+                               Title="Download message as ZIP">
+                        ZIP
                     </AppButton>
                     <AppButton OnClick="OpenSaveAsTemplate" CssClass="mdp-btn" Size="Small" Variant="Secondary"
                                Title="Save this message as a reusable template">
@@ -341,6 +350,66 @@ else
         await JS.InvokeVoidAsync("navigator.clipboard.writeText", json);
         Notifications.ShowSuccess("Copied!");
         await ShowFeedback("full");
+    }
+
+    private async Task DownloadMessageJsonAsync()
+    {
+        if (Message is null) return;
+        var json = System.Text.Json.JsonSerializer.Serialize(CreateDownloadPayload(Message), new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var fileName = $"message-{SafeFileName(Message.MessageId)}.json";
+        await JS.InvokeVoidAsync("SwebKit.downloadText", fileName, "application/json", json);
+        Notifications.ShowSuccess("Message downloaded");
+    }
+
+    private async Task DownloadMessageZipAsync()
+    {
+        if (Message is null) return;
+        var base64 = BuildZipBase64([Message]);
+        var fileName = $"message-{SafeFileName(Message.MessageId)}.zip";
+        await JS.InvokeVoidAsync("SwebKitUi.downloadBinaryFile", fileName, base64, "application/zip");
+        Notifications.ShowSuccess("Message downloaded as ZIP");
+    }
+
+    private static object CreateDownloadPayload(SbMessage m) => new
+    {
+        messageId = m.MessageId,
+        correlationId = m.CorrelationId,
+        subject = m.Subject,
+        contentType = m.ContentType,
+        body = m.Body,
+        applicationProperties = m.ApplicationProperties,
+        systemProperties = m.SystemProperties,
+        enqueuedAt = m.EnqueuedAt,
+        deliveryCount = m.DeliveryCount,
+        sequenceNumber = m.SequenceNumber,
+        sessionId = m.SessionId,
+        deadLetterReason = m.DeadLetterReason,
+        deadLetterErrorDescription = m.DeadLetterErrorDescription,
+    };
+
+    private static string SafeFileName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "unknown";
+        var safe = new string(value.Where(char.IsLetterOrDigit).ToArray());
+        return string.IsNullOrEmpty(safe) ? "unknown" : safe[..Math.Min(safe.Length, 80)];
+    }
+
+    private static string BuildZipBase64(IReadOnlyList<SbMessage> messages)
+    {
+        using var ms = new MemoryStream();
+        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, true))
+        {
+            for (int i = 0; i < messages.Count; i++)
+            {
+                var m = messages[i];
+                var entryName = $"message-{i + 1:000}-{SafeFileName(m.MessageId)}.json";
+                var entry = zip.CreateEntry(entryName);
+                using var entryStream = entry.Open();
+                using var writer = new StreamWriter(entryStream);
+                writer.Write(System.Text.Json.JsonSerializer.Serialize(CreateDownloadPayload(m), new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            }
+        }
+        return Convert.ToBase64String(ms.ToArray());
     }
 
     private async Task ShowFeedback(string key)
