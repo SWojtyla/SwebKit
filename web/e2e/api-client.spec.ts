@@ -480,11 +480,14 @@ test.describe("API Client", () => {
     await page.getByTestId("add-collection-button").click();
     await page.getByTestId("name-dialog-input").fill(collectionName);
     await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId("collection-search").fill(collectionName);
     await page.getByTestId(/collection-root-/).filter({ hasText: collectionName }).first().click();
+    await page.getByTestId("collection-search").fill("");
 
     await page.getByTestId("add-request-button").click();
     await page.getByTestId("name-dialog-input").fill(requestName);
     await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId("collection-search").fill(requestName);
     await page.getByTestId(/collection-node-Request-/).filter({ hasText: requestName }).first().click();
 
     await page.getByTestId("request-tab-auth").click();

@@ -17,12 +17,14 @@ async function openRequest(page: Page, name: string) {
   await page.getByTestId("name-dialog-input").fill(collectionName);
   await page.getByTestId("name-dialog-confirm").click();
 
+  await page.getByTestId("collection-search").fill(collectionName);
   const collection = page
     .getByTestId(/collection-root-/)
     .filter({ hasText: collectionName })
     .first();
   await collection.waitFor();
   await collection.click();
+  await page.getByTestId("collection-search").fill("");
 
   await page.getByTestId("add-request-button").click();
   await page.getByTestId("name-dialog-input").fill(name);
@@ -32,12 +34,14 @@ async function openRequest(page: Page, name: string) {
 }
 
 async function selectRequest(page: Page, name: string) {
+  await page.getByTestId("collection-search").fill(name);
   const node = page
     .getByTestId(/collection-node-Request-/)
     .filter({ hasText: name })
     .first();
   await node.waitFor();
   await node.click();
+  await page.getByTestId("collection-search").fill("");
   await expect(page.getByTestId("request-name-heading")).toContainText(name);
 }
 

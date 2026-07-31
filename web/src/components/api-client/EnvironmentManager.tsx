@@ -383,7 +383,7 @@ interface ValueFieldProps {
   isLoading: boolean;
 }
 
-function ValueField({ variable, keyVaults, onChange, onPreview, isLoading }: ValueFieldProps) {
+function ValueField({ variable, keyVaults, index, onChange, onPreview, isLoading }: ValueFieldProps) {
   if (variable.secretSource === "AzureKeyVault") {
     return (
       <>
@@ -407,6 +407,7 @@ function ValueField({ variable, keyVaults, onChange, onPreview, isLoading }: Val
           onChange={(e) => onChange({ credentialKey: e.target.value })}
           placeholder="Secret name"
           className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
+          data-testid={`env-var-value-${index}`}
         />
         <button
           onClick={onPreview}
@@ -433,6 +434,7 @@ function ValueField({ variable, keyVaults, onChange, onPreview, isLoading }: Val
       }}
       placeholder={placeholder}
       className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
+      data-testid={`env-var-value-${index}`}
     />
   );
 }
