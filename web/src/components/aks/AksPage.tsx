@@ -27,7 +27,7 @@ import { AksConfirmBar } from "./AksConfirmBar";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { NamespaceSelector } from "./NamespaceSelector";
 import { ContextSelector } from "./ContextSelector";
-import { RefreshCw, Clock } from "lucide-react";
+import { RefreshCw, Clock, Loader2 } from "lucide-react";
 
 export function AksPage() {
   return (
@@ -50,6 +50,7 @@ function AksPageContent() {
           contexts={ws.contexts}
           currentContext={ws.currentContext}
           onChange={ws.handleContextChange}
+          isLoading={ws.contextLoading}
         />
 
         <span className="text-sm font-medium">Namespace:</span>
@@ -59,7 +60,13 @@ function AksPageContent() {
           onChange={ws.setSelectedNamespaces}
           isLoading={ws.nsLoading}
         />
-        {ws.nsLoading && <span className="text-xs text-muted-foreground">Loading...</span>}
+
+        {(ws.contextLoading || ws.isAksFetching) && (
+          <div className="flex items-center gap-1.5 text-xs text-primary" data-testid="aks-loading-indicator">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            {ws.contextLoading ? "Switching context…" : "Loading resources…"}
+          </div>
+        )}
 
         {/* Auto-refresh controls */}
         <div className="ml-auto flex items-center gap-2">

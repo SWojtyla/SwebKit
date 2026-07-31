@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode, type MouseEvent, type JSX } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useIsFetching } from "@tanstack/react-query";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import {
   useAksNamespaces,
@@ -116,6 +116,8 @@ export interface AksWorkspaceContextValue {
   isMultiNamespace: boolean;
   namespaces: string[] | undefined;
   nsLoading: boolean;
+  contextLoading: boolean;
+  isAksFetching: boolean;
   contexts: KubeContextInfo[] | undefined;
   currentContext: string | null;
   testResult: { connected: boolean; error?: string } | undefined;
@@ -186,6 +188,15 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
   const { data: testResult, refetch: refetchTest } = useAksTestConnection();
   const { data: profile } = useProfile();
   const setContextMutation = useAksSetContext();
+  const contextLoading = setContextMutation.isPending;
+  const isAksFetching = useIsFetching({
+    predicate: (query) => {
+      const key = query.queryKey[0];
+      if (typeof key !== "string") return false;
+      if (key === "aks-namespaces" || key === "aks-contexts" || key === "aks-test") return false;
+      return key.startsWith("aks-");
+    },
+  }) > 0;
   const isProduction = profile?.config.isProduction ?? false;
 
   const updateParams = useCallback(
@@ -491,6 +502,8 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
       isMultiNamespace,
       namespaces,
       nsLoading,
+      contextLoading,
+      isAksFetching,
       contexts,
       currentContext: profile?.config.aksConfig?.kubeconfigContext ?? null,
       testResult,
@@ -543,6 +556,8 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
       isMultiNamespace,
       namespaces,
       nsLoading,
+      contextLoading,
+      isAksFetching,
       contexts,
       profile?.config.aksConfig?.kubeconfigContext,
       testResult,

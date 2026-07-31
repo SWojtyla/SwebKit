@@ -300,3 +300,15 @@ export async function getAksResourceYaml(ns: string, kind: string, name: string)
   }
   return response.text();
 }
+
+export async function applyAksResourceYaml(ns: string, kind: string, name: string, yaml: string): Promise<void> {
+  return apiSend<void>(
+    `/api/aks/${encodeURIComponent(ns)}/yaml/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`,
+    "POST",
+    { yaml },
+  );
+}
+
+export async function validateAksResourceYaml(ns: string, yaml: string): Promise<{ error?: string }> {
+  return apiSend<{ error?: string }>(`/api/aks/${encodeURIComponent(ns)}/yaml/validate`, "POST", { yaml });
+}

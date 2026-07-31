@@ -811,6 +811,29 @@ export function useAksResourceYaml(ns: string | null, kind: string | null, name:
   });
 }
 
+export function useAksApplyYaml() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { ns: string; kind: string; name: string; yaml: string }) =>
+      apiSend<void>(
+        `/api/aks/${encodeURIComponent(vars.ns)}/yaml/${encodeURIComponent(vars.kind)}/${encodeURIComponent(vars.name)}`,
+        "POST",
+        { yaml: vars.yaml },
+      ),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["aks-yaml", vars.ns, vars.kind, vars.name] });
+      qc.invalidateQueries({ queryKey: ["aks-"] });
+    },
+  });
+}
+
+export function useAksValidateYaml() {
+  return useMutation({
+    mutationFn: (vars: { ns: string; yaml: string }) =>
+      apiSend<{ error?: string }>(`/api/aks/${encodeURIComponent(vars.ns)}/yaml/validate`, "POST", { yaml: vars.yaml }),
+  });
+}
+
 export function useAksContainerDetails(ns: string | null, podName: string | null) {
   return useQuery({
     queryKey: ["aks-container-details", ns, podName],
