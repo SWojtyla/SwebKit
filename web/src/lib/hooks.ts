@@ -45,6 +45,7 @@ import type {
   AlertFiredEvent,
   AlertSignalStatus,
 } from "./api";
+import { useNotifyMutation } from "./useNotifyMutation";
 import type {
   ProfileData,
   UserSettings,
@@ -580,34 +581,29 @@ export function useAksHpas(ns: string | null) {
 }
 
 export function useAksScaleHpa() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { ns: string; name: string; minReplicas: number; maxReplicas: number }) =>
-      scaleHpa(vars.ns, vars.name, vars.minReplicas, vars.maxReplicas),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["aks-hpas"] });
-    },
+  return useNotifyMutation<unknown, { ns: string; name: string; minReplicas: number; maxReplicas: number }>({
+    mutationFn: (vars) => scaleHpa(vars.ns, vars.name, vars.minReplicas, vars.maxReplicas),
+    successMessage: (_data, vars) => `HPA ${vars.name} scaled to ${vars.minReplicas}–${vars.maxReplicas} replicas`,
+    errorPrefix: "Scale HPA failed",
+    invalidateKeys: [["aks-hpas"]],
   });
 }
 
 export function useAksDeleteHpa() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { ns: string; name: string }) => deleteHpa(vars.ns, vars.name),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["aks-hpas"] });
-    },
+  return useNotifyMutation<unknown, { ns: string; name: string }>({
+    mutationFn: (vars) => deleteHpa(vars.ns, vars.name),
+    successMessage: (_data, vars) => `HPA ${vars.name} deleted`,
+    errorPrefix: "Delete HPA failed",
+    invalidateKeys: [["aks-hpas"]],
   });
 }
 
 export function useAksSetHpaScalingEnabled() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { ns: string; name: string; enabled: boolean }) =>
-      setHpaScalingEnabled(vars.ns, vars.name, vars.enabled),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["aks-hpas"] });
-    },
+  return useNotifyMutation<unknown, { ns: string; name: string; enabled: boolean }>({
+    mutationFn: (vars) => setHpaScalingEnabled(vars.ns, vars.name, vars.enabled),
+    successMessage: (_data, vars) => `Scaling ${vars.enabled ? "enabled" : "disabled"} for ${vars.name}`,
+    errorPrefix: "Toggle HPA scaling failed",
+    invalidateKeys: [["aks-hpas"]],
   });
 }
 
@@ -620,13 +616,11 @@ export function useAksCronJobs(ns: string | null) {
 }
 
 export function useAksSuspendCronJob() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { ns: string; name: string; suspend: boolean }) =>
-      suspendCronJob(vars.ns, vars.name, vars.suspend),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["aks-cronjobs"] });
-    },
+  return useNotifyMutation<unknown, { ns: string; name: string; suspend: boolean }>({
+    mutationFn: (vars) => suspendCronJob(vars.ns, vars.name, vars.suspend),
+    successMessage: (_data, vars) => `CronJob ${vars.name} ${vars.suspend ? "suspended" : "resumed"}`,
+    errorPrefix: "Toggle CronJob failed",
+    invalidateKeys: [["aks-cronjobs"]],
   });
 }
 
@@ -639,36 +633,67 @@ export function useAksJobs(ns: string | null) {
 }
 
 export function useAksRestartDeployment() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { ns: string; name: string }) =>
-      apiSend(`/api/aks/${vars.ns}/deployments/${vars.name}/restart`, "POST"),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["aks-deployments"] });
-      qc.invalidateQueries({ queryKey: ["aks-pods"] });
-    },
+  return useNotifyMutation<unknown, { ns: string; name: string }>({
+    mutationFn: (vars) => apiSend(`/api/aks/${vars.ns}/deployments/${vars.name}/restart`, "POST"),
+    successMessage: (_data, vars) => `Deployment ${vars.name} restarted`,
+    errorPrefix: "Restart deployment failed",
+    invalidateKeys: [["aks-deployments"], ["aks-pods"]],
   });
 }
 
 export function useAksScaleDeployment() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { ns: string; name: string; replicas: number }) =>
+  return useNotifyMutation<unknown, { ns: string; name: string; replicas: number }>({
+    mutationFn: (vars) =>
       apiSend(`/api/aks/${vars.ns}/deployments/${vars.name}/scale?replicas=${vars.replicas}`, "POST"),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["aks-deployments"] });
-    },
+    successMessage: (_data, vars) => `Deployment ${vars.name} scaled to ${vars.replicas} replicas`,
+    errorPrefix: "Scale deployment failed",
+    invalidateKeys: [["aks-deployments"]],
   });
 }
 
 export function useAksDeletePod() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { ns: string; name: string }) =>
-      apiSend(`/api/aks/${vars.ns}/pods/${vars.name}/delete`, "POST"),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["aks-pods"] });
-    },
+  return useNotifyMutation<unknown, { ns: string; name: string }>({
+    mutationFn: (vars) => apiSend(`/api/aks/${vars.ns}/pods/${vars.name}/delete`, "POST"),
+    successMessage: (_data, vars) => `Pod ${vars.name} deleted`,
+    errorPrefix: "Delete pod failed",
+    invalidateKeys: [["aks-pods"]],
+  });
+}
+
+export function useAksRestartStatefulSet() {
+  return useNotifyMutation<unknown, { ns: string; name: string }>({
+    mutationFn: (vars) => apiSend(`/api/aks/${vars.ns}/statefulsets/${vars.name}/restart`, "POST"),
+    successMessage: (_data, vars) => `StatefulSet ${vars.name} restarted`,
+    errorPrefix: "Restart StatefulSet failed",
+    invalidateKeys: [["aks-statefulsets"], ["aks-pods"]],
+  });
+}
+
+export function useAksScaleStatefulSet() {
+  return useNotifyMutation<unknown, { ns: string; name: string; replicas: number }>({
+    mutationFn: (vars) =>
+      apiSend(`/api/aks/${vars.ns}/statefulsets/${vars.name}/scale?replicas=${vars.replicas}`, "POST"),
+    successMessage: (_data, vars) => `StatefulSet ${vars.name} scaled to ${vars.replicas} replicas`,
+    errorPrefix: "Scale StatefulSet failed",
+    invalidateKeys: [["aks-statefulsets"]],
+  });
+}
+
+export function useAksDeleteIngress() {
+  return useNotifyMutation<unknown, { ns: string; name: string }>({
+    mutationFn: (vars) => apiSend(`/api/aks/${vars.ns}/ingresses/${vars.name}`, "DELETE"),
+    successMessage: (_data, vars) => `Ingress ${vars.name} deleted`,
+    errorPrefix: "Delete ingress failed",
+    invalidateKeys: [["aks-ingresses"]],
+  });
+}
+
+export function useAksDeleteHttpRoute() {
+  return useNotifyMutation<unknown, { ns: string; name: string }>({
+    mutationFn: (vars) => apiSend(`/api/aks/${vars.ns}/httproutes/${vars.name}`, "DELETE"),
+    successMessage: (_data, vars) => `HTTPRoute ${vars.name} deleted`,
+    errorPrefix: "Delete HTTPRoute failed",
+    invalidateKeys: [["aks-httproutes"]],
   });
 }
 
@@ -1208,6 +1233,8 @@ export function useRestoreBlobVersion(accountId: string | null, container: strin
     },
   });
 }
+
+export { useNotifyMutation };
 
 export function useDeletedBlobs(accountId: string | null, container: string | null) {
   return useQuery({

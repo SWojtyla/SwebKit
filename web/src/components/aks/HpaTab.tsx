@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useAksHpas, useAksScaleHpa, useAksDeleteHpa, useAksSetHpaScalingEnabled } from "@/lib/hooks";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { ResourceTable } from "./shared/ResourceTable";
+import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import { YamlViewer } from "./YamlViewer";
 import type { HpaInfo } from "@/lib/types";
 
 export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
-  const { notify } = useNotification();
+  const ws = useAksWorkspace();
   const { data: hpas, isLoading } = useAksHpas(ns);
   const scaleMutation = useAksScaleHpa();
   const deleteMutation = useAksDeleteHpa();
@@ -14,126 +15,102 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   const [scaleTarget, setScaleTarget] = useState<HpaInfo | null>(null);
   const [yamlTarget, setYamlTarget] = useState<HpaInfo | null>(null);
 
-  if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
-  if (!hpas || hpas.length === 0)
-    return <div className="p-4 text-sm text-muted-foreground">No HPAs found</div>;
-
   const handleScale = async (min: number, max: number) => {
     if (!scaleTarget) return;
-    try {
-      await scaleMutation.mutateAsync({ ns: scaleTarget.namespace, name: scaleTarget.name, minReplicas: min, maxReplicas: max });
-      notify("success", "HPA scaled", `${scaleTarget.namespace}/${scaleTarget.name}: ${min}–${max} replicas`);
-      setScaleTarget(null);
-    } catch (e) {
-      notify("error", "Scale HPA failed", String(e));
-    }
+    scaleMutation.mutate({ ns: scaleTarget.namespace, name: scaleTarget.name, minReplicas: min, maxReplicas: max });
+    setScaleTarget(null);
   };
 
-  const handleDelete = async (hpa: HpaInfo) => {
-    if (!confirm(`Delete HPA ${hpa.name} in ${hpa.namespace}?`)) return;
-    try {
-      await deleteMutation.mutateAsync({ ns: hpa.namespace, name: hpa.name });
-      notify("success", "HPA deleted", `${hpa.namespace}/${hpa.name}`);
-    } catch (e) {
-      notify("error", "Delete HPA failed", String(e));
-    }
+  const handleDelete = (hpa: HpaInfo) => {
+    ws.requestConfirm({
+      message: `Delete HPA ${hpa.name} in ${hpa.namespace}?`,
+      resourceName: hpa.name,
+      onConfirm: () => deleteMutation.mutate({ ns: hpa.namespace, name: hpa.name }),
+    });
   };
 
-  const handleToggleScaling = async (hpa: HpaInfo) => {
+  const handleToggleScaling = (hpa: HpaInfo) => {
     const next = !hpa.isScalingDisabled;
     const action = next ? "disable" : "enable";
-    if (!confirm(`${action === "disable" ? "Disable" : "Enable"} scaling for ${hpa.name}?`)) return;
-    try {
-      await toggleMutation.mutateAsync({ ns: hpa.namespace, name: hpa.name, enabled: !next });
-      notify("success", `Scaling ${action}d`, `${hpa.namespace}/${hpa.name}`);
-    } catch (e) {
-      notify("error", `Scale ${action} failed`, String(e));
-    }
+    ws.requestConfirm({
+      message: `${action === "disable" ? "Disable" : "Enable"} scaling for ${hpa.name}?`,
+      resourceName: hpa.name,
+      onConfirm: () => toggleMutation.mutate({ ns: hpa.namespace, name: hpa.name, enabled: !next }),
+    });
   };
 
   return (
     <div className="p-4">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs text-muted-foreground">
-            <th className="py-2 pr-4">Name</th>
-            {isMulti && <th className="py-2 pr-4">Namespace</th>}
-            <th className="py-2 pr-4">Target</th>
-            <th className="py-2 pr-4">Min</th>
-            <th className="py-2 pr-4">Max</th>
-            <th className="py-2 pr-4">Current</th>
-            <th className="py-2 pr-4">Desired</th>
-            <th className="py-2 pr-4">CPU%</th>
-            <th className="py-2 pr-4">Type</th>
-            <th className="py-2 pr-4">Actions</th>
-          </tr>
-        </thead>
-        <tbody data-testid="hpas-table-body">
-          {hpas.map((hpa) => (
-            <tr key={`${hpa.namespace}/${hpa.name}`} data-testid={`hpa-row-${hpa.name}`} className="border-b last:border-0">
-              <td className="py-2 pr-4 font-medium">{hpa.name}</td>
-              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{hpa.namespace}</td>}
-              <td className="py-2 pr-4 text-xs text-muted-foreground">{hpa.targetKind}/{hpa.targetName}</td>
-              <td className="py-2 pr-4">{hpa.minReplicas}</td>
-              <td className="py-2 pr-4">{hpa.maxReplicas}</td>
-              <td className="py-2 pr-4">{hpa.currentReplicas}</td>
-              <td className="py-2 pr-4 text-green-500">{hpa.desiredReplicas}</td>
-              <td className="py-2 pr-4">
-                {hpa.currentCpuUtilizationPercent != null ? (
-                  <span className={
-                    hpa.targetCpuUtilizationPercent != null && hpa.currentCpuUtilizationPercent > hpa.targetCpuUtilizationPercent
-                      ? "text-yellow-500" : "text-muted-foreground"
-                  }>
-                    {hpa.currentCpuUtilizationPercent}%
-                  </span>
-                ) : "—"}
-              </td>
-              <td className="py-2 pr-4">
-                <div className="flex flex-wrap gap-1">
-                  {hpa.isKedaManaged ? (
-                    <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-xs text-purple-500">KEDA</span>
-                  ) : (
-                    <span className="rounded px-1.5 py-0.5 text-xs text-muted-foreground">HPA</span>
-                  )}
-                  {hpa.isScalingDisabled && (
-                    <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs text-red-500">Disabled</span>
-                  )}
-                </div>
-              </td>
-              <td className="py-2 pr-4">
-                <div className="flex flex-wrap gap-1">
-                  <button
-                    onClick={() => setScaleTarget(hpa)}
-                    className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
-                  >
-                    Scale
-                  </button>
-                  <button
-                    onClick={() => handleToggleScaling(hpa)}
-                    disabled={toggleMutation.isPending}
-                    className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
-                  >
-                    {hpa.isScalingDisabled ? "Enable" : "Disable"}
-                  </button>
-                  <button
-                    onClick={() => setYamlTarget(hpa)}
-                    className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
-                  >
-                    YAML
-                  </button>
-                  <button
-                    onClick={() => handleDelete(hpa)}
-                    disabled={deleteMutation.isPending}
-                    className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <ResourceTable
+        data={hpas}
+        isLoading={isLoading}
+        isMulti={isMulti}
+        testIdPrefix="hpa"
+        tableBodyTestId="hpas-table-body"
+        emptyMessage="No HPAs found"
+        columns={[
+          { header: "Target", cell: (hpa) => <span className="text-xs text-muted-foreground">{hpa.targetKind}/{hpa.targetName}</span> },
+          { header: "Min", cell: (hpa) => hpa.minReplicas },
+          { header: "Max", cell: (hpa) => hpa.maxReplicas },
+          { header: "Current", cell: (hpa) => hpa.currentReplicas },
+          { header: "Desired", cell: (hpa) => <span className="text-green-500">{hpa.desiredReplicas}</span> },
+          { header: "CPU%", cell: (hpa) => (
+            hpa.currentCpuUtilizationPercent != null ? (
+              <span className={
+                hpa.targetCpuUtilizationPercent != null && hpa.currentCpuUtilizationPercent > hpa.targetCpuUtilizationPercent
+                  ? "text-yellow-500" : "text-muted-foreground"
+              }>
+                {hpa.currentCpuUtilizationPercent}%
+              </span>
+            ) : "—"
+          )},
+          { header: "Type", cell: (hpa) => (
+            <div className="flex flex-wrap gap-1">
+              {hpa.isKedaManaged ? (
+                <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-xs text-purple-500">KEDA</span>
+              ) : (
+                <span className="rounded px-1.5 py-0.5 text-xs text-muted-foreground">HPA</span>
+              )}
+              {hpa.isScalingDisabled && (
+                <>
+                  {" "}
+                  <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs text-red-500">Disabled</span>
+                </>
+              )}
+            </div>
+          )},
+          { header: "Actions", cell: (hpa) => (
+            <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => setScaleTarget(hpa)}
+                className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
+              >
+                Scale
+              </button>
+              <button
+                onClick={() => handleToggleScaling(hpa)}
+                disabled={toggleMutation.isPending}
+                className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
+              >
+                {hpa.isScalingDisabled ? "Enable" : "Disable"}
+              </button>
+              <button
+                onClick={() => setYamlTarget(hpa)}
+                className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
+              >
+                YAML
+              </button>
+              <button
+                onClick={() => handleDelete(hpa)}
+                disabled={deleteMutation.isPending}
+                className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+              >
+                Delete
+              </button>
+            </div>
+          )},
+        ]}
+      />
 
       {scaleTarget && (
         <ScaleHpaForm

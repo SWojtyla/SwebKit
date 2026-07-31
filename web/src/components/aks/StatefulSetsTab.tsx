@@ -1,47 +1,71 @@
-import { useAksStatefulSets } from "@/lib/hooks";
+import { useAksStatefulSets, useAksRestartStatefulSet, useAksScaleStatefulSet } from "@/lib/hooks";
+import { ResourceTable } from "./shared/ResourceTable";
+import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import type { ContextMenuItem } from "./ContextMenu";
 import type { StatefulSetInfo } from "@/lib/types";
 
 interface StatefulSetsTabProps {
   ns: string;
   isMulti?: boolean;
-  onContextMenu?: (e: React.MouseEvent, sts: StatefulSetInfo) => void;
 }
 
-export function StatefulSetsTab({ ns, isMulti, onContextMenu }: StatefulSetsTabProps) {
+export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
   const { data: statefulsets, isLoading } = useAksStatefulSets(ns);
+  const ws = useAksWorkspace();
+  const restartSts = useAksRestartStatefulSet();
+  const scaleSts = useAksScaleStatefulSet();
 
-  if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
-  if (!statefulsets || statefulsets.length === 0)
-    return <div className="p-4 text-sm text-muted-foreground">No stateful sets found</div>;
+  const buildMenu = (sts: StatefulSetInfo): ContextMenuItem[] => [
+    { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(sts.name) },
+    { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("statefulset", sts.name, sts.namespace) },
+    { label: "View Logs", icon: "☰", onClick: async () => {
+      const pods = await ws.resolvePodsForSelector(sts.namespace, sts.selectorLabels);
+      if (pods.length > 0) ws.openLogs(pods[0]);
+    } },
+    { label: "Container Details", icon: "⚙", onClick: async () => {
+      const pods = await ws.resolvePodsForSelector(sts.namespace, sts.selectorLabels);
+      if (pods.length > 0) ws.openContainerDetails(pods[0].name, pods[0].namespace);
+    } },
+    { label: "Analyze network", icon: "📶", onClick: () => ws.navigateToAnalysis() },
+    { label: "", separator: true, onClick: () => {} },
+    { label: "Restart", icon: "↻", onClick: () => {
+      ws.requestConfirm({
+        message: `Restart stateful set "${sts.name}"?`,
+        resourceName: sts.name,
+        onConfirm: () => restartSts.mutate({ ns: sts.namespace, name: sts.name }),
+      });
+    }},
+    { label: "Scale...", icon: "⇳", onClick: () => {
+      const replicas = prompt(`Scale stateful set "${sts.name}" to how many replicas?`, String(sts.replicas));
+      if (replicas === null) return;
+      const n = parseInt(replicas, 10);
+      if (isNaN(n) || n < 0) return;
+      ws.requestConfirm({
+        message: `Scale stateful set "${sts.name}" to ${n} replicas?`,
+        resourceName: sts.name,
+        onConfirm: () => scaleSts.mutate({ ns: sts.namespace, name: sts.name, replicas: n }),
+      });
+    }},
+  ];
 
   return (
-    <div className="p-4">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs text-muted-foreground">
-            <th className="py-2 pr-4">Name</th>
-            {isMulti && <th className="py-2 pr-4">Namespace</th>}
-            <th className="py-2 pr-4">Ready</th>
-            <th className="py-2 pr-4">Current Rev</th>
-            <th className="py-2 pr-4">Update Rev</th>
-          </tr>
-        </thead>
-        <tbody data-testid="statefulsets-table-body">
-          {statefulsets.map((sts) => (
-            <tr key={`${sts.namespace}/${sts.name}`} data-testid={`statefulset-row-${sts.name}`} className="border-b last:border-0 hover:bg-accent/30" onContextMenu={(e) => onContextMenu?.(e, sts)}>
-              <td className="py-2 pr-4 font-medium">{sts.name}</td>
-              {isMulti && <td className="py-2 pr-4 text-xs text-muted-foreground">{sts.namespace}</td>}
-              <td className="py-2 pr-4">
-                <span className={sts.readyReplicas === sts.replicas ? "text-green-500" : "text-yellow-500"}>
-                  {sts.readyReplicas}/{sts.replicas}
-                </span>
-              </td>
-              <td className="py-2 pr-4 text-xs text-muted-foreground">{sts.currentRevision ?? "—"}</td>
-              <td className="py-2 pr-4 text-xs text-muted-foreground">{sts.updateRevision ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <ResourceTable
+      data={statefulsets}
+      isLoading={isLoading}
+      isMulti={isMulti}
+      testIdPrefix="statefulset"
+      tableBodyTestId="statefulsets-table-body"
+      emptyMessage="No stateful sets found"
+      onRowContextMenu={(e, sts) => ws.showContextMenu(e, buildMenu(sts))}
+      columns={[
+        { header: "Ready", cell: (sts) => (
+          <span className={sts.readyReplicas === sts.replicas ? "text-green-500" : "text-yellow-500"}>
+            {sts.readyReplicas}/{sts.replicas}
+          </span>
+        )},
+        { header: "Current Rev", cell: (sts) => <span className="text-xs text-muted-foreground">{sts.currentRevision ?? "—"}</span> },
+        { header: "Update Rev", cell: (sts) => <span className="text-xs text-muted-foreground">{sts.updateRevision ?? "—"}</span> },
+      ]}
+    />
   );
 }
