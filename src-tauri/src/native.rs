@@ -94,7 +94,9 @@ pub struct PortForwardSession {
     pub namespace: String,
     pub pod: String,
     pub remote_port: u16,
-    pub local_port: u16,
+    // No `local_port` field here — it would just duplicate the HashMap key this session is
+    // stored under in `PortForwardState::sessions`; see `list_port_forwards`, which reads the
+    // port from the map key, not from a struct field.
 }
 
 impl PortForwardState {
@@ -124,7 +126,6 @@ pub fn start_port_forward(
         namespace: namespace.clone(),
         pod: pod.clone(),
         remote_port,
-        local_port: actual_port,
     };
 
     state
@@ -405,11 +406,9 @@ pub async fn list_dir(path: String, roots: State<'_, AllowedRoots>) -> Result<Ve
     }
     let entries = std::fs::read_dir(&canonical).map_err(|e| format!("Failed to read dir: {}", e))?;
     let mut names = Vec::new();
-    for entry in entries {
-        if let Ok(entry) = entry {
-            if let Some(name) = entry.file_name().to_str() {
-                names.push(name.to_string());
-            }
+    for entry in entries.flatten() {
+        if let Some(name) = entry.file_name().to_str() {
+            names.push(name.to_string());
         }
     }
     Ok(names)

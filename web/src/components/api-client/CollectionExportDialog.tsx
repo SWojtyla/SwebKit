@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Download, X } from "lucide-react";
+import { Dialog } from "@/components/shared/Dialog";
 import type { ApiCollection, ApiEnvironment } from "@/lib/types";
 
 interface CollectionExportDialogProps {
@@ -119,12 +120,8 @@ export function CollectionExportDialog({ collection, environments, onClose }: Co
   };
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
-      <div
-        className="fixed left-1/2 top-1/2 z-50 w-96 -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-card p-6 shadow-lg"
-        data-testid="collection-export-dialog"
-      >
+    <Dialog onClose={onClose} label="Export Collection" testId="collection-export-dialog" widthClassName="w-96">
+      <div className="p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Export Collection</h2>
           <button onClick={onClose} className="rounded p-1 hover:bg-accent">
@@ -189,6 +186,6 @@ export function CollectionExportDialog({ collection, environments, onClose }: Co
           </button>
         </div>
       </div>
-    </>
+    </Dialog>
   );
 }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using SwebKit.Azure.ServiceBus;
+using SwebKit.Core.Diagnostics;
 using SwebKit.Core.Serialization;
 using SwebKit.Azure.Storage;
 using SwebKit.Agents;
@@ -18,11 +19,25 @@ var builder = WebApplication.CreateBuilder(args);
 // Allow override via --urls or ASPNETCORE_URLS (used by Tauri and Playwright tests).
 builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5199");
 
+// Structured file logging + crash handlers — wired as early as possible, mirroring
+// MauiProgram.cs's startup order, so no other startup work can throw/log before this is in
+// place. In a windowless release build the sidecar previously had nowhere for its logs to go
+// (default console logging is discarded), leaving a production crash with no diagnostic trail.
+var userSettingsRepository = new UserSettingsRepository();
+var fileLoggerProvider = AppBootstrap.ConfigureCrashHandlers(userSettingsRepository);
+builder.Logging.AddProvider(fileLoggerProvider);
+// The FileLoggerProvider does its own level filtering based on user settings
+// (LoggingSettings.MinimumLevel) — without this filter, the factory's default minimum level
+// silently blocks entries the user explicitly enabled, and no log files are ever created.
+builder.Logging.AddFilter<FileLoggerProvider>(_ => true);
+
 // Register core configuration repositories (same as MauiProgram.cs)
 builder.Services.AddSingleton<ProfileRepository>();
 builder.Services.AddSingleton<EnvironmentRepository>();
 builder.Services.AddSingleton<CollectionRepository>();
-builder.Services.AddSingleton<UserSettingsRepository>();
+// The same instance the file logger above reads settings from, so a change to logging
+// settings via PUT /api/config/user-settings takes effect without a restart.
+builder.Services.AddSingleton(userSettingsRepository);
 builder.Services.AddSingleton<UiStateRepository>();
 builder.Services.AddSingleton<ReleaseRepository>();
 builder.Services.AddSingleton<SwebKit.Core.Services.AppStateService>();
@@ -138,20 +153,39 @@ app.UseExceptionHandler(ex =>
     ex.Run(async context =>
     {
         var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
-        context.Response.StatusCode = exception switch
+        var statusCode = exception switch
         {
             InvalidOperationException => 400,
             ArgumentException => 400,
             UnauthorizedAccessException => 401,
             _ => 500,
         };
+        context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json; charset=utf-8";
         var origin = context.Request.Headers.Origin.ToString();
         if (IsAllowedOrigin(origin))
         {
             context.Response.Headers.AccessControlAllowOrigin = origin;
         }
-        var payload = System.Text.Json.JsonSerializer.Serialize(new { error = exception?.Message ?? "Internal server error" });
+
+        // 400/401s here are deliberate, user-actionable messages the app throws itself (e.g.
+        // "AKS is not configured..."), safe to return as-is. A 500 means something unexpected blew
+        // up — often an Azure/K8s/Redis SDK exception whose message can contain connection
+        // strings, internal paths, or other detail that shouldn't reach the client. Log the real
+        // exception server-side and return a generic message instead.
+        string message;
+        if (statusCode == 500)
+        {
+            context.RequestServices.GetRequiredService<ILogger<Program>>()
+                .LogError(exception, "Unhandled exception on {Method} {Path}", context.Request.Method, context.Request.Path);
+            message = "Internal server error";
+        }
+        else
+        {
+            message = exception?.Message ?? "Internal server error";
+        }
+
+        var payload = System.Text.Json.JsonSerializer.Serialize(new { error = message });
         await context.Response.WriteAsync(payload);
     });
 });

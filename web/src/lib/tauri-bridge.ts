@@ -11,6 +11,7 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   return tauriInvoke<T>(cmd, args);
 }
 
+
 // ── Clipboard ────────────────────────────────────────────────────────────────
 
 export async function writeClipboard(text: string): Promise<void> {
