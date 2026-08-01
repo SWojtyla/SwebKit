@@ -111,3 +111,13 @@ export function getTtlColorClass(ms: number | null): string {
   if (ms < 300_000) return "bg-yellow-500";
   return "bg-green-500";
 }
+
+/**
+ * Formats a byte count as a short human-readable string (e.g. `"1.2K"`, `"3.4M"`).
+ */
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes == null) return "-";
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
+}
