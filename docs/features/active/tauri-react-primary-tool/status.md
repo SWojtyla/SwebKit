@@ -97,7 +97,15 @@
       file (§6.6) remains deliberately **skipped**: adding an explicit capabilities file risks
       silently breaking the IPC bridge (wrong permission scoping) and this pass had no way to verify
       it against the real packaged desktop app — do this with a live Tauri build to test against,
-      not blind.
+      not blind. §6.4 (packaging: identifier, signing, auto-update, changelog) is **not started and
+      not something to guess at**: `tauri.conf.json`'s `identifier` is still the literal placeholder
+      `com.companyname.swebkit`, there's no `tauri-plugin-updater`, and no `CHANGELOG.md`. A real
+      reverse-DNS identifier is a one-way, org-identity decision (it's baked into the Windows
+      installer's upgrade-detection registry key and would need to stay stable across every future
+      release) that only the user/org can make — fabricating one here would just replace one
+      placeholder with another. Needs an explicit answer from the user before any of §6.4 is
+      actionable; code-signing further needs an actual certificate, which the plan already correctly
+      scopes as "a procurement/ops task outside this repo's control."
 - [x] UX Phase 2 feature parity (ux-plan.md) — **partial**: Storage batch download now bundles
       selected blobs into a single ZIP (`buildZip`, reusing the pattern already proven in Service
       Bus's `MessageList.tsx`) instead of firing one sequential download per file. Agent tool-calling
