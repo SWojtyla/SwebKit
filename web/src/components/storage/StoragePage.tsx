@@ -17,6 +17,8 @@ import {
 } from "@/lib/hooks";
 import type { StorageBlobItem } from "@/lib/types";
 import { Download, Link as LinkIcon, Check, Plus, Trash2, RotateCcw, Upload, Copy as CopyIcon, File, Folder } from "lucide-react";
+import { buildZip } from "@/lib/zip";
+import { downloadBlob } from "@/lib/download";
 import { BlobRecoveryPanel } from "./BlobRecoveryPanel";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { useNotification } from "@/components/layout/NotificationSystem";
@@ -188,6 +190,32 @@ export function StoragePage() {
     }
   };
 
+  // Bundles the selected blobs into a single ZIP, matching the pattern Service Bus's message
+  // list already uses (lib/zip.ts) — previously this looped handleDownloadBlob per file, firing
+  // N separate browser downloads instead of one archive.
+  const handleBatchDownloadBlobs = async (blobNames: string[]) => {
+    if (blobNames.length === 0) return;
+    try {
+      const files: Record<string, string> = {};
+      for (const blobName of blobNames) {
+        const params = new URLSearchParams({ blobName });
+        const response = await fetch(`/api/storage/${resolvedAccountId}/containers/${selectedContainer}/blobs/content?${params}`);
+        if (!response.ok) throw new Error(`API ${response.status}`);
+        const data = await response.json();
+        if (data.content) {
+          files[blobName.split("/").pop() || blobName] = data.content;
+        }
+      }
+      const zipped = await buildZip(files);
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+      downloadBlob(`${selectedContainer}-blobs-${timestamp}.zip`, zipped);
+      notify("success", `Downloaded ${Object.keys(files).length} blob(s) as ZIP`);
+    } catch (e) {
+      console.error("Batch download failed:", e);
+      notify("error", "Batch download failed", String(e));
+    }
+  };
+
   const toggleBlobSelection = (name: string) => {
     setSelectedBlobs((prev) => {
       const next = new Set(prev);
@@ -333,7 +361,7 @@ export function StoragePage() {
                   {multiSelectMode && selectedBlobs.size > 0 && (
                     <>
                       <span className="text-xs text-muted-foreground" data-testid="storage-batch-count">{selectedBlobs.size} selected</span>
-                      <button onClick={() => selectedBlobs.forEach((b) => handleDownloadBlob(b))} className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent" data-testid="storage-batch-download">
+                      <button onClick={() => handleBatchDownloadBlobs([...selectedBlobs])} className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent" data-testid="storage-batch-download">
                         <Download className="h-3 w-3" /> Download
                       </button>
                       <button onClick={() => setSelectedBlobs(new Set())} className="text-xs text-muted-foreground" data-testid="storage-batch-clear">Clear</button>
