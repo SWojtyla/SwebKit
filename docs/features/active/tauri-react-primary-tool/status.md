@@ -76,11 +76,19 @@
       collection export dialog, AKS alert-rule dialog, keyboard-shortcuts panel; command palette and
       entity command palette given `role="dialog"`/`aria-modal` directly (kept their existing
       custom focus/Escape logic instead of a full migration).
-- [x] Performance pass (technical-plan.md Module 5) — **partial**: `RedisPage.tsx`'s key tree and
-      `StoragePage.tsx`'s blob list now render through `@tanstack/react-virtual`, matching the
-      pattern already proven in `CollectionTree.tsx`. Not done: the systematic `React.memo` pass
-      once list rows are extracted, and `lib/hooks.ts`/large-component decomposition (Module 2,
-      below) that the technical plan treats as a performance-adjacent prerequisite.
+- [x] Performance pass (technical-plan.md Module 5) — **partial**: §5.1 and §5.2 done —
+      `service-bus/MessageList.tsx`, `RedisPage.tsx`'s key tree, and `StoragePage.tsx`'s blob list
+      all now render through `@tanstack/react-virtual`, matching the pattern first proven in
+      `CollectionTree.tsx`. Virtualizing `MessageList.tsx` required converting its real `<table>`
+      into a CSS-grid layout (a shared `gridTemplateColumns` string on the sticky header and every
+      absolutely-positioned row, with explicit ARIA table roles replacing the semantics native table
+      elements gave for free) since `<tr>` can't be absolutely-positioned independently without
+      losing shared column widths. §5.3 (systematic `React.memo` pass) is **not done** and, per the
+      note under Module 2 above, isn't just a mechanical follow-up now that the decomposition
+      landed — the one-big-context pattern these pages (and `AksWorkspaceContext.tsx`) use caups
+      causes any single field change to re-render every consumer regardless of memoization, so a real win
+      needs splitting each context into narrower ones first. §5.4 (command-palette registry
+      consolidation) not started.
 - [x] Production/ops readiness (technical-plan.md Module 6) — **partial**: sidecar file logging via
       `FileLoggerProvider`/`AppBootstrap` (moved to `SwebKit.Core.Diagnostics` so both MAUI and the
       sidecar share it), sidecar 500s now log the real exception server-side while still returning a
