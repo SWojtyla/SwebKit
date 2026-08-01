@@ -252,6 +252,74 @@ test.describe("API Client", () => {
     await expect(page.getByTestId("response-curl-panel")).toContainText("curl");
   });
 
+  test("environment variable source picker switches fields and lists configured key vaults", async ({ page }) => {
+    const uniqueVaultName = `Test Vault ${Date.now()}`;
+
+    // Each field here mutates the whole profile independently (no debounce, no optimistic cache
+    // update), so firing two edits back-to-back races: the second mutate can read a profile
+    // snapshot from before the first one's round trip landed and silently overwrite it. Wait for
+    // each save to land before starting the next edit.
+    const saveProfile = () =>
+      page.waitForResponse((r) => r.url().includes("/api/config/profiles") && r.request().method() === "PUT");
+
+    // Configure a Key Vault in Settings so the picker has something to list.
+    await page.goto("/settings");
+    await expect(page.getByTestId("key-vaults-section")).toBeVisible();
+    const existingVaultCount = await page.locator('[data-testid^="kv-name-"]').count();
+    await Promise.all([saveProfile(), page.getByTestId("kv-add").click()]);
+    await Promise.all([
+      saveProfile(),
+      page.getByTestId(`kv-name-${existingVaultCount}`).fill(uniqueVaultName),
+    ]);
+    await Promise.all([
+      saveProfile(),
+      page.getByTestId(`kv-url-${existingVaultCount}`).fill("https://test-vault.vault.azure.net/"),
+    ]);
+
+    // Reload and confirm the vault persisted before moving on, so the environment editor's fetch
+    // below can't race the save.
+    await page.reload();
+    await expect(page.getByTestId(`kv-name-${existingVaultCount}`)).toHaveValue(uniqueVaultName);
+
+    await page.goto("/api-client");
+    await page.getByTestId("env-manager-button").click();
+    await page.getByTestId("env-add-button").click();
+    await page.getByTestId("env-name-input").fill("Source Picker Test Env");
+    await page.getByTestId("env-add-variable").click();
+    await page.getByTestId("env-var-key-0").fill("apiKey");
+
+    // Plain (default): a single value input, no vault picker or preview button.
+    await expect(page.getByTestId("env-var-value-0")).toHaveAttribute("placeholder", "Value");
+    await expect(page.getByTestId("env-var-vault-0")).toHaveCount(0);
+    await expect(page.getByTestId("env-var-preview-btn-0")).toHaveCount(0);
+
+    // Windows Credential Store: a credential-key input.
+    await page.getByTestId("env-var-source-0").selectOption("WindowsCredentialStore");
+    await expect(page.getByTestId("env-var-value-0")).toHaveAttribute("placeholder", "Credential key");
+
+    // Azure Key Vault: the configured vault appears in the dropdown, plus a secret-name input and Preview.
+    await page.getByTestId("env-var-source-0").selectOption("AzureKeyVault");
+    await expect(page.getByTestId("env-var-value-0")).toHaveAttribute("placeholder", "Secret name");
+    await expect(page.getByTestId("env-var-vault-0")).toBeVisible();
+    await expect(page.getByTestId("env-var-vault-0").locator("option", { hasText: uniqueVaultName })).toHaveCount(1);
+    await expect(page.getByTestId("env-var-preview-btn-0")).toBeDisabled();
+
+    await page.getByTestId("env-var-value-0").fill("my-secret-name");
+    await expect(page.getByTestId("env-var-preview-btn-0")).toBeEnabled();
+
+    // Switching back to Plain restores the plain value input and hides the vault picker.
+    await page.getByTestId("env-var-source-0").selectOption("Plain");
+    await expect(page.getByTestId("env-var-value-0")).toHaveAttribute("placeholder", "Value");
+    await expect(page.getByTestId("env-var-vault-0")).toHaveCount(0);
+
+    // Removing the vault in Settings takes it out of the list.
+    await page.goto("/settings");
+    await expect(page.getByTestId("key-vaults-section")).toBeVisible();
+    const countBeforeRemove = await page.locator('[data-testid^="kv-name-"]').count();
+    await page.getByTestId(`kv-remove-${existingVaultCount}`).click();
+    await expect(page.locator('[data-testid^="kv-name-"]')).toHaveCount(countBeforeRemove - 1);
+  });
+
   test("environment manager creates and edits environments", async ({ page }) => {
     // Open environment manager
     await page.getByTestId("env-manager-button").click();

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useCallback, useState, type MouseEvent } from "react";
 import { useAksConfigMaps } from "@/lib/hooks";
-import { ResourceTable } from "./shared/ResourceTable";
+import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { ConfigMapInfo } from "@/lib/types";
@@ -10,16 +10,29 @@ interface ConfigMapsTabProps {
   isMulti?: boolean;
 }
 
+const columns: Column<ConfigMapInfo>[] = [
+  { header: "Keys", cell: (cm) => (
+    <span className="text-xs text-muted-foreground">
+      {Object.keys(cm.data).length > 0 ? Object.keys(cm.data).join(", ") : "—"}
+    </span>
+  )},
+];
+
 export function ConfigMapsTab({ ns, isMulti }: ConfigMapsTabProps) {
   const { data: configmaps, isLoading } = useAksConfigMaps(ns);
   const [selected, setSelected] = useState<ConfigMapInfo | null>(null);
   const ws = useAksWorkspace();
 
-  const buildMenu = (cm: ConfigMapInfo): ContextMenuItem[] => [
+  const buildMenu = useCallback((cm: ConfigMapInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(cm.name) },
     { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("configmap", cm.name, cm.namespace) },
     { label: "View keys", icon: "🔑", onClick: () => ws.copyToClipboard(Object.keys(cm.data).join(", ")) },
-  ];
+  ], [ws]);
+
+  const handleRowContextMenu = useCallback(
+    (e: MouseEvent<HTMLTableRowElement>, cm: ConfigMapInfo) => ws.showContextMenu(e, buildMenu(cm)),
+    [ws, buildMenu],
+  );
 
   const selectedKey = selected ? `${selected.namespace}/${selected.name}` : null;
 
@@ -33,16 +46,10 @@ export function ConfigMapsTab({ ns, isMulti }: ConfigMapsTabProps) {
           testIdPrefix="configmap"
           tableBodyTestId="configmaps-table-body"
           emptyMessage="No config maps found"
-          onRowClick={(cm) => setSelected(cm)}
-          onRowContextMenu={(e, cm) => ws.showContextMenu(e, buildMenu(cm))}
+          onRowClick={setSelected}
+          onRowContextMenu={handleRowContextMenu}
           selectedKey={selectedKey}
-          columns={[
-            { header: "Keys", cell: (cm) => (
-              <span className="text-xs text-muted-foreground">
-                {Object.keys(cm.data).length > 0 ? Object.keys(cm.data).join(", ") : "—"}
-              </span>
-            )},
-          ]}
+          columns={columns}
         />
       </div>
       {selected && (

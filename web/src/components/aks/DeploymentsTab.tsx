@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { useAksDeployments, useAksRestartDeployment, useAksScaleDeployment } from "@/lib/hooks";
-import { ResourceTable } from "./shared/ResourceTable";
+import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { DeploymentInfo } from "@/lib/types";
@@ -19,24 +19,24 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
   const [scaling, setScaling] = useState<string | null>(null);
   const [scaleValue, setScaleValue] = useState(0);
 
-  const scale = (dep: DeploymentInfo) => {
+  const scale = useCallback((dep: DeploymentInfo) => {
     ws.requestConfirm({
       message: `Scale deployment "${dep.name}" to ${scaleValue} replicas?`,
       resourceName: dep.name,
       onConfirm: () => scaleMutation.mutate({ ns: dep.namespace, name: dep.name, replicas: scaleValue }),
     });
     setScaling(null);
-  };
+  }, [ws, scaleValue, scaleMutation.mutate]);
 
-  const restart = (dep: DeploymentInfo) => {
+  const restart = useCallback((dep: DeploymentInfo) => {
     ws.requestConfirm({
       message: `Restart deployment "${dep.name}"?`,
       resourceName: dep.name,
       onConfirm: () => restartMutation.mutate({ ns: dep.namespace, name: dep.name }),
     });
-  };
+  }, [ws, restartMutation.mutate]);
 
-  const buildMenu = (dep: DeploymentInfo): ContextMenuItem[] => [
+  const buildMenu = useCallback((dep: DeploymentInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(dep.name) },
     { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("deployment", dep.name, dep.namespace) },
     { label: "Edit YAML", icon: "✎", onClick: () => ws.openYaml("deployment", dep.name, dep.namespace) },
@@ -61,7 +61,66 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
       setScaling(dep.name);
       setScaleValue(dep.replicas);
     }},
-  ];
+  ], [ws, restart]);
+
+  const handleRowContextMenu = useCallback(
+    (e: MouseEvent<HTMLTableRowElement>, dep: DeploymentInfo) => ws.showContextMenu(e, buildMenu(dep)),
+    [ws, buildMenu],
+  );
+
+  const columns: Column<DeploymentInfo>[] = useMemo(() => [
+    { header: "Ready", cell: (dep) => (
+      <span className={dep.readyReplicas === dep.replicas ? "text-green-500" : "text-yellow-500"}>
+        {dep.readyReplicas}/{dep.replicas}
+      </span>
+    )},
+    { header: "Status", cell: (dep) => <StatusBadge status={dep.status} /> },
+    { header: "Image", cell: (dep) => <span className="text-muted-foreground">{dep.imageTag ?? "—"}</span> },
+    { header: "Actions", cell: (dep) => (
+      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={() => restart(dep)}
+          disabled={restartMutation.isPending}
+          className="rounded border px-2 py-1 text-xs hover:bg-accent"
+        >
+          Restart
+        </button>
+        {scaling === dep.name ? (
+          <>
+            <input
+              type="number"
+              value={scaleValue}
+              onChange={(e) => setScaleValue(parseInt(e.target.value) || 0)}
+              className="w-16 rounded border bg-card px-2 py-1 text-xs"
+              autoFocus
+            />
+            <button
+              onClick={() => scale(dep)}
+              className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground"
+            >
+              OK
+            </button>
+            <button
+              onClick={() => setScaling(null)}
+              className="rounded border px-2 py-1 text-xs"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => {
+              setScaling(dep.name);
+              setScaleValue(dep.replicas);
+            }}
+            className="rounded border px-2 py-1 text-xs hover:bg-accent"
+          >
+            Scale
+          </button>
+        )}
+      </div>
+    )},
+  ], [restart, restartMutation.isPending, scaling, scaleValue, scale]);
 
   return (
     <div className="p-4">
@@ -72,60 +131,8 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
         testIdPrefix="deployment"
         tableBodyTestId="deployments-table-body"
         emptyMessage="No deployments found"
-        onRowContextMenu={(e, dep) => ws.showContextMenu(e, buildMenu(dep))}
-        columns={[
-          { header: "Ready", cell: (dep) => (
-            <span className={dep.readyReplicas === dep.replicas ? "text-green-500" : "text-yellow-500"}>
-              {dep.readyReplicas}/{dep.replicas}
-            </span>
-          )},
-          { header: "Status", cell: (dep) => <StatusBadge status={dep.status} /> },
-          { header: "Image", cell: (dep) => <span className="text-muted-foreground">{dep.imageTag ?? "—"}</span> },
-          { header: "Actions", cell: (dep) => (
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <button
-                onClick={() => restart(dep)}
-                disabled={restartMutation.isPending}
-                className="rounded border px-2 py-1 text-xs hover:bg-accent"
-              >
-                Restart
-              </button>
-              {scaling === dep.name ? (
-                <>
-                  <input
-                    type="number"
-                    value={scaleValue}
-                    onChange={(e) => setScaleValue(parseInt(e.target.value) || 0)}
-                    className="w-16 rounded border bg-card px-2 py-1 text-xs"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => scale(dep)}
-                    className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground"
-                  >
-                    OK
-                  </button>
-                  <button
-                    onClick={() => setScaling(null)}
-                    className="rounded border px-2 py-1 text-xs"
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => {
-                    setScaling(dep.name);
-                    setScaleValue(dep.replicas);
-                  }}
-                  className="rounded border px-2 py-1 text-xs hover:bg-accent"
-                >
-                  Scale
-                </button>
-              )}
-            </div>
-          )},
-        ]}
+        onRowContextMenu={handleRowContextMenu}
+        columns={columns}
       />
     </div>
   );

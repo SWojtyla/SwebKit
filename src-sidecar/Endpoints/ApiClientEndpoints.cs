@@ -41,32 +41,46 @@ public static class ApiClientEndpoints
             }
         });
 
-        app.MapPost("/api/api-client/preview-keyvault-secret", async (
+        app.MapPost("/api/api-client/preview-keyvault-secret", (
             PreviewKeyVaultSecretRequest req,
             IKeyVaultSecretResolver resolver,
-            CancellationToken cancellationToken) =>
-        {
-            if (string.IsNullOrWhiteSpace(req.SecretName))
-                return Results.BadRequest(new { error = "Secret name is required" });
-
-            if (!resolver.IsAvailable)
-                return Results.Problem("No key vaults are configured");
-
-            var raw = await resolver.GetSecretAsync(req.SecretName, req.KeyVaultName, cancellationToken).ConfigureAwait(false);
-
-            if (raw.StartsWith("[KV_ERROR:", StringComparison.Ordinal) || raw.StartsWith("[KV_UNAVAILABLE:", StringComparison.Ordinal))
-            {
-                return Results.Ok(new KeyVaultPreviewResponse("error", null, 0, raw));
-            }
-
-            return Results.Ok(new KeyVaultPreviewResponse("ok", MaskSecret(raw), raw.Length, null));
-        });
+            CancellationToken cancellationToken) => PreviewKeyVaultSecretAsync(req, resolver, cancellationToken));
     }
 
-    private static string MaskSecret(string value)
+    /// <summary>
+    /// Handler body for the preview endpoint, extracted so it can be unit tested directly against a
+    /// fake <see cref="IKeyVaultSecretResolver"/> without spinning up the ASP.NET pipeline.
+    /// </summary>
+    internal static async Task<IResult> PreviewKeyVaultSecretAsync(
+        PreviewKeyVaultSecretRequest req,
+        IKeyVaultSecretResolver resolver,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(req.SecretName))
+            return Results.BadRequest(new { error = "Secret name is required" });
+
+        if (!resolver.IsAvailable)
+            return Results.Problem("No key vaults are configured");
+
+        var raw = await resolver.GetSecretAsync(req.SecretName, req.KeyVaultName, cancellationToken).ConfigureAwait(false);
+
+        if (raw.StartsWith("[KV_ERROR:", StringComparison.Ordinal) || raw.StartsWith("[KV_UNAVAILABLE:", StringComparison.Ordinal))
+        {
+            return Results.Ok(new KeyVaultPreviewResponse("error", null, raw));
+        }
+
+        return Results.Ok(new KeyVaultPreviewResponse("ok", MaskSecret(raw), null));
+    }
+
+    /// <summary>
+    /// Masks a secret value for display. The dot count is clamped to a narrow range rather than
+    /// reflecting the exact length, so the preview can't be used to infer the real secret's size.
+    /// </summary>
+    internal static string MaskSecret(string value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
-        return "••••••••";
+        var dots = Math.Clamp(value.Length, 4, 16);
+        return new string('•', dots);
     }
 
     private static async Task<ApiCollection?> ResolveCollectionAsync(string? collectionId, CollectionRepository collections, DemoModeService demo)
@@ -128,5 +142,4 @@ public sealed record PreviewKeyVaultSecretRequest(string? KeyVaultName, string S
 public sealed record KeyVaultPreviewResponse(
     string Status,
     string? MaskedValue,
-    int Length,
     string? Error);

@@ -235,7 +235,7 @@ function EnvironmentEditor({ environment, collections, isActive, onChange, onSet
     try {
       const result = await previewKeyVaultSecret(v.keyVaultName ?? null, v.credentialKey);
       if (result.status === "ok") {
-        setPreviews((prev) => ({ ...prev, [index]: { status: "ok", message: `Present (${result.length} chars)` } }));
+        setPreviews((prev) => ({ ...prev, [index]: { status: "ok", message: `Present ${result.maskedValue ?? ""}` } }));
       } else {
         setPreviews((prev) => ({ ...prev, [index]: { status: "error", message: result.error ?? "Not found" } }));
       }
@@ -394,6 +394,7 @@ function ValueField({ variable, keyVaults, index, onChange, onPreview, isLoading
             value={variable.keyVaultName ?? ""}
             onChange={(e) => onChange({ keyVaultName: e.target.value || null })}
             className="w-36 rounded border bg-background px-2 py-1 text-xs"
+            data-testid={`env-var-vault-${index}`}
           >
             <option value="">Default vault</option>
             {keyVaults.map((kv) => (
@@ -413,6 +414,7 @@ function ValueField({ variable, keyVaults, index, onChange, onPreview, isLoading
           onClick={onPreview}
           disabled={!variable.credentialKey || isLoading || keyVaults.length === 0}
           className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+          data-testid={`env-var-preview-btn-${index}`}
         >
           {isLoading ? "…" : "Preview"}
         </button>

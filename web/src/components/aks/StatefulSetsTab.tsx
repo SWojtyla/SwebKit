@@ -1,5 +1,6 @@
+import { useCallback, type MouseEvent } from "react";
 import { useAksStatefulSets, useAksRestartStatefulSet, useAksScaleStatefulSet } from "@/lib/hooks";
-import { ResourceTable } from "./shared/ResourceTable";
+import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { StatefulSetInfo } from "@/lib/types";
@@ -9,13 +10,23 @@ interface StatefulSetsTabProps {
   isMulti?: boolean;
 }
 
+const columns: Column<StatefulSetInfo>[] = [
+  { header: "Ready", cell: (sts) => (
+    <span className={sts.readyReplicas === sts.replicas ? "text-green-500" : "text-yellow-500"}>
+      {sts.readyReplicas}/{sts.replicas}
+    </span>
+  )},
+  { header: "Current Rev", cell: (sts) => <span className="text-xs text-muted-foreground">{sts.currentRevision ?? "—"}</span> },
+  { header: "Update Rev", cell: (sts) => <span className="text-xs text-muted-foreground">{sts.updateRevision ?? "—"}</span> },
+];
+
 export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
   const { data: statefulsets, isLoading } = useAksStatefulSets(ns);
   const ws = useAksWorkspace();
   const restartSts = useAksRestartStatefulSet();
   const scaleSts = useAksScaleStatefulSet();
 
-  const buildMenu = (sts: StatefulSetInfo): ContextMenuItem[] => [
+  const buildMenu = useCallback((sts: StatefulSetInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(sts.name) },
     { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("statefulset", sts.name, sts.namespace) },
     { label: "View Logs", icon: "☰", onClick: async () => {
@@ -46,7 +57,12 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
         onConfirm: () => scaleSts.mutate({ ns: sts.namespace, name: sts.name, replicas: n }),
       });
     }},
-  ];
+  ], [ws, restartSts.mutate, scaleSts.mutate]);
+
+  const handleRowContextMenu = useCallback(
+    (e: MouseEvent<HTMLTableRowElement>, sts: StatefulSetInfo) => ws.showContextMenu(e, buildMenu(sts)),
+    [ws, buildMenu],
+  );
 
   return (
     <ResourceTable
@@ -56,16 +72,8 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
       testIdPrefix="statefulset"
       tableBodyTestId="statefulsets-table-body"
       emptyMessage="No stateful sets found"
-      onRowContextMenu={(e, sts) => ws.showContextMenu(e, buildMenu(sts))}
-      columns={[
-        { header: "Ready", cell: (sts) => (
-          <span className={sts.readyReplicas === sts.replicas ? "text-green-500" : "text-yellow-500"}>
-            {sts.readyReplicas}/{sts.replicas}
-          </span>
-        )},
-        { header: "Current Rev", cell: (sts) => <span className="text-xs text-muted-foreground">{sts.currentRevision ?? "—"}</span> },
-        { header: "Update Rev", cell: (sts) => <span className="text-xs text-muted-foreground">{sts.updateRevision ?? "—"}</span> },
-      ]}
+      onRowContextMenu={handleRowContextMenu}
+      columns={columns}
     />
   );
 }

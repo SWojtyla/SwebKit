@@ -33,6 +33,9 @@ public sealed class SidecarKeyVaultResolver : IKeyVaultSecretResolver
     public Task<string> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
         => GetInner().GetSecretAsync(secretName, vaultName, cancellationToken);
 
+    /// <summary>Exposes the current inner resolver instance so tests can assert on rebuild-vs-reuse by identity.</summary>
+    internal IKeyVaultSecretResolver GetInnerForTesting() => GetInner();
+
     private IKeyVaultSecretResolver GetInner()
     {
         var vaults = _profileRepository.Config.KeyVaults;
