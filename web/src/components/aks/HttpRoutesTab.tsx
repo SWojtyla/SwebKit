@@ -1,5 +1,6 @@
+import { useCallback, type MouseEvent } from "react";
 import { useAksHttpRoutes, useAksDeleteHttpRoute } from "@/lib/hooks";
-import { ResourceTable } from "./shared/ResourceTable";
+import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { HttpRouteInfo } from "@/lib/types";
@@ -9,12 +10,33 @@ interface HttpRoutesTabProps {
   isMulti?: boolean;
 }
 
+const columns: Column<HttpRouteInfo>[] = [
+  { header: "Hosts", cell: (route) => (
+    <span className="text-xs">{route.hostnames.length > 0 ? route.hostnames.join(", ") : "—"}</span>
+  )},
+  { header: "Parents", cell: (route) => (
+    <span className="text-xs text-muted-foreground">{route.parentRefs.length > 0 ? route.parentRefs.join(", ") : "—"}</span>
+  )},
+  { header: "Backends", cell: (route) => (
+    <span className="text-xs text-muted-foreground">{route.backendRefs.length > 0 ? route.backendRefs.join(", ") : "—"}</span>
+  )},
+  { header: "Status", cell: (route) => (
+    <span className={
+      route.status === "Accepted" ? "text-green-500" :
+      route.status === "Pending" ? "text-yellow-500" :
+      "text-muted-foreground"
+    }>
+      {route.status}
+    </span>
+  )},
+];
+
 export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
   const { data: routes, isLoading } = useAksHttpRoutes(ns);
   const ws = useAksWorkspace();
   const deleteHttpRoute = useAksDeleteHttpRoute();
 
-  const buildMenu = (route: HttpRouteInfo): ContextMenuItem[] => {
+  const buildMenu = useCallback((route: HttpRouteInfo): ContextMenuItem[] => {
     const host = route.hostnames[0];
     return [
       { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(route.name) },
@@ -31,7 +53,12 @@ export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
         });
       }, destructive: true },
     ];
-  };
+  }, [ws, deleteHttpRoute.mutate]);
+
+  const handleRowContextMenu = useCallback(
+    (e: MouseEvent<HTMLTableRowElement>, route: HttpRouteInfo) => ws.showContextMenu(e, buildMenu(route)),
+    [ws, buildMenu],
+  );
 
   return (
     <ResourceTable
@@ -41,27 +68,8 @@ export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
       testIdPrefix="httproute"
       tableBodyTestId="httproutes-table-body"
       emptyMessage="No HTTP routes found"
-      onRowContextMenu={(e, route) => ws.showContextMenu(e, buildMenu(route))}
-      columns={[
-        { header: "Hosts", cell: (route) => (
-          <span className="text-xs">{route.hostnames.length > 0 ? route.hostnames.join(", ") : "—"}</span>
-        )},
-        { header: "Parents", cell: (route) => (
-          <span className="text-xs text-muted-foreground">{route.parentRefs.length > 0 ? route.parentRefs.join(", ") : "—"}</span>
-        )},
-        { header: "Backends", cell: (route) => (
-          <span className="text-xs text-muted-foreground">{route.backendRefs.length > 0 ? route.backendRefs.join(", ") : "—"}</span>
-        )},
-        { header: "Status", cell: (route) => (
-          <span className={
-            route.status === "Accepted" ? "text-green-500" :
-            route.status === "Pending" ? "text-yellow-500" :
-            "text-muted-foreground"
-          }>
-            {route.status}
-          </span>
-        )},
-      ]}
+      onRowContextMenu={handleRowContextMenu}
+      columns={columns}
     />
   );
 }

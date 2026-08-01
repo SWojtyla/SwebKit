@@ -28,6 +28,26 @@ export async function initSidecarBaseUrl(): Promise<void> {
   }
 }
 
+/**
+ * Extracts a human-readable message from a failed API response body. ASP.NET error payloads vary
+ * in shape: `{ error }` (custom BadRequest bodies), `{ detail }`/`{ title }` (ProblemDetails from
+ * Results.Problem), or plain text — without this, callers surface the raw JSON blob to the user.
+ */
+function extractErrorMessage(status: number, statusText: string, body: string): string {
+  if (body) {
+    try {
+      const parsed = JSON.parse(body);
+      const message = parsed?.error ?? parsed?.detail ?? parsed?.title;
+      if (typeof message === "string" && message.trim()) {
+        return message;
+      }
+    } catch {
+      // Not JSON — fall through to the raw body below.
+    }
+  }
+  return body || statusText || `Request failed with status ${status}`;
+}
+
 export async function apiFetch<T>(
   path: string,
   options?: RequestInit,
@@ -42,7 +62,7 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${body || res.statusText}`);
+    throw new Error(extractErrorMessage(res.status, res.statusText, body));
   }
 
   return res.json() as Promise<T>;
@@ -61,7 +81,7 @@ export async function apiSend<T>(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+    throw new Error(extractErrorMessage(res.status, res.statusText, text));
   }
 
   const text = await res.text().catch(() => "");
@@ -311,4 +331,17 @@ export async function applyAksResourceYaml(ns: string, kind: string, name: strin
 
 export async function validateAksResourceYaml(ns: string, yaml: string): Promise<{ error?: string }> {
   return apiSend<{ error?: string }>(`/api/aks/${encodeURIComponent(ns)}/yaml/validate`, "POST", { yaml });
+}
+
+export interface KeyVaultPreviewResult {
+  status: "ok" | "error";
+  maskedValue: string | null;
+  error: string | null;
+}
+
+export async function previewKeyVaultSecret(keyVaultName: string | null, secretName: string): Promise<KeyVaultPreviewResult> {
+  return apiSend<KeyVaultPreviewResult>("/api/api-client/preview-keyvault-secret", "POST", {
+    keyVaultName: keyVaultName || null,
+    secretName,
+  });
 }

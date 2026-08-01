@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useAksHpas, useAksScaleHpa, useAksDeleteHpa, useAksSetHpaScalingEnabled } from "@/lib/hooks";
-import { ResourceTable } from "./shared/ResourceTable";
+import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import { YamlViewer } from "./YamlViewer";
 import type { HpaInfo } from "@/lib/types";
@@ -15,21 +15,21 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   const [scaleTarget, setScaleTarget] = useState<HpaInfo | null>(null);
   const [yamlTarget, setYamlTarget] = useState<HpaInfo | null>(null);
 
-  const handleScale = async (min: number, max: number) => {
+  const handleScale = useCallback(async (min: number, max: number) => {
     if (!scaleTarget) return;
     scaleMutation.mutate({ ns: scaleTarget.namespace, name: scaleTarget.name, minReplicas: min, maxReplicas: max });
     setScaleTarget(null);
-  };
+  }, [scaleTarget, scaleMutation.mutate]);
 
-  const handleDelete = (hpa: HpaInfo) => {
+  const handleDelete = useCallback((hpa: HpaInfo) => {
     ws.requestConfirm({
       message: `Delete HPA ${hpa.name} in ${hpa.namespace}?`,
       resourceName: hpa.name,
       onConfirm: () => deleteMutation.mutate({ ns: hpa.namespace, name: hpa.name }),
     });
-  };
+  }, [ws, deleteMutation.mutate]);
 
-  const handleToggleScaling = (hpa: HpaInfo) => {
+  const handleToggleScaling = useCallback((hpa: HpaInfo) => {
     const next = !hpa.isScalingDisabled;
     const action = next ? "disable" : "enable";
     ws.requestConfirm({
@@ -37,18 +37,9 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
       resourceName: hpa.name,
       onConfirm: () => toggleMutation.mutate({ ns: hpa.namespace, name: hpa.name, enabled: !next }),
     });
-  };
+  }, [ws, toggleMutation.mutate]);
 
-  return (
-    <div className="p-4">
-      <ResourceTable
-        data={hpas}
-        isLoading={isLoading}
-        isMulti={isMulti}
-        testIdPrefix="hpa"
-        tableBodyTestId="hpas-table-body"
-        emptyMessage="No HPAs found"
-        columns={[
+  const columns: Column<HpaInfo>[] = useMemo(() => [
           { header: "Target", cell: (hpa) => <span className="text-xs text-muted-foreground">{hpa.targetKind}/{hpa.targetName}</span> },
           { header: "Min", cell: (hpa) => hpa.minReplicas },
           { header: "Max", cell: (hpa) => hpa.maxReplicas },
@@ -109,7 +100,18 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
               </button>
             </div>
           )},
-        ]}
+  ], [handleToggleScaling, toggleMutation.isPending, handleDelete, deleteMutation.isPending]);
+
+  return (
+    <div className="p-4">
+      <ResourceTable
+        data={hpas}
+        isLoading={isLoading}
+        isMulti={isMulti}
+        testIdPrefix="hpa"
+        tableBodyTestId="hpas-table-body"
+        emptyMessage="No HPAs found"
+        columns={columns}
       />
 
       {scaleTarget && (

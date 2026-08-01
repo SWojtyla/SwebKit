@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Plus, Folder, FileText, Trash2, ChevronRight, ChevronDown,
   Search, MoreVertical, Pencil, FolderPlus, FilePlus, Download,
@@ -49,6 +50,49 @@ interface ContextMenuState {
   nodeType: "Folder" | "Request";
 }
 
+interface FlatRow {
+  id: string;
+  node: ApiCollectionNode;
+  collectionId: string;
+  depth: number;
+  isCollection: boolean;
+}
+
+function collectionRootNode(collection: ApiCollection): ApiCollectionNode {
+  return {
+    id: collection.id,
+    type: "Folder",
+    name: collection.name,
+    isExpanded: true,
+    children: collection.nodes,
+    defaultAuth: collection.defaultAuth,
+    request: null,
+  };
+}
+
+function flattenTree(filteredCollections: ApiCollection[], expandedIds: Set<string>): FlatRow[] {
+  const rows: FlatRow[] = [];
+
+  function walk(nodes: ApiCollectionNode[], collectionId: string, depth: number) {
+    for (const n of nodes) {
+      rows.push({ id: n.id, node: n, collectionId, depth, isCollection: false });
+      if (n.type === "Folder" && expandedIds.has(n.id)) {
+        walk(n.children, collectionId, depth + 1);
+      }
+    }
+  }
+
+  for (const c of filteredCollections) {
+    const root = collectionRootNode(c);
+    rows.push({ id: c.id, node: root, collectionId: c.id, depth: 0, isCollection: true });
+    if (expandedIds.has(c.id)) {
+      walk(c.nodes, c.id, 1);
+    }
+  }
+
+  return rows;
+}
+
 export function CollectionTree({
   collections,
   selectedNodeId,
@@ -70,12 +114,19 @@ export function CollectionTree({
   const [renameValue, setRenameValue] = useState("");
   const [renameCollectionId, setRenameCollectionId] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
-      collections.forEach((c) => next.add(c.id));
-      return next;
+      let changed = false;
+      collections.forEach((c) => {
+        if (!next.has(c.id)) {
+          next.add(c.id);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
     });
   }, [collections]);
 
@@ -148,91 +199,105 @@ export function CollectionTree({
     }
   }, [contextMenu]);
 
-  const filteredCollections = search
-    ? collections
-        .map((c) => ({ ...c, nodes: filterNodes(c.nodes, search) }))
-        .filter(
-          (c) =>
-            c.name.toLowerCase().includes(search.toLowerCase()) ||
-            c.nodes.length > 0,
-        )
-    : collections;
+  const filteredCollections = useMemo(
+    () =>
+      search
+        ? collections
+            .map((c) => ({ ...c, nodes: filterNodes(c.nodes, search) }))
+            .filter(
+              (c) =>
+                c.name.toLowerCase().includes(search.toLowerCase()) ||
+                c.nodes.length > 0,
+            )
+        : collections,
+    [collections, search],
+  );
 
-  const renderNode = (node: ApiCollectionNode, collectionId: string, depth = 0) => {
+  const flatRows = useMemo(
+    () => flattenTree(filteredCollections, expandedIds),
+    [filteredCollections, expandedIds],
+  );
+
+  const virtualizer = useVirtualizer({
+    count: flatRows.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 32,
+    getItemKey: (index) => flatRows[index].id,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 32,
+  });
+
+  const renderRow = (row: FlatRow) => {
+    const { node, collectionId, depth, isCollection } = row;
     const isExpanded = expandedIds.has(node.id);
     const isSelected = selectedNodeId === node.id;
-    const hasChildren = node.type === "Folder" && node.children && node.children.length > 0;
     const isRenaming = renamingId === node.id;
     const method = node.type === "Request" && node.request ? node.request.method : null;
 
     return (
-      <div key={node.id}>
-        <div
-          data-testid={`collection-node-${node.type}-${node.id}`}
-          className={`group flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-sm ${
-            isSelected ? "bg-primary text-primary-foreground" : "hover:bg-accent"
-          }`}
-          style={{ paddingLeft: `${12 + depth * 16}px` }}
-          onClick={() => onSelectNode(node, collectionId)}
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            startRename(node.id, node.name, collectionId);
-          }}
-          onContextMenu={(e) => handleContextMenu(e, node.id, collectionId, false, node.type)}
-        >
-          {node.type === "Folder" && (
-            <button
-              data-testid={`folder-toggle-${node.id}`}
-              className="p-0.5"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleExpand(node.id);
-              }}
-            >
-              {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            </button>
-          )}
-          {node.type === "Folder" && <Folder className="h-4 w-4 shrink-0" />}
-          {node.type === "Request" && (
-            <>
-              {method && <MethodBadge method={method} variant="text" className="w-10 text-right" />}
-              <FileText className="h-3.5 w-3.5 shrink-0 opacity-50" />
-            </>
-          )}
-          {isRenaming ? (
-            <input
-              ref={renameInputRef}
-              type="text"
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onBlur={confirmRename}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") confirmRename();
-                if (e.key === "Escape") { setRenamingId(null); setRenameValue(""); }
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="flex-1 rounded border bg-background px-1 py-0 text-sm"
-            />
-          ) : (
-            <span className="flex-1 truncate">{node.name}</span>
-          )}
-          {!isRenaming && (
-            <button
-              data-testid={`node-menu-${node.id}`}
-              className="p-0.5 opacity-0 hover:bg-accent-foreground/10 group-hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleContextMenu(e, node.id, collectionId, false, node.type);
-              }}
-            >
-              <MoreVertical className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-        {node.type === "Folder" && isExpanded && hasChildren && (
-          <div>
-            {node.children!.map((child) => renderNode(child, collectionId, depth + 1))}
-          </div>
+      <div
+        data-testid={
+          isCollection
+            ? `collection-root-${node.id}`
+            : `collection-node-${node.type}-${node.id}`
+        }
+        className={`group flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-sm ${
+          isSelected ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+        } ${isCollection ? "font-medium" : ""}`}
+        style={{ paddingLeft: `${12 + depth * 16}px` }}
+        onClick={() => onSelectNode(node, collectionId)}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          startRename(node.id, node.name, collectionId);
+        }}
+        onContextMenu={(e) => handleContextMenu(e, node.id, collectionId, isCollection, node.type)}
+      >
+        {node.type === "Folder" && (
+          <button
+            data-testid={`folder-toggle-${node.id}`}
+            className="p-0.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleExpand(node.id);
+            }}
+          >
+            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          </button>
+        )}
+        {node.type === "Folder" && <Folder className="h-4 w-4 shrink-0" />}
+        {node.type === "Request" && (
+          <>
+            {method && <MethodBadge method={method} variant="text" className="w-10 text-right" />}
+            <FileText className="h-3.5 w-3.5 shrink-0 opacity-50" />
+          </>
+        )}
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            type="text"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={confirmRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirmRename();
+              if (e.key === "Escape") { setRenamingId(null); setRenameValue(""); }
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="flex-1 rounded border bg-background px-1 py-0 text-sm"
+          />
+        ) : (
+          <span className="flex-1 truncate">{node.name}</span>
+        )}
+        {!isRenaming && (
+          <button
+            data-testid={`node-menu-${node.id}`}
+            className="p-0.5 opacity-0 hover:bg-accent-foreground/10 group-hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleContextMenu(e, node.id, collectionId, isCollection, node.type);
+            }}
+          >
+            <MoreVertical className="h-3 w-3" />
+          </button>
         )}
       </div>
     );
@@ -302,91 +367,43 @@ export function CollectionTree({
         </div>
 
         {/* Tree */}
-        <div className="flex-1 overflow-auto p-2">
+        <div ref={listRef} className="flex-1 overflow-auto p-2" data-testid="collection-tree-list">
           {collections.length === 0 && (
             <div className="p-2 text-xs text-muted-foreground">
               No collections. Click + to create one.
             </div>
           )}
-          {filteredCollections.map((collection) => {
-            const isExpanded = expandedIds.has(collection.id);
-            const isSelected = selectedNodeId === collection.id;
-            const isRenaming = renamingId === collection.id;
-            return (
-              <div key={collection.id}>
-                <div
-                  data-testid={`collection-root-${collection.id}`}
-                  className={`group flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-sm font-medium ${
-                    isSelected ? "bg-primary text-primary-foreground" : "hover:bg-accent"
-                  }`}
-                  onClick={() =>
-                    onSelectNode(
-                      {
-                        id: collection.id,
-                        type: "Folder",
-                        name: collection.name,
-                        isExpanded: true,
-                        children: collection.nodes,
-                        defaultAuth: collection.defaultAuth,
-                        request: null,
-                      },
-                      collection.id,
-                    )
-                  }
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    startRename(collection.id, collection.name, collection.id);
-                  }}
-                  onContextMenu={(e) => handleContextMenu(e, collection.id, collection.id, true, "Folder")}
-                >
-                  <button
-                    className="p-0.5"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleExpand(collection.id);
+          {flatRows.length === 0 && collections.length > 0 && (
+            <div className="p-2 text-xs text-muted-foreground">
+              No matching collections.
+            </div>
+          )}
+          {flatRows.length > 0 && (
+            <div
+              style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
+              data-testid="collection-tree-virtualizer"
+            >
+              {virtualizer.getVirtualItems().map((item) => {
+                const row = flatRows[item.index];
+                return (
+                  <div
+                    key={item.key}
+                    data-index={item.index}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${item.start}px)`,
                     }}
                   >
-                    {isExpanded ? (
-                      <ChevronDown className="h-3 w-3" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3" />
-                    )}
-                  </button>
-                  <Folder className="h-4 w-4 shrink-0" />
-                  {isRenaming ? (
-                    <input
-                      ref={renameInputRef}
-                      type="text"
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onBlur={confirmRename}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") confirmRename();
-                        if (e.key === "Escape") { setRenamingId(null); setRenameValue(""); }
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex-1 rounded border bg-background px-1 py-0 text-sm"
-                    />
-                  ) : (
-                    <span className="flex-1 truncate">{collection.name}</span>
-                  )}
-                  {!isRenaming && (
-                    <button
-                      data-testid={`node-menu-${collection.id}`}
-                      className="p-0.5 opacity-0 hover:bg-accent-foreground/10 group-hover:opacity-100"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleContextMenu(e, collection.id, collection.id, true, "Folder");
-                      }}
-                    >
-                      <MoreVertical className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-                {isExpanded && collection.nodes.map((node) => renderNode(node, collection.id))}
-              </div>
-            );
-          })}
+                    {renderRow(row)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

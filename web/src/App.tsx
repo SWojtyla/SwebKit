@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Routes, Route } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
+import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 
 // Each feature page is code-split so the initial bundle only carries the shell.
 // The pages are named exports, hence the `.then` unwrap into a default.
@@ -42,15 +43,15 @@ export default function App() {
           </Suspense>
         }
       >
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/service-bus" element={<ServiceBusPage />} />
-        <Route path="/aks" element={<AksPage />} />
-        <Route path="/api-client" element={<ApiClientPage />} />
-        <Route path="/redis" element={<RedisPage />} />
-        <Route path="/storage" element={<StoragePage />} />
-        <Route path="/agent" element={<AgentPage />} />
-        <Route path="/monitoring" element={<MonitoringPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/" element={<ErrorBoundary><DashboardPage /></ErrorBoundary>} />
+        <Route path="/service-bus" element={<ErrorBoundary><ServiceBusPage /></ErrorBoundary>} />
+        <Route path="/aks" element={<ErrorBoundary><AksPage /></ErrorBoundary>} />
+        <Route path="/api-client" element={<ErrorBoundary><ApiClientPage /></ErrorBoundary>} />
+        <Route path="/redis" element={<ErrorBoundary><RedisPage /></ErrorBoundary>} />
+        <Route path="/storage" element={<ErrorBoundary><StoragePage /></ErrorBoundary>} />
+        <Route path="/agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
+        <Route path="/monitoring" element={<ErrorBoundary><MonitoringPage /></ErrorBoundary>} />
+        <Route path="/settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
       </Route>
     </Routes>
   );

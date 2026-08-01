@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useAksPods, useAksDeletePod, useAksPodMetrics } from "@/lib/hooks";
 import { showNotification } from "@/lib/tauri-bridge";
-import { ResourceTable } from "./shared/ResourceTable";
+import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { PodInfo, PodMetricInfo } from "@/lib/types";
@@ -120,15 +120,15 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     return map;
   }, [metrics, visiblePods]);
 
-  const handleDelete = (pod: PodInfo) => {
+  const handleDelete = useCallback((pod: PodInfo) => {
     ws.requestConfirm({
       message: `Delete pod "${pod.name}"? The controller will recreate it.`,
       resourceName: pod.name,
       onConfirm: () => deleteMutation.mutate({ ns: pod.namespace, name: pod.name }),
     });
-  };
+  }, [ws, deleteMutation.mutate]);
 
-  const buildMenu = (pod: PodInfo): ContextMenuItem[] => [
+  const buildMenu = useCallback((pod: PodInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(pod.name) },
     { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("pod", pod.name, pod.namespace) },
     { label: "View Logs", icon: "☰", onClick: () => ws.openLogs(pod) },
@@ -139,7 +139,69 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     { label: "Port-forward…", icon: "→", onClick: () => ws.openPortForward(pod) },
     { label: "", separator: true, onClick: () => {} },
     { label: "Delete Pod", icon: "✕", onClick: () => handleDelete(pod), destructive: true },
-  ];
+  ], [ws, handleDelete]);
+
+  const handleRowClick = useCallback((pod: PodInfo) => ws.setPodKey(pod), [ws]);
+  const handleRowContextMenu = useCallback(
+    (e: MouseEvent<HTMLTableRowElement>, pod: PodInfo) => ws.showContextMenu(e, buildMenu(pod)),
+    [ws, buildMenu],
+  );
+
+  const columns: Column<PodInfo>[] = useMemo(() => [
+    { header: "Status", cell: (pod) => <PodStatusBadge status={pod.status} /> },
+    { header: "Ready", cell: (pod) => (
+      <span className={pod.ready ? "text-green-500" : "text-yellow-500"}>
+        {pod.readyDisplay}
+      </span>
+    )},
+    {
+      header: "CPU",
+      cell: (pod) => {
+        const usage = usageFor.get(`${pod.namespace}/${pod.name}`);
+        if (!usage) return <span className="text-xs text-muted-foreground" title="Metrics unavailable — metrics-server may not be installed or pod has no resource data">—</span>;
+        const cpuPct = (usage.cpu * 1000) / CPU_CEILING_MILLICORES;
+        return (
+          <div className="flex items-center gap-2" title={`${formatCpu(usage.cpu)} / ~${CPU_CEILING_MILLICORES}m`}>
+            <span className={`text-xs font-mono ${cpuClass(usage.cpu)}`}>{formatCpu(usage.cpu)}</span>
+            <MetricBar value={cpuPct} className={cpuClass(usage.cpu).replace("text-", "bg-")} />
+          </div>
+        );
+      },
+    },
+    {
+      header: "Memory",
+      cell: (pod) => {
+        const usage = usageFor.get(`${pod.namespace}/${pod.name}`);
+        if (!usage) return <span className="text-xs text-muted-foreground" title="Metrics unavailable — metrics-server may not be installed or pod has no resource data">—</span>;
+        const memoryMi = usage.memory / (1024 * 1024);
+        const memoryPct = memoryMi / MEMORY_CEILING_MI;
+        return (
+          <div className="flex items-center gap-2" title={`${formatMemory(usage.memory)} / ~${MEMORY_CEILING_MI}Mi`}>
+            <span className={`text-xs font-mono ${memoryClass(memoryMi)}`}>{formatMemory(usage.memory)}</span>
+            <MetricBar value={memoryPct} className={memoryClass(memoryMi).replace("text-", "bg-")} />
+          </div>
+        );
+      },
+    },
+    { header: "Restarts", cell: (pod) => (
+      pod.restartCount > 0 ? (
+        <span className="text-yellow-500">{pod.restartCount}</span>
+      ) : (
+        <span className="text-muted-foreground">0</span>
+      )
+    )},
+    { header: "Node", cell: (pod) => <span className="text-xs text-muted-foreground">{pod.nodeName ?? "—"}</span> },
+    { header: "Age", cell: (pod) => <span className="text-xs text-muted-foreground">{formatAge(pod.startTime)}</span> },
+    { header: "Actions", cell: (pod) => (
+      <button
+        onClick={() => handleDelete(pod)}
+        disabled={deleteMutation.isPending}
+        className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+      >
+        Delete
+      </button>
+    )},
+  ], [usageFor, deleteMutation.isPending, handleDelete]);
 
   return (
     <div className="p-4">
@@ -160,63 +222,9 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
         testIdPrefix="pod"
         tableBodyTestId="pods-table-body"
         emptyMessage="No pods found"
-        onRowClick={(pod) => ws.setPodKey(pod)}
-        onRowContextMenu={(e, pod) => ws.showContextMenu(e, buildMenu(pod))}
-        columns={[
-          { header: "Status", cell: (pod) => <PodStatusBadge status={pod.status} /> },
-          { header: "Ready", cell: (pod) => (
-            <span className={pod.ready ? "text-green-500" : "text-yellow-500"}>
-              {pod.readyDisplay}
-            </span>
-          )},
-          {
-            header: "CPU",
-            cell: (pod) => {
-              const usage = usageFor.get(`${pod.namespace}/${pod.name}`);
-              if (!usage) return <span className="text-xs text-muted-foreground" title="Metrics unavailable — metrics-server may not be installed or pod has no resource data">—</span>;
-              const cpuPct = (usage.cpu * 1000) / CPU_CEILING_MILLICORES;
-              return (
-                <div className="flex items-center gap-2" title={`${formatCpu(usage.cpu)} / ~${CPU_CEILING_MILLICORES}m`}>
-                  <span className={`text-xs font-mono ${cpuClass(usage.cpu)}`}>{formatCpu(usage.cpu)}</span>
-                  <MetricBar value={cpuPct} className={cpuClass(usage.cpu).replace("text-", "bg-")} />
-                </div>
-              );
-            },
-          },
-          {
-            header: "Memory",
-            cell: (pod) => {
-              const usage = usageFor.get(`${pod.namespace}/${pod.name}`);
-              if (!usage) return <span className="text-xs text-muted-foreground" title="Metrics unavailable — metrics-server may not be installed or pod has no resource data">—</span>;
-              const memoryMi = usage.memory / (1024 * 1024);
-              const memoryPct = memoryMi / MEMORY_CEILING_MI;
-              return (
-                <div className="flex items-center gap-2" title={`${formatMemory(usage.memory)} / ~${MEMORY_CEILING_MI}Mi`}>
-                  <span className={`text-xs font-mono ${memoryClass(memoryMi)}`}>{formatMemory(usage.memory)}</span>
-                  <MetricBar value={memoryPct} className={memoryClass(memoryMi).replace("text-", "bg-")} />
-                </div>
-              );
-            },
-          },
-          { header: "Restarts", cell: (pod) => (
-            pod.restartCount > 0 ? (
-              <span className="text-yellow-500">{pod.restartCount}</span>
-            ) : (
-              <span className="text-muted-foreground">0</span>
-            )
-          )},
-          { header: "Node", cell: (pod) => <span className="text-xs text-muted-foreground">{pod.nodeName ?? "—"}</span> },
-          { header: "Age", cell: (pod) => <span className="text-xs text-muted-foreground">{formatAge(pod.startTime)}</span> },
-          { header: "Actions", cell: (pod) => (
-            <button
-              onClick={() => handleDelete(pod)}
-              disabled={deleteMutation.isPending}
-              className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
-            >
-              Delete
-            </button>
-          )},
-        ]}
+        onRowClick={handleRowClick}
+        onRowContextMenu={handleRowContextMenu}
+        columns={columns}
       />
     </div>
   );

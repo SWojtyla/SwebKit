@@ -79,10 +79,17 @@ public sealed class MultiVaultKeyVaultSecretResolver : IKeyVaultSecretResolver
         }
     }
 
+    /// <summary>
+    /// Resolves the client for <paramref name="vaultName"/>. When a vault name is given but
+    /// doesn't match any configured vault (e.g. a typo), this returns <c>null</c> rather than
+    /// silently falling back to the default vault — resolving against the wrong vault would look
+    /// like success while actually reading (or previewing) an unrelated secret.
+    /// </summary>
     private SecretClient? ResolveClient(string? vaultName)
     {
-        if (vaultName is not null && _clients.TryGetValue(vaultName, out var named))
-            return named;
-        return _defaultClient;
+        if (vaultName is null)
+            return _defaultClient;
+
+        return _clients.TryGetValue(vaultName, out var named) ? named : null;
     }
 }

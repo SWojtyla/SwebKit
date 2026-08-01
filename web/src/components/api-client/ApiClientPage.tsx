@@ -43,7 +43,7 @@ function now() {
 }
 
 function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj));
+  return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
 }
 
 function findRequestNode(nodes: ApiCollectionNode[], nodeId: string): ApiCollectionNode | null {

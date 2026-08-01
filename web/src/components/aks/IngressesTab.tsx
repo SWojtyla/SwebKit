@@ -1,5 +1,6 @@
+import { useCallback, type MouseEvent } from "react";
 import { useAksIngresses, useAksDeleteIngress } from "@/lib/hooks";
-import { ResourceTable } from "./shared/ResourceTable";
+import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { IngressInfo } from "@/lib/types";
@@ -9,12 +10,23 @@ interface IngressesTabProps {
   isMulti?: boolean;
 }
 
+const columns: Column<IngressInfo>[] = [
+  { header: "Class", cell: (ing) => <span className="text-muted-foreground">{ing.ingressClass ?? "—"}</span> },
+  { header: "Hosts", cell: (ing) => (
+    <span className="text-xs">{ing.rules.map((r) => r.host).filter(Boolean).join(", ") || "—"}</span>
+  )},
+  { header: "Addresses", cell: (ing) => (
+    <span className="text-xs text-muted-foreground">{ing.addresses.length > 0 ? ing.addresses.join(", ") : "—"}</span>
+  )},
+  { header: "Rules", cell: (ing) => <span className="text-xs text-muted-foreground">{ing.rules.length} rule(s)</span> },
+];
+
 export function IngressesTab({ ns, isMulti }: IngressesTabProps) {
   const { data: ingresses, isLoading } = useAksIngresses(ns);
   const ws = useAksWorkspace();
   const deleteIngress = useAksDeleteIngress();
 
-  const buildMenu = (ing: IngressInfo): ContextMenuItem[] => {
+  const buildMenu = useCallback((ing: IngressInfo): ContextMenuItem[] => {
     const host = ing.rules.find((r) => r.host)?.host;
     return [
       { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(ing.name) },
@@ -32,7 +44,12 @@ export function IngressesTab({ ns, isMulti }: IngressesTabProps) {
         });
       }, destructive: true },
     ];
-  };
+  }, [ws, deleteIngress.mutate]);
+
+  const handleRowContextMenu = useCallback(
+    (e: MouseEvent<HTMLTableRowElement>, ing: IngressInfo) => ws.showContextMenu(e, buildMenu(ing)),
+    [ws, buildMenu],
+  );
 
   return (
     <ResourceTable
@@ -42,17 +59,8 @@ export function IngressesTab({ ns, isMulti }: IngressesTabProps) {
       testIdPrefix="ingress"
       tableBodyTestId="ingresses-table-body"
       emptyMessage="No ingresses found"
-      onRowContextMenu={(e, ing) => ws.showContextMenu(e, buildMenu(ing))}
-      columns={[
-        { header: "Class", cell: (ing) => <span className="text-muted-foreground">{ing.ingressClass ?? "—"}</span> },
-        { header: "Hosts", cell: (ing) => (
-          <span className="text-xs">{ing.rules.map((r) => r.host).filter(Boolean).join(", ") || "—"}</span>
-        )},
-        { header: "Addresses", cell: (ing) => (
-          <span className="text-xs text-muted-foreground">{ing.addresses.length > 0 ? ing.addresses.join(", ") : "—"}</span>
-        )},
-        { header: "Rules", cell: (ing) => <span className="text-xs text-muted-foreground">{ing.rules.length} rule(s)</span> },
-      ]}
+      onRowContextMenu={handleRowContextMenu}
+      columns={columns}
     />
   );
 }
