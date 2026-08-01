@@ -48,13 +48,44 @@
       (`RedisPage.tsx`/`StoragePage.tsx` decomposition, `lib/hooks.ts` split,
       `ApiClientPage.tsx`/`RequestEditor.tsx` — the last two are also blocked on the same missing
       branch as Phase 1 above)
-- [ ] Shared UI primitives (technical-plan.md Module 4) — not started
+- [x] Shared UI primitives (technical-plan.md Module 4) — done: `Dialog`, `EmptyState`, `Skeleton`,
+      `QueryState` added under `web/src/components/shared/`; migrated onto in API Client dialogs,
+      collection export dialog, AKS alert-rule dialog, keyboard-shortcuts panel; command palette and
+      entity command palette given `role="dialog"`/`aria-modal` directly (kept their existing
+      custom focus/Escape logic instead of a full migration).
 - [ ] Performance pass (technical-plan.md Module 5) — not started
-- [ ] Production/ops readiness (technical-plan.md Module 6) — not started, except the Tauri
-      capabilities file (§6.6) was deliberately **skipped**: adding an explicit capabilities file
-      risks silently breaking the IPC bridge (wrong permission scoping) and this pass had no way to
-      verify it against the real packaged desktop app — do this with a live Tauri build to test
-      against, not blind.
+- [x] Production/ops readiness (technical-plan.md Module 6) — **partial**: sidecar file logging via
+      `FileLoggerProvider`/`AppBootstrap` (moved to `SwebKit.Core.Diagnostics` so both MAUI and the
+      sidecar share it), sidecar 500s now log the real exception server-side while still returning a
+      generic message to the client, and a footer "Reconnect" button now calls the pre-existing
+      `restart_sidecar` Tauri command when `useHealth()` detects an outage. The Tauri capabilities
+      file (§6.6) remains deliberately **skipped**: adding an explicit capabilities file risks
+      silently breaking the IPC bridge (wrong permission scoping) and this pass had no way to verify
+      it against the real packaged desktop app — do this with a live Tauri build to test against,
+      not blind.
+- [x] UX Phase 2 feature parity (ux-plan.md) — **partial**: Storage batch download now bundles
+      selected blobs into a single ZIP (`buildZip`, reusing the pattern already proven in Service
+      Bus's `MessageList.tsx`) instead of firing one sequential download per file. Agent tool-calling
+      is now wired for Kubernetes and Service Bus diagnostics: `Program.cs` registers the 6
+      Kubernetes + 3 Service Bus read-only `IAgentTool` implementations (plus `DemoAksClient`,
+      `IAgentToolRegistry`) and `SidecarAgentChatService` passes them to `IAgentModelClient.ChatAsync`
+      when the active profile's capability is `ToolCalling`, gated exactly like MAUI's
+      `AgentChatService.FilterToolsByCapability`. Deliberately **not** wired: the 2 Observability
+      tools (`QueryLogsTool`/`GetMetricsTool`) — the sidecar has no `IObservabilityProviderFactory`
+      at all yet, that implementation lives only in `SwebKit.App` (a separate, larger feature gap);
+      and the 3 API Client mutation/proposal tools in `ApiClientTools.cs` — those need the
+      confirmation-card flow (`IAgentActionCoordinator`/`AgentActionApplier`) that the sidecar's chat
+      UI doesn't implement, so wiring them without it would let the model mutate collections with no
+      user confirmation step. Still open: pod shell exec (`PodsTab.tsx`'s "Open shell in pod" is
+      `disabled: true`, no Tauri command backs it) and real port-forward (`native.rs` only maintains
+      a session registry — no `kubectl port-forward` subprocess is actually spawned).
+- [ ] UX Phase 4-5 accessibility + visual polish — **partial**: notification key collisions, nested
+      `<button>`, Redis key-tree keyboard reachability, and `PodsTab.tsx`'s raw Tailwind colors are
+      fixed. Still open: `role="tree"`/`role="treeitem"` (or `listbox`/`option`) semantics for
+      `CollectionTree` (API Client), `EntityTree` (Service Bus), and `ResourceTable` (AKS) — none of
+      these have real tree/list a11y semantics yet; and the broader raw-color-to-semantic-token
+      migration (`text-green-500`/`text-yellow-500`/`text-red-500` → `text-success`/`text-warning`/
+      `text-destructive`) across the ~23 other files still using raw Tailwind colors.
 
 ## Verification
 

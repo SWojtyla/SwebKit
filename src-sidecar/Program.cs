@@ -4,6 +4,7 @@ using SwebKit.Core.Diagnostics;
 using SwebKit.Core.Serialization;
 using SwebKit.Azure.Storage;
 using SwebKit.Agents;
+using SwebKit.Agents.Tools;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -94,6 +95,26 @@ builder.Services.AddHostedService(
 
 // Agent: OpenAI-compatible LLM client + sidecar chat service
 builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
+
+// Agent tools — read-only Kubernetes and Service Bus diagnostics only. Observability tools
+// (QueryLogsTool/GetMetricsTool) are not wired here because the sidecar has no
+// IObservabilityProviderFactory yet (that's a MAUI-only service, a separate feature gap of its
+// own). The API Client mutation/proposal tools (ApiClientTools.cs) are not wired here either
+// because they need the confirmation-card flow (IAgentActionCoordinator/AgentActionApplier) that
+// the sidecar's chat UI doesn't implement — wiring them without it would let the model mutate
+// collections with no user confirmation step.
+builder.Services.AddSingleton<DemoAksClient>();
+builder.Services.AddSingleton<IAgentTool, GetPodStatusTool>();
+builder.Services.AddSingleton<IAgentTool, ListNamespacesTool>();
+builder.Services.AddSingleton<IAgentTool, ListPodsTool>();
+builder.Services.AddSingleton<IAgentTool, GetPodLogsTool>();
+builder.Services.AddSingleton<IAgentTool, GetPodEventsTool>();
+builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
+builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
+builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
+builder.Services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
+builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
+
 builder.Services.AddSingleton<SidecarAgentChatService>();
 
 // HTTP client used by the API client request executor

@@ -16,6 +16,7 @@ namespace SwebKit.Sidecar.Services;
 public sealed class SidecarAgentChatService
 {
     private readonly IAgentModelClient _modelClient;
+    private readonly IAgentToolRegistry _toolRegistry;
     private readonly ProfileRepository _profiles;
     private readonly UserSettingsRepository _settings;
     private readonly DemoModeService _demo;
@@ -26,11 +27,13 @@ public sealed class SidecarAgentChatService
 
     public SidecarAgentChatService(
         IAgentModelClient modelClient,
+        IAgentToolRegistry toolRegistry,
         ProfileRepository profiles,
         UserSettingsRepository settings,
         DemoModeService demo)
     {
         _modelClient = modelClient;
+        _toolRegistry = toolRegistry;
         _profiles = profiles;
         _settings = settings;
         _demo = demo;
@@ -56,11 +59,15 @@ public sealed class SidecarAgentChatService
         if (historyList.Count > 0)
             historyList.RemoveAt(historyList.Count - 1);
 
+        var allTools = _toolRegistry.GetDefinitions();
+        var hasToolCalling = (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
+        var tools = hasToolCalling ? allTools : [];
+
         var request = new AgentModelRequest
         {
             SystemPrompt = systemPrompt,
             UserMessage = userMessage,
-            Tools = [],
+            Tools = tools,
             History = historyList,
             Temperature = profile?.Temperature ?? 0.7,
             MaxTokens = profile?.MaxTokens ?? 2048,
@@ -68,7 +75,10 @@ public sealed class SidecarAgentChatService
 
         try
         {
-            var result = await _modelClient.ChatAsync(request, null, ct);
+            var result = await _modelClient.ChatAsync(
+                request,
+                tools.Count > 0 ? (toolName, args, toolCt) => _toolRegistry.ExecuteAsync(toolName, args, toolCt) : null,
+                ct);
             _history.Enqueue(new AgentMessage { Role = "assistant", Content = result.Text });
             TrimHistory();
 
@@ -76,6 +86,7 @@ public sealed class SidecarAgentChatService
             return new SidecarAgentReply
             {
                 Text = result.Text,
+                ToolsUsed = result.ToolsUsed,
                 ElapsedMs = (int)sw.Elapsed.TotalMilliseconds,
                 Status = result.HitMaxRounds ? "failed" : "done",
                 Error = false,
@@ -142,6 +153,24 @@ public sealed class SidecarAgentChatService
             ? "No workspace services configured."
             : string.Join(" | ", contextParts);
 
+        var profile = _settings.Settings.Agent.GetActiveProfile();
+        var hasToolCalling = (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
+
+        var toolPolicy = hasToolCalling
+            ? """
+              ## Tool policy
+              - Use tools to fetch live data when the user asks about Kubernetes pods/namespaces/events/logs
+                or Service Bus queue stats, messages, or health.
+              - All available tools are read-only diagnostics — no confirmation is needed before calling them.
+              - If a tool returns an error, explain what it means and suggest a resolution.
+              - Do not expose internal JSON schemas or tool names in your replies.
+              """
+            : """
+              ## Tool policy
+              - Tool calling is not available with the current model. Answer based on context only.
+              - If the user needs live data, suggest enabling a model that supports tool calling.
+              """;
+
         return $"""
             You are SwebKit Assistant, an AI copilot embedded in SwebKit — a DevOps operations desktop
             application for platform engineers. You help users diagnose and understand their Kubernetes
@@ -154,10 +183,11 @@ public sealed class SidecarAgentChatService
             ## Response format
             - Be concise and technical. Prefer bullet points and tables over prose.
             - If you are unsure, say so rather than guessing.
-            - You do not have access to live data tools in this mode. Answer based on context and your knowledge.
+
+            {toolPolicy}
 
             ## Limits
-            - No tool calling is available in the sidecar mode.
+            - No Observability, Storage, or API Client tools are available in the sidecar mode yet.
             - No Git operations.
             """;
     }
@@ -166,6 +196,7 @@ public sealed class SidecarAgentChatService
 public sealed class SidecarAgentReply
 {
     public required string Text { get; init; }
+    public IReadOnlyList<string> ToolsUsed { get; init; } = [];
     public int ElapsedMs { get; init; }
     public string Status { get; init; } = "done";
     public bool Error { get; init; }
