@@ -359,7 +359,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
             }}
           />
           <span
-            className={`h-2 w-2 rounded-full ${isLive && isStreaming ? "bg-green-500" : "bg-muted-foreground"}`}
+            className={`h-2 w-2 rounded-full ${isLive && isStreaming ? "bg-success" : "bg-muted-foreground"}`}
           />
           Live
         </label>
@@ -453,7 +453,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
             disabled={isPrevious || (isLive && isStreaming && !paused && safePage === 0)}
             className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
               isLive && isStreaming && !paused && safePage === 0
-                ? "border border-green-500/50 text-green-500"
+                ? "border border-success/50 text-success"
                 : "border bg-primary text-primary-foreground hover:bg-primary/90"
             }`}
             title="Resume live tailing and jump to the newest lines"
@@ -564,18 +564,18 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
       <div
         className={`flex items-center gap-2 border-t bg-card px-3 py-1 text-xs ${
           followState === "live"
-            ? "text-green-500"
+            ? "text-success"
             : followState === "paused"
-              ? "text-yellow-500"
+              ? "text-warning"
               : "text-muted-foreground"
         }`}
       >
         <span
           className={`h-2 w-2 rounded-full ${
             followState === "live"
-              ? "bg-green-500 animate-pulse"
+              ? "bg-success animate-pulse"
               : followState === "paused"
-                ? "bg-yellow-500"
+                ? "bg-warning"
                 : "bg-muted-foreground"
           }`}
         />

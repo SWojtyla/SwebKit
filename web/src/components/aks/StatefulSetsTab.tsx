@@ -12,7 +12,7 @@ interface StatefulSetsTabProps {
 
 const columns: Column<StatefulSetInfo>[] = [
   { header: "Ready", cell: (sts) => (
-    <span className={sts.readyReplicas === sts.replicas ? "text-green-500" : "text-yellow-500"}>
+    <span className={sts.readyReplicas === sts.replicas ? "text-success" : "text-warning"}>
       {sts.readyReplicas}/{sts.replicas}
     </span>
   )},

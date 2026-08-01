@@ -44,12 +44,12 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
           { header: "Min", cell: (hpa) => hpa.minReplicas },
           { header: "Max", cell: (hpa) => hpa.maxReplicas },
           { header: "Current", cell: (hpa) => hpa.currentReplicas },
-          { header: "Desired", cell: (hpa) => <span className="text-green-500">{hpa.desiredReplicas}</span> },
+          { header: "Desired", cell: (hpa) => <span className="text-success">{hpa.desiredReplicas}</span> },
           { header: "CPU%", cell: (hpa) => (
             hpa.currentCpuUtilizationPercent != null ? (
               <span className={
                 hpa.targetCpuUtilizationPercent != null && hpa.currentCpuUtilizationPercent > hpa.targetCpuUtilizationPercent
-                  ? "text-yellow-500" : "text-muted-foreground"
+                  ? "text-warning" : "text-muted-foreground"
               }>
                 {hpa.currentCpuUtilizationPercent}%
               </span>
@@ -65,7 +65,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
               {hpa.isScalingDisabled && (
                 <>
                   {" "}
-                  <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs text-red-500">Disabled</span>
+                  <span className="rounded bg-destructive/20 px-1.5 py-0.5 text-xs text-destructive">Disabled</span>
                 </>
               )}
             </div>

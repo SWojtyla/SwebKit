@@ -13,15 +13,15 @@ const sourceLabel: Record<string, string> = {
 };
 
 const statusDot: Record<AlertSignalStatus, string> = {
-  Ok: "bg-green-500",
-  Firing: "bg-red-500 animate-pulse",
+  Ok: "bg-success",
+  Firing: "bg-destructive animate-pulse",
   Skipped: "bg-gray-400",
-  Error: "bg-yellow-500",
+  Error: "bg-warning",
 };
 
 const severityBadge: Record<string, string> = {
-  Critical: "text-red-500 bg-red-500/10",
-  Warning: "text-yellow-500 bg-yellow-500/10",
+  Critical: "text-destructive bg-destructive/10",
+  Warning: "text-warning bg-warning/10",
 };
 
 export function AlertRuleRow({
@@ -60,7 +60,7 @@ export function AlertRuleRow({
             <> · evaluated {new Date(rule.lastEvaluatedAt).toLocaleTimeString()}</>
           )}
           {rule.lastFiredAt && (
-            <span className="text-red-500"> · fired {new Date(rule.lastFiredAt).toLocaleTimeString()}</span>
+            <span className="text-destructive"> · fired {new Date(rule.lastFiredAt).toLocaleTimeString()}</span>
           )}
         </div>
       </div>

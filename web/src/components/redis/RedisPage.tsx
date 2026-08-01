@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   useProfile,
   useRedisServerInfo,
@@ -102,6 +103,32 @@ function buildNamespaceTree(keys: string[], separator: string): NamespaceNode[] 
   return [...roots.values()];
 }
 
+type FlatRedisRow =
+  | { kind: "namespace"; node: NamespaceNode; depth: number }
+  | { kind: "key"; key: string; node: NamespaceNode; depth: number };
+
+function flattenNamespaceTree(
+  nodes: NamespaceNode[],
+  expandedNamespaces: Set<string>,
+  depth = 0,
+): FlatRedisRow[] {
+  const rows: FlatRedisRow[] = [];
+  for (const node of nodes) {
+    rows.push({ kind: "namespace", node, depth });
+    if (expandedNamespaces.has(node.path)) {
+      rows.push(...flattenNamespaceTree([...node.children.values()], expandedNamespaces, depth + 1));
+      for (const key of node.keys) {
+        rows.push({ kind: "key", key, node, depth });
+      }
+    }
+  }
+  return rows;
+}
+
+function redisRowKey(row: FlatRedisRow): string {
+  return row.kind === "namespace" ? `ns:${row.node.path}` : `key:${row.key}`;
+}
+
 export function RedisPage() {
   const { data: profile } = useProfile();
   const location = useLocation();
@@ -120,6 +147,7 @@ export function RedisPage() {
     }
   }, [location, caches, navigate]);
 
+  const redisTreeRef = useRef<HTMLDivElement | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [pattern, setPattern] = useState("*");
   const [searchInput, setSearchInput] = useState("*");
@@ -240,6 +268,19 @@ export function RedisPage() {
     () => buildNamespaceTree(filteredKeys, separator),
     [filteredKeys, separator],
   );
+
+  const flatRedisRows = useMemo(
+    () => flattenNamespaceTree(namespaceTree, expandedNamespaces),
+    [namespaceTree, expandedNamespaces],
+  );
+
+  const redisVirtualizer = useVirtualizer({
+    count: flatRedisRows.length,
+    getScrollElement: () => redisTreeRef.current,
+    estimateSize: () => 26,
+    getItemKey: (index) => redisRowKey(flatRedisRows[index]),
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 26,
+  });
 
   useEffect(() => {
     if (namespaceTree.length === 0) return;
@@ -395,65 +436,66 @@ export function RedisPage() {
     });
   };
 
-  const renderNamespaceNode = (node: NamespaceNode, depth = 0): ReactNode => {
-    const isExpanded = expandedNamespaces.has(node.path);
-    return (
-      <div key={node.path} style={{ paddingLeft: `${depth * 0.75}rem` }}>
-        <div className="flex items-center">
-          <button
-            onClick={() => toggleNamespace(node.path)}
-            className="p-0.5 text-muted-foreground hover:text-foreground"
-            data-testid={`redis-namespace-toggle-${node.path}`}
-            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${node.path}`}
-          >
-            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-          </button>
-          <button
-            onClick={() => setNamespaceFilter(namespaceFilter === node.path ? null : node.path)}
-            className={`flex-1 rounded px-2 py-0.5 text-left text-xs font-mono ${namespaceFilter === node.path ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-            data-testid={`redis-namespace-${node.path}`}
-          >
-            {node.name} ({node.keyCount})
-          </button>
-        </div>
-        {isExpanded && (
-          <div data-testid={`redis-namespace-children-${node.path}`}>
-            {[...node.children.values()].map((child) => renderNamespaceNode(child, depth + 1))}
-            {node.keys.map((key) => (
-              <div
-                key={key}
-                role="button"
-                tabIndex={0}
-                data-testid={`redis-key-${key}`}
-                onClick={() => (batchMode ? toggleKeySelection(key) : setSelectedKey(key))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    if (batchMode) toggleKeySelection(key);
-                    else setSelectedKey(key);
-                  }
-                }}
-                className={`flex w-full items-center gap-2 rounded px-2 py-0.5 text-left text-xs font-mono cursor-pointer ${
-                  batchMode ? (selectedKeys.has(key) ? "bg-primary/20" : "") : selectedKey === key ? "bg-accent" : "hover:bg-accent"
-                }`}
-              >
-                {batchMode && (
-                  <input
-                    type="checkbox"
-                    checked={selectedKeys.has(key)}
-                    onChange={() => toggleKeySelection(key)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="h-3.5 w-3.5"
-                    data-testid={`redis-key-checkbox-${key}`}
-                  />
-                )}
-                <span className="truncate">
-                  {node.name === "(no prefix)" ? key : key.slice(node.path.length + separator.length) || key}
-                </span>
-              </div>
-            ))}
+  const renderFlatRedisRow = (row: FlatRedisRow) => {
+    if (row.kind === "namespace") {
+      const { node, depth } = row;
+      const isExpanded = expandedNamespaces.has(node.path);
+      return (
+        <div style={{ paddingLeft: `${depth * 0.75}rem` }}>
+          <div className="flex items-center">
+            <button
+              onClick={() => toggleNamespace(node.path)}
+              className="p-0.5 text-muted-foreground hover:text-foreground"
+              data-testid={`redis-namespace-toggle-${node.path}`}
+              aria-label={`${isExpanded ? "Collapse" : "Expand"} ${node.path}`}
+            >
+              {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            </button>
+            <button
+              onClick={() => setNamespaceFilter(namespaceFilter === node.path ? null : node.path)}
+              className={`flex-1 rounded px-2 py-0.5 text-left text-xs font-mono ${namespaceFilter === node.path ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+              data-testid={`redis-namespace-${node.path}`}
+            >
+              {node.name} ({node.keyCount})
+            </button>
           </div>
-        )}
+        </div>
+      );
+    }
+
+    const { key, node, depth } = row;
+    return (
+      <div style={{ paddingLeft: `${depth * 0.75}rem` }}>
+        <div
+          role="button"
+          tabIndex={0}
+          data-testid={`redis-key-${key}`}
+          onClick={() => (batchMode ? toggleKeySelection(key) : setSelectedKey(key))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              if (batchMode) toggleKeySelection(key);
+              else setSelectedKey(key);
+            }
+          }}
+          className={`flex w-full items-center gap-2 rounded px-2 py-0.5 text-left text-xs font-mono cursor-pointer ${
+            batchMode ? (selectedKeys.has(key) ? "bg-primary/20" : "") : selectedKey === key ? "bg-accent" : "hover:bg-accent"
+          }`}
+        >
+          {batchMode && (
+            <input
+              type="checkbox"
+              checked={selectedKeys.has(key)}
+              onChange={() => toggleKeySelection(key)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-3.5 w-3.5"
+              data-testid={`redis-key-checkbox-${key}`}
+            />
+          )}
+          <span className="truncate">
+            {node.name === "(no prefix)" ? key : key.slice(node.path.length + separator.length) || key}
+          </span>
+        </div>
       </div>
     );
   };
@@ -494,8 +536,8 @@ export function RedisPage() {
           </select>
         )}
         {serverInfo.data && (
-          <span className="flex items-center gap-1.5 text-xs text-green-500" data-testid="redis-connection-status">
-            <span className="h-2 w-2 rounded-full bg-green-500" />
+          <span className="flex items-center gap-1.5 text-xs text-success" data-testid="redis-connection-status">
+            <span className="h-2 w-2 rounded-full bg-success" />
             Connected
           </span>
         )}
@@ -622,7 +664,7 @@ export function RedisPage() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-auto">
+              <div ref={redisTreeRef} className="flex-1 overflow-auto" data-testid="redis-key-tree-scroll">
                 {scanResult.isLoading && (
                   <div className="p-3 text-sm text-muted-foreground">Loading keys...</div>
                 )}
@@ -643,7 +685,32 @@ export function RedisPage() {
                     ← All namespaces ({displayKeys.length})
                   </button>
                 )}
-                {namespaceTree.map((node) => renderNamespaceNode(node))}
+                {flatRedisRows.length > 0 && (
+                  <div
+                    style={{ height: `${redisVirtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
+                    data-testid="redis-key-tree-virtualizer"
+                  >
+                    {redisVirtualizer.getVirtualItems().map((item) => {
+                      const row = flatRedisRows[item.index];
+                      return (
+                        <div
+                          key={item.key}
+                          data-index={item.index}
+                          ref={redisVirtualizer.measureElement}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            transform: `translateY(${item.start}px)`,
+                          }}
+                        >
+                          {renderFlatRedisRow(row)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 {scanResult.data && !scanResult.data.isComplete && (
                   <div className="flex gap-2 border-t px-3 py-2">
                     <button

@@ -105,7 +105,7 @@ function Toast({ notification, onDismiss }: { notification: NotificationItem; on
   return (
     <div
       className={`flex w-80 items-start gap-2 rounded-lg border bg-card p-3 shadow-lg ${
-        notification.type === "error" ? "border-destructive/30" : notification.type === "success" ? "border-green-500/30" : ""
+        notification.type === "error" ? "border-destructive/30" : notification.type === "success" ? "border-success/30" : ""
       }`}
       data-testid={`notification-toast-${notification.id}`}
     >
@@ -122,7 +122,7 @@ function Toast({ notification, onDismiss }: { notification: NotificationItem; on
 }
 
 function NotificationIcon({ type }: { type: NotificationType }) {
-  if (type === "success") return <CheckCircle className="h-4 w-4 text-green-500" />;
+  if (type === "success") return <CheckCircle className="h-4 w-4 text-success" />;
   if (type === "error") return <AlertCircle className="h-4 w-4 text-destructive" />;
   return <Info className="h-4 w-4 text-blue-500" />;
 }

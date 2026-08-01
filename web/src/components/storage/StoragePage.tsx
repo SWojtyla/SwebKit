@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   useProfile,
   useStorageContainers,
@@ -51,6 +52,7 @@ export function StoragePage() {
   const allowMutations = activeAccount?.allowMutations ?? false;
   const { notify } = useNotification();
 
+  const blobListRef = useRef<HTMLDivElement | null>(null);
   const [selectedContainer, setSelectedContainer] = useState<string | null>(null);
   const [currentPrefix, setCurrentPrefix] = useState("");
   const [prefixHistory, setPrefixHistory] = useState<string[]>([]);
@@ -160,6 +162,14 @@ export function StoragePage() {
   const filteredItems = blobFilter
     ? displayItems.filter((item) => item.name.toLowerCase().includes(blobFilter.toLowerCase()))
     : displayItems;
+
+  const blobVirtualizer = useVirtualizer({
+    count: filteredItems.length,
+    getScrollElement: () => blobListRef.current,
+    estimateSize: () => 30,
+    getItemKey: (index) => filteredItems[index].name,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 30,
+  });
 
   const handleCopyUrl = (blobName: string) => {
     const url = `https://${resolvedAccountId}.blob.core.windows.net/${selectedContainer}/${blobName}`;
@@ -434,7 +444,7 @@ export function StoragePage() {
               </div>
 
               {/* Blob list */}
-              <div className="flex-1 overflow-auto">
+              <div ref={blobListRef} className="flex-1 overflow-auto" data-testid="storage-blob-list-scroll">
                 {blobs.isLoading && (
                   <div className="px-3 py-2 text-sm text-muted-foreground">Loading blobs...</div>
                 )}
@@ -446,38 +456,60 @@ export function StoragePage() {
                 {displayItems.length === 0 && !blobs.isLoading && (
                   <div className="px-3 py-2 text-sm text-muted-foreground">No blobs found</div>
                 )}
-                {filteredItems.map((item) => (
+                {filteredItems.length > 0 && (
                   <div
-                    key={item.name}
-                    data-testid={`storage-item-${item.name}`}
-                    onClick={() => multiSelectMode && !item.isPrefix ? toggleBlobSelection(item.name) : item.isPrefix ? handleNavigatePrefix(item.name) : handleSelectBlob(item.name)}
-                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent cursor-pointer ${
-                      multiSelectMode && !item.isPrefix ? selectedBlobs.has(item.name) ? "bg-primary/20" : "" : !item.isPrefix && selectedBlob === item.name ? "bg-accent" : ""
-                    }`}
+                    style={{ height: `${blobVirtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
+                    data-testid="storage-blob-list-virtualizer"
                   >
-                    {multiSelectMode && !item.isPrefix && (
-                      <input
-                        type="checkbox"
-                        checked={selectedBlobs.has(item.name)}
-                        onChange={() => toggleBlobSelection(item.name)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="h-3.5 w-3.5"
-                        data-testid={`storage-blob-checkbox-${item.name}`}
-                      />
-                    )}
-                    {item.isPrefix ? (
-                      <Folder className="h-3.5 w-3.5 shrink-0 text-blue-400" />
-                    ) : (
-                      <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="truncate font-mono">
-                      {item.isPrefix ? item.name.replace(currentPrefix, "") : item.name.replace(currentPrefix, "")}
-                    </span>
-                    {!item.isPrefix && (
-                      <span className="ml-auto text-xs text-muted-foreground">{formatBytes(item.sizeBytes)}</span>
-                    )}
+                    {blobVirtualizer.getVirtualItems().map((virtualItem) => {
+                      const item = filteredItems[virtualItem.index];
+                      return (
+                        <div
+                          key={virtualItem.key}
+                          data-index={virtualItem.index}
+                          ref={blobVirtualizer.measureElement}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            transform: `translateY(${virtualItem.start}px)`,
+                          }}
+                        >
+                          <div
+                            data-testid={`storage-item-${item.name}`}
+                            onClick={() => multiSelectMode && !item.isPrefix ? toggleBlobSelection(item.name) : item.isPrefix ? handleNavigatePrefix(item.name) : handleSelectBlob(item.name)}
+                            className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent cursor-pointer ${
+                              multiSelectMode && !item.isPrefix ? selectedBlobs.has(item.name) ? "bg-primary/20" : "" : !item.isPrefix && selectedBlob === item.name ? "bg-accent" : ""
+                            }`}
+                          >
+                            {multiSelectMode && !item.isPrefix && (
+                              <input
+                                type="checkbox"
+                                checked={selectedBlobs.has(item.name)}
+                                onChange={() => toggleBlobSelection(item.name)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-3.5 w-3.5"
+                                data-testid={`storage-blob-checkbox-${item.name}`}
+                              />
+                            )}
+                            {item.isPrefix ? (
+                              <Folder className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+                            ) : (
+                              <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            )}
+                            <span className="truncate font-mono">
+                              {item.isPrefix ? item.name.replace(currentPrefix, "") : item.name.replace(currentPrefix, "")}
+                            </span>
+                            {!item.isPrefix && (
+                              <span className="ml-auto text-xs text-muted-foreground">{formatBytes(item.sizeBytes)}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
+                )}
                 {blobs.data?.continuationToken && (
                   <button
                     data-testid="storage-load-more"
@@ -525,7 +557,7 @@ export function StoragePage() {
                         {blobProps.data.name}
                       </div>
                       <button onClick={() => handleCopyUrl(blobProps.data.name)} className="text-muted-foreground hover:text-foreground" data-testid="storage-copy-url-btn" title="Copy URL">
-                        {copiedUrl ? <Check className="h-3.5 w-3.5 text-green-500" /> : <LinkIcon className="h-3.5 w-3.5" />}
+                        {copiedUrl ? <Check className="h-3.5 w-3.5 text-success" /> : <LinkIcon className="h-3.5 w-3.5" />}
                       </button>
                       <button onClick={() => handleDownloadBlob(blobProps.data.name)} className="text-muted-foreground hover:text-foreground" data-testid="storage-download-btn" title="Download blob">
                         <Download className="h-3.5 w-3.5" />
@@ -722,7 +754,7 @@ export function StoragePage() {
                                     <td className="px-3 py-2 font-mono text-xs break-all">{v.versionId}</td>
                                     <td className="px-3 py-2 text-xs">{formatDate(v.lastModified)}</td>
                                     <td className="px-3 py-2 text-right text-xs">{formatBytes(v.sizeBytes)}</td>
-                                    <td className="px-3 py-2 text-center">{v.isCurrent && <Check className="inline h-3 w-3 text-green-500" />}</td>
+                                    <td className="px-3 py-2 text-center">{v.isCurrent && <Check className="inline h-3 w-3 text-success" />}</td>
                                     <td className="px-3 py-2 text-right">
                                       {!v.isCurrent && allowMutations && (
                                         <button

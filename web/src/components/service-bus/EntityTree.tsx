@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ChevronRight, ChevronDown, Mail, MailX, Folder, Search, ArrowUp, ArrowDown } from "lucide-react";
 import { useSbQueues, useSbTopics, useSbSubscriptions } from "@/lib/hooks";
 import type { SbEntityInfo } from "@/lib/types";
@@ -82,6 +82,19 @@ function EntityStatsBadges({
   );
 }
 
+// Roving keyboard navigation across `role="treeitem"` rows within a tree
+// container. Since EntityTree isn't virtualized, every rendered row already
+// exists in the DOM, so a simple DOM query is enough (no scroll-into-view
+// dance like the virtualized CollectionTree needs).
+function focusAdjacentTreeItem(container: HTMLElement | null, current: HTMLElement, delta: 1 | -1) {
+  if (!container) return;
+  const items = Array.from(container.querySelectorAll<HTMLElement>('[role="treeitem"]'));
+  const index = items.indexOf(current);
+  if (index === -1) return;
+  const next = items[index + delta];
+  next?.focus();
+}
+
 export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
   const { data: queues, isLoading: queuesLoading } = useSbQueues(nsId);
   const { data: topics, isLoading: topicsLoading } = useSbTopics(nsId);
@@ -89,6 +102,7 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
   const [filter, setFilter] = useState("");
   const [sortCol, setSortCol] = useState<SortCol>("name");
   const [sortAsc, setSortAsc] = useState(true);
+  const treeRef = useRef<HTMLDivElement | null>(null);
 
   const toggleSort = (col: SortCol) => {
     if (sortCol === col) setSortAsc(!sortAsc);
@@ -185,17 +199,19 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto py-1">
+      <div className="flex-1 overflow-auto py-1" role="tree" aria-label="Queues and topics" ref={treeRef}>
         {/* Queues section */}
         {sortedQueues.length > 0 && (
-          <div className="mb-2">
+          <div className="mb-2" role="group" aria-label="Queues">
             <div className="px-3 py-1 text-xs font-semibold uppercase text-muted-foreground">
               Queues ({sortedQueues.length})
             </div>
             {sortedQueues.map((queue) => (
               <div
                 key={queue.entityPath}
-                role="button"
+                role="treeitem"
+                aria-level={1}
+                aria-selected={selectedEntity?.entityPath === queue.entityPath}
                 tabIndex={0}
                 data-testid={`entity-tree-queue-${queue.name}`}
                 onClick={() => onSelectEntity(queue)}
@@ -203,6 +219,12 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     onSelectEntity(queue);
+                  } else if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    focusAdjacentTreeItem(treeRef.current, e.currentTarget, -1);
                   }
                 }}
                 className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
@@ -219,47 +241,69 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
 
         {/* Topics section */}
         {sortedTopics.length > 0 && (
-          <div>
+          <div role="group" aria-label="Topics">
             <div className="px-3 py-1 text-xs font-semibold uppercase text-muted-foreground">
               Topics ({sortedTopics.length})
             </div>
-            {sortedTopics.map((topic) => (
-              <div key={topic.entityPath}>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  data-testid={`entity-tree-topic-${topic.name}`}
-                  onClick={() => toggleTopic(topic.name)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      toggleTopic(topic.name);
-                    }
-                  }}
-                  className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
-                    selectedEntity?.entityPath === topic.entityPath ? "bg-accent" : ""
-                  }`}
-                >
-                  {expandedTopics.has(topic.name) ? (
-                    <ChevronDown className="h-3 w-3" />
-                  ) : (
-                    <ChevronRight className="h-3 w-3" />
-                  )}
-                  <Folder className="h-4 w-4 text-muted-foreground" />
-                  <span className="truncate">{topic.name}</span>
-                  <EntityStatsBadges entity={topic} onSelectEntity={onSelectEntity} />
-                </div>
+            {sortedTopics.map((topic) => {
+              const isExpanded = expandedTopics.has(topic.name);
+              return (
+                <div key={topic.entityPath}>
+                  <div
+                    role="treeitem"
+                    aria-level={1}
+                    aria-expanded={isExpanded}
+                    aria-selected={selectedEntity?.entityPath === topic.entityPath}
+                    tabIndex={0}
+                    data-testid={`entity-tree-topic-${topic.name}`}
+                    onClick={() => toggleTopic(topic.name)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleTopic(topic.name);
+                      } else if (e.key === "ArrowRight") {
+                        e.preventDefault();
+                        if (!isExpanded) toggleTopic(topic.name);
+                        else focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
+                      } else if (e.key === "ArrowLeft") {
+                        if (isExpanded) {
+                          e.preventDefault();
+                          toggleTopic(topic.name);
+                        }
+                      } else if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        focusAdjacentTreeItem(treeRef.current, e.currentTarget, -1);
+                      }
+                    }}
+                    className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
+                      selectedEntity?.entityPath === topic.entityPath ? "bg-accent" : ""
+                    }`}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                    <Folder className="h-4 w-4 text-muted-foreground" />
+                    <span className="truncate">{topic.name}</span>
+                    <EntityStatsBadges entity={topic} onSelectEntity={onSelectEntity} />
+                  </div>
 
-                {expandedTopics.has(topic.name) && (
-                  <TopicSubscriptions
-                    nsId={nsId}
-                    topicName={topic.name}
-                    selectedEntity={selectedEntity}
-                    onSelectEntity={onSelectEntity}
-                  />
-                )}
-              </div>
-            ))}
+                  {isExpanded && (
+                    <TopicSubscriptions
+                      nsId={nsId}
+                      topicName={topic.name}
+                      selectedEntity={selectedEntity}
+                      onSelectEntity={onSelectEntity}
+                      treeRef={treeRef}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -278,11 +322,13 @@ function TopicSubscriptions({
   topicName,
   selectedEntity,
   onSelectEntity,
+  treeRef,
 }: {
   nsId: string;
   topicName: string;
   selectedEntity: SbEntityInfo | null;
   onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
+  treeRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const { data: subs, isLoading } = useSbSubscriptions(nsId, topicName);
 
@@ -290,11 +336,13 @@ function TopicSubscriptions({
   if (!subs || subs.length === 0) return null;
 
   return (
-    <div className="ml-4">
+    <div className="ml-4" role="group" aria-label={`Subscriptions of ${topicName}`}>
       {subs.map((sub) => (
         <div
           key={sub.entityPath}
-          role="button"
+          role="treeitem"
+          aria-level={2}
+          aria-selected={selectedEntity?.entityPath === sub.entityPath}
           tabIndex={0}
           data-testid={`entity-tree-sub-${sub.name}`}
           onClick={() => onSelectEntity(sub)}
@@ -302,6 +350,12 @@ function TopicSubscriptions({
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               onSelectEntity(sub);
+            } else if (e.key === "ArrowDown") {
+              e.preventDefault();
+              focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
+            } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+              e.preventDefault();
+              focusAdjacentTreeItem(treeRef.current, e.currentTarget, -1);
             }
           }}
           className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${

@@ -22,8 +22,8 @@ const columns: Column<HttpRouteInfo>[] = [
   )},
   { header: "Status", cell: (route) => (
     <span className={
-      route.status === "Accepted" ? "text-green-500" :
-      route.status === "Pending" ? "text-yellow-500" :
+      route.status === "Accepted" ? "text-success" :
+      route.status === "Pending" ? "text-warning" :
       "text-muted-foreground"
     }>
       {route.status}

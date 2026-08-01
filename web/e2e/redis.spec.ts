@@ -1,6 +1,12 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { setDemoMode } from "./helpers";
+import { setDemoMode, scrollVirtualListIntoView } from "./helpers";
+
+// The key browser tree is virtualized (@tanstack/react-virtual): rows outside the visible
+// window aren't in the DOM at all, so keys alphabetically past what fits on screen (session:*,
+// user:*) need the list scrolled toward them before Playwright can find/click their row.
+const scrollToKey = (page: import("@playwright/test").Page, key: string) =>
+  scrollVirtualListIntoView(page, "redis-key-tree-scroll", `redis-key-${key}`);
 
 test.describe("Redis", () => {
   test.beforeEach(async ({ page }) => {
@@ -16,7 +22,7 @@ test.describe("Redis", () => {
 
     // Wait for key browser to load
     await expect(page.getByTestId("redis-key-browser")).toBeVisible();
-    await expect(page.getByTestId("redis-key-user:1001")).toBeVisible();
+    await scrollToKey(page, "user:1001");
 
     // Click a string key
     await page.getByTestId("redis-key-user:1001").click();
@@ -28,7 +34,7 @@ test.describe("Redis", () => {
   test("shows hash key fields", async ({ page }) => {
     await page.goto("/redis");
 
-    await expect(page.getByTestId("redis-key-session:abc123")).toBeVisible();
+    await scrollToKey(page, "session:abc123");
     await page.getByTestId("redis-key-session:abc123").click();
     await expect(page.getByTestId("redis-detail-key-type")).toHaveText("hash");
     await expect(page.getByTestId("redis-detail-hash-fields")).toBeVisible();
@@ -56,7 +62,7 @@ test.describe("Redis", () => {
   test("searches keys with pattern", async ({ page }) => {
     await page.goto("/redis");
 
-    await expect(page.getByTestId("redis-key-user:1001")).toBeVisible();
+    await scrollToKey(page, "user:1001");
 
     // Search for session keys only
     await page.getByTestId("redis-key-search").fill("session:*");
@@ -69,7 +75,7 @@ test.describe("Redis", () => {
   test("deletes a key after confirm", async ({ page }) => {
     await page.goto("/redis");
 
-    await expect(page.getByTestId("redis-key-user:1002")).toBeVisible();
+    await scrollToKey(page, "user:1002");
     await page.getByTestId("redis-key-user:1002").click();
     await expect(page.getByTestId("redis-detail-key-name")).toHaveText("user:1002");
 
@@ -83,6 +89,7 @@ test.describe("Redis", () => {
 
   test("key detail shows rename, copy, and TTL controls", async ({ page }) => {
     await page.goto("/redis");
+    await scrollToKey(page, "user:1001");
     await page.getByTestId("redis-key-user:1001").click();
     await expect(page.getByTestId("redis-detail-key-name")).toBeVisible();
     await expect(page.getByTestId("redis-copy-key-btn")).toBeVisible();
@@ -92,6 +99,7 @@ test.describe("Redis", () => {
 
   test("string value editing works", async ({ page }) => {
     await page.goto("/redis");
+    await scrollToKey(page, "user:1001");
     await page.getByTestId("redis-key-user:1001").click();
     await expect(page.getByTestId("redis-detail-string-value")).toBeVisible();
     await expect(page.getByTestId("redis-string-edit-btn")).toBeVisible();
@@ -114,7 +122,9 @@ test.describe("Redis", () => {
   test("exports selected keys with their values", async ({ page }) => {
     await page.goto("/redis");
     await page.getByTestId("redis-batch-toggle").click();
+    await scrollToKey(page, "user:1001");
     await page.getByTestId("redis-key-checkbox-user:1001").check();
+    await scrollToKey(page, "session:abc123");
     await page.getByTestId("redis-key-checkbox-session:abc123").check();
 
     const downloadPromise = page.waitForEvent("download");
@@ -136,7 +146,7 @@ test.describe("Redis", () => {
     await page.goto("/redis");
     // Namespace tree removed; keys render directly in the browser list.
     await expect(page.getByTestId("redis-key-browser")).toBeVisible();
-    await expect(page.getByTestId("redis-key-user:1001")).toBeVisible();
+    await scrollToKey(page, "user:1001");
     await expect(page.getByTestId("redis-key-count")).toContainText(/keys loaded/);
   });
 
@@ -196,6 +206,7 @@ test.describe("Redis", () => {
 
   test("hash field add, edit, and delete", async ({ page }) => {
     await page.goto("/redis");
+    await scrollToKey(page, "session:abc123");
     await page.getByTestId("redis-key-session:abc123").click();
     await expect(page.getByTestId("redis-detail-hash-fields")).toBeVisible();
 

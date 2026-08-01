@@ -89,7 +89,7 @@ export function HelmDetailPanel({ ns, release, onClose, onRequestConfirm, onErro
                     <tr key={h.revision} className="border-b last:border-0">
                       <td className="py-2 pr-4 font-medium">{h.revision}</td>
                       <td className="py-2 pr-4">
-                        <span className={h.status === "deployed" ? "text-green-500" : "text-yellow-500"}>
+                        <span className={h.status === "deployed" ? "text-success" : "text-warning"}>
                           {h.status}
                         </span>
                       </td>

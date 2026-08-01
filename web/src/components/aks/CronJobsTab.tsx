@@ -39,7 +39,7 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
   const columns: Column<CronJobInfo>[] = useMemo(() => [
     { header: "Schedule", cell: (cj) => <span className="font-mono text-xs">{cj.schedule ?? "—"}</span> },
     { header: "Suspend", cell: (cj) => (
-      cj.suspend ? <span className="text-yellow-500">Yes</span> : <span className="text-green-500">No</span>
+      cj.suspend ? <span className="text-warning">Yes</span> : <span className="text-success">No</span>
     )},
     { header: "Active", cell: (cj) => cj.activeCount },
     { header: "Last Schedule", cell: (cj) => (

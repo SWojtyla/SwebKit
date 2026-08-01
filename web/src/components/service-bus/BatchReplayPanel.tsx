@@ -74,7 +74,7 @@ export function BatchReplayPanel({ nsId, entity, onClose }: Props) {
 
         {done ? (
           <div className="flex flex-col items-center justify-center py-12" data-testid="batch-replay-done">
-            <Check className="h-8 w-8 text-green-500" />
+            <Check className="h-8 w-8 text-success" />
             <p className="mt-2 text-sm">Successfully replayed {selectedSeqs.size} messages</p>
             <button onClick={onClose} className="mt-4 rounded-md border px-4 py-1.5 text-xs hover:bg-accent">
               Close

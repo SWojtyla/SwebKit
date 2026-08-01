@@ -14,11 +14,11 @@ export function DiagnosticsSettings() {
           <div className="mt-3 space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span>Sidecar connection</span>
-              <span className="text-green-500" data-testid="diag-sidecar-status">OK</span>
+              <span className="text-success" data-testid="diag-sidecar-status">OK</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span>Profile loaded</span>
-              <span className="text-green-500" data-testid="diag-profile-status">OK</span>
+              <span className="text-success" data-testid="diag-profile-status">OK</span>
             </div>
           </div>
         </div>

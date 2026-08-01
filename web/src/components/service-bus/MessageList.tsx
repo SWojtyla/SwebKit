@@ -819,7 +819,7 @@ export function MessageList({
           {isLoadingMore ? "Loading…" : canLoadMore ? `Load more (+${prefs.peekCount})` : "All loaded"}
         </button>
         {prefs.autoRefreshInterval > 0 && (
-          <span className="ml-2 flex items-center gap-1 text-green-500" data-testid="auto-refresh-indicator">
+          <span className="ml-2 flex items-center gap-1 text-success" data-testid="auto-refresh-indicator">
             <RotateCw className="h-3 w-3 animate-spin" /> {prefs.autoRefreshInterval}s
           </span>
         )}

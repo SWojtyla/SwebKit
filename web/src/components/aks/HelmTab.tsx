@@ -15,7 +15,7 @@ const columns: Column<HelmReleaseInfo>[] = [
   { header: "Version", cell: (rel) => <span className="text-muted-foreground">{rel.appVersion ?? rel.chartVersion ?? "—"}</span> },
   { header: "Revision", cell: (rel) => rel.revision },
   { header: "Status", cell: (rel) => (
-    <span className={rel.status === "deployed" ? "text-green-500" : "text-yellow-500"}>
+    <span className={rel.status === "deployed" ? "text-success" : "text-warning"}>
       {rel.status}
     </span>
   )},

@@ -90,13 +90,18 @@
       brand-new xterm.js terminal component in the frontend (there is currently zero terminal/pty
       infrastructure anywhere in `web/` or `src-tauri/`), which is a multi-day feature in its own
       right, not a gap-closing fix — it needs its own design pass before implementation.
-- [ ] UX Phase 4-5 accessibility + visual polish — **partial**: notification key collisions, nested
-      `<button>`, Redis key-tree keyboard reachability, and `PodsTab.tsx`'s raw Tailwind colors are
-      fixed. Still open: `role="tree"`/`role="treeitem"` (or `listbox`/`option`) semantics for
-      `CollectionTree` (API Client), `EntityTree` (Service Bus), and `ResourceTable` (AKS) — none of
-      these have real tree/list a11y semantics yet; and the broader raw-color-to-semantic-token
-      migration (`text-green-500`/`text-yellow-500`/`text-red-500` → `text-success`/`text-warning`/
-      `text-destructive`) across the ~23 other files still using raw Tailwind colors.
+- [x] UX Phase 4-5 accessibility + visual polish — **done**: notification key collisions, nested
+      `<button>`, and Redis key-tree keyboard reachability were fixed earlier. This pass added real
+      `role="tree"`/`role="treeitem"`/`aria-expanded`/`aria-level`/`aria-selected` plus roving
+      Arrow-key/Enter/Space navigation to `CollectionTree` (API Client) and `EntityTree` (Service
+      Bus); `ResourceTable` (AKS) stayed a plain `<table>` (it has no sortable headers to give
+      `aria-sort`) but its rows are now keyboard-reachable/selectable. It also migrated every
+      remaining raw-color status indicator (`text-green/yellow/amber/red-*`,
+      `bg-green/yellow/red-*`, including opacity variants) to the semantic
+      `text-success/warning/destructive`/`bg-success/warning/destructive` tokens across 27 files —
+      deliberately leaving alone the handful of genuinely decorative/categorical colors (Redis's
+      per-datatype `typeColors` map, the TTL progress bar, two terminal-style diff/content viewers,
+      the JSON syntax highlighter) that aren't status indicators.
 
 ## Verification
 
@@ -104,10 +109,12 @@
 | --- | --- |
 | `npx tsc -b` (web) | Pass |
 | `npm run test:unit` (Vitest) | 116 passed |
-| `npx playwright test` (full e2e suite) | 190 passed, 1 failed — `service-bus.spec.ts` "copy body and copy full message buttons work", a pre-existing clipboard-related flake unrelated to this session's changes (confirmed passing in 3 separate isolated re-runs) |
+| `npx playwright test` (full e2e suite) | 191 passed, 0 failed |
 | `dotnet build` — `src-sidecar`, `SwebKit.Core`, `SwebKit.Azure` | Pass, 0 warnings |
-| `dotnet test tests/SwebKit.Sidecar.Tests` | 28 passed (22 existing + 6 new) |
+| `dotnet test tests/SwebKit.Sidecar.Tests` | 32 passed (22 existing + 6 connection-pool + 4 agent tool-calling) |
 | `dotnet test tests/SwebKit.Core.Tests` | 798 passed |
+| `cargo clippy --all-targets -- -D warnings` (`src-tauri`) | Pass, 0 warnings |
+| `cargo test --lib` (`src-tauri`) | 53 passed (50 existing + 3 port-forward parsing) |
 
 ## Definition of Done
 

@@ -35,7 +35,7 @@ export function AnalysisPanel({ ns }: Props) {
                     <td className="px-3 py-2 text-xs">{hosts}</td>
                     <td className="px-3 py-2 text-xs">{paths}</td>
                     <td className="px-3 py-2 text-xs">
-                      <span className={hasTls ? "text-green-500" : "text-yellow-500"}>
+                      <span className={hasTls ? "text-success" : "text-warning"}>
                         {hasTls ? "Yes" : "No"}
                       </span>
                     </td>

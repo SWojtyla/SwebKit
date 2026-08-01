@@ -123,7 +123,7 @@ export function BlobRecoveryPanel({ accountId, container, allowMutations = false
                     <td className="px-3 py-2 text-xs text-muted-foreground">{formatBytes(blob.sizeBytes)}</td>
                     <td className="px-3 py-2 text-right">
                       {isRecovered ? (
-                        <span className="text-xs text-green-500" data-testid={`blob-recovered-${blob.name}`}>
+                        <span className="text-xs text-success" data-testid={`blob-recovered-${blob.name}`}>
                           Recovered
                         </span>
                       ) : (
