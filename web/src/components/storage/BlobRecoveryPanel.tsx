@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { useUndeleteBlob } from "@/lib/hooks";
+import { useStoragePageContext } from "./StoragePageContext";
 
 interface DeletedBlob {
   name: string;
@@ -17,14 +18,13 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
-interface Props {
-  accountId: string | null;
-  container: string | null;
-  allowMutations?: boolean;
-  serverDeletedBlobs?: { name: string; deletedOn: string; remainingDays: number }[];
-}
+export function BlobRecoveryPanel() {
+  const ctx = useStoragePageContext();
+  const accountId = ctx.resolvedAccountId;
+  const container = ctx.selectedContainer;
+  const allowMutations = ctx.allowMutations;
+  const serverDeletedBlobs = ctx.deletedBlobs.data;
 
-export function BlobRecoveryPanel({ accountId, container, allowMutations = false, serverDeletedBlobs }: Props) {
   const deletedBlobs: DeletedBlob[] = (serverDeletedBlobs ?? []).map((b) => ({
     name: b.name,
     deletedAt: b.deletedOn,
