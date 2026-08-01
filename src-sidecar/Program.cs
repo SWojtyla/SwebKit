@@ -255,6 +255,12 @@ app.MapPut("/api/config/collections", async (CollectionRepository repo, Collecti
         store.Collections.RemoveAll(c => c.Id == DemoApiCollectionFactory.DemoCollectionId);
     }
 
+    // Structural guard, not just the DTO's conditional [JsonIgnore]: strip any populated
+    // CredentialSecret before it can reach disk, regardless of how it got onto the in-memory
+    // object graph. CredentialSecret exists only to carry a secret to the /execute endpoint for a
+    // single request — it must never be written to collections.json.
+    StripCredentialSecrets(store);
+
     if (!string.IsNullOrWhiteSpace(concurrencyToken))
     {
         var currentToken = repo.GetConcurrencyToken();
@@ -318,3 +324,29 @@ app.MapAgentEndpoints();
 app.MapMonitoringEndpoints();
 
 app.Run();
+
+// Recursively nulls every AuthConfig.CredentialSecret reachable from a CollectionsStore, so a
+// populated value can never reach collections.json regardless of how it got onto the object graph.
+static void StripCredentialSecrets(CollectionsStore store)
+{
+    foreach (var collection in store.Collections)
+    {
+        StripAuth(collection.DefaultAuth);
+        foreach (var node in collection.Nodes)
+            StripNode(node);
+    }
+
+    static void StripNode(ApiCollectionNode node)
+    {
+        StripAuth(node.DefaultAuth);
+        StripAuth(node.Request?.Auth);
+        foreach (var child in node.Children)
+            StripNode(child);
+    }
+
+    static void StripAuth(AuthConfig? auth)
+    {
+        if (auth is not null)
+            auth.CredentialSecret = null;
+    }
+}

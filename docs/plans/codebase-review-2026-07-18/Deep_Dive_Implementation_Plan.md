@@ -1,5 +1,15 @@
 # SwebKit Deep-Dive Implementation Plan
 
+> **Scope note (2026-08-01):** this document is entirely scoped to the legacy MAUI Blazor codebase
+> (`SwebKit.App`, `MauiProgram.cs`, `SwebKitComponentBase`, etc.) — it predates and does not
+> reference the Tauri/React/sidecar stack at all. Now that Tauri+React is the primary tool (see
+> `docs/features/active/tauri-react-primary-tool/`), treat this as historical/MAUI-only, not a
+> current source for the new stack's technical plan — except for the items that describe issues in
+> shared `SwebKit.Core`/`.Azure`/`.Kubernetes` libraries the sidecar still depends on unchanged
+> (kubectl `ArgumentList` hardening, `DefaultAzureCredential` factory bypass,
+> `WindowsCredentialStore` exception swallowing), which were carried forward and re-verified in
+> `docs/features/active/tauri-react-primary-tool/technical-plan.md` Module 3.11.
+
 > Concrete, phase-by-phase improvements for `SWojtyla/SwebKit`. Each phase lists the exact files to change, the expected code shape, and acceptance criteria. Phases are ordered to minimize risk: tooling and security first, then reliability, then UI decomposition, then long-term architecture.
 >
 > **Revised**: original plan by Devin corrected for inaccuracies and updated to reflect work already merged in PR #27. .NET 10 is the target — no downgrade.

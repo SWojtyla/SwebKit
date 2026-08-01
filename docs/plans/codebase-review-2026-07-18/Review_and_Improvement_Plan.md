@@ -1,5 +1,11 @@
 # SwebKit Codebase Review & Improvement Plan
 
+> **Scope note (2026-08-01):** entirely scoped to the legacy MAUI Blazor codebase — no reference to
+> `web/`, `src-tauri/`, or `src-sidecar/` anywhere in this document. Treat as historical/MAUI-only
+> now that Tauri+React is the primary tool; see
+> `docs/features/active/tauri-react-primary-tool/technical-plan.md` for the current stack's plan,
+> which carries forward only the shared-library items still applicable (Module 3.11).
+
 > Scope: code quality, architecture, performance, security, reliability, and engineering-experience improvements.
 > Method: static review of `SWojtyla/SwebKit` (≈86k source LOC, ≈29k test LOC). Verified against current `main` as of 2026-07-18. .NET 10 is the target framework and is intentionally chosen — this plan does **not** recommend downgrading.
 > **Revised**: original plan by Devin corrected for inaccuracies and updated to reflect work already merged in PR #27.

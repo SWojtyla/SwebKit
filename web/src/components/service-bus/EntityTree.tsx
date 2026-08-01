@@ -193,18 +193,26 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
               Queues ({sortedQueues.length})
             </div>
             {sortedQueues.map((queue) => (
-              <button
+              <div
                 key={queue.entityPath}
+                role="button"
+                tabIndex={0}
                 data-testid={`entity-tree-queue-${queue.name}`}
                 onClick={() => onSelectEntity(queue)}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectEntity(queue);
+                  }
+                }}
+                className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
                   selectedEntity?.entityPath === queue.entityPath ? "bg-accent" : ""
                 }`}
               >
                 <EntityIcon entity={queue} />
                 <span className="truncate flex-1">{queue.name}</span>
                 <EntityStatsBadges entity={queue} onSelectEntity={onSelectEntity} />
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -217,10 +225,18 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
             </div>
             {sortedTopics.map((topic) => (
               <div key={topic.entityPath}>
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   data-testid={`entity-tree-topic-${topic.name}`}
                   onClick={() => toggleTopic(topic.name)}
-                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggleTopic(topic.name);
+                    }
+                  }}
+                  className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
                     selectedEntity?.entityPath === topic.entityPath ? "bg-accent" : ""
                   }`}
                 >
@@ -232,7 +248,7 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
                   <Folder className="h-4 w-4 text-muted-foreground" />
                   <span className="truncate">{topic.name}</span>
                   <EntityStatsBadges entity={topic} onSelectEntity={onSelectEntity} />
-                </button>
+                </div>
 
                 {expandedTopics.has(topic.name) && (
                   <TopicSubscriptions
@@ -276,18 +292,26 @@ function TopicSubscriptions({
   return (
     <div className="ml-4">
       {subs.map((sub) => (
-        <button
+        <div
           key={sub.entityPath}
+          role="button"
+          tabIndex={0}
           data-testid={`entity-tree-sub-${sub.name}`}
           onClick={() => onSelectEntity(sub)}
-          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSelectEntity(sub);
+            }
+          }}
+          className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
             selectedEntity?.entityPath === sub.entityPath ? "bg-accent" : ""
           }`}
         >
           <Mail className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="truncate flex-1">{sub.name}</span>
           <EntityStatsBadges entity={sub} onSelectEntity={onSelectEntity} />
-        </button>
+        </div>
       ))}
     </div>
   );

@@ -28,7 +28,10 @@ export function DashboardPage() {
   const sidecarOk = health?.status === "ok";
   const isDemo = demoMode?.isDemoMode ?? false;
 
-  const aksConfigured = !!profile?.config.aksConfig;
+  // Demo mode doesn't synthesize a fake `aksConfig` into the profile the way it
+  // populates Service Bus/Redis/Storage lists, so without this the AKS tile
+  // would read "Not configured" while the AKS page itself works fully on demo data.
+  const aksConfigured = isDemo || !!profile?.config.aksConfig;
   const redisCaches = profile?.config.redisConfig?.caches ?? [];
   const storageAccounts = profile?.config.storageAccounts ?? [];
   const sbNamespaces = profile?.serviceBusNamespaces ?? [];

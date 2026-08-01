@@ -1076,6 +1076,49 @@ public class DemoAksClient : IAksClient
         if (kind.Equals("CronJob", StringComparison.OrdinalIgnoreCase))
             return Task.FromResult(BuildCronJobYaml(ns, name));
 
+        if (kind.Equals("Pod", StringComparison.OrdinalIgnoreCase))
+        {
+            var podYaml = $"""
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                  labels:
+                    app: {name.Split('-').FirstOrDefault() ?? name}
+                    pod-template-hash: {name.Split('-').LastOrDefault() ?? "abc123"}
+                spec:
+                  containers:
+                  - name: {name}
+                    image: acr.azurecr.io/{name}:1.8.3
+                    ports:
+                    - containerPort: 8080
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                  - name: istio-proxy
+                    image: docker.io/istio/proxyv2:1.20.3
+                    ports:
+                    - containerPort: 15090
+                status:
+                  phase: Running
+                  podIP: 10.244.1.17
+                  hostIP: 10.240.0.4
+                  containerStatuses:
+                  - name: {name}
+                    ready: true
+                    restartCount: 0
+                    state:
+                      running:
+                        startedAt: "2026-07-31T08:12:00Z"
+                """;
+            return Task.FromResult(podYaml);
+        }
+
         var yaml = $"""
             apiVersion: {(kind == "Deployment" ? "apps/v1" : kind == "Ingress" ? "networking.k8s.io/v1" : "v1")}
             kind: {kind}

@@ -7,7 +7,6 @@ import { RedisSettings } from "./RedisSettings";
 import { StorageSettings } from "./StorageSettings";
 import { AgentSettings } from "./AgentSettings";
 import { GeneralSettings } from "./GeneralSettings";
-import { DevOpsSettings } from "./DevOpsSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 
@@ -18,7 +17,6 @@ const tabs = [
   { id: "redis", label: "Redis" },
   { id: "storage", label: "Storage" },
   { id: "agent", label: "AI Agent" },
-  { id: "devops", label: "DevOps" },
   { id: "diagnostics", label: "Diagnostics" },
   { id: "appearance", label: "Appearance" },
 ] as const;
@@ -92,7 +90,6 @@ export function SettingsPage() {
           {activeTab === "redis" && <RedisSettings />}
           {activeTab === "storage" && <StorageSettings />}
           {activeTab === "agent" && <AgentSettings />}
-          {activeTab === "devops" && <DevOpsSettings />}
           {activeTab === "diagnostics" && <DiagnosticsSettings />}
           {activeTab === "appearance" && <AppearanceSettings />}
         </div>
