@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, Filter, X, Columns, Pin, Plus, RotateCw, Check, AlertCircle, ArrowUpRight, Bookmark, Download, Loader2 } from "lucide-react";
 import { useSbCompleteMessages, useSbCompleteDlq, useSbResubmitDlq } from "@/lib/hooks";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
@@ -45,6 +46,38 @@ const densityClass: Record<RowDensity, string> = {
   compact: "py-0.5",
   default: "py-1.5",
   comfort: "py-2.5",
+};
+
+// Estimated row height per density, used as the virtualizer's initial size
+// guess before `measureElement` corrects it against the real rendered height.
+const ROW_HEIGHT_ESTIMATE: Record<RowDensity, number> = {
+  compact: 24,
+  default: 32,
+  comfort: 40,
+};
+
+// The message list renders as a real data table (see ColumnDef below), but
+// virtualized rows are absolutely-positioned siblings rather than actual
+// <tr> elements in a shared <table> — so every row (and the header) must
+// share one explicit `grid-template-columns` string for the columns to line
+// up. These widths mirror the `max-w-[...]` classes the columns already had.
+const CHECKBOX_COL_WIDTH = "32px";
+const CUSTOM_COLUMN_WIDTH = "140px";
+const COLUMN_WIDTHS: Record<string, string> = {
+  enqueuedAt: "110px",
+  sequenceNumber: "90px",
+  messageId: "160px",
+  correlationId: "140px",
+  subject: "220px",
+  deliveryCount: "90px",
+  contentType: "120px",
+  sessionId: "120px",
+  partitionKey: "130px",
+  deadLetterReason: "200px",
+  nsbEndpoint: "200px",
+  nsbMessageType: "160px",
+  nsbTimeSent: "150px",
+  nsbConversation: "200px",
 };
 
 // Real columns rendered as an actual data table — this is what the MAUI
@@ -311,6 +344,27 @@ export function MessageList({
     downloadBlob(fileName, zipped);
     notify("success", `Downloaded ${messagesToDownload.length} message(s) as ZIP`);
   }, [entity, messages, filteredMessages, selectedMsgs, notify]);
+
+  // Columns actually rendered given current view mode + toggles, and the
+  // shared grid template both the header and every virtualized row use so
+  // columns stay aligned across independently-positioned row elements.
+  const activeColumnDefs = COLUMN_DEFS.filter(
+    (col) => visibleColumns.has(col.key) && (!col.dlqOnly || viewMode === "dlq"),
+  );
+  const gridTemplateColumns = [
+    CHECKBOX_COL_WIDTH,
+    ...activeColumnDefs.map((col) => COLUMN_WIDTHS[col.key] ?? "140px"),
+    ...prefs.customColumns.map(() => CUSTOM_COLUMN_WIDTH),
+    ...(nsbMode ? NSB_COLUMN_DEFS.map((col) => COLUMN_WIDTHS[col.key] ?? "160px") : []),
+  ].join(" ");
+
+  const rowVirtualizer = useVirtualizer({
+    count: filteredMessages.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => ROW_HEIGHT_ESTIMATE[prefs.rowDensity],
+    getItemKey: (index) => sbMessageKey(filteredMessages[index]),
+    measureElement: (el) => el?.getBoundingClientRect().height ?? ROW_HEIGHT_ESTIMATE[prefs.rowDensity],
+  });
 
   if (!entity) {
     return (
@@ -706,98 +760,130 @@ export function MessageList({
             : "No messages match the current filters"}
         </div>
       ) : (
-        <div ref={listRef} className="flex-1 min-h-0 overflow-auto" data-testid="message-list">
-          <table className="w-full border-collapse text-xs">
-            <thead className="sticky top-0 z-10 bg-card">
-              <tr className="border-b">
-                <th className="w-8 px-2 py-1.5">
-                  <input
-                    type="checkbox"
-                    checked={selectedMsgs.size > 0 && selectedMsgs.size === filteredMessages.length}
-                    onChange={toggleSelectAll}
-                    data-testid="message-select-all-checkbox"
-                  />
-                </th>
-                {COLUMN_DEFS.filter((col) => visibleColumns.has(col.key) && (!col.dlqOnly || viewMode === "dlq")).map((col) => (
-                  <th key={col.key} className="whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground">
-                    {col.label}
-                  </th>
-                ))}
-                {prefs.customColumns.map((col) => (
-                  <th key={col} className="whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground">
-                    {col}
-                  </th>
-                ))}
-                {nsbMode && NSB_COLUMN_DEFS.map((col) => (
-                  <th key={col.key} className="whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground">
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredMessages.map((msg) => {
-                const msgKey = sbMessageKey(msg);
-                const isSelected = selectedMsgs.has(msgKey);
-                const isActive =
-                  selectedMessage?.messageId === msg.messageId &&
-                  selectedMessage?.sequenceNumber === msg.sequenceNumber;
-                return (
-                  <tr
-                    key={msgKey}
+        <div ref={listRef} className="flex-1 min-h-0 overflow-auto text-xs" data-testid="message-list" role="table" aria-label="Messages">
+          <div className="sticky top-0 z-10 grid border-b bg-card" style={{ gridTemplateColumns }} role="row">
+            <div className="flex items-center px-2 py-1.5" role="columnheader">
+              <input
+                type="checkbox"
+                checked={selectedMsgs.size > 0 && selectedMsgs.size === filteredMessages.length}
+                onChange={toggleSelectAll}
+                data-testid="message-select-all-checkbox"
+              />
+            </div>
+            {activeColumnDefs.map((col) => (
+              <div key={col.key} className="flex items-center whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground" role="columnheader">
+                {col.label}
+              </div>
+            ))}
+            {prefs.customColumns.map((col) => (
+              <div key={col} className="flex items-center whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground" role="columnheader">
+                {col}
+              </div>
+            ))}
+            {nsbMode && NSB_COLUMN_DEFS.map((col) => (
+              <div key={col.key} className="flex items-center whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground" role="columnheader">
+                {col.label}
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
+            data-testid="message-list-virtualizer"
+            role="rowgroup"
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const msg = filteredMessages[virtualRow.index];
+              const msgKey = sbMessageKey(msg);
+              const isSelected = selectedMsgs.has(msgKey);
+              const isActive =
+                selectedMessage?.messageId === msg.messageId &&
+                selectedMessage?.sequenceNumber === msg.sequenceNumber;
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  role="presentation"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <div
                     data-testid={`message-item-${msg.sequenceNumber}`}
                     onClick={() => onSelectMessage(msg)}
-                    className={`cursor-pointer border-b hover:bg-accent ${isActive ? "bg-accent" : ""}`}
+                    role="row"
+                    className={`grid cursor-pointer border-b hover:bg-accent ${isActive ? "bg-accent" : ""}`}
+                    style={{ gridTemplateColumns }}
                   >
-                    <td className={`px-2 ${densityClass[prefs.rowDensity]}`} onClick={(e) => e.stopPropagation()}>
+                    <div
+                      className={`flex items-center px-2 ${densityClass[prefs.rowDensity]}`}
+                      onClick={(e) => e.stopPropagation()}
+                      role="cell"
+                    >
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelect(msg)}
                         data-testid={`message-checkbox-${msg.sequenceNumber}`}
                       />
-                    </td>
-                    {COLUMN_DEFS.filter((col) => visibleColumns.has(col.key) && (!col.dlqOnly || viewMode === "dlq")).map((col) => {
+                    </div>
+                    {activeColumnDefs.map((col) => {
                       const value = col.render(msg);
                       const isDelivery = col.key === "deliveryCount";
                       const isDlqReason = col.key === "deadLetterReason";
                       return (
-                        <td
+                        <div
                           key={col.key}
                           title={value}
-                          className={`truncate px-2 ${densityClass[prefs.rowDensity]} ${col.className ?? ""} ${
+                          role="cell"
+                          className={`flex min-w-0 items-center truncate px-2 ${densityClass[prefs.rowDensity]} ${col.className ?? ""} ${
                             isDelivery && viewMode === "dlq" && msg.deliveryCount > 0 ? "text-destructive" : ""
                           } ${isDlqReason ? "text-destructive" : ""}`}
                         >
                           {isDlqReason && msg.deadLetterReason && (
                             <AlertCircle className="mr-1 inline h-3 w-3 shrink-0" />
                           )}
-                          {value}
-                        </td>
+                          <span className="truncate">{value}</span>
+                        </div>
                       );
                     })}
                     {prefs.customColumns.map((col) => {
                       const val = msg.applicationProperties[col];
                       const display = val === undefined || val === null ? "-" : String(val);
                       return (
-                        <td key={col} title={display} className={`truncate px-2 text-muted-foreground ${densityClass[prefs.rowDensity]}`}>
-                          {display}
-                        </td>
+                        <div
+                          key={col}
+                          title={display}
+                          role="cell"
+                          className={`flex min-w-0 items-center truncate px-2 text-muted-foreground ${densityClass[prefs.rowDensity]}`}
+                        >
+                          <span className="truncate">{display}</span>
+                        </div>
                       );
                     })}
                     {nsbMode && NSB_COLUMN_DEFS.map((col) => {
                       const value = col.render(msg);
                       return (
-                        <td key={col.key} title={value} className={`truncate px-2 text-muted-foreground ${densityClass[prefs.rowDensity]} ${col.className ?? ""}`}>
-                          {value}
-                        </td>
+                        <div
+                          key={col.key}
+                          title={value}
+                          role="cell"
+                          className={`flex min-w-0 items-center truncate px-2 text-muted-foreground ${densityClass[prefs.rowDensity]} ${col.className ?? ""}`}
+                        >
+                          <span className="truncate">{value}</span>
+                        </div>
                       );
                     })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           <div ref={sentinelRef} className="h-1" data-testid="message-load-sentinel" />
         </div>
       )}
