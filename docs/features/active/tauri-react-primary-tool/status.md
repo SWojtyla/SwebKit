@@ -44,10 +44,33 @@
       a `WebApplicationFactory` integration harness, neither of which fit in the remaining time.
 - [x] CI wiring (test-plan.md Module 7) — done: Vitest now runs in the `frontend` job, a new `rust`
       job runs `cargo clippy`/`cargo test` gated on `src-tauri/**` changes.
-- [ ] Frontend architecture decomposition (technical-plan.md Module 2) — not started
-      (`RedisPage.tsx`/`StoragePage.tsx` decomposition, `lib/hooks.ts` split,
-      `ApiClientPage.tsx`/`RequestEditor.tsx` — the last two are also blocked on the same missing
-      branch as Phase 1 above)
+- [x] Frontend architecture decomposition (technical-plan.md Module 2) — **partial, the rest
+      blocked**: `lib/hooks.ts` (1540 lines, every domain's hooks in one file) split into
+      `web/src/lib/hooks/{useServiceBus,useAks,useRedis,useStorage,useApiClient,useAgent,
+      useMonitoring,useProfile,useCommandPalette}.ts` with `index.ts` re-exporting all of them, so
+      the ~400 existing `import { useX } from "@/lib/hooks"` call sites needed zero changes.
+      `RedisPage.tsx` (1330 lines, 31 `useState`) and `StoragePage.tsx` (975 lines, ~30 `useState`)
+      both decomposed into a `<Feature>PageContext`/`use<Feature>PageContext` hook plus per-tab/
+      per-view components, mirroring `AksWorkspaceContext.tsx`/`AksPage.tsx`'s proven shape:
+      `RedisPage.tsx` 1330 → 149 lines, `StoragePage.tsx` 975 → 98 lines. `BlobRecoveryPanel.tsx`'s
+      previously-partial context extraction is now finished (§2.2 called this out explicitly — "don't
+      leave it half-done"). `ApiClientPage.tsx`/`RequestEditor.tsx` (§2.3) remain **not started** —
+      the plan explicitly says do this one *after* Phase 1 (above) lands the uncommitted
+      `api-client-ux-overhaul` branch, which still doesn't exist anywhere reachable in this repo, so
+      it stays blocked on the same missing branch as Phase 1.
+      **Note for whoever picks up Module 5's remaining `React.memo` pass**: neither
+      `RedisPageContext.tsx` nor `StoragePageContext.tsx` wraps its context `value` object in
+      `useMemo` (unlike `AksWorkspaceContext.tsx`), and most of their handlers aren't wrapped in
+      `useCallback` either — so `React.memo` on a context-consuming child wouldn't yet see a stable
+      prop/context reference to skip a re-render against. But this is *not* a quick fix: a single
+      shared context value (the pattern all three of these files use, matching the AKS reference)
+      means one context field changing (e.g. a keystroke in a rename input) still changes the whole
+      `value` object identity even after memoizing it, so every consumer re-renders regardless —
+      `useMemo`/`useCallback` alone would mostly add bookkeeping overhead without the payoff a real
+      fix needs. An actual win here means splitting each page's one big context into a few narrower
+      ones (e.g. tree/list state vs. dialog state vs. selection), which is real design work, not a
+      mechanical follow-up to this decomposition — scope it as its own pass rather than folding it in
+      here.
 - [x] Shared UI primitives (technical-plan.md Module 4) — done: `Dialog`, `EmptyState`, `Skeleton`,
       `QueryState` added under `web/src/components/shared/`; migrated onto in API Client dialogs,
       collection export dialog, AKS alert-rule dialog, keyboard-shortcuts panel; command palette and
