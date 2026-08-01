@@ -81,6 +81,9 @@ pub fn run() {
             // as an orphan holding its port.
             if let tauri::RunEvent::Exit = event {
                 sidecar::kill_sidecar(app_handle);
+                if let Some(state) = app_handle.try_state::<native::PortForwardState>() {
+                    native::kill_all_port_forwards(&state);
+                }
             }
         });
 }

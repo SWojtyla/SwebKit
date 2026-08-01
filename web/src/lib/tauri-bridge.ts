@@ -85,6 +85,8 @@ export async function startPortForward(
   pod: string,
   remotePort: number,
   localPort?: number,
+  context?: string | null,
+  kubeconfig?: string | null,
 ): Promise<number> {
   if (isTauri()) {
     return invoke<number>("start_port_forward", {
@@ -92,6 +94,8 @@ export async function startPortForward(
       pod,
       remotePort,
       localPort: localPort ?? null,
+      context: context ?? null,
+      kubeconfig: kubeconfig ?? null,
     });
   }
   throw new Error("Port-forward requires the Tauri desktop app");

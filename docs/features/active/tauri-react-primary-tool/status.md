@@ -53,7 +53,11 @@
       collection export dialog, AKS alert-rule dialog, keyboard-shortcuts panel; command palette and
       entity command palette given `role="dialog"`/`aria-modal` directly (kept their existing
       custom focus/Escape logic instead of a full migration).
-- [ ] Performance pass (technical-plan.md Module 5) — not started
+- [x] Performance pass (technical-plan.md Module 5) — **partial**: `RedisPage.tsx`'s key tree and
+      `StoragePage.tsx`'s blob list now render through `@tanstack/react-virtual`, matching the
+      pattern already proven in `CollectionTree.tsx`. Not done: the systematic `React.memo` pass
+      once list rows are extracted, and `lib/hooks.ts`/large-component decomposition (Module 2,
+      below) that the technical plan treats as a performance-adjacent prerequisite.
 - [x] Production/ops readiness (technical-plan.md Module 6) — **partial**: sidecar file logging via
       `FileLoggerProvider`/`AppBootstrap` (moved to `SwebKit.Core.Diagnostics` so both MAUI and the
       sidecar share it), sidecar 500s now log the real exception server-side while still returning a
@@ -76,9 +80,16 @@
       and the 3 API Client mutation/proposal tools in `ApiClientTools.cs` — those need the
       confirmation-card flow (`IAgentActionCoordinator`/`AgentActionApplier`) that the sidecar's chat
       UI doesn't implement, so wiring them without it would let the model mutate collections with no
-      user confirmation step. Still open: pod shell exec (`PodsTab.tsx`'s "Open shell in pod" is
-      `disabled: true`, no Tauri command backs it) and real port-forward (`native.rs` only maintains
-      a session registry — no `kubectl port-forward` subprocess is actually spawned).
+      user confirmation step. Real port-forward is done: `start_port_forward` now spawns an actual
+      `kubectl port-forward -n <ns> pod/<pod> <local>:<remote>` subprocess (mirroring the
+      stdout-parsing pattern `sidecar.rs` already used to recover an OS-assigned port), keeps the
+      child in the session so `stop_port_forward` can kill it, and `RunEvent::Exit` now kills every
+      live forward so none survive as orphans after the app closes. Still open: pod shell exec
+      (`PodsTab.tsx`'s "Open shell in pod" is `disabled: true`) — deliberately **not** attempted this
+      pass: it needs a pty crate (`portable-pty`), a bidirectional Tauri IPC streaming channel, and a
+      brand-new xterm.js terminal component in the frontend (there is currently zero terminal/pty
+      infrastructure anywhere in `web/` or `src-tauri/`), which is a multi-day feature in its own
+      right, not a gap-closing fix — it needs its own design pass before implementation.
 - [ ] UX Phase 4-5 accessibility + visual polish — **partial**: notification key collisions, nested
       `<button>`, Redis key-tree keyboard reachability, and `PodsTab.tsx`'s raw Tailwind colors are
       fixed. Still open: `role="tree"`/`role="treeitem"` (or `listbox`/`option`) semantics for
