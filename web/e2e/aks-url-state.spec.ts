@@ -48,11 +48,13 @@ test.describe("AKS URL state", () => {
   test("pod click and YAML view update the URL and are restored after reload", async ({ page }) => {
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption("ecommerce");
+    await expect(page).toHaveURL(/ns=ecommerce/);
     await page.getByTestId("aks-tab-pods").click();
 
     const table = page.getByTestId("pods-table-body");
     await expect(table).toBeVisible();
     const firstRow = table.locator("tr").first();
+    await expect(firstRow).toBeVisible();
     await firstRow.click();
 
     await expect(page.getByTestId("pod-detail-panel")).toBeVisible();

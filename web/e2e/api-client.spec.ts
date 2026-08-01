@@ -139,7 +139,8 @@ test.describe("API Client", () => {
     await page.getByTestId("name-dialog-input").fill(uniqueName);
     await page.getByTestId("name-dialog-confirm").click();
 
-    // Find our specific collection by text
+    // Filter so the virtualized tree renders our specific collection
+    await page.getByTestId("collection-search").fill(uniqueName);
     const collectionRoot = page.getByTestId(/collection-root-/).filter({ hasText: uniqueName }).first();
     await collectionRoot.waitFor();
     await collectionRoot.scrollIntoViewIfNeeded();
@@ -300,7 +301,8 @@ test.describe("API Client", () => {
     await page.getByTestId("name-dialog-input").fill("Col Var Test Collection");
     await page.getByTestId("name-dialog-confirm").click();
 
-    // Select it
+    // Select it (filter so the virtualized tree renders it)
+    await page.getByTestId("collection-search").fill("Col Var Test Collection");
     await page.getByTestId(/collection-root-/).filter({ hasText: "Col Var Test Collection" }).first().click();
 
     // Open collection variables editor
