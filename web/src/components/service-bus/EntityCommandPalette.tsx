@@ -112,6 +112,9 @@ export function EntityCommandPalette({ open, nsId, onClose, onSelectEntity, onAc
       data-testid="entity-command-palette"
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search entities"
         className="w-96 rounded-lg border bg-card shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >

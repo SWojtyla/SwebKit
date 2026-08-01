@@ -359,7 +359,7 @@ export function DashboardPage() {
                   <h3 className="font-semibold">{service.name}</h3>
                   {"count" in service && service.count !== undefined && (
                     <p className="text-xs text-muted-foreground">
-                      {service.count} {service.unit}
+                      {service.count} {service.count === 1 && service.unit?.endsWith("s") ? service.unit.slice(0, -1) : service.unit}
                     </p>
                   )}
                   {"configured" in service && (

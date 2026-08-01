@@ -160,6 +160,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       data-testid="command-palette-overlay"
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
         className="w-full max-w-lg rounded-lg border bg-card shadow-lg"
         onClick={(e) => e.stopPropagation()}
         data-testid="command-palette"

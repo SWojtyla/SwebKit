@@ -24,14 +24,14 @@ function formatMemory(bytes: number): string {
 
 function cpuClass(cores: number): string {
   if (cores > 0.4) return "text-destructive";
-  if (cores > 0.15) return "text-yellow-500";
-  return "text-green-500";
+  if (cores > 0.15) return "text-warning";
+  return "text-success";
 }
 
 function memoryClass(mi: number): string {
   if (mi > 400) return "text-destructive";
-  if (mi > 200) return "text-yellow-500";
-  return "text-green-500";
+  if (mi > 200) return "text-warning";
+  return "text-success";
 }
 
 function formatAge(startTime: string | null | undefined): string {
@@ -68,8 +68,8 @@ function aggregatePodUsage(metric: PodMetricInfo | undefined) {
 
 function PodStatusBadge({ status }: { status: string }) {
   const color =
-    status === "Running" ? "text-green-500" :
-    status === "Pending" ? "text-yellow-500" :
+    status === "Running" ? "text-success" :
+    status === "Pending" ? "text-warning" :
     status === "Failed" || status.includes("BackOff") || status.includes("Error") ? "text-destructive" :
     "text-muted-foreground";
   return <span className={color}>{status}</span>;
@@ -150,7 +150,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
   const columns: Column<PodInfo>[] = useMemo(() => [
     { header: "Status", cell: (pod) => <PodStatusBadge status={pod.status} /> },
     { header: "Ready", cell: (pod) => (
-      <span className={pod.ready ? "text-green-500" : "text-yellow-500"}>
+      <span className={pod.ready ? "text-success" : "text-warning"}>
         {pod.readyDisplay}
       </span>
     )},
@@ -185,7 +185,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     },
     { header: "Restarts", cell: (pod) => (
       pod.restartCount > 0 ? (
-        <span className="text-yellow-500">{pod.restartCount}</span>
+        <span className="text-warning">{pod.restartCount}</span>
       ) : (
         <span className="text-muted-foreground">0</span>
       )

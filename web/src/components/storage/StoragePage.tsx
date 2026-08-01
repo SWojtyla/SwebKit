@@ -16,7 +16,7 @@ import {
   useSetBlobMetadata,
 } from "@/lib/hooks";
 import type { StorageBlobItem } from "@/lib/types";
-import { Download, Link as LinkIcon, Check, Plus, Trash2, RotateCcw, Upload, Copy as CopyIcon } from "lucide-react";
+import { Download, Link as LinkIcon, Check, Plus, Trash2, RotateCcw, Upload, Copy as CopyIcon, File, Folder } from "lucide-react";
 import { BlobRecoveryPanel } from "./BlobRecoveryPanel";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { useNotification } from "@/components/layout/NotificationSystem";
@@ -437,9 +437,11 @@ export function StoragePage() {
                         data-testid={`storage-blob-checkbox-${item.name}`}
                       />
                     )}
-                    <span className={item.isPrefix ? "text-blue-400" : "text-muted-foreground"}>
-                      {item.isPrefix ? "📁" : "📄"}
-                    </span>
+                    {item.isPrefix ? (
+                      <Folder className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+                    ) : (
+                      <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )}
                     <span className="truncate font-mono">
                       {item.isPrefix ? item.name.replace(currentPrefix, "") : item.name.replace(currentPrefix, "")}
                     </span>

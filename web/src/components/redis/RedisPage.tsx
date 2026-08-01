@@ -23,7 +23,7 @@ import {
   useRedisKeyspaceHealth,
   useRedisPrefixMemory,
 } from "@/lib/hooks";
-import { formatTtl, parseTtl, getTtlColorClass } from "@/lib/redis-format";
+import { formatTtl, parseTtl, getTtlColorClass, formatDuration } from "@/lib/redis-format";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { Copy, Pencil, Check, X, Clock, Trash2, RefreshCw, Plus, ChevronRight, ChevronDown } from "lucide-react";
 import { KeyspaceHealthPanel, PrefixMemoryPanel, OpsInsightsPanel } from "./AdvancedPanels";
@@ -422,8 +422,17 @@ export function RedisPage() {
             {node.keys.map((key) => (
               <div
                 key={key}
+                role="button"
+                tabIndex={0}
                 data-testid={`redis-key-${key}`}
                 onClick={() => (batchMode ? toggleKeySelection(key) : setSelectedKey(key))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    if (batchMode) toggleKeySelection(key);
+                    else setSelectedKey(key);
+                  }
+                }}
                 className={`flex w-full items-center gap-2 rounded px-2 py-0.5 text-left text-xs font-mono cursor-pointer ${
                   batchMode ? (selectedKeys.has(key) ? "bg-primary/20" : "") : selectedKey === key ? "bg-accent" : "hover:bg-accent"
                 }`}
@@ -1240,7 +1249,7 @@ function SlowLogTab({ cacheId }: { cacheId: string }) {
                 <tr key={e.id} className="border-t">
                   <td className="px-3 py-2 text-muted-foreground">{e.id}</td>
                   <td className="px-3 py-2">{new Date(e.executedAt).toLocaleTimeString()}</td>
-                  <td className="px-3 py-2 text-right font-mono">{e.duration}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatDuration(e.duration)}</td>
                   <td className="px-3 py-2 font-mono">{e.command}</td>
                   <td className="px-3 py-2 font-mono text-muted-foreground">{e.arguments}</td>
                   <td className="px-3 py-2 text-muted-foreground">{e.clientName ?? "-"}</td>
