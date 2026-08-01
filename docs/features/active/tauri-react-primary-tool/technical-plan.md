@@ -113,14 +113,18 @@ reference implementation, not a green-field design.
 - These were flagged in the prior architecture review (`docs/plans/react-architecture-performance-review.md`)
   and are **unchanged** since. Re-confirm the prior review's specific recommendation
   (`ApiClientContext` + `useApiClientState`, ~500 lines removed from the page) is still the right
-  shape given what's landed since (Key Vault variables, virtualized CollectionTree, the
-  uncommitted `api-client-ux-overhaul` layout work) — do this decomposition **after** Phase 1 of
-  [ux-plan.md](ux-plan.md) lands the uncommitted branch, so it's not decomposing code that's about
-  to change shape anyway.
-- Note from `api-client-ux-overhaul`'s own status doc: its bundle chunk has grown to ~476kB,
-  approaching Vite's 500kB warning threshold. If this decomposition doesn't naturally reduce it below
-  threshold, add a `React.lazy` boundary around a heavy sub-panel (the CodeMirror-based body editor
-  is the likely candidate) rather than accepting the warning.
+  shape given what's landed since (Key Vault variables, virtualized CollectionTree).
+- **Update (2026-08-01): the "do this after Phase 1 lands" gating is dropped.** Phase 1 of
+  [ux-plan.md](ux-plan.md) (landing the `feat/api-client-ux-and-git` branch) is abandoned — that
+  branch no longer exists, confirmed by the user, not merely unlanded — so this decomposition is no
+  longer blocked on it. It's simply not started yet; scope it fresh against the current
+  `ApiClientPage.tsx`/`RequestEditor.tsx`, mirroring the `RedisPageContext.tsx`/`StoragePageContext.tsx`
+  pattern already applied to `RedisPage.tsx`/`StoragePage.tsx` in this same initiative.
+- Note: a prior pass observed `ApiClientPage.tsx`'s bundle chunk had grown to ~476kB on the (now
+  gone) `api-client-ux-overhaul` branch, approaching Vite's 500kB warning threshold — re-check the
+  current bundle size before this decomposition rather than assuming that number still applies. If
+  it's still close to threshold, add a `React.lazy` boundary around a heavy sub-panel (the
+  CodeMirror-based body editor is the likely candidate) rather than accepting the warning.
 
 ### 2.4 `lib/hooks.ts` (1540 lines, every domain's React Query hooks in one file)
 

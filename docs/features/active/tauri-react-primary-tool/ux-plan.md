@@ -116,7 +116,20 @@ review because it may not be UI-only.
 
 ---
 
-## Phase 1 — Land what's already built
+## Phase 1 — Land what's already built (ABANDONED — branch no longer exists)
+
+**Status update (2026-08-01): dropped.** This phase assumed `monitoring-rebuild`,
+`api-client-git-completion`, and `api-client-ux-overhaul` were functionally complete and just sitting
+uncommitted on `feat/api-client-ux-and-git`. That branch does not exist anywhere reachable in this
+repo (confirmed absent both locally and on origin across multiple passes), and the user has confirmed
+it no longer exists — whatever work it held is gone, not merely unlanded. Nothing from this phase is
+being pursued; any future work in this area (e.g. `ApiClientPage.tsx`/`RequestEditor.tsx`
+decomposition in `technical-plan.md` §2.3, which explicitly deferred to "after Phase 1 lands") should
+now be scoped fresh against the current `ApiClientPage.tsx`/`RequestEditor.tsx`, not treated as
+blocked on this phase. The three numbered items below are kept for historical record only.
+
+<details>
+<summary>Original plan (no longer actionable)</summary>
 
 The single fastest way to make real progress: three features are functionally complete per their own
 status docs but sitting uncommitted.
@@ -138,6 +151,8 @@ status docs but sitting uncommitted.
 Do the manual desktop-shell verification for #2 and #3 together (both live on the same branch) —
 launch the actual Tauri app (not just the Vite dev server) and walk through the numbered steps in
 each feature's `status.md` before committing.
+
+</details>
 
 ---
 

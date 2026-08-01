@@ -24,12 +24,14 @@
       Service Bus entity tree (0.2), AKS "not configured" inconsistency on Dashboard/Settings (0.5),
       response-panel clipping at narrow widths (0.6), Pod YAML showing Deployment-shaped content
       (0.7), dead DevOps settings tab removed (0.8)
-- [ ] Phase 1: land uncommitted work (`monitoring-rebuild`, `api-client-git-completion`,
-      `api-client-ux-overhaul`) — **could not do**: the branch these were implemented on
-      (`feat/api-client-ux-and-git`) does not exist in this repository, locally or on origin, as of
-      this pass. Either it was never pushed from wherever that work happened, or those status docs
-      describe work that was never actually committed anywhere reachable here. Re-verify with
-      whoever ran those sessions before assuming this work still exists to "land."
+- [x] Phase 1: land uncommitted work (`monitoring-rebuild`, `api-client-git-completion`,
+      `api-client-ux-overhaul`) — **abandoned, confirmed by the user (2026-08-01)**: the branch these
+      were implemented on (`feat/api-client-ux-and-git`) does not exist in this repository, locally or
+      on origin, across multiple checks. The user has confirmed it no longer exists — this was
+      genuinely lost work, not merely unlanded — so this phase is dropped, not just blocked. See the
+      "ABANDONED" note in `ux-plan.md`'s Phase 1 section. Anything that was gated on this phase
+      landing (`ApiClientPage.tsx`/`RequestEditor.tsx` decomposition, `technical-plan.md` §2.3) is now
+      unblocked and can be scoped fresh whenever it's picked up.
 - [x] Sidecar architecture & security fixes (technical-plan.md Module 3) — **partial**: done —
       static mutable `IAksClient` singleton replaced with the DI-registered
       `IMonitoringConnectionPool` pattern (§3.1), `/httproutes` no longer swallows all exceptions
@@ -55,9 +57,7 @@
       `RedisPage.tsx` 1330 → 149 lines, `StoragePage.tsx` 975 → 98 lines. `BlobRecoveryPanel.tsx`'s
       previously-partial context extraction is now finished (§2.2 called this out explicitly — "don't
       leave it half-done"). `ApiClientPage.tsx`/`RequestEditor.tsx` (§2.3) remain **not started** —
-      the plan explicitly says do this one *after* Phase 1 (above) lands the uncommitted
-      `api-client-ux-overhaul` branch, which still doesn't exist anywhere reachable in this repo, so
-      it stays blocked on the same missing branch as Phase 1.
+      no longer blocked (Phase 1 above is abandoned, not just pending), simply not picked up yet.
       **Note for whoever picks up Module 5's remaining `React.memo` pass**: neither
       `RedisPageContext.tsx` nor `StoragePageContext.tsx` wraps its context `value` object in
       `useMemo` (unlike `AksWorkspaceContext.tsx`), and most of their handlers aren't wrapped in
@@ -161,8 +161,10 @@
    regression test.
 2. Every feature-parity gap rated "Important" in §4 is closed or explicitly re-classified as an
    intentional substitution with a documented rationale.
-3. The three uncommitted-but-complete features (`monitoring-rebuild`, `api-client-git-completion`,
-   `api-client-ux-overhaul`) are committed, manually verified in the real Tauri shell, and merged.
+3. ~~The three uncommitted-but-complete features (`monitoring-rebuild`, `api-client-git-completion`,
+   `api-client-ux-overhaul`) are committed, manually verified in the real Tauri shell, and merged.~~
+   **Dropped (2026-08-01)**: the branch holding this work no longer exists, confirmed by the user —
+   not achievable, not a remaining gate on Definition of Done.
 4. Crash telemetry, sidecar file logging, and sidecar crash recovery are all in place
    (`technical-plan.md` Module 6).
 5. CI runs Vitest and Rust checks in addition to its current .NET/Playwright coverage.

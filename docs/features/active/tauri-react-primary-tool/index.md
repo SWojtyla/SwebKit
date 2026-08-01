@@ -42,9 +42,11 @@ in the field is diagnosable and fixable rather than invisible.
   endpoint tests, CI gaps (Vitest and Rust checks don't run in CI today), and accessibility testing.
 - **Production/packaging readiness**: crash telemetry, sidecar file logging, sidecar crash recovery,
   code signing, auto-update, and a real app identifier — all currently absent (see review §6).
-- Committing the work already sitting uncommitted on `feat/api-client-ux-and-git`
+- ~~Committing the work already sitting uncommitted on `feat/api-client-ux-and-git`
   (`api-client-git-completion`, `api-client-ux-overhaul`) and the finished-but-uncommitted
-  `monitoring-rebuild` — these are "Review"/"Done" per their own status docs and just need to land.
+  `monitoring-rebuild`~~ — **dropped (2026-08-01)**: `feat/api-client-ux-and-git` doesn't exist
+  anywhere reachable in this repo, confirmed by the user as gone, not merely unlanded. See
+  [ux-plan.md](ux-plan.md)'s Phase 1 for the full note.
 
 ### Out of scope (explicitly, do not re-litigate)
 
@@ -86,9 +88,10 @@ in the field is diagnosable and fixable rather than invisible.
 - [test-plan.md](test-plan.md) — phased test-coverage and CI plan
 - [status.md](status.md) — progress tracking
 - Existing active features this plan depends on and consolidates:
-  `aks-internal-refactor`, `aks-ux-improvements`, `api-client-git-completion`,
-  `api-client-key-vault`, `api-client-ux-overhaul`, `monitoring-rebuild`,
+  `aks-internal-refactor`, `aks-ux-improvements`, `api-client-key-vault`,
   `post-migration-ux-review`, `react-polish-aug-01`, `service-bus-download-parity`,
   `storage-detail-overflow`, `ux-followup-july-27`
+  (`api-client-git-completion`, `api-client-ux-overhaul`, and `monitoring-rebuild` are excluded here —
+  their implementing branch no longer exists; see the dropped-scope note above)
 - `docs/tauri-react-rewrite-megaplan.md`, `docs/MIGRATION-NOTES.md`,
   `docs/architecture/functionalities/api-client.md`

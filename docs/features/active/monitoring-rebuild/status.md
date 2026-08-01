@@ -2,7 +2,14 @@
 
 ## Current State
 
-`Done` (pending user commit)
+`Done`
+
+**Update (2026-08-01):** the "(pending user commit)" caveat below is stale — `git log` confirms this
+work has been committed and merged for some time (`MonitoringAlertEvaluationService.cs`,
+`AlertRuleRepository`, the monitoring signal sources, and `web/src/components/monitoring/` all exist
+on this branch with real history, and `e2e/monitoring.spec.ts` passes). This is unrelated to the
+`feat/api-client-ux-and-git` branch (confirmed gone — see `api-client-git-completion`/
+`api-client-ux-overhaul`'s status docs) — monitoring was never on that branch.
 
 ## Quick Summary
 
