@@ -19,6 +19,8 @@ public sealed class ListNamespacesTool : IAgentTool
 
     public string Name => "list_namespaces";
     public string Description => "Lists all Kubernetes namespaces in the cluster.";
+    public FeatureArea FeatureArea => FeatureArea.Aks;
+
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         { "type": "object", "properties": {}, "required": [] }
         """);

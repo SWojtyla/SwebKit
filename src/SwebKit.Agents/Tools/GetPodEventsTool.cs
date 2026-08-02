@@ -27,6 +27,8 @@ public sealed class GetPodEventsTool : IAgentTool
         "Returns Kubernetes events for a namespace, optionally filtered to a specific pod or resource. " +
         "Warning events are returned first. Useful for diagnosing scheduling failures, probe errors, and OOMKills.";
 
+    public FeatureArea FeatureArea => FeatureArea.Aks;
+
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
           "type": "object",

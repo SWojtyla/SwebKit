@@ -60,6 +60,7 @@ public class ToolMetadataTests
     {
         public string Name => "test";
         public string Description => "Test tool";
+        public FeatureArea FeatureArea => FeatureArea.Aks;
         public System.Text.Json.JsonElement ParametersSchema =>
             System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone();
         public Task<string> ExecuteAsync(System.Text.Json.JsonElement arguments, CancellationToken ct) =>
@@ -70,6 +71,7 @@ public class ToolMetadataTests
     {
         public string Name => "delete";
         public string Description => "Delete tool";
+        public FeatureArea FeatureArea => FeatureArea.Aks;
         public System.Text.Json.JsonElement ParametersSchema =>
             System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone();
         public ToolKind Kind => ToolKind.Mutate;

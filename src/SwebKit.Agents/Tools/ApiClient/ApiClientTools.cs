@@ -30,6 +30,8 @@ public sealed class SearchApiRequestsTool : IAgentTool
     }
     """);
 
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
+
     public JsonElement ParametersSchema => Schema;
 
     public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
@@ -80,6 +82,8 @@ public sealed class GetApiRequestTool : IAgentTool
         "additionalProperties": false
     }
     """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
 
     public JsonElement ParametersSchema => Schema;
 
@@ -180,6 +184,8 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
         "additionalProperties": false
     }
     """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
 
     public JsonElement ParametersSchema => Schema;
 
@@ -338,6 +344,8 @@ public sealed class ProposeApiRequestDeleteTool : IAgentTool
     }
     """);
 
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
+
     public JsonElement ParametersSchema => Schema;
 
     public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
@@ -408,6 +416,8 @@ public sealed class PrepareApiRequestExecutionTool : IAgentTool
         "additionalProperties": false
     }
     """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
 
     public JsonElement ParametersSchema => Schema;
 

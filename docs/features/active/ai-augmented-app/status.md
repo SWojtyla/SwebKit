@@ -42,7 +42,21 @@ lands, following the pattern used by the now-closed `tauri-react-primary-tool/st
       result could be read. Verified: `dotnet test tests/SwebKit.Sidecar.Tests` 182/182 (7 new),
       `dotnet test tests/SwebKit.Agents.Tests` 135/135 (17 new), `npx vitest run` 116/116 (unchanged),
       `npx playwright test agent.spec.ts dashboard.spec.ts` 22/22 (4 new, rest unchanged).
-- [ ] Module 4 — Redis and Storage tools
+- [x] Module 4 — Redis and Storage tools — **done** (2026-08-02): added `IAgentTool.FeatureArea`
+      (no default — retrofitted onto all 16 pre-existing tools, caught by the compiler). New Redis
+      tools (`GetRedisKeyInfoTool`, `ListRedisKeysTool`, `AnalyzeCacheHealthTool`,
+      `ProposeDeleteRedisKeyTool`, `ProposeSetRedisKeyTtlTool`) and Storage tools
+      (`ListStorageBlobsTool`, `GetStorageBlobPropertiesTool`, `ProposeCopyBlobTool`) plus their
+      `IAgentActionExecutor`s, wired into both the sidecar and the legacy MAUI app. **Deviated from
+      plan on purpose**: no `ProposeDeleteBlobTool` — `IStorageClient` has no delete-blob method at
+      all, checked directly rather than assumed. Also wired the 5 pre-existing API Client tools into
+      both hosts now that Module 3 unblocks them. Demo mode handled the same way existing AKS/SB
+      tools do it (construct a fresh `DemoRedisClient`/`DemoStorageClient` directly) since these
+      tools live in the shared `SwebKit.Agents` project and can't depend on the sidecar-only
+      `DemoModeService`. Verified: `dotnet test tests/SwebKit.Agents.Tests` 166/166 (31 new),
+      `dotnet test tests/SwebKit.Sidecar.Tests` 182/182 (unchanged, 1 fix for a local test fake),
+      `dotnet build` clean on the sidecar, `SwebKit.Agents`, and the MAUI app, `npx vitest run`
+      116/116 (unchanged, this module was backend-only).
 - [ ] Module 5 — Contextual system prompt + mode-aware tool filtering
 - [ ] Module 6 — Frontend contextual entry points and mode UI
 - [ ] Module 7 — Local-model (LM Studio) manual verification

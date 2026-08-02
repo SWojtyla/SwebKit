@@ -64,18 +64,31 @@ mode for frontend flows.
   end-to-end proposal). The confirm test is also what caught the invalidation-timing bug recorded
   in technical-plan.md — it failed first, then got fixed, then passed; not written after the fact.
 
-## Module 4 — Redis and Storage tools
+## Module 4 — Redis and Storage tools — done
 
-- Unit: each new tool's `ExecuteAsync` against a demo/fake `IRedisClient`/`IStorageClient` —
-  correct data returned for the happy path, and (matching the existing pattern in
-  `RedisEndpointsMutationTests`/`StorageEndpointsMutationTests`) exceptions from the underlying
-  client propagate rather than being swallowed into a false "success".
-  correct `Kind`/`Risk`/`RequiredCapability` metadata on each tool (a mutate tool that accidentally
-  reports `Kind = Read` would bypass the Module 5 mode filter — this is worth a direct assertion,
-  not just behavioral testing).
-- Unit: composite tools (`AnalyzeCacheHealthTool` etc.) — the derived health-summary logic
-  (Healthy/Warning/Critical thresholds) tested directly with crafted inputs at each boundary,
-  mirroring `AnalyzeQueueHealthTool`'s existing test coverage if any exists as a reference.
+- [x] Unit (`RedisToolsTests.cs`, 19 tests): each read tool against a mocked `IRedisClient` — happy
+  path, not-configured error, missing-required-param error (asserted to never touch the client),
+  requested-cache-id-not-found error, demo-mode branch. `AnalyzeCacheHealthTool`'s health-summary
+  logic tested as a 5-case boundary table (healthy / warning-from-memory / warning-from-slow-log /
+  critical-from-memory / critical-from-slow-log), plus a client-throws-returns-Critical case.
+  Both propose tools verified to register the right `AgentActionType`/`AgentActionRisk` and to
+  carry the proposed fields in `Payload`.
+- [x] Unit (`RedisActionExecutorTests.cs`, 5 tests): `CanHandle` scoped to exactly the two Redis
+  action types; delete/set-ttl/remove-ttl each call the exact expected `IRedisClient` method with
+  the exact expected arguments (verified via `Mock.Verify`, not just checking `IsSuccess`); missing
+  payload fails without ever resolving a client (`factory.Verify(..., Times.Never)`).
+- [x] Unit (`StorageToolsTests.cs`, 7 tests; `StorageActionExecutorTests.cs`, 4 tests): same rigor
+  for the Storage side — `ProposeCopyBlobTool`/`StorageActionExecutor` verified against
+  `BlobCopyOptions`' exact fields, including a client-reports-failure case that propagates the
+  real `ErrorMessage` rather than a generic one.
+- [x] All 16 pre-existing tools' `FeatureArea` retrofit verified indirectly: the full
+  `SwebKit.Agents.Tests` suite (166/166) and `SwebKit.Sidecar.Tests` suite (182/182) both had to
+  keep passing after the interface change, including two local test-fake `IAgentTool`
+  implementations (`ToolMetadataTests.cs`, `SidecarAgentChatServiceToolsTests.cs`) that needed the
+  same one-line fix as the real tools — caught by the compiler, not missed.
+- [x] Verified both hosts build clean with every new tool/executor wired: `dotnet build` on
+  `SwebKit.Sidecar.csproj`, `SwebKit.Agents.csproj`, and `SwebKit.App.csproj` (the MAUI target,
+  since Module 4 also updated `SwebKitServiceCollectionExtensions.Agents.cs` for parity).
 
 ## Module 5 — Contextual system prompt + mode filtering
 

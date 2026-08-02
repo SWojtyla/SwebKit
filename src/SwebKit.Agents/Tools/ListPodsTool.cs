@@ -27,6 +27,8 @@ public sealed class ListPodsTool : IAgentTool
         "Optionally filter by label selector (e.g. 'app=myservice'). " +
         "Returns pod name, phase, status, ready state, and restart count.";
 
+    public FeatureArea FeatureArea => FeatureArea.Aks;
+
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
           "type": "object",

@@ -16,6 +16,9 @@ public enum AgentActionType
     RenameFolder,
     DeleteFolder,
     ExecuteHttpRequest,
+    DeleteRedisKey,
+    SetRedisKeyTtl,
+    CopyBlob,
 }
 
 /// <summary>

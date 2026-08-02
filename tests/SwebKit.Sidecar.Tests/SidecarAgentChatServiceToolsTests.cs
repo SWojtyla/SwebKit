@@ -35,6 +35,7 @@ internal sealed class FakeAgentTool : IAgentTool
 {
     public string Name => "fake_tool";
     public string Description => "A fake tool for testing.";
+    public FeatureArea FeatureArea => FeatureArea.Aks;
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""{"type":"object","properties":{}}""");
 
     public Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct) =>

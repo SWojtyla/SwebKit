@@ -23,6 +23,23 @@ public enum ToolRisk
     High,
 }
 
+/// <summary>
+/// Which feature area a tool belongs to. Used by <c>SidecarAgentChatService</c> (ai-augmented-app
+/// technical-plan.md Module 5) to scope a contextual conversation's tools to the page it was opened
+/// from by default — an "Ask AI" panel opened from the AKS pod view shouldn't also be handed Redis
+/// or Storage tools it was never asked about. No default value on purpose: every tool must declare
+/// its area explicitly rather than silently inheriting one that might be wrong.
+/// </summary>
+public enum FeatureArea
+{
+    Aks,
+    ServiceBus,
+    Redis,
+    Storage,
+    Observability,
+    ApiClient,
+}
+
 public interface IAgentTool
 {
     string Name { get; }
@@ -33,6 +50,9 @@ public interface IAgentTool
     /// Use <see cref="AgentToolSchema"/> helpers to build a valid schema.
     /// </summary>
     JsonElement ParametersSchema { get; }
+
+    /// <summary>Which feature area this tool belongs to (see <see cref="FeatureArea"/>).</summary>
+    FeatureArea FeatureArea { get; }
 
     /// <summary>Whether this tool reads data or mutates state. Defaults to <see cref="ToolKind.Read"/>.</summary>
     ToolKind Kind => ToolKind.Read;

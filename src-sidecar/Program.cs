@@ -5,6 +5,9 @@ using SwebKit.Core.Serialization;
 using SwebKit.Azure.Storage;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
+using SwebKit.Agents.Tools.ApiClient;
+using SwebKit.Agents.Tools.Redis;
+using SwebKit.Agents.Tools.Storage;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -100,13 +103,11 @@ builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>()
 // capability test may run against a profile that isn't the active one.
 builder.Services.AddHttpClient<AgentCapabilityTester>();
 
-// Agent tools — read-only Kubernetes and Service Bus diagnostics only. Observability tools
-// (QueryLogsTool/GetMetricsTool) are not wired here because the sidecar has no
-// IObservabilityProviderFactory yet (that's a MAUI-only service, a separate feature gap of its
-// own). The API Client mutation/proposal tools (ApiClientTools.cs) are not wired here either
-// because they need the confirmation-card flow (IAgentActionCoordinator/AgentActionApplier) that
-// the sidecar's chat UI doesn't implement — wiring them without it would let the model mutate
-// collections with no user confirmation step.
+// Agent tools. Observability tools (QueryLogsTool/GetMetricsTool) are still not wired here because
+// the sidecar has no IObservabilityProviderFactory yet (that's a MAUI-only service, a separate,
+// larger feature gap — see index.md's non-goals, Observability was product-dropped from this
+// rewrite anyway). Everything else — Kubernetes, Service Bus, Redis, Storage, and (now that
+// Module 3's confirm-flow exists below) API Client — is wired.
 builder.Services.AddSingleton<DemoAksClient>();
 builder.Services.AddSingleton<IAgentTool, GetPodStatusTool>();
 builder.Services.AddSingleton<IAgentTool, ListNamespacesTool>();
@@ -117,6 +118,19 @@ builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
+builder.Services.AddSingleton<IAgentTool, GetRedisKeyInfoTool>();
+builder.Services.AddSingleton<IAgentTool, ListRedisKeysTool>();
+builder.Services.AddSingleton<IAgentTool, AnalyzeCacheHealthTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeDeleteRedisKeyTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeSetRedisKeyTtlTool>();
+builder.Services.AddSingleton<IAgentTool, ListStorageBlobsTool>();
+builder.Services.AddSingleton<IAgentTool, GetStorageBlobPropertiesTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeCopyBlobTool>();
+builder.Services.AddSingleton<IAgentTool, SearchApiRequestsTool>();
+builder.Services.AddSingleton<IAgentTool, GetApiRequestTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeApiRequestChangeTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeApiRequestDeleteTool>();
+builder.Services.AddSingleton<IAgentTool, PrepareApiRequestExecutionTool>();
 builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 
 builder.Services.AddSingleton<SidecarAgentChatService>();
@@ -133,7 +147,9 @@ builder.Services.AddSingleton<SwebKit.Core.Services.LinkedCollectionFileService>
 builder.Services.AddSingleton<SwebKit.Core.Configuration.LinkedCollectionRootRepository>();
 builder.Services.AddSingleton<IApiClientAgentService, SwebKit.Core.Services.ApiClientAgentService>();
 builder.Services.AddSingleton<IAgentActionCoordinator, AgentActionCoordinator>();
-builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Agents.Tools.ApiClient.ApiClientActionExecutor>();
+builder.Services.AddSingleton<IAgentActionExecutor, ApiClientActionExecutor>();
+builder.Services.AddSingleton<IAgentActionExecutor, RedisActionExecutor>();
+builder.Services.AddSingleton<IAgentActionExecutor, StorageActionExecutor>();
 builder.Services.AddSingleton<AgentActionApplier>();
 
 // HTTP client used by the API client request executor

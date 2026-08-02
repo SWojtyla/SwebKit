@@ -27,6 +27,8 @@ public sealed class GetMetricsTool : IAgentTool
         "Retrieves metrics data from Application Insights including request counts, failure rates, " +
         "latency, exceptions, and dependency health. Returns aggregated metrics for the specified time range.";
 
+    public FeatureArea FeatureArea => FeatureArea.Observability;
+
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
           "type": "object",

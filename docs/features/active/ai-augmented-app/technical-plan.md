@@ -127,38 +127,49 @@ nothing before this module.
       message (pre-existing `AgentActionApplier` behavior, now actually reachable) rather than a
       live countdown-sync mechanism — matches the plan's original "simpler" option.
 
-## Module 4 — Redis and Storage tools
+## Module 4 — Redis and Storage tools — done
 
-Neither area has any `IAgentTool` today. Follow the exact pattern already proven for AKS/Service
-Bus (`src/SwebKit.Agents/Tools/`): a read tool per common lookup, one composite "investigation"
-tool per area (bundling several read calls + a derived health/summary verdict, matching
-`InvestigatePodIssueTool`/`AnalyzeQueueHealthTool`), and mutate tools that only `Propose*` (per
-Module 3's pattern), never execute directly.
+Neither area had any `IAgentTool` before this module. Followed the exact pattern already proven for
+AKS/Service Bus (`src/SwebKit.Agents/Tools/`): a read tool per common lookup, one composite
+"investigation" tool per area (bundling several read calls + a derived health/summary verdict,
+matching `InvestigatePodIssueTool`/`AnalyzeQueueHealthTool`), and mutate tools that only `Propose*`
+(per Module 3's pattern), never execute directly.
 
-- [ ] Add a `FeatureArea` property to `IAgentTool` itself (`Aks`/`ServiceBus`/`Redis`/`Storage`/
-      `ApiClient` — an enum, shared with the `FeatureArea` field Module 3 adds to
-      `PendingAgentAction`), retrofitted onto every existing tool, not just the new ones. Module 5's
-      per-area tool filtering depends on every tool declaring which area it belongs to — without
-      this, "only send this page's tools" has nothing to filter on.
-
-- [ ] Redis read tools: `GetKeyInfoTool` (type, TTL, size, encoding), `ListKeysTool` (pattern-scoped,
-      capped count), `AnalyzeCacheHealthTool` (composite: memory usage, key count, hit rate, slow
-      log sample → derived health summary, mirroring `AnalyzeQueueHealthTool`'s
-      Healthy/Warning/Critical shape).
-- [ ] Redis mutate tools (propose-only): `ProposeDeleteKeyTool` (Risk=High), `ProposeSetTtlTool`
-      (Risk=Low).
-- [ ] Storage read tools: `ListBlobsTool` (container-scoped), `GetBlobPropertiesTool`.
-- [ ] Storage mutate tools (propose-only): `ProposeDeleteBlobTool` (Risk=High),
-      `ProposeCopyBlobTool` (Risk=Low).
-- [ ] Wire all of the above into the sidecar's `Program.cs` DI (`services.AddSingleton<IAgentTool, ...>()`
-      per tool, matching how the 6 AKS + 3 Service Bus tools are already registered there).
-- [ ] Corresponding `IAgentActionExecutor` implementations for Redis/Storage mutate actions
-      (Module 3's extension point), backed by the existing `IRedisClient`/`IStorageClient`.
-- [ ] API Client's existing tools (`SearchApiRequestsTool`, `GetApiRequestTool`,
-      `ProposeApiRequestChangeTool`, `ProposeApiRequestDeleteTool`,
-      `PrepareApiRequestExecutionTool`) get wired into the sidecar's `Program.cs` now that Module 3
-      gives them somewhere to land — this was explicitly blocked on the confirm flow per
-      `tauri-react-primary-tool`'s closing status notes, and that blocker is now resolved.
+- [x] Added `FeatureArea FeatureArea { get; }` to `IAgentTool` (no default — every tool must declare
+      it explicitly) and retrofitted it onto all 16 pre-existing tools (6 AKS, 3 Service Bus, 2
+      Observability, 5 API Client), not just the new ones — confirmed via the compiler: adding a
+      non-defaulted interface member turns every missing implementation into a build error, which is
+      exactly how the 16 sites needing it were found, not by manual audit.
+- [x] Redis tools (`src/SwebKit.Agents/Tools/Redis/`): `GetRedisKeyInfoTool` (type/TTL/memory/
+      encoding), `ListRedisKeysTool` (pattern-scoped, capped at 50), `AnalyzeCacheHealthTool`
+      (composite: server info + slow log in parallel → Healthy/Warning/Critical, mirroring
+      `AnalyzeQueueHealthTool`'s shape), `ProposeDeleteRedisKeyTool` (Risk=High),
+      `ProposeSetRedisKeyTtlTool` (Risk=Low, handles both "set to N seconds" and "remove TTL
+      entirely"). A shared `RedisToolContext.ResolveAsync` helper (cache-by-id → active cache →
+      first configured cache → demo client, matching the existing Service Bus tools' fallback
+      pattern) avoids duplicating that resolution logic across all five tools.
+- [x] `RedisActionExecutor` (the `IAgentActionExecutor` for `DeleteRedisKey`/`SetRedisKeyTtl`) —
+      calls through to the real `IRedisClient.DeleteKeysAsync`/`SetTtlAsync`/`RemoveTtlAsync`.
+- [x] Storage tools (`src/SwebKit.Agents/Tools/Storage/`): `ListStorageBlobsTool`,
+      `GetStorageBlobPropertiesTool`, `ProposeCopyBlobTool` (Risk=Low). **Deviated from the original
+      plan on purpose**: there is no `ProposeDeleteBlobTool` — `IStorageClient` has **no delete-blob
+      method at all** (checked the interface directly: upload/copy/set-metadata/restore/undelete
+      exist, delete doesn't), so a "propose delete" tool would have had nothing real to call. Only
+      mutations the client actually supports got a tool.
+- [x] `StorageActionExecutor` (the `IAgentActionExecutor` for `CopyBlob`) — calls through to the real
+      `IStorageClient.CopyBlobAsync`.
+- [x] All of the above, plus the 5 pre-existing API Client tools (`SearchApiRequestsTool`,
+      `GetApiRequestTool`, `ProposeApiRequestChangeTool`, `ProposeApiRequestDeleteTool`,
+      `PrepareApiRequestExecutionTool` — unblocked now that Module 3's confirm-flow exists) wired
+      into both the sidecar's `Program.cs` **and** the legacy MAUI app's
+      `SwebKitServiceCollectionExtensions.Agents.cs`, for parity between the two hosts.
+- [x] Since these tools live in the shared `SwebKit.Agents` project (not the sidecar), demo mode is
+      handled the same way the existing AKS/Service Bus tools already do it — checking
+      `AppStateService.UseDemoData` and constructing a fresh `DemoRedisClient`/`DemoStorageClient`
+      directly — **not** via the sidecar-only `DemoModeService` class, which `SwebKit.Agents` can't
+      depend on (wrong project direction). This was a real design fork worth recording: it would
+      have been easy to reach for `DemoModeService` by analogy with the sidecar's own endpoint
+      handlers and gotten a circular/invalid dependency instead.
 
 ## Module 5 — Contextual system prompt + mode-aware tool filtering
 
