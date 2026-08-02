@@ -39,25 +39,42 @@
       conditional `JsonIgnore` (§3.6). Not done: §3.3–3.5, 3.7–3.11 (demo-mode centralization,
       config-endpoint extraction, error sanitization, cancellation tokens, request validation,
       auth-builder consolidation, OpenAPI surface, shared-library re-verification).
-- [x] Sidecar test coverage (test-plan.md Module 1) — **partial**: added
-      `SidecarMonitoringConnectionPoolAksTests.cs` (6 tests covering the AKS resolution/caching path
-      `AksEndpoints` now depends on). The 8 endpoint files and 4 remaining services with zero
-      coverage are still zero — this needs either extracting handler bodies (the proven pattern) or
-      a `WebApplicationFactory` integration harness, neither of which fit in the remaining time.
+- [x] Sidecar test coverage (test-plan.md Module 1) — **partial, in progress**: added
+      `SidecarMonitoringConnectionPoolAksTests.cs` (6 tests), `SidecarAgentChatServiceToolsTests.cs`
+      (4 tests, covers the agent tool-calling wiring), `AksEndpointsTests.cs` (11 tests: Deployments,
+      Pods, HPAs, and an HTTPRoutes exception-propagation regression test) and
+      `RedisEndpointsMutationTests.cs` (18 tests: hash field set/delete, sorted-set score update, key
+      rename, TTL set/remove — success + client-error paths). Each required first extracting the
+      target handler's body from an inline lambda into a named `internal static` method (the pattern
+      `ApiClientEndpointsPreviewTests.cs` already proved), touching only the specific handlers tested,
+      leaving every other lambda in each file untouched. 32 → 61 `SwebKit.Sidecar.Tests` passing.
+      Per test-plan.md §1's own risk-ordering, still zero coverage: `ServiceBusEndpoints.cs`
+      (peek/send/complete/purge/DLQ-resubmit — the plan specifically flags a "does resubmit fire
+      exactly once" regression test as valuable here given the notification-duplication bug found
+      elsewhere), `StorageEndpoints.cs`, `MonitoringEndpoints.cs`, `AgentEndpoints.cs`,
+      `ConfigEndpoints.cs` (the `CredentialSecret` structural-guard regression test from §3.6),
+      `DemoModeService.cs`, and the services `SidecarAuthHeaderBuilder.cs`/`SidecarCredentialStore.cs`.
+      The `Program.cs` `WebApplicationFactory` integration smoke test (exception handler status-code
+      mapping + CORS origin rejection) is also not yet added.
 - [x] CI wiring (test-plan.md Module 7) — done: Vitest now runs in the `frontend` job, a new `rust`
       job runs `cargo clippy`/`cargo test` gated on `src-tauri/**` changes.
-- [x] Frontend architecture decomposition (technical-plan.md Module 2) — **partial, the rest
-      blocked**: `lib/hooks.ts` (1540 lines, every domain's hooks in one file) split into
+- [x] Frontend architecture decomposition (technical-plan.md Module 2) — **done**: `lib/hooks.ts`
+      (1540 lines, every domain's hooks in one file) split into
       `web/src/lib/hooks/{useServiceBus,useAks,useRedis,useStorage,useApiClient,useAgent,
       useMonitoring,useProfile,useCommandPalette}.ts` with `index.ts` re-exporting all of them, so
       the ~400 existing `import { useX } from "@/lib/hooks"` call sites needed zero changes.
-      `RedisPage.tsx` (1330 lines, 31 `useState`) and `StoragePage.tsx` (975 lines, ~30 `useState`)
-      both decomposed into a `<Feature>PageContext`/`use<Feature>PageContext` hook plus per-tab/
-      per-view components, mirroring `AksWorkspaceContext.tsx`/`AksPage.tsx`'s proven shape:
-      `RedisPage.tsx` 1330 → 149 lines, `StoragePage.tsx` 975 → 98 lines. `BlobRecoveryPanel.tsx`'s
-      previously-partial context extraction is now finished (§2.2 called this out explicitly — "don't
-      leave it half-done"). `ApiClientPage.tsx`/`RequestEditor.tsx` (§2.3) remain **not started** —
-      no longer blocked (Phase 1 above is abandoned, not just pending), simply not picked up yet.
+      `RedisPage.tsx` (1330 lines, 31 `useState`), `StoragePage.tsx` (975 lines, ~30 `useState`), and
+      `ApiClientPage.tsx` (916 lines, 15+ `useState`) all decomposed into a
+      `<Feature>PageContext`/`use<Feature>PageContext` hook plus per-tab/per-view components,
+      mirroring `AksWorkspaceContext.tsx`/`AksPage.tsx`'s proven shape: `RedisPage.tsx` 1330 → 149
+      lines, `StoragePage.tsx` 975 → 98 lines, `ApiClientPage.tsx` 916 → 235 lines.
+      `BlobRecoveryPanel.tsx`'s previously-partial context extraction is now finished (§2.2 called
+      this out explicitly — "don't leave it half-done"). `RequestEditor.tsx` (937 lines) was
+      deliberately left untouched — it only has 5 `useState` calls and already delegates
+      GraphQL/WebSocket to their own panels, so its length is straightforward JSX, not the
+      state-monolith problem this decomposition targets. `ApiClientPage.tsx`'s built chunk is
+      482.73kB (151.73kB gzip), under Vite's 500kB warning threshold, so no `React.lazy` split was
+      needed.
       **Note for whoever picks up Module 5's remaining `React.memo` pass**: neither
       `RedisPageContext.tsx` nor `StoragePageContext.tsx` wraps its context `value` object in
       `useMemo` (unlike `AksWorkspaceContext.tsx`), and most of their handlers aren't wrapped in
@@ -150,7 +167,7 @@
 | `npm run test:unit` (Vitest) | 116 passed |
 | `npx playwright test` (full e2e suite) | 191 passed, 0 failed |
 | `dotnet build` — `src-sidecar`, `SwebKit.Core`, `SwebKit.Azure` | Pass, 0 warnings |
-| `dotnet test tests/SwebKit.Sidecar.Tests` | 32 passed (22 existing + 6 connection-pool + 4 agent tool-calling) |
+| `dotnet test tests/SwebKit.Sidecar.Tests` | 61 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 18 RedisEndpoints mutations) |
 | `dotnet test tests/SwebKit.Core.Tests` | 798 passed |
 | `cargo clippy --all-targets -- -D warnings` (`src-tauri`) | Pass, 0 warnings |
 | `cargo test --lib` (`src-tauri`) | 53 passed (50 existing + 3 port-forward parsing) |
