@@ -1,6 +1,8 @@
-import { Download, Link as LinkIcon, Check, Plus, Trash2, Copy as CopyIcon } from "lucide-react";
+import { useState } from "react";
+import { Download, Link as LinkIcon, Check, Plus, Trash2, Copy as CopyIcon, Sparkles } from "lucide-react";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { useStoragePageContext } from "./StoragePageContext";
+import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 
 function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null) return "-";
@@ -20,6 +22,7 @@ function formatDate(date: string | null | undefined): string {
 
 export function BlobDetailPanel() {
   const ctx = useStoragePageContext();
+  const [askAiOpen, setAskAiOpen] = useState(false);
 
   return (
     <div className="flex-1 overflow-auto" data-testid="storage-blob-detail">
@@ -79,7 +82,27 @@ export function BlobDetailPanel() {
                       <CopyIcon className="h-3.5 w-3.5" />
                     </button>
                   </span>
+                  <button
+                    onClick={() => setAskAiOpen(true)}
+                    className="text-muted-foreground hover:text-foreground"
+                    title="Ask AI about this blob"
+                    data-testid="storage-ask-ai-btn"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                  </button>
                 </div>
+                {askAiOpen && (
+                  <ContextualAssistant
+                    featureArea="Storage"
+                    title={`blob ${ctx.blobProps.data.name}`}
+                    selection={{
+                      container: ctx.selectedContainer ?? "",
+                      blob: ctx.blobProps.data.name,
+                      ...(ctx.activeAccountId ? { account_id: ctx.activeAccountId } : {}),
+                    }}
+                    onClose={() => setAskAiOpen(false)}
+                  />
+                )}
                 {ctx.showSasUrl && (
                   <div className="mt-2 rounded border bg-muted/30 p-2" data-testid="storage-sas-url-display">
                     <div className="flex items-center gap-2">

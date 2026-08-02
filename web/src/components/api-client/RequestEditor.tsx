@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Save, Send, Wand2, Minimize2, Eye, Crosshair, Pencil } from "lucide-react";
+import { Save, Send, Wand2, Minimize2, Eye, Crosshair, Pencil, Sparkles } from "lucide-react";
+import { GenerateApiRequestPanel } from "./GenerateApiRequestPanel";
 import { EditorState, Compartment } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { json } from "@codemirror/lang-json";
@@ -230,6 +231,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   const [activeTab, setActiveTab] = useState<Tab>("params");
   const [dirty, setDirty] = useState(false);
   const [showVarPreview, setShowVarPreview] = useState(false);
+  const [showGeneratePanel, setShowGeneratePanel] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSnapshotRef = useRef<HttpRequestEntry>(request);
   const onSaveRef = useRef(onSave);
@@ -418,7 +420,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   };
 
   return (
-    <div className="flex h-full min-w-0 flex-col border-r bg-card" data-testid="request-editor">
+    <div className="relative flex h-full min-w-0 flex-col border-r bg-card" data-testid="request-editor">
       {/* URL bar */}
       <div className="flex min-w-0 items-center gap-2 border-b p-3">
         <select
@@ -455,6 +457,14 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
             <Eye className="h-3.5 w-3.5" />
           </button>
         </div>
+        <button
+          data-testid="request-ask-ai-button"
+          className="shrink-0 flex items-center gap-1 rounded border px-2.5 py-1.5 text-sm hover:bg-accent"
+          onClick={() => setShowGeneratePanel(true)}
+          title="Ask AI to generate or edit this request"
+        >
+          <Sparkles className="h-4 w-4" />
+        </button>
         <button
           data-testid="request-send-button"
           className="shrink-0 flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
@@ -932,6 +942,9 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
           <WebSocketPanel request={request} onChange={onChange} />
         )}
       </div>
+      {showGeneratePanel && (
+        <GenerateApiRequestPanel requestId={request.id} onClose={() => setShowGeneratePanel(false)} />
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import { useAgentChat, useAgentClear, useAgentStatus, usePendingApprovals } from "@/lib/hooks";
 import { PendingActionCard } from "./PendingActionCard";
 import type { ChatMessage } from "@/lib/types";
@@ -153,7 +154,13 @@ export function AgentPage() {
                     : "bg-muted"
               }`}
             >
-              <div className="whitespace-pre-wrap text-sm font-mono">{msg.content}</div>
+              {msg.role === "assistant" ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none text-sm [&_p]:my-1 [&_pre]:overflow-x-auto">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+              ) : (
+                <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+              )}
               {msg.role === "assistant" && msg.elapsedMs != null && (
                 <div className="mt-1 text-xs text-muted-foreground">
                   {msg.elapsedMs}ms

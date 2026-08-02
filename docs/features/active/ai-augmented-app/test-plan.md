@@ -115,16 +115,27 @@ mode for frontend flows.
   these tests exercise that the *right* tools are scoped Read/Aks/etc. via the fake-tool fixtures
   above, which is the part the compiler can't check).
 
-## Module 6 — Contextual entry points / mode UI
+## Module 6 — Contextual entry points / mode UI — done
 
-- E2E per feature area: opening the "Ask AI" entry point from the relevant detail panel opens a
-  contextual panel; the mode toggle is visible and switching it is reflected in a subsequent
-  request's `mode` field (can be asserted via a network-request interception in Playwright rather
-  than needing a real model reply).
-- E2E: API Client's "generate a request" affordance opens its focused prompt (not the generic panel)
-  and a successful generation surfaces as a confirm card, not a silent mutation of the open request.
-- E2E: markdown rendering — a reply containing a fenced code block or a list renders as such, not
-  as literal `` ``` `` / `-` characters (demo/mocked model response is fine here).
+- [x] E2E (`contextual-assistant.spec.ts`, 9 tests, all via `page.route` interception of
+  `/api/agent/chat` capturing the real request body — not just "the panel opened"): AKS, Redis,
+  Storage, and Service Bus entry points each open the panel and send the correct
+  `context.featureArea` (and, for Redis/Storage, the right `selection` key/value); Monitoring's
+  entry point derives its area from a freshly-created rule's default source (`AksPodHealth` →
+  `"Aks"`) rather than asserting a hardcoded literal, so the test would actually fail if that
+  derivation regressed; the mode toggle switching to Ask & do is reflected in the next request's
+  `mode` field; closing the panel removes it from the DOM.
+- [x] E2E: API Client's `GenerateApiRequestPanel` — submitting a description sends `mode:
+  "ask_and_do"`, `context.featureArea: "ApiClient"`, and a message referencing
+  `propose_api_request_change` (asserting the actual nudge text landed, not just that *a* message
+  was sent); a mocked proposal response surfaces as the shared `PendingActionCard`, not a silent
+  mutation.
+- [x] E2E (`agent.spec.ts`): a mocked reply containing bold text, a list, and a fenced code block
+  renders as real `<strong>`/`<li>`/`<code>` elements, and the raw `**pod-a**` markdown syntax never
+  appears as literal text — confirms it's actually parsed, not just dumped as a monospace string
+  like before this module (this is the one test in the file exercising a non-trivial reply; every
+  other mocked reply in the suite happens to contain no markdown syntax, so this was the gap worth
+  closing rather than leaving implicit).
 
 ## Module 7 — Local-model verification (manual, not automated)
 

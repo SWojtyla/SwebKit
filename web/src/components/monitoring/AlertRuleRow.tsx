@@ -1,5 +1,19 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Pencil, Trash2, Sparkles } from "lucide-react";
+import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import type { MonitoringAlertRule, AlertSignalStatus } from "../../lib/api";
+
+// There's no "Monitoring" backend FeatureArea (no monitoring-specific agent tools exist) — a rule's
+// signal source already names the area it's actually about (an AksPodHealth rule should let the
+// assistant use AKS tools, not a nonexistent "Monitoring" set), so derive from that instead of
+// inventing an enum value with nothing behind it.
+function featureAreaForSource(source: string): string {
+  if (source.startsWith("Aks")) return "Aks";
+  if (source.startsWith("ServiceBus")) return "ServiceBus";
+  if (source.startsWith("Redis")) return "Redis";
+  if (source.startsWith("Storage")) return "Storage";
+  return source;
+}
 
 const sourceLabel: Record<string, string> = {
   AksPodHealth: "AKS Pod Health",
@@ -37,6 +51,8 @@ export function AlertRuleRow({
   onEdit: (rule: MonitoringAlertRule) => void;
   onDelete: (rule: MonitoringAlertRule) => void;
 }) {
+  const [askAiOpen, setAskAiOpen] = useState(false);
+
   return (
     <div
       className="flex items-center gap-3 border-b px-3 py-2 last:border-0"
@@ -74,6 +90,14 @@ export function AlertRuleRow({
         enabled
       </label>
       <button
+        onClick={() => setAskAiOpen(true)}
+        className="rounded p-1 hover:bg-accent"
+        title="Ask AI about this alert"
+        data-testid={`monitoring-rule-ask-ai-${rule.id}`}
+      >
+        <Sparkles className="h-3.5 w-3.5" />
+      </button>
+      <button
         onClick={() => onEdit(rule)}
         className="rounded p-1 hover:bg-accent"
         data-testid={`monitoring-rule-edit-${rule.id}`}
@@ -87,6 +111,14 @@ export function AlertRuleRow({
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
+      {askAiOpen && (
+        <ContextualAssistant
+          featureArea={featureAreaForSource(rule.source)}
+          title={`alert "${rule.name}"`}
+          selection={{ ruleName: rule.name, source: rule.source, severity: rule.severity }}
+          onClose={() => setAskAiOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -73,8 +73,28 @@ lands, following the pattern used by the now-closed `tauri-react-primary-tool/st
       tests/SwebKit.Sidecar.Tests` 193/193 (11 new), `dotnet test tests/SwebKit.Agents.Tests`
       166/166 (unchanged, 2 fixes for `ToolDefinition.FeatureArea` becoming required), `npx vitest
       run` 116/116 (unchanged), `npx playwright test agent.spec.ts` 8/8 (unchanged).
-- [ ] Module 5 — Contextual system prompt + mode-aware tool filtering
-- [ ] Module 6 — Frontend contextual entry points and mode UI
+- [x] Module 6 — Frontend contextual entry points and mode UI — **done** (2026-08-02):
+      `useContextualAgent`/`<ContextualAssistant>` built and wired into all six feature areas (AKS,
+      Service Bus, Redis, Storage, Monitoring, API Client). **Real gap found and fixed**: Monitoring
+      has no backend `FeatureArea` (no monitoring-specific tools exist) — `AlertRuleRow.tsx` derives
+      the area from the rule's own signal source instead (`AksPodHealth` → `"Aks"`, etc.) rather
+      than sending a literal `"Monitoring"` that would silently fail to scope anything. API Client
+      got its own dedicated `GenerateApiRequestPanel` (always Ask & do, always targets the open
+      request as an update — no collection picker for net-new requests in this compact flow, a
+      known and documented limitation) rather than reusing the generic chat panel, since it's meant
+      to be the highest-frequency "do" action. Added `react-markdown` (audited — no new
+      vulnerabilities) for assistant reply rendering in both `AgentPage.tsx` and the new panels.
+      **Scope call, not an oversight**: the global `/agent` page did not get a mode toggle — it
+      still sends no context/mode at all (safe "ask" default from Module 5), since adding a toggle
+      with nothing to scope by area felt like its own smaller follow-up. Verified: `npx vitest run`
+      116/116 (unchanged), `npx playwright test contextual-assistant.spec.ts` 9/9 (new — one per
+      feature-area entry point plus mode-toggle/close/generate-request coverage, all via network
+      interception asserting the real request body, not just "a panel opened"), `npx playwright test
+      agent.spec.ts` 9/9 (1 new — markdown rendering), plus a full regression sweep across
+      `aks-portforward-analysis`/`redis`/`service-bus`/`monitoring`/`api-client`/`api-client-layout`/
+      `dashboard`/`settings` specs (98 tests; the only 2 failures were the same pre-existing
+      clipboard-test flake cascade documented earlier this session, confirmed unrelated by rerunning
+      the cascaded-past tests in isolation — all passed).
 - [ ] Module 7 — Local-model (LM Studio) manual verification
 - [ ] Module 8 — Streaming (stretch, optional)
 

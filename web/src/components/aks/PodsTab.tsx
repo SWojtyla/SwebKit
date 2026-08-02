@@ -4,6 +4,7 @@ import { showNotification } from "@/lib/tauri-bridge";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import { PodShellPanel } from "./PodShellPanel";
+import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { PodInfo, PodMetricInfo } from "@/lib/types";
 
@@ -85,6 +86,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
   const prevStatusesRef = useRef<Map<string, string>>(new Map());
   const prevNsRef = useRef(ns);
   const [shellPod, setShellPod] = useState<PodInfo | null>(null);
+  const [askAiPod, setAskAiPod] = useState<PodInfo | null>(null);
 
   // Fires a native notification the moment a pod actually transitions into
   // Failed (not on initial load, which would spam notifications for
@@ -139,6 +141,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     { label: "", separator: true, onClick: () => {} },
     { label: "Open shell in pod", icon: ">", onClick: () => setShellPod(pod) },
     { label: "Port-forward…", icon: "→", onClick: () => ws.openPortForward(pod) },
+    { label: "Ask AI about this pod", icon: "✨", onClick: () => setAskAiPod(pod) },
     { label: "", separator: true, onClick: () => {} },
     { label: "Delete Pod", icon: "✕", onClick: () => handleDelete(pod), destructive: true },
   ], [ws, handleDelete]);
@@ -235,6 +238,14 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
           container={shellPod.containers[0] ?? null}
           context={ws.currentContext}
           onClose={() => setShellPod(null)}
+        />
+      )}
+      {askAiPod && (
+        <ContextualAssistant
+          featureArea="Aks"
+          title={`pod ${askAiPod.name}`}
+          selection={{ namespace: askAiPod.namespace, pod: askAiPod.name }}
+          onClose={() => setAskAiPod(null)}
         />
       )}
     </div>

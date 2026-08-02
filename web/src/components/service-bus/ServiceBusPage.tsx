@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft } from "lucide-react";
+import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, Sparkles } from "lucide-react";
+import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { useProfile, useSbPeekMessages, useSbPeekDlq, useSbEntityStats } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
@@ -32,6 +33,7 @@ export function ServiceBusPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [composerMode, setComposerMode] = useState<ComposerMode | null>(null);
+  const [askAiOpen, setAskAiOpen] = useState(false);
   const [showBatchSend, setShowBatchSend] = useState(false);
   const [showScheduled, setShowScheduled] = useState(false);
   const [showEntityPalette, setShowEntityPalette] = useState(false);
@@ -324,7 +326,27 @@ export function ServiceBusPage() {
               <span className="truncate font-medium" title={selectedEntity.name}>
                 {selectedEntity.name}
               </span>
+              <button
+                type="button"
+                onClick={() => setAskAiOpen(true)}
+                className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                title="Ask AI about this entity"
+                data-testid="sb-ask-ai-btn"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+              </button>
             </div>
+          )}
+          {askAiOpen && selectedEntity && (
+            <ContextualAssistant
+              featureArea="ServiceBus"
+              title={`entity ${selectedEntity.name}`}
+              selection={{
+                entityPath: selectedEntity.entityPath,
+                ...(selectedNsId ? { nsId: selectedNsId } : {}),
+              }}
+              onClose={() => setAskAiOpen(false)}
+            />
           )}
           {selectedEntity && (
             <div className="flex border-b">

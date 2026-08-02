@@ -207,33 +207,55 @@ matching `InvestigatePodIssueTool`/`AnalyzeQueueHealthTool`), and mutate tools t
       unused settings field now would be exactly the kind of speculative, no-one-reads-it addition
       worth avoiding. Module 6 adds the field alongside the toggle that actually uses it.
 
-## Module 6 — Frontend: contextual entry points and mode UI
+## Module 6 — Frontend: contextual entry points and mode UI — done
 
-- [ ] A reusable `<ContextualAssistant>` component + `useContextualAgent(featureArea, selection)`
-      hook wrapping Module 2's session-scoped chat + Module 5's context/mode fields. Renders as a
-      docked side panel or flyout (not a full-page navigation) so the user's place in the feature
-      page isn't lost.
-- [ ] Ask / Ask & do toggle, visible at the top of every contextual assistant panel and the existing
-      global `/agent` page.
-- [ ] Entry points, one per feature area, each mounting `<ContextualAssistant>` with that area's
-      current selection:
-  - AKS: pod/deployment detail panels (`PodsTab.tsx`/`DeploymentsTab.tsx` and friends) — "Ask AI"
-    action near the existing "Open shell in pod" context-menu entry.
-  - Service Bus: entity detail (`EntityTree.tsx`/message detail) — "Ask AI about this queue".
-  - Redis: key detail panel (`KeyDetailPanel.tsx`) — "Ask AI about this key/cache".
-  - Storage: blob detail panel (`BlobDetailPanel.tsx`).
-  - API Client: request editor — see the dedicated "generate a request" flow below.
-  - Monitoring: alert rule / alert history rows.
-- [ ] **API Client "generate a request" flow** (the user's own example): a distinct affordance in
-      the request editor — not just a generic chat box — that takes a short natural-language
-      description and calls the contextual assistant with `mode: "ask_and_do"` and a system-prompt
-      hint biased toward using `ProposeApiRequestChangeTool`. The result surfaces as the existing
-      Module 3 confirm card (method/URL/headers/body diff) rather than silently mutating the open
-      request — building a request is still a mutation and goes through the same propose/confirm
-      path as anything else.
-- [ ] Markdown rendering for assistant replies in `AgentPage.tsx` and the new contextual panels
-      (parity with the legacy MAUI app's Markdig rendering — pick a lightweight React markdown
-      renderer already compatible with the existing CSP `style-src 'self' 'unsafe-inline'`).
+- [x] `useContextualAgent(featureArea, selection)` (`web/src/lib/hooks/useContextualAgent.ts`) — a
+      stable per-mount session id, Ask/Ask & do mode state (defaulting to "ask" for every fresh
+      conversation, per ux-plan.md), and `sendMessage` wrapping Module 5's context/mode fields.
+      `<ContextualAssistant>` (`web/src/components/agent/ContextualAssistant.tsx`) is the docked
+      panel built on it — slides in from the right (not a full-page navigation), shows the mode
+      toggle, the shared `PendingActionCard` list, the message transcript (markdown-rendered
+      assistant replies), and the input.
+- [x] Ask / Ask & do toggle — present in every `<ContextualAssistant>` panel. **Not added to the
+      global `AgentPage.tsx`**, a deliberate scope call rather than an oversight: that page still
+      sends no context/mode at all and defaults to "ask" server-side per Module 5's decision; adding
+      a toggle there with no per-area scoping to pair it with felt like its own small follow-up
+      rather than something this module needed to block on.
+- [x] Entry points wired for all six areas, each mounting `<ContextualAssistant>` with real selection
+      data already tracked by that page (no new state invented for this):
+  - AKS: `PodsTab.tsx` — "Ask AI about this pod" next to "Open shell in pod" in the context menu.
+  - Service Bus: `ServiceBusPage.tsx`'s entity breadcrumb — a small sparkle icon next to the entity
+    name (`EntityTree.tsx` itself has no per-row menu to hang this off; the breadcrumb was the
+    natural existing home for a "currently selected entity" action).
+  - Redis: `KeyDetailPanel.tsx` — "Ask AI" button next to Copy/Rename/Delete.
+  - Storage: `BlobDetailPanel.tsx` — sparkle icon button next to Copy URL/Download/SAS/Copy blob.
+  - Monitoring: `AlertRuleRow.tsx` — sparkle icon button per row.
+  - **Real gap found and resolved, not in the original plan**: `Monitoring` isn't a backend
+    `FeatureArea` — no monitoring-specific `IAgentTool`s exist (Monitoring's alert engine isn't
+    itself a data source an assistant queries; it evaluates AKS/Service Bus/Redis/Storage signals).
+    Using the literal string `"Monitoring"` as `featureArea` would parse-fail server-side (falling
+    through to no area filter, per Module 5's fail-safe — not a crash, but not useful scoping
+    either). Fixed by deriving the area from the rule's own `source` field instead (an
+    `AksPodHealth` rule opens scoped to `"Aks"`, a `ServiceBusDlqDepth` rule to `"ServiceBus"`,
+    etc.) — semantically correct, since an alert about pod health should let the assistant use AKS
+    tools, not a nonexistent "Monitoring" set.
+- [x] **API Client "generate a request" flow** — `GenerateApiRequestPanel.tsx`, a compact
+      single-purpose panel (not the full `<ContextualAssistant>` chat UI), opened from a new
+      sparkle button in `RequestEditor.tsx`'s toolbar. Always sends `mode: "ask_and_do"` (no toggle
+      — generating/editing a request is the whole point) and always targets the request currently
+      open in the editor as an update (`propose_api_request_change` with `operation: "update"`).
+      The model is nudged toward that tool via the message text itself rather than a new
+      system-prompt-hint mechanism — one extra sentence achieves the same effect without a bespoke
+      backend hook for this one flow. **Known limitation, not handled**: creating a brand-new
+      request in a different collection — there's no collection picker in this compact flow; that
+      case goes through the global `/agent` page instead, where the model can ask which collection.
+      Result surfaces as the existing `PendingActionCard` (method/URL/headers/body diff via
+      `Preview`), never silently mutating the open request.
+- [x] Markdown rendering (`react-markdown`, a new dependency — audited, introduces no new
+      vulnerabilities; the pre-existing `react-router` high-severity advisory flagged earlier this
+      session is unrelated) for assistant replies in both `AgentPage.tsx` and
+      `ContextualAssistant.tsx`. User messages stay plain text (`whitespace-pre-wrap`) — only
+      assistant replies are markdown, matching the MAUI app's Markdig behavior.
 
 ## Module 7 — Local-model correctness and manual verification
 

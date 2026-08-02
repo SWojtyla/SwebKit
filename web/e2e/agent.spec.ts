@@ -146,6 +146,31 @@ test.describe("Agent", () => {
     await expect(page.getByTestId("pending-action-action-2")).not.toBeVisible();
   });
 
+  test("assistant replies render markdown, not literal syntax characters", async ({ page }) => {
+    await page.route("**/api/agent/chat", async (route) => {
+      await route.fulfill({
+        json: {
+          text: "Here's what I found:\n\n- **pod-a** is `Running`\n- pod-b is `CrashLoopBackOff`\n\n```\nkubectl logs pod-b\n```",
+          elapsedMs: 1,
+          status: "done",
+          error: false,
+        },
+      });
+    });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("what's the status?");
+    await page.getByTestId("agent-send").click();
+
+    const reply = page.getByTestId("agent-messages").locator("li", { hasText: "pod-a" });
+    await expect(reply).toBeVisible();
+    await expect(page.getByTestId("agent-messages").locator("strong", { hasText: "pod-a" })).toBeVisible();
+    await expect(page.getByTestId("agent-messages").locator("code", { hasText: "kubectl logs pod-b" })).toBeVisible();
+    // Never the raw markdown syntax as literal text — confirms it was actually parsed, not just
+    // dumped as a monospace string like before this module.
+    await expect(page.getByTestId("agent-messages")).not.toContainText("**pod-a**");
+  });
+
   test("Enter key sends message, Shift+Enter adds newline", async ({ page }) => {
     await page.goto("/agent");
 
