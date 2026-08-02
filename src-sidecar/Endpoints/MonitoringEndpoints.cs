@@ -21,53 +21,19 @@ public static class MonitoringEndpoints
 
         // ── Rules CRUD ──────────────────────────────────────────────────────
 
-        group.MapGet("/rules", async (IAlertRuleRepository repo) =>
-            Results.Ok(await repo.GetAllAsync()));
+        group.MapGet("/rules", GetRulesAsync);
 
-        group.MapGet("/rules/{id}", async (string id, IAlertRuleRepository repo) =>
-        {
-            var rule = await repo.GetByIdAsync(id);
-            return rule is null ? Results.NotFound() : Results.Ok(rule);
-        });
+        group.MapGet("/rules/{id}", GetRuleByIdAsync);
 
-        group.MapPost("/rules", async (
-            MonitoringAlertRule rule,
-            IAlertRuleRepository repo,
-            MonitoringAlertEvaluationService engine) =>
-        {
-            if (string.IsNullOrWhiteSpace(rule.Id))
-                rule.Id = Guid.NewGuid().ToString("N");
-            await repo.UpsertAsync(rule);
-            await engine.ReloadRulesAsync();
-            return Results.Created($"/api/monitoring/rules/{rule.Id}", rule);
-        });
+        group.MapPost("/rules", CreateRuleAsync);
 
-        group.MapPut("/rules/{id}", async (
-            string id,
-            MonitoringAlertRule rule,
-            IAlertRuleRepository repo,
-            MonitoringAlertEvaluationService engine) =>
-        {
-            rule.Id = id;
-            await repo.UpsertAsync(rule);
-            await engine.ReloadRulesAsync();
-            return Results.Ok(rule);
-        });
+        group.MapPut("/rules/{id}", UpdateRuleAsync);
 
-        group.MapDelete("/rules/{id}", async (
-            string id,
-            IAlertRuleRepository repo,
-            MonitoringAlertEvaluationService engine) =>
-        {
-            await repo.DeleteAsync(id);
-            await engine.ReloadRulesAsync();
-            return Results.NoContent();
-        });
+        group.MapDelete("/rules/{id}", DeleteRuleAsync);
 
         // ── History snapshot ────────────────────────────────────────────────
 
-        group.MapGet("/history", (MonitoringAlertEvaluationService engine) =>
-            Results.Ok(engine.RecentAlerts));
+        group.MapGet("/history", GetHistory);
 
         // ── Live SSE stream of fired alerts ─────────────────────────────────
 
@@ -111,4 +77,50 @@ public static class MonitoringEndpoints
             }
         });
     }
+
+    internal static async Task<Ok<IReadOnlyList<MonitoringAlertRule>>> GetRulesAsync(IAlertRuleRepository repo) =>
+        TypedResults.Ok(await repo.GetAllAsync());
+
+    internal static async Task<Results<Ok<MonitoringAlertRule>, NotFound>> GetRuleByIdAsync(string id, IAlertRuleRepository repo)
+    {
+        var rule = await repo.GetByIdAsync(id);
+        return rule is null ? TypedResults.NotFound() : TypedResults.Ok(rule);
+    }
+
+    internal static async Task<Created<MonitoringAlertRule>> CreateRuleAsync(
+        MonitoringAlertRule rule,
+        IAlertRuleRepository repo,
+        MonitoringAlertEvaluationService engine)
+    {
+        if (string.IsNullOrWhiteSpace(rule.Id))
+            rule.Id = Guid.NewGuid().ToString("N");
+        await repo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+        return TypedResults.Created($"/api/monitoring/rules/{rule.Id}", rule);
+    }
+
+    internal static async Task<Ok<MonitoringAlertRule>> UpdateRuleAsync(
+        string id,
+        MonitoringAlertRule rule,
+        IAlertRuleRepository repo,
+        MonitoringAlertEvaluationService engine)
+    {
+        rule.Id = id;
+        await repo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+        return TypedResults.Ok(rule);
+    }
+
+    internal static async Task<NoContent> DeleteRuleAsync(
+        string id,
+        IAlertRuleRepository repo,
+        MonitoringAlertEvaluationService engine)
+    {
+        await repo.DeleteAsync(id);
+        await engine.ReloadRulesAsync();
+        return TypedResults.NoContent();
+    }
+
+    internal static Ok<IReadOnlyList<AlertFiredEvent>> GetHistory(MonitoringAlertEvaluationService engine) =>
+        TypedResults.Ok(engine.RecentAlerts);
 }
