@@ -20,7 +20,8 @@ public static class ServiceBusEndpoints
             string nsId,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            ILogger<Program> logger) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
@@ -33,7 +34,10 @@ public static class ServiceBusEndpoints
             }
             catch (Exception ex)
             {
-                return Results.Ok(new { connected = false, error = ex.Message });
+                // The Service Bus connection string/Entra details can appear in the underlying SDK
+                // exception's message — never return ex.Message here.
+                logger.LogWarning(ex, "Service Bus connection test failed for namespace {NamespaceId}", nsId);
+                return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
             }
         });
 
@@ -110,41 +114,9 @@ public static class ServiceBusEndpoints
             return Results.Ok(stats);
         });
 
-        app.MapGet("/api/servicebus/{nsId}/entities/{entityPath}/peek", async (
-            string nsId,
-            string entityPath,
-            int count,
-            long? fromSeq,
-            ProfileRepository profile,
-            IServiceBusClientFactory factory,
-            DemoModeService demo) =>
-        {
-            entityPath = DecodeEntityPath(entityPath);
-            var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+        app.MapGet("/api/servicebus/{nsId}/entities/{entityPath}/peek", PeekMessagesAsync);
 
-            var client = CreateClient(ns, factory, demo);
-            var messages = await client.PeekMessagesAsync(entityPath, count, fromSequenceNumber: fromSeq);
-            return Results.Ok(messages);
-        });
-
-        app.MapGet("/api/servicebus/{nsId}/entities/{entityPath}/dlq", async (
-            string nsId,
-            string entityPath,
-            int count,
-            long? fromSeq,
-            ProfileRepository profile,
-            IServiceBusClientFactory factory,
-            DemoModeService demo) =>
-        {
-            entityPath = DecodeEntityPath(entityPath);
-            var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
-
-            var client = CreateClient(ns, factory, demo);
-            var messages = await client.PeekDeadLetterAsync(entityPath, count, fromSequenceNumber: fromSeq);
-            return Results.Ok(messages);
-        });
+        app.MapGet("/api/servicebus/{nsId}/entities/{entityPath}/dlq", PeekDeadLetterAsync);
 
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/send", async (
             string nsId,
@@ -248,39 +220,9 @@ public static class ServiceBusEndpoints
             return Results.Ok();
         });
 
-        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/complete", async (
-            string nsId,
-            string entityPath,
-            long[] sequenceNumbers,
-            ProfileRepository profile,
-            IServiceBusClientFactory factory,
-            DemoModeService demo) =>
-        {
-            entityPath = DecodeEntityPath(entityPath);
-            var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/complete", CompleteMessagesAsync);
 
-            var client = CreateClient(ns, factory, demo);
-            var count = await client.CompleteMessagesAsync(entityPath, sequenceNumbers);
-            return Results.Ok(new { completed = count });
-        });
-
-        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/purge", async (
-            string nsId,
-            string entityPath,
-            bool deadLetter,
-            ProfileRepository profile,
-            IServiceBusClientFactory factory,
-            DemoModeService demo) =>
-        {
-            entityPath = DecodeEntityPath(entityPath);
-            var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
-
-            var client = CreateClient(ns, factory, demo);
-            var count = await client.PurgeMessagesAsync(entityPath, deadLetter);
-            return Results.Ok(new { purged = count });
-        });
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/purge", PurgeMessagesAsync);
 
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/dlq/complete", async (
             string nsId,
@@ -299,22 +241,7 @@ public static class ServiceBusEndpoints
             return Results.Ok();
         });
 
-        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/resubmit", async (
-            string nsId,
-            string entityPath,
-            ResubmitRequest req,
-            ProfileRepository profile,
-            IServiceBusClientFactory factory,
-            DemoModeService demo) =>
-        {
-            entityPath = DecodeEntityPath(entityPath);
-            var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
-
-            var client = CreateClient(ns, factory, demo);
-            await client.ResubmitDeadLetterAsync(entityPath, req.SequenceNumbers, req.TargetEntityPath, req.RemapRules);
-            return Results.Ok();
-        });
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/resubmit", ResubmitDeadLetterAsync);
 
         // ── Message Templates ──────────────────────────────────────────────────
         app.MapGet("/api/servicebus/templates", (ProfileRepository profile) =>
@@ -334,6 +261,110 @@ public static class ServiceBusEndpoints
             profile.DeleteMessageTemplate(guid);
             return Results.Ok();
         });
+    }
+
+    // ── Extracted handlers (unit-testable without a WebApplicationFactory) ────────────
+
+    /// <summary>Handler body for the active-message peek endpoint.</summary>
+    internal static async Task<IResult> PeekMessagesAsync(
+        string nsId,
+        string entityPath,
+        int count,
+        long? fromSeq,
+        ProfileRepository profile,
+        IServiceBusClientFactory factory,
+        DemoModeService demo)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return Results.NotFound("Namespace not found");
+
+        var client = CreateClient(ns, factory, demo);
+        var messages = await client.PeekMessagesAsync(entityPath, count, fromSequenceNumber: fromSeq);
+        return Results.Ok(messages);
+    }
+
+    /// <summary>Handler body for the dead-letter peek endpoint.</summary>
+    internal static async Task<IResult> PeekDeadLetterAsync(
+        string nsId,
+        string entityPath,
+        int count,
+        long? fromSeq,
+        ProfileRepository profile,
+        IServiceBusClientFactory factory,
+        DemoModeService demo)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return Results.NotFound("Namespace not found");
+
+        var client = CreateClient(ns, factory, demo);
+        var messages = await client.PeekDeadLetterAsync(entityPath, count, fromSequenceNumber: fromSeq);
+        return Results.Ok(messages);
+    }
+
+    /// <summary>
+    /// Handler body for the message-complete mutation endpoint. Regression coverage target: the
+    /// production-readiness review flagged a possible duplicate-mutation bug (a React key-collision
+    /// bug caused duplicate-rendered notifications, which might indicate the underlying action fires
+    /// twice, not just renders twice) — tests for this method assert the underlying client's
+    /// <c>CompleteMessagesAsync</c> is invoked exactly once per handler invocation.
+    /// </summary>
+    internal static async Task<IResult> CompleteMessagesAsync(
+        string nsId,
+        string entityPath,
+        long[] sequenceNumbers,
+        ProfileRepository profile,
+        IServiceBusClientFactory factory,
+        DemoModeService demo)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return Results.NotFound("Namespace not found");
+
+        var client = CreateClient(ns, factory, demo);
+        var count = await client.CompleteMessagesAsync(entityPath, sequenceNumbers);
+        return Results.Ok(new { completed = count });
+    }
+
+    /// <summary>Handler body for the purge mutation endpoint.</summary>
+    internal static async Task<IResult> PurgeMessagesAsync(
+        string nsId,
+        string entityPath,
+        bool deadLetter,
+        ProfileRepository profile,
+        IServiceBusClientFactory factory,
+        DemoModeService demo)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return Results.NotFound("Namespace not found");
+
+        var client = CreateClient(ns, factory, demo);
+        var count = await client.PurgeMessagesAsync(entityPath, deadLetter);
+        return Results.Ok(new { purged = count });
+    }
+
+    /// <summary>
+    /// Handler body for the dead-letter resubmit mutation endpoint. Same "exactly once" regression
+    /// concern as <see cref="CompleteMessagesAsync"/> — tests assert <c>ResubmitDeadLetterAsync</c> is
+    /// invoked exactly once per handler invocation.
+    /// </summary>
+    internal static async Task<IResult> ResubmitDeadLetterAsync(
+        string nsId,
+        string entityPath,
+        ResubmitRequest req,
+        ProfileRepository profile,
+        IServiceBusClientFactory factory,
+        DemoModeService demo)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return Results.NotFound("Namespace not found");
+
+        var client = CreateClient(ns, factory, demo);
+        await client.ResubmitDeadLetterAsync(entityPath, req.SequenceNumbers, req.TargetEntityPath, req.RemapRules);
+        return Results.Ok();
     }
 
     private static string DecodeEntityPath(string entityPath) => Uri.UnescapeDataString(entityPath);
