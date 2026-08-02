@@ -86,4 +86,48 @@ public class AgentEndpointsTests
         var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
         Assert.Contains($"\"historyCount\":{service.HistoryCount}", json);
     }
+
+    // ── Capability test ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task TestProfileAsync_UnknownProfileId_ReturnsNotFound()
+    {
+        var settings = new UserSettingsRepository();
+        var handler = new FakeHttpMessageHandler();
+        var tester = new AgentCapabilityTester(new HttpClient(handler), new FakeCredentialStore());
+
+        var result = await AgentEndpoints.TestProfileAsync("does-not-exist", tester, settings, CancellationToken.None);
+
+        Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.NotFound>(result);
+    }
+
+    [Fact]
+    public async Task TestProfileAsync_KnownProfile_ReturnsCapabilityResult_AndDoesNotPersistIt()
+    {
+        var settings = new UserSettingsRepository();
+        settings.Settings.Agent.Profiles.Add(new AgentProfile
+        {
+            Id = "p1",
+            DisplayName = "Local LM Studio",
+            Provider = ProviderKind.LmStudio,
+            BaseUrl = "http://localhost:1234/v1",
+            Model = "test-model",
+        });
+
+        var handler = new FakeHttpMessageHandler();
+        handler.EnqueueJson("""{"data":[{"id":"test-model"}]}""");
+        handler.EnqueueJson("""{"choices":[{"message":{"content":"OK"}}]}""");
+        handler.EnqueueJson("""{"choices":[{"finish_reason":"tool_calls","message":{"tool_calls":[{"function":{"name":"echo_test"}}]}}]}""");
+        var tester = new AgentCapabilityTester(new HttpClient(handler), new FakeCredentialStore());
+
+        var result = await AgentEndpoints.TestProfileAsync("p1", tester, settings, CancellationToken.None);
+
+        var ok = Assert.IsType<Ok<CapabilityTestResult>>(result);
+        Assert.Equal(AgentCapability.ToolCalling, ok.Value!.Capability);
+        Assert.True(ok.Value.ToolCallingValid);
+        // Stateless by design (see AgentEndpoints.TestProfileAsync's doc comment): the frontend
+        // patches the result into its own state and saves via the existing user-settings endpoint
+        // rather than this one owning persistence.
+        Assert.Equal(AgentCapability.Unknown, settings.Settings.Agent.Profiles[0].Capability);
+    }
 }

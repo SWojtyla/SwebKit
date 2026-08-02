@@ -6,26 +6,41 @@ priority — Module 3 (confirm-flow) is a hard prerequisite for most of what mak
 meaningfully different from "Ask", so it should land early even though it touches no
 feature-specific tools itself.
 
-## Module 1 — Fix the capability-test dead code (quick, independent win)
+## Module 1 — Fix the capability-test dead code (quick, independent win) — done
 
 `AgentCapabilityTester.TestAsync()` (`src/SwebKit.Agents/AgentCapabilityTester.cs`) already probes
 (1) `GET /models` reachability, (2) a minimal chat round-trip, (3) a minimal tool-call round-trip,
-and sets `AgentProfile.Capability`/`LastTestDiagnostic`. Nothing calls it today — a manually-added
-profile's `Capability` stays `Unknown` forever, and `FilterToolsByCapability`/the sidecar's inline
-equivalent both treat `Unknown` as "no tool calling", so tools are silently never sent. This is a
-live, user-facing bug independent of everything else in this plan.
+and sets `AgentProfile.Capability`/`LastTestDiagnostic`. Nothing called it before this module — a
+manually-added profile's `Capability` stayed `Unknown` forever, and `FilterToolsByCapability`/the
+sidecar's inline equivalent both treat `Unknown` as "no tool calling", so tools were silently never
+sent. This was a live, user-facing bug independent of everything else in this plan.
 
-- [ ] Add `POST /api/agent/profiles/{id}/test` to `src-sidecar/Endpoints/AgentEndpoints.cs`, backed
-      by `AgentCapabilityTester` (register it in `Program.cs`'s DI alongside the other agent
-      services — check whether it needs an `HttpClient` factory registration like the MAUI side's
-      `services.AddHttpClient<AgentCapabilityTester>()`).
-- [ ] Persist the result back onto the profile via `UserSettingsRepository` (mirror how
-      `SaveProfileAsync` already persists profile edits).
-- [ ] Add a "Test connection" button next to each profile row in `AgentSettings.tsx`, showing the
-      capability result (`ChatOnly` / `ToolCalling` / failure + `LastTestDiagnostic`) inline.
-- [ ] Run this test automatically once, right after a profile is created/edited and saved, so a
-      user never has to know this step exists to benefit from it (still expose the manual button
-      for re-testing after e.g. swapping the model loaded in LM Studio).
+- [x] `POST /api/agent/profiles/{id}/test` added to `src-sidecar/Endpoints/AgentEndpoints.cs`,
+      backed by `AgentCapabilityTester` (registered via `AddHttpClient<AgentCapabilityTester>()` in
+      `Program.cs`, next to the model client's own registration).
+- [x] **Design change from the original bullet point**: the endpoint is stateless — it runs the test
+      and returns the result, it does not persist anything server-side. `AgentSettings.tsx` already
+      round-trips the *entire* `UserSettings` blob for every profile edit (get whole settings →
+      mutate locally → `PUT /api/config/user-settings`); adding a second, server-side persistence
+      path for just this one field would create two competing ways to save the same data. The
+      frontend patches `capability`/`lastTestDiagnostic` into its local profile state from the test
+      response and saves through that same existing path instead.
+- [x] "Test connection" button added next to each profile row in `AgentSettings.tsx`, showing the
+      capability result inline (`agent-profile-capability-{i}` testid).
+- [x] **Found and fixed two pre-existing bugs while touching this file**, both load-bearing for this
+      entire feature's premise ("configure a profile and have it work"): the frontend's
+      `AgentProfile` type/component used a field named `endpointUrl` that doesn't exist on the wire
+      (the real property is `baseUrl`) — editing the "Endpoint URL" input never actually changed the
+      profile's base URL. And the provider dropdown's OpenAI-compatible option sent the string
+      `"OpenAI"`, which isn't a valid `ProviderKind` member (the real value is `"OpenAiCompatible"`)
+      — selecting it and saving would have failed enum deserialization server-side. Fixed both,
+      added the previously-entirely-missing `temperature`/`maxTokens`/`timeoutSeconds` fields to the
+      editor (they existed on the backend model but had no UI at all), and added a regression e2e
+      test (`settings.spec.ts`) asserting the base URL survives a reload.
+- [ ] **Not done**: auto-running the test automatically right after a profile is saved. The manual
+      "Test connection" button covers the capability-testing need; auto-run is a small additive
+      follow-up, not blocking anything else in this plan — revisit if it turns out users don't
+      discover the manual button on their own.
 
 ## Module 2 — Per-session conversations (frontend + sidecar)
 

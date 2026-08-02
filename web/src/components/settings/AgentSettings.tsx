@@ -1,8 +1,19 @@
+import { useState } from "react";
 import { useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
+import { useTestAgentProfile } from "@/lib/hooks/useAgent";
+import type { AgentProfile } from "@/lib/types";
+
+const capabilityLabel: Record<AgentProfile["capability"], string> = {
+  Unknown: "Not tested",
+  ChatOnly: "Chat only (no tool calling)",
+  ToolCalling: "Tool calling supported",
+};
 
 export function AgentSettings() {
   const { data: settings, isLoading } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
+  const testProfile = useTestAgentProfile();
+  const [testingId, setTestingId] = useState<string | null>(null);
 
   if (isLoading || !settings) {
     return <div className="text-muted-foreground">Loading...</div>;
@@ -14,6 +25,33 @@ export function AgentSettings() {
     updateSettings.mutate({
       ...settings,
       agent: { ...agent, ...patch },
+    });
+  };
+
+  const updateProfile = (index: number, patch: Partial<AgentProfile>) => {
+    const profiles = [...agent.profiles];
+    profiles[index] = { ...profiles[index], ...patch };
+    update({ profiles });
+  };
+
+  const runTest = (index: number) => {
+    const profile = agent.profiles[index];
+    setTestingId(profile.id);
+    testProfile.mutate(profile.id, {
+      onSuccess: (result) => {
+        setTestingId(null);
+        updateProfile(index, {
+          capability: result.capability,
+          lastTestDiagnostic: result.diagnostic,
+        });
+      },
+      onError: (err) => {
+        setTestingId(null);
+        updateProfile(index, {
+          capability: "Unknown",
+          lastTestDiagnostic: err instanceof Error ? err.message : "Test failed",
+        });
+      },
     });
   };
 
@@ -39,11 +77,7 @@ export function AgentSettings() {
               <input
                 type="text"
                 value={p.displayName}
-                onChange={(e) => {
-                  const profiles = [...agent.profiles];
-                  profiles[i] = { ...p, displayName: e.target.value };
-                  update({ profiles });
-                }}
+                onChange={(e) => updateProfile(i, { displayName: e.target.value })}
                 className="flex-1 rounded-md border bg-card px-3 py-1.5 text-sm"
                 placeholder="Profile name"
               />
@@ -54,7 +88,7 @@ export function AgentSettings() {
                     profiles,
                     activeProfileId:
                       agent.activeProfileId === p.id
-                        ? profiles[0]?.id ?? ""
+                        ? (profiles[0]?.id ?? "")
                         : agent.activeProfileId,
                   });
                 }}
@@ -65,58 +99,118 @@ export function AgentSettings() {
             </div>
             <select
               value={p.provider}
-              onChange={(e) => {
-                const profiles = [...agent.profiles];
-                profiles[i] = { ...p, provider: e.target.value };
-                update({ profiles });
-              }}
+              onChange={(e) =>
+                updateProfile(i, { provider: e.target.value as AgentProfile["provider"] })
+              }
               className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
             >
+              <option value="LmStudio">LM Studio (local)</option>
+              <option value="OpenAiCompatible">OpenAI-compatible</option>
               <option value="Mistral">Mistral AI</option>
-              <option value="LmStudio">LM Studio</option>
-              <option value="OpenAI">OpenAI-compatible</option>
             </select>
             <input
               type="text"
-              value={p.endpointUrl}
-              onChange={(e) => {
-                const profiles = [...agent.profiles];
-                profiles[i] = { ...p, endpointUrl: e.target.value };
-                update({ profiles });
-              }}
+              value={p.baseUrl}
+              onChange={(e) => updateProfile(i, { baseUrl: e.target.value })}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-              placeholder="Endpoint URL"
+              placeholder="Base URL (e.g. http://localhost:1234/v1)"
+              data-testid={`agent-profile-base-url-${i}`}
             />
             <input
               type="text"
               value={p.model}
-              onChange={(e) => {
-                const profiles = [...agent.profiles];
-                profiles[i] = { ...p, model: e.target.value };
-                update({ profiles });
-              }}
+              onChange={(e) => updateProfile(i, { model: e.target.value })}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Model name"
             />
-            <label className="flex items-center gap-2 text-sm">
+            {p.provider !== "LmStudio" && (
               <input
-                type="radio"
-                checked={agent.activeProfileId === p.id}
-                onChange={() => update({ activeProfileId: p.id })}
+                type="text"
+                value={p.credentialKey}
+                onChange={(e) => updateProfile(i, { credentialKey: e.target.value })}
+                className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                placeholder="Credential key (resolved via the OS credential store)"
               />
-              Active profile
-            </label>
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Temperature</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="2"
+                  value={p.temperature}
+                  onChange={(e) =>
+                    updateProfile(i, { temperature: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Max tokens</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={p.maxTokens}
+                  onChange={(e) =>
+                    updateProfile(i, { maxTokens: parseInt(e.target.value) || 2048 })
+                  }
+                  className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Timeout (s)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={p.timeoutSeconds}
+                  onChange={(e) =>
+                    updateProfile(i, { timeoutSeconds: parseInt(e.target.value) || 60 })
+                  }
+                  className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  checked={agent.activeProfileId === p.id}
+                  onChange={() => update({ activeProfileId: p.id })}
+                />
+                Active profile
+              </label>
+              <button
+                onClick={() => runTest(i)}
+                disabled={testingId === p.id}
+                className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                data-testid={`agent-profile-test-${i}`}
+              >
+                {testingId === p.id ? "Testing…" : "Test connection"}
+              </button>
+            </div>
+            <div className="text-xs text-muted-foreground" data-testid={`agent-profile-capability-${i}`}>
+              {capabilityLabel[p.capability]}
+              {p.lastTestDiagnostic && ` — ${p.lastTestDiagnostic}`}
+            </div>
           </div>
         ))}
         <button
           onClick={() => {
-            const newProfile = {
+            const newProfile: AgentProfile = {
               id: crypto.randomUUID(),
               provider: "LmStudio",
               displayName: "New Profile",
-              endpointUrl: "http://localhost:1234/v1",
+              baseUrl: "http://localhost:1234/v1",
               model: "",
               credentialKey: "",
+              temperature: 0.7,
+              maxTokens: 2048,
+              timeoutSeconds: 120,
+              capability: "Unknown",
+              lastTestDiagnostic: null,
+              requiresApiKey: false,
             };
             update({
               profiles: [...agent.profiles, newProfile],
@@ -124,6 +218,7 @@ export function AgentSettings() {
             });
           }}
           className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90"
+          data-testid="agent-add-profile"
         >
           Add Profile
         </button>

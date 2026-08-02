@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend } from "../api";
-import type { AgentReply, AgentStatus } from "../types";
+import type { AgentCapabilityTestResult, AgentReply, AgentStatus } from "../types";
 
 // ── Agent hooks ───────────────────────────────────────────────────────────────
 
@@ -38,5 +38,12 @@ export function useAgentClear() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agent", "status"] });
     },
+  });
+}
+
+export function useTestAgentProfile() {
+  return useMutation({
+    mutationFn: (profileId: string) =>
+      apiSend<AgentCapabilityTestResult>(`/api/agent/profiles/${profileId}/test`, "POST"),
   });
 }

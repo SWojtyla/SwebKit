@@ -45,6 +45,44 @@ test.describe("Settings", () => {
     await expect(page.getByTestId("appearance-density")).toBeVisible();
   });
 
+  test("agent profile base URL persists across reload", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-agent").click();
+    await page.getByTestId("agent-add-profile").click();
+
+    const baseUrlInput = page.getByTestId("agent-profile-base-url-0");
+    await baseUrlInput.fill("http://localhost:9999/v1");
+    await expect(baseUrlInput).toHaveValue("http://localhost:9999/v1");
+
+    await page.reload();
+    await page.getByTestId("settings-tab-agent").click();
+    await expect(page.getByTestId("agent-profile-base-url-0")).toHaveValue("http://localhost:9999/v1");
+  });
+
+  test("test connection button reports capability from the sidecar", async ({ page }) => {
+    await page.route("**/api/agent/profiles/*/test", async (route) => {
+      await route.fulfill({
+        json: {
+          serverReachable: true,
+          modelAvailable: true,
+          chatValid: true,
+          toolCallingValid: true,
+          capability: "ToolCalling",
+          diagnostic: "Tool calling supported.",
+          availableModels: ["test-model"],
+        },
+      });
+    });
+
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-agent").click();
+    await page.getByTestId("agent-add-profile").click();
+    await expect(page.getByTestId("agent-profile-capability-0")).toHaveText(/Not tested/);
+
+    await page.getByTestId("agent-profile-test-0").click();
+    await expect(page.getByTestId("agent-profile-capability-0")).toHaveText(/Tool calling supported/);
+  });
+
   test("selecting the fancy theme applies it to the document", async ({ page }) => {
     await page.goto("/settings");
     await page.getByTestId("settings-tab-appearance").click();

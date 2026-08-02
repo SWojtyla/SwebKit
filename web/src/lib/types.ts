@@ -143,13 +143,31 @@ export interface AgentConfig {
   historyWarningThresholdPercent: number;
 }
 
+export type AgentCapability = "Unknown" | "ChatOnly" | "ToolCalling";
+
 export interface AgentProfile {
   id: string;
-  provider: string;
+  provider: "LmStudio" | "OpenAiCompatible" | "Mistral";
   displayName: string;
-  endpointUrl: string;
+  baseUrl: string;
   model: string;
   credentialKey: string;
+  temperature: number;
+  maxTokens: number;
+  timeoutSeconds: number;
+  capability: AgentCapability;
+  lastTestDiagnostic: string | null;
+  requiresApiKey: boolean;
+}
+
+export interface AgentCapabilityTestResult {
+  serverReachable: boolean;
+  modelAvailable: boolean;
+  chatValid: boolean;
+  toolCallingValid: boolean;
+  capability: AgentCapability;
+  diagnostic: string | null;
+  availableModels: string[] | null;
 }
 
 export interface LoggingSettings {

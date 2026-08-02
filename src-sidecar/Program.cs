@@ -95,6 +95,10 @@ builder.Services.AddHostedService(
 
 // Agent: OpenAI-compatible LLM client + sidecar chat service
 builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
+// Capability tester: probes a profile's endpoint for reachability/tool-calling support, backing
+// POST /api/agent/profiles/{id}/test. Separate HttpClient from the model client above since a
+// capability test may run against a profile that isn't the active one.
+builder.Services.AddHttpClient<AgentCapabilityTester>();
 
 // Agent tools — read-only Kubernetes and Service Bus diagnostics only. Observability tools
 // (QueryLogsTool/GetMetricsTool) are not wired here because the sidecar has no

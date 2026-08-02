@@ -6,17 +6,22 @@ xUnit testing without `WebApplicationFactory` (see e.g. `AksEndpointsTests.cs`,
 `ServiceBusEndpointsMutationTests.cs` for the pattern to follow), and Playwright specs against demo
 mode for frontend flows.
 
-## Module 1 — Capability testing
+## Module 1 — Capability testing — done
 
-- Unit: the new `/api/agent/profiles/{id}/test` handler — success sets `Capability`/
-  `LastTestDiagnostic` and persists via `UserSettingsRepository`; unreachable endpoint / model not
-  in `/models` list / tool-call probe failure each map to the right `Capability` value and a
-  non-empty diagnostic message.
-- Unit: `AgentCapabilityTester` itself likely already has coverage in `tests/SwebKit.Agents.Tests`
-  — verify existing coverage still applies unchanged, since this module only wires it up, it
-  doesn't change its logic.
-- E2E: "Test connection" button in `AgentSettings.tsx` shows a result (demo/mocked profile is fine
-  here — this is a UI-wiring check, not a real-model check, which belongs in Module 7).
+- [x] Unit (`AgentEndpointsTests.cs`): `TestProfileAsync` against an unknown profile id returns
+  `NotFound`; against a known profile, returns the tester's `CapabilityTestResult` (verified against
+  a fake `HttpMessageHandler`+`HttpClient`, reusing the existing `FakeHttpMessageHandler`/
+  `FakeCredentialStore` doubles from `SidecarAuthHeaderBuilderTests.cs` rather than writing new
+  ones) and — per the stateless design decision recorded in `technical-plan.md` — does **not**
+  mutate the profile in `UserSettingsRepository`; asserted directly rather than assumed.
+- [x] `AgentCapabilityTester` itself was confirmed to have **no** existing coverage in
+  `tests/SwebKit.Agents.Tests` (checked directly, not assumed) — out of scope for this module, which
+  only wires up already-existing, unmodified logic; its own unit tests remain a gap, not one this
+  module introduced.
+- [x] E2E (`settings.spec.ts`): "Test connection" button shows the mocked capability result
+  (`test connection button reports capability from the sidecar`), and a base-URL edit survives a
+  reload (`agent profile base URL persists across reload` — a regression test for the `endpointUrl`
+  field-name bug found and fixed alongside this module).
 
 ## Module 2 — Per-session conversations
 
