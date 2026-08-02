@@ -66,8 +66,18 @@
       shared abstraction. A generic `IDemoAwareClientResolver<TClient>` would need type parameters or
       delegates per domain either way, adding a layer of indirection without actually shrinking the
       real code. Not worth building — three similar 2-line branches are clearer than the abstraction.
-      Not done: §3.8–3.11 (request validation, auth-builder consolidation, OpenAPI surface,
-      shared-library re-verification).
+      §3.11 (re-verify MAUI-era shared-library issues from `codebase-review-2026-07-18`) is **done —
+      all three already fixed, striking them from this plan per the plan's own instruction**: (1)
+      kubectl argument hardening — `KubernetesAksClient.cs` and `KubectlShellLauncher.cs` already
+      build args via `ProcessStartInfo.ArgumentList` throughout (a dedicated
+      `KubectlArgumentBuilder.cs` exists for this), not the raw single-string API the review flagged;
+      (2) the two direct `DefaultAzureCredential` call sites in `KubernetesAksClient.cs` (lines 272,
+      1504 as of this check) already go through `AzureCredentialFactory.CreateDefault(...)`, not a
+      bypass; (3) `WindowsCredentialStore.cs`'s catch blocks already log via
+      `logger?.LogDebug`/`LogWarning` on every path (Get/Delete/ListKeys) rather than silently
+      swallowing — this was either already fixed before this initiative started or was a stale
+      finding in the original review. Not done: §3.8–3.10 (request validation, auth-builder
+      consolidation, OpenAPI surface).
 - [x] Sidecar test coverage (test-plan.md Module 1) — **done, with 2 deliberate exceptions**: added
       `SidecarMonitoringConnectionPoolAksTests.cs` (6 tests), `SidecarAgentChatServiceToolsTests.cs`
       (4 tests), `AksEndpointsTests.cs` (11 tests: Deployments, Pods, HPAs, HTTPRoutes
