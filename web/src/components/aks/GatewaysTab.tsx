@@ -14,8 +14,8 @@ const columns: Column<GatewayInfo>[] = [
   { header: "Class", cell: (gw) => <span className="text-xs text-muted-foreground">{gw.gatewayClass ?? "—"}</span> },
   { header: "Status", cell: (gw) => (
     <span className={
-      gw.status === "Ready" ? "text-green-500" :
-      gw.status === "Pending" ? "text-yellow-500" :
+      gw.status === "Ready" ? "text-success" :
+      gw.status === "Pending" ? "text-warning" :
       "text-muted-foreground"
     }>
       {gw.status}

@@ -5,6 +5,13 @@
 `Review` — implemented on branch `feat/api-client-ux-and-git` on 2026-07-31, alongside
 [api-client-ux-overhaul](../api-client-ux-overhaul/index.md). Not committed.
 
+**Update (2026-08-01): this branch is gone.** Confirmed absent both locally and on origin across
+multiple checks during the `tauri-react-primary-tool` initiative, and the user has confirmed it no
+longer exists — this was genuinely lost work, not merely unlanded. There is nothing left to land;
+whoever picks this feature back up is starting from scratch against the current codebase, not
+resuming this implementation. See
+[tauri-react-primary-tool/ux-plan.md](../tauri-react-primary-tool/ux-plan.md)'s Phase 1 note.
+
 **Jira:** not linked
 
 ## Origin

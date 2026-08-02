@@ -41,7 +41,7 @@ pub fn spawn_sidecar(app: &AppHandle) -> Result<(u16, Option<Child>), String> {
         let _ = app; // unused in dev mode: the sidecar is started externally
         let port = 5199u16;
         eprintln!("[swebkit] Dev mode: assuming sidecar at http://127.0.0.1:{port}");
-        return Ok((port, None));
+        Ok((port, None))
     }
 
     // In production, spawn the bundled sidecar binary

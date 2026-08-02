@@ -3,8 +3,8 @@ import { BellOff } from "lucide-react";
 import type { AlertFiredEvent } from "../../lib/api";
 
 const severityBadge: Record<string, string> = {
-  Critical: "text-red-500 bg-red-500/10",
-  Warning: "text-yellow-500 bg-yellow-500/10",
+  Critical: "text-destructive bg-destructive/10",
+  Warning: "text-warning bg-warning/10",
 };
 
 export function AlertHistoryPanel({

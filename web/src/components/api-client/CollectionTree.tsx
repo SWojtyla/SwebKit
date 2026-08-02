@@ -226,7 +226,62 @@ export function CollectionTree({
     measureElement: (el) => el?.getBoundingClientRect().height ?? 32,
   });
 
-  const renderRow = (row: FlatRow) => {
+  // Roving keyboard navigation across the (possibly virtualized) tree rows.
+  // scrollToIndex forces the target row to render before we try to focus it,
+  // which matters because react-virtual only mounts rows near the viewport.
+  const focusRowByFlatIndex = (index: number) => {
+    if (index < 0 || index >= flatRows.length) return;
+    virtualizer.scrollToIndex(index, { align: "auto" });
+    requestAnimationFrame(() => {
+      const el = listRef.current?.querySelector(
+        `[data-tree-index="${index}"]`,
+      ) as HTMLElement | null;
+      el?.focus();
+    });
+  };
+
+  const handleRowKeyDown = (
+    e: React.KeyboardEvent<HTMLDivElement>,
+    row: FlatRow,
+    rowIndex: number,
+  ) => {
+    const { node, collectionId } = row;
+    switch (e.key) {
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        onSelectNode(node, collectionId);
+        break;
+      case "ArrowRight":
+        if (node.type === "Folder") {
+          e.preventDefault();
+          if (!expandedIds.has(node.id)) {
+            toggleExpand(node.id);
+          } else {
+            focusRowByFlatIndex(rowIndex + 1);
+          }
+        }
+        break;
+      case "ArrowLeft":
+        if (node.type === "Folder" && expandedIds.has(node.id)) {
+          e.preventDefault();
+          toggleExpand(node.id);
+        }
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        focusRowByFlatIndex(rowIndex + 1);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        focusRowByFlatIndex(rowIndex - 1);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const renderRow = (row: FlatRow, rowIndex: number) => {
     const { node, collectionId, depth, isCollection } = row;
     const isExpanded = expandedIds.has(node.id);
     const isSelected = selectedNodeId === node.id;
@@ -240,6 +295,12 @@ export function CollectionTree({
             ? `collection-root-${node.id}`
             : `collection-node-${node.type}-${node.id}`
         }
+        data-tree-index={rowIndex}
+        role="treeitem"
+        aria-level={depth + 1}
+        aria-selected={isSelected}
+        aria-expanded={node.type === "Folder" ? isExpanded : undefined}
+        tabIndex={0}
         className={`group flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-sm ${
           isSelected ? "bg-primary text-primary-foreground" : "hover:bg-accent"
         } ${isCollection ? "font-medium" : ""}`}
@@ -250,6 +311,7 @@ export function CollectionTree({
           startRename(node.id, node.name, collectionId);
         }}
         onContextMenu={(e) => handleContextMenu(e, node.id, collectionId, isCollection, node.type)}
+        onKeyDown={(e) => handleRowKeyDown(e, row, rowIndex)}
       >
         {node.type === "Folder" && (
           <button
@@ -367,7 +429,13 @@ export function CollectionTree({
         </div>
 
         {/* Tree */}
-        <div ref={listRef} className="flex-1 overflow-auto p-2" data-testid="collection-tree-list">
+        <div
+          ref={listRef}
+          className="flex-1 overflow-auto p-2"
+          data-testid="collection-tree-list"
+          role="tree"
+          aria-label="Collections"
+        >
           {collections.length === 0 && (
             <div className="p-2 text-xs text-muted-foreground">
               No collections. Click + to create one.
@@ -382,6 +450,7 @@ export function CollectionTree({
             <div
               style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
               data-testid="collection-tree-virtualizer"
+              role="presentation"
             >
               {virtualizer.getVirtualItems().map((item) => {
                 const row = flatRows[item.index];
@@ -390,6 +459,7 @@ export function CollectionTree({
                     key={item.key}
                     data-index={item.index}
                     ref={virtualizer.measureElement}
+                    role="presentation"
                     style={{
                       position: "absolute",
                       top: 0,
@@ -398,7 +468,7 @@ export function CollectionTree({
                       transform: `translateY(${item.start}px)`,
                     }}
                   >
-                    {renderRow(row)}
+                    {renderRow(row, item.index)}
                   </div>
                 );
               })}

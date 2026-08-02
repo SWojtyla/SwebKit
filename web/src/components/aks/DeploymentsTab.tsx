@@ -70,7 +70,7 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
 
   const columns: Column<DeploymentInfo>[] = useMemo(() => [
     { header: "Ready", cell: (dep) => (
-      <span className={dep.readyReplicas === dep.replicas ? "text-green-500" : "text-yellow-500"}>
+      <span className={dep.readyReplicas === dep.replicas ? "text-success" : "text-warning"}>
         {dep.readyReplicas}/{dep.replicas}
       </span>
     )},
@@ -140,8 +140,8 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
 
 function StatusBadge({ status }: { status: string }) {
   const color =
-    status === "Available" ? "text-green-500" :
-    status === "Progressing" ? "text-yellow-500" :
+    status === "Available" ? "text-success" :
+    status === "Progressing" ? "text-warning" :
     "text-destructive";
   return <span className={color}>{status}</span>;
 }

@@ -27,8 +27,13 @@ public sealed class SidecarCredentialStore(ILogger<SidecarCredentialStore>? logg
         {
             Keyring.SetPassword(PackageName, ServiceName, key, secret);
         }
-        catch (KeyringException ex)
+        catch (Exception ex) when (ex is KeyringException or DllNotFoundException)
         {
+            // DllNotFoundException happens one layer below KeyringException: it's KeySharp's own
+            // native shim (libsecret on Linux, Credential Manager on Windows) failing to *load* at
+            // all, e.g. libsecret-1.so.0 not installed on a minimal/headless Linux box. That's just
+            // as much an "OS store unavailable" case as a KeyringException, and this class promises
+            // an in-memory fallback for exactly that — so it needs to be caught here too.
             logger?.LogWarning(ex, "OS credential store unavailable; secret for key {Key} retained in session memory only.", key);
         }
     }
@@ -45,7 +50,7 @@ public sealed class SidecarCredentialStore(ILogger<SidecarCredentialStore>? logg
         {
             return null;
         }
-        catch (KeyringException ex)
+        catch (Exception ex) when (ex is KeyringException or DllNotFoundException)
         {
             logger?.LogWarning(ex, "OS credential store unavailable; returning in-memory fallback for key {Key}.", key);
             return _fallback.TryGetValue(key, out var value) ? value : null;
@@ -62,7 +67,7 @@ public sealed class SidecarCredentialStore(ILogger<SidecarCredentialStore>? logg
         {
             Keyring.DeletePassword(PackageName, ServiceName, key);
         }
-        catch (KeyringException ex)
+        catch (Exception ex) when (ex is KeyringException or DllNotFoundException)
         {
             logger?.LogWarning(ex, "OS credential store delete failed for key {Key}; removed from session memory.", key);
         }

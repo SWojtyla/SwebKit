@@ -13,16 +13,16 @@ interface JobsTabProps {
 const columns: Column<JobInfo>[] = [
   { header: "Status", cell: (job) => (
     <span className={
-      job.status === "Completed" ? "text-green-500" :
-      job.status === "Failed" ? "text-red-500" :
-      "text-yellow-500"
+      job.status === "Completed" ? "text-success" :
+      job.status === "Failed" ? "text-destructive" :
+      "text-warning"
     }>
       {job.status}
     </span>
   )},
   { header: "Active", cell: (job) => job.active },
-  { header: "Succeeded", cell: (job) => <span className="text-green-500">{job.succeeded}</span> },
-  { header: "Failed", cell: (job) => <span className="text-red-500">{job.failed}</span> },
+  { header: "Succeeded", cell: (job) => <span className="text-success">{job.succeeded}</span> },
+  { header: "Failed", cell: (job) => <span className="text-destructive">{job.failed}</span> },
   { header: "Completions", cell: (job) => <span className="text-muted-foreground">{job.desiredCompletions ?? "—"}</span> },
   { header: "Source", cell: (job) => (
     <span className="text-xs text-muted-foreground">

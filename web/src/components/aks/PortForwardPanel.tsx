@@ -5,9 +5,10 @@ import { listPortForwards, startPortForward, stopPortForward, type PortForwardSe
 interface Props {
   ns: string;
   selectedPod: string | null;
+  context?: string | null;
 }
 
-export function PortForwardPanel({ ns, selectedPod }: Props) {
+export function PortForwardPanel({ ns, selectedPod, context }: Props) {
   const [sessions, setSessions] = useState<PortForwardSessionInfo[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [pod, setPod] = useState("");
@@ -38,7 +39,7 @@ export function PortForwardPanel({ ns, selectedPod }: Props) {
     setLoading(true);
     setError(null);
     try {
-      await startPortForward(ns, pod, remotePort, localPort || undefined);
+      await startPortForward(ns, pod, remotePort, localPort || undefined, context);
       await refresh();
       setShowForm(false);
     } catch (e) {

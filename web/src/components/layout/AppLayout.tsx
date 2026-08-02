@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -33,6 +34,9 @@ import {
   useToggleDemoMode,
 } from "@/lib/hooks";
 import { useSettingsStore } from "@/lib/stores/settings";
+import { restartSidecar } from "@/lib/tauri-bridge";
+import { initSidecarBaseUrl } from "@/lib/api";
+import { useNotification } from "./NotificationSystem";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -63,6 +67,29 @@ export function AppLayout() {
   const { theme, toggleTheme } = useSettingsStore();
   const sidecarOk = health?.status === "ok";
   const isDemoMode = demoData?.isDemoMode ?? false;
+  const [reconnecting, setReconnecting] = useState(false);
+  const queryClient = useQueryClient();
+  const { notify } = useNotification();
+
+  // The sidecar previously had no recovery path if it crashed mid-session: `restart_sidecar`
+  // existed as a Tauri command but nothing ever called it, so a crash silently broke the app
+  // until the user manually relaunched. `useHealth`'s 10s poll already detects the outage
+  // (`sidecarOk` goes false); this adds the missing recovery action.
+  const handleReconnect = useCallback(async () => {
+    setReconnecting(true);
+    try {
+      const port = await restartSidecar();
+      if (port !== null) {
+        await initSidecarBaseUrl();
+      }
+      await queryClient.invalidateQueries();
+      notify("success", "Reconnected to the sidecar");
+    } catch (err) {
+      notify("error", "Reconnect failed", err instanceof Error ? err.message : String(err));
+    } finally {
+      setReconnecting(false);
+    }
+  }, [queryClient, notify]);
 
   const contextTitle = navItems.find((n) => n.to === location.pathname)?.label ?? "SwebKit";
   const areaHealth = [
@@ -204,6 +231,16 @@ export function AppLayout() {
           <div className="flex items-center gap-1.5">
             <Circle className={`h-2 w-2 ${sidecarOk ? "fill-success text-success" : "fill-destructive text-destructive"}`} />
             <span data-testid="status-bar-connection">{sidecarOk ? "Connected" : "Disconnected"}</span>
+            {!sidecarOk && (
+              <button
+                onClick={handleReconnect}
+                disabled={reconnecting}
+                className="ml-1 rounded border px-1.5 py-0.5 text-[11px] hover:bg-accent disabled:opacity-50"
+                data-testid="status-bar-reconnect"
+              >
+                {reconnecting ? "Reconnecting…" : "Reconnect"}
+              </button>
+            )}
           </div>
           <div className="flex min-w-0 items-center gap-3" data-testid="status-bar-area-health">
             {areaHealth.map(({ id, label, configured, query, connected }) => {

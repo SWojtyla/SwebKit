@@ -7,7 +7,6 @@ import { RedisSettings } from "./RedisSettings";
 import { StorageSettings } from "./StorageSettings";
 import { AgentSettings } from "./AgentSettings";
 import { GeneralSettings } from "./GeneralSettings";
-import { DevOpsSettings } from "./DevOpsSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 
@@ -18,7 +17,6 @@ const tabs = [
   { id: "redis", label: "Redis" },
   { id: "storage", label: "Storage" },
   { id: "agent", label: "AI Agent" },
-  { id: "devops", label: "DevOps" },
   { id: "diagnostics", label: "Diagnostics" },
   { id: "appearance", label: "Appearance" },
 ] as const;
@@ -61,7 +59,7 @@ export function SettingsPage() {
       </div>
 
       {demoMode?.isDemoMode && DEMO_AFFECTED_TABS.has(activeTab) && (
-        <div className="flex items-center gap-2 border-b bg-yellow-500/10 px-6 py-2 text-xs text-yellow-600" data-testid="settings-demo-mode-banner">
+        <div className="flex items-center gap-2 border-b bg-warning/10 px-6 py-2 text-xs text-warning" data-testid="settings-demo-mode-banner">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           Demo mode is on — this tab's connection fields are inert until you turn it off from the Dashboard.
         </div>
@@ -92,7 +90,6 @@ export function SettingsPage() {
           {activeTab === "redis" && <RedisSettings />}
           {activeTab === "storage" && <StorageSettings />}
           {activeTab === "agent" && <AgentSettings />}
-          {activeTab === "devops" && <DevOpsSettings />}
           {activeTab === "diagnostics" && <DiagnosticsSettings />}
           {activeTab === "appearance" && <AppearanceSettings />}
         </div>

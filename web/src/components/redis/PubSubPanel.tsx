@@ -73,7 +73,7 @@ export function PubSubPanel({ cacheId }: Props) {
         <>
           {snapshot.capability === "Unsupported" && (
             <div
-              className="rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm"
+              className="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm"
               role="status"
               data-testid="redis-pubsub-unsupported"
             >

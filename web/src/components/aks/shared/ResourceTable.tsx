@@ -72,7 +72,19 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
                 className={`border-b last:border-0 ${
                   clickable ? "cursor-pointer hover:bg-accent/50" : "hover:bg-accent/30"
                 } ${isSelected ? "bg-accent" : ""} ${getRowClassName?.(row) ?? ""}`}
+                tabIndex={clickable ? 0 : undefined}
+                aria-selected={clickable ? isSelected : undefined}
                 onClick={() => onRowClick?.(row)}
+                onKeyDown={
+                  onRowClick
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onRowClick(row);
+                        }
+                      }
+                    : undefined
+                }
                 onContextMenu={(e) => {
                   if (onRowContextMenu) {
                     e.preventDefault();

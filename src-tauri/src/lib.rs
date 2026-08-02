@@ -2,6 +2,7 @@ mod sidecar;
 mod native;
 mod secrets;
 mod git;
+mod pod_shell;
 
 use tauri::Manager;
 use sidecar::{get_sidecar_port, restart_sidecar};
@@ -15,6 +16,7 @@ use native::{
     restore_allowed_root,
     AllowedRoots,
 };
+use pod_shell::{start_pod_shell, write_pod_shell, resize_pod_shell, close_pod_shell, PodShellState};
 use git::{
     git_is_repo, git_status, git_changed_files, git_branches,
     git_stage_paths, git_unstage_paths, git_revert_paths,
@@ -29,6 +31,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(native::PortForwardState::new())
+        .manage(PodShellState::new())
         .manage(AllowedRoots::new())
         .setup(|app| {
             let handle = app.handle();
@@ -73,6 +76,10 @@ pub fn run() {
             get_secret,
             delete_secret,
             list_secrets,
+            start_pod_shell,
+            write_pod_shell,
+            resize_pod_shell,
+            close_pod_shell,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -81,6 +88,12 @@ pub fn run() {
             // as an orphan holding its port.
             if let tauri::RunEvent::Exit = event {
                 sidecar::kill_sidecar(app_handle);
+                if let Some(state) = app_handle.try_state::<native::PortForwardState>() {
+                    native::kill_all_port_forwards(&state);
+                }
+                if let Some(state) = app_handle.try_state::<PodShellState>() {
+                    pod_shell::kill_all_pod_shells(&state);
+                }
             }
         });
 }

@@ -1,14 +1,11 @@
-using Microsoft.Extensions.Logging;
-using SwebKit.App.Services;
 using SwebKit.Core.Configuration;
-using SwebKit.Core.Diagnostics;
 
-namespace SwebKit.App.Hosting;
+namespace SwebKit.Core.Diagnostics;
 
 /// <summary>
-/// Handles early bootstrap: file logging provider construction, crash handlers,
-/// and performance baseline recording. Must be called before any other startup
-/// work that could itself throw/log during construction.
+/// Handles early bootstrap: file logging provider construction and crash handlers. Must be
+/// called before any other startup work that could itself throw/log during construction.
+/// Shared by both hosts (the MAUI app and the Tauri sidecar) — has no MAUI-specific dependencies.
 /// </summary>
 public static class AppBootstrap
 {

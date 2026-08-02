@@ -1,5 +1,11 @@
 # SwebKit Design
 
+> **Primary-stack notice (2026-08-01):** same caveat as `docs/architecture/architecture.md` — this
+> document describes the legacy MAUI Blazor app's internals. Tauri + React
+> (`web/`/`src-tauri/`/`src-sidecar/`) is now the primary tool; see
+> `docs/features/active/tauri-react-primary-tool/`. Treat everything below as legacy MAUI reference
+> until this file is rewritten (tracked in `technical-plan.md` Module 1.3).
+
 ## Mandate
 
 **This is the component blueprint.** It answers: _how is each component internally structured, and what are the key flows through it?_

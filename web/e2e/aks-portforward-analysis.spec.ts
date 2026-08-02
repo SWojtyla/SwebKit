@@ -27,6 +27,25 @@ test.describe("AKS Port-Forward & Analysis", () => {
     await expect(page.getByTestId("port-forward-form")).not.toBeVisible();
   });
 
+  test("open shell in pod opens the terminal panel and reports it needs the desktop app", async ({ page }) => {
+    await page.goto("/aks");
+    await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
+    await page.getByTestId("aks-tab-pods").click();
+    const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
+    await firstRow.click({ button: "right" });
+    await expect(page.getByTestId("aks-context-menu")).toBeVisible();
+    await page.getByTestId("ctx-item-open-shell-in-pod").click();
+
+    await expect(page.getByTestId("pod-shell-panel")).toBeVisible();
+    // Playwright runs the app as a plain browser page, not the Tauri desktop shell, so the
+    // pty/kubectl bridge isn't available — the panel should surface that gracefully instead of
+    // hanging on "Connecting…" forever or throwing an unhandled error.
+    await expect(page.getByTestId("pod-shell-status")).toHaveText(/desktop app/i);
+
+    await page.getByTestId("pod-shell-close").click();
+    await expect(page.getByTestId("pod-shell-panel")).not.toBeVisible();
+  });
+
   test("analysis tab shows ingress and probe analysis", async ({ page }) => {
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });

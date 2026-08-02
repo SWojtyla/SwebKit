@@ -4,7 +4,7 @@ import { X, CheckCircle, AlertCircle, Info, Bell } from "lucide-react";
 type NotificationType = "success" | "error" | "info";
 
 interface NotificationItem {
-  id: number;
+  id: string;
   type: NotificationType;
   title: string;
   body?: string;
@@ -14,7 +14,7 @@ interface NotificationItem {
 interface NotificationContextValue {
   notify: (type: NotificationType, title: string, body?: string) => void;
   notifications: NotificationItem[];
-  dismiss: (id: number) => void;
+  dismiss: (id: string) => void;
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
@@ -30,7 +30,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<NotificationItem[]>([]);
 
-  const dismiss = (id: number) => {
+  const dismiss = (id: string) => {
     setNotifications((prev) => {
       const item = prev.find((n) => n.id === id);
       if (item) setHistory((h) => [{ ...item }, ...h].slice(0, 50));
@@ -39,7 +39,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   };
 
   const notify = (type: NotificationType, title: string, body?: string) => {
-    const id = Date.now() + Math.random();
+    const id = crypto.randomUUID();
     const item: NotificationItem = { id, type, title, body, timestamp: Date.now() };
     setNotifications((prev) => [...prev, item]);
     setTimeout(() => dismiss(id), 5000);
@@ -105,7 +105,7 @@ function Toast({ notification, onDismiss }: { notification: NotificationItem; on
   return (
     <div
       className={`flex w-80 items-start gap-2 rounded-lg border bg-card p-3 shadow-lg ${
-        notification.type === "error" ? "border-destructive/30" : notification.type === "success" ? "border-green-500/30" : ""
+        notification.type === "error" ? "border-destructive/30" : notification.type === "success" ? "border-success/30" : ""
       }`}
       data-testid={`notification-toast-${notification.id}`}
     >
@@ -122,7 +122,7 @@ function Toast({ notification, onDismiss }: { notification: NotificationItem; on
 }
 
 function NotificationIcon({ type }: { type: NotificationType }) {
-  if (type === "success") return <CheckCircle className="h-4 w-4 text-green-500" />;
+  if (type === "success") return <CheckCircle className="h-4 w-4 text-success" />;
   if (type === "error") return <AlertCircle className="h-4 w-4 text-destructive" />;
   return <Info className="h-4 w-4 text-blue-500" />;
 }

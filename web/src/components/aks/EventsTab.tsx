@@ -19,8 +19,8 @@ export function EventsTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
             <span
               className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${
                 evt.type === "Warning"
-                  ? "bg-yellow-500/20 text-yellow-600"
-                  : "bg-green-500/20 text-green-600"
+                  ? "bg-warning/20 text-warning"
+                  : "bg-success/20 text-success"
               }`}
             >
               {evt.type}

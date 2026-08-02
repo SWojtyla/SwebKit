@@ -118,11 +118,11 @@ function AksPageContent() {
 
         {ws.testResult && (
           <span
-            className={`flex items-center gap-1.5 text-xs ${ws.testResult.connected ? "text-green-500" : "text-destructive"}`}
+            className={`flex items-center gap-1.5 text-xs ${ws.testResult.connected ? "text-success" : "text-destructive"}`}
             data-testid="aks-connection-status"
           >
             <span
-              className={`h-2 w-2 rounded-full ${ws.testResult.connected ? "bg-green-500" : "bg-destructive"}`}
+              className={`h-2 w-2 rounded-full ${ws.testResult.connected ? "bg-success" : "bg-destructive"}`}
             />
             {ws.testResult.connected ? "Connected" : "Disconnected"}
             {ws.testResult.error && ` — ${ws.testResult.error}`}
@@ -266,7 +266,11 @@ function AksPageContent() {
                 <EventsTab ns={ws.namespaceToken} isMulti={ws.isMultiNamespace} />
               )}
               {ws.activeTab === "portforward" && (
-                <PortForwardPanel ns={ws.namespaceToken} selectedPod={ws.selectedPod?.name ?? null} />
+                <PortForwardPanel
+                  ns={ws.namespaceToken}
+                  selectedPod={ws.selectedPod?.name ?? null}
+                  context={ws.currentContext}
+                />
               )}
               {ws.activeTab === "analysis" && <AnalysisPanel ns={ws.namespaceToken} />}
             </>

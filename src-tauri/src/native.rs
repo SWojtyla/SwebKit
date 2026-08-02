@@ -1,6 +1,9 @@
 use std::collections::HashMap;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::process::{Child, Stdio};
+use std::sync::{mpsc, Mutex};
+use std::time::Duration;
 use tauri::State;
 
 #[cfg(windows)]
@@ -10,6 +13,10 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 pub(crate) fn hidden_command(program: &str) -> std::process::Command {
+    // `mut` is only exercised by the `#[cfg(windows)]` call below (`creation_flags` needs
+    // `&mut self`) — on other platforms that line is compiled out entirely, so clippy correctly
+    // sees an unused `mut` there.
+    #[cfg_attr(not(windows), allow(unused_mut))]
     let mut cmd = std::process::Command::new(program);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -85,7 +92,11 @@ fn validate_within_roots(path: &str, roots: &AllowedRoots) -> Result<PathBuf, St
     Ok(canonical_parent.join(file_name))
 }
 
-/// Active port-forward sessions: local_port -> (namespace, pod, remote_port)
+/// How long we wait for `kubectl port-forward` to either report it's listening
+/// (stdout: "Forwarding from ...") or fail outright (stderr) before giving up.
+const FORWARD_READY_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Active port-forward sessions: local_port -> session (including the live kubectl child).
 pub struct PortForwardState {
     sessions: Mutex<HashMap<u16, PortForwardSession>>,
 }
@@ -94,7 +105,10 @@ pub struct PortForwardSession {
     pub namespace: String,
     pub pod: String,
     pub remote_port: u16,
-    pub local_port: u16,
+    // No `local_port` field here — it would just duplicate the HashMap key this session is
+    // stored under in `PortForwardState::sessions`; see `list_port_forwards`, which reads the
+    // port from the map key, not from a struct field.
+    child: Child,
 }
 
 impl PortForwardState {
@@ -105,7 +119,9 @@ impl PortForwardState {
     }
 }
 
-/// Tauri command: start a port-forward session via kubectl
+/// Tauri command: start a port-forward session by spawning a real `kubectl port-forward`
+/// subprocess. `context`/`kubeconfig` mirror the AKS config already used elsewhere in the app —
+/// when omitted, kubectl falls back to its own default context/kubeconfig resolution.
 #[tauri::command]
 pub fn start_port_forward(
     state: State<PortForwardState>,
@@ -113,46 +129,119 @@ pub fn start_port_forward(
     pod: String,
     remote_port: u16,
     local_port: Option<u16>,
+    context: Option<String>,
+    kubeconfig: Option<String>,
 ) -> Result<u16, String> {
     let lp = local_port.unwrap_or(0);
 
-    // In production, this would spawn `kubectl port-forward -n {namespace} {pod} {lp}:{remote_port}`
-    // For now, we register the session and return the local port
-    let actual_port = if lp == 0 { 18000 + (state.sessions.lock().unwrap().len() as u16) } else { lp };
+    let mut cmd = hidden_command("kubectl");
+    cmd.arg("port-forward")
+        .arg("-n")
+        .arg(&namespace)
+        .arg(format!("pod/{pod}"))
+        .arg(format!("{lp}:{remote_port}"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(ctx) = context.filter(|c| !c.is_empty()) {
+        cmd.arg("--context").arg(ctx);
+    }
+    if let Some(kc) = kubeconfig.filter(|k| !k.is_empty()) {
+        cmd.arg("--kubeconfig").arg(kc);
+    }
 
-    let session = PortForwardSession {
-        namespace: namespace.clone(),
-        pod: pod.clone(),
-        remote_port,
-        local_port: actual_port,
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start kubectl port-forward: {e}"))?;
+
+    let stdout = child.stdout.take().expect("port-forward stdout was piped");
+    let stderr = child.stderr.take().expect("port-forward stderr was piped");
+    let (tx, rx) = mpsc::channel::<Result<u16, String>>();
+
+    let tx_stdout = tx.clone();
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().map_while(Result::ok) {
+            eprintln!("[swebkit:port-forward] {line}");
+            if let Some(port) = parse_forwarded_port(&line) {
+                let _ = tx_stdout.send(Ok(port));
+            }
+        }
+    });
+
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().map_while(Result::ok) {
+            eprintln!("[swebkit:port-forward:stderr] {line}");
+            if line.to_ascii_lowercase().contains("error") {
+                let _ = tx.send(Err(line));
+            }
+        }
+    });
+
+    let actual_port = match rx.recv_timeout(FORWARD_READY_TIMEOUT) {
+        Ok(Ok(port)) => port,
+        Ok(Err(e)) => {
+            let _ = child.kill();
+            return Err(format!("kubectl port-forward failed: {e}"));
+        }
+        Err(_) => {
+            let _ = child.kill();
+            return Err(format!(
+                "kubectl port-forward did not start within {}s — check that kubectl is on PATH \
+                 and the pod is running",
+                FORWARD_READY_TIMEOUT.as_secs()
+            ));
+        }
     };
 
-    state
-        .sessions
-        .lock()
-        .unwrap()
-        .insert(actual_port, session);
+    state.sessions.lock().unwrap().insert(
+        actual_port,
+        PortForwardSession { namespace: namespace.clone(), pod: pod.clone(), remote_port, child },
+    );
 
     eprintln!(
-        "[swebkit] Port-forward registered: {}:{} -> localhost:{}",
+        "[swebkit] Port-forward started: {}:{} -> localhost:{}",
         namespace, pod, actual_port
     );
 
     Ok(actual_port)
 }
 
-/// Tauri command: stop a port-forward session
+/// Parses kubectl's `Forwarding from 127.0.0.1:<port> -> <remote>` startup line to recover the
+/// actual bound local port (needed when the caller asked for port 0 / OS-assigned).
+fn parse_forwarded_port(line: &str) -> Option<u16> {
+    let marker = "127.0.0.1:";
+    let idx = line.find(marker)?;
+    let rest = &line[idx + marker.len()..];
+    let port_str = rest.split(|c: char| !c.is_ascii_digit()).next()?;
+    port_str.parse().ok()
+}
+
+/// Tauri command: stop a port-forward session, killing the underlying kubectl process.
 #[tauri::command]
 pub fn stop_port_forward(state: State<PortForwardState>, local_port: u16) -> Result<(), String> {
-    state
+    let mut session = state
         .sessions
         .lock()
         .unwrap()
         .remove(&local_port)
         .ok_or_else(|| format!("No session on port {}", local_port))?;
 
+    let _ = session.child.kill();
+    let _ = session.child.wait();
+
     eprintln!("[swebkit] Port-forward stopped on port {}", local_port);
     Ok(())
+}
+
+/// Kills every active port-forward's kubectl child process. Called on app exit so forwards
+/// never survive as orphans holding their local port after the app closes.
+pub fn kill_all_port_forwards(state: &PortForwardState) {
+    let mut sessions = state.sessions.lock().unwrap();
+    for (_, mut session) in sessions.drain() {
+        let _ = session.child.kill();
+        let _ = session.child.wait();
+    }
 }
 
 /// Tauri command: list active port-forward sessions
@@ -405,11 +494,9 @@ pub async fn list_dir(path: String, roots: State<'_, AllowedRoots>) -> Result<Ve
     }
     let entries = std::fs::read_dir(&canonical).map_err(|e| format!("Failed to read dir: {}", e))?;
     let mut names = Vec::new();
-    for entry in entries {
-        if let Ok(entry) = entry {
-            if let Some(name) = entry.file_name().to_str() {
-                names.push(name.to_string());
-            }
+    for entry in entries.flatten() {
+        if let Some(name) = entry.file_name().to_str() {
+            names.push(name.to_string());
         }
     }
     Ok(names)
@@ -431,4 +518,28 @@ pub async fn show_notification(
         .title(title)
         .blocking_show();
     Ok(())
+}
+
+#[cfg(test)]
+mod port_forward_tests {
+    use super::parse_forwarded_port;
+
+    #[test]
+    fn parses_ipv4_forwarding_line() {
+        assert_eq!(
+            parse_forwarded_port("Forwarding from 127.0.0.1:37559 -> 8080"),
+            Some(37559)
+        );
+    }
+
+    #[test]
+    fn ignores_ipv6_forwarding_line() {
+        assert_eq!(parse_forwarded_port("Forwarding from [::1]:37559 -> 8080"), None);
+    }
+
+    #[test]
+    fn ignores_unrelated_lines() {
+        assert_eq!(parse_forwarded_port("Handling connection for 37559"), None);
+        assert_eq!(parse_forwarded_port(""), None);
+    }
 }

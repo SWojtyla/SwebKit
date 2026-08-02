@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
+import { Dialog } from "@/components/shared/Dialog";
 import type {
   MonitoringAlertRule,
   AlertRuleSource,
@@ -73,8 +74,13 @@ export function AlertRuleDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="alert-rule-dialog">
-      <div className="max-h-[90vh] w-[34rem] overflow-auto rounded-lg border bg-card p-6 shadow-lg">
+    <Dialog
+      onClose={onCancel}
+      label={rule ? "Edit Rule" : "New Alert Rule"}
+      testId="alert-rule-dialog"
+      widthClassName="max-h-[90vh] w-[34rem] overflow-auto"
+    >
+      <div className="p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold" data-testid="alert-rule-dialog-title">
             {rule ? "Edit Rule" : "New Alert Rule"}
@@ -287,7 +293,7 @@ export function AlertRuleDialog({
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

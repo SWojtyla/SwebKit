@@ -1,8 +1,10 @@
 using System.Text.Json;
 using SwebKit.Azure.ServiceBus;
+using SwebKit.Core.Diagnostics;
 using SwebKit.Core.Serialization;
 using SwebKit.Azure.Storage;
 using SwebKit.Agents;
+using SwebKit.Agents.Tools;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -18,11 +20,25 @@ var builder = WebApplication.CreateBuilder(args);
 // Allow override via --urls or ASPNETCORE_URLS (used by Tauri and Playwright tests).
 builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5199");
 
+// Structured file logging + crash handlers — wired as early as possible, mirroring
+// MauiProgram.cs's startup order, so no other startup work can throw/log before this is in
+// place. In a windowless release build the sidecar previously had nowhere for its logs to go
+// (default console logging is discarded), leaving a production crash with no diagnostic trail.
+var userSettingsRepository = new UserSettingsRepository();
+var fileLoggerProvider = AppBootstrap.ConfigureCrashHandlers(userSettingsRepository);
+builder.Logging.AddProvider(fileLoggerProvider);
+// The FileLoggerProvider does its own level filtering based on user settings
+// (LoggingSettings.MinimumLevel) — without this filter, the factory's default minimum level
+// silently blocks entries the user explicitly enabled, and no log files are ever created.
+builder.Logging.AddFilter<FileLoggerProvider>(_ => true);
+
 // Register core configuration repositories (same as MauiProgram.cs)
 builder.Services.AddSingleton<ProfileRepository>();
 builder.Services.AddSingleton<EnvironmentRepository>();
 builder.Services.AddSingleton<CollectionRepository>();
-builder.Services.AddSingleton<UserSettingsRepository>();
+// The same instance the file logger above reads settings from, so a change to logging
+// settings via PUT /api/config/user-settings takes effect without a restart.
+builder.Services.AddSingleton(userSettingsRepository);
 builder.Services.AddSingleton<UiStateRepository>();
 builder.Services.AddSingleton<ReleaseRepository>();
 builder.Services.AddSingleton<SwebKit.Core.Services.AppStateService>();
@@ -79,6 +95,26 @@ builder.Services.AddHostedService(
 
 // Agent: OpenAI-compatible LLM client + sidecar chat service
 builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
+
+// Agent tools — read-only Kubernetes and Service Bus diagnostics only. Observability tools
+// (QueryLogsTool/GetMetricsTool) are not wired here because the sidecar has no
+// IObservabilityProviderFactory yet (that's a MAUI-only service, a separate feature gap of its
+// own). The API Client mutation/proposal tools (ApiClientTools.cs) are not wired here either
+// because they need the confirmation-card flow (IAgentActionCoordinator/AgentActionApplier) that
+// the sidecar's chat UI doesn't implement — wiring them without it would let the model mutate
+// collections with no user confirmation step.
+builder.Services.AddSingleton<DemoAksClient>();
+builder.Services.AddSingleton<IAgentTool, GetPodStatusTool>();
+builder.Services.AddSingleton<IAgentTool, ListNamespacesTool>();
+builder.Services.AddSingleton<IAgentTool, ListPodsTool>();
+builder.Services.AddSingleton<IAgentTool, GetPodLogsTool>();
+builder.Services.AddSingleton<IAgentTool, GetPodEventsTool>();
+builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
+builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
+builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
+builder.Services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
+builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
+
 builder.Services.AddSingleton<SidecarAgentChatService>();
 
 // HTTP client used by the API client request executor
@@ -138,20 +174,39 @@ app.UseExceptionHandler(ex =>
     ex.Run(async context =>
     {
         var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
-        context.Response.StatusCode = exception switch
+        var statusCode = exception switch
         {
             InvalidOperationException => 400,
             ArgumentException => 400,
             UnauthorizedAccessException => 401,
             _ => 500,
         };
+        context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json; charset=utf-8";
         var origin = context.Request.Headers.Origin.ToString();
         if (IsAllowedOrigin(origin))
         {
             context.Response.Headers.AccessControlAllowOrigin = origin;
         }
-        var payload = System.Text.Json.JsonSerializer.Serialize(new { error = exception?.Message ?? "Internal server error" });
+
+        // 400/401s here are deliberate, user-actionable messages the app throws itself (e.g.
+        // "AKS is not configured..."), safe to return as-is. A 500 means something unexpected blew
+        // up — often an Azure/K8s/Redis SDK exception whose message can contain connection
+        // strings, internal paths, or other detail that shouldn't reach the client. Log the real
+        // exception server-side and return a generic message instead.
+        string message;
+        if (statusCode == 500)
+        {
+            context.RequestServices.GetRequiredService<ILogger<Program>>()
+                .LogError(exception, "Unhandled exception on {Method} {Path}", context.Request.Method, context.Request.Path);
+            message = "Internal server error";
+        }
+        else
+        {
+            message = exception?.Message ?? "Internal server error";
+        }
+
+        var payload = System.Text.Json.JsonSerializer.Serialize(new { error = message });
         await context.Response.WriteAsync(payload);
     });
 });
@@ -163,129 +218,11 @@ await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
 await app.Services.GetRequiredService<UserSettingsRepository>().LoadAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
 
-// ── Health ───────────────────────────────────────────────────────────────────
+// ── Health, Demo Mode ────────────────────────────────────────────────────────
 
-app.MapGet("/health", () => new { status = "ok", version = "0.1.0" });
+app.MapSystemEndpoints();
 
-// ── Demo Mode ────────────────────────────────────────────────────────────────
-
-app.MapGet("/api/demo-mode", (DemoModeService demo) =>
-    Results.Ok(new { isDemoMode = demo.IsDemoMode }));
-
-app.MapPost("/api/demo-mode", (DemoModeService demo, bool enabled) =>
-{
-    demo.IsDemoMode = enabled;
-    return Results.Ok(new { isDemoMode = demo.IsDemoMode });
-});
-
-// ── Config: Profiles ─────────────────────────────────────────────────────────
-
-app.MapGet("/api/config/profiles", (ProfileRepository repo, DemoModeService demo) =>
-{
-    // Clone before applying demo overlays so the in-memory repository is not mutated.
-    var data = repo.GetProfileData();
-    var result = JsonSerializer.Deserialize<ProfileData>(JsonSerializer.Serialize(data, SwebKitJsonOptions.Default), SwebKitJsonOptions.Default) ?? new ProfileData();
-    if (demo.IsDemoMode)
-    {
-        result.ServiceBusNamespaces = [.. demo.GetDemoNamespaces()];
-        var demoCache = demo.GetDemoRedisCache(DemoModeService.DemoRedisCacheId);
-        if (demoCache is not null)
-        {
-            result.Config.RedisConfig = new RedisConfig
-            {
-                Caches = [demoCache],
-                ActiveCacheId = demoCache.Id,
-                NamespaceSeparator = ":",
-            };
-        }
-        var demoStorage = demo.GetDemoStorageConfig();
-        if (demoStorage is not null)
-        {
-            result.Config.StorageAccounts = [demoStorage];
-        }
-    }
-    return Results.Ok(result);
-});
-
-app.MapPut("/api/config/profiles", async (ProfileRepository repo, ProfileData data) =>
-{
-    repo.ReplaceProfileData(data);
-    await repo.SaveAsync();
-    return Results.Ok();
-});
-
-// ── Config: Environments ─────────────────────────────────────────────────────
-
-app.MapGet("/api/config/environments", (EnvironmentRepository repo) =>
-    Results.Ok(new { repo.Environments, repo.UiState }));
-
-app.MapPut("/api/config/environments", async (EnvironmentRepository repo, EnvironmentsStore store) =>
-{
-    await repo.ReplaceStoreAsync(store);
-    return Results.Ok();
-});
-
-// ── Config: Collections ──────────────────────────────────────────────────────
-
-app.MapGet("/api/config/collections", (CollectionRepository repo, DemoModeService demo) =>
-{
-    var collections = repo.Collections;
-    if (demo.IsDemoMode)
-    {
-        collections = [DemoApiCollectionFactory.CreateDemoCollection(), .. collections];
-    }
-    return Results.Ok(collections);
-});
-
-app.MapGet("/api/config/collections/store", (CollectionRepository repo, DemoModeService demo) =>
-{
-    var collections = repo.Collections.ToList();
-    if (demo.IsDemoMode)
-    {
-        collections.Insert(0, DemoApiCollectionFactory.CreateDemoCollection());
-    }
-    return Results.Ok(new CollectionsStoreResponse { SchemaVersion = 1, Collections = collections, ConcurrencyToken = repo.GetConcurrencyToken() });
-});
-
-app.MapPut("/api/config/collections", async (CollectionRepository repo, CollectionsStore store, DemoModeService demo, string? concurrencyToken = null) =>
-{
-    // Demo collection is synthetic and must not be persisted. Remove it before saving.
-    if (demo.IsDemoMode || store.Collections.Any(c => c.Id == DemoApiCollectionFactory.DemoCollectionId))
-    {
-        store.Collections.RemoveAll(c => c.Id == DemoApiCollectionFactory.DemoCollectionId);
-    }
-
-    if (!string.IsNullOrWhiteSpace(concurrencyToken))
-    {
-        var currentToken = repo.GetConcurrencyToken();
-        if (currentToken is not null && !string.Equals(concurrencyToken, currentToken, StringComparison.Ordinal))
-        {
-            return Results.Conflict(new { error = "Collections file changed on disk." });
-        }
-    }
-
-    await repo.ReplaceStoreAsync(store);
-
-    var collections = repo.Collections.ToList();
-    if (demo.IsDemoMode)
-    {
-        collections.Insert(0, DemoApiCollectionFactory.CreateDemoCollection());
-    }
-    return Results.Ok(new CollectionsStoreResponse { SchemaVersion = 1, Collections = collections, ConcurrencyToken = repo.GetConcurrencyToken() });
-});
-
-// ── Config: User Settings ────────────────────────────────────────────────────
-
-app.MapGet("/api/config/user-settings", (UserSettingsRepository repo) => Results.Ok(repo.Settings));
-
-app.MapPut("/api/config/user-settings", async (UserSettingsRepository repo, UserSettings settings) =>
-{
-    repo.ReplaceSettings(settings);
-    await repo.SaveAsync();
-    return Results.Ok();
-});
-
-// ── Config: Import / Export ──────────────────────────────────────────────────
+// ── Config: Profiles, Environments, Collections, User Settings, Import/Export ─
 
 app.MapConfigEndpoints();
 

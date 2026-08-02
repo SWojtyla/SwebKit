@@ -11,6 +11,7 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   return tauriInvoke<T>(cmd, args);
 }
 
+
 // ── Clipboard ────────────────────────────────────────────────────────────────
 
 export async function writeClipboard(text: string): Promise<void> {
@@ -84,6 +85,8 @@ export async function startPortForward(
   pod: string,
   remotePort: number,
   localPort?: number,
+  context?: string | null,
+  kubeconfig?: string | null,
 ): Promise<number> {
   if (isTauri()) {
     return invoke<number>("start_port_forward", {
@@ -91,6 +94,8 @@ export async function startPortForward(
       pod,
       remotePort,
       localPort: localPort ?? null,
+      context: context ?? null,
+      kubeconfig: kubeconfig ?? null,
     });
   }
   throw new Error("Port-forward requires the Tauri desktop app");
@@ -109,6 +114,87 @@ export async function listPortForwards(): Promise<PortForwardSessionInfo[]> {
     return invoke<PortForwardSessionInfo[]>("list_port_forwards");
   }
   return [];
+}
+
+// ── Pod Shell ────────────────────────────────────────────────────────────────
+// Bytes cross the Tauri IPC boundary base64-encoded in both directions — terminal I/O is
+// arbitrary bytes (ANSI escapes, occasional non-UTF-8 output), and Tauri events/commands carry
+// JSON, so a raw string would risk corrupting anything that isn't valid UTF-8.
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+export async function startPodShell(
+  namespace: string,
+  pod: string,
+  container?: string | null,
+  context?: string | null,
+  kubeconfig?: string | null,
+): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>("start_pod_shell", {
+      namespace,
+      pod,
+      container: container ?? null,
+      context: context ?? null,
+      kubeconfig: kubeconfig ?? null,
+    });
+  }
+  throw new Error("Pod shell requires the Tauri desktop app");
+}
+
+export async function writePodShell(sessionId: string, data: Uint8Array): Promise<void> {
+  if (isTauri()) {
+    await invoke("write_pod_shell", { sessionId, data: bytesToBase64(data) });
+  }
+}
+
+export async function resizePodShell(sessionId: string, cols: number, rows: number): Promise<void> {
+  if (isTauri()) {
+    await invoke("resize_pod_shell", { sessionId, cols, rows });
+  }
+}
+
+export async function closePodShell(sessionId: string): Promise<void> {
+  if (isTauri()) {
+    await invoke("close_pod_shell", { sessionId });
+  }
+}
+
+/**
+ * Subscribes to a pod shell session's output and exit events. Returns an unsubscribe function
+ * that must be called when the terminal component unmounts (Tauri's `listen` doesn't stop
+ * listening on its own).
+ */
+export async function onPodShellOutput(
+  sessionId: string,
+  onData: (bytes: Uint8Array) => void,
+  onExit: () => void,
+): Promise<() => void> {
+  if (!isTauri()) return () => {};
+
+  const { listen } = await import("@tauri-apps/api/event");
+  const unlistenOutput = await listen<string>(`pod-shell-output-${sessionId}`, (event) => {
+    onData(base64ToBytes(event.payload));
+  });
+  const unlistenExit = await listen(`pod-shell-exit-${sessionId}`, () => {
+    onExit();
+  });
+
+  return () => {
+    unlistenOutput();
+    unlistenExit();
+  };
 }
 
 // ── Git Operations ───────────────────────────────────────────────────────────

@@ -113,7 +113,7 @@ public class DemoAksClient : IAksClient
         "[INF] Request finished HTTP/2 204 - 12ms"
     ];
 
-    public Task<bool> TestConnectionAsync(CancellationToken ct = default)
+    public virtual Task<bool> TestConnectionAsync(CancellationToken ct = default)
         => Task.FromResult(true);
 
     public async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default)
@@ -747,7 +747,7 @@ public class DemoAksClient : IAksClient
         };
     }
 
-    public async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default)
+    public virtual async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default)
     {
         await Task.Delay(180, ct).ConfigureAwait(false);
         return new List<HttpRouteInfo>
@@ -1075,6 +1075,49 @@ public class DemoAksClient : IAksClient
 
         if (kind.Equals("CronJob", StringComparison.OrdinalIgnoreCase))
             return Task.FromResult(BuildCronJobYaml(ns, name));
+
+        if (kind.Equals("Pod", StringComparison.OrdinalIgnoreCase))
+        {
+            var podYaml = $"""
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                  labels:
+                    app: {name.Split('-').FirstOrDefault() ?? name}
+                    pod-template-hash: {name.Split('-').LastOrDefault() ?? "abc123"}
+                spec:
+                  containers:
+                  - name: {name}
+                    image: acr.azurecr.io/{name}:1.8.3
+                    ports:
+                    - containerPort: 8080
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                  - name: istio-proxy
+                    image: docker.io/istio/proxyv2:1.20.3
+                    ports:
+                    - containerPort: 15090
+                status:
+                  phase: Running
+                  podIP: 10.244.1.17
+                  hostIP: 10.240.0.4
+                  containerStatuses:
+                  - name: {name}
+                    ready: true
+                    restartCount: 0
+                    state:
+                      running:
+                        startedAt: "2026-07-31T08:12:00Z"
+                """;
+            return Task.FromResult(podYaml);
+        }
 
         var yaml = $"""
             apiVersion: {(kind == "Deployment" ? "apps/v1" : kind == "Ingress" ? "networking.k8s.io/v1" : "v1")}

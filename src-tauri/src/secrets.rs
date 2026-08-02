@@ -55,7 +55,7 @@ pub fn list_secrets(prefix: Option<String>) -> Result<Vec<String>, String> {
     Ok(vault
         .0
         .keys()
+        .filter(|k| prefix.as_ref().is_none_or(|p| k.starts_with(p)))
         .cloned()
-        .filter(|k| prefix.as_ref().map_or(true, |p| k.starts_with(p)))
         .collect())
 }

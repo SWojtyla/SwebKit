@@ -275,7 +275,7 @@ export function ResizablePanels({
   const totalWidth = widths.reduce((sum, w) => sum + w, 0);
 
   return (
-    <div ref={containerRef} className={`flex h-full min-w-0 overflow-hidden ${className}`}>
+    <div ref={containerRef} className={`flex h-full min-w-0 overflow-x-auto overflow-y-hidden ${className}`}>
       {validChildren.map((child, i) => (
         <Fragment key={i}>
           {i > 0 && (

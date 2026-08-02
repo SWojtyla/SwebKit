@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { Dialog } from "@/components/shared/Dialog";
 
 interface Props {
   open: boolean;
@@ -21,15 +22,8 @@ export function KeyboardShortcutsPanel({ open, onClose }: Props) {
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={onClose}
-      data-testid="keyboard-shortcuts-panel"
-    >
-      <div
-        className="rounded-lg border bg-card p-6 shadow-lg w-96"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog onClose={onClose} label="Keyboard Shortcuts" testId="keyboard-shortcuts-panel" widthClassName="w-96">
+      <div className="p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Keyboard Shortcuts</h2>
           <button onClick={onClose} className="rounded p-1 hover:bg-accent" data-testid="keyboard-shortcuts-close">
@@ -45,6 +39,6 @@ export function KeyboardShortcutsPanel({ open, onClose }: Props) {
           ))}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

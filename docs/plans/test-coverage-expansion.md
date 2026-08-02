@@ -1,5 +1,14 @@
 # Test Coverage Expansion Plan
 
+> **Superseded (2026-08-01).** This doc's "Current State" below is stale — actual counts as of this
+> date are ~22 e2e spec files (~178 tests), 9 Vitest unit-test files (pure-logic, by deliberate
+> design), and a real (if thin) `SwebKit.Sidecar.Tests` project, all well beyond this doc's stated
+> baseline of "35 tests, zero unit tests, zero sidecar tests." Active tracking has moved to
+> `docs/features/active/tauri-react-primary-tool/test-plan.md`, which re-baselines the numbers and
+> carries forward this doc's still-relevant phases (sidecar integration tests, accessibility/perf
+> testing). Kept here for historical reference only — do not plan new test work from the phase list
+> below without cross-checking it against the current test-plan.md first.
+
 Expand test coverage for the Tauri/React frontend from the current 35 smoke-level E2E tests to comprehensive coverage including unit tests, integration tests, and deep E2E tests.
 
 ## Current State

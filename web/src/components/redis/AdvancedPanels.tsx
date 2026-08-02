@@ -70,7 +70,7 @@ export function KeyspaceHealthPanel({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-lg border p-3" data-testid="health-hit-rate">
           <p className="text-xs text-muted-foreground">Hit Rate</p>
-          <p className="mt-1 text-xl font-bold text-green-500">{hitRate}%</p>
+          <p className="mt-1 text-xl font-bold text-success">{hitRate}%</p>
         </div>
         <div className="rounded-lg border p-3" data-testid="health-memory">
           <p className="text-xs text-muted-foreground">Memory Used</p>
@@ -194,7 +194,7 @@ function HealthFindingRow({
   const severityClass = finding.severity === "Critical"
     ? "bg-destructive/15 text-destructive"
     : finding.severity === "Warning"
-      ? "bg-yellow-500/15 text-yellow-600"
+      ? "bg-warning/15 text-warning"
       : "bg-muted text-muted-foreground";
 
   return (
