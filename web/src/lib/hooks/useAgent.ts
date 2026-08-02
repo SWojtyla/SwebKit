@@ -3,6 +3,8 @@ import { apiFetch, apiSend } from "../api";
 import type {
   AgentActionApplyResult,
   AgentCapabilityTestResult,
+  AgentChatContext,
+  AgentChatMode,
   AgentReply,
   AgentStatus,
   PendingAction,
@@ -57,11 +59,23 @@ export function useAgentStatus(sessionId?: string) {
   });
 }
 
+interface SendMessageVars {
+  message: string;
+  /** What the current page has open, for a contextual assistant panel. Omitted (as the global
+   * /agent page does) means no "Current focus" system-prompt section and no feature-area tool
+   * scoping — matches pre-Module-5 behavior for that page. */
+  context?: AgentChatContext;
+  /** "ask" (default, read-only tools only) or "ask_and_do". Omitting this — as every caller does
+   * until Module 6 adds the actual toggle — is equivalent to "ask": the sidecar treats a missing
+   * or unrecognized mode as the safe option, never as permission to mutate. */
+  mode?: AgentChatMode;
+}
+
 export function useAgentChat(sessionId?: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (message: string) =>
-      apiSend<AgentReply>("/api/agent/chat", "POST", { message, sessionId }),
+    mutationFn: ({ message, context, mode }: SendMessageVars) =>
+      apiSend<AgentReply>("/api/agent/chat", "POST", { message, sessionId, context, mode }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agent", "status", sessionKey(sessionId)] });
     },

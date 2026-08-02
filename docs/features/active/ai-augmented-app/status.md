@@ -57,6 +57,22 @@ lands, following the pattern used by the now-closed `tauri-react-primary-tool/st
       `dotnet test tests/SwebKit.Sidecar.Tests` 182/182 (unchanged, 1 fix for a local test fake),
       `dotnet build` clean on the sidecar, `SwebKit.Agents`, and the MAUI app, `npx vitest run`
       116/116 (unchanged, this module was backend-only).
+- [x] Module 5 — Contextual system prompt + mode-aware tool filtering — **done** (2026-08-02):
+      `AgentChatContext`/`mode` added to `AgentChatRequest`; three-gate tool filtering (capability →
+      mode → feature area) implemented in `SidecarAgentChatService.ResolveTools`; "## Current focus"
+      system-prompt section added ahead of the existing coarse workspace summary. **Real decision
+      made along the way**: an omitted/unrecognized `mode` normalizes to `"ask"` (safe), not
+      `"ask_and_do"` — this tightens the global `/agent` page's behavior immediately, closing a
+      window Module 4 quietly opened (mutate tools reachable with zero UI indication) rather than
+      leaving it open until Module 6's toggle ships. Same fail-safe applied to an unparseable
+      `featureArea` (ignored, not treated as "match nothing"). Frontend: `AgentChatContext`/
+      `AgentChatMode` types added, `useAgentChat` takes `{ message, context?, mode? }`,
+      `AgentPage.tsx` updated to the new call shape (still sends neither — Module 6 adds the actual
+      toggle/context). Not done, on purpose: persisting a default mode in `UserSettings` — deferred
+      to Module 6, since there's no toggle yet to have a default *for*. Verified: `dotnet test
+      tests/SwebKit.Sidecar.Tests` 193/193 (11 new), `dotnet test tests/SwebKit.Agents.Tests`
+      166/166 (unchanged, 2 fixes for `ToolDefinition.FeatureArea` becoming required), `npx vitest
+      run` 116/116 (unchanged), `npx playwright test agent.spec.ts` 8/8 (unchanged).
 - [ ] Module 5 — Contextual system prompt + mode-aware tool filtering
 - [ ] Module 6 — Frontend contextual entry points and mode UI
 - [ ] Module 7 — Local-model (LM Studio) manual verification

@@ -36,4 +36,9 @@ public sealed class ToolDefinition
 
     /// <summary>Minimum capability the provider must support.</summary>
     public AgentCapability RequiredCapability { get; set; } = AgentCapability.ToolCalling;
+
+    /// <summary>Which feature area this tool belongs to (see <see cref="FeatureArea"/>) — used by
+    /// <c>SidecarAgentChatService</c> to scope a contextual conversation's tools to the page it was
+    /// opened from.</summary>
+    public required FeatureArea FeatureArea { get; set; }
 }

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using SwebKit.Agents;
+using SwebKit.Agents.Tools;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -19,10 +20,19 @@ namespace SwebKit.Sidecar.Services;
 /// maps to a single fixed key (<see cref="GlobalSessionKey"/>) — this preserves the pre-Module-2
 /// behavior of the global page exactly (one shared conversation, never evicted), which is why that
 /// key is exempt from idle eviction while every other session isn't.
+///
+/// Module 5 adds two more gates to which tools a given turn actually sees, both defaulting to the
+/// safe/narrow option when unspecified (the pre-Module-5 caller shape — the global page today —
+/// keeps working, just more conservatively than before): <c>mode</c> ("ask" keeps only
+/// <see cref="ToolKind.Read"/> tools; anything else defaults to "ask" too — a typo or omitted mode
+/// should never silently grant Ask & do), and <see cref="AgentChatContext.FeatureArea"/> (when
+/// present, keeps only tools whose <see cref="Tools.FeatureArea"/> matches — the mechanism that
+/// makes a contextual panel opened from one page not see every other area's tools by default).
 /// </summary>
 public sealed class SidecarAgentChatService
 {
     private const string GlobalSessionKey = "__global__";
+    private const string AskAndDoMode = "ask_and_do";
     private static readonly TimeSpan IdleSessionTimeout = TimeSpan.FromMinutes(30);
 
     private readonly IAgentModelClient _modelClient;
@@ -61,20 +71,30 @@ public sealed class SidecarAgentChatService
             while (session.History.TryDequeue(out _)) { }
     }
 
-    /// <summary>Overload preserving the pre-Module-2 call shape for the global session.</summary>
+    /// <summary>Overload preserving the pre-Module-5 call shape: no session, no context, and the
+    /// safe "ask" mode (not "ask_and_do" — see the class doc comment on why unspecified always
+    /// means the narrower option).</summary>
     public Task<SidecarAgentReply> SendAsync(string userMessage, CancellationToken ct = default) =>
-        SendAsync(null, userMessage, ct);
+        SendAsync(null, userMessage, context: null, mode: null, ct);
 
-    public async Task<SidecarAgentReply> SendAsync(string? sessionId, string userMessage, CancellationToken ct = default)
+    public async Task<SidecarAgentReply> SendAsync(
+        string? sessionId,
+        string userMessage,
+        AgentChatContext? context = null,
+        string? mode = null,
+        CancellationToken ct = default)
     {
         EvictIdleSessions();
         var key = Key(sessionId);
         var session = _sessions.GetOrAdd(key, _ => new ConversationSession());
         session.LastActivity = DateTimeOffset.UtcNow;
 
+        var normalizedMode = mode == AskAndDoMode ? AskAndDoMode : "ask";
+
         var sw = Stopwatch.StartNew();
-        var systemPrompt = BuildSystemPrompt();
         var profile = _settings.Settings.Agent.GetActiveProfile();
+        var hasToolCalling = (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
+        var systemPrompt = BuildSystemPrompt(context, normalizedMode, hasToolCalling);
 
         // Record user message
         session.History.Enqueue(new AgentMessage { Role = "user", Content = userMessage });
@@ -85,9 +105,7 @@ public sealed class SidecarAgentChatService
         if (historyList.Count > 0)
             historyList.RemoveAt(historyList.Count - 1);
 
-        var allTools = _toolRegistry.GetDefinitions();
-        var hasToolCalling = (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
-        var tools = hasToolCalling ? allTools : [];
+        var tools = ResolveTools(hasToolCalling, normalizedMode, context);
 
         var request = new AgentModelRequest
         {
@@ -134,6 +152,30 @@ public sealed class SidecarAgentChatService
         }
     }
 
+    /// <summary>Applies the three tool-visibility gates in order: capability (existing) → mode (new
+    /// — "ask" keeps only Read-kind tools) → feature-area scope (new — when
+    /// <paramref name="context"/> names an area, keeps only that area's tools; a request with no
+    /// context, i.e. the global page, skips this gate entirely and keeps every area's tools, exactly
+    /// like before Module 5).</summary>
+    private IReadOnlyList<ToolDefinition> ResolveTools(bool hasToolCalling, string normalizedMode, AgentChatContext? context)
+    {
+        if (!hasToolCalling)
+            return [];
+
+        IEnumerable<ToolDefinition> tools = _toolRegistry.GetDefinitions();
+
+        if (normalizedMode != AskAndDoMode)
+            tools = tools.Where(t => t.Kind == ToolKind.Read);
+
+        if (context?.FeatureArea is { Length: > 0 } areaName &&
+            Enum.TryParse<FeatureArea>(areaName, ignoreCase: true, out var area))
+        {
+            tools = tools.Where(t => t.FeatureArea == area);
+        }
+
+        return tools.ToList();
+    }
+
     private static string Key(string? sessionId) =>
         string.IsNullOrWhiteSpace(sessionId) ? GlobalSessionKey : sessionId;
 
@@ -157,7 +199,7 @@ public sealed class SidecarAgentChatService
         }
     }
 
-    private string BuildSystemPrompt()
+    private string BuildSystemPrompt(AgentChatContext? context, string normalizedMode, bool hasToolCalling)
     {
         var data = _profiles.GetProfileData();
         var config = data.Config;
@@ -193,36 +235,22 @@ public sealed class SidecarAgentChatService
         if (_demo.IsDemoMode)
             contextParts.Add("Demo mode: enabled (using synthetic data)");
 
-        var context = contextParts.Count == 0
+        var workspaceContext = contextParts.Count == 0
             ? "No workspace services configured."
             : string.Join(" | ", contextParts);
 
-        var profile = _settings.Settings.Agent.GetActiveProfile();
-        var hasToolCalling = (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
+        var currentFocus = BuildCurrentFocusSection(context);
 
-        var toolPolicy = hasToolCalling
-            ? """
-              ## Tool policy
-              - Use tools to fetch live data when the user asks about Kubernetes pods/namespaces/events/logs
-                or Service Bus queue stats, messages, or health.
-              - All available tools are read-only diagnostics — no confirmation is needed before calling them.
-              - If a tool returns an error, explain what it means and suggest a resolution.
-              - Do not expose internal JSON schemas or tool names in your replies.
-              """
-            : """
-              ## Tool policy
-              - Tool calling is not available with the current model. Answer based on context only.
-              - If the user needs live data, suggest enabling a model that supports tool calling.
-              """;
+        var toolPolicy = BuildToolPolicySection(hasToolCalling, normalizedMode);
 
         return $"""
             You are SwebKit Assistant, an AI copilot embedded in SwebKit — a DevOps operations desktop
             application for platform engineers. You help users diagnose and understand their Kubernetes
             clusters, Azure DevOps pipelines, Redis instances, Azure Service Bus queues, Storage accounts,
             and observability data.
-
+            {currentFocus}
             ## Current workspace context
-            {context}
+            {workspaceContext}
 
             ## Response format
             - Be concise and technical. Prefer bullet points and tables over prose.
@@ -231,8 +259,63 @@ public sealed class SidecarAgentChatService
             {toolPolicy}
 
             ## Limits
-            - No Observability, Storage, or API Client tools are available in the sidecar mode yet.
+            - No Observability tools are available in the sidecar mode yet.
             - No Git operations.
+            """;
+    }
+
+    /// <summary>Additive detail ahead of the general workspace summary, describing exactly what the
+    /// user has open right now (e.g. "the AKS pod panel for pod api-7c9f in namespace prod") — empty
+    /// for the global page, which passes no context. Never replaces the coarse workspace summary
+    /// below it.</summary>
+    private static string BuildCurrentFocusSection(AgentChatContext? context)
+    {
+        if (context is null || string.IsNullOrEmpty(context.FeatureArea))
+            return "";
+
+        var lines = new List<string> { $"Area: {context.FeatureArea}" };
+        if (context.Selection is { Count: > 0 })
+            lines.AddRange(context.Selection.Select(kv => $"{kv.Key}: {kv.Value}"));
+
+        return $"""
+
+            ## Current focus
+            {string.Join("\n", lines)}
+
+            """;
+    }
+
+    private static string BuildToolPolicySection(bool hasToolCalling, string normalizedMode)
+    {
+        if (!hasToolCalling)
+        {
+            return """
+                ## Tool policy
+                - Tool calling is not available with the current model. Answer based on context only.
+                - If the user needs live data, suggest enabling a model that supports tool calling.
+                """;
+        }
+
+        if (normalizedMode == AskAndDoMode)
+        {
+            return """
+                ## Tool policy (Ask & do mode)
+                - Use tools to fetch live data, and propose changes with the Propose*/Prepare* tools when asked.
+                - Every mutating tool only proposes a pending action — it never changes anything by itself.
+                  The user must explicitly confirm before anything is applied.
+                - If a tool returns an error, explain what it means and suggest a resolution.
+                - Do not expose internal JSON schemas or tool names in your replies.
+                """;
+        }
+
+        return """
+            ## Tool policy (Ask mode)
+            - Use tools to fetch live data, but you have no mutating tools available in this mode —
+              nothing you do can change the user's cluster, queues, caches, storage, or collections,
+              no matter what is asked. If the user wants to change something, tell them to switch to
+              Ask & do mode.
+            - If a tool returns an error, explain what it means and suggest a resolution.
+            - Do not expose internal JSON schemas or tool names in your replies.
             """;
     }
 
@@ -241,6 +324,20 @@ public sealed class SidecarAgentChatService
         public ConcurrentQueue<AgentMessage> History { get; } = new();
         public DateTimeOffset LastActivity { get; set; } = DateTimeOffset.UtcNow;
     }
+}
+
+/// <summary>What the user currently has open, passed by a contextual assistant panel so the model
+/// can be told exactly what's on screen and so tool visibility can be scoped to that one area (see
+/// <c>SidecarAgentChatService.ResolveTools</c>). The global <c>/agent</c> page passes null.</summary>
+public sealed class AgentChatContext
+{
+    /// <summary>Name of a <see cref="FeatureArea"/> enum member (e.g. "Aks", "Redis") — a string on
+    /// the wire since the frontend has no reason to import the C# enum; parsed server-side.</summary>
+    public string? FeatureArea { get; set; }
+
+    /// <summary>Free-form key/value pairs describing the current selection (e.g. namespace/pod,
+    /// cache/key, requestId) — whatever the page already tracks, passed through unmodified.</summary>
+    public Dictionary<string, string>? Selection { get; set; }
 }
 
 public sealed class SidecarAgentReply

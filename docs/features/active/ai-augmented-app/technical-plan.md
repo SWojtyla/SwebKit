@@ -171,36 +171,41 @@ matching `InvestigatePodIssueTool`/`AnalyzeQueueHealthTool`), and mutate tools t
       have been easy to reach for `DemoModeService` by analogy with the sidecar's own endpoint
       handlers and gotten a circular/invalid dependency instead.
 
-## Module 5 — Contextual system prompt + mode-aware tool filtering
+## Module 5 — Contextual system prompt + mode-aware tool filtering — done
 
-- [ ] Add an `AgentChatContext` shape to `AgentChatRequest`: `{ featureArea: string, selection?:
-      Record<string, string> }` (e.g. `{ featureArea: "aks", selection: { namespace: "prod",
-      pod: "api-7c9f" } }`, or `{ featureArea: "api-client", selection: { requestId: "..." } }`).
-      Frontend contextual panels populate this from whatever the page already tracks (e.g.
-      `AksWorkspaceContext`'s current namespace/pod selection) — no new state, just reading what's
-      already there.
-- [ ] Extend `SidecarAgentChatService.BuildSystemPrompt()` to take the context and append a
-      "Current focus" section describing exactly what the user has open, ahead of the general
-      workspace summary that's already there. Keep the existing coarse workspace summary — this is
-      additive detail, not a replacement.
-- [ ] Add a `mode: "ask" | "ask_and_do"` field to `AgentChatRequest`. Tool filtering becomes three
-      gates applied in order: capability (existing: no tool calling at all if the profile hasn't
-      tested as `ToolCalling`) → mode (new: `ask` keeps only `Kind == Read` tools) → feature-area
-      scope (new, using Module 4's `IAgentTool.FeatureArea`: keep only tools whose `FeatureArea`
-      matches the request's `context.featureArea`, when one is present). A contextual conversation
-      opened from the AKS pod panel sees only AKS tools by default, not Redis/Storage/Service Bus
-      tools it was never asked about — this scoping is also what makes
-      `workspace-intelligence`'s later "search across my whole workspace" escalation (a `scope`
-      field that lifts exactly this last gate) meaningful as an actual widening, not a no-op.
-      Requests with no `featureArea` (the existing global `/agent` page, unchanged) skip the
-      area-scope gate entirely — that page keeps today's "every area's tools, if capability/mode
-      allow" behavior; only the new contextual panels default to being scoped. Update
-      `BuildSystemPrompt()`'s "Tool policy" section to state which mode is active and that in Ask
-      mode nothing will be changed no matter what's asked.
-- [ ] Default mode per conversation: persist the user's last-chosen mode in `UserSettings` as a
-      default for new conversations, but always show the toggle and let it be changed per
-      conversation — don't silently remember "Ask & do" as a global sticky default that surprises
-      the user in a different feature area later.
+- [x] Added `AgentChatContext` (`{ featureArea?: string, selection?: Record<string, string> }`) and
+      `mode?: "ask" | "ask_and_do"` to `AgentChatRequest`. `featureArea` is a plain string matching a
+      backend `FeatureArea` enum member name (e.g. `"Aks"`, `"Redis"`), parsed server-side via
+      `Enum.TryParse` — deliberately not a shared enum type on the wire, since the frontend has no
+      other reason to import the C# enum.
+- [x] `SidecarAgentChatService.BuildSystemPrompt()` takes the context and prepends a "## Current
+      focus" section (area + every selection key/value) ahead of the existing coarse workspace
+      summary, which is unchanged — this is additive, not a replacement. Absent for the global page
+      (no context), verified directly rather than assumed.
+- [x] Tool filtering is three gates applied in order, each implemented in the new
+      `ResolveTools(hasToolCalling, normalizedMode, context)`: capability (existing) → mode (`ask`
+      keeps only `Kind == Read`) → feature-area (keeps only tools whose `FeatureArea` matches
+      `context.featureArea`, using Module 4's retrofit). A request with no `featureArea` skips the
+      area gate entirely — the global page's existing "every area, if capability/mode allow"
+      behavior is preserved.
+- [x] **Real design decision, not in the original bullet**: an omitted or unrecognized `mode` value
+      normalizes to `"ask"` (the safe, read-only option), not `"ask_and_do"`. This is a deliberate
+      *tightening* of the global `/agent` page's behavior — before this module, once Module 4 wired
+      the API Client `Propose*` (mutate) tools into the sidecar, the global page could already
+      silently reach them with zero UI indication it had gained that capability (no toggle exists
+      until Module 6). Defaulting unspecified mode to "ask" closes that window rather than leaving
+      it open until Module 6 ships. Same fail-safe principle applied to an unparseable
+      `featureArea` string: it's ignored (falls through to "no area filter"), not treated as "match
+      nothing" — an area gate that silently produces zero tools on a typo would look like a bug, not
+      a restriction.
+- [x] Tool-policy text in the system prompt is now mode-aware (three variants: no tool calling / Ask
+      / Ask & do), explicitly telling the model when it has zero mutating tools available "no matter
+      what is asked."
+- [ ] **Not done — moved to Module 6 on purpose**: persisting the user's last-chosen mode in
+      `UserSettings` as a default for new conversations. This needs the actual Ask/Ask & do toggle
+      component to exist first (there's nothing to read/write a default *for* yet) — adding an
+      unused settings field now would be exactly the kind of speculative, no-one-reads-it addition
+      worth avoiding. Module 6 adds the field alongside the toggle that actually uses it.
 
 ## Module 6 — Frontend: contextual entry points and mode UI
 

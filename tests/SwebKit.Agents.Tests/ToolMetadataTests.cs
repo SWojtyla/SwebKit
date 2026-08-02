@@ -13,7 +13,8 @@ public class ToolMetadataTests
         {
             Name = "test",
             Description = "test tool",
-            ParametersSchema = System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()
+            ParametersSchema = System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone(),
+            FeatureArea = FeatureArea.Aks,
         };
 
         Assert.Equal(ToolKind.Read, def.Kind);
@@ -31,7 +32,8 @@ public class ToolMetadataTests
             ParametersSchema = System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone(),
             Kind = ToolKind.Mutate,
             Risk = ToolRisk.High,
-            RequiredCapability = AgentCapability.ToolCalling
+            RequiredCapability = AgentCapability.ToolCalling,
+            FeatureArea = FeatureArea.ApiClient,
         };
 
         Assert.Equal(ToolKind.Mutate, def.Kind);

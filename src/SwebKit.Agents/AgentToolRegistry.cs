@@ -26,7 +26,8 @@ public sealed class AgentToolRegistry : IAgentToolRegistry
                 ParametersSchema = t.ParametersSchema,
                 Kind = t.Kind,
                 Risk = t.Risk,
-                RequiredCapability = t.RequiredCapability
+                RequiredCapability = t.RequiredCapability,
+                FeatureArea = t.FeatureArea,
             })
             .ToList();
     }

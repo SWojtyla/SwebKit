@@ -892,6 +892,19 @@ export interface AgentStatus {
   historyCount: number;
 }
 
+/** "ask" = read-only tools only. "ask_and_do" = mutating propose/prepare tools are also
+ * available (still gated behind a confirm card — see PendingActionCard). */
+export type AgentChatMode = "ask" | "ask_and_do";
+
+/** What the current page has open, passed to a contextual assistant conversation so the model can
+ * be told what's on screen and so tool visibility scopes to that one feature area. `featureArea`
+ * must match a backend FeatureArea enum member name (e.g. "Aks", "Redis") — see
+ * SidecarAgentChatService.cs for the parsing side. */
+export interface AgentChatContext {
+  featureArea: string;
+  selection?: Record<string, string>;
+}
+
 export interface PendingAction {
   id: string;
   type: string;

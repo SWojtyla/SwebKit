@@ -33,7 +33,7 @@ export function AgentPage() {
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
 
-    chat.mutate(text, {
+    chat.mutate({ message: text }, {
       onSuccess: (reply) => {
         const assistantMsg: ChatMessage = {
           id: nextMsgId(),

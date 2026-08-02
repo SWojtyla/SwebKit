@@ -40,7 +40,7 @@ public static class AgentEndpoints
         if (string.IsNullOrWhiteSpace(req.Message))
             return Results.BadRequest("Message is required");
 
-        var reply = await agent.SendAsync(req.SessionId, req.Message, ct);
+        var reply = await agent.SendAsync(req.SessionId, req.Message, req.Context, req.Mode, ct);
         return Results.Ok(reply);
     }
 
@@ -141,4 +141,13 @@ public sealed class AgentChatRequest
     /// (client-generated, see <c>useContextualAgent</c>). Null/omitted keeps using the single
     /// global session the pre-Module-2 <c>/agent</c> page always used.</summary>
     public string? SessionId { get; set; }
+
+    /// <summary>What the user currently has open (feature area + selection) — populated by a
+    /// contextual assistant panel, null for the global <c>/agent</c> page.</summary>
+    public AgentChatContext? Context { get; set; }
+
+    /// <summary>"ask" or "ask_and_do". Anything else (including null/omitted) is treated as "ask" —
+    /// see <c>SidecarAgentChatService</c>'s doc comment for why an unrecognized value never
+    /// silently grants the more permissive mode.</summary>
+    public string? Mode { get; set; }
 }

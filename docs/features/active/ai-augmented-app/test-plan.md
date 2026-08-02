@@ -90,24 +90,30 @@ mode for frontend flows.
   `SwebKit.Sidecar.csproj`, `SwebKit.Agents.csproj`, and `SwebKit.App.csproj` (the MAUI target,
   since Module 4 also updated `SwebKitServiceCollectionExtensions.Agents.cs` for parity).
 
-## Module 5 — Contextual system prompt + mode filtering
+## Module 5 — Contextual system prompt + mode filtering — done
 
-- Unit: `BuildSystemPrompt()` (or its successor) includes the "current focus" section only when
-  context is provided, and the right fields render into it — test with and without a `selection`.
-- Unit: mode filtering — `mode: "ask"` strips every `Kind == Mutate` tool even when the profile's
-  capability is `ToolCalling`; `mode: "ask_and_do"` includes them (still gated by capability as
-  today). Test both orthogonally: capability × mode is a 2×2 that should be tested as such, not
-  just the two "happy path" combinations.
-- Unit: feature-area scoping — a request with `context.featureArea: "aks"` receives only tools whose
-  `FeatureArea == Aks` (plus whatever mode/capability already allow), even when other areas' tools
-  would otherwise pass those gates; a request with no `featureArea` at all (the global `/agent`
-  page's existing behavior) is unaffected and receives every area's tools as it does today — this is
-  a regression check, not just a new-behavior check, since it's easy to accidentally scope the
-  global page too.
-- Unit: `IAgentTool.FeatureArea` is set correctly on every existing tool after the retrofit (a tool
-  silently left with a wrong/default area would be scoped out of every conversation that should see
-  it, or into ones that shouldn't — assert the full registry's area assignments directly rather than
-  relying on it coming up in some other test's incidental coverage).
+- [x] Unit (`SidecarAgentChatServiceFilteringTests.cs`, 11 tests, against a real
+  `SidecarAgentChatService` + fake tools of mixed `Kind`/`FeatureArea`, capturing the actual
+  `AgentModelRequest.Tools` sent to a `FakeAgentModelClient` — not just the filtering logic in
+  isolation): `ChatOnly` capability sends zero tools regardless of mode/context (capability always
+  wins); mode alone (no context) — "ask" keeps only Read tools *from every area*, "ask_and_do" keeps
+  everything; context alone (`ask_and_do` mode) — an `"Aks"` context keeps only Aks tools, including
+  the mutate one; both together — an `"Aks"` context *and* "ask" mode keeps only the one tool that's
+  both Read and Aks. Capability × mode is exercised as an actual 2×2 via these cases, not just two
+  happy paths.
+- [x] Unit: omitted mode, empty-string mode, and a made-up mode string (`"not-a-real-mode"`) all
+  verified to never include the mutate tool — the three ways "no valid mode was given" can actually
+  arrive over JSON, not just the `null` case.
+- [x] Unit: an unparseable `featureArea` string falls through to no area filtering (asserted against
+  the full expected tool list, not just "didn't throw") — confirms it's a fail-safe, not a
+  fail-to-empty that would look like a bug.
+- [x] Unit: `BuildCurrentFocusSection` — the system prompt contains `"## Current focus"`, the area
+  name, and every selection key/value when context is provided; contains none of that when it isn't
+  (both directions asserted, not just the positive case).
+- [x] `IAgentTool.FeatureArea`'s retrofit onto all 16 pre-existing tools was already exercised by the
+  full test suites staying green through Module 4 (the compiler enforces the assignment exists;
+  these tests exercise that the *right* tools are scoped Read/Aks/etc. via the fake-tool fixtures
+  above, which is the part the compiler can't check).
 
 ## Module 6 — Contextual entry points / mode UI
 
