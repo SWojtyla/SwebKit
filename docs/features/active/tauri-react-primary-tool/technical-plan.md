@@ -290,11 +290,15 @@ inline props on every render — it's a no-op until the parent is memoized too (
 already found and fixed once for `ResourceTable`'s callers; don't repeat it for `MessageList`/Redis/
 Storage row components).
 
-### 5.4 Command-palette registry consolidation (performance-adjacent, mostly architectural)
+### 5.4 Command-palette registry consolidation (performance-adjacent, mostly architectural) — done
 
-Tracked in [ux-plan.md](ux-plan.md) Phase 6 as the user-facing outcome; the technical task is merging
-`layout/CommandPalette.tsx` and `service-bus/EntityCommandPalette.tsx` onto one shared registry/hook
-so a third bespoke implementation doesn't get built as more features get palette entries.
+Tracked in [ux-plan.md](ux-plan.md) Phase 6 as the user-facing outcome. `layout/CommandPalette.tsx`
+and `service-bus/EntityCommandPalette.tsx` now share `lib/paletteSearch.ts` (fuzzy scoring),
+`lib/hooks/usePaletteNavigation.ts` (list navigation + open/focus lifecycle), and
+`components/layout/PaletteOverlay.tsx` (backdrop/dialog shell) instead of each carrying its own copy
+of that logic, so a third bespoke implementation doesn't get built as more features get palette
+entries. Each palette kept its own item shape and keyboard semantics (MRU-based nav vs.
+entity/action drill-down) — those are genuinely different UX, not duplicated plumbing.
 
 ---
 

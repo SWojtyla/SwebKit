@@ -201,7 +201,13 @@
       landed — the one-big-context pattern these pages (and `AksWorkspaceContext.tsx`) use caups
       causes any single field change to re-render every consumer regardless of memoization, so a real win
       needs splitting each context into narrower ones first. §5.4 (command-palette registry
-      consolidation) not started.
+      consolidation) is **done**: `CommandPalette.tsx` and `EntityCommandPalette.tsx` now share
+      `lib/paletteSearch.ts` (fuzzy scoring — the entity palette previously did plain substring
+      matching), `lib/hooks/usePaletteNavigation.ts` (selected-index/scroll-into-view list nav +
+      open-focus-reset lifecycle), and `components/layout/PaletteOverlay.tsx` (backdrop/dialog
+      shell), so a future domain-scoped palette can reuse these instead of copy-pasting a third
+      implementation. Each palette keeps its own item shape, keyboard semantics (MRU vs.
+      entity/action drill-down), and existing testids unchanged.
 - [x] Production/ops readiness (technical-plan.md Module 6) — **partial**: sidecar file logging via
       `FileLoggerProvider`/`AppBootstrap` (moved to `SwebKit.Core.Diagnostics` so both MAUI and the
       sidecar share it), sidecar 500s now log the real exception server-side while still returning a

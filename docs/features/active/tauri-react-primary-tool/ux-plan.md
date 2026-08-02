@@ -291,9 +291,10 @@ refactors.
   include live resource names (queue names, pod names, namespace names) — the fuzzy-search/MRU
   infrastructure is already there per the parity research; this is a data-source extension, not a
   new component.
-- **Command-palette registry consolidation**: merge `CommandPalette.tsx` and
-  `service-bus/EntityCommandPalette.tsx` onto one shared command registry, so future per-feature
-  command-palette entries don't require a third bespoke implementation.
+- **Command-palette registry consolidation** — done: `CommandPalette.tsx` and
+  `service-bus/EntityCommandPalette.tsx` now share a common registry of search/navigation/shell
+  primitives (see technical-plan.md 5.4), so future per-feature command-palette entries don't
+  require a third bespoke implementation.
 - **Per-area live status dots** in the footer status bar (SB/AKS/Redis/Storage individually, not
   just one global dot) — MAUI's `StatusBar.razor` is the reference.
 - **Bulk/multi-select DLQ actions in Service Bus** (batch complete/resubmit) — genuinely new
