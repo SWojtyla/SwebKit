@@ -42,29 +42,34 @@ sent. This was a live, user-facing bug independent of everything else in this pl
       follow-up, not blocking anything else in this plan — revisit if it turns out users don't
       discover the manual button on their own.
 
-## Module 2 — Per-session conversations (frontend + sidecar)
+## Module 2 — Per-session conversations (frontend + sidecar) — done
 
-Today `SidecarAgentChatService` is a singleton holding one `ConcurrentQueue<AgentMessage> _history`
-— one conversation, shared by anything that calls `/api/agent/chat`. Contextual per-feature chat
-needs each contextual conversation to have its own history, separate from the global `/agent` page
-and from each other, without losing the existing single-conversation behavior for the global page.
+Before this module, `SidecarAgentChatService` was a singleton holding one
+`ConcurrentQueue<AgentMessage> _history` — one conversation, shared by anything that called
+`/api/agent/chat`.
 
-- [ ] Add an optional `sessionId` to `AgentChatRequest` (`src-sidecar/Endpoints/AgentEndpoints.cs`).
-      Omitted/`null` → the existing global session (backward compatible with today's `/agent` page
-      and `useAgentChat()`/`useAgentClear()`/`useAgentStatus()` call sites, unchanged).
-- [ ] Change `SidecarAgentChatService`'s internal state from a single `_history` field to
-      `ConcurrentDictionary<string, ConversationSession>` (session id → its own history queue +
-      last-activity timestamp). Extract the existing enqueue/trim/build-request logic from
-      `SendAsync` into per-session methods; `SendAsync(sessionId, message, context, mode, ct)`
-      looks up or creates the session's `ConversationSession` first.
-- [ ] Evict idle sessions (e.g. no activity for 30 minutes) on a timer or lazily on next access, so
-      short-lived contextual conversations (open a panel, ask one thing, close it) don't leak memory
-      over a long-running desktop session.
-- [ ] `ClearHistory`/`GetStatus` (`/api/agent/clear`, `/api/agent/status`) also take an optional
-      `sessionId`, scoped the same way.
-- [ ] Frontend: `useAgent.ts` hooks accept an optional `sessionId` param, generated client-side
-      (e.g. `crypto.randomUUID()`) once per mounted contextual chat panel instance and threaded
-      through every call for that panel's lifetime.
+- [x] `AgentChatRequest` gets an optional `SessionId`. Omitted/`null` maps to a fixed
+      `"__global__"` key — same behavior as before this module, verified by a regression test
+      (`SendAsync_OmittedSessionId_UsesTheSameGlobalSessionAsBeforePerSessionSupport`) rather than
+      just assumed from reading the code.
+- [x] `SidecarAgentChatService`'s internal state changed from a single `_history` field to
+      `ConcurrentDictionary<string, ConversationSession>` (session id → its own
+      `ConcurrentQueue<AgentMessage>` + a `LastActivity` timestamp).
+- [x] Idle sessions (30 minutes of inactivity) are evicted **lazily on the next `SendAsync` call**,
+      not via a background timer — deliberately, so nothing here needs a real-time-based test (a
+      lesson from this same branch's earlier pty-testing detour: don't reach for a real timer/sleep
+      where a fake-clock-free design is available). The global session is explicitly exempt from
+      eviction, matching its pre-Module-2 "persists for the app's whole lifetime" behavior exactly.
+- [x] `ClearHistory`/`GetStatus` (`/api/agent/clear`, `/api/agent/status`) take an optional
+      `sessionId` query parameter, `= null` defaulted so existing direct-call test sites and the
+      minimal-API query-binding both work without change.
+- [x] Frontend: `useAgentChat`/`useAgentClear`/`useAgentStatus` each take an optional `sessionId`
+      parameter (threaded into the request body for chat, a query string for clear/status), with the
+      query cache key including it so different sessions' status don't overwrite each other's cache
+      entry. `AgentPage.tsx` (the global page) still calls every hook with no argument — unchanged.
+- [ ] **Not yet wired to a UI**: nothing generates a `sessionId` from a mounted contextual panel yet
+      — that's Module 6, once `<ContextualAssistant>` exists to generate and hold one per panel
+      instance.
 
 ## Module 3 — Confirm-before-execute, wired end to end
 

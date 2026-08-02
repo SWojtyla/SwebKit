@@ -11,19 +11,32 @@ namespace SwebKit.Sidecar.Services;
 /// <summary>
 /// Sidecar-specific agent chat service that wraps <see cref="IAgentModelClient"/>
 /// with conversation history and context built from <see cref="ProfileRepository"/>.
-/// Maintains a single conversation session (singleton lifetime, single-user desktop app).
+///
+/// Holds one <see cref="ConversationSession"/> per <c>sessionId</c> (a per-panel id the frontend
+/// generates once per mounted contextual assistant, see <c>ai-augmented-app</c> technical-plan.md
+/// Module 2), so a conversation opened from an AKS pod panel doesn't share history with one opened
+/// from a Redis key panel, or with the global <c>/agent</c> page. A null/omitted <c>sessionId</c>
+/// maps to a single fixed key (<see cref="GlobalSessionKey"/>) — this preserves the pre-Module-2
+/// behavior of the global page exactly (one shared conversation, never evicted), which is why that
+/// key is exempt from idle eviction while every other session isn't.
 /// </summary>
 public sealed class SidecarAgentChatService
 {
+    private const string GlobalSessionKey = "__global__";
+    private static readonly TimeSpan IdleSessionTimeout = TimeSpan.FromMinutes(30);
+
     private readonly IAgentModelClient _modelClient;
     private readonly IAgentToolRegistry _toolRegistry;
     private readonly ProfileRepository _profiles;
     private readonly UserSettingsRepository _settings;
     private readonly DemoModeService _demo;
-    private readonly ConcurrentQueue<AgentMessage> _history = new();
+    private readonly ConcurrentDictionary<string, ConversationSession> _sessions = new();
     private readonly int _maxHistory = 20;
 
-    public int HistoryCount => _history.Count;
+    /// <summary>History count for the global <c>/agent</c> page's session. Kept for existing call
+    /// sites (<see cref="AgentEndpoints.GetStatus"/>); prefer <see cref="GetHistoryCount"/> for new
+    /// per-session call sites.</summary>
+    public int HistoryCount => GetHistoryCount(null);
 
     public SidecarAgentChatService(
         IAgentModelClient modelClient,
@@ -39,22 +52,35 @@ public sealed class SidecarAgentChatService
         _demo = demo;
     }
 
-    public void ClearHistory()
+    public int GetHistoryCount(string? sessionId) =>
+        _sessions.TryGetValue(Key(sessionId), out var session) ? session.History.Count : 0;
+
+    public void ClearHistory(string? sessionId = null)
     {
-        while (_history.TryDequeue(out _)) { }
+        if (_sessions.TryGetValue(Key(sessionId), out var session))
+            while (session.History.TryDequeue(out _)) { }
     }
 
-    public async Task<SidecarAgentReply> SendAsync(string userMessage, CancellationToken ct = default)
+    /// <summary>Overload preserving the pre-Module-2 call shape for the global session.</summary>
+    public Task<SidecarAgentReply> SendAsync(string userMessage, CancellationToken ct = default) =>
+        SendAsync(null, userMessage, ct);
+
+    public async Task<SidecarAgentReply> SendAsync(string? sessionId, string userMessage, CancellationToken ct = default)
     {
+        EvictIdleSessions();
+        var key = Key(sessionId);
+        var session = _sessions.GetOrAdd(key, _ => new ConversationSession());
+        session.LastActivity = DateTimeOffset.UtcNow;
+
         var sw = Stopwatch.StartNew();
         var systemPrompt = BuildSystemPrompt();
         var profile = _settings.Settings.Agent.GetActiveProfile();
 
         // Record user message
-        _history.Enqueue(new AgentMessage { Role = "user", Content = userMessage });
-        TrimHistory();
+        session.History.Enqueue(new AgentMessage { Role = "user", Content = userMessage });
+        TrimHistory(session);
 
-        var historyList = _history.ToList();
+        var historyList = session.History.ToList();
         // Remove the last (user message) from history passed to the model since it's passed separately
         if (historyList.Count > 0)
             historyList.RemoveAt(historyList.Count - 1);
@@ -79,8 +105,8 @@ public sealed class SidecarAgentChatService
                 request,
                 tools.Count > 0 ? (toolName, args, toolCt) => _toolRegistry.ExecuteAsync(toolName, args, toolCt) : null,
                 ct);
-            _history.Enqueue(new AgentMessage { Role = "assistant", Content = result.Text });
-            TrimHistory();
+            session.History.Enqueue(new AgentMessage { Role = "assistant", Content = result.Text });
+            TrimHistory(session);
 
             sw.Stop();
             return new SidecarAgentReply
@@ -94,8 +120,8 @@ public sealed class SidecarAgentChatService
         }
         catch (Exception ex)
         {
-            _history.Enqueue(new AgentMessage { Role = "assistant", Content = $"Error: {ex.Message}" });
-            TrimHistory();
+            session.History.Enqueue(new AgentMessage { Role = "assistant", Content = $"Error: {ex.Message}" });
+            TrimHistory(session);
 
             sw.Stop();
             return new SidecarAgentReply
@@ -108,9 +134,27 @@ public sealed class SidecarAgentChatService
         }
     }
 
-    private void TrimHistory()
+    private static string Key(string? sessionId) =>
+        string.IsNullOrWhiteSpace(sessionId) ? GlobalSessionKey : sessionId;
+
+    private void TrimHistory(ConversationSession session)
     {
-        while (_history.Count > _maxHistory && _history.TryDequeue(out _)) { }
+        while (session.History.Count > _maxHistory && session.History.TryDequeue(out _)) { }
+    }
+
+    /// <summary>Lazily sweeps idle contextual sessions on each call rather than running a background
+    /// timer — cheap for the handful of concurrent sessions a single-user desktop app has, and
+    /// avoids a real-time-based background loop that would need faking in tests. The global session
+    /// is exempt (see the class doc comment): it's meant to persist for the app's whole lifetime,
+    /// matching its pre-Module-2 behavior exactly.</summary>
+    private void EvictIdleSessions()
+    {
+        var cutoff = DateTimeOffset.UtcNow - IdleSessionTimeout;
+        foreach (var (key, session) in _sessions)
+        {
+            if (key != GlobalSessionKey && session.LastActivity < cutoff)
+                _sessions.TryRemove(key, out _);
+        }
     }
 
     private string BuildSystemPrompt()
@@ -190,6 +234,12 @@ public sealed class SidecarAgentChatService
             - No Observability, Storage, or API Client tools are available in the sidecar mode yet.
             - No Git operations.
             """;
+    }
+
+    private sealed class ConversationSession
+    {
+        public ConcurrentQueue<AgentMessage> History { get; } = new();
+        public DateTimeOffset LastActivity { get; set; } = DateTimeOffset.UtcNow;
     }
 }
 

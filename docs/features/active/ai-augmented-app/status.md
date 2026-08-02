@@ -18,7 +18,16 @@ lands, following the pattern used by the now-closed `tauri-react-primary-tool/st
       unchanged), `npx playwright test settings.spec.ts` 7/7 (2 new, including a base-URL-survives-
       reload regression test). Not done: auto-running the test right after a profile save (the
       manual button covers the need; noted as a small follow-up, not blocking).
-- [ ] Module 2 — Per-session conversations
+- [x] Module 2 — Per-session conversations — **done** (2026-08-02):
+      `SidecarAgentChatService` now holds a `ConcurrentDictionary` of per-session conversations
+      instead of one singleton history; omitted `sessionId` still maps to the same always-persistent
+      global session the `/agent` page always used (verified — not just assumed — via a regression
+      test). Idle non-global sessions evict lazily on next access (no background timer, so nothing
+      here needed a fake-clock test). Frontend hooks (`useAgentChat`/`useAgentClear`/
+      `useAgentStatus`) accept an optional `sessionId`; no UI generates one yet (that's Module 6).
+      Verified: `dotnet test tests/SwebKit.Sidecar.Tests` 175/175 (2 new), `npx vitest run` 116/116
+      (unchanged), `npx playwright test agent.spec.ts` 6/6 (pre-existing, unchanged — confirms the
+      global page's behavior survived the refactor underneath it).
 - [ ] Module 3 — Confirm-before-execute, wired end to end
 - [ ] Module 4 — Redis and Storage tools
 - [ ] Module 5 — Contextual system prompt + mode-aware tool filtering

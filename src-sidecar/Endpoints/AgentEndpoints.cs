@@ -34,21 +34,21 @@ public static class AgentEndpoints
         if (string.IsNullOrWhiteSpace(req.Message))
             return Results.BadRequest("Message is required");
 
-        var reply = await agent.SendAsync(req.Message, ct);
+        var reply = await agent.SendAsync(req.SessionId, req.Message, ct);
         return Results.Ok(reply);
     }
 
-    internal static Ok<object> ClearHistory(SidecarAgentChatService agent)
+    internal static Ok<object> ClearHistory(SidecarAgentChatService agent, string? sessionId = null)
     {
-        agent.ClearHistory();
+        agent.ClearHistory(sessionId);
         return TypedResults.Ok<object>(new { cleared = true });
     }
 
-    internal static Ok<object> GetStatus(SidecarAgentChatService agent)
+    internal static Ok<object> GetStatus(SidecarAgentChatService agent, string? sessionId = null)
     {
         return TypedResults.Ok<object>(new
         {
-            historyCount = agent.HistoryCount,
+            historyCount = agent.GetHistoryCount(sessionId),
         });
     }
 
@@ -78,4 +78,9 @@ public static class AgentEndpoints
 public sealed class AgentChatRequest
 {
     public string Message { get; set; } = string.Empty;
+
+    /// <summary>Scopes this conversation's history to a contextual assistant panel instance
+    /// (client-generated, see <c>useContextualAgent</c>). Null/omitted keeps using the single
+    /// global session the pre-Module-2 <c>/agent</c> page always used.</summary>
+    public string? SessionId { get; set; }
 }

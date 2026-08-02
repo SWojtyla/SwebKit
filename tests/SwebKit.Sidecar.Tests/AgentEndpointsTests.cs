@@ -57,6 +57,39 @@ public class AgentEndpointsTests
         Assert.False(ok.Value.Error);
     }
 
+    // ── Per-session isolation ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task SendAsync_DifferentSessionIds_HaveIndependentHistory()
+    {
+        var service = CreateService();
+
+        await service.SendAsync("session-a", "hello from a", CancellationToken.None);
+        await service.SendAsync("session-b", "hello from b", CancellationToken.None);
+
+        Assert.Equal(2, service.GetHistoryCount("session-a")); // user + assistant
+        Assert.Equal(2, service.GetHistoryCount("session-b"));
+
+        service.ClearHistory("session-a");
+
+        Assert.Equal(0, service.GetHistoryCount("session-a"));
+        Assert.Equal(2, service.GetHistoryCount("session-b"));
+    }
+
+    [Fact]
+    public async Task SendAsync_OmittedSessionId_UsesTheSameGlobalSessionAsBeforePerSessionSupport()
+    {
+        var service = CreateService();
+
+        // The overload with no sessionId (pre-Module-2 call shape) and an explicit null both must
+        // land in the same global session, since AgentPage.tsx keeps calling it exactly like this.
+        await service.SendAsync("first message");
+        await service.SendAsync(null, "second message", CancellationToken.None);
+
+        Assert.Equal(4, service.HistoryCount); // 2 user + 2 assistant, one shared session
+        Assert.Equal(service.HistoryCount, service.GetHistoryCount(null));
+    }
+
     // ── Clear history ────────────────────────────────────────────────────────
 
     [Fact]

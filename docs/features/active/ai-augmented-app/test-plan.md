@@ -23,15 +23,20 @@ mode for frontend flows.
   reload (`agent profile base URL persists across reload` — a regression test for the `endpointUrl`
   field-name bug found and fixed alongside this module).
 
-## Module 2 — Per-session conversations
+## Module 2 — Per-session conversations — done
 
-- Unit: two different `sessionId`s produce independent histories (message sent on session A isn't
-  visible in session B's next request's history); omitted `sessionId` behaves exactly as today's
-  single global session (regression check — existing `/agent` page behavior must not change).
-  `ClearHistory`/`GetStatus` scoped correctly per session.
-- Unit: idle session eviction (if implemented as a scheduled sweep, test the sweep function
-  directly with an injected/fake clock rather than a real sleep — do not write a real-time-based
-  test here, per the sleep/hang lesson learned earlier on this branch's pty work).
+- [x] Unit (`AgentEndpointsTests.cs`): `SendAsync_DifferentSessionIds_HaveIndependentHistory` — two
+  sessions' histories don't leak into each other, and clearing one doesn't touch the other.
+  `SendAsync_OmittedSessionId_UsesTheSameGlobalSessionAsBeforePerSessionSupport` — the no-arg
+  overload and an explicit `null` land in the same session, matching pre-Module-2 behavior exactly
+  (a real regression check, not an assumption).
+- [x] Idle eviction ended up lazy-on-access rather than a scheduled sweep (see technical-plan.md),
+  which sidesteps the need for a fake-clock unit test entirely — there's no timer to fake. Not
+  separately unit-tested as a result; if a scheduled-sweep design is ever adopted instead, add the
+  fake-clock test this bullet originally called for at that point.
+- [x] E2E (`agent.spec.ts`, pre-existing, unchanged): all 6 tests still pass against the refactored
+  service — confirms the global `/agent` page's behavior wasn't disturbed by the session-scoping
+  change underneath it.
 
 ## Module 3 — Confirm-before-execute
 
