@@ -49,9 +49,14 @@
       to `ConfigEndpoints.SaveCollectionsAsync` (done as a byproduct of the sidecar-test-coverage
       pass below, to make the §3.6 regression test possible) — `/health`, `/api/demo-mode`,
       `/api/config/profiles`, `/api/config/environments`, `/api/config/user-settings` are still
-      inline in `Program.cs`. Not done: §3.3, 3.7–3.11 (demo-mode centralization, cancellation
-      tokens, request validation, auth-builder consolidation, OpenAPI surface, shared-library
-      re-verification).
+      inline in `Program.cs`. §3.7 (propagate `CancellationToken` consistently) is **done**:
+      `RedisEndpoints.cs`/`StorageEndpoints.cs`/`ServiceBusEndpoints.cs` (0 → 24/14/16 occurrences)
+      and the `ApiClientEndpoints.execute` handler now thread a real token from the request down to
+      every `IRedisClient`/`IStorageClient`/`IServiceBusClient`/`IHttpRequestExecutor` call, which
+      already declared and documented `CancellationToken` support on every method — this was pure
+      plumbing, no logic change, matching `AksEndpoints.cs`'s pre-existing pattern. Not done: §3.3
+      (demo-mode centralization), 3.8–3.11 (request validation, auth-builder consolidation, OpenAPI
+      surface, shared-library re-verification).
 - [x] Sidecar test coverage (test-plan.md Module 1) — **done, with 2 deliberate exceptions**: added
       `SidecarMonitoringConnectionPoolAksTests.cs` (6 tests), `SidecarAgentChatServiceToolsTests.cs`
       (4 tests), `AksEndpointsTests.cs` (11 tests: Deployments, Pods, HPAs, HTTPRoutes
