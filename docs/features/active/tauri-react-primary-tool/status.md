@@ -236,12 +236,36 @@
       `kubectl port-forward -n <ns> pod/<pod> <local>:<remote>` subprocess (mirroring the
       stdout-parsing pattern `sidecar.rs` already used to recover an OS-assigned port), keeps the
       child in the session so `stop_port_forward` can kill it, and `RunEvent::Exit` now kills every
-      live forward so none survive as orphans after the app closes. Still open: pod shell exec
-      (`PodsTab.tsx`'s "Open shell in pod" is `disabled: true`) — deliberately **not** attempted this
-      pass: it needs a pty crate (`portable-pty`), a bidirectional Tauri IPC streaming channel, and a
-      brand-new xterm.js terminal component in the frontend (there is currently zero terminal/pty
-      infrastructure anywhere in `web/` or `src-tauri/`), which is a multi-day feature in its own
-      right, not a gap-closing fix — it needs its own design pass before implementation.
+      live forward so none survive as orphans after the app closes. **Pod shell exec is done**
+      (2026-08-02, explicitly requested as a V1 blocker): `src-tauri/src/pod_shell.rs` spawns
+      `kubectl exec -it pod/<pod> -n <ns> [-c <container>] [--context ...] -- sh -c "command -v
+      bash && exec bash || exec sh"` through a real pty (`portable-pty`, ConPTY on Windows), with
+      I/O crossing the Tauri IPC boundary base64-encoded in both directions. `PodShellPanel.tsx`
+      (new `@xterm/xterm` + `@xterm/addon-fit` dependency) renders the terminal — deliberately not
+      built on the shared `Dialog` primitive, since that closes on Escape and a real shell session
+      needs Escape to reach the shell (e.g. vim). Wired into `PodsTab.tsx`'s context menu.
+      **A real deadlock was caught and fixed while building this**, worth flagging for anyone
+      touching this file: the original design detected "session ended" by reading the pty master
+      until EOF in a background thread, which hangs forever on Windows/ConPTY — EOF is never
+      signaled to a reader while this process still holds its own `master` handle open (needed for
+      the session's whole lifetime, for resize support). Fixed by polling `Child::try_wait()` from
+      a dedicated thread instead. A second, related deadlock was caught in review before shipping:
+      a *blocking* `Child::wait()` in that thread would hold the child's `Mutex` for the whole
+      session, making it impossible for `close_pod_shell`/`kill_all_pod_shells` to ever acquire the
+      lock to call `kill()` — fixed by polling with a short sleep between checks instead of a
+      blocking wait, so the lock is only held briefly. **Not validated by an automated test**: an
+      attempt to write a Rust integration test driving a real pty round-trip found that even a
+      trivial, zero-output child process (`cmd /C exit 7`) never reached `try_wait() == Some(_)`
+      within 15 seconds when driven by a bare `Read`/`Write` harness with no real terminal emulator
+      attached — pointing to a ConPTY console handshake requirement a full terminal emulator
+      (xterm.js, in the real app) evidently satisfies but a minimal test harness doesn't. That test
+      was removed rather than shipped half-working; see the doc comment left in place of it in
+      `pod_shell.rs` for the full detail. **This means the feature has not been
+      end-to-end verified against a real cluster** — the mutex/threading design is sound by code
+      review, and the frontend wiring is verified (a new e2e test confirms the panel opens and
+      reports "requires the desktop app" gracefully in the browser-mode fallback Playwright runs
+      under), but someone needs to manually click through a real `kubectl exec` session in the
+      packaged app against a real pod before this is fully trusted.
 - [x] UX Phase 4-5 accessibility + visual polish — **done**: notification key collisions, nested
       `<button>`, and Redis key-tree keyboard reachability were fixed earlier. This pass added real
       `role="tree"`/`role="treeitem"`/`aria-expanded`/`aria-level`/`aria-selected` plus roving
