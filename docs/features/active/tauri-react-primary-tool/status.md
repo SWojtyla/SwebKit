@@ -52,7 +52,7 @@
       inline in `Program.cs`. Not done: §3.3, 3.7–3.11 (demo-mode centralization, cancellation
       tokens, request validation, auth-builder consolidation, OpenAPI surface, shared-library
       re-verification).
-- [x] Sidecar test coverage (test-plan.md Module 1) — **partial, in progress**: added
+- [x] Sidecar test coverage (test-plan.md Module 1) — **done, with 2 deliberate exceptions**: added
       `SidecarMonitoringConnectionPoolAksTests.cs` (6 tests), `SidecarAgentChatServiceToolsTests.cs`
       (4 tests), `AksEndpointsTests.cs` (11 tests: Deployments, Pods, HPAs, HTTPRoutes
       exception-propagation), `RedisEndpointsMutationTests.cs` (18 tests: hash field set/delete,
@@ -94,9 +94,19 @@
       process-wide env var with no synchronization — safe with one test class using it, a real race
       once more classes did (xUnit runs test classes in parallel by default), corrupting an unrelated
       test class; fixed with a static `SemaphoreSlim` gate (not `lock`, since async tests can resume
-      on a different thread). Remaining, not yet done: `DemoModeService.cs` direct tests, and the
-      `Program.cs` `WebApplicationFactory` integration smoke test (exception handler status-code
-      mapping + CORS origin rejection).
+      on a different thread). `DemoModeServiceTests.cs` (9 tests) closes the last endpoint-adjacent
+      gap: demo namespace shape, per-namespace client caching, the unknown-namespace error path,
+      demo Redis/Storage config resolution. 32 → **156** `SwebKit.Sidecar.Tests` passing — this
+      effectively completes test-plan.md §1. Two items remain deliberately unaddressed, both
+      documented with reasoning rather than left as silent gaps: `MonitoringEndpoints.cs`'s SSE
+      `/stream` endpoint (its raw `HttpContext`-response/`PeriodicTimer` loop doesn't fit the
+      extract-and-assert-on-`IResult` pattern without a much heavier fake `HttpContext`), and a
+      `Program.cs` `WebApplicationFactory` integration smoke test (`Program.cs` calls
+      `builder.WebHost.UseUrls` with a hardcoded fallback port — a known sharp edge where
+      `WebApplicationFactory` can force a real Kestrel bind instead of the in-memory `TestServer`;
+      in this shared dev environment, where a real sidecar instance is often already running on that
+      port, that risks a flaky port collision for a test whose value — exception-handler status-code
+      mapping, CORS — is simple, inspectable code already indirectly covered by the e2e suite).
 - [x] CI wiring (test-plan.md Module 7) — done: Vitest now runs in the `frontend` job, a new `rust`
       job runs `cargo clippy`/`cargo test` gated on `src-tauri/**` changes.
 - [x] Frontend architecture decomposition (technical-plan.md Module 2) — **done**: `lib/hooks.ts`
@@ -208,7 +218,7 @@
 | `npm run test:unit` (Vitest) | 116 passed |
 | `npx playwright test` (full e2e suite) | 191 passed, 0 failed |
 | `dotnet build` — `src-sidecar`, `SwebKit.Core`, `SwebKit.Azure` | Pass, 0 warnings |
-| `dotnet test tests/SwebKit.Sidecar.Tests` | 147 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 18 RedisEndpoints + 14 ServiceBusEndpoints + 19 StorageEndpoints + 6 ConnectionTestError + 4 AgentEndpoints + 8 MonitoringEndpoints + 3 ConfigEndpoints + 3 CredentialSecret regression + 18 SidecarAuthHeaderBuilder + 11 SidecarCredentialStore) |
+| `dotnet test tests/SwebKit.Sidecar.Tests` | 156 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 18 RedisEndpoints + 14 ServiceBusEndpoints + 19 StorageEndpoints + 6 ConnectionTestError + 4 AgentEndpoints + 8 MonitoringEndpoints + 3 ConfigEndpoints + 3 CredentialSecret regression + 18 SidecarAuthHeaderBuilder + 11 SidecarCredentialStore + 9 DemoModeService) |
 | `dotnet test tests/SwebKit.Core.Tests` | 798 passed |
 | `cargo clippy --all-targets -- -D warnings` (`src-tauri`) | Pass, 0 warnings |
 | `cargo test --lib` (`src-tauri`) | 53 passed (50 existing + 3 port-forward parsing) |
