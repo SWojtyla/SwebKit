@@ -14,7 +14,8 @@ public static class ApiClientEndpoints
             IHttpRequestExecutor executor,
             CollectionRepository collections,
             EnvironmentRepository environments,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var collection = await ResolveCollectionAsync(req.CollectionId, collections, demo);
             if (collection is null && req.CollectionId is not null)
@@ -32,7 +33,7 @@ public static class ApiClientEndpoints
 
             try
             {
-                var result = await executor.ExecuteAsync(req.Request, collection, activeEnvironment);
+                var result = await executor.ExecuteAsync(req.Request, collection, activeEnvironment, ct);
                 return Results.Ok(Map(result));
             }
             catch (Exception ex)
