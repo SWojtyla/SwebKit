@@ -223,6 +223,42 @@
 | `cargo clippy --all-targets -- -D warnings` (`src-tauri`) | Pass, 0 warnings |
 | `cargo test --lib` (`src-tauri`) | 53 passed (50 existing + 3 port-forward parsing) |
 
+### Known flaky test — investigated, not resolved
+
+`service-bus.spec.ts`'s "copy body and copy full message buttons work" has intermittently failed
+throughout this initiative (roughly 1-in-5 to 1-in-8 runs, confirmed via ~20 isolated repeated runs
+on 2026-08-02). **Two things worth recording so a future attempt doesn't re-tread the same ground:**
+
+1. **The failure is not what it first looks like.** The initial hypothesis — that
+   `navigator.clipboard.writeText()` silently rejects because a freshly created
+   `browser.newContext()`/`newPage()` lacks OS-level focus (a real, documented Chromium Clipboard
+   API requirement), so the "Copied!" feedback never appears and the assertion times out — was
+   tested by adding `page.bringToFront()` before each clipboard interaction. It did **not** reduce
+   the failure rate. Captured full output from an actual failure shows the real error is `Test
+   timeout of 60000ms exceeded` inside the test's own `finally` block (`setDemoMode(page, false)`
+   failing with "Target page, context or browser has been closed"), meaning something *earlier* in
+   the test body hangs for the full 60s test timeout, and the browser gets force-closed by Playwright
+   itself before cleanup runs — this is a genuine intermittent hang somewhere in the test, not a
+   fast assertion race. The `bringToFront()` change was reverted rather than left in as a
+   non-fix with a misleading justifying comment.
+2. **This is very likely also the root cause of every other "cascading failure starting at
+   service-bus.spec.ts:159" seen throughout this whole initiative** (dashboard.spec.ts and other
+   unrelated specs occasionally showed the same pattern): when this test hangs and its worker gets
+   killed, Playwright respawns a worker, which re-imports `playwright.config.ts` — a module with a
+   top-level side effect (`fs.rmSync(e2eAppDataRoot, ...)`) — while the previous worker's child
+   processes (a spawned `dotnet` sidecar, in particular) haven't fully released their file handles
+   yet, producing the familiar `EPERM` on `.e2e-appdata` for every subsequent test in that run. In
+   other words: the dozens of "unrelated flake, retried and got a clean run" incidents logged across
+   this initiative's commits were most likely all downstream of this one intermittent hang, not
+   independent flakes. Confirmed via `Get-Process -Name dotnet` after a failed run: 9 stray `dotnet`
+   processes were still resident, all spawned within the same few seconds.
+
+Not fixed in this pass — pinpointing exactly which `await` hangs needs either instrumented tracing
+or a dedicated, patient repro session (repeat-each within one worker doesn't give independent
+samples, since one hang poisons every later repeat in the same worker — isolated
+`npx playwright test` invocations, one at a time, with process cleanup between each, is the only way
+to get real signal, and that's slow).
+
 ## Definition of Done
 
 1. Every critical/high-severity bug found in `production-readiness-review.md` §3 is fixed and has a
