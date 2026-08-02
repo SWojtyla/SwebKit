@@ -147,6 +147,14 @@ jobs:
         with:
           global-json-file: global.json
 
+      # SidecarCredentialStore (KeySharp) needs libsecret's shared library present to even attempt
+      # the real Secret Service path on Linux — without it, KeySharp can't load its native shim at
+      # all (DllNotFoundException) rather than cleanly finding "no Secret Service running"
+      # (KeyringException, already handled). Installing it here means CI exercises the same
+      # not-actually-reachable-but-loadable path a real headless Linux deployment would.
+      - name: Install libsecret (credential store native dependency)
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
+
       - name: Build sidecar
         run: dotnet build src-sidecar/SwebKit.Sidecar.csproj
 
@@ -191,6 +199,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      # tauri.conf.json's bundle.resources references binaries/sidecar/**/* (the real sidecar is
+      # dotnet-published there for an actual installer build, see release.yml) — tauri-build's
+      # build.rs validates that glob matches at least one file even for `cargo clippy`/`cargo test`,
+      # which don't bundle anything. This job doesn't need a working sidecar, just something to
+      # satisfy that check, so a placeholder is enough (and much faster than a real dotnet publish).
+      - name: Placeholder sidecar resource (satisfies tauri.conf.json bundle.resources glob)
+        run: |
+          mkdir -p binaries/sidecar
+          touch binaries/sidecar/.ci-placeholder
+        working-directory: src-tauri
 
       - name: Lint (clippy)
         working-directory: src-tauri
