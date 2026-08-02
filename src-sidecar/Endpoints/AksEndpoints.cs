@@ -102,23 +102,28 @@ public static class AksEndpoints
         return Results.Ok(routes);
     }
 
+    /// <summary>Handler body for the connection-test endpoint, extracted so the error-sanitization
+    /// behavior (never return a raw exception message) is unit testable.</summary>
+    internal static async Task<IResult> TestConnectionAsync(ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, ILogger<Program> logger, CancellationToken ct)
+    {
+        try
+        {
+            var client = GetClient(pool);
+            var ok = await client.TestConnectionAsync(ct);
+            return Results.Ok(new { connected = ok });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "AKS connection test failed");
+            return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
+        }
+    }
+
     public static void MapAksEndpoints(this WebApplication app)
     {
         // ── Connection / context ─────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/test", async (ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
-        {
-            try
-            {
-                var client = GetClient(pool);
-                var ok = await client.TestConnectionAsync(ct);
-                return Results.Ok(new { connected = ok });
-            }
-            catch (Exception ex)
-            {
-                return Results.Ok(new { connected = false, error = ex.Message });
-            }
-        });
+        app.MapGet("/api/aks/test", TestConnectionAsync);
 
         app.MapGet("/api/aks/contexts", (ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool) =>
         {
@@ -127,7 +132,7 @@ public static class AksEndpoints
             return Results.Ok(contexts);
         });
 
-        app.MapPost("/api/aks/context", async (SetContextRequest request, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/context", async (SetContextRequest request, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, ILogger<Program> logger, CancellationToken ct) =>
         {
             var data = profile.GetProfileData();
             data.Config.AksConfig ??= new AksConfig();
@@ -147,7 +152,8 @@ public static class AksEndpoints
             }
             catch (Exception ex)
             {
-                return Results.Ok(new { connected = false, context = request.Context, error = ex.Message });
+                logger.LogWarning(ex, "AKS context switch connection test failed for {Context}", request.Context);
+                return Results.Ok(new { connected = false, context = request.Context, error = ConnectionTestError.Describe(ex) });
             }
         });
 

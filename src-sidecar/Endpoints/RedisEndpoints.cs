@@ -16,7 +16,8 @@ public static class RedisEndpoints
             string cacheId,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            ILogger<Program> logger) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
@@ -29,7 +30,11 @@ public static class RedisEndpoints
             }
             catch (Exception ex)
             {
-                return Results.Ok(new { connected = false, error = ex.Message });
+                // StackExchange.Redis exceptions frequently embed the endpoint/connection config in
+                // their message — never return ex.Message here, the cache's connection string can
+                // carry a password.
+                logger.LogWarning(ex, "Redis connection test failed for cache {CacheId}", cacheId);
+                return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
             }
         });
 

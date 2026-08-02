@@ -113,7 +113,7 @@ public class DemoAksClient : IAksClient
         "[INF] Request finished HTTP/2 204 - 12ms"
     ];
 
-    public Task<bool> TestConnectionAsync(CancellationToken ct = default)
+    public virtual Task<bool> TestConnectionAsync(CancellationToken ct = default)
         => Task.FromResult(true);
 
     public async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default)
