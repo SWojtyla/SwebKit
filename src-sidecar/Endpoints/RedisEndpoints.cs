@@ -260,40 +260,9 @@ public static class RedisEndpoints
             return Results.Ok();
         });
 
-        app.MapPost("/api/redis/{cacheId}/keys/{key}/ttl", async (
-            string cacheId,
-            string key,
-            SetTtlRequest req,
-            ProfileRepository profile,
-            IRedisClientFactory factory,
-            DemoModeService demo) =>
-        {
-            var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+        app.MapPost("/api/redis/{cacheId}/keys/{key}/ttl", SetTtlAsync);
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            if (req.RemoveTtl)
-                await client.RemoveTtlAsync(key);
-            else if (req.TtlSeconds.HasValue)
-                await client.SetTtlAsync(key, TimeSpan.FromSeconds(req.TtlSeconds.Value));
-            return Results.Ok();
-        });
-
-        app.MapPost("/api/redis/{cacheId}/keys/{key}/rename", async (
-            string cacheId,
-            string key,
-            RenameKeyRequest req,
-            ProfileRepository profile,
-            IRedisClientFactory factory,
-            DemoModeService demo) =>
-        {
-            var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
-
-            var client = await CreateClientAsync(cache, factory, demo);
-            await client.RenameKeyAsync(key, req.NewKey);
-            return Results.Ok();
-        });
+        app.MapPost("/api/redis/{cacheId}/keys/{key}/rename", RenameKeyAsync);
 
         app.MapPost("/api/redis/{cacheId}/keys/{key}/value", async (
             string cacheId,
@@ -314,55 +283,13 @@ public static class RedisEndpoints
 
         // ── Hash field mutations ─────────────────────────────────────────────────
 
-        app.MapPost("/api/redis/{cacheId}/keys/{key}/hash/field", async (
-            string cacheId,
-            string key,
-            SetHashFieldRequest req,
-            ProfileRepository profile,
-            IRedisClientFactory factory,
-            DemoModeService demo) =>
-        {
-            var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+        app.MapPost("/api/redis/{cacheId}/keys/{key}/hash/field", SetHashFieldAsync);
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            await client.SetHashFieldAsync(key, req.Field, req.Value ?? "");
-            return Results.Ok();
-        });
-
-        app.MapPost("/api/redis/{cacheId}/keys/{key}/hash/field/delete", async (
-            string cacheId,
-            string key,
-            DeleteHashFieldRequest req,
-            ProfileRepository profile,
-            IRedisClientFactory factory,
-            DemoModeService demo) =>
-        {
-            var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
-
-            var client = await CreateClientAsync(cache, factory, demo);
-            await client.DeleteHashFieldAsync(key, req.Field);
-            return Results.Ok();
-        });
+        app.MapPost("/api/redis/{cacheId}/keys/{key}/hash/field/delete", DeleteHashFieldAsync);
 
         // ── Sorted set score mutation ────────────────────────────────────────────
 
-        app.MapPost("/api/redis/{cacheId}/keys/{key}/zset/score", async (
-            string cacheId,
-            string key,
-            UpdateSortedSetScoreRequest req,
-            ProfileRepository profile,
-            IRedisClientFactory factory,
-            DemoModeService demo) =>
-        {
-            var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
-
-            var client = await CreateClientAsync(cache, factory, demo);
-            await client.UpdateSortedSetScoreAsync(key, req.Member, req.Score);
-            return Results.Ok();
-        });
+        app.MapPost("/api/redis/{cacheId}/keys/{key}/zset/score", UpdateSortedSetScoreAsync);
 
         // ── Paginated set members ────────────────────────────────────────────────
 
@@ -417,6 +344,96 @@ public static class RedisEndpoints
             var snapshot = await client.GetPubSubSnapshotAsync(pattern, maxChannels ?? 200);
             return Results.Ok(snapshot);
         });
+    }
+
+    // ── Extracted mutation handlers (unit-testable without a WebApplicationFactory) ────────────
+
+    /// <summary>Handler body for the hash-field-set mutation endpoint.</summary>
+    internal static async Task<IResult> SetHashFieldAsync(
+        string cacheId,
+        string key,
+        SetHashFieldRequest req,
+        ProfileRepository profile,
+        IRedisClientFactory factory,
+        DemoModeService demo)
+    {
+        var cache = ResolveCache(cacheId, profile, demo);
+        if (cache is null) return Results.NotFound("Cache not found");
+
+        var client = await CreateClientAsync(cache, factory, demo);
+        await client.SetHashFieldAsync(key, req.Field, req.Value ?? "");
+        return Results.Ok();
+    }
+
+    /// <summary>Handler body for the hash-field-delete mutation endpoint.</summary>
+    internal static async Task<IResult> DeleteHashFieldAsync(
+        string cacheId,
+        string key,
+        DeleteHashFieldRequest req,
+        ProfileRepository profile,
+        IRedisClientFactory factory,
+        DemoModeService demo)
+    {
+        var cache = ResolveCache(cacheId, profile, demo);
+        if (cache is null) return Results.NotFound("Cache not found");
+
+        var client = await CreateClientAsync(cache, factory, demo);
+        await client.DeleteHashFieldAsync(key, req.Field);
+        return Results.Ok();
+    }
+
+    /// <summary>Handler body for the sorted-set score-update mutation endpoint.</summary>
+    internal static async Task<IResult> UpdateSortedSetScoreAsync(
+        string cacheId,
+        string key,
+        UpdateSortedSetScoreRequest req,
+        ProfileRepository profile,
+        IRedisClientFactory factory,
+        DemoModeService demo)
+    {
+        var cache = ResolveCache(cacheId, profile, demo);
+        if (cache is null) return Results.NotFound("Cache not found");
+
+        var client = await CreateClientAsync(cache, factory, demo);
+        await client.UpdateSortedSetScoreAsync(key, req.Member, req.Score);
+        return Results.Ok();
+    }
+
+    /// <summary>Handler body for the key-rename mutation endpoint.</summary>
+    internal static async Task<IResult> RenameKeyAsync(
+        string cacheId,
+        string key,
+        RenameKeyRequest req,
+        ProfileRepository profile,
+        IRedisClientFactory factory,
+        DemoModeService demo)
+    {
+        var cache = ResolveCache(cacheId, profile, demo);
+        if (cache is null) return Results.NotFound("Cache not found");
+
+        var client = await CreateClientAsync(cache, factory, demo);
+        await client.RenameKeyAsync(key, req.NewKey);
+        return Results.Ok();
+    }
+
+    /// <summary>Handler body for the TTL set/remove mutation endpoint.</summary>
+    internal static async Task<IResult> SetTtlAsync(
+        string cacheId,
+        string key,
+        SetTtlRequest req,
+        ProfileRepository profile,
+        IRedisClientFactory factory,
+        DemoModeService demo)
+    {
+        var cache = ResolveCache(cacheId, profile, demo);
+        if (cache is null) return Results.NotFound("Cache not found");
+
+        var client = await CreateClientAsync(cache, factory, demo);
+        if (req.RemoveTtl)
+            await client.RemoveTtlAsync(key);
+        else if (req.TtlSeconds.HasValue)
+            await client.SetTtlAsync(key, TimeSpan.FromSeconds(req.TtlSeconds.Value));
+        return Results.Ok();
     }
 
     private static RedisCacheEntry? ResolveCache(

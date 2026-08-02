@@ -747,7 +747,7 @@ public class DemoAksClient : IAksClient
         };
     }
 
-    public async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default)
+    public virtual async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default)
     {
         await Task.Delay(180, ct).ConfigureAwait(false);
         return new List<HttpRouteInfo>

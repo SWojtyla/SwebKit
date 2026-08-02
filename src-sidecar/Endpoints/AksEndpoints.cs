@@ -57,6 +57,51 @@ public static class AksEndpoints
         return parsed;
     }
 
+    /// <summary>Handler body for the Deployments list endpoint, extracted so it's unit testable against a fake pool.</summary>
+    internal static async Task<IResult> GetDeploymentsAsync(string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    {
+        var client = GetClient(pool);
+        var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+        var deployments = await client.GetDeploymentsAsync(namespaces, ct);
+        return Results.Ok(deployments);
+    }
+
+    /// <summary>Handler body for the Pods list endpoint, extracted so it's unit testable against a fake pool.</summary>
+    internal static async Task<IResult> GetPodsAsync(string ns, string? labelSelector, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    {
+        var client = GetClient(pool);
+        var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+        var pods = string.IsNullOrWhiteSpace(labelSelector)
+            ? await client.GetPodsAsync(namespaces, ct)
+            : await client.GetPodsAsync(namespaces, labelSelector, ct);
+        return Results.Ok(pods);
+    }
+
+    /// <summary>Handler body for the HPA list endpoint, extracted so it's unit testable against a fake pool.</summary>
+    internal static async Task<IResult> GetHpasAsync(string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    {
+        var client = GetClient(pool);
+        var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+        var hpas = await client.GetHpasAsync(namespaces, ct);
+        return Results.Ok(hpas);
+    }
+
+    /// <summary>
+    /// Handler body for the HTTPRoutes list endpoint, extracted so it's unit testable against a fake
+    /// pool/client. The client already returns an empty list when the Gateway API CRD isn't installed
+    /// (see KubernetesAksClient.ListGatewayApiCustomObjectsAsync) — no need to swallow exceptions here
+    /// too. Doing so previously made a real auth/RBAC/connectivity failure indistinguishable from "no
+    /// HTTPRoutes exist," which is actively misleading for a debugging tool. Let real errors propagate
+    /// to the global exception handler like every other AKS endpoint does.
+    /// </summary>
+    internal static async Task<IResult> GetHttpRoutesAsync(string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    {
+        var client = GetClient(pool);
+        var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+        var routes = await client.GetHttpRoutesAsync(namespaces, ct);
+        return Results.Ok(routes);
+    }
+
     public static void MapAksEndpoints(this WebApplication app)
     {
         // ── Connection / context ─────────────────────────────────────────────────
@@ -115,23 +160,9 @@ public static class AksEndpoints
 
         // ── Workloads ──────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/deployments", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
-        {
-            var client = GetClient(pool);
-            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
-            var deployments = await client.GetDeploymentsAsync(namespaces, ct);
-            return Results.Ok(deployments);
-        });
+        app.MapGet("/api/aks/{ns}/deployments", GetDeploymentsAsync);
 
-        app.MapGet("/api/aks/{ns}/pods", async (string ns, string? labelSelector, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
-        {
-            var client = GetClient(pool);
-            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
-            var pods = string.IsNullOrWhiteSpace(labelSelector)
-                ? await client.GetPodsAsync(namespaces, ct)
-                : await client.GetPodsAsync(namespaces, labelSelector, ct);
-            return Results.Ok(pods);
-        });
+        app.MapGet("/api/aks/{ns}/pods", GetPodsAsync);
 
         app.MapGet("/api/aks/{ns}/statefulsets", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
@@ -306,13 +337,7 @@ public static class AksEndpoints
 
         // ── HPA ────────────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/hpas", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
-        {
-            var client = GetClient(pool);
-            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
-            var hpas = await client.GetHpasAsync(namespaces, ct);
-            return Results.Ok(hpas);
-        });
+        app.MapGet("/api/aks/{ns}/hpas", GetHpasAsync);
 
         app.MapPost("/api/aks/{ns}/hpas/{name}/scale", async (string ns, string name, ScaleHpaRequest dto, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
@@ -366,19 +391,7 @@ public static class AksEndpoints
 
         // ── Gateway API ────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/httproutes", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
-        {
-            // The client already returns an empty list when the Gateway API CRD isn't installed
-            // (see KubernetesAksClient.ListGatewayApiCustomObjectsAsync) — no need to swallow
-            // exceptions here too. Doing so previously made a real auth/RBAC/connectivity failure
-            // indistinguishable from "no HTTPRoutes exist," which is actively misleading for a
-            // debugging tool. Let real errors propagate to the global exception handler like every
-            // other AKS endpoint does.
-            var client = GetClient(pool);
-            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
-            var routes = await client.GetHttpRoutesAsync(namespaces, ct);
-            return Results.Ok(routes);
-        });
+        app.MapGet("/api/aks/{ns}/httproutes", GetHttpRoutesAsync);
 
         app.MapDelete("/api/aks/{ns}/httproutes/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
