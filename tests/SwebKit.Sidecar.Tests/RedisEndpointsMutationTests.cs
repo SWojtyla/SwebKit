@@ -117,6 +117,19 @@ public class RedisEndpointsMutationTests
     }
 
     [Fact]
+    public async Task SetHashFieldAsync_MissingField_ReturnsBadRequest_WithoutTouchingTheClient()
+    {
+        var (profile, demo, factory) = Build();
+        var req = new RedisEndpoints.SetHashFieldRequest { Field = "  ", Value = "v" };
+
+        var result = await RedisEndpoints.SetHashFieldAsync(CacheId, "key", req, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(400, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Empty(factory.Calls);
+    }
+
+    [Fact]
     public async Task SetHashFieldAsync_CacheNotFound_ReturnsNotFound()
     {
         var (profile, demo, factory) = Build();
@@ -154,6 +167,19 @@ public class RedisEndpointsMutationTests
         Assert.IsType<Ok>(result);
         var fields = await demoClient.GetHashFieldsAsync("session:abc123");
         Assert.DoesNotContain(fields, f => f.Field == "user_id");
+    }
+
+    [Fact]
+    public async Task DeleteHashFieldAsync_MissingField_ReturnsBadRequest_WithoutTouchingTheClient()
+    {
+        var (profile, demo, factory) = Build();
+        var req = new RedisEndpoints.DeleteHashFieldRequest { Field = null! };
+
+        var result = await RedisEndpoints.DeleteHashFieldAsync(CacheId, "key", req, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(400, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Empty(factory.Calls);
     }
 
     [Fact]
@@ -197,6 +223,19 @@ public class RedisEndpointsMutationTests
     }
 
     [Fact]
+    public async Task UpdateSortedSetScoreAsync_MissingMember_ReturnsBadRequest_WithoutTouchingTheClient()
+    {
+        var (profile, demo, factory) = Build();
+        var req = new RedisEndpoints.UpdateSortedSetScoreRequest { Member = "", Score = 1 };
+
+        var result = await RedisEndpoints.UpdateSortedSetScoreAsync(CacheId, "key", req, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(400, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Empty(factory.Calls);
+    }
+
+    [Fact]
     public async Task UpdateSortedSetScoreAsync_CacheNotFound_ReturnsNotFound()
     {
         var (profile, demo, factory) = Build();
@@ -234,6 +273,19 @@ public class RedisEndpointsMutationTests
         Assert.IsType<Ok>(result);
         Assert.Equal("none", await demoClient.GetKeyTypeAsync("user:1001"));
         Assert.Equal("string", await demoClient.GetKeyTypeAsync("user:1001:renamed"));
+    }
+
+    [Fact]
+    public async Task RenameKeyAsync_MissingNewKey_ReturnsBadRequest_WithoutTouchingTheClient()
+    {
+        var (profile, demo, factory) = Build();
+        var req = new RedisEndpoints.RenameKeyRequest { NewKey = null! };
+
+        var result = await RedisEndpoints.RenameKeyAsync(CacheId, "user:1001", req, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(400, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Empty(factory.Calls);
     }
 
     [Fact]

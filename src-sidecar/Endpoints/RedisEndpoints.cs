@@ -380,6 +380,8 @@ public static class RedisEndpoints
         DemoModeService demo,
         CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(req.Field)) return Results.BadRequest("field is required");
+
         var cache = ResolveCache(cacheId, profile, demo);
         if (cache is null) return Results.NotFound("Cache not found");
 
@@ -398,6 +400,8 @@ public static class RedisEndpoints
         DemoModeService demo,
         CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(req.Field)) return Results.BadRequest("field is required");
+
         var cache = ResolveCache(cacheId, profile, demo);
         if (cache is null) return Results.NotFound("Cache not found");
 
@@ -416,6 +420,8 @@ public static class RedisEndpoints
         DemoModeService demo,
         CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(req.Member)) return Results.BadRequest("member is required");
+
         var cache = ResolveCache(cacheId, profile, demo);
         if (cache is null) return Results.NotFound("Cache not found");
 
@@ -434,6 +440,8 @@ public static class RedisEndpoints
         DemoModeService demo,
         CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(req.NewKey)) return Results.BadRequest("newKey is required");
+
         var cache = ResolveCache(cacheId, profile, demo);
         if (cache is null) return Results.NotFound("Cache not found");
 
