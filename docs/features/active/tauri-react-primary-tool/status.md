@@ -44,9 +44,13 @@
       whole purpose is executing a user-authored HTTP request and showing why it failed (connection
       refused, DNS failure, timeout) — that's the same debugging signal Postman/Bruno/curl all
       surface, and it's about connectivity to a user-chosen target URL, not a credential-bearing SDK
-      call, so the leak risk profile is different from the connection-test endpoints. Not done:
-      §3.3–3.4, 3.7–3.11 (demo-mode centralization, config-endpoint extraction, cancellation tokens,
-      request validation, auth-builder consolidation, OpenAPI surface, shared-library
+      call, so the leak risk profile is different from the connection-test endpoints. §3.4 (move
+      config endpoints out of `Program.cs`) is **partial**: only `PUT /api/config/collections` moved
+      to `ConfigEndpoints.SaveCollectionsAsync` (done as a byproduct of the sidecar-test-coverage
+      pass below, to make the §3.6 regression test possible) — `/health`, `/api/demo-mode`,
+      `/api/config/profiles`, `/api/config/environments`, `/api/config/user-settings` are still
+      inline in `Program.cs`. Not done: §3.3, 3.7–3.11 (demo-mode centralization, cancellation
+      tokens, request validation, auth-builder consolidation, OpenAPI surface, shared-library
       re-verification).
 - [x] Sidecar test coverage (test-plan.md Module 1) — **partial, in progress**: added
       `SidecarMonitoringConnectionPoolAksTests.cs` (6 tests), `SidecarAgentChatServiceToolsTests.cs`
@@ -67,13 +71,32 @@
       these SDKs' exceptions frequently embed the connection string/kubeconfig path — fixed via a
       shared `ConnectionTestError.Describe(ex)` classifier plus server-side logging
       (`ConnectionTestErrorTests.cs`, 6 tests, incl. a regression test proving a kubeconfig path
-      never reaches the response body). 32 → **100** `SwebKit.Sidecar.Tests` passing.
-      Per test-plan.md §1's own risk-ordering, still zero coverage: `MonitoringEndpoints.cs`,
-      `AgentEndpoints.cs`, `ConfigEndpoints.cs` (the `CredentialSecret` structural-guard regression
-      test from §3.6), `DemoModeService.cs`, and the services
-      `SidecarAuthHeaderBuilder.cs`/`SidecarCredentialStore.cs`. The `Program.cs`
-      `WebApplicationFactory` integration smoke test (exception handler status-code mapping + CORS
-      origin rejection) is also not yet added.
+      never reaches the response body). Closed out the rest of the endpoint list too:
+      `AgentEndpointsTests.cs` (4 tests: chat/clear/status, incl. the empty-message 400 never calling
+      the model client), `MonitoringEndpointsTests.cs` (8 tests: rule CRUD — the SSE `/stream`
+      endpoint is deliberately untested, its raw `HttpContext`-response/`PeriodicTimer` loop doesn't
+      fit the extract-and-assert-on-`IResult` pattern without a much heavier fake `HttpContext` than
+      warranted), `ConfigEndpointsTests.cs` (3 tests: export/import round trip via `AppDataSandbox`),
+      and — the single most valuable test added this pass —
+      `ConfigCollectionsCredentialSecretTests.cs` (3 tests, the §3.6 regression test test-plan.md
+      specifically calls for): `PUT /api/config/collections` was moved out of `Program.cs` into
+      `ConfigEndpoints.SaveCollectionsAsync` (a small, targeted slice of §3.4 — not the full
+      "move every config endpoint out of Program.cs," just this one handler, done specifically to
+      make the regression test possible) along with the `StripCredentialSecrets`/`StripNode`/
+      `StripAuth` helpers it calls; the tests prove a populated `CredentialSecret` at the collection
+      level and at a deeply-nested folder/request level is stripped before ever reaching disk
+      (reloaded via a fresh `CollectionRepository` to prove it), plus that non-secret auth fields
+      survive the strip. `SidecarAuthHeaderBuilderTests.cs` (18 tests) directly covers the
+      security-sensitive Bearer/API-key/Basic/OAuth2 precedence logic — verified the documented
+      precedence exactly, no bug found. `SidecarCredentialStoreTests.cs` (11 tests, bonus) exercises
+      the real OS-backed keychain in this environment. 32 → **147** `SwebKit.Sidecar.Tests` passing.
+      One test-infrastructure bug found and fixed along the way: `AppDataSandbox` mutated a
+      process-wide env var with no synchronization — safe with one test class using it, a real race
+      once more classes did (xUnit runs test classes in parallel by default), corrupting an unrelated
+      test class; fixed with a static `SemaphoreSlim` gate (not `lock`, since async tests can resume
+      on a different thread). Remaining, not yet done: `DemoModeService.cs` direct tests, and the
+      `Program.cs` `WebApplicationFactory` integration smoke test (exception handler status-code
+      mapping + CORS origin rejection).
 - [x] CI wiring (test-plan.md Module 7) — done: Vitest now runs in the `frontend` job, a new `rust`
       job runs `cargo clippy`/`cargo test` gated on `src-tauri/**` changes.
 - [x] Frontend architecture decomposition (technical-plan.md Module 2) — **done**: `lib/hooks.ts`
@@ -185,7 +208,7 @@
 | `npm run test:unit` (Vitest) | 116 passed |
 | `npx playwright test` (full e2e suite) | 191 passed, 0 failed |
 | `dotnet build` — `src-sidecar`, `SwebKit.Core`, `SwebKit.Azure` | Pass, 0 warnings |
-| `dotnet test tests/SwebKit.Sidecar.Tests` | 100 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 18 RedisEndpoints + 14 ServiceBusEndpoints + 19 StorageEndpoints + 6 ConnectionTestError) |
+| `dotnet test tests/SwebKit.Sidecar.Tests` | 147 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 18 RedisEndpoints + 14 ServiceBusEndpoints + 19 StorageEndpoints + 6 ConnectionTestError + 4 AgentEndpoints + 8 MonitoringEndpoints + 3 ConfigEndpoints + 3 CredentialSecret regression + 18 SidecarAuthHeaderBuilder + 11 SidecarCredentialStore) |
 | `dotnet test tests/SwebKit.Core.Tests` | 798 passed |
 | `cargo clippy --all-targets -- -D warnings` (`src-tauri`) | Pass, 0 warnings |
 | `cargo test --lib` (`src-tauri`) | 53 passed (50 existing + 3 port-forward parsing) |
