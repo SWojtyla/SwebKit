@@ -13,6 +13,10 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 pub(crate) fn hidden_command(program: &str) -> std::process::Command {
+    // `mut` is only exercised by the `#[cfg(windows)]` call below (`creation_flags` needs
+    // `&mut self`) — on other platforms that line is compiled out entirely, so clippy correctly
+    // sees an unused `mut` there.
+    #[cfg_attr(not(windows), allow(unused_mut))]
     let mut cmd = std::process::Command::new(program);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
