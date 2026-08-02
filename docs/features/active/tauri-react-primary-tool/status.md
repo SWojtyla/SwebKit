@@ -32,7 +32,8 @@
       "ABANDONED" note in `ux-plan.md`'s Phase 1 section. Anything that was gated on this phase
       landing (`ApiClientPage.tsx`/`RequestEditor.tsx` decomposition, `technical-plan.md` §2.3) is now
       unblocked and can be scoped fresh whenever it's picked up.
-- [x] Sidecar architecture & security fixes (technical-plan.md Module 3) — **partial**: done —
+- [x] Sidecar architecture & security fixes (technical-plan.md Module 3) — **done, with 2 explicitly
+      non-actionable exceptions (§3.9/§3.10, see below)** —
       static mutable `IAksClient` singleton replaced with the DI-registered
       `IMonitoringConnectionPool` pattern (§3.1), `/httproutes` no longer swallows all exceptions
       (§3.2), `CredentialSecret` now has a structural strip-before-save guard, not just a
@@ -76,8 +77,21 @@
       bypass; (3) `WindowsCredentialStore.cs`'s catch blocks already log via
       `logger?.LogDebug`/`LogWarning` on every path (Get/Delete/ListKeys) rather than silently
       swallowing — this was either already fixed before this initiative started or was a stale
-      finding in the original review. Not done: §3.8–3.10 (request validation, auth-builder
-      consolidation, OpenAPI surface).
+      finding in the original review. §3.8 (request validation) is **done, scoped to the concrete
+      gap that actually exists**: checked the plan's own examples (malformed GUIDs/enums causing an
+      unhandled 500) and found the codebase already guards those — `Guid.TryParse` everywhere it's
+      used, no unguarded `Enum.Parse`/`Guid.Parse`/`int.Parse` in any endpoint file. The real gap:
+      `RenameKeyAsync`/`SetHashFieldAsync`/`DeleteHashFieldAsync`/`UpdateSortedSetScoreAsync` passed
+      their request's required string field straight to the Redis client with no
+      `IsNullOrWhiteSpace` guard (the DTO's `= string.Empty` default doesn't protect against a client
+      explicitly sending `null` for that field — `System.Text.Json` overwrites it) — fixed using the
+      same guard pattern already established in `StorageEndpoints.cs`. Module 3 is now closed out:
+      **not done, and not expected to be soon**: §3.9 (auth-builder consolidation) explicitly says to
+      wait until MAUI is far enough into deprecation that its `AuthHeaderBuilder` isn't being
+      actively modified — not yet true; §3.10 (OpenAPI surface) is blocked on a vulnerable transitive
+      dependency (`Microsoft.OpenApi` 2.0.0 via `Microsoft.AspNetCore.OpenApi`, GHSA-v5pm-xwqc-g5wc) —
+      already attempted and reverted earlier in this initiative, revisit once a patched version
+      ships.
 - [x] Sidecar test coverage (test-plan.md Module 1) — **done, with 2 deliberate exceptions**: added
       `SidecarMonitoringConnectionPoolAksTests.cs` (6 tests), `SidecarAgentChatServiceToolsTests.cs`
       (4 tests), `AksEndpointsTests.cs` (11 tests: Deployments, Pods, HPAs, HTTPRoutes
@@ -249,7 +263,7 @@
 | `npm run test:unit` (Vitest) | 116 passed |
 | `npx playwright test` (full e2e suite) | 191 passed, 0 failed |
 | `dotnet build` — `src-sidecar`, `SwebKit.Core`, `SwebKit.Azure` | Pass, 0 warnings |
-| `dotnet test tests/SwebKit.Sidecar.Tests` | 167 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 18 RedisEndpoints + 14 ServiceBusEndpoints + 19 StorageEndpoints + 6 ConnectionTestError + 4 AgentEndpoints + 8 MonitoringEndpoints + 11 ConfigEndpoints + 3 CredentialSecret regression + 18 SidecarAuthHeaderBuilder + 11 SidecarCredentialStore + 9 DemoModeService + 3 SystemEndpoints) |
+| `dotnet test tests/SwebKit.Sidecar.Tests` | 171 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 22 RedisEndpoints + 14 ServiceBusEndpoints + 19 StorageEndpoints + 6 ConnectionTestError + 4 AgentEndpoints + 8 MonitoringEndpoints + 11 ConfigEndpoints + 3 CredentialSecret regression + 18 SidecarAuthHeaderBuilder + 11 SidecarCredentialStore + 9 DemoModeService + 3 SystemEndpoints) |
 | `dotnet test tests/SwebKit.Core.Tests` | 798 passed |
 | `cargo clippy --all-targets -- -D warnings` (`src-tauri`) | Pass, 0 warnings |
 | `cargo test --lib` (`src-tauri`) | 53 passed (50 existing + 3 port-forward parsing) |
