@@ -24,6 +24,12 @@ public static class AgentEndpoints
         // ── Capability test ─────────────────────────────────────────────────────
 
         app.MapPost("/api/agent/profiles/{id}/test", TestProfileAsync);
+
+        // ── Pending actions (confirm-before-execute) ────────────────────────────
+
+        app.MapGet("/api/agent/pending-approvals", GetPendingApprovals);
+        app.MapPost("/api/agent/pending-approvals/{id}/confirm", ConfirmActionAsync);
+        app.MapPost("/api/agent/pending-approvals/{id}/reject", RejectAction);
     }
 
     internal static async Task<IResult> ChatAsync(
@@ -73,6 +79,58 @@ public static class AgentEndpoints
         var result = await tester.TestAsync(profile, ct);
         return Results.Ok(result);
     }
+
+    /// <summary>Lists actions currently awaiting user confirmation. Deliberately doesn't expose
+    /// <see cref="PendingAgentAction.Payload"/> — that's an internal detail for the executor
+    /// applying the action, not something the confirm-card UI needs.</summary>
+    internal static Ok<IReadOnlyList<PendingActionSummary>> GetPendingApprovals(IAgentActionCoordinator coordinator)
+    {
+        var summaries = coordinator.GetPendingActions()
+            .Select(a => new PendingActionSummary
+            {
+                Id = a.Id,
+                Type = a.Type.ToString(),
+                Summary = a.Summary,
+                Target = a.Target,
+                Risk = a.Risk.ToString(),
+                Preview = a.Preview,
+                ExpiresAt = a.ExpiresAt,
+            })
+            .ToList();
+        return TypedResults.Ok<IReadOnlyList<PendingActionSummary>>(summaries);
+    }
+
+    internal static async Task<IResult> ConfirmActionAsync(string id, IAgentActionCoordinator coordinator, AgentActionApplier applier, CancellationToken ct)
+    {
+        var action = coordinator.GetAction(id);
+        if (action is null)
+            return Results.NotFound();
+
+        action.Confirm();
+        var result = await applier.ApplyAsync(id, ct);
+        return TypedResults.Ok(result);
+    }
+
+    internal static IResult RejectAction(string id, IAgentActionCoordinator coordinator)
+    {
+        var action = coordinator.GetAction(id);
+        if (action is null)
+            return Results.NotFound();
+
+        coordinator.RejectAction(id);
+        return TypedResults.Ok<object>(new { rejected = true });
+    }
+}
+
+public sealed class PendingActionSummary
+{
+    public required string Id { get; init; }
+    public required string Type { get; init; }
+    public required string Summary { get; init; }
+    public required string Target { get; init; }
+    public required string Risk { get; init; }
+    public required string Preview { get; init; }
+    public required DateTimeOffset ExpiresAt { get; init; }
 }
 
 public sealed class AgentChatRequest

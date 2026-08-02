@@ -87,6 +87,65 @@ test.describe("Agent", () => {
     });
   });
 
+  test("pending action card confirms and shows the apply result", async ({ page }) => {
+    const pendingAction = {
+      id: "action-1",
+      type: "DeleteRequest",
+      summary: "Delete request 'Get token'",
+      target: "Request 'Get token' (r1)",
+      risk: "High",
+      preview: "Name: Get token\nMethod: Post\nURL: https://api.example.com/token",
+      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    };
+    let confirmed = false;
+    await page.route("**/api/agent/pending-approvals", async (route) => {
+      await route.fulfill({ json: confirmed ? [] : [pendingAction] });
+    });
+    await page.route("**/api/agent/pending-approvals/action-1/confirm", async (route) => {
+      confirmed = true;
+      await route.fulfill({
+        json: { isSuccess: true, errorMessage: null, resultSummary: "Deleted request 'Get token'" },
+      });
+    });
+
+    await page.goto("/agent");
+
+    await expect(page.getByTestId("pending-action-action-1")).toBeVisible();
+    await expect(page.getByTestId("pending-action-summary-action-1")).toHaveText("Delete request 'Get token'");
+    await expect(page.getByTestId("pending-action-risk-action-1")).toHaveText(/High risk/);
+
+    await page.getByTestId("pending-action-confirm-action-1").click();
+
+    await expect(page.getByTestId("pending-action-result-action-1")).toHaveText("Deleted request 'Get token'");
+  });
+
+  test("pending action card rejects and removes the card", async ({ page }) => {
+    const pendingAction = {
+      id: "action-2",
+      type: "DeleteRequest",
+      summary: "Delete request 'Old request'",
+      target: "Request 'Old request' (r2)",
+      risk: "High",
+      preview: "Name: Old request",
+      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    };
+    let rejected = false;
+    await page.route("**/api/agent/pending-approvals", async (route) => {
+      await route.fulfill({ json: rejected ? [] : [pendingAction] });
+    });
+    await page.route("**/api/agent/pending-approvals/action-2/reject", async (route) => {
+      rejected = true;
+      await route.fulfill({ json: { rejected: true } });
+    });
+
+    await page.goto("/agent");
+    await expect(page.getByTestId("pending-action-action-2")).toBeVisible();
+
+    await page.getByTestId("pending-action-reject-action-2").click();
+
+    await expect(page.getByTestId("pending-action-action-2")).not.toBeVisible();
+  });
+
   test("Enter key sends message, Shift+Enter adds newline", async ({ page }) => {
     await page.goto("/agent");
 

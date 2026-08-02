@@ -892,6 +892,22 @@ export interface AgentStatus {
   historyCount: number;
 }
 
+export interface PendingAction {
+  id: string;
+  type: string;
+  summary: string;
+  target: string;
+  risk: "None" | "Low" | "High";
+  preview: string;
+  expiresAt: string;
+}
+
+export interface AgentActionApplyResult {
+  isSuccess: boolean;
+  errorMessage: string | null;
+  resultSummary: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";

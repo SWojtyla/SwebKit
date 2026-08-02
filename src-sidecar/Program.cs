@@ -121,6 +121,21 @@ builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 
 builder.Services.AddSingleton<SidecarAgentChatService>();
 
+// Agent action confirm-before-execute flow (ai-augmented-app technical-plan.md Module 3). Wired
+// here as infrastructure even though nothing in the sidecar can propose an action yet — the API
+// Client propose tools (ApiClientTools.cs) land in Module 4, now that this exists for them to
+// target. IApiClientAgentService needs the same linked-collection chain the MAUI app uses
+// (SwebKitServiceCollectionExtensions.Agents.cs); LinkedCollectionRootRepository's LoadAsync() is
+// deliberately not called at sidecar startup below (linked collections aren't a sidecar feature
+// yet), so it stays empty and ApiClientAgentService correctly sees local collections only.
+builder.Services.AddSingleton<SwebKit.Core.Services.LinkedGitService>();
+builder.Services.AddSingleton<SwebKit.Core.Services.LinkedCollectionFileService>();
+builder.Services.AddSingleton<SwebKit.Core.Configuration.LinkedCollectionRootRepository>();
+builder.Services.AddSingleton<IApiClientAgentService, SwebKit.Core.Services.ApiClientAgentService>();
+builder.Services.AddSingleton<IAgentActionCoordinator, AgentActionCoordinator>();
+builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Agents.Tools.ApiClient.ApiClientActionExecutor>();
+builder.Services.AddSingleton<AgentActionApplier>();
+
 // HTTP client used by the API client request executor
 builder.Services.AddHttpClient();
 

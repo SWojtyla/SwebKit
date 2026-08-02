@@ -43,6 +43,12 @@ public static partial class SwebKitServiceCollectionExtensions
         // API Client agent service
         services.AddSingleton<IApiClientAgentService, ApiClientAgentService>();
 
+        // Action executors — one per feature area, dispatched by AgentActionApplier via
+        // IAgentActionExecutor.CanHandle. Registered as IAgentActionExecutor so more can be added
+        // (e.g. Redis/Storage, ai-augmented-app technical-plan.md Module 4) without AgentActionApplier
+        // itself changing.
+        services.AddSingleton<IAgentActionExecutor, ApiClientActionExecutor>();
+
         // Action applier for confirmed action execution
         services.AddSingleton<AgentActionApplier>();
 

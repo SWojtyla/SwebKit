@@ -71,43 +71,61 @@ Before this module, `SidecarAgentChatService` was a singleton holding one
       — that's Module 6, once `<ContextualAssistant>` exists to generate and hold one per panel
       instance.
 
-## Module 3 — Confirm-before-execute, wired end to end
+## Module 3 — Confirm-before-execute, wired end to end — done
 
 This is the module that makes "Ask & do" real. `IAgentActionCoordinator`/`AgentActionApplier`
-(`src/SwebKit.Agents/IAgentActionCoordinator.cs`, `AgentActionApplier.cs`) already model the right
-shape (propose → `PendingAgentAction` with a 5-minute expiry and a fingerprint for optimistic
-concurrency → explicit confirm/reject → apply) but are wired to nothing. Today the only mutate tools
-that exist (`ApiClient/ApiClientTools.cs`'s three `Propose*` tools) already return
-`status: "pending_confirmation"` instead of executing directly — that's the right pattern to extend
-to Redis/Storage/AKS mutate tools in Module 4, once this module makes confirmation real.
+already modeled the right shape (propose → `PendingAgentAction` with a 5-minute expiry and a
+fingerprint for optimistic concurrency → explicit confirm/reject → apply) but were wired to
+nothing before this module.
 
-- [ ] Register `IAgentActionCoordinator`/`AgentActionApplier` in the sidecar's `Program.cs` DI
-      (currently only registered in the legacy MAUI app's `SwebKitServiceCollectionExtensions.Agents.cs`).
-- [ ] Add sidecar endpoints:
-  - `GET /api/agent/pending-approvals` — list current `PendingAgentAction`s (id, type, summary,
-    target, risk, preview, expiry). This is the endpoint the frontend's existing (currently dead)
-    `usePendingApprovals()` hook already expects — check its exact expected shape in
-    `web/src/lib/hooks/useAgent.ts` and match it rather than inventing a new one.
-  - `POST /api/agent/pending-approvals/{id}/confirm` → `AgentActionCoordinator.Confirm()` then
-    `AgentActionApplier.ApplyAsync()`; return the apply result (success/failure + message).
-  - `POST /api/agent/pending-approvals/{id}/reject` → `AgentActionCoordinator.Reject()`.
-- [ ] `AgentActionApplier`'s current design is a single switch on `AgentActionType`
-      (Create/Update/Delete/Duplicate/Move/ExecuteHttpRequest), API-Client-shaped, with several
-      branches stubbed (`ApplyCreate`/`ApplyUpdate`/`ApplyDuplicate`/`ApplyMove` return
-      `IsSuccess = false` today; only `ApplyDeleteAsync` actually calls through). Before Module 4
-      adds Redis/Storage/AKS mutate actions, replace the single big switch with a small
-      `IAgentActionExecutor` interface (one implementation per feature area, dispatched by
-      `action.Type`'s area prefix or a new `FeatureArea` field on `PendingAgentAction`), so each
-      area's executor lives next to that area's tools instead of growing one shared switch
-      indefinitely. Finish the API Client stub branches as part of this (they're needed regardless
-      of which other areas get mutate tools).
-- [ ] Frontend: a shared `PendingActionCard` component (summary, preview/diff, risk badge,
-      expiry countdown, Confirm/Reject buttons) — used by every contextual chat panel and the
-      global `/agent` page identically, backed by `usePendingApprovals()`.
-- [ ] Decide and document expiry UX: what happens if a `PendingAgentAction` expires while its card
-      is still on screen (poll status, or just let confirm fail with a clear "this expired,
-      ask again" message — the latter is simpler and matches the existing 5-minute
-      `AgentActionCoordinator` design without adding a live countdown-sync mechanism).
+- [x] `IAgentActionCoordinator`/`AgentActionApplier` registered in the sidecar's `Program.cs` DI,
+      alongside the same `LinkedGitService`→`LinkedCollectionFileService`→
+      `LinkedCollectionRootRepository`→`IApiClientAgentService` chain the MAUI app uses (all live in
+      `SwebKit.Core`, no MAUI-specific code) — `LinkedCollectionRootRepository.LoadAsync()` is
+      deliberately not called at sidecar startup, so it stays empty and `ApiClientAgentService`
+      correctly only sees local collections, matching the sidecar's actual current capability
+      (linked/git-backed collections aren't a sidecar feature yet — this doesn't change that).
+- [x] Three sidecar endpoints added: `GET /api/agent/pending-approvals` (now returns the real list
+      of pending actions — the existing `usePendingApprovals()` hook's old `{ count: number }` type
+      was dead-code placeholder that never matched anything real; redesigned the response and its
+      TS type together, including fixing `DashboardPage.tsx`'s one other call site),
+      `POST /api/agent/pending-approvals/{id}/confirm`, `POST /api/agent/pending-approvals/{id}/reject`.
+- [x] Replaced `AgentActionApplier`'s single big switch with an `IAgentActionExecutor` interface
+      (one implementation per feature area, dispatched by `CanHandle(AgentActionType)`) — the first
+      one, `ApiClientActionExecutor`, holds every branch the old switch had. Added
+      `PendingAgentAction.Payload` (the original tool-call arguments, cloned) since the existing
+      `Preview`/`Target`/`Summary` fields are display strings, not something an executor could
+      safely act on — `Create`/`Update`/`Move` needed the *exact* proposed values, not a re-parse of
+      a human-readable diff.
+- [x] **Finished**: `ApplyCreate`/`ApplyUpdate`/`ApplyDuplicate`/`ApplyMove` now actually call
+      `IApiClientAgentService.CreateRequestAsync`/`UpdateRequestAsync`/`DuplicateRequestAsync`/
+      `MoveRequestAsync` with the values from `Payload` (or `Target` where that's all that's needed,
+      e.g. delete/duplicate). These were stubs before this module; they aren't anymore.
+- [x] **Deliberately still stubbed**: `ApplyExecuteHttpAsync`. Actually sending the HTTP request
+      needs the full `HttpRequestEntry`/`ApiCollection`/active `ApiEnvironment` that
+      `IHttpRequestExecutor.ExecuteAsync` requires — `IApiClientAgentService` only exposes a masked
+      `ApiRequestSnapshot`, not those. Doing this properly means either extending
+      `IApiClientAgentService` with a method that resolves them, or reaching into
+      `CollectionRepository`/`EnvironmentRepository` directly — a bigger, security-sensitive
+      addition (real outbound HTTP against a possibly-external server, on the agent's say-so) that
+      deserves its own careful pass rather than being rushed alongside the rest of this module. The
+      existing fingerprint-freshness check is preserved and still runs before the stubbed failure.
+      `RenameFolder`/`DeleteFolder` are handled in the executor's dispatch (not silently falling
+      through) but are currently unreachable — no tool proposes either action type yet.
+- [x] Frontend: `PendingActionCard` (`web/src/components/agent/PendingActionCard.tsx`) — summary,
+      preview, risk badge, Confirm/Reject, and the apply result shown inline in the same card.
+      Mounted in `AgentPage.tsx` today (the only existing chat surface); contextual panels get it
+      too once Module 6 exists.
+- [x] **Found and fixed a real bug while building this**: `useConfirmAction`'s success handler
+      originally invalidated the `["pending-approvals"]` query immediately, which — since the
+      backend's `GetPendingActions()` already excludes applied actions — unmounted the very card
+      showing the apply result before a user could read it. Fixed by not auto-invalidating on
+      confirm (only on reject, where there's no result to show); the list's own 30s
+      `refetchInterval` clears an applied action out naturally. Caught by an e2e test failing, not
+      by code review — see test-plan.md.
+- [x] Expiry UX: confirming an expired action fails with a distinguishable "Action has expired."
+      message (pre-existing `AgentActionApplier` behavior, now actually reachable) rather than a
+      live countdown-sync mechanism — matches the plan's original "simpler" option.
 
 ## Module 4 — Redis and Storage tools
 

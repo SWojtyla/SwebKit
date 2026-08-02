@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { useAgentChat, useAgentClear, useAgentStatus } from "@/lib/hooks";
+import { useAgentChat, useAgentClear, useAgentStatus, usePendingApprovals } from "@/lib/hooks";
+import { PendingActionCard } from "./PendingActionCard";
 import type { ChatMessage } from "@/lib/types";
 
 let msgIdCounter = 0;
@@ -16,6 +17,7 @@ export function AgentPage() {
   const chat = useAgentChat();
   const clear = useAgentClear();
   const status = useAgentStatus();
+  const pendingApprovals = usePendingApprovals();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -109,6 +111,15 @@ export function AgentPage() {
           </button>
         )}
       </div>
+
+      {/* Pending actions awaiting confirmation ("Ask & do" proposals) */}
+      {pendingApprovals.data && pendingApprovals.data.length > 0 && (
+        <div className="space-y-2 border-b px-6 py-3" data-testid="pending-actions-list">
+          {pendingApprovals.data.map((action) => (
+            <PendingActionCard key={action.id} action={action} />
+          ))}
+        </div>
+      )}
 
       {/* Chat messages */}
       <div

@@ -38,23 +38,31 @@ mode for frontend flows.
   service — confirms the global `/agent` page's behavior wasn't disturbed by the session-scoping
   change underneath it.
 
-## Module 3 — Confirm-before-execute
+## Module 3 — Confirm-before-execute — done
 
-- Unit: full propose → confirm → apply round trip for at least one existing tool
-  (`ProposeApiRequestDeleteTool`, since its `ApplyDeleteAsync` branch already works) via the new
-  endpoints, not just the underlying coordinator/applier classes directly (the whole point of this
-  module is the wiring, so test through the HTTP handler).
-- Unit: reject flow — a rejected `PendingAgentAction` cannot later be confirmed.
-- Unit: expired action — confirming after `ExpiresAt` fails with a clear, distinguishable error
-  (not the same generic failure as "not found" or "already applied" — these are different user-facing
-  situations and should be distinguishable in the response).
-- Unit: fingerprint mismatch (the target changed between propose and confirm) is rejected rather
-  than silently applied against stale state.
-- Unit: each new `IAgentActionExecutor` (once that refactor lands) has its own focused tests,
-  matching the existing per-endpoint-file test organization (e.g. a `RedisAgentActionExecutorTests`
-  alongside `RedisEndpointsMutationTests`).
-- E2E: `PendingActionCard` renders summary/risk/preview correctly for at least one mutate action
-  end-to-end in demo mode, and Confirm/Reject both produce the expected outcome in the UI.
+- [x] Unit (`AgentPendingApprovalsEndpointsTests.cs`): full propose(direct `RegisterAction`) →
+  confirm → apply round trip through `AgentEndpoints.ConfirmActionAsync` (not just the underlying
+  coordinator/applier classes directly); confirming an unknown id 404s; rejecting then confirming
+  the same id fails cleanly; confirming when no executor handles the type fails with a clear
+  message rather than a crash; `GetPendingApprovals` excludes rejected/expired actions and never
+  exposes `Payload`.
+- [x] Unit (`AgentActionApplierTests.cs`): every validation gate tested in isolation — unconfirmed,
+  rejected, expired, already-applied all fail *without* reaching the executor (asserted by checking
+  the fake executor's `LastApplied` stays null); dispatch picks the executor whose `CanHandle`
+  matches; no matching executor fails with a distinguishable message; an executor throwing is
+  caught and returned as a failure result, not left unhandled or marked as applied.
+- [x] Unit (`ApiClientActionExecutorTests.cs`): `Create`/`Update`/`Move` call through to
+  `IApiClientAgentService` with exactly the fields present in `Payload` (verified against a fake
+  service recording its last call, not just checking `IsSuccess`); missing payload fails cleanly
+  without calling the client; `Delete`/`Duplicate` extract the request id from `Target`;
+  `ExecuteHttpRequest` fails with a clear not-implemented message *and* still enforces the
+  fingerprint check first (a stale fingerprint fails with the freshness error, not the
+  not-implemented one — order matters and is tested).
+- [x] E2E (`agent.spec.ts`): `PendingActionCard` renders summary/risk/preview and confirm/reject
+  both produce the expected outcome, mocked via `page.route` (no real tool can propose an action
+  in the sidecar yet — that's Module 4 — so this exercises the UI/API contract, not a live
+  end-to-end proposal). The confirm test is also what caught the invalidation-timing bug recorded
+  in technical-plan.md — it failed first, then got fixed, then passed; not written after the fact.
 
 ## Module 4 — Redis and Storage tools
 

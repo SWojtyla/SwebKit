@@ -28,7 +28,20 @@ lands, following the pattern used by the now-closed `tauri-react-primary-tool/st
       Verified: `dotnet test tests/SwebKit.Sidecar.Tests` 175/175 (2 new), `npx vitest run` 116/116
       (unchanged), `npx playwright test agent.spec.ts` 6/6 (pre-existing, unchanged — confirms the
       global page's behavior survived the refactor underneath it).
-- [ ] Module 3 — Confirm-before-execute, wired end to end
+- [x] Module 3 — Confirm-before-execute, wired end to end — **done** (2026-08-02):
+      `IAgentActionCoordinator`/`AgentActionApplier` registered in the sidecar; 3 new endpoints
+      (list/confirm/reject); `AgentActionApplier`'s switch replaced with an `IAgentActionExecutor`
+      per feature area (`ApiClientActionExecutor` first); added `PendingAgentAction.Payload` so
+      Create/Update/Move can act on exact proposed values instead of re-parsing a display string.
+      **Finished** the Create/Update/Duplicate/Move stub branches (they now really call through to
+      `IApiClientAgentService`) — **deliberately still stubbed**: `ExecuteHttpRequest`, since real
+      HTTP execution needs data `IApiClientAgentService` doesn't expose yet (see technical-plan.md
+      for exactly why — a real gap, not an oversight). Frontend: `PendingActionCard`, mounted in
+      `AgentPage.tsx`. Found and fixed a real bug via a failing e2e test (not code review): confirming
+      an action immediately invalidated the pending-approvals list, unmounting the card before its
+      result could be read. Verified: `dotnet test tests/SwebKit.Sidecar.Tests` 182/182 (7 new),
+      `dotnet test tests/SwebKit.Agents.Tests` 135/135 (17 new), `npx vitest run` 116/116 (unchanged),
+      `npx playwright test agent.spec.ts dashboard.spec.ts` 22/22 (4 new, rest unchanged).
 - [ ] Module 4 — Redis and Storage tools
 - [ ] Module 5 — Contextual system prompt + mode-aware tool filtering
 - [ ] Module 6 — Frontend contextual entry points and mode UI
