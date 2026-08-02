@@ -97,6 +97,12 @@ tool per area (bundling several read calls + a derived health/summary verdict, m
 `InvestigatePodIssueTool`/`AnalyzeQueueHealthTool`), and mutate tools that only `Propose*` (per
 Module 3's pattern), never execute directly.
 
+- [ ] Add a `FeatureArea` property to `IAgentTool` itself (`Aks`/`ServiceBus`/`Redis`/`Storage`/
+      `ApiClient` — an enum, shared with the `FeatureArea` field Module 3 adds to
+      `PendingAgentAction`), retrofitted onto every existing tool, not just the new ones. Module 5's
+      per-area tool filtering depends on every tool declaring which area it belongs to — without
+      this, "only send this page's tools" has nothing to filter on.
+
 - [ ] Redis read tools: `GetKeyInfoTool` (type, TTL, size, encoding), `ListKeysTool` (pattern-scoped,
       capped count), `AnalyzeCacheHealthTool` (composite: memory usage, key count, hit rate, slow
       log sample → derived health summary, mirroring `AnalyzeQueueHealthTool`'s
@@ -128,11 +134,20 @@ Module 3's pattern), never execute directly.
       "Current focus" section describing exactly what the user has open, ahead of the general
       workspace summary that's already there. Keep the existing coarse workspace summary — this is
       additive detail, not a replacement.
-- [ ] Add a `mode: "ask" | "ask_and_do"` field to `AgentChatRequest`. Tool filtering becomes:
-      `tools = !hasToolCalling ? [] : mode == "ask" ? allTools.Where(t => t.Kind == Read) : allTools`
-      — i.e. capability gating (existing) and mode gating (new) both apply, mode is the stricter of
-      the two when set to `ask`. Update `BuildSystemPrompt()`'s "Tool policy" section to state which
-      mode is active and that in Ask mode nothing will be changed no matter what's asked.
+- [ ] Add a `mode: "ask" | "ask_and_do"` field to `AgentChatRequest`. Tool filtering becomes three
+      gates applied in order: capability (existing: no tool calling at all if the profile hasn't
+      tested as `ToolCalling`) → mode (new: `ask` keeps only `Kind == Read` tools) → feature-area
+      scope (new, using Module 4's `IAgentTool.FeatureArea`: keep only tools whose `FeatureArea`
+      matches the request's `context.featureArea`, when one is present). A contextual conversation
+      opened from the AKS pod panel sees only AKS tools by default, not Redis/Storage/Service Bus
+      tools it was never asked about — this scoping is also what makes
+      `workspace-intelligence`'s later "search across my whole workspace" escalation (a `scope`
+      field that lifts exactly this last gate) meaningful as an actual widening, not a no-op.
+      Requests with no `featureArea` (the existing global `/agent` page, unchanged) skip the
+      area-scope gate entirely — that page keeps today's "every area's tools, if capability/mode
+      allow" behavior; only the new contextual panels default to being scoped. Update
+      `BuildSystemPrompt()`'s "Tool policy" section to state which mode is active and that in Ask
+      mode nothing will be changed no matter what's asked.
 - [ ] Default mode per conversation: persist the user's last-chosen mode in `UserSettings` as a
       default for new conversations, but always show the toggle and let it be changed per
       conversation — don't silently remember "Ask & do" as a global sticky default that surprises

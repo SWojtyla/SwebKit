@@ -89,24 +89,24 @@ What's genuinely missing, and what this feature builds:
   selection into the system prompt, markdown-rendering assistant replies, and a chat-response deep
   link into a feature page.
 
-## Candidate future enhancements (not scoped into this plan)
+## Follow-on feature
 
-Ideas that would meaningfully extend this feature but are deliberately left out of the modules
-above — worth revisiting once the core modules ship, not before:
+`docs/features/active/workspace-intelligence/` (planned right after this doc was written) picks up
+two of the ideas originally floated here — proactive/ambient insights driven by Monitoring alerts,
+and cross-feature correlation queries — and gives them a proper design (a workspace topology model,
+a correlation tool, a global rate limit for proactive triggers) rather than leaving them as one-line
+candidates. It also covers session length/context-management concerns (token-aware budgeting,
+summarization, a reasoning-trace/usage-indicator UI) that came up in the same discussion. See that
+feature's `index.md` for the full scope — it's sequenced after this one (it needs Modules 3-4 below
+to exist first) but implemented on the same branch.
 
-1. **Proactive/ambient assistant** — surface AI-generated insights unprompted (e.g. "3 pods are
-   crash-looping — ask AI why?") driven by the existing Monitoring alert-evaluation machinery,
-   instead of purely reactive Q&A.
-2. **Cross-feature correlation queries** — let a conversation reason across areas at once ("is the
-   queue backlog related to the pod restarts in namespace Y?") by deliberately widening tool access
-   beyond the current page's area for that one query, rather than always scoping to one feature.
-3. **"Explain this" one-click shortcut** wherever raw errors/logs/stack traces already appear (pod
+## Candidate future enhancements (still just ideas, not scoped anywhere yet)
+
+1. **"Explain this" one-click shortcut** wherever raw errors/logs/stack traces already appear (pod
    logs, DLQ message body, API response error, alert message) — pre-fills a scoped prompt against
-   exactly that text, lower friction than typing a question from scratch.
-4. **Local-model-aware adaptive behavior** beyond the basic guardrails in `ux-plan.md` — e.g.
-   shrinking injected history/context based on a measured context-window size for the active
-   profile, not just a binary capability flag.
-5. **Durable audit log for Ask & do actions** — `PendingAgentAction` today is in-memory-only and
+   exactly that text, lower friction than typing a question from scratch. Doesn't need
+   `workspace-intelligence`'s topology model, though answers would get richer once that exists.
+2. **Durable audit log for Ask & do actions** — `PendingAgentAction` today is in-memory-only and
    expires after 5 minutes with no permanent record afterward; a persistent, user-visible history of
    what the AI actually did, when, and who confirmed it would matter for trust and debugging once
    real mutating actions are in regular use.

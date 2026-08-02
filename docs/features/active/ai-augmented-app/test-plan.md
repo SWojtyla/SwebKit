@@ -67,6 +67,16 @@ mode for frontend flows.
   capability is `ToolCalling`; `mode: "ask_and_do"` includes them (still gated by capability as
   today). Test both orthogonally: capability × mode is a 2×2 that should be tested as such, not
   just the two "happy path" combinations.
+- Unit: feature-area scoping — a request with `context.featureArea: "aks"` receives only tools whose
+  `FeatureArea == Aks` (plus whatever mode/capability already allow), even when other areas' tools
+  would otherwise pass those gates; a request with no `featureArea` at all (the global `/agent`
+  page's existing behavior) is unaffected and receives every area's tools as it does today — this is
+  a regression check, not just a new-behavior check, since it's easy to accidentally scope the
+  global page too.
+- Unit: `IAgentTool.FeatureArea` is set correctly on every existing tool after the retrofit (a tool
+  silently left with a wrong/default area would be scoped out of every conversation that should see
+  it, or into ones that shouldn't — assert the full registry's area assignments directly rather than
+  relying on it coming up in some other test's incidental coverage).
 
 ## Module 6 — Contextual entry points / mode UI
 
