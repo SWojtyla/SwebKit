@@ -45,18 +45,29 @@
       refused, DNS failure, timeout) — that's the same debugging signal Postman/Bruno/curl all
       surface, and it's about connectivity to a user-chosen target URL, not a credential-bearing SDK
       call, so the leak risk profile is different from the connection-test endpoints. §3.4 (move
-      config endpoints out of `Program.cs`) is **partial**: only `PUT /api/config/collections` moved
-      to `ConfigEndpoints.SaveCollectionsAsync` (done as a byproduct of the sidecar-test-coverage
-      pass below, to make the §3.6 regression test possible) — `/health`, `/api/demo-mode`,
-      `/api/config/profiles`, `/api/config/environments`, `/api/config/user-settings` are still
-      inline in `Program.cs`. §3.7 (propagate `CancellationToken` consistently) is **done**:
+      config endpoints out of `Program.cs`) is **done**: `/health`/`/api/demo-mode` moved to a new
+      `SystemEndpoints.cs`; `/api/config/profiles`, `/api/config/environments`,
+      `/api/config/collections`(+`/store`), `/api/config/user-settings` moved into the existing
+      `ConfigEndpoints.cs` alongside export/import and the already-extracted `SaveCollectionsAsync`.
+      `Program.cs` now just calls `MapSystemEndpoints()`/`MapConfigEndpoints()` — every domain now
+      follows the same `Endpoints/*.cs` extension-method pattern, no exceptions left. §3.7
+      (propagate `CancellationToken` consistently) is **done**:
       `RedisEndpoints.cs`/`StorageEndpoints.cs`/`ServiceBusEndpoints.cs` (0 → 24/14/16 occurrences)
       and the `ApiClientEndpoints.execute` handler now thread a real token from the request down to
       every `IRedisClient`/`IStorageClient`/`IServiceBusClient`/`IHttpRequestExecutor` call, which
       already declared and documented `CancellationToken` support on every method — this was pure
-      plumbing, no logic change, matching `AksEndpoints.cs`'s pre-existing pattern. Not done: §3.3
-      (demo-mode centralization), 3.8–3.11 (request validation, auth-builder consolidation, OpenAPI
-      surface, shared-library re-verification).
+      plumbing, no logic change, matching `AksEndpoints.cs`'s pre-existing pattern. §3.3 (demo-mode
+      centralization) is **explicitly declined, not just unstarted**: read the actual duplication
+      across `RedisEndpoints.cs`/`StorageEndpoints.cs`/`ServiceBusEndpoints.cs` and it's a 2-line
+      `if (demo.IsDemoMode) return demoThing; else return realThing;` branch that already differs in
+      shape per domain (Redis's client factory is async, Storage/Service Bus's are sync; each
+      "resolve the config/entity" step has a different signature) — and AKS uses a completely
+      different pattern already (`IMonitoringConnectionPool`), so it wouldn't even participate in a
+      shared abstraction. A generic `IDemoAwareClientResolver<TClient>` would need type parameters or
+      delegates per domain either way, adding a layer of indirection without actually shrinking the
+      real code. Not worth building — three similar 2-line branches are clearer than the abstraction.
+      Not done: §3.8–3.11 (request validation, auth-builder consolidation, OpenAPI surface,
+      shared-library re-verification).
 - [x] Sidecar test coverage (test-plan.md Module 1) — **done, with 2 deliberate exceptions**: added
       `SidecarMonitoringConnectionPoolAksTests.cs` (6 tests), `SidecarAgentChatServiceToolsTests.cs`
       (4 tests), `AksEndpointsTests.cs` (11 tests: Deployments, Pods, HPAs, HTTPRoutes
@@ -101,8 +112,13 @@
       test class; fixed with a static `SemaphoreSlim` gate (not `lock`, since async tests can resume
       on a different thread). `DemoModeServiceTests.cs` (9 tests) closes the last endpoint-adjacent
       gap: demo namespace shape, per-namespace client caching, the unknown-namespace error path,
-      demo Redis/Storage config resolution. 32 → **156** `SwebKit.Sidecar.Tests` passing — this
-      effectively completes test-plan.md §1. Two items remain deliberately unaddressed, both
+      demo Redis/Storage config resolution. `SystemEndpointsTests.cs` (3 tests) and 8 new tests added
+      to `ConfigEndpointsTests.cs` cover the endpoints moved out of `Program.cs` for §3.4 (the demo
+      overlay on `GET /api/config/profiles`, that the returned profile data is a real clone rather
+      than a reference back into the live repository, the demo-collection prepend on both
+      collections endpoints, and round-trip persistence for environments/user-settings/profile
+      saves). 32 → **167** `SwebKit.Sidecar.Tests` passing — this effectively completes
+      test-plan.md §1. Two items remain deliberately unaddressed, both
       documented with reasoning rather than left as silent gaps: `MonitoringEndpoints.cs`'s SSE
       `/stream` endpoint (its raw `HttpContext`-response/`PeriodicTimer` loop doesn't fit the
       extract-and-assert-on-`IResult` pattern without a much heavier fake `HttpContext`), and a
@@ -223,7 +239,7 @@
 | `npm run test:unit` (Vitest) | 116 passed |
 | `npx playwright test` (full e2e suite) | 191 passed, 0 failed |
 | `dotnet build` — `src-sidecar`, `SwebKit.Core`, `SwebKit.Azure` | Pass, 0 warnings |
-| `dotnet test tests/SwebKit.Sidecar.Tests` | 156 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 18 RedisEndpoints + 14 ServiceBusEndpoints + 19 StorageEndpoints + 6 ConnectionTestError + 4 AgentEndpoints + 8 MonitoringEndpoints + 3 ConfigEndpoints + 3 CredentialSecret regression + 18 SidecarAuthHeaderBuilder + 11 SidecarCredentialStore + 9 DemoModeService) |
+| `dotnet test tests/SwebKit.Sidecar.Tests` | 167 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 18 RedisEndpoints + 14 ServiceBusEndpoints + 19 StorageEndpoints + 6 ConnectionTestError + 4 AgentEndpoints + 8 MonitoringEndpoints + 11 ConfigEndpoints + 3 CredentialSecret regression + 18 SidecarAuthHeaderBuilder + 11 SidecarCredentialStore + 9 DemoModeService + 3 SystemEndpoints) |
 | `dotnet test tests/SwebKit.Core.Tests` | 798 passed |
 | `cargo clippy --all-targets -- -D warnings` (`src-tauri`) | Pass, 0 warnings |
 | `cargo test --lib` (`src-tauri`) | 53 passed (50 existing + 3 port-forward parsing) |
