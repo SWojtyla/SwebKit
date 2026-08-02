@@ -218,104 +218,11 @@ await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
 await app.Services.GetRequiredService<UserSettingsRepository>().LoadAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
 
-// ── Health ───────────────────────────────────────────────────────────────────
+// ── Health, Demo Mode ────────────────────────────────────────────────────────
 
-app.MapGet("/health", () => new { status = "ok", version = "0.1.0" });
+app.MapSystemEndpoints();
 
-// ── Demo Mode ────────────────────────────────────────────────────────────────
-
-app.MapGet("/api/demo-mode", (DemoModeService demo) =>
-    Results.Ok(new { isDemoMode = demo.IsDemoMode }));
-
-app.MapPost("/api/demo-mode", (DemoModeService demo, bool enabled) =>
-{
-    demo.IsDemoMode = enabled;
-    return Results.Ok(new { isDemoMode = demo.IsDemoMode });
-});
-
-// ── Config: Profiles ─────────────────────────────────────────────────────────
-
-app.MapGet("/api/config/profiles", (ProfileRepository repo, DemoModeService demo) =>
-{
-    // Clone before applying demo overlays so the in-memory repository is not mutated.
-    var data = repo.GetProfileData();
-    var result = JsonSerializer.Deserialize<ProfileData>(JsonSerializer.Serialize(data, SwebKitJsonOptions.Default), SwebKitJsonOptions.Default) ?? new ProfileData();
-    if (demo.IsDemoMode)
-    {
-        result.ServiceBusNamespaces = [.. demo.GetDemoNamespaces()];
-        var demoCache = demo.GetDemoRedisCache(DemoModeService.DemoRedisCacheId);
-        if (demoCache is not null)
-        {
-            result.Config.RedisConfig = new RedisConfig
-            {
-                Caches = [demoCache],
-                ActiveCacheId = demoCache.Id,
-                NamespaceSeparator = ":",
-            };
-        }
-        var demoStorage = demo.GetDemoStorageConfig();
-        if (demoStorage is not null)
-        {
-            result.Config.StorageAccounts = [demoStorage];
-        }
-    }
-    return Results.Ok(result);
-});
-
-app.MapPut("/api/config/profiles", async (ProfileRepository repo, ProfileData data) =>
-{
-    repo.ReplaceProfileData(data);
-    await repo.SaveAsync();
-    return Results.Ok();
-});
-
-// ── Config: Environments ─────────────────────────────────────────────────────
-
-app.MapGet("/api/config/environments", (EnvironmentRepository repo) =>
-    Results.Ok(new { repo.Environments, repo.UiState }));
-
-app.MapPut("/api/config/environments", async (EnvironmentRepository repo, EnvironmentsStore store) =>
-{
-    await repo.ReplaceStoreAsync(store);
-    return Results.Ok();
-});
-
-// ── Config: Collections ──────────────────────────────────────────────────────
-
-app.MapGet("/api/config/collections", (CollectionRepository repo, DemoModeService demo) =>
-{
-    var collections = repo.Collections;
-    if (demo.IsDemoMode)
-    {
-        collections = [DemoApiCollectionFactory.CreateDemoCollection(), .. collections];
-    }
-    return Results.Ok(collections);
-});
-
-app.MapGet("/api/config/collections/store", (CollectionRepository repo, DemoModeService demo) =>
-{
-    var collections = repo.Collections.ToList();
-    if (demo.IsDemoMode)
-    {
-        collections.Insert(0, DemoApiCollectionFactory.CreateDemoCollection());
-    }
-    return Results.Ok(new CollectionsStoreResponse { SchemaVersion = 1, Collections = collections, ConcurrencyToken = repo.GetConcurrencyToken() });
-});
-
-app.MapPut("/api/config/collections", ConfigEndpoints.SaveCollectionsAsync);
-
-// ── Config: User Settings ────────────────────────────────────────────────────
-
-app.MapGet("/api/config/user-settings", (UserSettingsRepository repo) => Results.Ok(repo.Settings));
-
-app.MapPut("/api/config/user-settings", async (UserSettingsRepository repo, UserSettings settings) =>
-{
-    repo.ReplaceSettings(settings);
-    await repo.SaveAsync();
-    return Results.Ok();
-});
-
-// ── Config: Import / Export ──────────────────────────────────────────────────
+// ── Config: Profiles, Environments, Collections, User Settings, Import/Export ─
 
 app.MapConfigEndpoints();
 
