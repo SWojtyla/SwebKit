@@ -36,26 +36,44 @@
       static mutable `IAksClient` singleton replaced with the DI-registered
       `IMonitoringConnectionPool` pattern (§3.1), `/httproutes` no longer swallows all exceptions
       (§3.2), `CredentialSecret` now has a structural strip-before-save guard, not just a
-      conditional `JsonIgnore` (§3.6). Not done: §3.3–3.5, 3.7–3.11 (demo-mode centralization,
-      config-endpoint extraction, error sanitization, cancellation tokens, request validation,
-      auth-builder consolidation, OpenAPI surface, shared-library re-verification).
+      conditional `JsonIgnore` (§3.6). §3.5 (error sanitization) is **partial by deliberate choice**:
+      the AKS/Redis/Service Bus/Storage "test connection" + AKS context-switch endpoints no longer
+      return `ex.Message` (see the sidecar-test-coverage entry above — this is where that gap was
+      found and fixed). `ApiClientEndpoints.execute`'s `Results.Problem($"Request failed:
+      {ex.Message}")` was deliberately left alone: unlike a connection-test probe, this endpoint's
+      whole purpose is executing a user-authored HTTP request and showing why it failed (connection
+      refused, DNS failure, timeout) — that's the same debugging signal Postman/Bruno/curl all
+      surface, and it's about connectivity to a user-chosen target URL, not a credential-bearing SDK
+      call, so the leak risk profile is different from the connection-test endpoints. Not done:
+      §3.3–3.4, 3.7–3.11 (demo-mode centralization, config-endpoint extraction, cancellation tokens,
+      request validation, auth-builder consolidation, OpenAPI surface, shared-library
+      re-verification).
 - [x] Sidecar test coverage (test-plan.md Module 1) — **partial, in progress**: added
       `SidecarMonitoringConnectionPoolAksTests.cs` (6 tests), `SidecarAgentChatServiceToolsTests.cs`
-      (4 tests, covers the agent tool-calling wiring), `AksEndpointsTests.cs` (11 tests: Deployments,
-      Pods, HPAs, and an HTTPRoutes exception-propagation regression test) and
-      `RedisEndpointsMutationTests.cs` (18 tests: hash field set/delete, sorted-set score update, key
-      rename, TTL set/remove — success + client-error paths). Each required first extracting the
-      target handler's body from an inline lambda into a named `internal static` method (the pattern
-      `ApiClientEndpointsPreviewTests.cs` already proved), touching only the specific handlers tested,
-      leaving every other lambda in each file untouched. 32 → 61 `SwebKit.Sidecar.Tests` passing.
-      Per test-plan.md §1's own risk-ordering, still zero coverage: `ServiceBusEndpoints.cs`
-      (peek/send/complete/purge/DLQ-resubmit — the plan specifically flags a "does resubmit fire
-      exactly once" regression test as valuable here given the notification-duplication bug found
-      elsewhere), `StorageEndpoints.cs`, `MonitoringEndpoints.cs`, `AgentEndpoints.cs`,
-      `ConfigEndpoints.cs` (the `CredentialSecret` structural-guard regression test from §3.6),
-      `DemoModeService.cs`, and the services `SidecarAuthHeaderBuilder.cs`/`SidecarCredentialStore.cs`.
-      The `Program.cs` `WebApplicationFactory` integration smoke test (exception handler status-code
-      mapping + CORS origin rejection) is also not yet added.
+      (4 tests), `AksEndpointsTests.cs` (11 tests: Deployments, Pods, HPAs, HTTPRoutes
+      exception-propagation), `RedisEndpointsMutationTests.cs` (18 tests: hash field set/delete,
+      sorted-set score update, rename, TTL), `ServiceBusEndpointsMutationTests.cs` (14 tests: peek
+      active/DLQ, complete, purge, DLQ resubmit — complete/resubmit specifically assert the
+      underlying client is invoked *exactly once*, regression coverage for the
+      notification-duplication concern in ux-plan.md Phase 0.1; no double-invocation bug found at
+      this layer, narrowing that concern to the frontend rendering layer), and
+      `StorageEndpointsMutationTests.cs` (19 tests: properties, SAS URL, upload, copy, metadata,
+      undelete, incl. an `AllowMutations=false → 403` check on each mutation). Each required first
+      extracting the target handler's body from an inline lambda into a named `internal static`
+      method (the pattern `ApiClientEndpointsPreviewTests.cs` already proved), touching only the
+      specific handlers tested. Also closed a real, live gap found while doing this pass (not
+      originally scoped, folded into §3.5 below): AKS/Redis/Service Bus/Storage's "test connection"
+      endpoints returned `ex.Message` verbatim in a 200 response — a live secret-leak path, since
+      these SDKs' exceptions frequently embed the connection string/kubeconfig path — fixed via a
+      shared `ConnectionTestError.Describe(ex)` classifier plus server-side logging
+      (`ConnectionTestErrorTests.cs`, 6 tests, incl. a regression test proving a kubeconfig path
+      never reaches the response body). 32 → **100** `SwebKit.Sidecar.Tests` passing.
+      Per test-plan.md §1's own risk-ordering, still zero coverage: `MonitoringEndpoints.cs`,
+      `AgentEndpoints.cs`, `ConfigEndpoints.cs` (the `CredentialSecret` structural-guard regression
+      test from §3.6), `DemoModeService.cs`, and the services
+      `SidecarAuthHeaderBuilder.cs`/`SidecarCredentialStore.cs`. The `Program.cs`
+      `WebApplicationFactory` integration smoke test (exception handler status-code mapping + CORS
+      origin rejection) is also not yet added.
 - [x] CI wiring (test-plan.md Module 7) — done: Vitest now runs in the `frontend` job, a new `rust`
       job runs `cargo clippy`/`cargo test` gated on `src-tauri/**` changes.
 - [x] Frontend architecture decomposition (technical-plan.md Module 2) — **done**: `lib/hooks.ts`
@@ -167,7 +185,7 @@
 | `npm run test:unit` (Vitest) | 116 passed |
 | `npx playwright test` (full e2e suite) | 191 passed, 0 failed |
 | `dotnet build` — `src-sidecar`, `SwebKit.Core`, `SwebKit.Azure` | Pass, 0 warnings |
-| `dotnet test tests/SwebKit.Sidecar.Tests` | 61 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 18 RedisEndpoints mutations) |
+| `dotnet test tests/SwebKit.Sidecar.Tests` | 100 passed (22 existing + 6 connection-pool + 4 agent tool-calling + 11 AksEndpoints + 18 RedisEndpoints + 14 ServiceBusEndpoints + 19 StorageEndpoints + 6 ConnectionTestError) |
 | `dotnet test tests/SwebKit.Core.Tests` | 798 passed |
 | `cargo clippy --all-targets -- -D warnings` (`src-tauri`) | Pass, 0 warnings |
 | `cargo test --lib` (`src-tauri`) | 53 passed (50 existing + 3 port-forward parsing) |
