@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
@@ -15,7 +15,7 @@ namespace SwebKit.Sidecar.Tests;
 /// injecting a fault into one of them. The call counts are the regression guard for the
 /// production-readiness review's finding that a React key-collision bug causing duplicate-rendered
 /// notifications might indicate the underlying complete/resubmit action fires twice, not just renders
-/// twice (see ux-plan.md Phase 0.1) — these tests prove the sidecar handler itself only calls the
+/// twice (see ux-plan.md Phase 0.1) â€” these tests prove the sidecar handler itself only calls the
 /// underlying client once per invocation, regardless of what the frontend does with the response.
 /// </summary>
 internal sealed class CountingServiceBusClient : IServiceBusClient
@@ -132,14 +132,14 @@ public class ServiceBusEndpointsMutationTests
         return (int)property!.GetValue(value)!;
     }
 
-    // ── Peek active messages ─────────────────────────────────────────────────
+    // â”€â”€ Peek active messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task PeekMessagesAsync_Success_ReturnsMessagesFromClient()
     {
         var (profile, demo, factory, nsId) = Build(new CountingServiceBusClient(DemoServiceBusClient.OrdersDev()));
 
-        var result = await ServiceBusEndpoints.PeekMessagesAsync(nsId.ToString(), EntityPath, 10, null, profile, factory, demo);
+        var result = await ServiceBusEndpoints.PeekMessagesAsync(nsId.ToString(), EntityPath, 10, null, profile, factory, demo, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<SbMessage>>>(result);
         Assert.NotEmpty(ok.Value!);
@@ -150,7 +150,7 @@ public class ServiceBusEndpointsMutationTests
     {
         var (profile, demo, factory, _) = Build();
 
-        var result = await ServiceBusEndpoints.PeekMessagesAsync(Guid.NewGuid().ToString(), EntityPath, 10, null, profile, factory, demo);
+        var result = await ServiceBusEndpoints.PeekMessagesAsync(Guid.NewGuid().ToString(), EntityPath, 10, null, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -163,18 +163,18 @@ public class ServiceBusEndpointsMutationTests
         var (profile, demo, factory, nsId) = Build(faulty);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => ServiceBusEndpoints.PeekMessagesAsync(nsId.ToString(), EntityPath, 10, null, profile, factory, demo));
+            () => ServiceBusEndpoints.PeekMessagesAsync(nsId.ToString(), EntityPath, 10, null, profile, factory, demo, CancellationToken.None));
         Assert.Equal("service bus unavailable", ex.Message);
     }
 
-    // ── Peek dead-letter messages ────────────────────────────────────────────
+    // â”€â”€ Peek dead-letter messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task PeekDeadLetterAsync_Success_ReturnsMessagesFromClient()
     {
         var (profile, demo, factory, nsId) = Build(new CountingServiceBusClient(DemoServiceBusClient.OrdersDev()));
 
-        var result = await ServiceBusEndpoints.PeekDeadLetterAsync(nsId.ToString(), EntityPath, 10, null, profile, factory, demo);
+        var result = await ServiceBusEndpoints.PeekDeadLetterAsync(nsId.ToString(), EntityPath, 10, null, profile, factory, demo, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<SbMessage>>>(result);
         Assert.NotEmpty(ok.Value!);
@@ -187,11 +187,11 @@ public class ServiceBusEndpointsMutationTests
         var (profile, demo, factory, nsId) = Build(faulty);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => ServiceBusEndpoints.PeekDeadLetterAsync(nsId.ToString(), EntityPath, 10, null, profile, factory, demo));
+            () => ServiceBusEndpoints.PeekDeadLetterAsync(nsId.ToString(), EntityPath, 10, null, profile, factory, demo, CancellationToken.None));
         Assert.Equal("service bus unavailable", ex.Message);
     }
 
-    // ── Complete messages — the highest-value test in this file ─────────────
+    // â”€â”€ Complete messages â€” the highest-value test in this file â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task CompleteMessagesAsync_Success_CallsUnderlyingClientExactlyOnce()
@@ -199,7 +199,7 @@ public class ServiceBusEndpointsMutationTests
         var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
         var (profile, demo, factory, nsId) = Build(faulty);
 
-        var result = await ServiceBusEndpoints.CompleteMessagesAsync(nsId.ToString(), EntityPath, [4501, 4502], profile, factory, demo);
+        var result = await ServiceBusEndpoints.CompleteMessagesAsync(nsId.ToString(), EntityPath, [4501, 4502], profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IValueHttpResult>(result);
         Assert.Equal(1, faulty.CompleteMessagesCallCount);
@@ -212,7 +212,7 @@ public class ServiceBusEndpointsMutationTests
         var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
         var (profile, demo, factory, _) = Build(faulty);
 
-        var result = await ServiceBusEndpoints.CompleteMessagesAsync(Guid.NewGuid().ToString(), EntityPath, [4501], profile, factory, demo);
+        var result = await ServiceBusEndpoints.CompleteMessagesAsync(Guid.NewGuid().ToString(), EntityPath, [4501], profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -226,12 +226,12 @@ public class ServiceBusEndpointsMutationTests
         var (profile, demo, factory, nsId) = Build(faulty);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => ServiceBusEndpoints.CompleteMessagesAsync(nsId.ToString(), EntityPath, [4501], profile, factory, demo));
+            () => ServiceBusEndpoints.CompleteMessagesAsync(nsId.ToString(), EntityPath, [4501], profile, factory, demo, CancellationToken.None));
         Assert.Equal("service bus unavailable", ex.Message);
         Assert.Equal(1, faulty.CompleteMessagesCallCount); // still called exactly once even though it threw
     }
 
-    // ── Purge ─────────────────────────────────────────────────────────────────
+    // â”€â”€ Purge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task PurgeMessagesAsync_Success_ReturnsPurgedCount()
@@ -239,7 +239,7 @@ public class ServiceBusEndpointsMutationTests
         var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
         var (profile, demo, factory, nsId) = Build(faulty);
 
-        var result = await ServiceBusEndpoints.PurgeMessagesAsync(nsId.ToString(), EntityPath, false, profile, factory, demo);
+        var result = await ServiceBusEndpoints.PurgeMessagesAsync(nsId.ToString(), EntityPath, false, profile, factory, demo, CancellationToken.None);
 
         Assert.Equal(1, faulty.PurgeMessagesCallCount);
         Assert.Equal(5, ReadAnonymousIntProperty(result, "purged")); // 5 active messages seeded for order-created
@@ -250,7 +250,7 @@ public class ServiceBusEndpointsMutationTests
     {
         var (profile, demo, factory, _) = Build();
 
-        var result = await ServiceBusEndpoints.PurgeMessagesAsync(Guid.NewGuid().ToString(), EntityPath, false, profile, factory, demo);
+        var result = await ServiceBusEndpoints.PurgeMessagesAsync(Guid.NewGuid().ToString(), EntityPath, false, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -263,12 +263,12 @@ public class ServiceBusEndpointsMutationTests
         var (profile, demo, factory, nsId) = Build(faulty);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => ServiceBusEndpoints.PurgeMessagesAsync(nsId.ToString(), EntityPath, false, profile, factory, demo));
+            () => ServiceBusEndpoints.PurgeMessagesAsync(nsId.ToString(), EntityPath, false, profile, factory, demo, CancellationToken.None));
         Assert.Equal("service bus unavailable", ex.Message);
         Assert.Equal(1, faulty.PurgeMessagesCallCount);
     }
 
-    // ── DLQ resubmit — same "exactly once" regression concern as complete ───
+    // â”€â”€ DLQ resubmit â€” same "exactly once" regression concern as complete â”€â”€â”€
 
     [Fact]
     public async Task ResubmitDeadLetterAsync_Success_CallsUnderlyingClientExactlyOnce()
@@ -277,7 +277,7 @@ public class ServiceBusEndpointsMutationTests
         var (profile, demo, factory, nsId) = Build(faulty);
         var req = new ServiceBusEndpoints.ResubmitRequest { SequenceNumbers = ["4410"], TargetEntityPath = null };
 
-        var result = await ServiceBusEndpoints.ResubmitDeadLetterAsync(nsId.ToString(), EntityPath, req, profile, factory, demo);
+        var result = await ServiceBusEndpoints.ResubmitDeadLetterAsync(nsId.ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsType<Ok>(result);
         Assert.Equal(1, faulty.ResubmitDeadLetterCallCount);
@@ -290,7 +290,7 @@ public class ServiceBusEndpointsMutationTests
         var (profile, demo, factory, _) = Build(faulty);
         var req = new ServiceBusEndpoints.ResubmitRequest { SequenceNumbers = ["4410"] };
 
-        var result = await ServiceBusEndpoints.ResubmitDeadLetterAsync(Guid.NewGuid().ToString(), EntityPath, req, profile, factory, demo);
+        var result = await ServiceBusEndpoints.ResubmitDeadLetterAsync(Guid.NewGuid().ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -305,7 +305,7 @@ public class ServiceBusEndpointsMutationTests
         var req = new ServiceBusEndpoints.ResubmitRequest { SequenceNumbers = ["4410"] };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => ServiceBusEndpoints.ResubmitDeadLetterAsync(nsId.ToString(), EntityPath, req, profile, factory, demo));
+            () => ServiceBusEndpoints.ResubmitDeadLetterAsync(nsId.ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None));
         Assert.Equal("service bus unavailable", ex.Message);
         Assert.Equal(1, faulty.ResubmitDeadLetterCallCount); // still called exactly once even though it threw
     }

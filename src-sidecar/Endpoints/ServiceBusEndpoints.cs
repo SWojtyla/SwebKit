@@ -21,7 +21,8 @@ public static class ServiceBusEndpoints
             ProfileRepository profile,
             IServiceBusClientFactory factory,
             DemoModeService demo,
-            ILogger<Program> logger) =>
+            ILogger<Program> logger,
+            CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
@@ -29,7 +30,7 @@ public static class ServiceBusEndpoints
             try
             {
                 var client = CreateClient(ns, factory, demo);
-                var ok = await client.TestConnectionAsync();
+                var ok = await client.TestConnectionAsync(ct);
                 return Results.Ok(new { connected = ok });
             }
             catch (Exception ex)
@@ -45,13 +46,14 @@ public static class ServiceBusEndpoints
             string nsId,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
-            var info = await client.GetNamespaceInfoAsync();
+            var info = await client.GetNamespaceInfoAsync(ct);
             return Results.Ok(info);
         });
 
@@ -59,13 +61,14 @@ public static class ServiceBusEndpoints
             string nsId,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
-            var queues = await client.ListQueuesAsync();
+            var queues = await client.ListQueuesAsync(ct);
             return Results.Ok(queues);
         });
 
@@ -73,13 +76,14 @@ public static class ServiceBusEndpoints
             string nsId,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
-            var topics = await client.ListTopicsAsync();
+            var topics = await client.ListTopicsAsync(ct);
             return Results.Ok(topics);
         });
 
@@ -88,13 +92,14 @@ public static class ServiceBusEndpoints
             string topic,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
-            var subs = await client.ListSubscriptionsAsync(topic);
+            var subs = await client.ListSubscriptionsAsync(topic, ct);
             return Results.Ok(subs);
         });
 
@@ -103,14 +108,15 @@ public static class ServiceBusEndpoints
             string entityPath,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
-            var stats = await client.GetEntityStatsAsync(entityPath);
+            var stats = await client.GetEntityStatsAsync(entityPath, ct);
             return Results.Ok(stats);
         });
 
@@ -124,14 +130,15 @@ public static class ServiceBusEndpoints
             SbMessage message,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
-            await client.SendMessageAsync(entityPath, message);
+            await client.SendMessageAsync(entityPath, message, ct);
             return Results.Ok();
         });
 
@@ -141,14 +148,15 @@ public static class ServiceBusEndpoints
             List<SbMessage> messages,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
-            await client.SendBatchAsync(entityPath, messages);
+            await client.SendBatchAsync(entityPath, messages, ct);
             return Results.Ok(new { sent = messages.Count });
         });
 
@@ -159,14 +167,15 @@ public static class ServiceBusEndpoints
             ProfileRepository profile,
             IServiceBusClientFactory factory,
             DemoModeService demo,
-            ScheduledMessageRepository schedRepo) =>
+            ScheduledMessageRepository schedRepo,
+            CancellationToken ct) =>
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
-            var seq = await client.ScheduleMessageAsync(entityPath, req.Message, req.ScheduledEnqueueTime);
+            var seq = await client.ScheduleMessageAsync(entityPath, req.Message, req.ScheduledEnqueueTime, ct);
 
             var entry = new ScheduledMessageEntry
             {
@@ -203,14 +212,15 @@ public static class ServiceBusEndpoints
             ProfileRepository profile,
             IServiceBusClientFactory factory,
             DemoModeService demo,
-            ScheduledMessageRepository schedRepo) =>
+            ScheduledMessageRepository schedRepo,
+            CancellationToken ct) =>
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
-            await client.CancelScheduledMessageAsync(entityPath, sequenceNumber);
+            await client.CancelScheduledMessageAsync(entityPath, sequenceNumber, ct);
 
             var entries = schedRepo.GetByEntity(ns.Id, entityPath);
             var entry = entries.FirstOrDefault(e => e.SequenceNumber == sequenceNumber);
@@ -230,14 +240,15 @@ public static class ServiceBusEndpoints
             string[] sequenceNumbers,
             ProfileRepository profile,
             IServiceBusClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return Results.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
-            await client.CompleteDeadLetterAsync(entityPath, sequenceNumbers);
+            await client.CompleteDeadLetterAsync(entityPath, sequenceNumbers, ct);
             return Results.Ok();
         });
 
@@ -273,14 +284,15 @@ public static class ServiceBusEndpoints
         long? fromSeq,
         ProfileRepository profile,
         IServiceBusClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         entityPath = DecodeEntityPath(entityPath);
         var ns = ResolveNamespace(nsId, profile, demo);
         if (ns is null) return Results.NotFound("Namespace not found");
 
         var client = CreateClient(ns, factory, demo);
-        var messages = await client.PeekMessagesAsync(entityPath, count, fromSequenceNumber: fromSeq);
+        var messages = await client.PeekMessagesAsync(entityPath, count, ct, fromSequenceNumber: fromSeq);
         return Results.Ok(messages);
     }
 
@@ -292,14 +304,15 @@ public static class ServiceBusEndpoints
         long? fromSeq,
         ProfileRepository profile,
         IServiceBusClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         entityPath = DecodeEntityPath(entityPath);
         var ns = ResolveNamespace(nsId, profile, demo);
         if (ns is null) return Results.NotFound("Namespace not found");
 
         var client = CreateClient(ns, factory, demo);
-        var messages = await client.PeekDeadLetterAsync(entityPath, count, fromSequenceNumber: fromSeq);
+        var messages = await client.PeekDeadLetterAsync(entityPath, count, ct, fromSequenceNumber: fromSeq);
         return Results.Ok(messages);
     }
 
@@ -316,14 +329,15 @@ public static class ServiceBusEndpoints
         long[] sequenceNumbers,
         ProfileRepository profile,
         IServiceBusClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         entityPath = DecodeEntityPath(entityPath);
         var ns = ResolveNamespace(nsId, profile, demo);
         if (ns is null) return Results.NotFound("Namespace not found");
 
         var client = CreateClient(ns, factory, demo);
-        var count = await client.CompleteMessagesAsync(entityPath, sequenceNumbers);
+        var count = await client.CompleteMessagesAsync(entityPath, sequenceNumbers, ct);
         return Results.Ok(new { completed = count });
     }
 
@@ -334,14 +348,15 @@ public static class ServiceBusEndpoints
         bool deadLetter,
         ProfileRepository profile,
         IServiceBusClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         entityPath = DecodeEntityPath(entityPath);
         var ns = ResolveNamespace(nsId, profile, demo);
         if (ns is null) return Results.NotFound("Namespace not found");
 
         var client = CreateClient(ns, factory, demo);
-        var count = await client.PurgeMessagesAsync(entityPath, deadLetter);
+        var count = await client.PurgeMessagesAsync(entityPath, deadLetter, ct);
         return Results.Ok(new { purged = count });
     }
 
@@ -356,14 +371,15 @@ public static class ServiceBusEndpoints
         ResubmitRequest req,
         ProfileRepository profile,
         IServiceBusClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         entityPath = DecodeEntityPath(entityPath);
         var ns = ResolveNamespace(nsId, profile, demo);
         if (ns is null) return Results.NotFound("Namespace not found");
 
         var client = CreateClient(ns, factory, demo);
-        await client.ResubmitDeadLetterAsync(entityPath, req.SequenceNumbers, req.TargetEntityPath, req.RemapRules);
+        await client.ResubmitDeadLetterAsync(entityPath, req.SequenceNumbers, req.TargetEntityPath, req.RemapRules, ct);
         return Results.Ok();
     }
 

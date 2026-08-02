@@ -17,15 +17,16 @@ public static class RedisEndpoints
             ProfileRepository profile,
             IRedisClientFactory factory,
             DemoModeService demo,
-            ILogger<Program> logger) =>
+            ILogger<Program> logger,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
             try
             {
-                var client = await CreateClientAsync(cache, factory, demo);
-                var ok = await client.TestConnectionAsync();
+                var client = await CreateClientAsync(cache, factory, demo, ct);
+                var ok = await client.TestConnectionAsync(ct);
                 return Results.Ok(new { connected = ok });
             }
             catch (Exception ex)
@@ -44,13 +45,14 @@ public static class RedisEndpoints
             string cacheId,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var info = await client.GetServerInfoAsync();
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var info = await client.GetServerInfoAsync(ct);
             return Results.Ok(info);
         });
 
@@ -62,14 +64,15 @@ public static class RedisEndpoints
             ProfileRepository profile,
             IRedisClientFactory factory,
             RedisKeyspaceHealthAnalyzer analyzer,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var infos = await LoadKeyInfosAsync(client, req.Keys);
-            var serverInfo = await client.GetServerInfoAsync();
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var infos = await LoadKeyInfosAsync(client, req.Keys, ct);
+            var serverInfo = await client.GetServerInfoAsync(ct);
             var estimatedKeyCount = serverInfo.Databases.Sum(database => database.Keys);
             var report = analyzer.Analyze(infos, estimatedKeyCount, new RedisHealthScanOptions
             {
@@ -84,13 +87,14 @@ public static class RedisEndpoints
             RedisAnalysisRequest req,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var infos = await LoadKeyInfosAsync(client, req.Keys);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var infos = await LoadKeyInfosAsync(client, req.Keys, ct);
             var buckets = RedisKeyGrouper.ComputePrefixMemory(infos, req.Separator ?? ":");
             return Results.Ok(buckets);
         });
@@ -104,13 +108,14 @@ public static class RedisEndpoints
             int? pageSize,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var result = await client.ScanKeysAsync(pattern ?? "*", cursor ?? 0, pageSize ?? 50);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var result = await client.ScanKeysAsync(pattern ?? "*", cursor ?? 0, pageSize ?? 50, ct);
             return Results.Ok(result);
         });
 
@@ -121,13 +126,14 @@ public static class RedisEndpoints
             string key,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var info = await client.GetKeyInfoAsync(key);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var info = await client.GetKeyInfoAsync(key, ct);
             return Results.Ok(info);
         });
 
@@ -136,13 +142,14 @@ public static class RedisEndpoints
             string key,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var value = await client.GetKeyValueAsync(key);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var value = await client.GetKeyValueAsync(key, ct);
             return Results.Ok(new { value });
         });
 
@@ -151,13 +158,14 @@ public static class RedisEndpoints
             string key,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var fields = await client.GetHashFieldsAsync(key);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var fields = await client.GetHashFieldsAsync(key, ct);
             return Results.Ok(fields);
         });
 
@@ -168,13 +176,14 @@ public static class RedisEndpoints
             long? stop,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var items = await client.GetListItemsAsync(key, start ?? 0, stop ?? -1);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var items = await client.GetListItemsAsync(key, start ?? 0, stop ?? -1, ct);
             return Results.Ok(items);
         });
 
@@ -183,13 +192,14 @@ public static class RedisEndpoints
             string key,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var members = await client.GetSetMembersAsync(key);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var members = await client.GetSetMembersAsync(key, ct);
             return Results.Ok(members);
         });
 
@@ -200,13 +210,14 @@ public static class RedisEndpoints
             long? stop,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var members = await client.GetSortedSetMembersAsync(key, start ?? 0, stop ?? -1);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var members = await client.GetSortedSetMembersAsync(key, start ?? 0, stop ?? -1, ct);
             return Results.Ok(members);
         });
 
@@ -215,26 +226,27 @@ public static class RedisEndpoints
             ExportKeysRequest req,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
             var data = new Dictionary<string, object?>();
             foreach (var key in req.Keys)
             {
                 try
                 {
-                    var info = await client.GetKeyInfoAsync(key);
+                    var info = await client.GetKeyInfoAsync(key, ct);
                     object? value = info.Type switch
                     {
-                        "string" => await client.GetKeyValueAsync(key),
-                        "hash" => (await client.GetHashFieldsAsync(key))
+                        "string" => await client.GetKeyValueAsync(key, ct),
+                        "hash" => (await client.GetHashFieldsAsync(key, ct))
                             .ToDictionary(field => field.Field, field => field.Value),
-                        "list" => await client.GetListItemsAsync(key),
-                        "set" => await client.GetSetMembersAsync(key),
-                        "zset" => await client.GetSortedSetMembersAsync(key),
+                        "list" => await client.GetListItemsAsync(key, ct: ct),
+                        "set" => await client.GetSetMembersAsync(key, ct),
+                        "zset" => await client.GetSortedSetMembersAsync(key, ct: ct),
                         _ => null
                     };
                     data[key] = value;
@@ -255,13 +267,14 @@ public static class RedisEndpoints
             string key,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            await client.DeleteKeysAsync([key]);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            await client.DeleteKeysAsync([key], ct);
             return Results.Ok();
         });
 
@@ -275,14 +288,15 @@ public static class RedisEndpoints
             SetValueRequest req,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
             TimeSpan? expiry = req.TtlSeconds.HasValue ? TimeSpan.FromSeconds(req.TtlSeconds.Value) : null;
-            await client.SetKeyValueAsync(key, req.Value ?? "", expiry);
+            await client.SetKeyValueAsync(key, req.Value ?? "", expiry, ct);
             return Results.Ok();
         });
 
@@ -305,13 +319,14 @@ public static class RedisEndpoints
             int? pageSize,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var result = await client.GetSetMembersPageAsync(key, cursor ?? 0, pageSize ?? 50);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var result = await client.GetSetMembersPageAsync(key, cursor ?? 0, pageSize ?? 50, ct);
             return Results.Ok(result);
         });
 
@@ -322,13 +337,14 @@ public static class RedisEndpoints
             int? top,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var slowlog = await client.GetSlowLogAsync(top ?? 50);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var slowlog = await client.GetSlowLogAsync(top ?? 50, ct);
             return Results.Ok(slowlog);
         });
 
@@ -340,13 +356,14 @@ public static class RedisEndpoints
             int? maxChannels,
             ProfileRepository profile,
             IRedisClientFactory factory,
-            DemoModeService demo) =>
+            DemoModeService demo,
+            CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
             if (cache is null) return Results.NotFound("Cache not found");
 
-            var client = await CreateClientAsync(cache, factory, demo);
-            var snapshot = await client.GetPubSubSnapshotAsync(pattern, maxChannels ?? 200);
+            var client = await CreateClientAsync(cache, factory, demo, ct);
+            var snapshot = await client.GetPubSubSnapshotAsync(pattern, maxChannels ?? 200, ct);
             return Results.Ok(snapshot);
         });
     }
@@ -360,13 +377,14 @@ public static class RedisEndpoints
         SetHashFieldRequest req,
         ProfileRepository profile,
         IRedisClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         var cache = ResolveCache(cacheId, profile, demo);
         if (cache is null) return Results.NotFound("Cache not found");
 
-        var client = await CreateClientAsync(cache, factory, demo);
-        await client.SetHashFieldAsync(key, req.Field, req.Value ?? "");
+        var client = await CreateClientAsync(cache, factory, demo, ct);
+        await client.SetHashFieldAsync(key, req.Field, req.Value ?? "", ct);
         return Results.Ok();
     }
 
@@ -377,13 +395,14 @@ public static class RedisEndpoints
         DeleteHashFieldRequest req,
         ProfileRepository profile,
         IRedisClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         var cache = ResolveCache(cacheId, profile, demo);
         if (cache is null) return Results.NotFound("Cache not found");
 
-        var client = await CreateClientAsync(cache, factory, demo);
-        await client.DeleteHashFieldAsync(key, req.Field);
+        var client = await CreateClientAsync(cache, factory, demo, ct);
+        await client.DeleteHashFieldAsync(key, req.Field, ct);
         return Results.Ok();
     }
 
@@ -394,13 +413,14 @@ public static class RedisEndpoints
         UpdateSortedSetScoreRequest req,
         ProfileRepository profile,
         IRedisClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         var cache = ResolveCache(cacheId, profile, demo);
         if (cache is null) return Results.NotFound("Cache not found");
 
-        var client = await CreateClientAsync(cache, factory, demo);
-        await client.UpdateSortedSetScoreAsync(key, req.Member, req.Score);
+        var client = await CreateClientAsync(cache, factory, demo, ct);
+        await client.UpdateSortedSetScoreAsync(key, req.Member, req.Score, ct);
         return Results.Ok();
     }
 
@@ -411,13 +431,14 @@ public static class RedisEndpoints
         RenameKeyRequest req,
         ProfileRepository profile,
         IRedisClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         var cache = ResolveCache(cacheId, profile, demo);
         if (cache is null) return Results.NotFound("Cache not found");
 
-        var client = await CreateClientAsync(cache, factory, demo);
-        await client.RenameKeyAsync(key, req.NewKey);
+        var client = await CreateClientAsync(cache, factory, demo, ct);
+        await client.RenameKeyAsync(key, req.NewKey, ct);
         return Results.Ok();
     }
 
@@ -428,16 +449,17 @@ public static class RedisEndpoints
         SetTtlRequest req,
         ProfileRepository profile,
         IRedisClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         var cache = ResolveCache(cacheId, profile, demo);
         if (cache is null) return Results.NotFound("Cache not found");
 
-        var client = await CreateClientAsync(cache, factory, demo);
+        var client = await CreateClientAsync(cache, factory, demo, ct);
         if (req.RemoveTtl)
-            await client.RemoveTtlAsync(key);
+            await client.RemoveTtlAsync(key, ct);
         else if (req.TtlSeconds.HasValue)
-            await client.SetTtlAsync(key, TimeSpan.FromSeconds(req.TtlSeconds.Value));
+            await client.SetTtlAsync(key, TimeSpan.FromSeconds(req.TtlSeconds.Value), ct);
         return Results.Ok();
     }
 
@@ -457,17 +479,19 @@ public static class RedisEndpoints
     private static async Task<IRedisClient> CreateClientAsync(
         RedisCacheEntry cache,
         IRedisClientFactory factory,
-        DemoModeService demo)
+        DemoModeService demo,
+        CancellationToken ct)
     {
         if (demo.IsDemoMode)
             return demo.GetRedisClient(cache);
 
-        return await factory.CreateAsync(cache);
+        return await factory.CreateAsync(cache, ct);
     }
 
     private static async Task<IReadOnlyList<RedisKeyInfo>> LoadKeyInfosAsync(
         IRedisClient client,
-        IReadOnlyList<string> keys)
+        IReadOnlyList<string> keys,
+        CancellationToken ct)
     {
         var normalizedKeys = keys
             .Where(static key => !string.IsNullOrWhiteSpace(key))
@@ -475,7 +499,7 @@ public static class RedisEndpoints
             .Take(500)
             .ToList();
 
-        var infos = await Task.WhenAll(normalizedKeys.Select(key => client.GetKeyInfoAsync(key)));
+        var infos = await Task.WhenAll(normalizedKeys.Select(key => client.GetKeyInfoAsync(key, ct)));
         return infos.Where(static info => !string.Equals(info.Type, "none", StringComparison.OrdinalIgnoreCase)).ToList();
     }
 

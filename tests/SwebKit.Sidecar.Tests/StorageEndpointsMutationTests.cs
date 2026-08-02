@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
@@ -10,7 +10,7 @@ namespace SwebKit.Sidecar.Tests;
 
 /// <summary>
 /// Delegates every call to a real <see cref="DemoStorageClient"/> (sealed, so composition rather than
-/// inheritance) except for whichever single method a test configures to throw instead — used to prove
+/// inheritance) except for whichever single method a test configures to throw instead â€” used to prove
 /// the mutation/read endpoints surface a client failure rather than swallowing it.
 /// </summary>
 internal sealed class FaultInjectingStorageClient : IStorageClient
@@ -138,14 +138,14 @@ public class StorageEndpointsMutationTests
         return ctx;
     }
 
-    // ── Blob properties (metadata get) ───────────────────────────────────────
+    // â”€â”€ Blob properties (metadata get) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task GetBlobPropertiesAsync_Success_ReturnsPropertiesFromClient()
     {
         var (profile, demo, factory) = Build();
 
-        var result = await StorageEndpoints.GetBlobPropertiesAsync(AccountId, Container, BlobName, profile, factory, demo);
+        var result = await StorageEndpoints.GetBlobPropertiesAsync(AccountId, Container, BlobName, profile, factory, demo, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<Core.Domain.BlobProperties>>(result);
         Assert.Equal(BlobName, ok.Value!.Name);
@@ -156,7 +156,7 @@ public class StorageEndpointsMutationTests
     {
         var (profile, demo, factory) = Build();
 
-        var result = await StorageEndpoints.GetBlobPropertiesAsync("no-such-account", Container, BlobName, profile, factory, demo);
+        var result = await StorageEndpoints.GetBlobPropertiesAsync("no-such-account", Container, BlobName, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -169,18 +169,18 @@ public class StorageEndpointsMutationTests
         var (profile, demo, factory) = Build(faulty);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => StorageEndpoints.GetBlobPropertiesAsync(AccountId, Container, BlobName, profile, factory, demo));
+            () => StorageEndpoints.GetBlobPropertiesAsync(AccountId, Container, BlobName, profile, factory, demo, CancellationToken.None));
         Assert.Equal("storage unavailable", ex.Message);
     }
 
-    // ── SAS URL generation ────────────────────────────────────────────────────
+    // â”€â”€ SAS URL generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task GetBlobSasUrlAsync_Success_ReturnsUrlFromClient()
     {
         var (profile, demo, factory) = Build();
 
-        var result = await StorageEndpoints.GetBlobSasUrlAsync(AccountId, Container, BlobName, 30, profile, factory, demo);
+        var result = await StorageEndpoints.GetBlobSasUrlAsync(AccountId, Container, BlobName, 30, profile, factory, demo, CancellationToken.None);
 
         var value = Assert.IsAssignableFrom<IValueHttpResult>(result).Value;
         Assert.NotNull(value);
@@ -195,11 +195,11 @@ public class StorageEndpointsMutationTests
         var (profile, demo, factory) = Build(faulty);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => StorageEndpoints.GetBlobSasUrlAsync(AccountId, Container, BlobName, 30, profile, factory, demo));
+            () => StorageEndpoints.GetBlobSasUrlAsync(AccountId, Container, BlobName, 30, profile, factory, demo, CancellationToken.None));
         Assert.Equal("shared key disallowed", ex.Message);
     }
 
-    // ── Upload ────────────────────────────────────────────────────────────────
+    // â”€â”€ Upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task UploadBlobAsync_Success_WritesBlobOnUnderlyingClient()
@@ -208,7 +208,7 @@ public class StorageEndpointsMutationTests
         var (profile, demo, factory) = Build(demoClient);
         var ctx = BuildUploadHttpContext("id,name\n1,alpha\n"u8.ToArray());
 
-        var result = await StorageEndpoints.UploadBlobAsync(AccountId, "fixtures", "new-upload.csv", ctx.Request, profile, factory, demo);
+        var result = await StorageEndpoints.UploadBlobAsync(AccountId, "fixtures", "new-upload.csv", ctx.Request, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<Ok<Core.Domain.BlobMutationResult>>(result);
         var content = await demoClient.GetBlobContentAsync("fixtures", "new-upload.csv");
@@ -222,7 +222,7 @@ public class StorageEndpointsMutationTests
         var (profile, demo, factory) = Build(faulty, allowMutations: false);
         var ctx = BuildUploadHttpContext("data"u8.ToArray());
 
-        var result = await StorageEndpoints.UploadBlobAsync(AccountId, "fixtures", "new-upload.csv", ctx.Request, profile, factory, demo);
+        var result = await StorageEndpoints.UploadBlobAsync(AccountId, "fixtures", "new-upload.csv", ctx.Request, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(403, ((IStatusCodeHttpResult)result).StatusCode);
@@ -234,7 +234,7 @@ public class StorageEndpointsMutationTests
         var (profile, demo, factory) = Build();
         var ctx = BuildUploadHttpContext([], fileFieldName: null);
 
-        var result = await StorageEndpoints.UploadBlobAsync(AccountId, "fixtures", "new-upload.csv", ctx.Request, profile, factory, demo);
+        var result = await StorageEndpoints.UploadBlobAsync(AccountId, "fixtures", "new-upload.csv", ctx.Request, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(400, ((IStatusCodeHttpResult)result).StatusCode);
@@ -248,11 +248,11 @@ public class StorageEndpointsMutationTests
         var ctx = BuildUploadHttpContext("data"u8.ToArray());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => StorageEndpoints.UploadBlobAsync(AccountId, "fixtures", "new-upload.csv", ctx.Request, profile, factory, demo));
+            () => StorageEndpoints.UploadBlobAsync(AccountId, "fixtures", "new-upload.csv", ctx.Request, profile, factory, demo, CancellationToken.None));
         Assert.Equal("storage unavailable", ex.Message);
     }
 
-    // ── Copy ──────────────────────────────────────────────────────────────────
+    // â”€â”€ Copy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task CopyBlobAsync_Success_CopiesOnUnderlyingClient()
@@ -261,7 +261,7 @@ public class StorageEndpointsMutationTests
         var (profile, demo, factory) = Build(demoClient);
         var req = new BlobCopyRequest { SourceContainer = Container, SourceBlob = BlobName, DestContainer = Container, DestBlob = "copy-of-report.csv" };
 
-        var result = await StorageEndpoints.CopyBlobAsync(AccountId, req, profile, factory, demo);
+        var result = await StorageEndpoints.CopyBlobAsync(AccountId, req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<Ok<Core.Domain.BlobMutationResult>>(result);
         var content = await demoClient.GetBlobContentAsync(Container, "copy-of-report.csv");
@@ -275,7 +275,7 @@ public class StorageEndpointsMutationTests
         var (profile, demo, factory) = Build(faulty, allowMutations: false);
         var req = new BlobCopyRequest { SourceContainer = Container, SourceBlob = BlobName, DestContainer = Container, DestBlob = "copy-of-report.csv" };
 
-        var result = await StorageEndpoints.CopyBlobAsync(AccountId, req, profile, factory, demo);
+        var result = await StorageEndpoints.CopyBlobAsync(AccountId, req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(403, ((IStatusCodeHttpResult)result).StatusCode);
@@ -289,11 +289,11 @@ public class StorageEndpointsMutationTests
         var req = new BlobCopyRequest { SourceContainer = Container, SourceBlob = BlobName, DestContainer = Container, DestBlob = "copy-of-report.csv" };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => StorageEndpoints.CopyBlobAsync(AccountId, req, profile, factory, demo));
+            () => StorageEndpoints.CopyBlobAsync(AccountId, req, profile, factory, demo, CancellationToken.None));
         Assert.Equal("storage unavailable", ex.Message);
     }
 
-    // ── Set metadata ──────────────────────────────────────────────────────────
+    // â”€â”€ Set metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task SetBlobMetadataAsync_Success_SetsMetadataOnUnderlyingClient()
@@ -302,7 +302,7 @@ public class StorageEndpointsMutationTests
         var (profile, demo, factory) = Build(demoClient);
         var metadata = new Dictionary<string, string> { ["author"] = "test-suite" };
 
-        var result = await StorageEndpoints.SetBlobMetadataAsync(AccountId, Container, BlobName, metadata, profile, factory, demo);
+        var result = await StorageEndpoints.SetBlobMetadataAsync(AccountId, Container, BlobName, metadata, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<Ok<Core.Domain.BlobMutationResult>>(result);
         var props = await demoClient.GetBlobPropertiesAsync(Container, BlobName);
@@ -315,7 +315,7 @@ public class StorageEndpointsMutationTests
         var faulty = new FaultInjectingStorageClient(new DemoStorageClient());
         var (profile, demo, factory) = Build(faulty, allowMutations: false);
 
-        var result = await StorageEndpoints.SetBlobMetadataAsync(AccountId, Container, BlobName, new Dictionary<string, string>(), profile, factory, demo);
+        var result = await StorageEndpoints.SetBlobMetadataAsync(AccountId, Container, BlobName, new Dictionary<string, string>(), profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(403, ((IStatusCodeHttpResult)result).StatusCode);
@@ -328,11 +328,11 @@ public class StorageEndpointsMutationTests
         var (profile, demo, factory) = Build(faulty);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => StorageEndpoints.SetBlobMetadataAsync(AccountId, Container, BlobName, new Dictionary<string, string>(), profile, factory, demo));
+            () => StorageEndpoints.SetBlobMetadataAsync(AccountId, Container, BlobName, new Dictionary<string, string>(), profile, factory, demo, CancellationToken.None));
         Assert.Equal("storage unavailable", ex.Message);
     }
 
-    // ── Undelete ──────────────────────────────────────────────────────────────
+    // â”€â”€ Undelete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task UndeleteBlobAsync_Success_RestoresBlobOnUnderlyingClient()
@@ -340,7 +340,7 @@ public class StorageEndpointsMutationTests
         var demoClient = new DemoStorageClient();
         var (profile, demo, factory) = Build(demoClient);
 
-        var result = await StorageEndpoints.UndeleteBlobAsync(AccountId, "exports", "deleted-report.csv", profile, factory, demo);
+        var result = await StorageEndpoints.UndeleteBlobAsync(AccountId, "exports", "deleted-report.csv", profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<Ok<Core.Domain.BlobRecoveryResult>>(result);
         var deleted = await demoClient.ListDeletedBlobsAsync("exports");
@@ -351,11 +351,11 @@ public class StorageEndpointsMutationTests
     public async Task UndeleteBlobAsync_NotFoundInDeletedList_ReturnsBadRequest_NotSwallowedIntoSuccess()
     {
         // DemoStorageClient.UndeleteBlobAsync returns BlobRecoveryState.Unsupported when the blob isn't
-        // in the deleted list — proves the endpoint surfaces that as a BadRequest rather than a false Ok.
+        // in the deleted list â€” proves the endpoint surfaces that as a BadRequest rather than a false Ok.
         var demoClient = new DemoStorageClient();
         var (profile, demo, factory) = Build(demoClient);
 
-        var result = await StorageEndpoints.UndeleteBlobAsync(AccountId, "exports", "never-deleted.csv", profile, factory, demo);
+        var result = await StorageEndpoints.UndeleteBlobAsync(AccountId, "exports", "never-deleted.csv", profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<BadRequest<Core.Domain.BlobRecoveryResult>>(result);
     }
@@ -366,7 +366,7 @@ public class StorageEndpointsMutationTests
         var faulty = new FaultInjectingStorageClient(new DemoStorageClient());
         var (profile, demo, factory) = Build(faulty, allowMutations: false);
 
-        var result = await StorageEndpoints.UndeleteBlobAsync(AccountId, "exports", "deleted-report.csv", profile, factory, demo);
+        var result = await StorageEndpoints.UndeleteBlobAsync(AccountId, "exports", "deleted-report.csv", profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(403, ((IStatusCodeHttpResult)result).StatusCode);
@@ -379,7 +379,7 @@ public class StorageEndpointsMutationTests
         var (profile, demo, factory) = Build(faulty);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => StorageEndpoints.UndeleteBlobAsync(AccountId, "exports", "deleted-report.csv", profile, factory, demo));
+            () => StorageEndpoints.UndeleteBlobAsync(AccountId, "exports", "deleted-report.csv", profile, factory, demo, CancellationToken.None));
         Assert.Equal("storage unavailable", ex.Message);
     }
 }

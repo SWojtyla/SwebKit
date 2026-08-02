@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
@@ -11,7 +11,7 @@ namespace SwebKit.Sidecar.Tests;
 
 /// <summary>
 /// Delegates every call to a real <see cref="DemoRedisClient"/> (sealed, so composition rather than
-/// inheritance) except for whichever single mutation method a test configures to throw instead —
+/// inheritance) except for whichever single mutation method a test configures to throw instead â€”
 /// used to prove the mutation endpoints surface a client failure rather than swallowing it.
 /// </summary>
 internal sealed class FaultInjectingRedisClient : IRedisClient
@@ -100,7 +100,7 @@ public class RedisEndpointsMutationTests
         return (profile, demo, factory);
     }
 
-    // ── Hash field set ───────────────────────────────────────────────────────
+    // â”€â”€ Hash field set â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task SetHashFieldAsync_Success_WritesFieldOnUnderlyingClient()
@@ -109,7 +109,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build(demoClient);
         var req = new RedisEndpoints.SetHashFieldRequest { Field = "newfield", Value = "newvalue" };
 
-        var result = await RedisEndpoints.SetHashFieldAsync(CacheId, "session:abc123", req, profile, factory, demo);
+        var result = await RedisEndpoints.SetHashFieldAsync(CacheId, "session:abc123", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsType<Ok>(result);
         var fields = await demoClient.GetHashFieldsAsync("session:abc123");
@@ -122,7 +122,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build();
         var req = new RedisEndpoints.SetHashFieldRequest { Field = "f", Value = "v" };
 
-        var result = await RedisEndpoints.SetHashFieldAsync("no-such-cache", "key", req, profile, factory, demo);
+        var result = await RedisEndpoints.SetHashFieldAsync("no-such-cache", "key", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -136,11 +136,11 @@ public class RedisEndpointsMutationTests
         var req = new RedisEndpoints.SetHashFieldRequest { Field = "f", Value = "v" };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => RedisEndpoints.SetHashFieldAsync(CacheId, "session:abc123", req, profile, factory, demo));
+            () => RedisEndpoints.SetHashFieldAsync(CacheId, "session:abc123", req, profile, factory, demo, CancellationToken.None));
         Assert.Equal("redis down", ex.Message);
     }
 
-    // ── Hash field delete ────────────────────────────────────────────────────
+    // â”€â”€ Hash field delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task DeleteHashFieldAsync_Success_RemovesFieldFromUnderlyingClient()
@@ -149,7 +149,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build(demoClient);
         var req = new RedisEndpoints.DeleteHashFieldRequest { Field = "user_id" };
 
-        var result = await RedisEndpoints.DeleteHashFieldAsync(CacheId, "session:abc123", req, profile, factory, demo);
+        var result = await RedisEndpoints.DeleteHashFieldAsync(CacheId, "session:abc123", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsType<Ok>(result);
         var fields = await demoClient.GetHashFieldsAsync("session:abc123");
@@ -162,7 +162,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build();
         var req = new RedisEndpoints.DeleteHashFieldRequest { Field = "f" };
 
-        var result = await RedisEndpoints.DeleteHashFieldAsync("no-such-cache", "key", req, profile, factory, demo);
+        var result = await RedisEndpoints.DeleteHashFieldAsync("no-such-cache", "key", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -176,11 +176,11 @@ public class RedisEndpointsMutationTests
         var req = new RedisEndpoints.DeleteHashFieldRequest { Field = "user_id" };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => RedisEndpoints.DeleteHashFieldAsync(CacheId, "session:abc123", req, profile, factory, demo));
+            () => RedisEndpoints.DeleteHashFieldAsync(CacheId, "session:abc123", req, profile, factory, demo, CancellationToken.None));
         Assert.Equal("redis down", ex.Message);
     }
 
-    // ── Sorted set score update ──────────────────────────────────────────────
+    // â”€â”€ Sorted set score update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task UpdateSortedSetScoreAsync_Success_UpdatesScoreOnUnderlyingClient()
@@ -189,7 +189,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build(demoClient);
         var req = new RedisEndpoints.UpdateSortedSetScoreRequest { Member = "alice", Score = 9999 };
 
-        var result = await RedisEndpoints.UpdateSortedSetScoreAsync(CacheId, "leaderboard:daily", req, profile, factory, demo);
+        var result = await RedisEndpoints.UpdateSortedSetScoreAsync(CacheId, "leaderboard:daily", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsType<Ok>(result);
         var members = await demoClient.GetSortedSetMembersAsync("leaderboard:daily");
@@ -202,7 +202,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build();
         var req = new RedisEndpoints.UpdateSortedSetScoreRequest { Member = "alice", Score = 1 };
 
-        var result = await RedisEndpoints.UpdateSortedSetScoreAsync("no-such-cache", "key", req, profile, factory, demo);
+        var result = await RedisEndpoints.UpdateSortedSetScoreAsync("no-such-cache", "key", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -216,11 +216,11 @@ public class RedisEndpointsMutationTests
         var req = new RedisEndpoints.UpdateSortedSetScoreRequest { Member = "alice", Score = 1 };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => RedisEndpoints.UpdateSortedSetScoreAsync(CacheId, "leaderboard:daily", req, profile, factory, demo));
+            () => RedisEndpoints.UpdateSortedSetScoreAsync(CacheId, "leaderboard:daily", req, profile, factory, demo, CancellationToken.None));
         Assert.Equal("redis down", ex.Message);
     }
 
-    // ── Key rename ───────────────────────────────────────────────────────────
+    // â”€â”€ Key rename â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task RenameKeyAsync_Success_RenamesOnUnderlyingClient()
@@ -229,7 +229,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build(demoClient);
         var req = new RedisEndpoints.RenameKeyRequest { NewKey = "user:1001:renamed" };
 
-        var result = await RedisEndpoints.RenameKeyAsync(CacheId, "user:1001", req, profile, factory, demo);
+        var result = await RedisEndpoints.RenameKeyAsync(CacheId, "user:1001", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsType<Ok>(result);
         Assert.Equal("none", await demoClient.GetKeyTypeAsync("user:1001"));
@@ -242,7 +242,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build();
         var req = new RedisEndpoints.RenameKeyRequest { NewKey = "new" };
 
-        var result = await RedisEndpoints.RenameKeyAsync("no-such-cache", "key", req, profile, factory, demo);
+        var result = await RedisEndpoints.RenameKeyAsync("no-such-cache", "key", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -252,12 +252,12 @@ public class RedisEndpointsMutationTests
     public async Task RenameKeyAsync_SourceKeyMissing_ExceptionPropagates_NotSwallowed()
     {
         // DemoRedisClient.RenameKeyAsync throws InvalidOperationException when the source key doesn't
-        // exist — proves the endpoint doesn't catch/swallow that into a false "Ok".
+        // exist â€” proves the endpoint doesn't catch/swallow that into a false "Ok".
         var (profile, demo, factory) = Build(new DemoRedisClient());
         var req = new RedisEndpoints.RenameKeyRequest { NewKey = "whatever" };
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => RedisEndpoints.RenameKeyAsync(CacheId, "key-that-does-not-exist", req, profile, factory, demo));
+            () => RedisEndpoints.RenameKeyAsync(CacheId, "key-that-does-not-exist", req, profile, factory, demo, CancellationToken.None));
     }
 
     [Fact]
@@ -268,11 +268,11 @@ public class RedisEndpointsMutationTests
         var req = new RedisEndpoints.RenameKeyRequest { NewKey = "user:new" };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => RedisEndpoints.RenameKeyAsync(CacheId, "user:1001", req, profile, factory, demo));
+            () => RedisEndpoints.RenameKeyAsync(CacheId, "user:1001", req, profile, factory, demo, CancellationToken.None));
         Assert.Equal("redis down", ex.Message);
     }
 
-    // ── TTL set/remove ───────────────────────────────────────────────────────
+    // â”€â”€ TTL set/remove â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task SetTtlAsync_TtlSecondsProvided_SetsTtlOnUnderlyingClient()
@@ -281,7 +281,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build(demoClient);
         var req = new RedisEndpoints.SetTtlRequest { TtlSeconds = 120, RemoveTtl = false };
 
-        var result = await RedisEndpoints.SetTtlAsync(CacheId, "lock:payment-batch", req, profile, factory, demo);
+        var result = await RedisEndpoints.SetTtlAsync(CacheId, "lock:payment-batch", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsType<Ok>(result);
         var ttl = await demoClient.GetTtlAsync("lock:payment-batch");
@@ -296,7 +296,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build(demoClient);
         var req = new RedisEndpoints.SetTtlRequest { RemoveTtl = true };
 
-        var result = await RedisEndpoints.SetTtlAsync(CacheId, "user:1001", req, profile, factory, demo);
+        var result = await RedisEndpoints.SetTtlAsync(CacheId, "user:1001", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsType<Ok>(result);
         Assert.Null(await demoClient.GetTtlAsync("user:1001"));
@@ -308,7 +308,7 @@ public class RedisEndpointsMutationTests
         var (profile, demo, factory) = Build();
         var req = new RedisEndpoints.SetTtlRequest { RemoveTtl = true };
 
-        var result = await RedisEndpoints.SetTtlAsync("no-such-cache", "key", req, profile, factory, demo);
+        var result = await RedisEndpoints.SetTtlAsync("no-such-cache", "key", req, profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -322,7 +322,7 @@ public class RedisEndpointsMutationTests
         var req = new RedisEndpoints.SetTtlRequest { TtlSeconds = 60 };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => RedisEndpoints.SetTtlAsync(CacheId, "user:1001", req, profile, factory, demo));
+            () => RedisEndpoints.SetTtlAsync(CacheId, "user:1001", req, profile, factory, demo, CancellationToken.None));
         Assert.Equal("redis down", ex.Message);
     }
 
@@ -334,7 +334,7 @@ public class RedisEndpointsMutationTests
         var req = new RedisEndpoints.SetTtlRequest { RemoveTtl = true };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => RedisEndpoints.SetTtlAsync(CacheId, "user:1001", req, profile, factory, demo));
+            () => RedisEndpoints.SetTtlAsync(CacheId, "user:1001", req, profile, factory, demo, CancellationToken.None));
         Assert.Equal("redis down", ex.Message);
     }
 }
