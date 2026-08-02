@@ -3,6 +3,7 @@ import { useAksPods, useAksDeletePod, useAksPodMetrics } from "@/lib/hooks";
 import { showNotification } from "@/lib/tauri-bridge";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { PodShellPanel } from "./PodShellPanel";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { PodInfo, PodMetricInfo } from "@/lib/types";
 
@@ -83,6 +84,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
   const ws = useAksWorkspace();
   const prevStatusesRef = useRef<Map<string, string>>(new Map());
   const prevNsRef = useRef(ns);
+  const [shellPod, setShellPod] = useState<PodInfo | null>(null);
 
   // Fires a native notification the moment a pod actually transitions into
   // Failed (not on initial load, which would spam notifications for
@@ -135,7 +137,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     { label: "Container Details", icon: "⚙", onClick: () => ws.openContainerDetails(pod.name, pod.namespace) },
     { label: "Analyze network", icon: "📶", onClick: () => ws.navigateToAnalysis() },
     { label: "", separator: true, onClick: () => {} },
-    { label: "Open shell in pod", icon: ">", onClick: () => {}, disabled: true },
+    { label: "Open shell in pod", icon: ">", onClick: () => setShellPod(pod) },
     { label: "Port-forward…", icon: "→", onClick: () => ws.openPortForward(pod) },
     { label: "", separator: true, onClick: () => {} },
     { label: "Delete Pod", icon: "✕", onClick: () => handleDelete(pod), destructive: true },
@@ -226,6 +228,15 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
         onRowContextMenu={handleRowContextMenu}
         columns={columns}
       />
+      {shellPod && (
+        <PodShellPanel
+          namespace={shellPod.namespace}
+          pod={shellPod.name}
+          container={shellPod.containers[0] ?? null}
+          context={ws.currentContext}
+          onClose={() => setShellPod(null)}
+        />
+      )}
     </div>
   );
 }
