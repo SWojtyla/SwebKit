@@ -3,6 +3,9 @@ import ReactMarkdown from "react-markdown";
 import { useContextualAgent } from "@/lib/hooks/useContextualAgent";
 import { usePendingApprovals } from "@/lib/hooks";
 import { PendingActionCard } from "./PendingActionCard";
+import { AgentReasoningTrace } from "./AgentReasoningTrace";
+import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
+import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import type { ChatMessage } from "@/lib/types";
 
 let msgIdCounter = 0;
@@ -28,7 +31,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { mode, setMode, chat, status, sendMessage } = useContextualAgent(featureArea, selection);
+  const { mode, setMode, scope, setScope, chat, status, sendMessage } = useContextualAgent(featureArea, selection);
   const pendingApprovals = usePendingApprovals();
 
   useEffect(() => {
@@ -57,7 +60,14 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, content: reply.text, elapsedMs: reply.elapsedMs, error: reply.error }
+              ? {
+                  ...m,
+                  content: reply.text,
+                  elapsedMs: reply.elapsedMs,
+                  error: reply.error,
+                  steps: reply.steps,
+                  summarized: reply.summarized,
+                }
               : m,
           ),
         );
@@ -92,6 +102,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
             {status.data && status.data.estimatedTokens > 0 && (
               <p className="text-xs text-muted-foreground" data-testid="contextual-assistant-token-estimate">
                 ~{status.data.estimatedTokens.toLocaleString()} tokens in this conversation
+                <ContextUsageIndicator percent={status.data.contextUsagePercent} />
               </p>
             )}
           </div>
@@ -123,6 +134,15 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
           >
             Ask &amp; do
           </button>
+          <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground" title="Widen tool access to every configured area for this turn, not just this page's">
+            <input
+              type="checkbox"
+              checked={scope === "workspace"}
+              onChange={(e) => setScope(e.target.checked ? "workspace" : "feature")}
+              data-testid="contextual-assistant-scope-workspace"
+            />
+            Search across my whole workspace
+          </label>
         </div>
 
         {pendingApprovals.data && pendingApprovals.data.length > 0 && (
@@ -157,6 +177,8 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
                 ) : (
                   <div className="whitespace-pre-wrap">{msg.content}</div>
                 )}
+                {msg.role === "assistant" && msg.steps && <AgentReasoningTrace steps={msg.steps} />}
+                {msg.role === "assistant" && msg.summarized && <AgentSummarizedNotice />}
               </div>
             </div>
           ))}

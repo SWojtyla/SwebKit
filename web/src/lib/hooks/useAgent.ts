@@ -6,6 +6,7 @@ import type {
   AgentCapabilityTestResult,
   AgentChatContext,
   AgentChatMode,
+  AgentChatScope,
   AgentProfile,
   AgentReply,
   AgentStatus,
@@ -72,13 +73,17 @@ interface SendMessageVars {
    * until Module 6 adds the actual toggle — is equivalent to "ask": the sidecar treats a missing
    * or unrecognized mode as the safe option, never as permission to mutate. */
   mode?: AgentChatMode;
+  /** "feature" (default) or "workspace" — the "search across my whole workspace" escalation
+   * (workspace-intelligence Module 3). Omitting this is equivalent to "feature": unchanged
+   * per-area tool scoping. */
+  scope?: AgentChatScope;
 }
 
 export function useAgentChat(sessionId?: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ message, context, mode }: SendMessageVars) =>
-      apiSend<AgentReply>("/api/agent/chat", "POST", { message, sessionId, context, mode }),
+    mutationFn: ({ message, context, mode, scope }: SendMessageVars) =>
+      apiSend<AgentReply>("/api/agent/chat", "POST", { message, sessionId, context, mode, scope }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agent", "status", sessionKey(sessionId)] });
     },
@@ -88,6 +93,7 @@ export function useAgentChat(sessionId?: string) {
 interface StreamSendOptions {
   context?: AgentChatContext;
   mode?: AgentChatMode;
+  scope?: AgentChatScope;
   /** Called for every incremental text chunk, in order — append, don't replace. */
   onToken?: (token: string) => void;
   /** Called when a tool call starts or finishes (Ask & do turns only). */
@@ -120,7 +126,7 @@ export function useAgentChatStream(sessionId?: string) {
         let settled = false;
 
         streamAgentChat(
-          { message, sessionId, context: options?.context, mode: options?.mode },
+          { message, sessionId, context: options?.context, mode: options?.mode, scope: options?.scope },
           (event) => {
             switch (event.kind) {
               case "token":

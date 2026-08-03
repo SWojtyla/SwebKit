@@ -2,11 +2,13 @@
 
 ## Status
 
-Planned. Follow-on to `docs/features/active/ai-augmented-app/`, implemented on the same branch
-(`feature/ai-augmented-app`). Sequenced after it because its headline capability (correlating across
-systems) needs every area's tools to exist and be callable in one conversation first — but its
-context-management half (Module 5/6 below) touches the existing chat plumbing directly and can
-start in parallel rather than waiting.
+In Progress — Modules 1-6 done and verified (2026-08-03), only Module 7 (local-model adaptive
+behavior) remains. See `status.md` for the "Handoff" note and per-module detail. Follow-on to
+`docs/features/active/ai-augmented-app/`, implemented on the same branch (`feature/ai-augmented-app`).
+Sequenced after it because its headline capability (correlating across systems) needs every area's
+tools to exist and be callable in one conversation first — but its context-management half
+(Module 5/6 below) touches the existing chat plumbing directly and started in parallel rather than
+waiting, exactly as anticipated.
 
 ## Scope
 
@@ -28,23 +30,32 @@ Two related but distinct halves, both born from the same conversation:
    This half makes session length gracefully degrade instead of silently breaking, and makes the
    assistant's own behavior inspectable rather than a black box.
 
-## Decision needed before Module 3/4 below can be scoped precisely
+## Decision resolved (2026-08-03): Application Insights as an agent-tool-only capability
 
-The original conversation that produced this idea named **AKS + Service Bus + Redis + Application
-Insights** as the systems to correlate. That's worth flagging directly: **Application
-Insights/OpenTelemetry querying is "Observability" in this codebase's terms, and Observability was
-already explicitly dropped from the Tauri+React rewrite by product decision** (see the note that
-used to live in `docs/features/README.md`, now folded into `ai-augmented-app/index.md`'s non-goals —
-the sidecar has no `IObservabilityProviderFactory` at all). Separately, and good news: the
-**Monitoring** feature's alert engine (`MonitoringAlertEvaluationService`,
-`AlertRuleSource` enum) already only spans `AksPodHealth`/`AksPodRestartRate`/
-`AksNamespaceHealthScore`, `ServiceBusDlqDepth`/`ServiceBusActiveDepth`/`ServiceBusDeadSubscription`,
-`RedisMemoryUsage`/`RedisConnectedClients`, and `StorageBlobCount` — **no Application Insights source
-exists there either.** So this plan is scoped to AKS + Service Bus + Redis + Storage + Monitoring's
-own alert rules, which is fully buildable on what exists today. Reintroducing Application Insights as
-a correlation input would mean reversing the earlier Observability non-goal — that's a real product
-decision, not something to assume quietly either way. **Flagging for the user to decide; not
-assumed in either direction in the modules below.**
+Asked the user directly: keep correlation scoped to what's buildable today, or reverse the earlier
+Observability product decision? Their answer was a genuine middle ground, not either option as
+originally framed: **no dedicated Observability page/menu — that non-goal stands — but the agent
+should have tool access to Application Insights, since the data is valuable context even without a
+place to browse it directly.**
+
+Implemented as its own small module (folded into Part A, not blocking Modules 1-2): `GetMetricsTool`/
+`QueryLogsTool` (`FeatureArea.Observability`) already existed, written for the MAUI app, and were
+never MAUI-specific — `IObservabilityProviderFactory`'s only real implementation was 5 lines with
+zero framework coupling (just misplaced in the MAUI App project; moved to `SwebKit.Observability`).
+Wiring the sidecar host up was almost entirely DI registration, not new logic. One deliberate design
+call made explicitly for this plan's correlation goal: Observability tools are **exempt from the
+per-feature-area tool filter** (`SidecarAgentChatService.ResolveTools`) — a contextual AKS
+conversation can still pull in Application Insights context for the pod it's discussing, since
+diagnostic data is cross-cutting, not scoped to one area the way Redis/Storage tools are. A minimal
+Settings widget (resource ID + display name only, no query/log browser) is the only new UI surface —
+see `ai-augmented-app` status.md for the exact implementation notes and verification (183+206+800+553
+backend tests, 34 relevant e2e tests, all green after this change).
+
+This does **not** change the Monitoring alert engine's scope for Modules 3-4 below — its
+`AlertRuleSource` enum still has no Application Insights-backed rule type, and that's out of scope
+here too (a correlation/proactive-insight concern, not the agent-tool concern this decision was
+about). Modules 3-4 remain scoped to AKS + Service Bus + Redis + Storage + Monitoring's own alert
+rules, as originally written below — unaffected by this resolution.
 
 ## Current state (verified against the code, 2026-08-02)
 

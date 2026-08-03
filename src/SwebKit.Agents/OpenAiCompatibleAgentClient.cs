@@ -15,6 +15,15 @@ namespace SwebKit.Agents;
 /// </summary>
 public sealed class OpenAiCompatibleAgentClient : IAgentModelClient
 {
+    /// <summary>Cap on a single tool result's length before it's fed back into the conversation —
+    /// workspace-intelligence Module 5. One tool call (e.g. <c>GetPodLogsTool</c>) can return far
+    /// more text than twenty ordinary chat turns combined; capping here, not just trimming overall
+    /// history later, matters because an oversized result would otherwise blow the context budget
+    /// within a single turn, before <c>SidecarAgentChatService</c>'s history-level summarization
+    /// ever gets a chance to run. ~8,000 chars (~2,000 tokens) leaves room for several capped
+    /// results across a multi-tool-call turn without either number needing to be exact.</summary>
+    private const int MaxToolResultChars = 8_000;
+
     private readonly HttpClient _httpClient;
     private readonly UserSettingsRepository _settings;
     private readonly ICredentialStore _credentialStore;
@@ -103,7 +112,7 @@ public sealed class OpenAiCompatibleAgentClient : IAgentModelClient
                 {
                     Role = "tool",
                     ToolCallId = tc.Id,
-                    Content = toolResult
+                    Content = CapToolResult(toolResult)
                 });
             }
         }
@@ -308,6 +317,18 @@ public sealed class OpenAiCompatibleAgentClient : IAgentModelClient
             messages.AddRange(history);
         messages.Add(new() { Role = "user", Content = userMessage });
         return messages;
+    }
+
+    /// <summary>Truncates an oversized tool result with an explicit marker rather than silently
+    /// cutting it off — workspace-intelligence Module 5. A result already under the cap passes
+    /// through untouched (also handles a null/empty result without throwing).</summary>
+    internal static string CapToolResult(string? toolResult)
+    {
+        if (string.IsNullOrEmpty(toolResult) || toolResult.Length <= MaxToolResultChars)
+            return toolResult ?? string.Empty;
+
+        var truncatedCount = toolResult.Length - MaxToolResultChars;
+        return toolResult[..MaxToolResultChars] + $"\n...truncated, {truncatedCount:N0} more characters available";
     }
 
     private static object[] BuildToolDefs(IReadOnlyList<ToolDefinition> tools)

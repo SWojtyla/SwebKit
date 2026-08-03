@@ -108,4 +108,59 @@ test.describe("Monitoring", () => {
     await row.locator("[data-testid^='monitoring-history-snooze-']").click();
     await expect(page.getByTestId(rowTestId)).not.toBeVisible();
   });
+
+  // ── Proactive insights (workspace-intelligence Module 4) ────────────────────
+
+  const insightFrame = {
+    kind: "proactiveInsightReady",
+    event: {
+      ruleId: "rule-1",
+      firedAt: "2026-08-03T12:00:00Z",
+      ruleName: "Pod restart rate",
+      summary: "The pod's restarts line up with a recent spike on the linked Service Bus queue.",
+      sessionId: "proactive-rule-1-1754222400000",
+    },
+  };
+
+  async function mockInsightStream(page: Page) {
+    await page.route("**/api/monitoring/stream", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `data: ${JSON.stringify(insightFrame)}\n\n`,
+      });
+    });
+  }
+
+  test("a proactive insight card appears, shows its summary, and Investigate opens it in the AI Agent page", async ({ page }) => {
+    await mockInsightStream(page);
+    await page.goto("/monitoring");
+
+    const card = page.getByTestId(`proactive-insight-${insightFrame.event.ruleId}-${insightFrame.event.firedAt}`);
+    await expect(card).toBeVisible();
+    await expect(card).toContainText(insightFrame.event.ruleName);
+    await expect(card).toContainText(insightFrame.event.summary);
+
+    await page.getByTestId(`proactive-insight-investigate-${insightFrame.event.ruleId}-${insightFrame.event.firedAt}`).click();
+
+    await expect(page).toHaveURL(/\/agent$/);
+    await expect(page.getByTestId("agent-messages")).toContainText(insightFrame.event.ruleName);
+    await expect(page.getByTestId("agent-messages")).toContainText(insightFrame.event.summary);
+  });
+
+  test("dismissing a proactive insight hides it, and it stays hidden across a reload (per-session de-dup)", async ({ page }) => {
+    await mockInsightStream(page);
+    await page.goto("/monitoring");
+
+    const card = page.getByTestId(`proactive-insight-${insightFrame.event.ruleId}-${insightFrame.event.firedAt}`);
+    await expect(card).toBeVisible();
+
+    await page.getByTestId(`proactive-insight-dismiss-${insightFrame.event.ruleId}-${insightFrame.event.firedAt}`).click();
+    await expect(card).toHaveCount(0);
+
+    await page.reload();
+    // The same event would be re-delivered by a reconnecting mocked stream, but sessionStorage
+    // de-dup (keyed by ruleId+firedAt) must keep it from reappearing after an explicit dismiss.
+    await expect(page.getByTestId(`proactive-insight-${insightFrame.event.ruleId}-${insightFrame.event.firedAt}`)).toHaveCount(0);
+  });
 });

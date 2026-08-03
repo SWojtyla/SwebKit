@@ -13,6 +13,7 @@ using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
+using SwebKit.Observability;
 using SwebKit.Redis;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
@@ -96,6 +97,16 @@ builder.Services.AddSingleton<SwebKit.Sidecar.Services.MonitoringAlertEvaluation
 builder.Services.AddHostedService(
     sp => sp.GetRequiredService<SwebKit.Sidecar.Services.MonitoringAlertEvaluationService>());
 
+// Workspace topology: heuristic relationship suggestions (workspace-intelligence Module 2). Reuses
+// the same IMonitoringConnectionPool the alert engine already resolves demo-vs-real AKS clients
+// through, rather than building its own connection logic.
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.WorkspaceRelationshipSuggestionService>();
+
+// Proactive insights (workspace-intelligence Module 4) — subscribes to
+// MonitoringAlertEvaluationService.AlertFired in its own constructor, so it must be resolved once
+// at startup below (a plain AddSingleton alone only registers it, it doesn't instantiate it).
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.ProactiveInsightService>();
+
 // Agent: OpenAI-compatible LLM client + sidecar chat service
 builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
 // Capability tester: probes a profile's endpoint for reachability/tool-calling support, backing
@@ -103,11 +114,17 @@ builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>()
 // capability test may run against a profile that isn't the active one.
 builder.Services.AddHttpClient<AgentCapabilityTester>();
 
-// Agent tools. Observability tools (QueryLogsTool/GetMetricsTool) are still not wired here because
-// the sidecar has no IObservabilityProviderFactory yet (that's a MAUI-only service, a separate,
-// larger feature gap — see index.md's non-goals, Observability was product-dropped from this
-// rewrite anyway). Everything else — Kubernetes, Service Bus, Redis, Storage, and (now that
-// Module 3's confirm-flow exists below) API Client — is wired.
+// Observability: agent-tool-only capability (workspace-intelligence plan, 2026-08-03) — no
+// dedicated page/nav item (that part of the earlier product decision stands), but get_metrics/
+// query_logs give the agent Application Insights context when a resource is configured.
+// ObservabilityProviderFactory picks demo vs. real Azure App Insights per AppStateService.UseDemoData
+// the same way the tools themselves already branch on it — no separate demo wiring needed here.
+builder.Services.AddSingleton<IObservabilityProviderFactory, ObservabilityProviderFactory>();
+builder.Services.AddSingleton<IAgentTool, GetMetricsTool>();
+builder.Services.AddSingleton<IAgentTool, QueryLogsTool>();
+
+// Agent tools — Kubernetes, Service Bus, Redis, Storage, and (now that Module 3's confirm-flow
+// exists below) API Client.
 builder.Services.AddSingleton<DemoAksClient>();
 builder.Services.AddSingleton<IAgentTool, GetPodStatusTool>();
 builder.Services.AddSingleton<IAgentTool, ListNamespacesTool>();
@@ -131,6 +148,12 @@ builder.Services.AddSingleton<IAgentTool, GetApiRequestTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApiRequestChangeTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApiRequestDeleteTool>();
 builder.Services.AddSingleton<IAgentTool, PrepareApiRequestExecutionTool>();
+
+// Cross-area correlation (workspace-intelligence Module 3) — resolves IAgentToolRegistry lazily via
+// IServiceProvider to avoid a circular dependency (the registry is itself built from every
+// registered IAgentTool, including this one). Registered last among IAgentTool entries purely for
+// readability — registration order has no bearing on the circular-dependency fix.
+builder.Services.AddSingleton<IAgentTool, InvestigateWorkspaceIssueTool>();
 builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 
 builder.Services.AddSingleton<SidecarAgentChatService>();
@@ -258,6 +281,10 @@ userSettingsRepository.Settings.SessionCount++;
 userSettingsRepository.Settings.FathomUnlocked |= userSettingsRepository.Settings.SessionCount >= UserSettings.FathomUnlockThreshold;
 await userSettingsRepository.SaveAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
+// Force-instantiate now so its constructor subscribes to MonitoringAlertEvaluationService.AlertFired
+// before the first alert can possibly fire — a plain AddSingleton registration alone only makes it
+// resolvable, it doesn't construct it until something asks for it.
+app.Services.GetRequiredService<SwebKit.Sidecar.Services.ProactiveInsightService>();
 
 // ── Health, Demo Mode ────────────────────────────────────────────────────────
 
@@ -294,5 +321,9 @@ app.MapAgentEndpoints();
 // ── Monitoring ───────────────────────────────────────────────────────────────
 
 app.MapMonitoringEndpoints();
+
+// ── Workspace topology (workspace-intelligence Module 1) ────────────────────
+
+app.MapWorkspaceTopologyEndpoints();
 
 app.Run();

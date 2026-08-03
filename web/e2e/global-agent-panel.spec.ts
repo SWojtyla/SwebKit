@@ -25,6 +25,22 @@ test.describe("Global AI Agent panel", () => {
     await expect(page.getByTestId("global-agent-panel-toggle")).not.toBeVisible();
   });
 
+  test("stays open while interacting with the rest of the app — it's a docked panel, not a click-outside-to-close overlay", async ({ page }) => {
+    // Regression test: the first version rendered as a `fixed inset-0` overlay with a backdrop
+    // that closed the panel on any click outside it — defeating the point of a panel meant to
+    // stay open while you keep working elsewhere. It's now a real docked sibling in the layout,
+    // like the left nav, and should only close via its own "✕", the toggle, or the shortcut.
+    await page.goto("/aks");
+    await page.getByTestId("global-agent-panel-toggle").click();
+    await expect(page.getByTestId("global-agent-panel")).toBeVisible();
+
+    await page.getByTestId("aks-tab-pods").click();
+    await expect(page.getByTestId("global-agent-panel")).toBeVisible();
+
+    await page.getByTestId("context-title").click();
+    await expect(page.getByTestId("global-agent-panel")).toBeVisible();
+  });
+
   test("Ctrl+Shift+L toggles the panel open and closed", async ({ page }) => {
     await page.goto("/aks");
     // Wait for the shell (and its keydown listener) to actually mount before sending the shortcut

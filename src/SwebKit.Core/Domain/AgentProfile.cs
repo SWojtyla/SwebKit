@@ -56,6 +56,16 @@ public sealed class AgentProfile
     /// <summary>Human-readable diagnostic from the last test (null if no test was run).</summary>
     public string? LastTestDiagnostic { get; set; }
 
+    /// <summary>
+    /// The model's context window, in tokens — used by <c>SidecarAgentChatService</c> to decide
+    /// when a growing conversation needs rolling summarization (workspace-intelligence Module 5).
+    /// Best-effort auto-populated by <see cref="SwebKit.Agents.AgentCapabilityTester"/> when a
+    /// provider's <c>/v1/models</c> response happens to advertise it (not all do); the user can
+    /// also set or override it directly. Null means "unknown" — treated as a conservative default,
+    /// not zero/unlimited, everywhere it's read.
+    /// </summary>
+    public int? ContextWindowTokens { get; set; }
+
     /// <summary>Whether this profile requires an API key to function.</summary>
     public bool RequiresApiKey => Provider != ProviderKind.LmStudio;
 }

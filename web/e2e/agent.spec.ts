@@ -164,6 +164,52 @@ test.describe("Agent", () => {
     await expect(page.getByTestId("agent-messages")).not.toContainText("**pod-a**");
   });
 
+  test("a reply with tool steps shows a collapsed 'Show reasoning' disclosure that expands", async ({ page }) => {
+    await mockAgentChatStreamDone(page, {
+      text: "The pod is healthy.",
+      steps: [
+        { type: "tool_call", toolName: "get_pod_status", summary: "Calling get_pod_status" },
+        { type: "tool_result", toolName: "get_pod_status", summary: "Running", elapsed: "00:00:00.1200000" },
+      ],
+    });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("is the pod healthy?");
+    await page.getByTestId("agent-send").click();
+
+    const toggle = page.getByTestId("agent-reasoning-trace-toggle");
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveText("Show reasoning (2 steps)");
+    await expect(page.getByTestId("agent-reasoning-trace-steps")).not.toBeVisible();
+
+    await toggle.click();
+    await expect(page.getByTestId("agent-reasoning-trace-steps")).toContainText("Calling get_pod_status");
+    await expect(page.getByTestId("agent-reasoning-trace-steps")).toContainText("Running");
+  });
+
+  test("a reply with no tool steps shows no reasoning disclosure at all", async ({ page }) => {
+    await mockAgentChatStreamDone(page, { text: "Just a plain chat answer, no tools used." });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("hi");
+    await page.getByTestId("agent-send").click();
+
+    await expect(page.getByTestId("agent-messages")).toContainText("Just a plain chat answer");
+    await expect(page.getByTestId("agent-reasoning-trace-toggle")).toHaveCount(0);
+  });
+
+  test("a summarized turn shows the inline 'earlier parts summarized' notice", async ({ page }) => {
+    await mockAgentChatStreamDone(page, { text: "Continuing from where we left off.", summarized: true });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("what happened earlier?");
+    await page.getByTestId("agent-send").click();
+
+    await expect(page.getByTestId("agent-summarized-notice")).toContainText(
+      "Earlier parts of this conversation were summarized",
+    );
+  });
+
   test("streamed replies assemble multiple token events into the final text", async ({ page }) => {
     // Playwright's route.fulfill() sends the whole mocked body in one response, so this can't
     // observe true network-level progressive rendering timing (that's the one part of Module 8's

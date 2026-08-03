@@ -10,7 +10,7 @@ test.describe("Settings", () => {
     await page.goto("/settings");
     await expect(page.getByTestId("settings-title")).toHaveText("Settings");
 
-    const tabs = ["general", "service-bus", "aks", "redis", "storage", "agent", "diagnostics", "appearance"];
+    const tabs = ["general", "service-bus", "aks", "redis", "storage", "agent", "map", "diagnostics", "appearance"];
     for (const id of tabs) {
       await page.getByTestId(`settings-tab-${id}`).click();
       await expect(page.getByTestId("settings-content")).toBeVisible();
@@ -57,6 +57,156 @@ test.describe("Settings", () => {
     await page.reload();
     await page.getByTestId("settings-tab-agent").click();
     await expect(page.getByTestId("agent-profile-base-url-0")).toHaveValue("http://localhost:9999/v1");
+  });
+
+  test("agent profile context window persists across reload, and shows the conservative default when unset", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-agent").click();
+    await page.getByTestId("agent-add-profile").click();
+
+    await expect(page.getByTestId("agent-profile-capability-0")).toContainText(
+      "unknown context window (using a 4,096-token conservative default)",
+    );
+
+    const contextWindowInput = page.getByTestId("agent-profile-context-window-0");
+    await contextWindowInput.fill("32000");
+    await expect(contextWindowInput).toHaveValue("32000");
+    await expect(page.getByTestId("agent-profile-capability-0")).toContainText("32,000-token window");
+
+    await page.reload();
+    await page.getByTestId("settings-tab-agent").click();
+    await expect(page.getByTestId("agent-profile-context-window-0")).toHaveValue("32000");
+  });
+
+  test("Application Insights resource id/name persist across reload — agent-tool-only, no browsing UI", async ({ page }) => {
+    // workspace-intelligence: Observability was wired back in as an agent-tool-only capability
+    // (get_metrics/query_logs), not a browsing page — this is the one small settings surface it
+    // gets, just enough for the agent to know which resource to query.
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-agent").click();
+
+    const resourceIdInput = page.getByTestId("observability-resource-id");
+    await resourceIdInput.fill("/subscriptions/abc/resourceGroups/rg/providers/microsoft.insights/components/my-app");
+    await expect(resourceIdInput).toHaveValue("/subscriptions/abc/resourceGroups/rg/providers/microsoft.insights/components/my-app");
+
+    const resourceNameInput = page.getByTestId("observability-resource-name");
+    await resourceNameInput.fill("My App Insights");
+    await expect(resourceNameInput).toHaveValue("My App Insights");
+
+    await page.reload();
+    await page.getByTestId("settings-tab-agent").click();
+    await expect(page.getByTestId("observability-resource-id")).toHaveValue(
+      "/subscriptions/abc/resourceGroups/rg/providers/microsoft.insights/components/my-app",
+    );
+    await expect(page.getByTestId("observability-resource-name")).toHaveValue("My App Insights");
+  });
+
+  test("Map tab: a manually-added resource and relationship persist across reload", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-map").click();
+    await expect(page.getByTestId("workspace-map-settings")).toBeVisible();
+
+    // Nodes here don't depend on any of the other tabs being configured — the "Add a custom
+    // resource" form works even with zero auto-populated candidates, which is the common case for
+    // a freshly-provisioned test profile.
+    const nodeList = page.getByTestId("workspace-map-nodes");
+
+    await page.getByTestId("workspace-manual-area").selectOption("Aks");
+    await page.getByTestId("workspace-manual-key").fill("prod/api");
+    await page.getByTestId("workspace-manual-label").fill("api (prod)");
+    await page.getByTestId("workspace-manual-add").click();
+    await expect(nodeList.getByText("api (prod)")).toBeVisible();
+
+    await page.getByTestId("workspace-manual-area").selectOption("ServiceBus");
+    await page.getByTestId("workspace-manual-key").fill("orders.servicebus.windows.net/orders-queue");
+    await page.getByTestId("workspace-manual-label").fill("orders queue");
+    await page.getByTestId("workspace-manual-add").click();
+    await expect(nodeList.getByText("orders queue")).toBeVisible();
+
+    await page.getByTestId("workspace-relationship-from").selectOption({ label: "api (prod)" });
+    await page.getByTestId("workspace-relationship-label").fill("consumes");
+    await page.getByTestId("workspace-relationship-to").selectOption({ label: "orders queue" });
+    await page.getByTestId("workspace-relationship-add").click();
+
+    await expect(page.getByTestId("workspace-map-relationships")).toContainText("api (prod)");
+    await expect(page.getByTestId("workspace-map-relationships")).toContainText("consumes");
+    await expect(page.getByTestId("workspace-map-relationships")).toContainText("orders queue");
+
+    await page.reload();
+    await page.getByTestId("settings-tab-map").click();
+
+    await expect(nodeList.getByText("api (prod)")).toBeVisible();
+    await expect(page.getByTestId("workspace-map-relationships")).toContainText("consumes");
+
+    // Removing the node also removes the relationship that referenced it — dangling relationships
+    // pointing at a deleted node would be silent, confusing garbage otherwise.
+    const nodeRow = page.locator('[data-testid^="workspace-node-"]', { hasText: "api (prod)" });
+    await nodeRow.getByRole("button", { name: "Remove" }).click();
+    await expect(page.getByTestId("workspace-map-relationships").locator("tbody tr")).toHaveCount(0);
+  });
+
+  test("Map tab: a suggested relationship can be confirmed (adds a real relationship) or dismissed (just hides it)", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-map").click();
+    const nodeList = page.getByTestId("workspace-map-nodes");
+
+    await page.getByTestId("workspace-manual-area").selectOption("Aks");
+    await page.getByTestId("workspace-manual-key").fill("prod/api");
+    await page.getByTestId("workspace-manual-label").fill("api (prod)");
+    await page.getByTestId("workspace-manual-add").click();
+    await expect(nodeList.getByText("api (prod)")).toBeVisible();
+
+    await page.getByTestId("workspace-manual-area").selectOption("ServiceBus");
+    await page.getByTestId("workspace-manual-key").fill("orders.servicebus.windows.net");
+    await page.getByTestId("workspace-manual-label").fill("orders queue");
+    await page.getByTestId("workspace-manual-add").click();
+    await expect(nodeList.getByText("orders queue")).toBeVisible();
+
+    const aksNodeId = await nodeList.locator('[data-testid^="workspace-node-"]', { hasText: "api (prod)" }).getAttribute("data-testid");
+    const sbNodeId = await nodeList.locator('[data-testid^="workspace-node-"]', { hasText: "orders queue" }).getAttribute("data-testid");
+    const fromNodeId = aksNodeId!.replace("workspace-node-", "");
+    const toNodeId = sbNodeId!.replace("workspace-node-", "");
+
+    await page.route("**/api/workspace/topology/suggestions", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            fromNodeId,
+            toNodeId,
+            reason:
+              'Pod config in prod/api contains a value matching "orders queue" — based on matching names in pod configuration; may miss or misidentify real relationships.',
+          },
+        ]),
+      });
+    });
+    await page.reload();
+    await page.getByTestId("settings-tab-map").click();
+
+    const suggestionRow = page.getByTestId(`workspace-suggestion-${fromNodeId}-${toNodeId}`);
+    await expect(suggestionRow).toContainText("api (prod)");
+    await expect(suggestionRow).toContainText("orders queue");
+    await expect(suggestionRow).toContainText("may miss or misidentify real relationships");
+
+    // Dismiss just hides it client-side — no relationship gets added.
+    await page.getByTestId(`workspace-suggestion-dismiss-${fromNodeId}-${toNodeId}`).click();
+    await expect(suggestionRow).toHaveCount(0);
+    await expect(page.getByTestId("workspace-map-relationships").locator("tbody tr")).toHaveCount(0);
+
+    // Reload brings the (still-mocked) suggestion back, since dismissal isn't persisted.
+    await page.reload();
+    await page.getByTestId("settings-tab-map").click();
+    await expect(page.getByTestId(`workspace-suggestion-${fromNodeId}-${toNodeId}`)).toBeVisible();
+
+    // Confirm adds a real, persisted relationship.
+    await page.getByTestId(`workspace-suggestion-confirm-${fromNodeId}-${toNodeId}`).click();
+    await expect(page.getByTestId("workspace-map-relationships")).toContainText("api (prod)");
+    await expect(page.getByTestId("workspace-map-relationships")).toContainText("orders queue");
+
+    await page.reload();
+    await page.getByTestId("settings-tab-map").click();
+    await expect(page.getByTestId("workspace-map-relationships").locator("tbody tr")).toHaveCount(1);
   });
 
   test("agent profile no longer exposes temperature/max-tokens, and the History section is gone", async ({ page }) => {

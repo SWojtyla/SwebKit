@@ -2,6 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
 import { PendingActionCard } from "./PendingActionCard";
+import { AgentReasoningTrace } from "./AgentReasoningTrace";
+import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
+import { ContextUsageIndicator } from "./ContextUsageIndicator";
 
 export function AgentPage() {
   const [input, setInput] = useState("");
@@ -45,6 +48,7 @@ export function AgentPage() {
             {status.data && status.data.estimatedTokens > 0 && (
               <> · ~{status.data.estimatedTokens.toLocaleString()} tokens</>
             )}
+            <ContextUsageIndicator percent={status.data?.contextUsagePercent ?? 0} />
           </span>
         </div>
         {showClearConfirm ? (
@@ -131,6 +135,8 @@ export function AgentPage() {
                   {msg.elapsedMs}ms
                 </div>
               )}
+              {msg.role === "assistant" && msg.steps && <AgentReasoningTrace steps={msg.steps} />}
+              {msg.role === "assistant" && msg.summarized && <AgentSummarizedNotice />}
             </div>
           </div>
         ))}

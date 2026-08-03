@@ -1,8 +1,7 @@
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Services;
-using SwebKit.Observability;
 
-namespace SwebKit.App.Services;
+namespace SwebKit.Observability;
 
 public sealed class ObservabilityProviderFactory : IObservabilityProviderFactory
 {

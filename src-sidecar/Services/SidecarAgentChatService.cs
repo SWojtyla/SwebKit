@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
 using SwebKit.Core.Abstractions;
@@ -34,7 +35,26 @@ public sealed class SidecarAgentChatService
 {
     private const string GlobalSessionKey = "__global__";
     private const string AskAndDoMode = "ask_and_do";
+
+    /// <summary>workspace-intelligence Module 3's escalation value for <c>AgentChatRequest.Scope</c>
+    /// — orthogonal to <see cref="AskAndDoMode"/> (mode gates mutate tools; scope gates which area's
+    /// tools are visible at all). "feature" (the default) leaves the existing per-area filter in
+    /// place; "workspace" skips it for the turn.</summary>
+    private const string WorkspaceScope = "workspace";
     private static readonly TimeSpan IdleSessionTimeout = TimeSpan.FromMinutes(30);
+
+    /// <summary>Context window assumed for a profile that never reported one (a local model whose
+    /// actual window LM Studio doesn't advertise, and the user hasn't set by hand) — deliberately
+    /// conservative rather than treating "unknown" as "unlimited", per workspace-intelligence
+    /// Module 5.</summary>
+    private const int DefaultContextWindowTokens = 4096;
+
+    /// <summary>Fraction of the effective context window at which rolling summarization kicks in.</summary>
+    private const double SummarizationThresholdRatio = 0.75;
+
+    /// <summary>Most recent messages kept verbatim across a summarization pass — 3 user/assistant
+    /// exchanges. Below this count there's nothing older to summarize away.</summary>
+    private const int KeepVerbatimMessageCount = 6;
 
     private readonly IAgentModelClient _modelClient;
     private readonly IAgentToolRegistry _toolRegistry;
@@ -67,6 +87,34 @@ public sealed class SidecarAgentChatService
         _sessions.TryGetValue(Key(sessionId), out var session) ? session.History.Count : 0;
 
     /// <summary>
+    /// Seeds a brand-new session (workspace-intelligence Module 4's proactive insights) with a
+    /// synthetic user/assistant exchange representing the fired alert and its background
+    /// investigation, so opening this <paramref name="sessionId"/> through the normal chat
+    /// endpoints immediately shows what was found — no separate "insight" viewer needed, and any
+    /// follow-up question the user asks continues through the exact same turn-taking logic as any
+    /// other session. A no-op safeguard: does nothing if a session with this id already exists,
+    /// since the id is derived from the firing event's own identity (rule id + fired-at) and should
+    /// never be seeded twice.
+    /// </summary>
+    public void SeedProactiveInsightSession(string sessionId, string ruleName, string alertMessage, string reportJson, string summary)
+    {
+        if (_sessions.ContainsKey(sessionId))
+            return;
+
+        var session = _sessions.GetOrAdd(sessionId, _ => new ConversationSession());
+        session.History.Enqueue(new AgentMessage
+        {
+            Role = "user",
+            Content = $"A monitoring alert just fired — \"{ruleName}\": {alertMessage}. What's related, and what should I check?",
+        });
+        session.History.Enqueue(new AgentMessage
+        {
+            Role = "assistant",
+            Content = $"{summary}\n\nFull correlation report:\n{reportJson}",
+        });
+    }
+
+    /// <summary>
     /// Rough token estimate for a session's history (~4 characters per token — the standard
     /// coarse heuristic for English text, not real tokenization) so the UI can show the user
     /// something to watch as a conversation grows, without needing a per-model tokenizer or a
@@ -83,6 +131,20 @@ public sealed class SidecarAgentChatService
         return (int)Math.Ceiling(totalChars / 4.0);
     }
 
+    /// <summary>
+    /// Percentage of the active profile's (effective) context window the most recently sent
+    /// request for this session actually used, per the fully-constructed-request estimate computed
+    /// in <see cref="PrepareHistoryForModelAsync"/> — workspace-intelligence Module 5/6. 0 for a
+    /// session that has never sent a turn yet.
+    /// </summary>
+    public double GetContextUsagePercent(string? sessionId)
+    {
+        if (!_sessions.TryGetValue(Key(sessionId), out var session) || session.LastContextWindowTokens <= 0)
+            return 0;
+
+        return Math.Round(100.0 * session.LastRequestEstimatedTokens / session.LastContextWindowTokens, 1);
+    }
+
     public void ClearHistory(string? sessionId = null)
     {
         if (_sessions.TryGetValue(Key(sessionId), out var session))
@@ -93,13 +155,14 @@ public sealed class SidecarAgentChatService
     /// safe "ask" mode (not "ask_and_do" — see the class doc comment on why unspecified always
     /// means the narrower option).</summary>
     public Task<SidecarAgentReply> SendAsync(string userMessage, CancellationToken ct = default) =>
-        SendAsync(null, userMessage, context: null, mode: null, ct);
+        SendAsync(null, userMessage, context: null, mode: null, scope: null, ct);
 
     public async Task<SidecarAgentReply> SendAsync(
         string? sessionId,
         string userMessage,
         AgentChatContext? context = null,
         string? mode = null,
+        string? scope = null,
         CancellationToken ct = default)
     {
         EvictIdleSessions();
@@ -108,22 +171,19 @@ public sealed class SidecarAgentChatService
         session.LastActivity = DateTimeOffset.UtcNow;
 
         var normalizedMode = mode == AskAndDoMode ? AskAndDoMode : "ask";
+        var normalizedScope = scope == WorkspaceScope ? WorkspaceScope : "feature";
 
         var sw = Stopwatch.StartNew();
         var profile = _settings.Settings.Agent.GetActiveProfile();
         var hasToolCalling = (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
         var systemPrompt = BuildSystemPrompt(context, normalizedMode, hasToolCalling);
+        var tools = ResolveTools(hasToolCalling, normalizedMode, context, normalizedScope);
 
         // Record user message
         session.History.Enqueue(new AgentMessage { Role = "user", Content = userMessage });
         TrimHistory(session);
 
-        var historyList = session.History.ToList();
-        // Remove the last (user message) from history passed to the model since it's passed separately
-        if (historyList.Count > 0)
-            historyList.RemoveAt(historyList.Count - 1);
-
-        var tools = ResolveTools(hasToolCalling, normalizedMode, context);
+        var (historyList, summarized) = await PrepareHistoryForModelAsync(session, systemPrompt, tools, userMessage, profile, ct);
 
         var request = new AgentModelRequest
         {
@@ -133,12 +193,12 @@ public sealed class SidecarAgentChatService
             History = historyList,
         };
 
+        var steps = new List<AgentChatStep>();
+        var toolExecutor = BuildStepTrackingToolExecutor(tools, steps);
+
         try
         {
-            var result = await _modelClient.ChatAsync(
-                request,
-                tools.Count > 0 ? (toolName, args, toolCt) => _toolRegistry.ExecuteAsync(toolName, args, toolCt) : null,
-                ct);
+            var result = await _modelClient.ChatAsync(request, toolExecutor, ct);
             session.History.Enqueue(new AgentMessage { Role = "assistant", Content = result.Text });
             TrimHistory(session);
 
@@ -147,9 +207,12 @@ public sealed class SidecarAgentChatService
             {
                 Text = result.Text,
                 ToolsUsed = result.ToolsUsed,
+                Steps = steps,
                 ElapsedMs = (int)sw.Elapsed.TotalMilliseconds,
                 Status = result.HitMaxRounds ? "failed" : "done",
                 Error = false,
+                Summarized = summarized,
+                ContextUsagePercent = GetContextUsagePercent(sessionId),
             };
         }
         catch (Exception ex)
@@ -161,9 +224,12 @@ public sealed class SidecarAgentChatService
             return new SidecarAgentReply
             {
                 Text = $"Error: {ex.Message}",
+                Steps = steps,
                 ElapsedMs = (int)sw.Elapsed.TotalMilliseconds,
                 Status = "failed",
                 Error = true,
+                Summarized = summarized,
+                ContextUsagePercent = GetContextUsagePercent(sessionId),
             };
         }
     }
@@ -179,6 +245,7 @@ public sealed class SidecarAgentChatService
         string userMessage,
         AgentChatContext? context = null,
         string? mode = null,
+        string? scope = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         EvictIdleSessions();
@@ -187,19 +254,17 @@ public sealed class SidecarAgentChatService
         session.LastActivity = DateTimeOffset.UtcNow;
 
         var normalizedMode = mode == AskAndDoMode ? AskAndDoMode : "ask";
+        var normalizedScope = scope == WorkspaceScope ? WorkspaceScope : "feature";
 
         var profile = _settings.Settings.Agent.GetActiveProfile();
         var hasToolCalling = (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
         var systemPrompt = BuildSystemPrompt(context, normalizedMode, hasToolCalling);
+        var tools = ResolveTools(hasToolCalling, normalizedMode, context, normalizedScope);
 
         session.History.Enqueue(new AgentMessage { Role = "user", Content = userMessage });
         TrimHistory(session);
 
-        var historyList = session.History.ToList();
-        if (historyList.Count > 0)
-            historyList.RemoveAt(historyList.Count - 1);
-
-        var tools = ResolveTools(hasToolCalling, normalizedMode, context);
+        var (historyList, summarized) = await PrepareHistoryForModelAsync(session, systemPrompt, tools, userMessage, profile, ct);
 
         var request = new AgentModelRequest
         {
@@ -209,10 +274,10 @@ public sealed class SidecarAgentChatService
             History = historyList,
         };
 
-        var stream = _modelClient.ChatStreamAsync(
-            request,
-            tools.Count > 0 ? (toolName, args, toolCt) => _toolRegistry.ExecuteAsync(toolName, args, toolCt) : null,
-            ct);
+        var steps = new List<AgentChatStep>();
+        var toolExecutor = BuildStepTrackingToolExecutor(tools, steps);
+
+        var stream = _modelClient.ChatStreamAsync(request, toolExecutor, ct);
         var enumerator = stream.GetAsyncEnumerator(ct);
         try
         {
@@ -240,7 +305,14 @@ public sealed class SidecarAgentChatService
                 {
                     session.History.Enqueue(new AgentMessage { Role = "assistant", Content = $"Error: {caught.Message}" });
                     TrimHistory(session);
-                    yield return new AgentStreamEvent { Kind = AgentStreamEventKind.Error, ErrorMessage = caught.Message };
+                    yield return new AgentStreamEvent
+                    {
+                        Kind = AgentStreamEventKind.Error,
+                        ErrorMessage = caught.Message,
+                        Steps = steps,
+                        Summarized = summarized,
+                        ContextUsagePercent = GetContextUsagePercent(sessionId),
+                    };
                     yield break;
                 }
 
@@ -251,11 +323,30 @@ public sealed class SidecarAgentChatService
                 {
                     session.History.Enqueue(new AgentMessage { Role = "assistant", Content = current.Result.Text });
                     TrimHistory(session);
+                    yield return new AgentStreamEvent
+                    {
+                        Kind = AgentStreamEventKind.Done,
+                        Result = current.Result,
+                        Steps = steps,
+                        Summarized = summarized,
+                        ContextUsagePercent = GetContextUsagePercent(sessionId),
+                    };
+                    continue;
                 }
-                else if (current.Kind == AgentStreamEventKind.Error)
+
+                if (current.Kind == AgentStreamEventKind.Error)
                 {
                     session.History.Enqueue(new AgentMessage { Role = "assistant", Content = $"Error: {current.ErrorMessage}" });
                     TrimHistory(session);
+                    yield return new AgentStreamEvent
+                    {
+                        Kind = AgentStreamEventKind.Error,
+                        ErrorMessage = current.ErrorMessage,
+                        Steps = steps,
+                        Summarized = summarized,
+                        ContextUsagePercent = GetContextUsagePercent(sessionId),
+                    };
+                    continue;
                 }
 
                 yield return current;
@@ -267,12 +358,171 @@ public sealed class SidecarAgentChatService
         }
     }
 
+    /// <summary>Wraps the raw tool registry call with step recording — same "tool_call"/"tool_result"
+    /// pair shape the legacy MAUI-side <c>AgentChatService.SendAsync</c> already uses, reused rather
+    /// than inventing a new trace format (workspace-intelligence Module 6).</summary>
+    private Func<string, JsonElement, CancellationToken, Task<string>>? BuildStepTrackingToolExecutor(
+        IReadOnlyList<ToolDefinition> tools, List<AgentChatStep> steps)
+    {
+        if (tools.Count == 0)
+            return null;
+
+        return async (toolName, args, toolCt) =>
+        {
+            var toolSw = Stopwatch.StartNew();
+            var toolDef = tools.FirstOrDefault(t => t.Name == toolName);
+            steps.Add(new AgentChatStep
+            {
+                Type = "tool_call",
+                ToolName = toolName,
+                Summary = toolDef?.Kind == ToolKind.Mutate
+                    ? $"Preparing {toolName} (mutation)"
+                    : $"Calling {toolName}",
+            });
+
+            var result = await _toolRegistry.ExecuteAsync(toolName, args, toolCt);
+            toolSw.Stop();
+
+            steps.Add(new AgentChatStep
+            {
+                Type = "tool_result",
+                ToolName = toolName,
+                Summary = SummarizeToolResult(result),
+                Elapsed = toolSw.Elapsed,
+            });
+
+            return result;
+        };
+    }
+
+    private static string SummarizeToolResult(string result)
+    {
+        if (string.IsNullOrEmpty(result))
+            return "Empty result";
+
+        return result.Length > 80 ? result[..80] + "…" : result;
+    }
+
+    /// <summary>
+    /// Builds the history actually sent to the model for this turn — the just-enqueued user message
+    /// excluded, since it's passed separately — trimming it via rolling summarization first if the
+    /// fully-constructed request (system prompt + tool schemas + history + this message) would
+    /// otherwise cross <see cref="SummarizationThresholdRatio"/> of the profile's effective context
+    /// window (workspace-intelligence Module 5). Also records the estimate actually used (post-trim,
+    /// if a trim happened) onto the session for <see cref="GetContextUsagePercent"/>.
+    /// </summary>
+    private async Task<(List<AgentMessage> HistoryForModel, bool Summarized)> PrepareHistoryForModelAsync(
+        ConversationSession session,
+        string systemPrompt,
+        IReadOnlyList<ToolDefinition> tools,
+        string userMessage,
+        AgentProfile? profile,
+        CancellationToken ct)
+    {
+        var contextWindow = ResolveContextWindow(profile);
+        var historyForModel = HistoryExcludingLastMessage(session);
+        var estimated = EstimateFullRequestTokens(systemPrompt, tools, historyForModel, userMessage);
+        var summarized = false;
+
+        if (estimated > contextWindow * SummarizationThresholdRatio && historyForModel.Count > KeepVerbatimMessageCount)
+        {
+            summarized = await TrySummarizeOlderHistoryAsync(session, ct);
+            if (summarized)
+            {
+                historyForModel = HistoryExcludingLastMessage(session);
+                estimated = EstimateFullRequestTokens(systemPrompt, tools, historyForModel, userMessage);
+            }
+        }
+
+        session.LastContextWindowTokens = contextWindow;
+        session.LastRequestEstimatedTokens = estimated;
+
+        return (historyForModel, summarized);
+    }
+
+    private static int ResolveContextWindow(AgentProfile? profile) =>
+        profile?.ContextWindowTokens is > 0 ? profile.ContextWindowTokens.Value : DefaultContextWindowTokens;
+
+    private static List<AgentMessage> HistoryExcludingLastMessage(ConversationSession session)
+    {
+        var historyList = session.History.ToList();
+        if (historyList.Count > 0)
+            historyList.RemoveAt(historyList.Count - 1);
+        return historyList;
+    }
+
+    /// <summary>~4-chars-per-token heuristic applied to the *fully constructed* request (system
+    /// prompt + tool schemas + history + the pending user message) — not just history, unlike the
+    /// coarser <see cref="GetEstimatedTokens"/> — since one large tool result or a long tool-schema
+    /// list can matter as much as the transcript itself.</summary>
+    private static int EstimateFullRequestTokens(
+        string systemPrompt, IReadOnlyList<ToolDefinition> tools, IReadOnlyList<AgentMessage> history, string userMessage)
+    {
+        var chars = systemPrompt.Length + userMessage.Length;
+        chars += history.Sum(m => (m.Content?.Length ?? 0) + (m.ToolCalls?.Sum(tc => tc.ArgumentsJson.Length) ?? 0));
+        chars += tools.Sum(t => t.Name.Length + t.Description.Length + t.ParametersSchema.GetRawText().Length);
+        return (int)Math.Ceiling(chars / 4.0);
+    }
+
+    /// <summary>
+    /// Rolling summarization: keeps the most recent <see cref="KeepVerbatimMessageCount"/> messages
+    /// verbatim, replaces everything older with a single short summary turn from one extra
+    /// <see cref="IAgentModelClient.CompleteAsync"/> call. The "current focus"/workspace-context
+    /// system prompt is never part of <c>session.History</c> at all (it's rebuilt fresh every turn
+    /// in <see cref="BuildSystemPrompt"/>), so it survives a summarization pass automatically — no
+    /// special-casing needed to "pin" it. Fails open: if the summarization call itself throws (e.g.
+    /// a flaky local model), the turn proceeds with the untrimmed history rather than failing what's
+    /// meant to be a graceful-degradation feature.
+    /// </summary>
+    private async Task<bool> TrySummarizeOlderHistoryAsync(ConversationSession session, CancellationToken ct)
+    {
+        var all = session.History.ToList();
+        if (all.Count <= KeepVerbatimMessageCount)
+            return false;
+
+        var toSummarize = all.Take(all.Count - KeepVerbatimMessageCount).ToList();
+        var toKeep = all.Skip(all.Count - KeepVerbatimMessageCount).ToList();
+
+        string? summaryText;
+        try
+        {
+            var summaryRequest = new AgentModelRequest
+            {
+                SystemPrompt = "Summarize the following conversation between a user and an AI assistant "
+                    + "concisely, in under 150 words, preserving concrete facts (resource names, findings, "
+                    + "decisions) a later turn might still need. Do not add commentary about the "
+                    + "summarization itself.",
+                UserMessage = string.Join("\n", toSummarize.Select(m => $"{m.Role}: {m.Content}")),
+            };
+            var response = await _modelClient.CompleteAsync(summaryRequest, ct);
+            summaryText = response.Content;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(summaryText))
+            return false;
+
+        while (session.History.TryDequeue(out _)) { }
+        session.History.Enqueue(new AgentMessage { Role = "system", Content = $"[Earlier conversation summarized]: {summaryText}" });
+        foreach (var m in toKeep)
+            session.History.Enqueue(m);
+
+        return true;
+    }
+
     /// <summary>Applies the three tool-visibility gates in order: capability (existing) → mode (new
     /// — "ask" keeps only Read-kind tools) → feature-area scope (new — when
-    /// <paramref name="context"/> names an area, keeps only that area's tools; a request with no
-    /// context, i.e. the global page, skips this gate entirely and keeps every area's tools, exactly
-    /// like before Module 5).</summary>
-    private IReadOnlyList<ToolDefinition> ResolveTools(bool hasToolCalling, string normalizedMode, AgentChatContext? context)
+    /// <paramref name="context"/> names an area, keeps only that area's tools, plus Observability's
+    /// (exempt — see below); a request with no context, i.e. the global page, skips this gate
+    /// entirely and keeps every area's tools, exactly like before Module 5).</summary>
+    private IReadOnlyList<ToolDefinition> ResolveTools(bool hasToolCalling, string normalizedMode, AgentChatContext? context, string normalizedScope)
     {
         if (!hasToolCalling)
             return [];
@@ -282,10 +532,20 @@ public sealed class SidecarAgentChatService
         if (normalizedMode != AskAndDoMode)
             tools = tools.Where(t => t.Kind == ToolKind.Read);
 
-        if (context?.FeatureArea is { Length: > 0 } areaName &&
+        // workspace-intelligence Module 3's "search across my whole workspace" escalation: scope ==
+        // "workspace" skips the per-area filter entirely for this turn (every configured area's
+        // tools become visible, still subject to the capability/mode gates above), rather than
+        // needing its own separate tool-visibility mechanism.
+        if (normalizedScope != WorkspaceScope &&
+            context?.FeatureArea is { Length: > 0 } areaName &&
             Enum.TryParse<FeatureArea>(areaName, ignoreCase: true, out var area))
         {
-            tools = tools.Where(t => t.FeatureArea == area);
+            // Observability is exempt from the per-area filter: it's a cross-cutting diagnostic
+            // signal (traces/exceptions/metrics), not something scoped to one feature area the way
+            // Redis/Storage/etc. tools are — a contextual AKS conversation should still be able to
+            // pull in Application Insights context for the pod it's looking at, not just when the
+            // (nonexistent) "Observability" area happens to be the active one.
+            tools = tools.Where(t => t.FeatureArea == area || t.FeatureArea == FeatureArea.Observability);
         }
 
         return tools.ToList();
@@ -374,7 +634,6 @@ public sealed class SidecarAgentChatService
             {toolPolicy}
 
             ## Limits
-            - No Observability tools are available in the sidecar mode yet.
             - No Git operations.
             """;
     }
@@ -438,6 +697,14 @@ public sealed class SidecarAgentChatService
     {
         public ConcurrentQueue<AgentMessage> History { get; } = new();
         public DateTimeOffset LastActivity { get; set; } = DateTimeOffset.UtcNow;
+
+        /// <summary>Estimated token size of the most recently sent request for this session (post
+        /// rolling-summarization trim, if one happened) — workspace-intelligence Module 5/6.</summary>
+        public int LastRequestEstimatedTokens { get; set; }
+
+        /// <summary>The effective context window (profile's declared value or the conservative
+        /// default) that <see cref="LastRequestEstimatedTokens"/> was measured against.</summary>
+        public int LastContextWindowTokens { get; set; }
     }
 }
 
@@ -459,7 +726,21 @@ public sealed class SidecarAgentReply
 {
     public required string Text { get; init; }
     public IReadOnlyList<string> ToolsUsed { get; init; } = [];
+
+    /// <summary>Per-tool-call trace for this turn (workspace-intelligence Module 6) — empty when no
+    /// tools were used. See <c>AgentChatStep</c> (<c>SwebKit.Agents</c>) for the shape, reused from
+    /// the legacy MAUI-side <c>AgentChatService</c> rather than inventing a new one.</summary>
+    public IReadOnlyList<AgentChatStep> Steps { get; init; } = [];
+
     public int ElapsedMs { get; init; }
     public string Status { get; init; } = "done";
     public bool Error { get; init; }
+
+    /// <summary>True when this turn's history was rolling-summarized before being sent — the
+    /// frontend surfaces this as an inline notice (workspace-intelligence Module 5/6).</summary>
+    public bool Summarized { get; init; }
+
+    /// <summary>Percentage of the effective context window this turn's request used (see
+    /// <see cref="SidecarAgentChatService.GetContextUsagePercent"/>).</summary>
+    public double ContextUsagePercent { get; init; }
 }

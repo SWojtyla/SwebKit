@@ -50,7 +50,6 @@
         <Compile Include="..\..\src\SwebKit.App\Services\AksNamespaceScope.cs" Link="Services\AksNamespaceScope.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\AksClientBootstrapper.cs" Link="Services\AksClientBootstrapper.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\NotificationService.cs" Link="Services\NotificationService.cs" />
-        <Compile Include="..\..\src\SwebKit.App\Services\ObservabilityProviderFactory.cs" Link="Services\ObservabilityProviderFactory.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\OperatorWorkspaceService.cs" Link="Services\OperatorWorkspaceService.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\SearchScoring.cs" Link="Services\SearchScoring.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\ConfigurationProbeService.cs" Link="Services\ConfigurationProbeService.cs" />

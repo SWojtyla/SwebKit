@@ -2,10 +2,13 @@
 
 ## Status
 
-Planned — this is the current top-level active feature, tracked at `docs/features/active/ai-augmented-app/`.
+In Progress — every module is done and verified except Module 7 (manual LM Studio verification,
+explicitly the user's own task to run, not something to implement or automate). See `status.md` for
+per-module detail, including several user-requested modules added after the original plan (8-13).
 Supersedes `docs/features/active/tauri-react-primary-tool/` (merged to `main` via PR #75,
-2026-08-02 — its folder has been removed; see git history for that work) as the entry point for
-current priorities.
+2026-08-02 — its folder has been removed; see git history for that work). Its follow-on,
+`docs/features/active/workspace-intelligence/`, is itself now the entry point for current
+priorities (Modules 1-6 of 7 done there too) — see that feature's `status.md` "Handoff" note.
 
 ## Scope
 

@@ -46,7 +46,7 @@ public static class AgentEndpoints
         if (string.IsNullOrWhiteSpace(req.Message))
             return Results.BadRequest("Message is required");
 
-        var reply = await agent.SendAsync(req.SessionId, req.Message, req.Context, req.Mode, ct);
+        var reply = await agent.SendAsync(req.SessionId, req.Message, req.Context, req.Mode, req.Scope, ct);
         return Results.Ok(reply);
     }
 
@@ -81,7 +81,7 @@ public static class AgentEndpoints
         // header when running behind Tauri's direct localhost connection like this app does.
         httpContext.Response.Headers["X-Accel-Buffering"] = "no";
 
-        await foreach (var evt in agent.SendStreamAsync(req.SessionId, req.Message, req.Context, req.Mode, ct))
+        await foreach (var evt in agent.SendStreamAsync(req.SessionId, req.Message, req.Context, req.Mode, req.Scope, ct))
         {
             var json = JsonSerializer.Serialize(ToWireEvent(evt), StreamEventJsonOptions);
             await httpContext.Response.WriteAsync($"data: {json}\n\n", ct);
@@ -117,9 +117,12 @@ public static class AgentEndpoints
             {
                 Text = evt.Result.Text,
                 ToolsUsed = evt.Result.ToolsUsed,
+                Steps = evt.Steps ?? [],
                 ElapsedMs = (int)evt.Result.Elapsed.TotalMilliseconds,
                 Status = evt.Result.HitMaxRounds ? "failed" : "done",
                 Error = false,
+                Summarized = evt.Summarized,
+                ContextUsagePercent = evt.ContextUsagePercent ?? 0,
             }
     };
 
@@ -144,6 +147,7 @@ public static class AgentEndpoints
         {
             historyCount = agent.GetHistoryCount(sessionId),
             estimatedTokens = agent.GetEstimatedTokens(sessionId),
+            contextUsagePercent = agent.GetContextUsagePercent(sessionId),
         });
     }
 
@@ -247,4 +251,10 @@ public sealed class AgentChatRequest
     /// see <c>SidecarAgentChatService</c>'s doc comment for why an unrecognized value never
     /// silently grants the more permissive mode.</summary>
     public string? Mode { get; set; }
+
+    /// <summary>"feature" (default) or "workspace" — workspace-intelligence Module 3's "search
+    /// across my whole workspace" escalation. Orthogonal to <see cref="Mode"/>: this gates which
+    /// area's tools are visible at all, not whether mutate tools are available. Anything other than
+    /// exactly "workspace" (including null/omitted) is treated as "feature".</summary>
+    public string? Scope { get; set; }
 }

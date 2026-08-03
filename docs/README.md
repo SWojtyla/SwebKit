@@ -6,7 +6,9 @@ This is the canonical starting point for SwebKit documentation.
 
 1. `docs/README.md` (this file)
 2. `docs/features/README.md` (feature catalog and order)
-3. `docs/features/active/ai-augmented-app/index.md` (current top-level active feature)
+3. `docs/features/active/workspace-intelligence/index.md` (current active feature — see its
+   `status.md` "Handoff" note for exactly what remains; `ai-augmented-app/index.md` is its
+   prerequisite, now done except for a manual-verification task that's explicitly the user's own)
 4. `docs/architecture/architecture.md` and `docs/architecture/design.md` (supporting product context)
 5. `docs/MIGRATION-NOTES.md` (what was removed and why)
 

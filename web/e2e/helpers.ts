@@ -39,7 +39,15 @@ export async function scrollVirtualListIntoView(
  */
 export async function mockAgentChatStreamDone(
   page: Page,
-  reply: { text: string; elapsedMs?: number; status?: string; error?: boolean },
+  reply: {
+    text: string;
+    elapsedMs?: number;
+    status?: string;
+    error?: boolean;
+    steps?: { type: string; toolName?: string; summary?: string; elapsed?: string }[];
+    summarized?: boolean;
+    contextUsagePercent?: number;
+  },
 ) {
   const event = {
     kind: "done",
@@ -48,6 +56,9 @@ export async function mockAgentChatStreamDone(
       elapsedMs: reply.elapsedMs ?? 1,
       status: reply.status ?? "done",
       error: reply.error ?? false,
+      steps: reply.steps ?? [],
+      summarized: reply.summarized ?? false,
+      contextUsagePercent: reply.contextUsagePercent ?? 0,
     },
   };
   await page.route("**/api/agent/chat/stream", async (route) => {

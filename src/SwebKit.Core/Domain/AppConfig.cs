@@ -14,6 +14,7 @@ public class AppConfig
     public List<FavoriteEntity> FavoriteEntities { get; set; } = [];
     public List<FavoriteResource> FavoriteResources { get; set; } = [];
     public List<SavedWorkspace> SavedWorkspaces { get; set; } = [];
+    public WorkspaceTopology Topology { get; set; } = new();
     public Dictionary<string, FilterState> LastUsedFilters { get; set; } = [];
     /// <summary>Azure Key Vault URL for resolving <c>AzureKeyVault</c> environment variables (e.g. https://my-vault.vault.azure.net/). Optional.</summary>
     [Obsolete("Use KeyVaults instead. Kept for backward-compatible deserialization of existing profiles.")]

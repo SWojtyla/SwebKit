@@ -7,6 +7,7 @@ import { getSidecarPort } from "./tauri-bridge";
 import type {
   AgentChatContext,
   AgentChatMode,
+  AgentChatScope,
   AgentStreamEvent,
   RedisKeyspaceHealthReport,
   RedisPrefixMemoryBucket,
@@ -96,6 +97,7 @@ export interface StreamAgentChatBody {
   sessionId?: string;
   context?: AgentChatContext;
   mode?: AgentChatMode;
+  scope?: AgentChatScope;
 }
 
 /**
@@ -244,6 +246,17 @@ export interface AlertFiredEvent {
   detail: string;
   firedAt: string;
   profileName: string;
+}
+
+/** Pushed once a background proactive investigation completes (workspace-intelligence Module 4).
+ * `ruleId`+`firedAt` together are the same composite identity the originating `AlertFiredEvent` has
+ * — used to de-dup a dismissed insight against the firing event it came from. */
+export interface ProactiveInsightReadyEvent {
+  ruleId: string;
+  firedAt: string;
+  ruleName: string;
+  summary: string;
+  sessionId: string;
 }
 
 export async function getMonitoringRules(): Promise<MonitoringAlertRule[]> {

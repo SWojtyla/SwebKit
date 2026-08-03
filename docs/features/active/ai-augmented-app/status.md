@@ -204,6 +204,49 @@ lands, following the pattern used by the now-closed `tauri-react-primary-tool/st
       passed. Not covered by automated e2e (the browser-only Playwright harness can't exercise real
       Tauri process supervision) — genuinely requires manual verification against a real rebuilt
       app, flagged honestly rather than claimed as tested.
+- [x] Module 12.1 — Global panel redesign: docked, not an overlay (immediate user follow-up) —
+      **done** (2026-08-03): "It should really be part of the app... whenever I click somewhere
+      it's gone." The panel had been built as a `fixed` overlay with a click-outside backdrop,
+      copied from the transient per-page contextual popup's pattern — wrong for something meant to
+      stay open while working elsewhere. Now renders as a real `w-96` flex sibling in `AppLayout`'s
+      layout row (same role as the left nav), closes only via its own "✕"/toggle/shortcut. Verified
+      directly in the browser (opened it, clicked around the app, confirmed it stayed docked), plus
+      a new regression test and a full sweep (57 tests) — all passed.
+
+- [x] Module 13 — Observability as an agent-tool-only capability (user-requested, added after
+      Module 12.1, resolves an open decision recorded in `workspace-intelligence/index.md`) — **done**
+      (2026-08-03): asked the user directly whether to keep Application Insights fully out of scope
+      or reverse that decision — their answer was a genuine middle ground: no dedicated Observability
+      page/menu (that non-goal stands), but the agent should have tool access to it, since the data
+      is valuable context even without a place to browse it. **Real finding, not assumed**:
+      `GetMetricsTool`/`QueryLogsTool` and `IObservabilityProviderFactory`/`AzureAppInsightsProvider`/
+      `DemoObservabilityProvider` already existed, written for the MAUI app, and had zero actual
+      MAUI-specific coupling — the concrete factory was just physically misplaced in
+      `SwebKit.App/Services/`. Moved it to `SwebKit.Observability` (its correct home) and wired the
+      sidecar host up: new `SwebKit.Sidecar.csproj` project reference, `Program.cs` registers the
+      factory and both tools, demo vs. real resolved the same way every other tool already does it
+      (`AppStateService.UseDemoData`). Removed the stale "No Observability tools are available in the
+      sidecar mode yet" line from `BuildSystemPrompt`. **Real design decision, not a default**:
+      Observability tools are exempt from `ResolveTools`'s per-feature-area filter — a contextual
+      AKS/Redis/etc. conversation still sees `get_metrics`/`query_logs` even though its context names
+      a different area, since diagnostic telemetry is cross-cutting rather than scoped to one area.
+      Minimal Settings surface only, per the user's explicit "not sure about how to visualize it"
+      hesitation: `AgentSettings.tsx` gets a resource-ID/display-name pair, no query editor or log
+      browser. Also fixed `web/src/lib/types.ts`'s `ObservabilityConfig` — it had never matched the
+      real backend shape at all (`applicationInsightsResourceId`/`credentialKey`, neither of which
+      exist on the C# type) and was unused dead scaffolding. **Process note**: nearly overwrote a
+      genuinely comprehensive pre-existing `ObservabilityToolsTests.cs` (12 tests, predates this
+      session) with a redundant draft — the Write tool's "must Read before overwrite" guard caught
+      it; left the original untouched rather than duplicating or destroying it. Verified: `dotnet
+      test tests/SwebKit.Agents.Tests` 183/183 (pre-existing, unmodified), `dotnet test
+      tests/SwebKit.Sidecar.Tests` 206/206 (1 new), `dotnet test tests/SwebKit.Core.Tests` 800/800
+      (moved factory test), `dotnet test tests/SwebKit.App.Tests` 553/553 (unaffected by the move),
+      `dotnet build` clean on `SwebKit.Core`/`SwebKit.Agents`/`SwebKit.Observability`/the
+      sidecar/the MAUI app, `npx tsc --noEmit` clean, `npx vitest run` 116/116 (unchanged), `npx
+      playwright test settings.spec.ts` 10/10 (1 new), plus a regression sweep
+      (`agent`/`contextual-assistant`/`global-agent-panel`/`settings`, 34 tests) — all passed. Does
+      **not** change the Monitoring alert engine's scope — `AlertRuleSource` still has no Application
+      Insights-backed rule type; that remains `workspace-intelligence`'s concern, not this module's.
 
 ## Notes
 

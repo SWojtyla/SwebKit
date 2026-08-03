@@ -543,6 +543,84 @@ branch/session and a genuinely small, contained fix.
       just the .NET sidecar process does not pick up this fix; the supervision logic lives in the
       Rust shell that spawns the sidecar, not in the sidecar itself.
 
+## Module 12.1 — Global panel redesign: docked, not an overlay (user-requested follow-up) — done
+
+Immediate user feedback on Module 10's panel: "It should really be part of the app. now it's just
+a sidepanel and whenever I click somewhere it's gone." `GlobalAgentPanel.tsx` had been built as a
+`fixed inset-0` overlay with a click-outside-to-close backdrop, copied from `ContextualAssistant`'s
+transient-popup pattern — wrong fit for a panel meant to stay open *while* working elsewhere.
+
+- [x] Removed the overlay/backdrop entirely. `GlobalAgentPanel` now renders as a plain `w-96
+      flex-shrink-0` flex sibling inside `AppLayout`'s top-level layout row (same structural role
+      as the left nav `<aside>`), so opening it genuinely docks and shrinks the main content area
+      instead of floating on top of it. It only closes via its own "✕", the top-bar toggle, or
+      `Ctrl+Shift+L` now — clicking anywhere else in the app (a tab, a table row, the page title)
+      leaves it open.
+- [x] Verified in the browser directly (not just via test assertions): opened the panel, clicked
+      an AKS tab and the top-bar page title while it was open, confirmed it stayed docked and
+      visible both times; closed it via "✕" and confirmed it actually closes.
+- [x] Added a regression test (`global-agent-panel.spec.ts`) that opens the panel, clicks a tab in
+      the main content area, and asserts the panel is still visible — this is exactly the bug
+      being fixed, not just "the panel still renders after mounting."
+- [x] Verified: `npx tsc --noEmit` clean, `npx playwright test global-agent-panel.spec.ts` 5/5 (1
+      new), plus a regression sweep (`agent`, `contextual-assistant`, `dashboard`, `layout`,
+      `layout-deferred`, `settings`, `api-client-layout` — 57 tests, all passed in isolation; one
+      unrelated pre-existing Service-Bus test flake cascaded a handful of others in a combined run,
+      confirmed unrelated by rerunning everything in isolation, same documented pattern as earlier
+      in this session).
+
+## Module 13 — Observability as an agent-tool-only capability (user-requested, added after Module 12) — done
+
+Resolves an open decision from `workspace-intelligence/index.md`: no dedicated Observability page
+(that product decision stands), but the agent gets tool access to Application Insights, since the
+user judged the data valuable context even without a place to browse it directly.
+
+- [x] `GetMetricsTool`/`QueryLogsTool` (`FeatureArea.Observability`) already existed, written for
+      the MAUI app — a research pass confirmed neither the tools nor `IObservabilityProviderFactory`
+      nor `IObservabilityProvider`/`AzureAppInsightsProvider` were actually MAUI-specific; the
+      concrete factory was just physically misplaced in `SwebKit.App/Services/` (zero Blazor/MAUI
+      dependency in its 5 lines). Moved it to `SwebKit.Observability` (its correct home — that
+      project already depends on `SwebKit.Core`, not the reverse) so both the MAUI app and the
+      sidecar can reference the one class; updated the one test file that moved with it
+      (`tests/SwebKit.Core.Tests`, which already referenced `SwebKit.Observability`).
+- [x] `SwebKit.Sidecar.csproj` gets a new `SwebKit.Observability` project reference (previously
+      excluded by an explicit "deliberately NOT ported" comment, now updated to explain the
+      narrower scope: browsing UI still dropped, tool-only querying now wired). `Program.cs`
+      registers `IObservabilityProviderFactory` and both tools — demo vs. real Application Insights
+      still resolved the same way every other tool already does it
+      (`AppStateService.UseDemoData`), no new demo-mode plumbing needed.
+- [x] Removed the stale `"No Observability tools are available in the sidecar mode yet."` line from
+      `SidecarAgentChatService.BuildSystemPrompt`'s `## Limits` section.
+- [x] **Real design decision, not a default**: Observability tools are exempt from `ResolveTools`'s
+      per-feature-area filter — a contextual AKS/Redis/etc. conversation still sees
+      `get_metrics`/`query_logs` even though its context names a different area, since diagnostic
+      telemetry is cross-cutting, not scoped to one feature area the way Redis/Storage tools
+      legitimately are. Every other area's tools remain properly scoped; this is a one-area-only
+      exemption, not a loosening of the gate generally.
+- [x] Minimal Settings surface (the user was explicit: no browsing UI, no query editor, no SLO
+      panel) — `AgentSettings.tsx` gets a small "Application Insights (optional)" section: resource
+      ID + display name only, backed by the existing generic `PUT /api/config/profiles` round-trip
+      (no new persistence path). Fixed `web/src/lib/types.ts`'s `ObservabilityConfig` — it had never
+      matched the real C# shape at all (`applicationInsightsResourceId`/`credentialKey`, neither of
+      which exist on the backend type; the real fields are `selectedResourceId`/
+      `selectedResourceName`, and there's no credential-store field at all since Observability auth
+      is ambient `DefaultAzureCredential`, not a stored secret) — dead/stale scaffolding, confirmed
+      unused anywhere in the frontend before fixing it.
+- [x] Verified: `dotnet test tests/SwebKit.Agents.Tests` 183/183 (pre-existing, comprehensive
+      `ObservabilityToolsTests.cs` from before this session — found it before overwriting it, see
+      the note below), `dotnet test tests/SwebKit.Sidecar.Tests` 206/206 (1 new — the cross-cutting
+      exemption test), `dotnet test tests/SwebKit.Core.Tests` 800/800 (moved factory test),
+      `dotnet test tests/SwebKit.App.Tests` 553/553 (unaffected by the move), `dotnet build` clean
+      on `SwebKit.Core`, `SwebKit.Agents`, `SwebKit.Observability`, the sidecar, and the MAUI app,
+      `npx tsc --noEmit` clean, `npx vitest run` 116/116 (unchanged), `npx playwright test
+      settings.spec.ts` 10/10 (1 new), plus a regression sweep
+      (`agent`/`contextual-assistant`/`global-agent-panel`/`settings`, 34 tests) — all passed.
+- [x] **Process note, not a finding about the product**: nearly overwrote a genuinely
+      comprehensive, pre-existing `ObservabilityToolsTests.cs` (12 tests, predates this session)
+      with a redundant draft — the Write tool's "must Read before overwrite" guard caught it. Kept
+      the original file untouched; this is recorded so a future session doesn't repeat the mistake
+      of assuming "not registered in the sidecar" meant "untested" for these two tools.
+
 ## Explicit non-goals reminder
 
 Do not add Observability or DevOps/Pipelines tools (product-dropped, see `index.md`). Do not make

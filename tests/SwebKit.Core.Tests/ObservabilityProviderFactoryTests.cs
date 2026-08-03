@@ -1,9 +1,8 @@
-using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Services;
 using SwebKit.Observability;
 
-namespace SwebKit.App.Tests;
+namespace SwebKit.Core.Tests;
 
 public sealed class ObservabilityProviderFactoryTests
 {

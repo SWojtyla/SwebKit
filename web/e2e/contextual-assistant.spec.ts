@@ -161,6 +161,32 @@ test.describe("Contextual assistant entry points", () => {
     expect(chat.bodies[0]).toMatchObject({ mode: "ask_and_do" });
   });
 
+  test("'search across my whole workspace' checkbox sends scope: workspace (workspace-intelligence Module 3)", async ({ page }) => {
+    const chat = captureChatRequests(page);
+    await chat.install();
+
+    await page.goto("/aks");
+    await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
+    await page.getByTestId("aks-tab-pods").click();
+    const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
+    await firstRow.click({ button: "right" });
+    await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
+
+    // Unchecked by default — a fresh conversation never starts pre-escalated.
+    await expect(page.getByTestId("contextual-assistant-scope-workspace")).not.toBeChecked();
+
+    await page.getByTestId("contextual-assistant-input").fill("what's related to this pod?");
+    await page.getByTestId("contextual-assistant-send").click();
+    await expect.poll(() => chat.bodies.length).toBe(1);
+    expect(chat.bodies[0]).not.toMatchObject({ scope: "workspace" });
+
+    await page.getByTestId("contextual-assistant-scope-workspace").check();
+    await page.getByTestId("contextual-assistant-input").fill("search my whole workspace for related issues");
+    await page.getByTestId("contextual-assistant-send").click();
+    await expect.poll(() => chat.bodies.length).toBe(2);
+    expect(chat.bodies[1]).toMatchObject({ scope: "workspace" });
+  });
+
   test("closing the panel removes it from the DOM", async ({ page }) => {
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });

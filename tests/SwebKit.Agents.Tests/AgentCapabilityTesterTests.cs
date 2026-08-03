@@ -235,6 +235,45 @@ public class AgentCapabilityTesterTests
     }
 
     [Fact]
+    public async Task TestAsync_ModelsResponseAdvertisesContextLength_PopulatesDetectedContextWindowTokens()
+    {
+        var (tester, handler) = Build();
+        handler.EnqueueJson("""{"data":[{"id":"test-model","context_length":8192}]}""");
+        handler.EnqueueJson(ChatOkJson);
+        handler.EnqueueJson(ToolCallSupportedJson);
+
+        var result = await tester.TestAsync(LmStudioProfile());
+
+        Assert.Equal(8192, result.DetectedContextWindowTokens);
+    }
+
+    [Fact]
+    public async Task TestAsync_ModelsResponseAdvertisesContextLength_OnlyForADifferentModel_DetectsNothing()
+    {
+        var (tester, handler) = Build();
+        handler.EnqueueJson("""{"data":[{"id":"some-other-model","context_length":8192}]}""");
+        handler.EnqueueJson(ChatOkJson);
+        handler.EnqueueJson(ToolCallSupportedJson);
+
+        var result = await tester.TestAsync(LmStudioProfile());
+
+        Assert.Null(result.DetectedContextWindowTokens);
+    }
+
+    [Fact]
+    public async Task TestAsync_ModelsResponseHasNoContextLengthField_DetectsNothing_NotAnException()
+    {
+        var (tester, handler) = Build();
+        handler.EnqueueJson(ModelsJson);
+        handler.EnqueueJson(ChatOkJson);
+        handler.EnqueueJson(ToolCallSupportedJson);
+
+        var result = await tester.TestAsync(LmStudioProfile());
+
+        Assert.Null(result.DetectedContextWindowTokens);
+    }
+
+    [Fact]
     public async Task TestAsync_ApiKeyResolved_SendsBearerAuthorizationHeaderOnEveryRequest()
     {
         var (tester, handler) = BuildWithStore(out var store);

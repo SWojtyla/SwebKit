@@ -262,6 +262,36 @@ Ask conversation and one full Ask & do propose→confirm→apply round trip agai
   spawn/kill a real Tauri-managed child process, so this genuinely can't be scripted here — it
   needs a rebuilt Tauri binary and a human killing the process by hand.
 
+## Module 13 — Observability as an agent-tool-only capability — done
+
+- [x] Unit (`SidecarAgentChatServiceFilteringTests.cs`,
+  `ObservabilityTools_SurviveAnyFeatureAreaContext_UnlikeOtherNonMatchingAreas`, new): a deliberately
+  separate registry fixture (not the shared `CreateService()` helper, so other tests in the file
+  don't have to account for the new tool in their expected lists) asserts an `"Aks"`-scoped context
+  keeps `read_aks` (matches) and `read_observability` (cross-cutting exemption) but drops
+  `read_redis` (a different, non-exempt area) — proves the exemption is real filtering behavior, not
+  just "no exception was thrown."
+- [x] `ObservabilityToolsTests.cs` (`tests/SwebKit.Agents.Tests`, pre-existing, 12 tests, predates
+  this session): confirmed still green after the `ObservabilityProviderFactory` move to
+  `SwebKit.Observability` — this class already covered `GetMetricsTool`/`QueryLogsTool` against
+  `TestSupport.CreateAppState()` in both demo and real-provider configurations; no new tests needed
+  here since the move didn't change any of that class's actual logic, only its physical location.
+- [x] `ObservabilityProviderFactoryTests.cs` moved from `tests/SwebKit.App.Tests` to
+  `tests/SwebKit.Core.Tests` (namespace updated to `SwebKit.Core.Tests`) alongside the production
+  code move — same test bodies, confirmed still passing in the new location.
+- [x] Full backend regression re-run after the DI wiring and project-reference changes: `dotnet test`
+  across `SwebKit.Agents.Tests` (183/183), `SwebKit.Sidecar.Tests` (206/206), `SwebKit.Core.Tests`
+  (800/800), `SwebKit.App.Tests` (553/553) — the last two matter specifically because the factory
+  move and the csproj `<Compile Include>` cleanup are exactly the kind of change that silently breaks
+  a project that isn't the one being edited.
+- [x] E2E (`settings.spec.ts`, 1 new test): the Application Insights resource-ID/display-name widget
+  round-trips through the existing profile-save endpoint and survives a reload — same persistence
+  pattern as every other settings field, no new backend endpoint introduced for it.
+- [x] Full regression sweep re-run (`agent`, `contextual-assistant`, `global-agent-panel`,
+  `settings` — 34 tests, all passed) to confirm the `ObservabilityConfig` type fix in
+  `web/src/lib/types.ts` (previously stale/unused fields, never actually read anywhere) didn't
+  disturb any other settings-adjacent flow.
+
 ## Regression coverage to re-run, not just add to
 
 - Full existing `SwebKit.Agents.Tests` and `SwebKit.Sidecar.Tests` suites — Module 2's refactor of

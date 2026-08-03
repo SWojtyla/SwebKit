@@ -118,6 +118,43 @@ public class AgentEndpointsTests
         Assert.Equal("hi", last.RootElement.GetProperty("result").GetProperty("text").GetString());
     }
 
+    [Fact]
+    public async Task ChatStreamAsync_DoneEvent_CarriesStepsAndContextUsagePercent_NotJustText()
+    {
+        // workspace-intelligence Module 5/6: SidecarAgentChatService.SendStreamAsync re-yields an
+        // enriched Done event with session-level fields the low-level provider client's own event
+        // never carries — this is the wire-serialization side of that, so a missing property
+        // mapping in ToWireEvent can't silently drop them again.
+        var registry = new AgentToolRegistry([]);
+        var profiles = new ProfileRepository();
+        var settings = new UserSettingsRepository();
+        settings.Settings.Agent.Profiles.Add(new AgentProfile { Id = "p1", DisplayName = "Test", Capability = AgentCapability.ChatOnly });
+        settings.Settings.Agent.ActiveProfileId = "p1";
+        var service = new SidecarAgentChatService(
+            new ScriptedStreamingModelClient(() => ScriptedStreamingModelClient.TokensThenDone("hi")),
+            registry, profiles, settings, new DemoModeService());
+
+        var body = new MemoryStream();
+        var httpContext = new DefaultHttpContext { Response = { Body = body } };
+        var req = new AgentChatRequest { Message = "hello" };
+
+        await AgentEndpoints.ChatStreamAsync(httpContext, service, req, CancellationToken.None);
+
+        body.Position = 0;
+        var text = Encoding.UTF8.GetString(body.ToArray());
+        var lastLine = text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries)
+            .Select(chunk => chunk.Trim())
+            .Last(chunk => chunk.StartsWith("data:", StringComparison.Ordinal))["data:".Length..].Trim();
+
+        using var doc = JsonDocument.Parse(lastLine);
+        var result = doc.RootElement.GetProperty("result");
+        Assert.True(result.TryGetProperty("steps", out _));
+        Assert.True(result.TryGetProperty("contextUsagePercent", out var usage));
+        Assert.True(usage.GetDouble() >= 0);
+        Assert.True(result.TryGetProperty("summarized", out var summarized));
+        Assert.False(summarized.GetBoolean());
+    }
+
     // ── Per-session isolation ───────────────────────────────────────────────
 
     [Fact]
@@ -191,6 +228,18 @@ public class AgentEndpointsTests
 
         var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
         Assert.Contains($"\"estimatedTokens\":{service.GetEstimatedTokens(null)}", json);
+    }
+
+    [Fact]
+    public async Task GetStatus_IncludesContextUsagePercent()
+    {
+        var service = CreateService();
+        await service.SendAsync("hello");
+
+        var result = AgentEndpoints.GetStatus(service);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
+        Assert.Contains("\"contextUsagePercent\":", json);
     }
 
     [Fact]

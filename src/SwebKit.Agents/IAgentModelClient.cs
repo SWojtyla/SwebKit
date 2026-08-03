@@ -180,4 +180,13 @@ public sealed class AgentStreamEvent
     public string? ToolName { get; init; }
     public AgentChatResult? Result { get; init; }
     public string? ErrorMessage { get; init; }
+
+    /// <summary>Populated only by <c>SidecarAgentChatService</c> (workspace-intelligence Module
+    /// 5/6) on the terminal <see cref="AgentStreamEventKind.Done"/>/<see cref="AgentStreamEventKind.Error"/>
+    /// event it re-yields — the low-level provider client (<c>OpenAiCompatibleAgentClient</c>) has
+    /// no session/profile concept and never sets these; they're null/default on every event it
+    /// produces directly.</summary>
+    public IReadOnlyList<AgentChatStep>? Steps { get; init; }
+    public bool Summarized { get; init; }
+    public double? ContextUsagePercent { get; init; }
 }

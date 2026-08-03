@@ -131,6 +131,93 @@ public class SidecarAgentChatServiceFilteringTests
     }
 
     [Fact]
+    public async Task ObservabilityTools_SurviveAnyFeatureAreaContext_UnlikeOtherNonMatchingAreas()
+    {
+        // Deliberately a separate fixture from CreateService() rather than adding an Observability
+        // tool to the shared one — that would force every other test in this file to also account
+        // for it in their expected lists, coupling unrelated assertions to this one behavior.
+        var registry = new AgentToolRegistry([
+            new FakeReadTool("read_aks", FeatureArea.Aks),
+            new FakeReadTool("read_redis", FeatureArea.Redis),
+            new FakeReadTool("read_observability", FeatureArea.Observability),
+        ]);
+        var profiles = new ProfileRepository();
+        var settings = new UserSettingsRepository();
+        settings.Settings.Agent.Profiles.Add(new AgentProfile { Id = "p1", DisplayName = "Test", Capability = AgentCapability.ToolCalling });
+        settings.Settings.Agent.ActiveProfileId = "p1";
+        var model = new FakeAgentModelClient();
+        var service = new SidecarAgentChatService(model, registry, profiles, settings, new DemoModeService());
+
+        await service.SendAsync(null, "hi", context: new AgentChatContext { FeatureArea = "Aks" }, mode: "ask");
+
+        // An Aks-scoped context keeps read_aks (matches the area) and read_observability
+        // (cross-cutting exemption — diagnostic data is relevant regardless of which area a
+        // conversation is scoped to) but not read_redis (a different, non-exempt area).
+        Assert.Equal(["read_aks", "read_observability"], ToolNames(model));
+    }
+
+    // ── scope: "feature" | "workspace" (workspace-intelligence Module 3) ───────
+
+    [Fact]
+    public async Task FeatureScope_Default_KeepsTheExistingPerAreaFilterBehavior()
+    {
+        var (service, model) = CreateService(AgentCapability.ToolCalling);
+
+        await service.SendAsync(null, "hi", context: new AgentChatContext { FeatureArea = "Aks" }, mode: "ask_and_do", scope: "feature");
+
+        Assert.Equal(["mutate_aks", "read_aks"], ToolNames(model));
+    }
+
+    [Fact]
+    public async Task WorkspaceScope_SkipsThePerAreaFilter_EveryConfiguredAreaToolBecomesVisible()
+    {
+        var (service, model) = CreateService(AgentCapability.ToolCalling);
+
+        await service.SendAsync(null, "hi", context: new AgentChatContext { FeatureArea = "Aks" }, mode: "ask_and_do", scope: "workspace");
+
+        // Despite the context naming "Aks" specifically, scope: "workspace" makes every configured
+        // area's tools visible for this turn — the whole point of the escalation.
+        Assert.Equal(["mutate_aks", "read_aks", "read_redis"], ToolNames(model));
+    }
+
+    [Fact]
+    public async Task WorkspaceScope_DoesNotBypassTheModeGate_StillExcludesMutateToolsInAskMode()
+    {
+        var (service, model) = CreateService(AgentCapability.ToolCalling);
+
+        await service.SendAsync(null, "hi", context: new AgentChatContext { FeatureArea = "Aks" }, mode: "ask", scope: "workspace");
+
+        // scope and mode are orthogonal per the plan: scope widens which AREA's tools are visible,
+        // mode still gates mutate tools regardless.
+        Assert.Equal(["read_aks", "read_redis"], ToolNames(model));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-a-real-scope")]
+    public async Task UnrecognizedOrMissingScope_DefaultsToFeature_NeverWidensToolVisibility(string? scope)
+    {
+        var (service, model) = CreateService(AgentCapability.ToolCalling);
+
+        await service.SendAsync(null, "hi", context: new AgentChatContext { FeatureArea = "Aks" }, mode: "ask_and_do", scope: scope);
+
+        Assert.Equal(["mutate_aks", "read_aks"], ToolNames(model));
+    }
+
+    [Fact]
+    public async Task WorkspaceScope_NoContext_SameAsFeatureScope_GlobalPageUnaffectedEitherWay()
+    {
+        var (service, model) = CreateService(AgentCapability.ToolCalling);
+
+        await service.SendAsync(null, "hi", context: null, mode: "ask_and_do", scope: "workspace");
+
+        // The global /agent page has no context.FeatureArea to begin with, so scope never had
+        // anything to bypass — it already saw every area's tools, unchanged.
+        Assert.Equal(["mutate_aks", "read_aks", "read_redis"], ToolNames(model));
+    }
+
+    [Fact]
     public async Task Context_AddsCurrentFocusSection_ToTheSystemPrompt()
     {
         var (service, model) = CreateService(AgentCapability.ToolCalling);

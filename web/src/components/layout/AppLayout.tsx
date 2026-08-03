@@ -422,9 +422,10 @@ export function AppLayout() {
         </footer>
       </div>
 
+      <GlobalAgentPanel open={agentPanelOpen} onClose={() => setAgentPanelOpen(false)} />
+
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <KeyboardShortcutsPanel open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-      <GlobalAgentPanel open={agentPanelOpen} onClose={() => setAgentPanelOpen(false)} />
     </div>
   );
 }

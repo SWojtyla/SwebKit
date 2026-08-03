@@ -38,7 +38,13 @@ export function useGlobalAgentConversation() {
       chat
         .send(trimmed, { onToken: (token) => appendToken(assistantId, token) })
         .then((reply) => {
-          updateMessage(assistantId, { content: reply.text, elapsedMs: reply.elapsedMs, error: reply.error });
+          updateMessage(assistantId, {
+            content: reply.text,
+            elapsedMs: reply.elapsedMs,
+            error: reply.error,
+            steps: reply.steps,
+            summarized: reply.summarized,
+          });
         })
         .catch((err: Error) => {
           updateMessage(assistantId, { content: `Error: ${err.message}`, error: true });

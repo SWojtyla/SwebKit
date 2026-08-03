@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
+import { useProfile, useUpdateProfile, useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
 import { useTestAgentProfile } from "@/lib/hooks/useAgent";
 import type { AgentProfile } from "@/lib/types";
 
@@ -14,6 +14,8 @@ export function AgentSettings() {
   const updateSettings = useUpdateUserSettings();
   const testProfile = useTestAgentProfile();
   const [testingId, setTestingId] = useState<string | null>(null);
+  const { data: profile } = useProfile();
+  const updateProfileData = useUpdateProfile();
 
   if (isLoading || !settings) {
     return <div className="text-muted-foreground">Loading...</div>;
@@ -43,6 +45,11 @@ export function AgentSettings() {
         updateProfile(index, {
           capability: result.capability,
           lastTestDiagnostic: result.diagnostic,
+          // Only overwrite when the provider actually advertised one — never clear a value the
+          // user already set by hand just because this provider's /v1/models doesn't report it.
+          ...(result.detectedContextWindowTokens != null
+            ? { contextWindowTokens: result.detectedContextWindowTokens }
+            : {}),
         });
       },
       onError: (err) => {
@@ -137,17 +144,37 @@ export function AgentSettings() {
                 duplicating them here would just create two different, silently-conflicting
                 settings. Timeout stays: it's this app's own HTTP client patience, not something
                 the provider has a say in. */}
-            <div className="w-32">
-              <label className="mb-1 block text-xs text-muted-foreground">Timeout (s)</label>
-              <input
-                type="number"
-                min="1"
-                value={p.timeoutSeconds}
-                onChange={(e) =>
-                  updateProfile(i, { timeoutSeconds: parseInt(e.target.value) || 60 })
-                }
-                className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
-              />
+            <div className="flex gap-3">
+              <div className="w-32">
+                <label className="mb-1 block text-xs text-muted-foreground">Timeout (s)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={p.timeoutSeconds}
+                  onChange={(e) =>
+                    updateProfile(i, { timeoutSeconds: parseInt(e.target.value) || 60 })
+                  }
+                  className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div className="w-40">
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  Context window (tokens)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={p.contextWindowTokens ?? ""}
+                  onChange={(e) =>
+                    updateProfile(i, {
+                      contextWindowTokens: e.target.value ? parseInt(e.target.value) || null : null,
+                    })
+                  }
+                  placeholder="Auto/unknown"
+                  className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
+                  data-testid={`agent-profile-context-window-${i}`}
+                />
+              </div>
             </div>
             <div className="flex items-center justify-between gap-2 pt-1">
               <label className="flex items-center gap-2 text-sm">
@@ -170,6 +197,9 @@ export function AgentSettings() {
             <div className="text-xs text-muted-foreground" data-testid={`agent-profile-capability-${i}`}>
               {capabilityLabel[p.capability]}
               {p.lastTestDiagnostic && ` — ${p.lastTestDiagnostic}`}
+              {p.contextWindowTokens
+                ? ` · ${p.contextWindowTokens.toLocaleString()}-token window`
+                : " · unknown context window (using a 4,096-token conservative default)"}
             </div>
           </div>
         ))}
@@ -186,6 +216,7 @@ export function AgentSettings() {
               capability: "Unknown",
               lastTestDiagnostic: null,
               requiresApiKey: false,
+              contextWindowTokens: null,
             };
             update({
               profiles: [...agent.profiles, newProfile],
@@ -198,6 +229,58 @@ export function AgentSettings() {
           Add Profile
         </button>
       </section>
+
+      {profile && (
+        <section>
+          <h3 className="mb-1 text-base font-semibold">Application Insights (optional)</h3>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Feeds the agent's <code>get_metrics</code>/<code>query_logs</code> tools with your
+            telemetry as extra context when relevant — there's no dedicated Observability page or
+            log/metric browser in this app, only agent-tool access. Authenticates via your Azure
+            CLI/VS login (no credential to enter here).
+          </p>
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={profile.config.observabilityConfig?.selectedResourceId ?? ""}
+              onChange={(e) =>
+                updateProfileData.mutate({
+                  ...profile,
+                  config: {
+                    ...profile.config,
+                    observabilityConfig: {
+                      selectedResourceId: e.target.value || null,
+                      selectedResourceName: profile.config.observabilityConfig?.selectedResourceName ?? null,
+                    },
+                  },
+                })
+              }
+              className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+              placeholder="Resource ID (/subscriptions/.../components/your-app-insights)"
+              data-testid="observability-resource-id"
+            />
+            <input
+              type="text"
+              value={profile.config.observabilityConfig?.selectedResourceName ?? ""}
+              onChange={(e) =>
+                updateProfileData.mutate({
+                  ...profile,
+                  config: {
+                    ...profile.config,
+                    observabilityConfig: {
+                      selectedResourceId: profile.config.observabilityConfig?.selectedResourceId ?? null,
+                      selectedResourceName: e.target.value || null,
+                    },
+                  },
+                })
+              }
+              className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+              placeholder="Display name (optional, e.g. Prod App Insights)"
+              data-testid="observability-resource-name"
+            />
+          </div>
+        </section>
+      )}
     </div>
   );
 }

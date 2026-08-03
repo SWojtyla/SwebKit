@@ -38,6 +38,12 @@ public enum FeatureArea
     Storage,
     Observability,
     ApiClient,
+
+    /// <summary>Cross-area tools (workspace-intelligence Module 3) — unlike every other area, these
+    /// are NOT exempt from the per-area filter the way Observability is; they only become visible
+    /// when a turn explicitly requests <c>scope: "workspace"</c> (or from the global <c>/agent</c>
+    /// page, which has no area filter to begin with). See <c>SidecarAgentChatService.ResolveTools</c>.</summary>
+    Workspace,
 }
 
 public interface IAgentTool
