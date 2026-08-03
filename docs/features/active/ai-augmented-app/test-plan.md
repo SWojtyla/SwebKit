@@ -245,6 +245,23 @@ Ask conversation and one full Ask & do propose→confirm→apply round trip agai
 - [x] Full regression sweep re-run (`agent`, `contextual-assistant`, `global-agent-panel`,
   `dashboard`, `settings` — 40 tests, all passed).
 
+## Module 12 — Sidecar crash recovery — done
+
+- [x] Automated coverage: `cargo build` (dev and release profiles — release specifically compiles
+  the new `#[cfg(not(debug_assertions))]` supervision/auto-respawn code that dev builds skip
+  entirely) and `cargo clippy --release` clean on the new code. `npx tsc --noEmit` clean for the
+  new frontend event-listener wiring. Full e2e regression sweep (`layout`, `layout-deferred`,
+  `dashboard`, `global-agent-panel`, `api-client-layout` — 67 tests) confirms
+  `onSidecarLifecycleEvent` no-opping outside Tauri doesn't disturb anything the browser-only
+  Playwright harness already covers.
+- [ ] **Manual only, not automated, same honesty standard as Module 7**: actually killing a
+  running packaged app's sidecar process and confirming (a) it auto-respawns within a few seconds,
+  (b) the frontend shows "Sidecar disconnected" then "Sidecar recovered automatically" without any
+  click, and (c) a hard-to-recover failure (e.g. the sidecar binary itself missing) surfaces
+  "recovery failed" rather than hanging silently. Playwright's browser-only harness has no way to
+  spawn/kill a real Tauri-managed child process, so this genuinely can't be scripted here — it
+  needs a rebuilt Tauri binary and a human killing the process by hand.
+
 ## Regression coverage to re-run, not just add to
 
 - Full existing `SwebKit.Agents.Tests` and `SwebKit.Sidecar.Tests` suites — Module 2's refactor of

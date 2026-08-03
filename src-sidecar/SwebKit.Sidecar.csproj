@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>SwebKit.Sidecar</RootNamespace>
+    <!-- Mirrors src-tauri/tauri.conf.json and src-tauri/Cargo.toml — bump all three together.
+         GetHealth() in SystemEndpoints.cs reads this at runtime rather than hardcoding a string,
+         so the status bar version can't silently drift from the app version again. -->
+    <Version>0.2.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

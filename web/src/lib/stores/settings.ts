@@ -9,6 +9,14 @@ const THEME_CYCLE: Theme[] = ["dark", "light", "fancy"];
 
 const THEME_CLASSES: Theme[] = ["dark", "fancy", "fathom-dark", "fathom-light"];
 
+const ALL_THEMES: Theme[] = ["light", "dark", "fancy", "fathom-dark", "fathom-light"];
+
+// Guards the value coming back from user-settings.json — it's a free-form string on that side,
+// and could be empty (never saved before) or stale (a theme id that no longer exists).
+export function isTheme(value: string | null | undefined): value is Theme {
+  return !!value && (ALL_THEMES as string[]).includes(value);
+}
+
 interface SettingsState {
   theme: Theme;
   toggleTheme: () => void;

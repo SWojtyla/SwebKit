@@ -182,7 +182,9 @@
 .fathom-light {
   --background: #eef6f4;
   --foreground: #0d2b30;
-  --card: #ffffff;
+  /* Not pure #fff — a bare-white card next to the deep-teal background read as glare rather
+     than "sunlit surface." A whisper of warm sand keeps it bright without the sting. */
+  --card: #fbf8f0;
   --card-foreground: #0d2b30;
   --primary: #b8892e;
   --primary-foreground: #fffaf0;
@@ -208,7 +210,7 @@
   --sidebar-foreground: #4d6b6a;
   --sidebar-active: rgba(184, 137, 46, 12%);
   --header: rgba(238, 246, 244, 80%);
-  --popover: #ffffff;
+  --popover: #fbf8f0;
   --popover-foreground: #0d2b30;
   --shadow-sm: 0 1px 2px rgba(13, 43, 48, 5%);
   --shadow-md: 0 4px 12px rgba(13, 43, 48, 8%), 0 1px 3px rgba(13, 43, 48, 6%);

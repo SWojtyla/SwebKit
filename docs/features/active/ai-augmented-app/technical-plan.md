@@ -495,6 +495,54 @@ weren't confident it was reliable.
       just-typed value), plus a regression sweep (`agent`/`contextual-assistant`/
       `global-agent-panel`/`dashboard`/`settings`, 40 tests total) — all passed.
 
+## Module 12 — Sidecar crash recovery (user-requested, added after Module 11) — done
+
+Not an AI-agent-specific module — a Tauri/sidecar-process-management fix, surfaced by the user
+hitting it while testing the agent feature (the sidecar died, every request failed with "Failed to
+fetch", and only a full app relaunch fixed it). Documented here anyway, in this plan's `status.md`,
+per this session's running log rather than a separate doc, since it's the same active
+branch/session and a genuinely small, contained fix.
+
+- [x] **Diagnosis**: `restart_sidecar` (`src-tauri/src/sidecar.rs`) and the status-bar "Reconnect"
+      button existed — added the day before, in the PR #75 merge, per that commit's own message:
+      "a crash silently broke the app until the user manually relaunched." That fix requires a
+      rebuilt/relaunched *Tauri* binary to take effect (it's Rust code, not the .NET sidecar) —
+      the user's incident is consistent with hitting a running app instance that predates it.
+      Confirmed via a background audit that today's code, taken in isolation, does correctly wire
+      health-poll detection → status-bar "Disconnected" → manual Reconnect button → `restart_sidecar`
+      → new port → `initSidecarBaseUrl()` → query invalidation. What was still missing, even in
+      today's code: recovery was **entirely manual** — nothing detected a crash and respawned the
+      process on its own; the user had to notice "Disconnected" and click a button (or, if that
+      didn't register in time, relaunch the whole app).
+- [x] Added real crash *detection*: `sidecar.rs`'s `watch_for_crash` polls the tracked child
+      process with `try_wait()` (never the blocking `Child::wait()` — that would hold
+      `SidecarState`'s mutex for the process's entire remaining lifetime and deadlock
+      `restart_sidecar`/`kill_sidecar`, which need that same lock; mirrors the existing pod-shell
+      exit-watcher's pattern in `pod_shell.rs` for the identical reason) and, on an unexpected
+      exit, automatically respawns it (up to 3 attempts with linear backoff) — production only;
+      dev mode's externally-run sidecar has no process handle to supervise at all, by design.
+      Started after every successful spawn, not just at app startup — a **manual** Reconnect-button
+      restart now also gets its own supervision going forward, not just the initial launch.
+- [x] Three Tauri events (`sidecar-crashed`, `sidecar-restarted`, `sidecar-recovery-failed`) let
+      the frontend react immediately instead of waiting for the next 10s health poll:
+      `AppLayout.tsx` now auto-calls `initSidecarBaseUrl()` + invalidates every query on a
+      successful auto-recovery, and shows a toast either way — the user sees "recovered
+      automatically" instead of silently-still-broken-until-noticed, or a clear "recovery failed,
+      use Reconnect or restart" if all 3 attempts fail.
+- [x] Verified: `cargo build` clean in both dev and release profiles (release specifically
+      exercises the new production-only supervision code — dev builds skip it entirely since
+      `spawn_sidecar` never returns a real process handle to supervise there), `cargo clippy
+      --release` clean on the new code (2 pre-existing warnings on unrelated, unmodified lines
+      confirmed unrelated), `npx tsc --noEmit` clean, `npx vitest run` 116/116 (unchanged), full
+      e2e regression sweep (`layout`, `layout-deferred`, `dashboard`, `global-agent-panel`,
+      `api-client-layout` — 67 tests, all passed; `onSidecarLifecycleEvent` no-ops outside Tauri,
+      so none of this is exercisable from the browser-only Playwright harness — genuinely
+      requires a rebuilt Tauri binary to verify by hand, which is out of scope for automated
+      coverage here, same honesty standard as Module 7's manual-only verification).
+- [x] **This requires rebuilding/relaunching the Tauri app itself to take effect** — restarting
+      just the .NET sidecar process does not pick up this fix; the supervision logic lives in the
+      Rust shell that spawns the sidecar, not in the sidecar itself.
+
 ## Explicit non-goals reminder
 
 Do not add Observability or DevOps/Pipelines tools (product-dropped, see `index.md`). Do not make

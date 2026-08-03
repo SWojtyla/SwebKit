@@ -146,13 +146,11 @@ export interface RedisPageContextValue {
 
   separator: string;
   setSeparator: (v: string) => void;
-  namespaceFilter: string | null;
-  setNamespaceFilter: (v: string | null) => void;
   expandedNamespaces: Set<string>;
   toggleNamespace: (path: string) => void;
+  collapseAllNamespaces: () => void;
 
   displayKeys: string[];
-  filteredKeys: string[];
   namespaceTree: NamespaceNode[];
   flatRedisRows: FlatRedisRow[];
   redisTreeRef: React.MutableRefObject<HTMLDivElement | null>;
@@ -289,7 +287,6 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const [refreshInterval, setRefreshInterval] = useState(10);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [loadAllActive, setLoadAllActive] = useState(false);
-  const [namespaceFilter, setNamespaceFilter] = useState<string | null>(null);
   const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(new Set());
   const [hashAdding, setHashAdding] = useState(false);
   const [newHashField, setNewHashField] = useState("");
@@ -352,7 +349,6 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     setPattern(searchInput);
     setCursor(0);
     setAllKeys([]);
-    setNamespaceFilter(null);
     setExpandedNamespaces(new Set());
   };
 
@@ -383,14 +379,9 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const health = useRedisKeyspaceHealth(resolvedCacheId, displayKeys, separator);
   const prefixMemory = useRedisPrefixMemory(resolvedCacheId, displayKeys, separator);
 
-  const filteredKeys = useMemo(() => {
-    if (!namespaceFilter) return displayKeys;
-    return displayKeys.filter((k) => k === namespaceFilter || k.startsWith(namespaceFilter + separator));
-  }, [displayKeys, namespaceFilter, separator]);
-
   const namespaceTree = useMemo(
-    () => buildNamespaceTree(filteredKeys, separator),
-    [filteredKeys, separator],
+    () => buildNamespaceTree(displayKeys, separator),
+    [displayKeys, separator],
   );
 
   const flatRedisRows = useMemo(
@@ -401,9 +392,9 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const redisVirtualizer = useVirtualizer({
     count: flatRedisRows.length,
     getScrollElement: () => redisTreeRef.current,
-    estimateSize: () => 26,
+    estimateSize: () => 28,
     getItemKey: (index) => redisRowKey(flatRedisRows[index]),
-    measureElement: (el) => el?.getBoundingClientRect().height ?? 26,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 28,
   });
 
   useEffect(() => {
@@ -427,6 +418,8 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
       return next;
     });
   };
+
+  const collapseAllNamespaces = () => setExpandedNamespaces(new Set());
 
   const handleDeleteKey = (key: string) => {
     deleteKey.mutate(key, {
@@ -565,7 +558,6 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     setCursor(0);
     setAllKeys([]);
     setSelectedKey(null);
-    setNamespaceFilter(null);
     setExpandedNamespaces(new Set());
   };
 
@@ -591,13 +583,11 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
 
     separator,
     setSeparator,
-    namespaceFilter,
-    setNamespaceFilter,
     expandedNamespaces,
     toggleNamespace,
+    collapseAllNamespaces,
 
     displayKeys,
-    filteredKeys,
     namespaceTree,
     flatRedisRows,
     redisTreeRef,

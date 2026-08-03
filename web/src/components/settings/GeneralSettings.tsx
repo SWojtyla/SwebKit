@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { CheckCircle2, Circle, Download, Upload } from "lucide-react";
 import { useProfile, useUpdateProfile, useUserSettings, useUpdateUserSettings, useExportSettings, useImportSettings, useDemoMode } from "@/lib/hooks";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { useNotification } from "@/components/layout/NotificationSystem";
 
 export function GeneralSettings() {
@@ -13,7 +12,6 @@ export function GeneralSettings() {
   const updateSettings = useUpdateUserSettings();
   const exportSettings = useExportSettings();
   const importSettings = useImportSettings();
-  const { theme, toggleTheme } = useSettingsStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const { notify } = useNotification();
@@ -42,27 +40,6 @@ export function GeneralSettings() {
               <span className="ml-auto text-xs text-muted-foreground">{item.ready ? "Ready" : "Not configured"}</span>
             </div>
           ))}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Appearance</h2>
-        <div className="flex items-center gap-3">
-          <span className="text-sm">Theme:</span>
-          <button
-            onClick={toggleTheme}
-            className="rounded-md border bg-card px-3 py-1.5 text-sm hover:bg-accent"
-          >
-            {theme === "dark"
-              ? "Dark"
-              : theme === "fancy"
-                ? "✨ Fancy ✨"
-                : theme === "fathom-dark"
-                  ? "Fathom · Abyss"
-                  : theme === "fathom-light"
-                    ? "Fathom · Shallows"
-                    : "Light"}
-          </button>
         </div>
       </section>
 

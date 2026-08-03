@@ -1,5 +1,5 @@
 import { useSettingsStore, type Theme } from "@/lib/stores/settings";
-import { useUserSettings } from "@/lib/hooks";
+import { useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
 import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
 
 const THEMES: { id: Theme; label: string; desc: string }[] = [
@@ -13,9 +13,15 @@ const THEMES: { id: Theme; label: string; desc: string }[] = [
 export function AppearanceSettings() {
   const { theme, setTheme } = useSettingsStore();
   const { data: settings } = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
   const sessionCount = settings?.sessionCount ?? 0;
   const fathomAvailable = settings?.fathomUnlocked || settings?.fathomDeveloperOverride || false;
   const fathomProgress = Math.min(100, Math.round((sessionCount / FATHOM_UNLOCK_THRESHOLD) * 100));
+
+  const selectTheme = (id: Theme) => {
+    setTheme(id);
+    if (settings) updateSettings.mutate({ ...settings, theme: id });
+  };
 
   return (
     <div className="space-y-6" data-testid="appearance-settings">
@@ -37,7 +43,7 @@ export function AppearanceSettings() {
             return (
               <button
                 key={t.id}
-                onClick={() => !locked && setTheme(t.id)}
+                onClick={() => !locked && selectTheme(t.id)}
                 disabled={locked}
                 className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all duration-200 ${
                   locked

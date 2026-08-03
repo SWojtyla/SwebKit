@@ -180,6 +180,30 @@ lands, following the pattern used by the now-closed `tauri-react-primary-tool/st
       116/116 (unchanged), `npx playwright test settings.spec.ts` 9/9 (1 new, end-to-end through
       the real UI), plus a regression sweep (`agent`/`contextual-assistant`/`global-agent-panel`/
       `dashboard`/`settings`, 40 tests total) — all passed.
+- [x] Module 12 — Sidecar crash recovery (user-requested, not in the original plan, not
+      AI-agent-specific) — **done** (2026-08-03): the user's sidecar process died mid-session
+      (every request failing with "Failed to fetch"), and only a full app relaunch fixed it —
+      "we lack a proper restart/retry mechanism." A background audit found `restart_sidecar` +
+      the status-bar Reconnect button *did* already exist (added the day before, in PR #75, whose
+      own commit message names exactly this "crash silently broke the app" problem) — but that fix
+      needs a rebuilt/relaunched Tauri binary to take effect, and even taken at face value, was
+      100% manual: nothing detected a crash and respawned the process on its own. Added real
+      detection: `sidecar.rs`'s `watch_for_crash` polls the tracked child with `try_wait()` (never
+      the blocking `wait()`, which would deadlock `restart_sidecar`/`kill_sidecar` — mirrors the
+      existing pod-shell exit-watcher's pattern for the same reason) and auto-respawns up to 3
+      times with backoff on an unexpected exit; production only, since dev mode's externally-run
+      sidecar has no process handle to supervise. New Tauri events
+      (`sidecar-crashed`/`sidecar-restarted`/`sidecar-recovery-failed`) let `AppLayout.tsx` react
+      immediately — auto-reconnecting and showing a toast — instead of waiting for the next 10s
+      health poll. **Requires rebuilding/relaunching the Tauri app itself** — restarting only the
+      .NET sidecar does not pick this up, since the supervision logic lives in the Rust shell, not
+      the sidecar. Verified: `cargo build` clean in dev and release profiles (release specifically
+      exercises the new production-only code path), `cargo clippy --release` clean on the new code,
+      `npx tsc --noEmit` clean, `npx vitest run` 116/116 (unchanged), regression sweep (`layout`,
+      `layout-deferred`, `dashboard`, `global-agent-panel`, `api-client-layout`, 67 tests) — all
+      passed. Not covered by automated e2e (the browser-only Playwright harness can't exercise real
+      Tauri process supervision) — genuinely requires manual verification against a real rebuilt
+      app, flagged honestly rather than claimed as tested.
 
 ## Notes
 

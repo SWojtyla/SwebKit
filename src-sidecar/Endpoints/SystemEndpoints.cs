@@ -1,9 +1,13 @@
+using System.Reflection;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Sidecar.Endpoints;
 
 public static class SystemEndpoints
 {
+    // Read once — it's the assembly's own version, which can't change at runtime.
+    private static readonly string Version = typeof(SystemEndpoints).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
     public static void MapSystemEndpoints(this WebApplication app)
     {
         app.MapGet("/health", GetHealth);
@@ -12,7 +16,7 @@ public static class SystemEndpoints
         app.MapPost("/api/demo-mode", SetDemoMode);
     }
 
-    internal static IResult GetHealth() => Results.Ok(new { status = "ok", version = "0.1.0" });
+    internal static IResult GetHealth() => Results.Ok(new { status = "ok", version = Version });
 
     internal static IResult GetDemoMode(DemoModeService demo) =>
         Results.Ok(new { isDemoMode = demo.IsDemoMode });

@@ -394,6 +394,40 @@ export async function restartSidecar(): Promise<number | null> {
   return null;
 }
 
+/**
+ * Subscribes to the Rust side's background sidecar-crash supervision (see `sidecar.rs`'s
+ * `watch_for_crash`): the sidecar is spawned and owned as a child process, and if it exits
+ * unexpectedly, Tauri detects that itself (not by waiting for the frontend's `/health` poll to
+ * notice) and tries to respawn it a few times with backoff before giving up. These events let the
+ * UI reflect that automatically instead of requiring the user to notice "Disconnected" in the
+ * status bar and click Reconnect themselves. No-op outside Tauri (plain browser dev mode) and in
+ * dev builds, where the sidecar is run externally and there's no process handle to supervise.
+ */
+export interface SidecarLifecycleHandlers {
+  onCrashed?: () => void;
+  onRestarted?: (port: number) => void;
+  onRecoveryFailed?: () => void;
+}
+
+export async function onSidecarLifecycleEvent(
+  handlers: SidecarLifecycleHandlers,
+): Promise<() => void> {
+  if (!isTauri()) return () => {};
+
+  const { listen } = await import("@tauri-apps/api/event");
+  const unlistenCrashed = await listen("sidecar-crashed", () => handlers.onCrashed?.());
+  const unlistenRestarted = await listen<number>("sidecar-restarted", (event) =>
+    handlers.onRestarted?.(event.payload),
+  );
+  const unlistenFailed = await listen("sidecar-recovery-failed", () => handlers.onRecoveryFailed?.());
+
+  return () => {
+    unlistenCrashed();
+    unlistenRestarted();
+    unlistenFailed();
+  };
+}
+
 // ── Secret Store (API Client auth) ───────────────────────────────────────────
 
 const WEB_SECRET_VAULT_KEY = "sw-secrets-v1";

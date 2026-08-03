@@ -38,8 +38,8 @@ import {
   useUpdateUserSettings,
 } from "@/lib/hooks";
 import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
-import { useSettingsStore } from "@/lib/stores/settings";
-import { restartSidecar } from "@/lib/tauri-bridge";
+import { useSettingsStore, isTheme } from "@/lib/stores/settings";
+import { onSidecarLifecycleEvent, restartSidecar } from "@/lib/tauri-bridge";
 import { initSidecarBaseUrl } from "@/lib/api";
 import { useNotification } from "./NotificationSystem";
 
@@ -78,9 +78,22 @@ export function AppLayout() {
   const redisHealth = useRedisServerInfo(profile?.config.redisConfig?.caches[0]?.id ?? null);
   const storageHealth = useStorageContainers(profile?.config.storageAccounts[0]?.id ?? null);
   const toggleDemoMode = useToggleDemoMode();
-  const { theme, toggleTheme } = useSettingsStore();
+  const { theme, toggleTheme, setTheme } = useSettingsStore();
   const { data: userSettings } = useUserSettings();
   const updateUserSettings = useUpdateUserSettings();
+
+  // Theme lives in the sidecar's user-settings.json, not just this session's Zustand store —
+  // without this, a restart always came back to the "dark" default no matter what was picked.
+  // Applied once per app launch, on the first settings load; later local changes push the other
+  // direction (see the theme toggle button and AppearanceSettings' card clicks).
+  const themeHydratedRef = useRef(false);
+  useEffect(() => {
+    if (themeHydratedRef.current || !userSettings) return;
+    themeHydratedRef.current = true;
+    if (isTheme(userSettings.theme) && userSettings.theme !== theme) {
+      setTheme(userSettings.theme);
+    }
+  }, [userSettings, theme, setTheme]);
   const sidecarOk = health?.status === "ok";
   const isDemoMode = demoData?.isDemoMode ?? false;
   const [reconnecting, setReconnecting] = useState(false);
@@ -139,6 +152,40 @@ export function AppLayout() {
     } finally {
       setReconnecting(false);
     }
+  }, [queryClient, notify]);
+
+  // Complements handleReconnect (manual, user-triggered) with the automatic side: the Rust side
+  // now supervises the sidecar child process itself and respawns it on an unexpected exit without
+  // waiting for the frontend's health poll to notice (see sidecar.rs's watch_for_crash) — this
+  // just reflects that in the UI instead of requiring the user to notice "Disconnected" and click
+  // Reconnect themselves, which was the whole gap: a crash used to be invisible here until someone
+  // manually relaunched the entire app.
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    onSidecarLifecycleEvent({
+      onCrashed: () => {
+        notify("info", "Sidecar disconnected", "Attempting automatic recovery…");
+      },
+      onRestarted: async (port) => {
+        void port; // the Rust side already updated its own state; re-resolving here just syncs ours
+        await initSidecarBaseUrl();
+        await queryClient.invalidateQueries();
+        notify("success", "Sidecar recovered automatically");
+      },
+      onRecoveryFailed: () => {
+        notify("error", "Sidecar recovery failed", "Use the Reconnect button below, or restart the app.");
+      },
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else unlisten = dispose;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, [queryClient, notify]);
 
   const contextTitle = navItems.find((n) => n.to === location.pathname)?.label ?? "SwebKit";
@@ -251,7 +298,12 @@ export function AppLayout() {
           </button>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button
-              onClick={() => toggleTheme()}
+              onClick={() => {
+                toggleTheme();
+                if (userSettings) {
+                  updateUserSettings.mutate({ ...userSettings, theme: useSettingsStore.getState().theme });
+                }
+              }}
               className="rounded-lg border p-2 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
               data-testid="theme-toggle"
               title="Toggle theme"
