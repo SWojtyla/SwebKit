@@ -145,11 +145,105 @@ on this repo (manual verification recorded in `status.md`, not a fabricated auto
 Record in `status.md`: model name/size used, capability-test result, and the outcome of one full
 Ask conversation and one full Ask & do propose→confirm→apply round trip against it.
 
-## Module 8 — Streaming (only if implemented)
+## Module 8 — Streaming — done
 
-- Unit: SSE chunk parsing/reassembly in the streaming client variant.
-- E2E: partial content appears progressively rather than all at once (can be asserted by checking
-  intermediate DOM state during a deliberately slow/chunked mock response).
+- [x] Unit (`OpenAiCompatibleAgentClientStreamingTests.cs`, `SwebKit.Agents.Tests`, 7 tests): a
+  `FakeStreamingHttpMessageHandler` returns canned SSE bodies over real `HttpClient` plumbing (not
+  a mocked `IAgentModelClient`) — text-only replies stream each token then a `Done` carrying the
+  full concatenated text; a tool call whose `id`/`name` arrive in one SSE chunk and whose
+  `arguments` JSON string is fragmented across two more chunks is reassembled correctly (verified
+  against the exact parsed argument value, not just "didn't throw") and executes the real tool
+  executor callback before continuing to a second round; a tool-calls finish reason with no
+  executor provided is treated as final rather than looping forever; the request body sets
+  `"stream":true`.
+- [x] Unit, **wire-format regression** (3 tests, one per call site — `ChatAsync`, `CompleteAsync`,
+  `ChatStreamAsync`): asserts the actual outgoing JSON body uses lowercase `"role"`/`"content"`
+  keys and never the PascalCase `"Role"`/`"Content"` that the real, previously-undiscovered bug
+  produced (see technical-plan.md Module 8) — written specifically so this can't silently regress
+  in only one of the three call sites again.
+- [x] Unit (`SidecarAgentChatServiceStreamingTests.cs`, `SwebKit.Sidecar.Tests`, 5 tests): a
+  `ScriptedStreamingModelClient` plays back a fixed event sequence — every event forwards in order
+  ending in `Done`; only the final text lands in history, never one entry per token; a model client
+  that throws mid-stream yields an `Error` event as the last event and records the error (not the
+  partial token) in history; different session ids keep independent history, same as the
+  non-streaming path.
+- [x] Unit (`AgentEndpointsTests.cs`, 2 new tests): empty message 400s without ever touching the
+  model client; a valid message writes `text/event-stream` headers and one SSE `data:` line per
+  event, with `kind` serialized as the camelCase wire string (`"token"`/`"done"`) the frontend
+  expects — not a raw enum integer, which is exactly what a missing enum-to-string mapping in the
+  manual serializer would have silently produced.
+- [x] E2E (`agent.spec.ts`, 1 new test): several separate SSE `token` events, each carrying one
+  text fragment, assemble into the exact final text — guards the buffer-splitting/concatenation
+  logic in `streamAgentChat` (`web/src/lib/api.ts`). True network-level progressive-rendering
+  timing isn't observable through Playwright's single-shot `route.fulfill()` mock (the whole body
+  arrives as one write regardless of how many SSE records it contains) — that part stays a manual
+  check against a real LM Studio instance, same as Module 7.
+- [x] E2E regression: `agent.spec.ts` (10/10) and `contextual-assistant.spec.ts` (9/9) both had to
+  be updated for the new `/api/agent/chat/stream` endpoint and SSE response shape — a real
+  Playwright glob gotcha surfaced doing this: `*` does not cross `/`, so a single
+  `**/api/agent/chat*` pattern silently never matched the `/stream` suffix; fixed with two explicit
+  routes. Full regression sweep re-run after the fix: `agent`, `contextual-assistant`,
+  `aks-portforward-analysis`, `redis`, `service-bus`, `monitoring`, `api-client`,
+  `api-client-layout`, `dashboard`, `settings` — 124/124 passed.
+
+## Module 9 — Agent settings simplification — done
+
+- [x] Unit (`AgentProfilePresetsTests.cs`): the `Temperature`/`MaxTokens` assertions were removed
+  from the LM Studio/Mistral preset tests (the properties no longer exist) — the remaining
+  assertions (`BaseUrl`, `CredentialKey`, `RequiresApiKey`, `TimeoutSeconds`) still cover what each
+  preset actually configures.
+- [x] Unit (`AgentEndpointsTests.cs`, 3 new tests): `GetStatus` includes `estimatedTokens` in its
+  JSON payload; a session that was never touched estimates 0 tokens (not an exception); a known
+  input/output pair (`"hello"` in, canned `"canned reply"` out — 18 total chars) verifies the
+  ~4-chars-per-token formula against an exact expected value (5), not just "returns a number" — so
+  a future change to the heuristic can't silently drift without a test noticing.
+- [x] E2E (`settings.spec.ts`, 1 new test): adding a profile no longer shows "Temperature", "Max
+  tokens", "Max History Messages", or "Warning Threshold (%)" anywhere in the DOM, while "Timeout
+  (s)" still does — a real regression test for the removal, not just "the page still renders."
+- [x] Full regression sweep re-run after the change (backend and frontend, both green — see
+  technical-plan.md Module 9 for exact counts): confirms removing two domain-model fields that used
+  to flow all the way into the outgoing LLM request payload didn't silently break request
+  construction for any of the three call sites, or the legacy MAUI settings form.
+
+## Module 10 — Global, persistent AI Agent side panel — done
+
+- [x] E2E (`global-agent-panel.spec.ts`, 4 new tests): the toggle button opens the panel from a
+  non-agent page and is hidden once on the `/agent` route (not just "the button exists" — asserts
+  both states); `Ctrl+Shift+L` opens and closes the panel; **the actual regression test** —
+  send a message on `/agent`, navigate to `/aks` via the sidebar, navigate back, and assert the
+  message is still rendered (this is the exact bug the user hit, reproduced and now fixed, not an
+  inferred fix); a message sent from the docked panel on `/aks` shows up when then visiting
+  `/agent` — proves the two views share one real conversation rather than each keeping its own
+  copy of the same session.
+- [x] Full regression sweep re-run (`agent`, `contextual-assistant`, `dashboard`, `layout`,
+  `layout-deferred`, `navigation`, `settings`, `api-client-layout` — 82 tests, all passed) since
+  `AppLayout.tsx` and `KeyboardShortcutsPanel.tsx` are shared by every page in the app.
+
+## Module 11 — Capability-test reliability fixes — done
+
+- [x] Unit (`AgentCapabilityTesterTests.cs`, new file, 10 tests — this class had zero prior
+  coverage): full happy path (models → chat → tool-call, reports `ToolCalling`); tool call
+  unsupported reports `ChatOnly`; the mini-chat request body actually contains `"max_tokens":64`
+  and never `"max_tokens":10` again (guards the fix, not just the end result); an empty chat
+  response reports "Chat returned empty response" and — verified by asserting only 2 requests were
+  ever sent — never attempts the tool-call probe; a network-level unreachable server (handler
+  throws) is distinguished from a `/models` endpoint that merely 404s (the latter must still be
+  treated as reachable and proceed to the chat test); a failing chat endpoint reports "Chat test
+  failed:" with the status code, without attempting the tool-call probe; a model absent from the
+  advertised list reports `ModelAvailable: false` but still runs the rest of the test; a missing
+  required API key returns immediately without any HTTP call at all; a resolved API key is sent as
+  a Bearer header on every one of the 3 requests.
+- [x] Unit (`AgentEndpointsTests.cs`, 2 new tests): a profile sent in the request body is tested
+  directly even when nothing with that id was ever persisted; a profile in the request body takes
+  precedence over a stale persisted copy under the same id — verified against the actual outgoing
+  request URL (not just that the result looks right, which a coincidentally-matching canned
+  response could mask).
+- [x] E2E (`settings.spec.ts`, 1 new test): edit the Base URL field, immediately click "Test
+  connection" (no wait for the background autosave), and assert the captured request body contains
+  the just-typed URL — proves the race fix end-to-end through the real UI, not just at the API
+  layer.
+- [x] Full regression sweep re-run (`agent`, `contextual-assistant`, `global-agent-panel`,
+  `dashboard`, `settings` — 40 tests, all passed).
 
 ## Regression coverage to re-run, not just add to
 

@@ -1,16 +1,33 @@
 import { test, expect } from "@playwright/test";
 import { setDemoMode, scrollVirtualListIntoView } from "./helpers";
 
-/** Captures every /api/agent/chat request body sent while this route is installed. */
+/**
+ * Captures every /api/agent/chat (or /chat/stream) request body sent while this route is
+ * installed — the contextual assistant panels stream (POST .../chat/stream), while
+ * GenerateApiRequestPanel still uses the plain non-streaming endpoint (POST .../chat). A single
+ * glob can't match both: Playwright's `*` doesn't cross `/`, so `**\/api/agent/chat*` never matches
+ * the `/stream` suffix — hence two explicit routes here instead of one wildcard-suffixed pattern.
+ */
 function captureChatRequests(page: import("@playwright/test").Page) {
   const bodies: Record<string, unknown>[] = [];
+  const record = async (route: import("@playwright/test").Route) => {
+    bodies.push(route.request().postDataJSON());
+    await route.fulfill({ json: { text: "ok", elapsedMs: 1, status: "done", error: false } });
+  };
+  const recordStreaming = async (route: import("@playwright/test").Route) => {
+    bodies.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `data: ${JSON.stringify({ kind: "done", result: { text: "ok", elapsedMs: 1, status: "done", error: false } })}\n\n`,
+    });
+  };
   return {
     bodies,
-    install: () =>
-      page.route("**/api/agent/chat", async (route) => {
-        bodies.push(route.request().postDataJSON());
-        await route.fulfill({ json: { text: "ok", elapsedMs: 1, status: "done", error: false } });
-      }),
+    install: async () => {
+      await page.route("**/api/agent/chat", record);
+      await page.route("**/api/agent/chat/stream", recordStreaming);
+    },
   };
 }
 

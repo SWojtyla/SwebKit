@@ -250,7 +250,13 @@ app.UseExceptionHandler(ex =>
 await app.Services.GetRequiredService<ProfileRepository>().LoadAsync();
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
-await app.Services.GetRequiredService<UserSettingsRepository>().LoadAsync();
+await userSettingsRepository.LoadAsync();
+// Fathom theme unlock progress: one increment per launch, and the unlock is sticky once earned
+// (a later SessionCount reset — e.g. via settings import — must not re-lock a theme the user
+// already reached, hence checking FathomUnlocked with ||= rather than recomputing from scratch).
+userSettingsRepository.Settings.SessionCount++;
+userSettingsRepository.Settings.FathomUnlocked |= userSettingsRepository.Settings.SessionCount >= UserSettings.FathomUnlockThreshold;
+await userSettingsRepository.SaveAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
 
 // ── Health, Demo Mode ────────────────────────────────────────────────────────

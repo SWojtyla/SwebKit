@@ -1,8 +1,13 @@
 import { create } from "zustand";
 
-export type Theme = "light" | "dark" | "fancy";
+export type Theme = "light" | "dark" | "fancy" | "fathom-dark" | "fathom-light";
 
+// Fathom is unlockable (Settings → Appearance gates it on usage) and deliberately left out of the
+// quick-cycle button/shortcut — that control has no way to know the unlock state from here, so it
+// only ever cycles the three themes everyone always has.
 const THEME_CYCLE: Theme[] = ["dark", "light", "fancy"];
+
+const THEME_CLASSES: Theme[] = ["dark", "fancy", "fathom-dark", "fathom-light"];
 
 interface SettingsState {
   theme: Theme;
@@ -11,7 +16,7 @@ interface SettingsState {
 }
 
 function applyThemeClass(theme: Theme) {
-  document.documentElement.classList.remove("dark", "fancy");
+  document.documentElement.classList.remove(...THEME_CLASSES);
   if (theme !== "light") {
     document.documentElement.classList.add(theme);
   }

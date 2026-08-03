@@ -1,12 +1,15 @@
+import { useCallback, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiSend } from "../api";
+import { apiFetch, apiSend, streamAgentChat } from "../api";
 import type {
   AgentActionApplyResult,
   AgentCapabilityTestResult,
   AgentChatContext,
   AgentChatMode,
+  AgentProfile,
   AgentReply,
   AgentStatus,
+  AgentStreamEvent,
   PendingAction,
 } from "../types";
 
@@ -82,6 +85,84 @@ export function useAgentChat(sessionId?: string) {
   });
 }
 
+interface StreamSendOptions {
+  context?: AgentChatContext;
+  mode?: AgentChatMode;
+  /** Called for every incremental text chunk, in order — append, don't replace. */
+  onToken?: (token: string) => void;
+  /** Called when a tool call starts or finishes (Ask & do turns only). */
+  onToolEvent?: (event: AgentStreamEvent) => void;
+}
+
+/**
+ * Streaming counterpart to {@link useAgentChat} — same session scoping, but reports incremental
+ * text (via `onToken`) as the model produces it instead of only the finished reply. `send` resolves
+ * with the same {@link AgentReply} shape the non-streaming endpoint returns (see
+ * `AgentEndpoints.ToWireEvent` on the sidecar side for why the wire shapes were made to match), so a
+ * caller can reuse the same "append final assistant message" logic for both.
+ *
+ * There is deliberately no automatic fallback to the non-streaming endpoint on failure — if the
+ * stream errors out (model unreachable, disconnected mid-turn), `send`'s promise rejects and the
+ * caller shows that like any other error; nothing here silently redrives a second request.
+ */
+export function useAgentChatStream(sessionId?: string) {
+  const qc = useQueryClient();
+  const [isStreaming, setIsStreaming] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const send = useCallback(
+    (message: string, options?: StreamSendOptions) => {
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setIsStreaming(true);
+
+      return new Promise<AgentReply>((resolve, reject) => {
+        let settled = false;
+
+        streamAgentChat(
+          { message, sessionId, context: options?.context, mode: options?.mode },
+          (event) => {
+            switch (event.kind) {
+              case "token":
+                if (event.token) options?.onToken?.(event.token);
+                break;
+              case "toolCallStarted":
+              case "toolCallResult":
+                options?.onToolEvent?.(event);
+                break;
+              case "done":
+                if (event.result) {
+                  settled = true;
+                  resolve(event.result);
+                }
+                break;
+              case "error":
+                settled = true;
+                reject(new Error(event.errorMessage ?? "The agent stream failed."));
+                break;
+            }
+          },
+          controller.signal,
+        )
+          .catch((err: unknown) => {
+            if (!settled) reject(err instanceof Error ? err : new Error(String(err)));
+          })
+          .finally(() => {
+            setIsStreaming(false);
+            qc.invalidateQueries({ queryKey: ["agent", "status", sessionKey(sessionId)] });
+          });
+      });
+    },
+    [sessionId, qc],
+  );
+
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  return { send, isStreaming, cancel };
+}
+
 export function useAgentClear(sessionId?: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -96,9 +177,15 @@ export function useAgentClear(sessionId?: string) {
   });
 }
 
+/**
+ * Tests a profile's connection/capability. Sends the full `profile` object as the request body
+ * — not just its id — so the test always runs against exactly what's currently on screen. The
+ * settings form saves on every keystroke via a fire-and-forget `PUT` the UI never awaits, so
+ * looking the profile up by id alone could race that save and silently test a stale value.
+ */
 export function useTestAgentProfile() {
   return useMutation({
-    mutationFn: (profileId: string) =>
-      apiSend<AgentCapabilityTestResult>(`/api/agent/profiles/${profileId}/test`, "POST"),
+    mutationFn: (profile: AgentProfile) =>
+      apiSend<AgentCapabilityTestResult>(`/api/agent/profiles/${profile.id}/test`, "POST", profile),
   });
 }

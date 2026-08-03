@@ -37,7 +37,7 @@ export function AgentSettings() {
   const runTest = (index: number) => {
     const profile = agent.profiles[index];
     setTestingId(profile.id);
-    testProfile.mutate(profile.id, {
+    testProfile.mutate(profile, {
       onSuccess: (result) => {
         setTestingId(null);
         updateProfile(index, {
@@ -132,45 +132,22 @@ export function AgentSettings() {
                 placeholder="Credential key (resolved via the OS credential store)"
               />
             )}
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Temperature</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="2"
-                  value={p.temperature}
-                  onChange={(e) =>
-                    updateProfile(i, { temperature: parseFloat(e.target.value) || 0 })
-                  }
-                  className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Max tokens</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={p.maxTokens}
-                  onChange={(e) =>
-                    updateProfile(i, { maxTokens: parseInt(e.target.value) || 2048 })
-                  }
-                  className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Timeout (s)</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={p.timeoutSeconds}
-                  onChange={(e) =>
-                    updateProfile(i, { timeoutSeconds: parseInt(e.target.value) || 60 })
-                  }
-                  className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
-                />
-              </div>
+            {/* Temperature and max output tokens are deliberately not exposed here — those are
+                generation parameters the provider (LM Studio, etc.) already controls, and
+                duplicating them here would just create two different, silently-conflicting
+                settings. Timeout stays: it's this app's own HTTP client patience, not something
+                the provider has a say in. */}
+            <div className="w-32">
+              <label className="mb-1 block text-xs text-muted-foreground">Timeout (s)</label>
+              <input
+                type="number"
+                min="1"
+                value={p.timeoutSeconds}
+                onChange={(e) =>
+                  updateProfile(i, { timeoutSeconds: parseInt(e.target.value) || 60 })
+                }
+                className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
+              />
             </div>
             <div className="flex items-center justify-between gap-2 pt-1">
               <label className="flex items-center gap-2 text-sm">
@@ -205,8 +182,6 @@ export function AgentSettings() {
               baseUrl: "http://localhost:1234/v1",
               model: "",
               credentialKey: "",
-              temperature: 0.7,
-              maxTokens: 2048,
               timeoutSeconds: 120,
               capability: "Unknown",
               lastTestDiagnostic: null,
@@ -222,36 +197,6 @@ export function AgentSettings() {
         >
           Add Profile
         </button>
-      </section>
-
-      <section>
-        <h3 className="mb-3 text-base font-semibold">History</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Max History Messages</label>
-            <input
-              type="number"
-              value={agent.maxHistoryMessages}
-              onChange={(e) =>
-                update({ maxHistoryMessages: parseInt(e.target.value) || 20 })
-              }
-              className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Warning Threshold (%)</label>
-            <input
-              type="number"
-              value={agent.historyWarningThresholdPercent}
-              onChange={(e) =>
-                update({
-                  historyWarningThresholdPercent: parseInt(e.target.value) || 75,
-                })
-              }
-              className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-            />
-          </div>
-        </div>
       </section>
     </div>
   );

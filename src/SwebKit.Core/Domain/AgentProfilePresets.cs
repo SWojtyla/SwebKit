@@ -25,8 +25,6 @@ public static class AgentProfilePresets
         BaseUrl = LmStudioBaseUrl,
         Model = model ?? string.Empty,
         CredentialKey = null,
-        Temperature = 0.7,
-        MaxTokens = 2048,
         TimeoutSeconds = 120,
     };
 
@@ -38,8 +36,6 @@ public static class AgentProfilePresets
         BaseUrl = MistralBaseUrl,
         Model = model ?? MistralDefaultModel,
         CredentialKey = MistralCredentialKey,
-        Temperature = 0.7,
-        MaxTokens = 2048,
         TimeoutSeconds = 60,
     };
 
@@ -51,8 +47,6 @@ public static class AgentProfilePresets
         BaseUrl = baseUrl,
         Model = model,
         CredentialKey = credentialKey,
-        Temperature = 0.7,
-        MaxTokens = 2048,
         TimeoutSeconds = 60,
     };
 }

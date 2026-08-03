@@ -96,7 +96,90 @@ lands, following the pattern used by the now-closed `tauri-react-primary-tool/st
       clipboard-test flake cascade documented earlier this session, confirmed unrelated by rerunning
       the cascaded-past tests in isolation — all passed).
 - [ ] Module 7 — Local-model (LM Studio) manual verification
-- [ ] Module 8 — Streaming (stretch, optional)
+- [x] Module 8 — Streaming (stretch, optional) — **done** (2026-08-02): added
+      `IAgentModelClient.ChatStreamAsync` (SSE), `SidecarAgentChatService.SendStreamAsync`
+      (session/history semantics identical to `SendAsync` — only the terminal event touches
+      history), `POST /api/agent/chat/stream`, and frontend `useAgentChatStream` wired into both
+      `AgentPage.tsx` and `ContextualAssistant.tsx` (token-by-token bubble, finalized from the
+      `done` event). **Deliberately not converted**: `GenerateApiRequestPanel` — it has no
+      conversational transcript for partial tokens to land in, so it keeps using the plain
+      `POST /api/agent/chat`. **Real bug found and fixed while building this** (not by manual
+      testing — by writing this module's own wire-format regression tests, then confirmed live
+      against the user's LM Studio): `AgentMessage.ToWireFormat()` existed but was never called —
+      every one of `ChatAsync`/`CompleteAsync`/the new `ChatStreamAsync` serialized messages with
+      PascalCase C# property names (`Role`/`Content`) instead of the OpenAI-compatible lowercase
+      wire format, which every real provider rejects outright. This had been broken since before
+      this feature; no prior test ever inspected the actual outgoing JSON. Fixed in all three call
+      sites with one regression test each. Also hit and worked around a real Playwright gotcha:
+      route glob `*` doesn't cross `/`, so e2e mocks needed two explicit routes
+      (`/api/agent/chat` and `/api/agent/chat/stream`) instead of one wildcard-suffixed pattern.
+      **Known gap, flagged but not fixed (pending user decision)**: `AgentCapabilityTester`'s mini
+      chat probe hardcodes `max_tokens: 10`, which a reasoning-capable local model can burn
+      entirely on hidden reasoning tokens before any visible `content` — reports "Chat returned
+      empty response" even though the profile works fine for real conversations. Verified:
+      `dotnet test tests/SwebKit.Agents.Tests` 173/173 (7 new), `dotnet test
+      tests/SwebKit.Sidecar.Tests` 200/200 (7 new), `npx vitest run` 116/116 (unchanged), `npx
+      playwright test agent.spec.ts contextual-assistant.spec.ts` 19/19 (1 new), plus a full
+      regression sweep (`aks-portforward-analysis`/`redis`/`service-bus`/`monitoring`/
+      `api-client`/`api-client-layout`/`dashboard`/`settings`, 124 tests total) — all passed.
+- [x] Module 9 — Agent settings simplification (user-requested, not in the original plan) — **done**
+      (2026-08-02): removed `Temperature`/`MaxTokens` from `AgentProfile` entirely — the outgoing
+      LLM request no longer sends `temperature`/`max_tokens` at all, so the provider's own
+      configured default genuinely applies (this was found to actually matter: the app previously
+      forced `temperature: 0.7`/`max_tokens: 2048` on every request regardless of what the user set
+      in LM Studio itself, exactly the "two settings that silently disagree" problem the user
+      flagged). **Real finding, not assumed**: `MaxHistoryMessages`/`HistoryWarningThresholdPercent`
+      were already fully dead in the sidecar/React app (it hardcodes its own history cap; the
+      warning-threshold setting was never read by *any* code path, sidecar or legacy MAUI) — removed
+      both from `AgentConfig`. Added a replacement the user asked for instead: a rough
+      ~4-chars-per-token estimate (`SidecarAgentChatService.GetEstimatedTokens`, deliberately not
+      real tokenization or a percentage-of-context figure — this app doesn't carry a per-model
+      tokenizer or know the active model's context-window size) surfaced in both `AgentPage.tsx` and
+      `ContextualAssistant.tsx`. Legacy MAUI `AgentConfigForm.razor`/`AgentChatPanel.razor` updated
+      to keep compiling with the same simplification applied. Verified: `dotnet test
+      tests/SwebKit.Agents.Tests` 173/173 (2 preset assertions updated), `dotnet test
+      tests/SwebKit.Sidecar.Tests` 203/203 (3 new), `dotnet build` clean on `SwebKit.Core`,
+      `SwebKit.Agents`, the sidecar, and `SwebKit.App`, `npx tsc --noEmit` clean, `npx vitest run`
+      116/116 (unchanged), `npx playwright test settings.spec.ts` 8/8 (1 new), plus the same full
+      regression sweep as Module 8 (125/125 passed).
+- [x] Module 10 — Global, persistent AI Agent side panel (user-requested, not in the original plan)
+      — **done** (2026-08-02): fixes a real bug the user hit — `AgentPage.tsx` kept its transcript
+      in local `useState`, which react-router destroys on navigation, so the message list vanished
+      on returning to `/agent` even though the backend session's `historyCount` never reset. New
+      Zustand store (`agent-conversation.ts`) + shared `useGlobalAgentConversation` hook now back
+      both `AgentPage.tsx` and a new always-mounted `GlobalAgentPanel.tsx` (docked flyout, toggle
+      button in the top bar, `Ctrl+Shift+L`), so the transcript survives navigation and is
+      identical no matter which of the two views is open. **Real finding while picking a keyboard
+      shortcut**: `Ctrl+Shift+A` (the obvious choice) is swallowed by Chrome's built-in "Search
+      tabs" shortcut before it reaches page JS at all — confirmed empirically, not assumed;
+      switched to `Ctrl+Shift+L`. **Real Playwright gotcha**: a shortcut test raced React's mount
+      effects right after `page.goto()` (unlike `.click()`, `page.keyboard.press()` has no
+      actionability wait) — fixed by asserting the page had rendered first. Also ran the
+      user-requested tool-wiring audit: 22/24 tools registered in the sidecar, the 2 missing
+      (`get_metrics`/`query_logs`) are a pre-existing, documented, deliberate exclusion
+      (Observability was product-dropped from this rewrite), not a defect; all 11
+      `AgentActionType` values have exactly one executor; the only real prerequisite for a capable
+      model to see any tools is an explicit, successfully-persisted "Test connection." Verified:
+      `npx tsc --noEmit` clean, `npx vitest run` 116/116 (unchanged), `npx playwright test
+      global-agent-panel.spec.ts` 4/4 (new), plus a regression sweep of every layout-adjacent and
+      agent spec (82 tests total) — all passed.
+- [x] Module 11 — Capability-test reliability fixes (user-requested, not in the original plan) —
+      **done** (2026-08-03): bumped `AgentCapabilityTester`'s mini-chat `max_tokens` from `10` to
+      `64` — the gap flagged but deliberately left unfixed in Module 8 (a reasoning-capable local
+      model can burn the whole tiny budget on hidden reasoning before any visible content). **Real
+      bug found while checking "does the Test connection button actually work reliably", not
+      assumed**: the settings form autosaves on every keystroke via a fire-and-forget `PUT` the UI
+      never awaits, while `POST /api/agent/profiles/{id}/test` looked the profile up by id from
+      that same persisted store — clicking Test right after an edit could race the save and
+      silently test a stale value. Fixed by having the endpoint accept the full profile in the
+      request body (frontend now sends the exact on-screen values directly; falls back to the old
+      by-id lookup only if no body is sent). `AgentCapabilityTester` had zero prior test coverage
+      (a known gap since Module 1) — added 10 tests covering the full happy/unhappy-path matrix.
+      Verified: `dotnet test tests/SwebKit.Agents.Tests` 183/183 (10 new), `dotnet test
+      tests/SwebKit.Sidecar.Tests` 205/205 (2 new), `npx tsc --noEmit` clean, `npx vitest run`
+      116/116 (unchanged), `npx playwright test settings.spec.ts` 9/9 (1 new, end-to-end through
+      the real UI), plus a regression sweep (`agent`/`contextual-assistant`/`global-agent-panel`/
+      `dashboard`/`settings`, 40 tests total) — all passed.
 
 ## Notes
 

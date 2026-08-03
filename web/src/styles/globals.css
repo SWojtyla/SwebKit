@@ -132,6 +132,111 @@
   --aurora-3: oklch(0.85 0.22 95);
 }
 
+/* ── Fathom Theme (unlockable — see Settings → Appearance) ──────────────
+   Ocean and gold, not gold-on-black: warm light at the surface fading into
+   cold dark water below. Dark ("Abyss") and light ("Shallows") are the same
+   gold-to-water gradient read from opposite ends, not a flat hue swap — see
+   the .aurora-bg::before override further down for the actual gradient.
+   Colors are hand-tuned hex from the approved theme-pitch mockup rather than
+   converted to oklch, to keep them pixel-identical to what was reviewed. ── */
+.fathom-dark {
+  --background: #071019;
+  --foreground: #dce8e6;
+  --card: #0d1b24;
+  --card-foreground: #dce8e6;
+  --primary: #e0a940;
+  --primary-foreground: #1a1206;
+  --primary-glow: rgba(224, 169, 64, 30%);
+  --secondary: #12232b;
+  --secondary-foreground: #cfe0dd;
+  --muted: #0f1e26;
+  --muted-foreground: #7fa19e;
+  --accent: #163038;
+  --accent-foreground: #dce8e6;
+  --destructive: #d9645a;
+  --destructive-foreground: #1a0806;
+  --success: #3fbf8f;
+  --success-foreground: #08150f;
+  --warning: #d98c4a;
+  --warning-foreground: #241505;
+  --info: #2dd4bf;
+  --info-foreground: #062420;
+  --border: rgba(224, 169, 64, 14%);
+  --input: rgba(224, 169, 64, 10%);
+  --ring: #e0a940;
+  --sidebar: #0a1720;
+  --sidebar-foreground: #7fa19e;
+  --sidebar-active: rgba(224, 169, 64, 14%);
+  --header: rgba(7, 16, 25, 75%);
+  --popover: #0d1b24;
+  --popover-foreground: #dce8e6;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 35%);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 40%), 0 1px 4px rgba(0, 0, 0, 25%);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 45%), 0 4px 12px rgba(0, 0, 0, 28%);
+  --shadow-glow: 0 0 28px rgba(224, 169, 64, 25%);
+  --aurora-1: #e0a940;
+  --aurora-2: #2dd4bf;
+  --aurora-3: #0d1b24;
+}
+
+.fathom-light {
+  --background: #eef6f4;
+  --foreground: #0d2b30;
+  --card: #ffffff;
+  --card-foreground: #0d2b30;
+  --primary: #b8892e;
+  --primary-foreground: #fffaf0;
+  --primary-glow: rgba(184, 137, 46, 20%);
+  --secondary: #e2f0ec;
+  --secondary-foreground: #123a3f;
+  --muted: #e6f2ef;
+  --muted-foreground: #587876;
+  --accent: #ddeeea;
+  --accent-foreground: #0d2b30;
+  --destructive: #c1544a;
+  --destructive-foreground: #fff5f3;
+  --success: #2f8f68;
+  --success-foreground: #f2fbf7;
+  --warning: #a9691f;
+  --warning-foreground: #2a1604;
+  --info: #1a8f8a;
+  --info-foreground: #f0fbfa;
+  --border: rgba(13, 43, 48, 10%);
+  --input: rgba(13, 43, 48, 8%);
+  --ring: #b8892e;
+  --sidebar: #e7f2ee;
+  --sidebar-foreground: #4d6b6a;
+  --sidebar-active: rgba(184, 137, 46, 12%);
+  --header: rgba(238, 246, 244, 80%);
+  --popover: #ffffff;
+  --popover-foreground: #0d2b30;
+  --shadow-sm: 0 1px 2px rgba(13, 43, 48, 5%);
+  --shadow-md: 0 4px 12px rgba(13, 43, 48, 8%), 0 1px 3px rgba(13, 43, 48, 6%);
+  --shadow-lg: 0 12px 32px rgba(13, 43, 48, 10%), 0 4px 8px rgba(13, 43, 48, 6%);
+  --shadow-glow: 0 0 24px rgba(184, 137, 46, 15%);
+  --aurora-1: #b8892e;
+  --aurora-2: #1a8f8a;
+  --aurora-3: #ffffff;
+}
+
+/* The signature move: depth as a literal gradient rather than a flat background. Abyss fades
+   from a sliver of gold light at the top into dark water; Shallows fades from sunlit surface
+   into slightly deeper turquoise. Low opacity throughout — this washes behind content via the
+   existing .aurora-bg::before layer, it doesn't repaint it. */
+.fathom-dark .aurora-bg::before {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 90% 45% at 50% -10%, rgba(224, 169, 64, 16%), transparent 60%),
+    linear-gradient(180deg, rgba(224, 169, 64, 5%) 0%, transparent 35%, rgba(4, 10, 16, 40%) 100%);
+}
+
+.fathom-light .aurora-bg::before {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 90% 45% at 50% -10%, rgba(184, 137, 46, 14%), transparent 60%),
+    linear-gradient(180deg, rgba(255, 250, 240, 60%) 0%, transparent 40%, rgba(26, 143, 138, 6%) 100%);
+}
+
 /* Comic Sans. On purpose. This is not a professional theme. */
 .fancy body {
   font-family: "Comic Sans MS", "Comic Sans", "Chalkboard SE", cursive, system-ui, sans-serif;
@@ -536,4 +641,34 @@ body {
   --cm-invalid: oklch(0.68 0.26 25);
   --cm-gutter: oklch(0.72 0.06 280);
   --cm-active-line: oklch(0.72 0.28 330 / 14%);
+}
+
+.fathom-dark {
+  --cm-key: #e0a940;
+  --cm-string: #3fbf8f;
+  --cm-number: #2dd4bf;
+  --cm-bool: #e0a940;
+  --cm-null: #7fa19e;
+  --cm-punct: #7fa19e;
+  --cm-comment: #5f8a87;
+  --cm-tag: #2dd4bf;
+  --cm-attr: #d98c4a;
+  --cm-invalid: #d9645a;
+  --cm-gutter: #5f8a87;
+  --cm-active-line: rgba(224, 169, 64, 8%);
+}
+
+.fathom-light {
+  --cm-key: #8f6a1f;
+  --cm-string: #2f8f68;
+  --cm-number: #0d6b66;
+  --cm-bool: #8f6a1f;
+  --cm-null: #587876;
+  --cm-punct: #587876;
+  --cm-comment: #6f8f8d;
+  --cm-tag: #0d6b66;
+  --cm-attr: #a9691f;
+  --cm-invalid: #c1544a;
+  --cm-gutter: #6f8f8d;
+  --cm-active-line: rgba(184, 137, 46, 8%);
 }

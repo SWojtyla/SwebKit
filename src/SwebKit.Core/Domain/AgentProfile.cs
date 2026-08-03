@@ -47,12 +47,6 @@ public sealed class AgentProfile
     /// </summary>
     public string? CredentialKey { get; set; }
 
-    /// <summary>Sampling temperature (0.0–2.0). Lower is more deterministic.</summary>
-    public double Temperature { get; set; } = 0.7;
-
-    /// <summary>Maximum output tokens per response.</summary>
-    public int MaxTokens { get; set; } = 2048;
-
     /// <summary>Request timeout in seconds. 0 means use the HttpClient default.</summary>
     public int TimeoutSeconds { get; set; } = 60;
 

@@ -202,7 +202,13 @@ public sealed class AgentCapabilityTester
             {
                 new { role = "user", content = "Reply with exactly: OK" }
             },
-            max_tokens = 10,
+            // Was 10 — reasoning-capable local models (observed with a Gemma QAT model in LM
+            // Studio) can spend the entire budget on hidden reasoning tokens before emitting any
+            // visible content, so a tiny cap made this probe report "empty response" for models
+            // that work perfectly fine in real conversation (which uses no cap at all — see
+            // OpenAiCompatibleAgentClient, which omits max_tokens entirely since Module 9). 64
+            // gives reasoning room without turning this into a slow test.
+            max_tokens = 64,
             temperature = 0
         });
 

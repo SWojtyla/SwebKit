@@ -133,14 +133,21 @@ export interface UserSettings {
   autoSaveRequests: boolean;
   agent: AgentConfig;
   logging: LoggingSettings;
+  /** Incremented once per app launch by the sidecar; drives the Fathom theme's unlock progress. */
+  sessionCount: number;
+  /** Sticky once true — the Fathom theme, once earned, stays available even if sessionCount is later reset. */
+  fathomUnlocked: boolean;
+  /** Set only via the hidden six-click gesture on the status bar version number — no other UI surfaces it. */
+  fathomDeveloperOverride: boolean;
 }
+
+/** Sessions needed before Fathom unlocks. Mirrors UserSettings.FathomUnlockThreshold (server-enforced; this constant only drives the progress bar). */
+export const FATHOM_UNLOCK_THRESHOLD = 100;
 
 export interface AgentConfig {
   isEnabled: boolean;
   profiles: AgentProfile[];
   activeProfileId: string;
-  maxHistoryMessages: number;
-  historyWarningThresholdPercent: number;
 }
 
 export type AgentCapability = "Unknown" | "ChatOnly" | "ToolCalling";
@@ -152,8 +159,6 @@ export interface AgentProfile {
   baseUrl: string;
   model: string;
   credentialKey: string;
-  temperature: number;
-  maxTokens: number;
   timeoutSeconds: number;
   capability: AgentCapability;
   lastTestDiagnostic: string | null;
@@ -888,8 +893,25 @@ export interface AgentReply {
   error: boolean;
 }
 
+/** One incremental event from POST /api/agent/chat/stream — see streamAgentChat in lib/api.ts and
+ * IAgentModelClient.ChatStreamAsync (SwebKit.Agents) for the producing side. "done" always carries
+ * `result` and is always the last event on success; "error" always carries `errorMessage` and is
+ * always the last event on failure — nothing follows either. */
+export type AgentStreamEventKind = "token" | "toolCallStarted" | "toolCallResult" | "done" | "error";
+
+export interface AgentStreamEvent {
+  kind: AgentStreamEventKind;
+  token?: string;
+  toolName?: string;
+  result?: AgentReply;
+  errorMessage?: string;
+}
+
 export interface AgentStatus {
   historyCount: number;
+  /** Rough ~4-chars-per-token estimate over this session's history — not real tokenization, just
+   * enough to let the user watch the conversation grow (see SidecarAgentChatService.GetEstimatedTokens). */
+  estimatedTokens: number;
 }
 
 /** "ask" = read-only tools only. "ask_and_do" = mutating propose/prepare tools are also

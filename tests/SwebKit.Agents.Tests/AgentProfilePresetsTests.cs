@@ -14,8 +14,6 @@ public class AgentProfilePresetsTests
         Assert.Equal("http://localhost:1234/v1", profile.BaseUrl);
         Assert.Null(profile.CredentialKey);
         Assert.False(profile.RequiresApiKey);
-        Assert.Equal(0.7, profile.Temperature);
-        Assert.Equal(2048, profile.MaxTokens);
         Assert.Equal(120, profile.TimeoutSeconds);
     }
 
@@ -29,8 +27,6 @@ public class AgentProfilePresetsTests
         Assert.Equal("mistral-medium-latest", profile.Model);
         Assert.Equal("SwebKit-Agent:Mistral-ApiKey", profile.CredentialKey);
         Assert.True(profile.RequiresApiKey);
-        Assert.Equal(0.7, profile.Temperature);
-        Assert.Equal(2048, profile.MaxTokens);
         Assert.Equal(60, profile.TimeoutSeconds);
     }
 

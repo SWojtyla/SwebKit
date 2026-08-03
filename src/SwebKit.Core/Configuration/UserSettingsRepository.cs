@@ -71,8 +71,22 @@ public sealed class UserSettingsRepository(ILogger<UserSettingsRepository>? logg
 
 public sealed class UserSettings
 {
+    /// <summary>Sessions needed before the Fathom theme unlocks (see <see cref="SessionCount"/>/<see cref="FathomUnlocked"/>).</summary>
+    public const int FathomUnlockThreshold = 100;
+
     public string Theme { get; set; } = string.Empty;
     public bool WarmupConnectionsOnStartup { get; set; } = true;
+
+    /// <summary>Incremented once per app launch by the sidecar. Drives the Fathom theme's unlock progress.</summary>
+    public int SessionCount { get; set; }
+
+    /// <summary>Set once <see cref="SessionCount"/> reaches <see cref="FathomUnlockThreshold"/>; never cleared afterward,
+    /// even if SessionCount is later reset (e.g. by a settings import) — the theme, once earned, stays earned.</summary>
+    public bool FathomUnlocked { get; set; }
+
+    /// <summary>Manual escape hatch with no UI surface besides a hidden six-click gesture on the version number in the
+    /// status bar — lets a developer skip the session-count gate on their own machine without touching anyone else's.</summary>
+    public bool FathomDeveloperOverride { get; set; }
     public Dictionary<string, List<PinnedPortForwardEntry>> PinnedPortForwards { get; set; } = [];
     /// <summary>When true, request edits are persisted automatically after a 500 ms debounce.</summary>
     public bool AutoSaveRequests { get; set; }

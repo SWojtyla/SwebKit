@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode } from "./helpers";
+import { mockAgentChatStreamDone, setDemoMode } from "./helpers";
 
 test.describe("Agent", () => {
   test.beforeEach(async ({ page }) => {
@@ -147,15 +147,8 @@ test.describe("Agent", () => {
   });
 
   test("assistant replies render markdown, not literal syntax characters", async ({ page }) => {
-    await page.route("**/api/agent/chat", async (route) => {
-      await route.fulfill({
-        json: {
-          text: "Here's what I found:\n\n- **pod-a** is `Running`\n- pod-b is `CrashLoopBackOff`\n\n```\nkubectl logs pod-b\n```",
-          elapsedMs: 1,
-          status: "done",
-          error: false,
-        },
-      });
+    await mockAgentChatStreamDone(page, {
+      text: "Here's what I found:\n\n- **pod-a** is `Running`\n- pod-b is `CrashLoopBackOff`\n\n```\nkubectl logs pod-b\n```",
     });
 
     await page.goto("/agent");
@@ -169,6 +162,32 @@ test.describe("Agent", () => {
     // Never the raw markdown syntax as literal text — confirms it was actually parsed, not just
     // dumped as a monospace string like before this module.
     await expect(page.getByTestId("agent-messages")).not.toContainText("**pod-a**");
+  });
+
+  test("streamed replies assemble multiple token events into the final text", async ({ page }) => {
+    // Playwright's route.fulfill() sends the whole mocked body in one response, so this can't
+    // observe true network-level progressive rendering timing (that's the one part of Module 8's
+    // test-plan.md scope that stays manual — see technical-plan.md Module 7/8). What it does verify
+    // end-to-end: several separate SSE "token" events, each carrying one fragment, get parsed and
+    // concatenated into the exact final text — not dropped, reordered, or merged incorrectly.
+    const tokens = ["The ", "pod ", "is ", "healthy."];
+    const events = [
+      ...tokens.map((token) => ({ kind: "token", token })),
+      { kind: "done", result: { text: tokens.join(""), elapsedMs: 5, status: "done", error: false } },
+    ];
+    await page.route("**/api/agent/chat/stream", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
+      });
+    });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("status?");
+    await page.getByTestId("agent-send").click();
+
+    await expect(page.getByTestId("agent-messages")).toContainText("The pod is healthy.");
   });
 
   test("Enter key sends message, Shift+Enter adds newline", async ({ page }) => {

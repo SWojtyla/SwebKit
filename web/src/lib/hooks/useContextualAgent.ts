@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { useAgentChat, useAgentClear, useAgentStatus } from "./useAgent";
-import type { AgentChatMode } from "../types";
+import { useAgentChatStream, useAgentClear, useAgentStatus } from "./useAgent";
+import type { AgentChatMode, AgentReply, AgentStreamEvent } from "../types";
 
 /**
  * Wires up a contextual assistant panel: a stable per-mount session id (so this panel's
@@ -20,18 +20,28 @@ export function useContextualAgent(featureArea: string, selection?: Record<strin
   // conversation never starts on Ask & do just because a previous one was switched to it.
   const [mode, setMode] = useState<AgentChatMode>("ask");
 
-  const chat = useAgentChat(sessionId);
+  const chat = useAgentChatStream(sessionId);
   const clear = useAgentClear(sessionId);
   const status = useAgentStatus(sessionId);
 
   const sendMessage = (
     message: string,
-    options?: { onSuccess?: (reply: { text: string; elapsedMs: number; error: boolean }) => void; onError?: (err: Error) => void },
+    options?: {
+      onToken?: (token: string) => void;
+      onToolEvent?: (event: AgentStreamEvent) => void;
+      onSuccess?: (reply: AgentReply) => void;
+      onError?: (err: Error) => void;
+    },
   ) => {
-    chat.mutate(
-      { message, context: { featureArea, selection }, mode },
-      { onSuccess: options?.onSuccess, onError: options?.onError },
-    );
+    chat
+      .send(message, {
+        context: { featureArea, selection },
+        mode,
+        onToken: options?.onToken,
+        onToolEvent: options?.onToolEvent,
+      })
+      .then((reply) => options?.onSuccess?.(reply))
+      .catch((err: Error) => options?.onError?.(err));
   };
 
   return { sessionId, mode, setMode, chat, clear, status, sendMessage };

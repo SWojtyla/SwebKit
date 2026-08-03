@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
 using SwebKit.Core.Abstractions;
@@ -65,6 +66,23 @@ public sealed class SidecarAgentChatService
     public int GetHistoryCount(string? sessionId) =>
         _sessions.TryGetValue(Key(sessionId), out var session) ? session.History.Count : 0;
 
+    /// <summary>
+    /// Rough token estimate for a session's history (~4 characters per token — the standard
+    /// coarse heuristic for English text, not real tokenization) so the UI can show the user
+    /// something to watch as a conversation grows, without needing a per-model tokenizer or a
+    /// user-configured context-window size (both of which belong to the model/provider, not this
+    /// app — see the "AI Agent" settings simplification this accompanies). Deliberately excludes
+    /// the system prompt, which is rebuilt fresh per turn rather than accumulating in history.
+    /// </summary>
+    public int GetEstimatedTokens(string? sessionId)
+    {
+        if (!_sessions.TryGetValue(Key(sessionId), out var session))
+            return 0;
+
+        var totalChars = session.History.Sum(m => m.Content?.Length ?? 0);
+        return (int)Math.Ceiling(totalChars / 4.0);
+    }
+
     public void ClearHistory(string? sessionId = null)
     {
         if (_sessions.TryGetValue(Key(sessionId), out var session))
@@ -113,8 +131,6 @@ public sealed class SidecarAgentChatService
             UserMessage = userMessage,
             Tools = tools,
             History = historyList,
-            Temperature = profile?.Temperature ?? 0.7,
-            MaxTokens = profile?.MaxTokens ?? 2048,
         };
 
         try
@@ -149,6 +165,105 @@ public sealed class SidecarAgentChatService
                 Status = "failed",
                 Error = true,
             };
+        }
+    }
+
+    /// <summary>Streaming counterpart to <see cref="SendAsync"/> — same session/tool/prompt setup,
+    /// but forwards <see cref="IAgentModelClient.ChatStreamAsync"/>'s events as they arrive instead
+    /// of waiting for the final result. History is only updated once, from the terminal
+    /// <see cref="AgentStreamEventKind.Done"/>/<see cref="AgentStreamEventKind.Error"/> event — never
+    /// from intermediate token events — so a client that disconnects mid-stream doesn't leave a
+    /// partial assistant message in history.</summary>
+    public async IAsyncEnumerable<AgentStreamEvent> SendStreamAsync(
+        string? sessionId,
+        string userMessage,
+        AgentChatContext? context = null,
+        string? mode = null,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        EvictIdleSessions();
+        var key = Key(sessionId);
+        var session = _sessions.GetOrAdd(key, _ => new ConversationSession());
+        session.LastActivity = DateTimeOffset.UtcNow;
+
+        var normalizedMode = mode == AskAndDoMode ? AskAndDoMode : "ask";
+
+        var profile = _settings.Settings.Agent.GetActiveProfile();
+        var hasToolCalling = (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
+        var systemPrompt = BuildSystemPrompt(context, normalizedMode, hasToolCalling);
+
+        session.History.Enqueue(new AgentMessage { Role = "user", Content = userMessage });
+        TrimHistory(session);
+
+        var historyList = session.History.ToList();
+        if (historyList.Count > 0)
+            historyList.RemoveAt(historyList.Count - 1);
+
+        var tools = ResolveTools(hasToolCalling, normalizedMode, context);
+
+        var request = new AgentModelRequest
+        {
+            SystemPrompt = systemPrompt,
+            UserMessage = userMessage,
+            Tools = tools,
+            History = historyList,
+        };
+
+        var stream = _modelClient.ChatStreamAsync(
+            request,
+            tools.Count > 0 ? (toolName, args, toolCt) => _toolRegistry.ExecuteAsync(toolName, args, toolCt) : null,
+            ct);
+        var enumerator = stream.GetAsyncEnumerator(ct);
+        try
+        {
+            while (true)
+            {
+                AgentStreamEvent? current = null;
+                var hasNext = false;
+                Exception? caught = null;
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync();
+                    if (hasNext)
+                        current = enumerator.Current;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    caught = ex;
+                }
+
+                if (caught is not null)
+                {
+                    session.History.Enqueue(new AgentMessage { Role = "assistant", Content = $"Error: {caught.Message}" });
+                    TrimHistory(session);
+                    yield return new AgentStreamEvent { Kind = AgentStreamEventKind.Error, ErrorMessage = caught.Message };
+                    yield break;
+                }
+
+                if (!hasNext)
+                    yield break;
+
+                if (current!.Kind == AgentStreamEventKind.Done && current.Result is not null)
+                {
+                    session.History.Enqueue(new AgentMessage { Role = "assistant", Content = current.Result.Text });
+                    TrimHistory(session);
+                }
+                else if (current.Kind == AgentStreamEventKind.Error)
+                {
+                    session.History.Enqueue(new AgentMessage { Role = "assistant", Content = $"Error: {current.ErrorMessage}" });
+                    TrimHistory(session);
+                }
+
+                yield return current;
+            }
+        }
+        finally
+        {
+            await enumerator.DisposeAsync();
         }
     }
 

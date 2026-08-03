@@ -28,32 +28,44 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { mode, setMode, chat, sendMessage } = useContextualAgent(featureArea, selection);
+  const { mode, setMode, chat, status, sendMessage } = useContextualAgent(featureArea, selection);
   const pendingApprovals = usePendingApprovals();
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, chat.isPending]);
+  }, [messages, chat.isStreaming]);
 
   const handleSend = () => {
     const text = input.trim();
-    if (!text || chat.isPending) return;
+    if (!text || chat.isStreaming) return;
 
-    setMessages((prev) => [...prev, { id: nextMsgId(), role: "user", content: text }]);
+    const assistantId = nextMsgId();
+    setMessages((prev) => [
+      ...prev,
+      { id: nextMsgId(), role: "user", content: text },
+      { id: assistantId, role: "assistant", content: "" },
+    ]);
     setInput("");
 
     sendMessage(text, {
+      onToken: (token) => {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + token } : m)),
+        );
+      },
       onSuccess: (reply) => {
-        setMessages((prev) => [
-          ...prev,
-          { id: nextMsgId(), role: "assistant", content: reply.text, elapsedMs: reply.elapsedMs, error: reply.error },
-        ]);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: reply.text, elapsedMs: reply.elapsedMs, error: reply.error }
+              : m,
+          ),
+        );
       },
       onError: (err) => {
-        setMessages((prev) => [
-          ...prev,
-          { id: nextMsgId(), role: "assistant", content: `Error: ${err.message}`, error: true },
-        ]);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, content: `Error: ${err.message}`, error: true } : m)),
+        );
       },
     });
   };
@@ -77,6 +89,11 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
             <h2 className="text-sm font-semibold" data-testid="contextual-assistant-title">
               Ask AI — {title}
             </h2>
+            {status.data && status.data.estimatedTokens > 0 && (
+              <p className="text-xs text-muted-foreground" data-testid="contextual-assistant-token-estimate">
+                ~{status.data.estimatedTokens.toLocaleString()} tokens in this conversation
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -143,7 +160,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
               </div>
             </div>
           ))}
-          {chat.isPending && (
+          {chat.isStreaming && messages[messages.length - 1]?.content === "" && (
             <div className="flex justify-start" data-testid="contextual-assistant-loading">
               <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">Thinking…</div>
             </div>
@@ -159,12 +176,12 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
               placeholder={`Ask about ${title}...`}
               rows={2}
               className="flex-1 resize-none rounded-md border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              disabled={chat.isPending}
+              disabled={chat.isStreaming}
               data-testid="contextual-assistant-input"
             />
             <button
               onClick={handleSend}
-              disabled={!input.trim() || chat.isPending}
+              disabled={!input.trim() || chat.isStreaming}
               className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               data-testid="contextual-assistant-send"
             >
