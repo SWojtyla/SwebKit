@@ -12,10 +12,10 @@ Beyond that, the only other open item anywhere in this pair of features is `ai-a
 Module 7 (manual verification against a real running LM Studio instance) — that one is explicitly
 **the user's own task**, not something to implement; do not attempt to automate or fake it.
 
-**Nothing from this session has been committed.** `git status` shows every change (this feature's
-Modules 1-6, plus the `ai-augmented-app` Module 13 Observability work from immediately before it)
-still sitting uncommitted on `feature/ai-augmented-app`. Do not assume a clean starting tree —
-check `git status`/`git diff` before doing anything that could discard work.
+**Module 7 was committed in this session.** `git status` now shows only the previous session's
+Modules 1-6 plus the `ai-augmented-app` Module 13 Observability work as still uncommitted; the
+Module 7 changes are on `feature/ai-augmented-app` as commit `f4fdbcd`. Check `git status`/`git diff`
+before doing anything that could discard work.
 
 Every module's entry below and in `technical-plan.md` was written in the same "what actually
 happened, including real deviations and honest gaps" style established across this whole session —
