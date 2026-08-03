@@ -48,7 +48,10 @@ export function AgentPage() {
             {status.data && status.data.estimatedTokens > 0 && (
               <> · ~{status.data.estimatedTokens.toLocaleString()} tokens</>
             )}
-            <ContextUsageIndicator percent={status.data?.contextUsagePercent ?? 0} />
+            <ContextUsageIndicator
+              percent={status.data?.contextUsagePercent ?? 0}
+              warningAt={status.data?.contextUsageWarningPercent ?? 75}
+            />
           </span>
         </div>
         {showClearConfirm ? (

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useContextualAgent } from "@/lib/hooks/useContextualAgent";
-import { usePendingApprovals } from "@/lib/hooks";
+import { usePendingApprovals, useUserSettings } from "@/lib/hooks";
 import { PendingActionCard } from "./PendingActionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
@@ -33,6 +33,24 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
   const scrollRef = useRef<HTMLDivElement>(null);
   const { mode, setMode, scope, setScope, chat, status, sendMessage } = useContextualAgent(featureArea, selection);
   const pendingApprovals = usePendingApprovals();
+  const { data: userSettings } = useUserSettings();
+
+  const activeProfile = userSettings?.agent.profiles.find(
+    (p) => p.id === userSettings.agent.activeProfileId,
+  );
+  const capability = activeProfile?.capability ?? "Unknown";
+
+  const workspaceScopeDisabled = capability === "ChatOnly" || capability === "Unknown";
+  let workspaceScopeReason = "";
+  if (capability === "ChatOnly") {
+    workspaceScopeReason = "This model doesn't support tool calling — workspace search is unavailable.";
+  } else if (capability === "Unknown") {
+    workspaceScopeReason = "Run Test Connection first to check whether this profile supports workspace search.";
+  }
+
+  useEffect(() => {
+    if (workspaceScopeDisabled && scope === "workspace") setScope("feature");
+  }, [workspaceScopeDisabled, scope, setScope]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -102,7 +120,10 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
             {status.data && status.data.estimatedTokens > 0 && (
               <p className="text-xs text-muted-foreground" data-testid="contextual-assistant-token-estimate">
                 ~{status.data.estimatedTokens.toLocaleString()} tokens in this conversation
-                <ContextUsageIndicator percent={status.data.contextUsagePercent} />
+                <ContextUsageIndicator
+                  percent={status.data.contextUsagePercent}
+                  warningAt={status.data.contextUsageWarningPercent ?? 75}
+                />
               </p>
             )}
           </div>
@@ -134,15 +155,32 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
           >
             Ask &amp; do
           </button>
-          <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground" title="Widen tool access to every configured area for this turn, not just this page's">
+          <label
+            className={`ml-auto flex items-center gap-1.5 text-xs ${workspaceScopeDisabled ? "text-muted-foreground/60 cursor-not-allowed" : "text-muted-foreground"}`}
+            title={
+              workspaceScopeDisabled
+                ? workspaceScopeReason
+                : "Widen tool access to every configured area for this turn, not just this page's"
+            }
+          >
             <input
               type="checkbox"
               checked={scope === "workspace"}
               onChange={(e) => setScope(e.target.checked ? "workspace" : "feature")}
+              disabled={workspaceScopeDisabled}
               data-testid="contextual-assistant-scope-workspace"
             />
             Search across my whole workspace
           </label>
+          {workspaceScopeDisabled && (
+            <span
+              className="max-w-[140px] truncate text-xs text-destructive"
+              data-testid="contextual-assistant-scope-reason"
+              title={workspaceScopeReason}
+            >
+              {workspaceScopeReason}
+            </span>
+          )}
         </div>
 
         {pendingApprovals.data && pendingApprovals.data.length > 0 && (

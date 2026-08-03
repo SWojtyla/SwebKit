@@ -49,12 +49,27 @@ public sealed class SidecarAgentChatService
     /// Module 5.</summary>
     private const int DefaultContextWindowTokens = 4096;
 
-    /// <summary>Fraction of the effective context window at which rolling summarization kicks in.</summary>
-    private const double SummarizationThresholdRatio = 0.75;
-
     /// <summary>Most recent messages kept verbatim across a summarization pass — 3 user/assistant
     /// exchanges. Below this count there's nothing older to summarize away.</summary>
     private const int KeepVerbatimMessageCount = 6;
+
+    /// <summary>Small-window reference point for the rolling-summarization threshold scale
+    /// (workspace-intelligence Module 7). A window at or below this value triggers summarization at
+    /// <see cref="MinSummarizationThresholdRatio"/> — earlier and more aggressively than a large
+    /// cloud model, so tiny local windows don't get pushed to the edge.</summary>
+    private const int SmallContextWindowTokens = 4096;
+
+    /// <summary>Large-window reference point for the rolling-summarization threshold scale.
+    /// A window at or above this value keeps the original 75% threshold (Module 5).</summary>
+    private const int LargeContextWindowTokens = 131072;
+
+    /// <summary>Minimum rolling-summarization threshold for the smallest windows — summarize at 50%
+    /// of an unknown/tiny local window to leave plenty of headroom.</summary>
+    private const double MinSummarizationThresholdRatio = 0.50;
+
+    /// <summary>Maximum rolling-summarization threshold for the largest windows — the original
+    /// Module 5 value, giving big cloud models the full benefit of their declared context.</summary>
+    private const double MaxSummarizationThresholdRatio = 0.75;
 
     private readonly IAgentModelClient _modelClient;
     private readonly IAgentToolRegistry _toolRegistry;
@@ -407,9 +422,10 @@ public sealed class SidecarAgentChatService
     /// Builds the history actually sent to the model for this turn — the just-enqueued user message
     /// excluded, since it's passed separately — trimming it via rolling summarization first if the
     /// fully-constructed request (system prompt + tool schemas + history + this message) would
-    /// otherwise cross <see cref="SummarizationThresholdRatio"/> of the profile's effective context
-    /// window (workspace-intelligence Module 5). Also records the estimate actually used (post-trim,
-    /// if a trim happened) onto the session for <see cref="GetContextUsagePercent"/>.
+    /// otherwise cross the profile's scaled summarization threshold (workspace-intelligence Module 7:
+    /// smaller <see cref="AgentProfile.ContextWindowTokens"/> values trigger earlier summarization).
+    /// Also records the estimate actually used (post-trim, if a trim happened) onto the session for
+    /// <see cref="GetContextUsagePercent"/>.
     /// </summary>
     private async Task<(List<AgentMessage> HistoryForModel, bool Summarized)> PrepareHistoryForModelAsync(
         ConversationSession session,
@@ -420,11 +436,12 @@ public sealed class SidecarAgentChatService
         CancellationToken ct)
     {
         var contextWindow = ResolveContextWindow(profile);
+        var threshold = ResolveSummarizationThreshold(contextWindow);
         var historyForModel = HistoryExcludingLastMessage(session);
         var estimated = EstimateFullRequestTokens(systemPrompt, tools, historyForModel, userMessage);
         var summarized = false;
 
-        if (estimated > contextWindow * SummarizationThresholdRatio && historyForModel.Count > KeepVerbatimMessageCount)
+        if (estimated > contextWindow * threshold && historyForModel.Count > KeepVerbatimMessageCount)
         {
             summarized = await TrySummarizeOlderHistoryAsync(session, ct);
             if (summarized)
@@ -442,6 +459,45 @@ public sealed class SidecarAgentChatService
 
     private static int ResolveContextWindow(AgentProfile? profile) =>
         profile?.ContextWindowTokens is > 0 ? profile.ContextWindowTokens.Value : DefaultContextWindowTokens;
+
+    /// <summary>
+    /// Rolling-summarization trigger point as a fraction of the effective context window — scaled to
+    /// the profile's declared <see cref="AgentProfile.ContextWindowTokens"/> (workspace-intelligence
+    /// Module 7). Smaller windows summarize earlier, leaving headroom for flaky local models; large
+    /// cloud windows keep the original 75% value. The scale is clamped to a sane 0.50–0.75 band so a
+    /// typo or 1-token window doesn't produce a pathological threshold.
+    /// </summary>
+    internal static double ResolveSummarizationThreshold(int contextWindowTokens)
+    {
+        if (contextWindowTokens <= SmallContextWindowTokens)
+            return MinSummarizationThresholdRatio;
+        if (contextWindowTokens >= LargeContextWindowTokens)
+            return MaxSummarizationThresholdRatio;
+
+        var ratio = (double)(contextWindowTokens - SmallContextWindowTokens) /
+            (LargeContextWindowTokens - SmallContextWindowTokens);
+        return MinSummarizationThresholdRatio + ratio * (MaxSummarizationThresholdRatio - MinSummarizationThresholdRatio);
+    }
+
+    /// <summary>
+    /// Percentage of the effective context window at which the UI should start warning the user that
+    /// the conversation is getting full — the same scaled threshold rolling summarization actually
+    /// uses, so the visual cue and the backend's graceful-degradation point coincide.
+    /// </summary>
+    public double GetContextUsageWarningPercent(string? sessionId)
+    {
+        var contextWindow = GetEffectiveContextWindow(sessionId);
+        return Math.Round(100.0 * ResolveSummarizationThreshold(contextWindow), 1);
+    }
+
+    private int GetEffectiveContextWindow(string? sessionId)
+    {
+        if (_sessions.TryGetValue(Key(sessionId), out var session) && session.LastContextWindowTokens > 0)
+            return session.LastContextWindowTokens;
+
+        var profile = _settings.Settings.Agent.GetActiveProfile();
+        return ResolveContextWindow(profile);
+    }
 
     private static List<AgentMessage> HistoryExcludingLastMessage(ConversationSession session)
     {

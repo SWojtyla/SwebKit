@@ -8,6 +8,41 @@ import { setDemoMode, scrollVirtualListIntoView } from "./helpers";
  * glob can't match both: Playwright's `*` doesn't cross `/`, so `**\/api/agent/chat*` never matches
  * the `/stream` suffix — hence two explicit routes here instead of one wildcard-suffixed pattern.
  */
+function mockUserSettings(page: import("@playwright/test").Page, capability: string) {
+  return page.route("**/api/config/user-settings", async (route) => {
+    await route.fulfill({
+      json: {
+        theme: "dark",
+        warmupConnectionsOnStartup: false,
+        verifyApiClientSsl: true,
+        apiClientRequestTabs: false,
+        autoSaveRequests: true,
+        agent: {
+          isEnabled: true,
+          profiles: [{
+            id: "p1",
+            displayName: "Test Profile",
+            provider: "LmStudio",
+            baseUrl: "http://localhost:1234/v1",
+            model: "test-model",
+            credentialKey: "",
+            timeoutSeconds: 120,
+            capability,
+            lastTestDiagnostic: null,
+            requiresApiKey: false,
+            contextWindowTokens: 4096,
+          }],
+          activeProfileId: "p1",
+        },
+        logging: { enabled: false, minimumLevel: "Information" },
+        sessionCount: 0,
+        fathomUnlocked: false,
+        fathomDeveloperOverride: false,
+      },
+    });
+  });
+}
+
 function captureChatRequests(page: import("@playwright/test").Page) {
   const bodies: Record<string, unknown>[] = [];
   const record = async (route: import("@playwright/test").Route) => {
@@ -164,6 +199,7 @@ test.describe("Contextual assistant entry points", () => {
   test("'search across my whole workspace' checkbox sends scope: workspace (workspace-intelligence Module 3)", async ({ page }) => {
     const chat = captureChatRequests(page);
     await chat.install();
+    await mockUserSettings(page, "ToolCalling");
 
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
@@ -185,6 +221,36 @@ test.describe("Contextual assistant entry points", () => {
     await page.getByTestId("contextual-assistant-send").click();
     await expect.poll(() => chat.bodies.length).toBe(2);
     expect(chat.bodies[1]).toMatchObject({ scope: "workspace" });
+  });
+
+  test("workspace search checkbox is disabled with a reason for a ChatOnly profile (workspace-intelligence Module 7)", async ({ page }) => {
+    await mockUserSettings(page, "ChatOnly");
+
+    await page.goto("/aks");
+    await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
+    await page.getByTestId("aks-tab-pods").click();
+    const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
+    await firstRow.click({ button: "right" });
+    await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
+
+    const checkbox = page.getByTestId("contextual-assistant-scope-workspace");
+    await expect(checkbox).toBeDisabled();
+    await expect(page.getByTestId("contextual-assistant-scope-reason")).toContainText("doesn't support tool calling");
+  });
+
+  test("workspace search checkbox shows a Test Connection nudge for an Unknown profile (workspace-intelligence Module 7)", async ({ page }) => {
+    await mockUserSettings(page, "Unknown");
+
+    await page.goto("/aks");
+    await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
+    await page.getByTestId("aks-tab-pods").click();
+    const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
+    await firstRow.click({ button: "right" });
+    await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
+
+    const checkbox = page.getByTestId("contextual-assistant-scope-workspace");
+    await expect(checkbox).toBeDisabled();
+    await expect(page.getByTestId("contextual-assistant-scope-reason")).toContainText("Test Connection first");
   });
 
   test("closing the panel removes it from the DOM", async ({ page }) => {

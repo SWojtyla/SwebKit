@@ -178,6 +178,20 @@ public class SidecarAgentChatServiceContextBudgetTests
         Assert.Equal("{}", reply.Steps[1].Summary);
     }
 
+    [Fact]
+    public void ResolveSummarizationThreshold_SmallWindow_IsLowerThanLargeWindow()
+    {
+        // workspace-intelligence Module 7: tiny local windows summarize earlier than big cloud ones.
+        var small = SidecarAgentChatService.ResolveSummarizationThreshold(4096);
+        var large = SidecarAgentChatService.ResolveSummarizationThreshold(131072);
+        var mid = SidecarAgentChatService.ResolveSummarizationThreshold(32_000);
+
+        Assert.Equal(0.50, small, precision: 2);
+        Assert.Equal(0.75, large, precision: 2);
+        Assert.True(small < mid);
+        Assert.True(mid < large);
+    }
+
     /// <summary>Actually invokes the tool executor it's given (unlike <c>FakeAgentModelClient</c>,
     /// which never calls its own executor) so <see cref="AgentChatStep"/> recording can be observed
     /// end-to-end.</summary>

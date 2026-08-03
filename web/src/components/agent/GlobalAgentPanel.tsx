@@ -73,7 +73,10 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
             {status.data && status.data.estimatedTokens > 0 && (
               <> · ~{status.data.estimatedTokens.toLocaleString()} tokens</>
             )}
-            <ContextUsageIndicator percent={status.data?.contextUsagePercent ?? 0} />
+            <ContextUsageIndicator
+              percent={status.data?.contextUsagePercent ?? 0}
+              warningAt={status.data?.contextUsageWarningPercent ?? 75}
+            />
           </p>
         </div>
         <div className="flex items-center gap-2">

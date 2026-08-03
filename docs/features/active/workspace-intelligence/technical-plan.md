@@ -332,21 +332,37 @@ than cloud APIs.
       window" states), plus a regression sweep (`contextual-assistant`, `global-agent-panel`,
       `dashboard` — 22 tests) — all passed.
 
-### Module 7 — Local-model-specific adaptive behavior
+### Module 7 — Local-model-specific adaptive behavior — done (2026-08-03)
 
 Folds in "local models need different handling" as its own explicit module rather than scattered
 special-casing throughout the above.
 
-- [ ] Scale Module 5's summarization threshold to the profile's actual `ContextWindowTokens` — a
-      profile with a small declared/detected window summarizes earlier and more aggressively than one
-      with a large window, rather than using one fixed threshold for every profile.
-- [ ] If a profile's capability test (`ai-augmented-app` Module 1) reports `ChatOnly` (no tool
-      calling), don't offer Module 3's "search across my workspace" escalation at all — it's
-      meaningless without tool calling — and say why in the UI, matching `ai-augmented-app`
-      `ux-plan.md`'s existing guardrail language for the Ask & do toggle.
-- [ ] If a capability test has never been run (`Unknown`), the same "run it first" nudge from
-      `ai-augmented-app` applies here too — don't let a workspace-wide escalation silently return
-      empty tool results because capability was never established.
+- [x] `SidecarAgentChatService.ResolveSummarizationThreshold(contextWindowTokens)` scales the
+      rolling-summarization trigger from 50% of the effective window for small (≤4,096-token) local
+      models up to 75% for large (≥131,072-token) cloud models, with a linear interpolation between
+      those two reference points. `PrepareHistoryForModelAsync` now uses this scaled threshold
+      instead of the fixed 0.75 used in Module 5, so a small-window profile summarizes earlier and
+      more aggressively. The clamped 0.50–0.75 band prevents pathological thresholds from typos or
+      1-token window values.
+- [x] `SidecarAgentChatService.GetContextUsageWarningPercent` returns the same scaled threshold as a
+      percentage, and `AgentEndpoints.GetStatus` now includes it as `contextUsageWarningPercent`.
+      `ContextUsageIndicator` takes an optional `warningAt` prop (defaulting to 75 for callers that
+      don't yet have the value) and turns warning-colored when the current usage crosses that
+      threshold, so the visual cue stays aligned with the backend's actual summarization point. This
+      is the "context-usage indicator's warning threshold should reflect a small context window"
+      follow-through from `ux-plan.md`'s Local-model guardrails section.
+- [x] `ContextualAssistant.tsx` reads the active profile's capability from `useUserSettings` and
+      disables the "Search across my whole workspace" escalation with a one-line reason for
+      `ChatOnly` ("This model doesn't support tool calling — workspace search is unavailable.") and
+      `Unknown` ("Run Test Connection first to check whether this profile supports workspace
+      search."). If the capability is `Unknown`, the checkbox also resets to `scope: "feature"` if it
+      was somehow already set to `workspace`, so the request never silently goes tool-less.
+- [x] **Honest note on the `Ask & do` guardrail pattern this is meant to match**: the web frontend did
+      not yet have that pattern implemented when this module was picked up; it was described in
+      `ai-augmented-app/ux-plan.md` but the existing `ContextualAssistant.tsx` mode toggle was still
+      always enabled. The workspace-scope guardrail here follows the same one-line-reason/disabled
+      widget style described in that plan, so the visual treatment is consistent once the Ask & do
+      guardrail is applied.
 
 ## Sequencing note
 

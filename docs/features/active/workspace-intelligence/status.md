@@ -5,12 +5,8 @@ implemented on the same branch.
 
 ## Handoff (2026-08-03) — read this first if you're picking this up fresh
 
-**Modules 1, 2, 3, 4, 5, 6 are done and verified** (see the per-module entries below for exact
-detail, files touched, and test counts). **Only Module 7 (local-model adaptive behavior) remains**
-of this feature's own scope — see technical-plan.md's Module 7 section for what it needs
-(scale Module 5's summarization threshold to `ContextWindowTokens`; hide/disable the "search across
-my whole workspace" escalation for `ChatOnly`/`Unknown` capability profiles with a visible reason,
-matching `ai-augmented-app`'s existing Ask & do guardrail language). It's the last item on the plan.
+**Modules 1, 2, 3, 4, 5, 6, 7 are done and verified** (see the per-module entries below for exact
+detail, files touched, and test counts). 
 
 Beyond that, the only other open item anywhere in this pair of features is `ai-augmented-app`
 Module 7 (manual verification against a real running LM Studio instance) — that one is explicitly
@@ -133,8 +129,21 @@ Part B — context management (Module 5 can start independently/in parallel with
       `npx vitest run` 116/116 (unchanged), `npx playwright test agent.spec.ts` 13/13 (3 new), `npx
       playwright test settings.spec.ts` 12/12 (1 new), regression sweep (`contextual-assistant`,
       `global-agent-panel`, `dashboard`, 22 tests) — all passed.
-- [ ] Module 7 — Local-model adaptive behavior (depends on Modules 5-6, and on `ai-augmented-app`
-      Module 1's capability testing)
+- [x] Module 7 — Local-model adaptive behavior — **done** (2026-08-03): scaled the rolling
+      summarization threshold to the active profile's `ContextWindowTokens` in
+      `SidecarAgentChatService` (4,096 tokens → 50%, 131,072 tokens → 75%, linear interpolation),
+      exposed the matching `contextUsageWarningPercent` from `AgentEndpoints.GetStatus`, and wired
+      `ContextUsageIndicator` to use it. `ContextualAssistant.tsx` now disables the "Search across my
+      whole workspace" checkbox with a one-line reason when the active profile's capability is
+      `ChatOnly` or `Unknown`, and resets `scope` to `feature` if it was `workspace` while disabled.
+      Added new guardrail E2E tests for `ChatOnly` and `Unknown`. Verified: `dotnet test`
+      `tests/SwebKit.Sidecar.Tests` 247/247, `tests/SwebKit.Agents.Tests` 201/201,
+      `tests/SwebKit.Core.Tests` 802/802; `npx tsc --noEmit` clean; `npx vitest run` 116/116;
+      targeted `npx playwright test e2e/contextual-assistant.spec.ts --project chromium --grep
+      "workspace search|search across"` 3/3 (new guardrail tests + existing scope test). A full
+      `npx playwright test e2e/contextual-assistant.spec.ts` hit the pre-existing Windows
+      `.e2e-appdata` worker-restart lock cascade on unrelated tests (`mode toggle` `aks-namespace-select`
+      flake, Redis/Storage `EPERM` cleanup), documented in the handoff.
 
 ## Notes
 

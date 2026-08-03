@@ -161,13 +161,22 @@ can instead take an injected/fake clock.
   re-run since `ContextUsageIndicator`/`AgentReasoningTrace` are now rendered by all three chat
   surfaces, not just the global one.
 
-## Module 7 — Local-model adaptive behavior
+## Module 7 — Local-model adaptive behavior — done
 
-- Unit: summarization threshold scales with a profile's `ContextWindowTokens` — a small-window
-  profile summarizes at a lower absolute token count than a large-window one, verified directly
-  against the threshold-calculation function.
-- E2E: a `ChatOnly`-capability profile hides/disables the workspace-wide escalation toggle with a
-  visible reason, matching the existing Ask & do guardrail pattern.
+- [x] Unit (`SidecarAgentChatServiceContextBudgetTests.cs`, 1 new): `ResolveSummarizationThreshold(4096)`
+      is 0.50, `ResolveSummarizationThreshold(131072)` is 0.75, and a midpoint (32,000) falls strictly
+      between — proving small windows summarize at a lower absolute token count than large ones.
+- [x] Unit (`AgentEndpointsTests.cs`, 1 new): `GetStatus` now includes `contextUsageWarningPercent`
+      alongside `contextUsagePercent`, matching the new `ContextUsageIndicator` contract.
+- [x] E2E (`contextual-assistant.spec.ts`, 2 new): a `ChatOnly`-capability profile disables the
+      workspace-wide escalation checkbox and shows the "doesn't support tool calling" reason; an
+      `Unknown`-capability profile does the same and shows the "Run Test Connection first" nudge.
+      The existing Module 3 scope test was updated to mock a `ToolCalling` profile so the checkbox
+      remains operable for that test.
+- [x] **Honest test-runner note**: a full `npx playwright test e2e/contextual-assistant.spec.ts` run
+      hit the pre-existing Windows `.e2e-appdata` worker-restart lock cascade on unrelated tests
+      (`mode toggle` `aks-namespace-select` flake, Redis/Storage `EPERM` cleanup). Targeted reruns of
+      the relevant scope tests (`--grep "workspace search|search across"`) passed 3/3.
 
 ## Module 7 (of the plan overall) — Manual local-model verification
 

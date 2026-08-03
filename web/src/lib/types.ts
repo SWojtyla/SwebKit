@@ -991,6 +991,10 @@ export interface AgentStatus {
    * fully-constructed request used (workspace-intelligence Module 5/6) — 0 if no turn has been
    * sent yet in this session. */
   contextUsagePercent: number;
+  /** The percentage at which the context-usage indicator should switch to a warning color — the
+   * same scaled threshold the backend uses to trigger rolling summarization
+   * (workspace-intelligence Module 7). */
+  contextUsageWarningPercent: number;
 }
 
 /** "ask" = read-only tools only. "ask_and_do" = mutating propose/prepare tools are also

@@ -148,6 +148,7 @@ public static class AgentEndpoints
             historyCount = agent.GetHistoryCount(sessionId),
             estimatedTokens = agent.GetEstimatedTokens(sessionId),
             contextUsagePercent = agent.GetContextUsagePercent(sessionId),
+            contextUsageWarningPercent = agent.GetContextUsageWarningPercent(sessionId),
         });
     }
 

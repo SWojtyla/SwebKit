@@ -243,6 +243,18 @@ public class AgentEndpointsTests
     }
 
     [Fact]
+    public async Task GetStatus_IncludesContextUsageWarningPercent()
+    {
+        var service = CreateService();
+        await service.SendAsync("hello");
+
+        var result = AgentEndpoints.GetStatus(service);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
+        Assert.Contains("\"contextUsageWarningPercent\":", json);
+    }
+
+    [Fact]
     public void GetEstimatedTokens_NoSession_ReturnsZero()
     {
         var service = CreateService();
