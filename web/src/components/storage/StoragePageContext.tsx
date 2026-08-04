@@ -7,7 +7,7 @@ import {
   type ReactNode,
   type JSX,
 } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import { useDropzone } from "react-dropzone";
 import {

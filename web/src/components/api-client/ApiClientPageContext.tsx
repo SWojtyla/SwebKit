@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type JSX,
 } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCollections,

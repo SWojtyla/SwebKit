@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode, type MouseEvent, type JSX } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient, useIsFetching } from "@tanstack/react-query";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import {

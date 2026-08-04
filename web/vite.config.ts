@@ -26,7 +26,7 @@ export default defineConfig({
         // file trips Vite's 500 kB warning and the browser can cache them apart
         // from application code.
         manualChunks: {
-          react: ["react", "react-dom", "react-router-dom"],
+          react: ["react", "react-dom", "react-router"],
           query: ["@tanstack/react-query"],
           icons: ["lucide-react"],
         },

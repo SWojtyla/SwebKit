@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, Sparkles } from "lucide-react";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { useProfile, useSbPeekMessages, useSbPeekDlq, useSbEntityStats } from "@/lib/hooks";
