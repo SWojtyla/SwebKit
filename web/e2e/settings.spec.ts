@@ -34,6 +34,28 @@ test.describe("Settings", () => {
     await expect(page.getByTestId("diag-log-viewer")).toBeVisible();
   });
 
+  test("diagnostics logging settings persist across reload", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-diagnostics").click();
+
+    const loggingEnabled = page.getByTestId("diagnostics-logging-enabled");
+    const loggingLevel = page.getByTestId("diagnostics-logging-level");
+
+    // Default state is enabled/Warning; flip to disabled/Information, wait for the save, and back-check reload.
+    await expect(loggingEnabled).toBeChecked();
+
+    const saveUserSettings = (method: string) =>
+      page.waitForResponse((r) => r.request().method() === method && r.url().includes("/api/config/user-settings"));
+
+    await Promise.all([saveUserSettings("PUT"), page.getByTestId("diagnostics-logging-enabled").click()]);
+    await Promise.all([saveUserSettings("PUT"), loggingLevel.selectOption("Information")]);
+
+    await page.reload();
+    await page.getByTestId("settings-tab-diagnostics").click();
+    await expect(loggingEnabled).not.toBeChecked();
+    await expect(loggingLevel).toHaveValue("Information");
+  });
+
   test("appearance tab shows theme and font options", async ({ page }) => {
     await page.goto("/settings");
     await page.getByTestId("settings-tab-appearance").click();
@@ -43,6 +65,22 @@ test.describe("Settings", () => {
     await expect(page.getByTestId("appearance-theme-fancy")).toBeVisible();
     await expect(page.getByTestId("appearance-font-size")).toBeVisible();
     await expect(page.getByTestId("appearance-density")).toBeVisible();
+  });
+
+  test("font size and density persist across reload", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-appearance").click();
+
+    const saveUserSettings = (method: string) =>
+      page.waitForResponse((r) => r.request().method() === method && r.url().includes("/api/config/user-settings"));
+
+    await Promise.all([saveUserSettings("PUT"), page.getByTestId("appearance-font-size").selectOption("large")]);
+    await Promise.all([saveUserSettings("PUT"), page.getByTestId("appearance-density").selectOption("compact")]);
+
+    await page.reload();
+    await page.getByTestId("settings-tab-appearance").click();
+    await expect(page.getByTestId("appearance-font-size")).toHaveValue("large");
+    await expect(page.getByTestId("appearance-density")).toHaveValue("compact");
   });
 
   test("agent profile base URL persists across reload", async ({ page }) => {

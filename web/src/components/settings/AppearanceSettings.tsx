@@ -1,6 +1,6 @@
 import { useSettingsStore, type Theme } from "@/lib/stores/settings";
 import { useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
-import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
+import { FATHOM_UNLOCK_THRESHOLD, type UserSettings } from "@/lib/types";
 
 const THEMES: { id: Theme; label: string; desc: string }[] = [
   { id: "dark", label: "Aurora Dark", desc: "Deep navy with indigo glows" },
@@ -12,15 +12,20 @@ const THEMES: { id: Theme; label: string; desc: string }[] = [
 
 export function AppearanceSettings() {
   const { theme, setTheme } = useSettingsStore();
-  const { data: settings } = useUserSettings();
+  const { data: settings, isLoading } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
-  const sessionCount = settings?.sessionCount ?? 0;
-  const fathomAvailable = settings?.fathomUnlocked || settings?.fathomDeveloperOverride || false;
+
+  if (isLoading || !settings) {
+    return <div className="text-muted-foreground">Loading...</div>;
+  }
+
+  const sessionCount = settings.sessionCount;
+  const fathomAvailable = settings.fathomUnlocked || settings.fathomDeveloperOverride || false;
   const fathomProgress = Math.min(100, Math.round((sessionCount / FATHOM_UNLOCK_THRESHOLD) * 100));
 
   const selectTheme = (id: Theme) => {
     setTheme(id);
-    if (settings) updateSettings.mutate({ ...settings, theme: id });
+    updateSettings.mutate({ ...settings, theme: id });
   };
 
   return (
@@ -112,6 +117,13 @@ export function AppearanceSettings() {
         <select
           className="mt-2 rounded-lg border bg-card px-3 py-2 text-sm"
           data-testid="appearance-font-size"
+          value={settings.fontSize ?? "medium"}
+          onChange={(e) =>
+            updateSettings.mutate({
+              ...settings,
+              fontSize: e.target.value as UserSettings["fontSize"],
+            })
+          }
         >
           <option value="small">Small</option>
           <option value="medium">Medium</option>
@@ -125,6 +137,13 @@ export function AppearanceSettings() {
         <select
           className="mt-2 rounded-lg border bg-card px-3 py-2 text-sm"
           data-testid="appearance-density"
+          value={settings.density ?? "comfortable"}
+          onChange={(e) =>
+            updateSettings.mutate({
+              ...settings,
+              density: e.target.value as UserSettings["density"],
+            })
+          }
         >
           <option value="comfortable">Comfortable</option>
           <option value="compact">Compact</option>

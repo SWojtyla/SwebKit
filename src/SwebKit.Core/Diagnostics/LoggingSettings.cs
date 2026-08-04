@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace SwebKit.Core.Diagnostics;
@@ -12,5 +13,6 @@ public sealed class LoggingSettings
     /// crash entries are captured out of the box. Users can lower this to Information/Debug/Trace
     /// from Settings → Diagnostics when they need deeper history while troubleshooting an issue.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public LogLevel MinimumLevel { get; set; } = LogLevel.Warning;
 }

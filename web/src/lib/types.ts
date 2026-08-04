@@ -177,6 +177,8 @@ export interface SbMessageTemplate {
 
 export interface UserSettings {
   theme: string;
+  fontSize: "small" | "medium" | "large";
+  density: "comfortable" | "compact";
   warmupConnectionsOnStartup: boolean;
   verifyApiClientSsl: boolean;
   apiClientRequestTabs: boolean;
@@ -189,6 +191,8 @@ export interface UserSettings {
   fathomUnlocked: boolean;
   /** Set only via the hidden six-click gesture on the status bar version number — no other UI surfaces it. */
   fathomDeveloperOverride: boolean;
+  /** Port-forward pins set elsewhere in the app; surfaced here so saves from this page don't erase them. */
+  pinnedPortForwards: Record<string, { label: string; namespace?: string; podLabelSelector?: string; remotePort: number; localPort: number; pinnedAt: string }[]>;
 }
 
 /** Sessions needed before Fathom unlocks. Mirrors UserSettings.FathomUnlockThreshold (server-enforced; this constant only drives the progress bar). */

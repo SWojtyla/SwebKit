@@ -62,6 +62,9 @@ public sealed class UserSettingsRepository(ILogger<UserSettingsRepository>? logg
     private static UserSettings NormalizeSettings(UserSettings settings)
     {
         settings.Theme ??= string.Empty;
+        settings.FontSize = string.IsNullOrWhiteSpace(settings.FontSize) ? "medium" : settings.FontSize;
+        settings.Density = string.IsNullOrWhiteSpace(settings.Density) ? "comfortable" : settings.Density;
+        settings.PinnedPortForwards ??= [];
         settings.Agent ??= new AgentConfig();
         settings.Agent.Migrate();
         settings.Logging ??= new LoggingSettings();
@@ -87,7 +90,15 @@ public sealed class UserSettings
     /// <summary>Manual escape hatch with no UI surface besides a hidden six-click gesture on the version number in the
     /// status bar — lets a developer skip the session-count gate on their own machine without touching anyone else's.</summary>
     public bool FathomDeveloperOverride { get; set; }
+
+    /// <summary>Font scaling: small, medium, or large. Affects the web UI's root font size.</summary>
+    public string FontSize { get; set; } = "medium";
+
+    /// <summary>UI density: comfortable or compact. Intended to tighten/loosen spacing in the React app.</summary>
+    public string Density { get; set; } = "comfortable";
+
     public Dictionary<string, List<PinnedPortForwardEntry>> PinnedPortForwards { get; set; } = [];
+
     /// <summary>When true, request edits are persisted automatically after a 500 ms debounce.</summary>
     public bool AutoSaveRequests { get; set; }
 

@@ -94,6 +94,15 @@ export function AppLayout() {
       setTheme(userSettings.theme);
     }
   }, [userSettings, theme, setTheme]);
+
+  // Apply font-size and density from user settings. The root font-size is a simple rem scaler;
+  // density is surfaced as a data attribute for future CSS and for select controls to reflect.
+  useEffect(() => {
+    if (!userSettings) return;
+    const fontSizeMap: Record<string, string> = { small: "14px", medium: "16px", large: "18px" };
+    document.documentElement.style.fontSize = fontSizeMap[userSettings.fontSize] ?? "16px";
+    document.documentElement.dataset.density = userSettings.density ?? "comfortable";
+  }, [userSettings]);
   const sidecarOk = health?.status === "ok";
   const isDemoMode = demoData?.isDemoMode ?? false;
   const [reconnecting, setReconnecting] = useState(false);

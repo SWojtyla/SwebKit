@@ -250,6 +250,18 @@ lands, following the pattern used by the now-closed `tauri-react-primary-tool/st
 
 ## Notes
 
+- **Settings persistence follow-up — done (2026-08-04):** audited `UserSettings` end to end and
+  closed the gaps that left several fields with UI but no save path. Backend: `FontSize`, `Density`,
+  and `PinnedPortForwards` now live on `UserSettings` with default values and normalization on load;
+  `LoggingSettings.MinimumLevel` uses `JsonStringEnumConverter` so the frontend can round-trip the
+  level as a string. Frontend: `UserSettings` TypeScript type includes the missing fields;
+  `AppearanceSettings` font/density selects now persist; `AppLayout` applies the chosen font size to
+  the document root and surfaces density as a `data-density` attribute; `DiagnosticsSettings` adds a
+  real logging panel (enabled toggle + minimum-level select) wired to the same save endpoint.
+  Regression tests added to `UserSettingsRepositoryTests.cs`, `settings.spec.ts` now covers font/
+  density and logging persistence across reload, and the full verification stack passed:
+  `dotnet test tests/SwebKit.Core.Tests` 806/806, `dotnet test tests/SwebKit.Sidecar.Tests` 247/247,
+  `npx tsc --noEmit`, `npx vitest run` 116/116, `npx playwright test e2e/settings.spec.ts` 15/15.
 - The provider/transport layer (`IAgentModelClient`, `OpenAiCompatibleAgentClient`, `AgentProfile`)
   needs no new work — verified against the code before this plan was written, see index.md's
   "Current state" section. This plan is scoped around what's actually missing, not a rebuild.
