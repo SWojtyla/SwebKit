@@ -1,50 +1,21 @@
 import { defineConfig, devices } from "@playwright/test";
-import { fileURLToPath } from "node:url";
-import fs from "node:fs";
-import path from "node:path";
+import { e2eAppDataRoot, sidecarPort, vitePort } from "./e2e/test-config";
 
 /**
  * Playwright E2E configuration for SwebKit.
  *
  * The tests spin up the .NET sidecar and the Vite dev server automatically on
  * isolated ports so they do not collide with a developer's running instances.
- */
-
-/**
- * The sidecar persists profiles, message templates, monitoring rules and the
- * scheduled-message store under %APPDATA%\SwebKit. Without an override the e2e
- * run would read — and write — the developer's real configuration: the suite
- * saves templates, sends messages and edits settings. `SWEBKIT_APPDATA_ROOT`
- * (see AppDataPaths) redirects all of that into a throwaway folder.
- */
-const e2eAppDataRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  ".e2e-appdata",
-);
-
-/**
- * Reset the throwaway appdata here rather than in the `webServer` command.
  *
- * Playwright runs `webServer.command` through the platform shell, which on
- * Windows is cmd.exe — where `rm -rf` does not exist and `mkdir -p <dir>` creates
- * a literal `-p` directory alongside the target. The stray `-p` then made every
- * subsequent run fail with "A subdirectory or file -p already exists", so the
- * suite could only ever be run once per checkout. Doing it in Node is
- * cross-platform and runs before the servers start.
+ * The throwaway `.e2e-appdata` directory and any leftover sidecar process are
+ * handled by `e2e/global-setup.ts` and `e2e/global-teardown.ts`, so the config
+ * itself does not try to delete a directory that may still be locked by the
+ * previous sidecar run.
  */
-fs.rmSync(e2eAppDataRoot, { recursive: true, force: true });
-fs.mkdirSync(e2eAppDataRoot, { recursive: true });
-
-/**
- * Sidecar/Vite ports default to the values every dev has always used, but can be
- * overridden so multiple checkouts (e.g. parallel worktrees) can run the suite
- * at the same time without binding the same two ports.
- */
-const sidecarPort = process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198";
-const vitePort = process.env.PLAYWRIGHT_VITE_PORT ?? "1419";
 
 export default defineConfig({
   testDir: "./e2e",
+  globalSetup: "./e2e/global-setup.ts",
   // The first navigation of a run pays for Vite's cold compile of the whole app,
   // which can exceed the 30s default on a cold cache and fail an otherwise
   // healthy test.
@@ -67,19 +38,10 @@ export default defineConfig({
     },
   ],
 
-  webServer: [
-    {
-      command: `dotnet run --project ../src-sidecar/SwebKit.Sidecar.csproj --urls http://127.0.0.1:${sidecarPort}`,
-      url: `http://127.0.0.1:${sidecarPort}/health`,
-      timeout: 120 * 1000,
-      reuseExistingServer: false,
-      env: { SWEBKIT_APPDATA_ROOT: e2eAppDataRoot },
-    },
-    {
-      command: `cross-env VITE_SIDECAR_URL=http://127.0.0.1:${sidecarPort} npx vite --port ${vitePort}`,
-      url: `http://localhost:${vitePort}`,
-      timeout: 60 * 1000,
-      reuseExistingServer: false,
-    },
-  ],
+  webServer: {
+    command: `cross-env VITE_SIDECAR_URL=http://127.0.0.1:${sidecarPort} npx vite --port ${vitePort}`,
+    url: `http://localhost:${vitePort}`,
+    timeout: 60 * 1000,
+    reuseExistingServer: false,
+  },
 });

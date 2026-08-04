@@ -262,6 +262,30 @@ lands, following the pattern used by the now-closed `tauri-react-primary-tool/st
   density and logging persistence across reload, and the full verification stack passed:
   `dotnet test tests/SwebKit.Core.Tests` 806/806, `dotnet test tests/SwebKit.Sidecar.Tests` 247/247,
   `npx tsc --noEmit`, `npx vitest run` 116/116, `npx playwright test e2e/settings.spec.ts` 15/15.
+- **Unified AI agent panel (2026-08-25):** removed the per-page `ContextualAssistant` panels and
+  replaced them with a single, global `GlobalAgentPanel`. Feature pages now call
+  `useAgentPanelStore.openWithContext(...)` to open the shared panel with the current focus
+  (Redis key, AKS pod, Storage blob, Service Bus entity, Monitoring alert) and the panel surfaces
+  Ask/Ask & do mode + workspace-scope toggles. `AppLayout` and `useGlobalAgentConversation` were
+  updated so the global session receives `context`, `mode`, and `scope` on each turn; the
+  `ContextualAssistant` component and `useContextualAgent` hook were removed. E2E test IDs in
+  `contextual-assistant.spec.ts` were migrated to the global panel. Verification: `npx tsc --noEmit`,
+  `npx vitest run` 116/116, `npx playwright test e2e/global-agent-panel.spec.ts` 5/5, targeted
+  `contextual-assistant` core tests (AKS, Redis, Monitoring, mode, scope, close) 7/7.
+- **E2E demo profile for contextual tests (2026-08-25):** `setDemoMode` now waits for the
+  dashboard to render the 2 demo Service Bus namespaces before the test navigates to a feature
+  page, and `contextual-assistant.spec.ts` uses helper `selectAksDefaultNamespace` plus an explicit
+  wait for the Service Bus namespace options, fixing timeouts on the Storage and Service Bus
+  contextual tests. Verification: `npx tsc --noEmit`, `npx vitest run` 116/116, targeted
+  `contextual-assistant` Storage/Service Bus 2/2, `e2e/global-agent-panel.spec.ts` 5/5.
+- **E2E sidecar lifecycle and demo-mode stability (2026-08-25):** moved the sidecar out of the
+  Playwright `webServer` config and into `globalSetup` with a returned teardown callback, and
+  introduced `web/e2e/test-config.ts` for shared port/appdata helpers. `setDemoMode` now drives
+  the sidecar directly via `/api/demo-mode` and polls `/api/config/profiles` until the demo
+  overlay is confirmed, then navigates and waits for the UI to converge. `selectAksDefaultNamespace`
+  waits 15 s for the `default` AKS option. Removed the in-test `page.reload()` workaround. Fixed a
+  test-isolation collision in `settings.spec.ts` Map tab by using a distinct `orders queue (suggestion)`
+  label. Full verification: `npx tsc --noEmit`, `npx vitest run` 116/116, `npx playwright test` 228/228.
 - The provider/transport layer (`IAgentModelClient`, `OpenAiCompatibleAgentClient`, `AgentProfile`)
   needs no new work — verified against the code before this plan was written, see index.md's
   "Current state" section. This plan is scoped around what's actually missing, not a rebuild.

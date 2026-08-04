@@ -195,13 +195,15 @@ test.describe("Settings", () => {
     await expect(nodeList.getByText("api (prod)")).toBeVisible();
 
     await page.getByTestId("workspace-manual-area").selectOption("ServiceBus");
+    // Use a distinct label so this test does not collide with the "orders queue" node
+    // left behind by the previous Map tab test, which only removes the AKS node.
     await page.getByTestId("workspace-manual-key").fill("orders.servicebus.windows.net");
-    await page.getByTestId("workspace-manual-label").fill("orders queue");
+    await page.getByTestId("workspace-manual-label").fill("orders queue (suggestion)");
     await page.getByTestId("workspace-manual-add").click();
-    await expect(nodeList.getByText("orders queue")).toBeVisible();
+    await expect(nodeList.getByText("orders queue (suggestion)")).toBeVisible();
 
     const aksNodeId = await nodeList.locator('[data-testid^="workspace-node-"]', { hasText: "api (prod)" }).getAttribute("data-testid");
-    const sbNodeId = await nodeList.locator('[data-testid^="workspace-node-"]', { hasText: "orders queue" }).getAttribute("data-testid");
+    const sbNodeId = await nodeList.locator('[data-testid^="workspace-node-"]', { hasText: "orders queue (suggestion)" }).getAttribute("data-testid");
     const fromNodeId = aksNodeId!.replace("workspace-node-", "");
     const toNodeId = sbNodeId!.replace("workspace-node-", "");
 
