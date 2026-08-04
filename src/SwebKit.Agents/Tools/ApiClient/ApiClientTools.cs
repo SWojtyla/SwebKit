@@ -30,6 +30,8 @@ public sealed class SearchApiRequestsTool : IAgentTool
     }
     """);
 
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
+
     public JsonElement ParametersSchema => Schema;
 
     public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
@@ -80,6 +82,8 @@ public sealed class GetApiRequestTool : IAgentTool
         "additionalProperties": false
     }
     """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
 
     public JsonElement ParametersSchema => Schema;
 
@@ -180,6 +184,8 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
         "additionalProperties": false
     }
     """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
 
     public JsonElement ParametersSchema => Schema;
 
@@ -285,6 +291,9 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
             Risk = risk,
             Preview = preview,
             ExpectedFingerprint = null, // Set at apply time for freshness check
+            // The applier (ApiClientActionExecutor) reads exact field values back out of this at
+            // apply time rather than re-parsing `preview`'s human-readable diff text.
+            Payload = arguments.Clone(),
         };
 
         _coordinator.RegisterAction(action);
@@ -334,6 +343,8 @@ public sealed class ProposeApiRequestDeleteTool : IAgentTool
         "additionalProperties": false
     }
     """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
 
     public JsonElement ParametersSchema => Schema;
 
@@ -405,6 +416,8 @@ public sealed class PrepareApiRequestExecutionTool : IAgentTool
         "additionalProperties": false
     }
     """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
 
     public JsonElement ParametersSchema => Schema;
 

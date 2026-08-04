@@ -23,19 +23,6 @@ public sealed class AgentConfig
     /// </summary>
     public string ActiveProfileId { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Maximum number of messages kept in the conversation history before the oldest
-    /// user/assistant pairs are dropped.  Each exchange counts as 2 messages (user + assistant).
-    /// Default 20 = 10 back-and-forth exchanges.
-    /// </summary>
-    public int MaxHistoryMessages { get; set; } = 20;
-
-    /// <summary>
-    /// Percentage of <see cref="MaxHistoryMessages"/> at which the UI shows a
-    /// "history almost full" warning.  Value between 0 and 100.
-    /// </summary>
-    public int HistoryWarningThresholdPercent { get; set; } = 75;
-
     // ── Legacy fields (kept for migration, not used after migration) ──
 
     /// <summary>

@@ -30,6 +30,8 @@ public sealed class GetQueueStatsTool : IAgentTool
         "Returns statistics for a Service Bus queue including active message count, dead-letter count, " +
         "scheduled message count, and last update time. If no queue specified, returns stats for all queues.";
 
+    public FeatureArea FeatureArea => FeatureArea.ServiceBus;
+
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
           "type": "object",

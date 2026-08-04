@@ -162,6 +162,9 @@ public class ProfileRepository
         config.FavoriteResources ??= [];
         config.SavedWorkspaces ??= [];
         config.LastUsedFilters ??= [];
+        config.Topology ??= new WorkspaceTopology();
+        config.Topology.Nodes ??= [];
+        config.Topology.Relationships ??= [];
 
         if (config.FavoriteResources.Count == 0)
         {

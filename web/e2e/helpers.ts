@@ -31,6 +31,45 @@ export async function scrollVirtualListIntoView(
   return target;
 }
 
+/**
+ * Mocks POST /api/agent/chat/stream with a single "done" SSE event carrying `reply` — the
+ * simplest valid stream a test can fake (no token events first), since AgentPage/ContextualAssistant
+ * both treat a "done" event's `result` as the source of truth regardless of what streamed before it.
+ * Use this instead of hand-rolling the SSE `data: ...\n\n` framing in every spec.
+ */
+export async function mockAgentChatStreamDone(
+  page: Page,
+  reply: {
+    text: string;
+    elapsedMs?: number;
+    status?: string;
+    error?: boolean;
+    steps?: { type: string; toolName?: string; summary?: string; elapsed?: string }[];
+    summarized?: boolean;
+    contextUsagePercent?: number;
+  },
+) {
+  const event = {
+    kind: "done",
+    result: {
+      text: reply.text,
+      elapsedMs: reply.elapsedMs ?? 1,
+      status: reply.status ?? "done",
+      error: reply.error ?? false,
+      steps: reply.steps ?? [],
+      summarized: reply.summarized ?? false,
+      contextUsagePercent: reply.contextUsagePercent ?? 0,
+    },
+  };
+  await page.route("**/api/agent/chat/stream", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `data: ${JSON.stringify(event)}\n\n`,
+    });
+  });
+}
+
 export async function setDemoMode(page: Page, enabled: boolean) {
   await page.goto("/");
   const toggle = page.getByTestId("demo-mode-toggle");

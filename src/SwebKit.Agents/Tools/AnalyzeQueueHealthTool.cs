@@ -33,6 +33,8 @@ public sealed class AnalyzeQueueHealthTool : IAgentTool
         "dead-letter message sample in parallel. Returns a merged result with a " +
         "plain-English health_summary field (Healthy, Warning, or Critical).";
 
+    public FeatureArea FeatureArea => FeatureArea.ServiceBus;
+
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
           "type": "object",

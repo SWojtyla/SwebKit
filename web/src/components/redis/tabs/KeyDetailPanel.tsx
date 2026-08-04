@@ -1,6 +1,8 @@
-import { Copy, Pencil, Check, X, Clock, Trash2, Plus } from "lucide-react";
+import { useState } from "react";
+import { Copy, Pencil, Check, X, Clock, Trash2, Plus, Sparkles } from "lucide-react";
 import { formatTtl, parseTtl, getTtlColorClass, formatBytes } from "@/lib/redis-format";
 import { useRedisPageContext } from "../RedisPageContext";
+import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 
 const typeColors: Record<string, string> = {
   string: "text-green-400",
@@ -30,6 +32,7 @@ function TtlBar({ ttl }: { ttl: string | null }) {
 
 export function KeyDetailPanel() {
   const ctx = useRedisPageContext();
+  const [askAiOpen, setAskAiOpen] = useState(false);
 
   return (
     <div className="flex-1 overflow-auto" data-testid="redis-key-detail">
@@ -116,6 +119,13 @@ export function KeyDetailPanel() {
               )}
             </div>
             <button
+              data-testid="redis-ask-ai-btn"
+              onClick={() => setAskAiOpen(true)}
+              className="flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Ask AI
+            </button>
+            <button
               data-testid="redis-delete-key-btn"
               onClick={() => ctx.requestDeleteKey(ctx.keyInfo.data!.key)}
               disabled={ctx.deleteKey.isPending}
@@ -124,6 +134,17 @@ export function KeyDetailPanel() {
               <Trash2 className="h-3.5 w-3.5" /> Delete
             </button>
           </div>
+          {askAiOpen && (
+            <ContextualAssistant
+              featureArea="Redis"
+              title={`key ${ctx.keyInfo.data.key}`}
+              selection={{
+                key: ctx.keyInfo.data.key,
+                ...(ctx.activeCacheId ? { cache_id: ctx.activeCacheId } : {}),
+              }}
+              onClose={() => setAskAiOpen(false)}
+            />
+          )}
 
           {ctx.keyInfo.data.type === "string" && (
             <div>

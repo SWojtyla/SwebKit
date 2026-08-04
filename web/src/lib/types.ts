@@ -21,6 +21,47 @@ export interface AppConfig {
   favoriteEntities: FavoriteEntity[];
   favoriteResources: FavoriteResource[];
   keyVaults: KeyVaultEntry[];
+  topology: WorkspaceTopology;
+}
+
+// ── Workspace topology (workspace-intelligence Module 1) ────────────────────
+
+export type WorkspaceResourceArea = "Aks" | "ServiceBus" | "Redis" | "Storage";
+
+export interface WorkspaceResourceNode {
+  id: string;
+  area: WorkspaceResourceArea;
+  resourceKey: string;
+  displayLabel: string;
+}
+
+export interface WorkspaceResourceRelationship {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  label: string | null;
+}
+
+export interface WorkspaceTopology {
+  nodes: WorkspaceResourceNode[];
+  relationships: WorkspaceResourceRelationship[];
+}
+
+/** Not-yet-added node the user can pick from — computed by the sidecar from existing config, never
+ * persisted itself. See `GET /api/workspace/topology/candidates`. */
+export interface WorkspaceResourceCandidate {
+  area: WorkspaceResourceArea;
+  resourceKey: string;
+  displayLabel: string;
+}
+
+/** A candidate relationship the heuristic scan found but nobody has confirmed yet
+ * (workspace-intelligence Module 2) — never persisted; recomputed each time the Map view asks for
+ * it. See `GET /api/workspace/topology/suggestions`. */
+export interface WorkspaceRelationshipSuggestion {
+  fromNodeId: string;
+  toNodeId: string;
+  reason: string;
 }
 
 export interface ServiceBusNamespace {
@@ -72,9 +113,18 @@ export interface DevOpsConfig {
   credentialKey: string;
 }
 
+/**
+ * Mirrors `SwebKit.Core.Domain.ObservabilityConfig` — only the two fields the agent-tool-only
+ * integration actually needs (which Application Insights resource to query) are surfaced in the
+ * UI; the rest of the real C# shape (SavedQueries, SLOs, guided-query drafts, thresholds) backs
+ * the Observability *browsing* page that was dropped from this rewrite, so there's nothing here to
+ * bind to. Auth is ambient `DefaultAzureCredential` (Azure CLI/VS login) — there's deliberately no
+ * `credentialKey` field; Observability doesn't use the OS credential store the way Redis/Service
+ * Bus/DevOps do.
+ */
 export interface ObservabilityConfig {
-  applicationInsightsResourceId: string;
-  credentialKey: string;
+  selectedResourceId: string | null;
+  selectedResourceName: string | null;
 }
 
 export interface KeyVaultEntry {
@@ -127,29 +177,63 @@ export interface SbMessageTemplate {
 
 export interface UserSettings {
   theme: string;
+  fontSize: "small" | "medium" | "large";
+  density: "comfortable" | "compact";
   warmupConnectionsOnStartup: boolean;
   verifyApiClientSsl: boolean;
   apiClientRequestTabs: boolean;
   autoSaveRequests: boolean;
   agent: AgentConfig;
   logging: LoggingSettings;
+  /** Incremented once per app launch by the sidecar; drives the Fathom theme's unlock progress. */
+  sessionCount: number;
+  /** Sticky once true — the Fathom theme, once earned, stays available even if sessionCount is later reset. */
+  fathomUnlocked: boolean;
+  /** Set only via the hidden six-click gesture on the status bar version number — no other UI surfaces it. */
+  fathomDeveloperOverride: boolean;
+  /** Port-forward pins set elsewhere in the app; surfaced here so saves from this page don't erase them. */
+  pinnedPortForwards: Record<string, { label: string; namespace?: string; podLabelSelector?: string; remotePort: number; localPort: number; pinnedAt: string }[]>;
 }
+
+/** Sessions needed before Fathom unlocks. Mirrors UserSettings.FathomUnlockThreshold (server-enforced; this constant only drives the progress bar). */
+export const FATHOM_UNLOCK_THRESHOLD = 100;
 
 export interface AgentConfig {
   isEnabled: boolean;
   profiles: AgentProfile[];
   activeProfileId: string;
-  maxHistoryMessages: number;
-  historyWarningThresholdPercent: number;
 }
+
+export type AgentCapability = "Unknown" | "ChatOnly" | "ToolCalling";
 
 export interface AgentProfile {
   id: string;
-  provider: string;
+  provider: "LmStudio" | "OpenAiCompatible" | "Mistral";
   displayName: string;
-  endpointUrl: string;
+  baseUrl: string;
   model: string;
   credentialKey: string;
+  timeoutSeconds: number;
+  capability: AgentCapability;
+  lastTestDiagnostic: string | null;
+  requiresApiKey: boolean;
+  /** Model's context window in tokens, used to scale when a growing conversation gets rolling
+   * summarization (workspace-intelligence Module 5). Null = unknown; the sidecar falls back to a
+   * conservative default rather than treating null as unlimited. */
+  contextWindowTokens: number | null;
+}
+
+export interface AgentCapabilityTestResult {
+  serverReachable: boolean;
+  modelAvailable: boolean;
+  chatValid: boolean;
+  toolCallingValid: boolean;
+  capability: AgentCapability;
+  diagnostic: string | null;
+  availableModels: string[] | null;
+  /** Best-effort context window read from a non-standard /v1/models field (LM Studio in
+   * particular) — null when the provider doesn't advertise one. */
+  detectedContextWindowTokens: number | null;
 }
 
 export interface LoggingSettings {
@@ -863,15 +947,93 @@ export interface BlobRecoveryResult {
 
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
+/** One step in an assistant turn's tool-call trace — mirrors `SwebKit.Agents.AgentChatStep`. Type is
+ * "tool_call" (about to run) or "tool_result" (finished); `summary` is a short, non-sensitive
+ * preview, never the full result. */
+export interface AgentChatStep {
+  type: string;
+  toolName?: string;
+  summary?: string;
+  elapsed?: string;
+}
+
 export interface AgentReply {
   text: string;
   elapsedMs: number;
   status: string;
   error: boolean;
+  /** Per-tool-call trace for this turn (workspace-intelligence Module 6) — empty when no tools were
+   * used. Rendered as a collapsed-by-default "Show reasoning" disclosure. */
+  steps?: AgentChatStep[];
+  /** True when this turn's history was rolling-summarized before being sent (Module 5) — render as
+   * an inline "earlier parts of this conversation were summarized" notice. */
+  summarized?: boolean;
+  /** Percentage of the effective context window this turn's request used. */
+  contextUsagePercent?: number;
+}
+
+/** One incremental event from POST /api/agent/chat/stream — see streamAgentChat in lib/api.ts and
+ * IAgentModelClient.ChatStreamAsync (SwebKit.Agents) for the producing side. "done" always carries
+ * `result` and is always the last event on success; "error" always carries `errorMessage` and is
+ * always the last event on failure — nothing follows either. */
+export type AgentStreamEventKind = "token" | "toolCallStarted" | "toolCallResult" | "done" | "error";
+
+export interface AgentStreamEvent {
+  kind: AgentStreamEventKind;
+  token?: string;
+  toolName?: string;
+  result?: AgentReply;
+  errorMessage?: string;
 }
 
 export interface AgentStatus {
   historyCount: number;
+  /** Rough ~4-chars-per-token estimate over this session's history — not real tokenization, just
+   * enough to let the user watch the conversation grow (see SidecarAgentChatService.GetEstimatedTokens). */
+  estimatedTokens: number;
+  /** Percentage of the active profile's effective context window the most recent turn's
+   * fully-constructed request used (workspace-intelligence Module 5/6) — 0 if no turn has been
+   * sent yet in this session. */
+  contextUsagePercent: number;
+  /** The percentage at which the context-usage indicator should switch to a warning color — the
+   * same scaled threshold the backend uses to trigger rolling summarization
+   * (workspace-intelligence Module 7). */
+  contextUsageWarningPercent: number;
+}
+
+/** "ask" = read-only tools only. "ask_and_do" = mutating propose/prepare tools are also
+ * available (still gated behind a confirm card — see PendingActionCard). */
+export type AgentChatMode = "ask" | "ask_and_do";
+
+/** "feature" (default) = tools scoped to the current contextual panel's area only. "workspace" =
+ * the "search across my whole workspace" escalation (workspace-intelligence Module 3) — every
+ * configured area's tools become visible for this turn. Orthogonal to `AgentChatMode`: scope gates
+ * which area's tools are visible, mode gates whether mutate tools are available at all. */
+export type AgentChatScope = "feature" | "workspace";
+
+/** What the current page has open, passed to a contextual assistant conversation so the model can
+ * be told what's on screen and so tool visibility scopes to that one feature area. `featureArea`
+ * must match a backend FeatureArea enum member name (e.g. "Aks", "Redis") — see
+ * SidecarAgentChatService.cs for the parsing side. */
+export interface AgentChatContext {
+  featureArea: string;
+  selection?: Record<string, string>;
+}
+
+export interface PendingAction {
+  id: string;
+  type: string;
+  summary: string;
+  target: string;
+  risk: "None" | "Low" | "High";
+  preview: string;
+  expiresAt: string;
+}
+
+export interface AgentActionApplyResult {
+  isSuccess: boolean;
+  errorMessage: string | null;
+  resultSummary: string | null;
 }
 
 export interface ChatMessage {
@@ -880,6 +1042,10 @@ export interface ChatMessage {
   content: string;
   elapsedMs?: number;
   error?: boolean;
+  /** Tool-call trace for this reply, if any (workspace-intelligence Module 6). */
+  steps?: AgentChatStep[];
+  /** True if this reply's turn triggered rolling summarization of older history (Module 5). */
+  summarized?: boolean;
 }
 
 export interface ContainerDetail {

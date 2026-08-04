@@ -37,7 +37,7 @@ public static class MonitoringEndpoints
 
         // ── Live SSE stream of fired alerts ─────────────────────────────────
 
-        group.MapGet("/stream", async (HttpContext context, MonitoringAlertEvaluationService engine) =>
+        group.MapGet("/stream", async (HttpContext context, MonitoringAlertEvaluationService engine, ProactiveInsightService insights) =>
         {
             context.Response.Headers.CacheControl = "no-cache";
             context.Response.Headers.Connection = "keep-alive";
@@ -47,11 +47,15 @@ public static class MonitoringEndpoints
 
             await context.Response.WriteAsync(": connected\n\n", cts.Token);
 
-            void OnAlertFired(AlertFiredEvent evt)
+            // Wrapped in a {kind, event} envelope (workspace-intelligence Module 4) so this one
+            // stream can carry both the pre-existing AlertFiredEvent and the new
+            // ProactiveInsightReadyEvent — see useMonitoringStream on the frontend for the matching
+            // parsing side.
+            void WriteEvent(string kind, object evt)
             {
                 try
                 {
-                    var json = JsonSerializer.Serialize(evt, JsonOptions);
+                    var json = JsonSerializer.Serialize(new { kind, @event = evt }, JsonOptions);
                     context.Response.WriteAsync($"data: {json}\n\n", cts.Token).GetAwaiter().GetResult();
                     context.Response.Body.FlushAsync(cts.Token).GetAwaiter().GetResult();
                 }
@@ -59,7 +63,11 @@ public static class MonitoringEndpoints
                 catch (Exception) { /* swallow — stream resilience */ }
             }
 
+            void OnAlertFired(AlertFiredEvent evt) => WriteEvent("alertFired", evt);
+            void OnInsightReady(ProactiveInsightReadyEvent evt) => WriteEvent("proactiveInsightReady", evt);
+
             engine.AlertFired += OnAlertFired;
+            insights.InsightReady += OnInsightReady;
             try
             {
                 using var timer = new PeriodicTimer(TimeSpan.FromSeconds(20));
@@ -74,6 +82,7 @@ public static class MonitoringEndpoints
             finally
             {
                 engine.AlertFired -= OnAlertFired;
+                insights.InsightReady -= OnInsightReady;
             }
         });
     }

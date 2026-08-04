@@ -1,5 +1,18 @@
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, Folder } from "lucide-react";
 import { useRedisPageContext, type FlatRedisRow } from "../RedisPageContext";
+
+// Vertical guide rules connecting a row to its ancestors, VSCode-file-tree style — the thing
+// that was missing before and made the whole tree read as a flat, undifferentiated wall of text.
+function IndentGuides({ depth }: { depth: number }) {
+  if (depth === 0) return null;
+  return (
+    <div className="flex shrink-0 self-stretch">
+      {Array.from({ length: depth }).map((_, i) => (
+        <span key={i} className="w-3 shrink-0 self-stretch border-r border-border/60" />
+      ))}
+    </div>
+  );
+}
 
 export function KeyBrowserPanel() {
   const ctx = useRedisPageContext();
@@ -9,22 +22,27 @@ export function KeyBrowserPanel() {
       const { node, depth } = row;
       const isExpanded = ctx.expandedNamespaces.has(node.path);
       return (
-        <div style={{ paddingLeft: `${depth * 0.75}rem` }}>
-          <div className="flex items-center">
+        <div className="flex items-stretch">
+          <IndentGuides depth={depth} />
+          <div className="flex min-w-0 flex-1 items-center gap-1 py-[3px] pr-2">
             <button
               onClick={() => ctx.toggleNamespace(node.path)}
-              className="p-0.5 text-muted-foreground hover:text-foreground"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               data-testid={`redis-namespace-toggle-${node.path}`}
               aria-label={`${isExpanded ? "Collapse" : "Expand"} ${node.path}`}
             >
-              {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`} />
             </button>
             <button
-              onClick={() => ctx.setNamespaceFilter(ctx.namespaceFilter === node.path ? null : node.path)}
-              className={`flex-1 rounded px-2 py-0.5 text-left text-xs font-mono ${ctx.namespaceFilter === node.path ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+              onClick={() => ctx.toggleNamespace(node.path)}
+              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[13px] font-medium text-foreground/90 transition-colors hover:bg-accent"
               data-testid={`redis-namespace-${node.path}`}
             >
-              {node.name} ({node.keyCount})
+              <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{node.name}</span>
+              <span className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] font-normal tabular-nums text-muted-foreground">
+                {node.keyCount}
+              </span>
             </button>
           </div>
         </div>
@@ -32,8 +50,10 @@ export function KeyBrowserPanel() {
     }
 
     const { key, node, depth } = row;
+    const isSelected = ctx.batchMode ? ctx.selectedKeys.has(key) : ctx.selectedKey === key;
     return (
-      <div style={{ paddingLeft: `${depth * 0.75}rem` }}>
+      <div className="flex items-stretch">
+        <IndentGuides depth={depth + 1} />
         <div
           role="button"
           tabIndex={0}
@@ -46,8 +66,8 @@ export function KeyBrowserPanel() {
               else ctx.setSelectedKey(key);
             }
           }}
-          className={`flex w-full items-center gap-2 rounded px-2 py-0.5 text-left text-xs font-mono cursor-pointer ${
-            ctx.batchMode ? (ctx.selectedKeys.has(key) ? "bg-primary/20" : "") : ctx.selectedKey === key ? "bg-accent" : "hover:bg-accent"
+          className={`flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-left text-[13px] font-mono transition-colors ${
+            isSelected ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
           }`}
         >
           {ctx.batchMode && (
@@ -56,7 +76,7 @@ export function KeyBrowserPanel() {
               checked={ctx.selectedKeys.has(key)}
               onChange={() => ctx.toggleKeySelection(key)}
               onClick={(e) => e.stopPropagation()}
-              className="h-3.5 w-3.5"
+              className="h-3.5 w-3.5 shrink-0"
               data-testid={`redis-key-checkbox-${key}`}
             />
           )}
@@ -105,6 +125,15 @@ export function KeyBrowserPanel() {
             {ctx.scanResult.data?.isComplete ? " (all)" : ""}
           </span>
           <button
+            onClick={ctx.collapseAllNamespaces}
+            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
+            data-testid="redis-collapse-all"
+            title="Collapse all namespaces"
+          >
+            <ChevronsDownUp className="h-3.5 w-3.5" />
+            Collapse all
+          </button>
+          <button
             onClick={() => { ctx.setBatchMode(!ctx.batchMode); ctx.setSelectedKeys(new Set()); }}
             className={`rounded border px-2 py-1 text-xs ${ctx.batchMode ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
             data-testid="redis-batch-toggle"
@@ -133,15 +162,6 @@ export function KeyBrowserPanel() {
         )}
         {ctx.namespaceTree.length === 0 && !ctx.scanResult.isLoading && (
           <div className="p-3 text-sm text-muted-foreground">No keys found</div>
-        )}
-        {ctx.namespaceTree.length > 0 && ctx.namespaceFilter && (
-          <button
-            onClick={() => ctx.setNamespaceFilter(null)}
-            className="mb-2 w-full rounded px-2 py-1 text-left text-xs font-mono hover:bg-accent"
-            data-testid="redis-namespace-clear-filter"
-          >
-            ← All namespaces ({ctx.displayKeys.length})
-          </button>
         )}
         {ctx.flatRedisRows.length > 0 && (
           <div

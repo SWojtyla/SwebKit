@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode } from "./helpers";
+import { mockAgentChatStreamDone, setDemoMode } from "./helpers";
 
 test.describe("Agent", () => {
   test.beforeEach(async ({ page }) => {
@@ -85,6 +85,155 @@ test.describe("Agent", () => {
     await expect(errorBubble).toBeVisible({ timeout: 5000 }).catch(() => {
       // If no error appears, at least verify the loading indicator appeared
     });
+  });
+
+  test("pending action card confirms and shows the apply result", async ({ page }) => {
+    const pendingAction = {
+      id: "action-1",
+      type: "DeleteRequest",
+      summary: "Delete request 'Get token'",
+      target: "Request 'Get token' (r1)",
+      risk: "High",
+      preview: "Name: Get token\nMethod: Post\nURL: https://api.example.com/token",
+      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    };
+    let confirmed = false;
+    await page.route("**/api/agent/pending-approvals", async (route) => {
+      await route.fulfill({ json: confirmed ? [] : [pendingAction] });
+    });
+    await page.route("**/api/agent/pending-approvals/action-1/confirm", async (route) => {
+      confirmed = true;
+      await route.fulfill({
+        json: { isSuccess: true, errorMessage: null, resultSummary: "Deleted request 'Get token'" },
+      });
+    });
+
+    await page.goto("/agent");
+
+    await expect(page.getByTestId("pending-action-action-1")).toBeVisible();
+    await expect(page.getByTestId("pending-action-summary-action-1")).toHaveText("Delete request 'Get token'");
+    await expect(page.getByTestId("pending-action-risk-action-1")).toHaveText(/High risk/);
+
+    await page.getByTestId("pending-action-confirm-action-1").click();
+
+    await expect(page.getByTestId("pending-action-result-action-1")).toHaveText("Deleted request 'Get token'");
+  });
+
+  test("pending action card rejects and removes the card", async ({ page }) => {
+    const pendingAction = {
+      id: "action-2",
+      type: "DeleteRequest",
+      summary: "Delete request 'Old request'",
+      target: "Request 'Old request' (r2)",
+      risk: "High",
+      preview: "Name: Old request",
+      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    };
+    let rejected = false;
+    await page.route("**/api/agent/pending-approvals", async (route) => {
+      await route.fulfill({ json: rejected ? [] : [pendingAction] });
+    });
+    await page.route("**/api/agent/pending-approvals/action-2/reject", async (route) => {
+      rejected = true;
+      await route.fulfill({ json: { rejected: true } });
+    });
+
+    await page.goto("/agent");
+    await expect(page.getByTestId("pending-action-action-2")).toBeVisible();
+
+    await page.getByTestId("pending-action-reject-action-2").click();
+
+    await expect(page.getByTestId("pending-action-action-2")).not.toBeVisible();
+  });
+
+  test("assistant replies render markdown, not literal syntax characters", async ({ page }) => {
+    await mockAgentChatStreamDone(page, {
+      text: "Here's what I found:\n\n- **pod-a** is `Running`\n- pod-b is `CrashLoopBackOff`\n\n```\nkubectl logs pod-b\n```",
+    });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("what's the status?");
+    await page.getByTestId("agent-send").click();
+
+    const reply = page.getByTestId("agent-messages").locator("li", { hasText: "pod-a" });
+    await expect(reply).toBeVisible();
+    await expect(page.getByTestId("agent-messages").locator("strong", { hasText: "pod-a" })).toBeVisible();
+    await expect(page.getByTestId("agent-messages").locator("code", { hasText: "kubectl logs pod-b" })).toBeVisible();
+    // Never the raw markdown syntax as literal text — confirms it was actually parsed, not just
+    // dumped as a monospace string like before this module.
+    await expect(page.getByTestId("agent-messages")).not.toContainText("**pod-a**");
+  });
+
+  test("a reply with tool steps shows a collapsed 'Show reasoning' disclosure that expands", async ({ page }) => {
+    await mockAgentChatStreamDone(page, {
+      text: "The pod is healthy.",
+      steps: [
+        { type: "tool_call", toolName: "get_pod_status", summary: "Calling get_pod_status" },
+        { type: "tool_result", toolName: "get_pod_status", summary: "Running", elapsed: "00:00:00.1200000" },
+      ],
+    });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("is the pod healthy?");
+    await page.getByTestId("agent-send").click();
+
+    const toggle = page.getByTestId("agent-reasoning-trace-toggle");
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveText("Show reasoning (2 steps)");
+    await expect(page.getByTestId("agent-reasoning-trace-steps")).not.toBeVisible();
+
+    await toggle.click();
+    await expect(page.getByTestId("agent-reasoning-trace-steps")).toContainText("Calling get_pod_status");
+    await expect(page.getByTestId("agent-reasoning-trace-steps")).toContainText("Running");
+  });
+
+  test("a reply with no tool steps shows no reasoning disclosure at all", async ({ page }) => {
+    await mockAgentChatStreamDone(page, { text: "Just a plain chat answer, no tools used." });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("hi");
+    await page.getByTestId("agent-send").click();
+
+    await expect(page.getByTestId("agent-messages")).toContainText("Just a plain chat answer");
+    await expect(page.getByTestId("agent-reasoning-trace-toggle")).toHaveCount(0);
+  });
+
+  test("a summarized turn shows the inline 'earlier parts summarized' notice", async ({ page }) => {
+    await mockAgentChatStreamDone(page, { text: "Continuing from where we left off.", summarized: true });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("what happened earlier?");
+    await page.getByTestId("agent-send").click();
+
+    await expect(page.getByTestId("agent-summarized-notice")).toContainText(
+      "Earlier parts of this conversation were summarized",
+    );
+  });
+
+  test("streamed replies assemble multiple token events into the final text", async ({ page }) => {
+    // Playwright's route.fulfill() sends the whole mocked body in one response, so this can't
+    // observe true network-level progressive rendering timing (that's the one part of Module 8's
+    // test-plan.md scope that stays manual — see technical-plan.md Module 7/8). What it does verify
+    // end-to-end: several separate SSE "token" events, each carrying one fragment, get parsed and
+    // concatenated into the exact final text — not dropped, reordered, or merged incorrectly.
+    const tokens = ["The ", "pod ", "is ", "healthy."];
+    const events = [
+      ...tokens.map((token) => ({ kind: "token", token })),
+      { kind: "done", result: { text: tokens.join(""), elapsedMs: 5, status: "done", error: false } },
+    ];
+    await page.route("**/api/agent/chat/stream", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
+      });
+    });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("status?");
+    await page.getByTestId("agent-send").click();
+
+    await expect(page.getByTestId("agent-messages")).toContainText("The pod is healthy.");
   });
 
   test("Enter key sends message, Shift+Enter adds newline", async ({ page }) => {

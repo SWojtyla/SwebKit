@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
 using SwebKit.Agents.Tools.ApiClient;
+using SwebKit.Agents.Tools.Redis;
+using SwebKit.Agents.Tools.Storage;
 using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Services;
@@ -43,6 +45,13 @@ public static partial class SwebKitServiceCollectionExtensions
         // API Client agent service
         services.AddSingleton<IApiClientAgentService, ApiClientAgentService>();
 
+        // Action executors — one per feature area, dispatched by AgentActionApplier via
+        // IAgentActionExecutor.CanHandle, so a new area's executor can be added without
+        // AgentActionApplier itself changing.
+        services.AddSingleton<IAgentActionExecutor, ApiClientActionExecutor>();
+        services.AddSingleton<IAgentActionExecutor, RedisActionExecutor>();
+        services.AddSingleton<IAgentActionExecutor, StorageActionExecutor>();
+
         // Action applier for confirmed action execution
         services.AddSingleton<AgentActionApplier>();
 
@@ -59,6 +68,18 @@ public static partial class SwebKitServiceCollectionExtensions
         services.AddSingleton<IAgentTool, GetQueueStatsTool>();
         services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
         services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
+
+        // Redis Tools
+        services.AddSingleton<IAgentTool, GetRedisKeyInfoTool>();
+        services.AddSingleton<IAgentTool, ListRedisKeysTool>();
+        services.AddSingleton<IAgentTool, AnalyzeCacheHealthTool>();
+        services.AddSingleton<IAgentTool, ProposeDeleteRedisKeyTool>();
+        services.AddSingleton<IAgentTool, ProposeSetRedisKeyTtlTool>();
+
+        // Storage Tools
+        services.AddSingleton<IAgentTool, ListStorageBlobsTool>();
+        services.AddSingleton<IAgentTool, GetStorageBlobPropertiesTool>();
+        services.AddSingleton<IAgentTool, ProposeCopyBlobTool>();
 
         // Observability Tools
         services.AddSingleton<IAgentTool, QueryLogsTool>();

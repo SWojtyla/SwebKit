@@ -5,11 +5,15 @@ using SwebKit.Core.Serialization;
 using SwebKit.Azure.Storage;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
+using SwebKit.Agents.Tools.ApiClient;
+using SwebKit.Agents.Tools.Redis;
+using SwebKit.Agents.Tools.Storage;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
+using SwebKit.Observability;
 using SwebKit.Redis;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
@@ -93,16 +97,34 @@ builder.Services.AddSingleton<SwebKit.Sidecar.Services.MonitoringAlertEvaluation
 builder.Services.AddHostedService(
     sp => sp.GetRequiredService<SwebKit.Sidecar.Services.MonitoringAlertEvaluationService>());
 
+// Workspace topology: heuristic relationship suggestions (workspace-intelligence Module 2). Reuses
+// the same IMonitoringConnectionPool the alert engine already resolves demo-vs-real AKS clients
+// through, rather than building its own connection logic.
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.WorkspaceRelationshipSuggestionService>();
+
+// Proactive insights (workspace-intelligence Module 4) — subscribes to
+// MonitoringAlertEvaluationService.AlertFired in its own constructor, so it must be resolved once
+// at startup below (a plain AddSingleton alone only registers it, it doesn't instantiate it).
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.ProactiveInsightService>();
+
 // Agent: OpenAI-compatible LLM client + sidecar chat service
 builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
+// Capability tester: probes a profile's endpoint for reachability/tool-calling support, backing
+// POST /api/agent/profiles/{id}/test. Separate HttpClient from the model client above since a
+// capability test may run against a profile that isn't the active one.
+builder.Services.AddHttpClient<AgentCapabilityTester>();
 
-// Agent tools — read-only Kubernetes and Service Bus diagnostics only. Observability tools
-// (QueryLogsTool/GetMetricsTool) are not wired here because the sidecar has no
-// IObservabilityProviderFactory yet (that's a MAUI-only service, a separate feature gap of its
-// own). The API Client mutation/proposal tools (ApiClientTools.cs) are not wired here either
-// because they need the confirmation-card flow (IAgentActionCoordinator/AgentActionApplier) that
-// the sidecar's chat UI doesn't implement — wiring them without it would let the model mutate
-// collections with no user confirmation step.
+// Observability: agent-tool-only capability (workspace-intelligence plan, 2026-08-03) — no
+// dedicated page/nav item (that part of the earlier product decision stands), but get_metrics/
+// query_logs give the agent Application Insights context when a resource is configured.
+// ObservabilityProviderFactory picks demo vs. real Azure App Insights per AppStateService.UseDemoData
+// the same way the tools themselves already branch on it — no separate demo wiring needed here.
+builder.Services.AddSingleton<IObservabilityProviderFactory, ObservabilityProviderFactory>();
+builder.Services.AddSingleton<IAgentTool, GetMetricsTool>();
+builder.Services.AddSingleton<IAgentTool, QueryLogsTool>();
+
+// Agent tools — Kubernetes, Service Bus, Redis, Storage, and (now that Module 3's confirm-flow
+// exists below) API Client.
 builder.Services.AddSingleton<DemoAksClient>();
 builder.Services.AddSingleton<IAgentTool, GetPodStatusTool>();
 builder.Services.AddSingleton<IAgentTool, ListNamespacesTool>();
@@ -113,9 +135,45 @@ builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
+builder.Services.AddSingleton<IAgentTool, GetRedisKeyInfoTool>();
+builder.Services.AddSingleton<IAgentTool, ListRedisKeysTool>();
+builder.Services.AddSingleton<IAgentTool, AnalyzeCacheHealthTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeDeleteRedisKeyTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeSetRedisKeyTtlTool>();
+builder.Services.AddSingleton<IAgentTool, ListStorageBlobsTool>();
+builder.Services.AddSingleton<IAgentTool, GetStorageBlobPropertiesTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeCopyBlobTool>();
+builder.Services.AddSingleton<IAgentTool, SearchApiRequestsTool>();
+builder.Services.AddSingleton<IAgentTool, GetApiRequestTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeApiRequestChangeTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeApiRequestDeleteTool>();
+builder.Services.AddSingleton<IAgentTool, PrepareApiRequestExecutionTool>();
+
+// Cross-area correlation (workspace-intelligence Module 3) — resolves IAgentToolRegistry lazily via
+// IServiceProvider to avoid a circular dependency (the registry is itself built from every
+// registered IAgentTool, including this one). Registered last among IAgentTool entries purely for
+// readability — registration order has no bearing on the circular-dependency fix.
+builder.Services.AddSingleton<IAgentTool, InvestigateWorkspaceIssueTool>();
 builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 
 builder.Services.AddSingleton<SidecarAgentChatService>();
+
+// Agent action confirm-before-execute flow (ai-augmented-app technical-plan.md Module 3). Wired
+// here as infrastructure even though nothing in the sidecar can propose an action yet — the API
+// Client propose tools (ApiClientTools.cs) land in Module 4, now that this exists for them to
+// target. IApiClientAgentService needs the same linked-collection chain the MAUI app uses
+// (SwebKitServiceCollectionExtensions.Agents.cs); LinkedCollectionRootRepository's LoadAsync() is
+// deliberately not called at sidecar startup below (linked collections aren't a sidecar feature
+// yet), so it stays empty and ApiClientAgentService correctly sees local collections only.
+builder.Services.AddSingleton<SwebKit.Core.Services.LinkedGitService>();
+builder.Services.AddSingleton<SwebKit.Core.Services.LinkedCollectionFileService>();
+builder.Services.AddSingleton<SwebKit.Core.Configuration.LinkedCollectionRootRepository>();
+builder.Services.AddSingleton<IApiClientAgentService, SwebKit.Core.Services.ApiClientAgentService>();
+builder.Services.AddSingleton<IAgentActionCoordinator, AgentActionCoordinator>();
+builder.Services.AddSingleton<IAgentActionExecutor, ApiClientActionExecutor>();
+builder.Services.AddSingleton<IAgentActionExecutor, RedisActionExecutor>();
+builder.Services.AddSingleton<IAgentActionExecutor, StorageActionExecutor>();
+builder.Services.AddSingleton<AgentActionApplier>();
 
 // HTTP client used by the API client request executor
 builder.Services.AddHttpClient();
@@ -215,8 +273,18 @@ app.UseExceptionHandler(ex =>
 await app.Services.GetRequiredService<ProfileRepository>().LoadAsync();
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
-await app.Services.GetRequiredService<UserSettingsRepository>().LoadAsync();
+await userSettingsRepository.LoadAsync();
+// Fathom theme unlock progress: one increment per launch, and the unlock is sticky once earned
+// (a later SessionCount reset — e.g. via settings import — must not re-lock a theme the user
+// already reached, hence checking FathomUnlocked with ||= rather than recomputing from scratch).
+userSettingsRepository.Settings.SessionCount++;
+userSettingsRepository.Settings.FathomUnlocked |= userSettingsRepository.Settings.SessionCount >= UserSettings.FathomUnlockThreshold;
+await userSettingsRepository.SaveAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
+// Force-instantiate now so its constructor subscribes to MonitoringAlertEvaluationService.AlertFired
+// before the first alert can possibly fire — a plain AddSingleton registration alone only makes it
+// resolvable, it doesn't construct it until something asks for it.
+app.Services.GetRequiredService<SwebKit.Sidecar.Services.ProactiveInsightService>();
 
 // ── Health, Demo Mode ────────────────────────────────────────────────────────
 
@@ -253,5 +321,9 @@ app.MapAgentEndpoints();
 // ── Monitoring ───────────────────────────────────────────────────────────────
 
 app.MapMonitoringEndpoints();
+
+// ── Workspace topology (workspace-intelligence Module 1) ────────────────────
+
+app.MapWorkspaceTopologyEndpoints();
 
 app.Run();

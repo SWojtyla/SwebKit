@@ -3,6 +3,8 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
 #[cfg(not(debug_assertions))]
+use tauri::Emitter;
+#[cfg(not(debug_assertions))]
 use std::io::{BufRead, BufReader};
 #[cfg(not(debug_assertions))]
 use std::process::{Command, Stdio};
@@ -133,13 +135,93 @@ fn parse_listening_port(line: &str) -> Option<u16> {
     port_str.trim_end_matches('/').parse().ok()
 }
 
+/// Starts background crash supervision for `child`, if there's a real process to supervise at
+/// all — dev mode's sidecar is run externally (`dotnet run`) and has no process handle here, so
+/// there's nothing to watch. Called after every successful spawn (initial startup and every
+/// restart) so a sidecar that crashes on its own is detected and respawned automatically instead
+/// of silently leaving the app talking to a dead port until the user notices and manually
+/// restarts — see `restart_sidecar`'s doc comment for the incident this was added to fix.
+fn start_supervision(app: &AppHandle, child: &Option<Child>) {
+    #[cfg(not(debug_assertions))]
+    if let Some(child) = child {
+        watch_for_crash(app.clone(), child.id());
+    }
+    #[cfg(debug_assertions)]
+    {
+        let _ = (app, child);
+    }
+}
+
+/// Polls (never blocks on) the child identified by `watched_pid` until it exits unexpectedly,
+/// then attempts to respawn it a few times with backoff. Uses `try_wait()` in a sleep loop rather
+/// than the blocking `Child::wait()` specifically so it never holds `SidecarState.child`'s mutex
+/// for longer than a single poll — `restart_sidecar`/`kill_sidecar` need to briefly take that same
+/// lock to kill the process themselves, and a competing blocking `wait()` holding the lock across
+/// the process's entire remaining lifetime would deadlock them (mirrors the pattern already used
+/// for the pod-shell exit watcher in `pod_shell.rs`, for the same reason).
+#[cfg(not(debug_assertions))]
+fn watch_for_crash(app: AppHandle, watched_pid: u32) {
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(Duration::from_millis(500));
+            let Some(state) = app.try_state::<SidecarState>() else {
+                return; // app is shutting down
+            };
+            let mut guard = state.child.lock().unwrap();
+            let Some(child) = guard.as_mut() else {
+                return; // slot cleared elsewhere (app exit, or a concurrent manual restart) — nothing left to watch
+            };
+            if child.id() != watched_pid {
+                return; // slot now holds a different process; whoever put it there started its own watcher
+            }
+            match child.try_wait() {
+                Ok(Some(_status)) => {
+                    *guard = None; // clear it now so restart_sidecar/kill_sidecar never touch an already-reaped handle
+                    break;
+                }
+                _ => continue, // still running (Ok(None)), or a transient error — keep polling either way
+            }
+        }
+
+        eprintln!("[swebkit] Sidecar (pid {watched_pid}) exited unexpectedly — attempting automatic recovery");
+        let _ = app.emit("sidecar-crashed", ());
+
+        for attempt in 1..=3u32 {
+            std::thread::sleep(Duration::from_secs(attempt as u64));
+            match spawn_sidecar(&app) {
+                Ok((port, Some(new_child))) => {
+                    let new_pid = new_child.id();
+                    let Some(state) = app.try_state::<SidecarState>() else {
+                        return; // app shut down mid-recovery
+                    };
+                    *state.child.lock().unwrap() = Some(new_child);
+                    *state.port.lock().unwrap() = port;
+                    eprintln!("[swebkit] Sidecar auto-recovered on attempt {attempt}, now listening on {port}");
+                    let _ = app.emit("sidecar-restarted", port);
+                    watch_for_crash(app, new_pid); // hand off supervision to a fresh watch cycle
+                    return;
+                }
+                Ok((_, None)) => return, // dev mode — nothing to supervise
+                Err(e) => eprintln!("[swebkit] Sidecar auto-respawn attempt {attempt} failed: {e}"),
+            }
+        }
+
+        eprintln!("[swebkit] Sidecar auto-recovery gave up after 3 attempts — manual restart required");
+        let _ = app.emit("sidecar-recovery-failed", ());
+    });
+}
+
 /// Tauri command: get the sidecar port for the frontend to use.
 #[tauri::command]
 pub fn get_sidecar_port(state: State<SidecarState>) -> u16 {
     *state.port.lock().unwrap()
 }
 
-/// Tauri command: restart the sidecar process.
+/// Tauri command: restart the sidecar process. Also used by the frontend's manual "Reconnect"
+/// button in the status bar — not just internally by `watch_for_crash`'s automatic recovery — so
+/// this (re)starts crash supervision for the freshly spawned process too, the same as `manage()`
+/// does at app startup. Without that, a manual restart would leave the newly-spawned process
+/// completely unsupervised until the next full app relaunch, defeating the point.
 #[tauri::command]
 pub fn restart_sidecar(app: AppHandle, state: State<SidecarState>) -> Result<u16, String> {
     // Kill existing process if any
@@ -151,6 +233,7 @@ pub fn restart_sidecar(app: AppHandle, state: State<SidecarState>) -> Result<u16
     }
 
     let (port, child) = spawn_sidecar(&app)?;
+    start_supervision(&app, &child);
     *state.child.lock().unwrap() = child;
     *state.port.lock().unwrap() = port;
     Ok(port)
@@ -161,6 +244,7 @@ pub fn restart_sidecar(app: AppHandle, state: State<SidecarState>) -> Result<u16
 /// actually have anything listening on it.
 pub fn manage(app: &AppHandle) -> Result<SidecarState, String> {
     let (port, child) = spawn_sidecar(app)?;
+    start_supervision(app, &child);
     Ok(SidecarState {
         child: Mutex::new(child),
         port: Mutex::new(port),

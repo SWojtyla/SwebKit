@@ -19,6 +19,14 @@ public sealed class CapabilityTestResult
     public AgentCapability Capability { get; init; } = AgentCapability.Unknown;
     public string? Diagnostic { get; init; }
     public IReadOnlyList<string>? AvailableModels { get; init; }
+
+    /// <summary>Best-effort context window (in tokens) for the tested model, read from a
+    /// non-standard field some <c>/v1/models</c> implementations (LM Studio in particular) attach
+    /// to a model entry — the plain OpenAI spec doesn't define one. Null when the field wasn't
+    /// present; the caller (the settings UI) only overwrites <see cref="AgentProfile.ContextWindowTokens"/>
+    /// when this is non-null, so a value the user already set by hand is never silently cleared by
+    /// a provider that simply doesn't advertise it.</summary>
+    public int? DetectedContextWindowTokens { get; init; }
 }
 
 /// <summary>
@@ -60,10 +68,11 @@ public sealed class AgentCapabilityTester
 
         // Step 1: Check server reachability via GET /models
         List<string>? models = null;
+        int? detectedContextWindow = null;
         bool serverReachable;
         try
         {
-            models = await GetModelsAsync(baseUrl, apiKey, ct);
+            (models, detectedContextWindow) = await GetModelsAsync(baseUrl, apiKey, profile.Model, ct);
             serverReachable = true;
         }
         catch (HttpRequestException ex)
@@ -108,7 +117,8 @@ public sealed class AgentCapabilityTester
                 ServerReachable = serverReachable,
                 ModelAvailable = modelAvailable,
                 ChatValid = false,
-                Diagnostic = $"Chat test failed: {ex.Message}"
+                Diagnostic = $"Chat test failed: {ex.Message}",
+                DetectedContextWindowTokens = detectedContextWindow,
             };
         }
 
@@ -120,7 +130,8 @@ public sealed class AgentCapabilityTester
                 ModelAvailable = modelAvailable,
                 ChatValid = false,
                 Capability = AgentCapability.Unknown,
-                Diagnostic = "Chat returned empty response."
+                Diagnostic = "Chat returned empty response.",
+                DetectedContextWindowTokens = detectedContextWindow,
             };
         }
 
@@ -152,7 +163,8 @@ public sealed class AgentCapabilityTester
             ToolCallingValid = toolCallingValid,
             Capability = capability,
             Diagnostic = diagnostic,
-            AvailableModels = models
+            AvailableModels = models,
+            DetectedContextWindowTokens = detectedContextWindow,
         };
     }
 
@@ -163,7 +175,13 @@ public sealed class AgentCapabilityTester
         return _credentialStore.Get(profile.CredentialKey);
     }
 
-    private async Task<List<string>?> GetModelsAsync(string baseUrl, string? apiKey, CancellationToken ct)
+    /// <summary>Non-standard field names some <c>/v1/models</c> implementations (LM Studio in
+    /// particular) attach to a model entry to advertise its context window — the plain OpenAI spec
+    /// defines no such field, so this is inherently best-effort/vendor-specific, checked in order.</summary>
+    private static readonly string[] ContextWindowFieldNames = ["context_length", "max_context_length", "context_window", "loaded_context_length"];
+
+    private async Task<(List<string>? Models, int? DetectedContextWindowTokens)> GetModelsAsync(
+        string baseUrl, string? apiKey, string configuredModel, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/models");
         if (!string.IsNullOrEmpty(apiKey))
@@ -172,25 +190,46 @@ public sealed class AgentCapabilityTester
 
         using var response = await _httpClient.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
-            return null;
+            return (null, null);
 
         var json = await response.Content.ReadAsStringAsync(ct);
         using var doc = JsonDocument.Parse(json);
 
         if (!doc.RootElement.TryGetProperty("data", out var data))
-            return null;
+            return (null, null);
 
         var models = new List<string>();
+        int? detectedContextWindow = null;
         foreach (var item in data.EnumerateArray())
         {
-            if (item.TryGetProperty("id", out var id))
+            if (!item.TryGetProperty("id", out var id))
+                continue;
+
+            var idStr = id.GetString();
+            if (string.IsNullOrEmpty(idStr))
+                continue;
+
+            models.Add(idStr);
+
+            if (string.Equals(idStr, configuredModel, StringComparison.OrdinalIgnoreCase))
+                detectedContextWindow = TryReadContextWindow(item);
+        }
+        return (models, detectedContextWindow);
+    }
+
+    private static int? TryReadContextWindow(JsonElement modelItem)
+    {
+        foreach (var fieldName in ContextWindowFieldNames)
+        {
+            if (modelItem.TryGetProperty(fieldName, out var value) &&
+                value.ValueKind == JsonValueKind.Number &&
+                value.TryGetInt32(out var tokens) &&
+                tokens > 0)
             {
-                var idStr = id.GetString();
-                if (!string.IsNullOrEmpty(idStr))
-                    models.Add(idStr);
+                return tokens;
             }
         }
-        return models;
+        return null;
     }
 
     private async Task<bool> SendMiniChatAsync(string baseUrl, string? apiKey, string model, CancellationToken ct)
@@ -202,7 +241,13 @@ public sealed class AgentCapabilityTester
             {
                 new { role = "user", content = "Reply with exactly: OK" }
             },
-            max_tokens = 10,
+            // Was 10 — reasoning-capable local models (observed with a Gemma QAT model in LM
+            // Studio) can spend the entire budget on hidden reasoning tokens before emitting any
+            // visible content, so a tiny cap made this probe report "empty response" for models
+            // that work perfectly fine in real conversation (which uses no cap at all — see
+            // OpenAiCompatibleAgentClient, which omits max_tokens entirely since Module 9). 64
+            // gives reasoning room without turning this into a slow test.
+            max_tokens = 64,
             temperature = 0
         });
 

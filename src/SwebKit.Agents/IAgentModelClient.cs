@@ -67,8 +67,6 @@ public sealed class AgentModelRequest
     public required string UserMessage { get; init; }
     public IReadOnlyList<ToolDefinition> Tools { get; init; } = [];
     public IReadOnlyList<AgentMessage> History { get; init; } = [];
-    public double Temperature { get; init; } = 0.7;
-    public int MaxTokens { get; init; } = 2048;
     public int MaxToolRounds { get; init; } = 5;
 }
 
@@ -136,4 +134,59 @@ public interface IAgentModelClient
     Task<AgentModelResponse> CompleteAsync(
         AgentModelRequest request,
         CancellationToken ct);
+
+    /// <summary>
+    /// Same agentic loop as <see cref="ChatAsync"/>, but streams incremental progress —
+    /// assistant text tokens as they arrive and tool-call lifecycle markers — instead of
+    /// returning only the final result. Each round is still resolved fully server-side
+    /// before a tool-calls-or-not decision is made (a partial tool-call can't be executed),
+    /// so streaming only changes how *this round's own progress* is surfaced, not the loop's
+    /// control flow.
+    /// </summary>
+    IAsyncEnumerable<AgentStreamEvent> ChatStreamAsync(
+        AgentModelRequest request,
+        Func<string, JsonElement, CancellationToken, Task<string>>? toolExecutor,
+        CancellationToken ct);
+}
+
+/// <summary>Kind of a single streamed event from <see cref="IAgentModelClient.ChatStreamAsync"/>.</summary>
+public enum AgentStreamEventKind
+{
+    /// <summary>An incremental chunk of assistant text (<see cref="AgentStreamEvent.Token"/>).</summary>
+    Token,
+
+    /// <summary>A tool call was just decided by the model and is about to execute
+    /// (<see cref="AgentStreamEvent.ToolName"/>).</summary>
+    ToolCallStarted,
+
+    /// <summary>A tool call finished executing (<see cref="AgentStreamEvent.ToolName"/>).</summary>
+    ToolCallResult,
+
+    /// <summary>The agentic loop is finished; <see cref="AgentStreamEvent.Result"/> carries the same
+    /// shape <see cref="IAgentModelClient.ChatAsync"/> would have returned. Always the last event on
+    /// success — nothing follows it.</summary>
+    Done,
+
+    /// <summary>The loop failed before producing a result; <see cref="AgentStreamEvent.ErrorMessage"/>
+    /// carries the reason. Always the last event when it occurs.</summary>
+    Error,
+}
+
+/// <summary>One incremental event from a streamed agent chat turn.</summary>
+public sealed class AgentStreamEvent
+{
+    public required AgentStreamEventKind Kind { get; init; }
+    public string? Token { get; init; }
+    public string? ToolName { get; init; }
+    public AgentChatResult? Result { get; init; }
+    public string? ErrorMessage { get; init; }
+
+    /// <summary>Populated only by <c>SidecarAgentChatService</c> (workspace-intelligence Module
+    /// 5/6) on the terminal <see cref="AgentStreamEventKind.Done"/>/<see cref="AgentStreamEventKind.Error"/>
+    /// event it re-yields — the low-level provider client (<c>OpenAiCompatibleAgentClient</c>) has
+    /// no session/profile concept and never sets these; they're null/default on every event it
+    /// produces directly.</summary>
+    public IReadOnlyList<AgentChatStep>? Steps { get; init; }
+    public bool Summarized { get; init; }
+    public double? ContextUsagePercent { get; init; }
 }

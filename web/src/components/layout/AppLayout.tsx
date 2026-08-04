@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
@@ -20,9 +20,11 @@ import {
   Sparkles,
   Beaker,
   Keyboard,
+  Waves,
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
+import { GlobalAgentPanel } from "@/components/agent/GlobalAgentPanel";
 import {
   useAksTestConnection,
   useDemoMode,
@@ -32,9 +34,12 @@ import {
   useSbTestConnection,
   useStorageContainers,
   useToggleDemoMode,
+  useUserSettings,
+  useUpdateUserSettings,
 } from "@/lib/hooks";
-import { useSettingsStore } from "@/lib/stores/settings";
-import { restartSidecar } from "@/lib/tauri-bridge";
+import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
+import { useSettingsStore, isTheme } from "@/lib/stores/settings";
+import { onSidecarLifecycleEvent, restartSidecar } from "@/lib/tauri-bridge";
 import { initSidecarBaseUrl } from "@/lib/api";
 import { useNotification } from "./NotificationSystem";
 
@@ -54,8 +59,17 @@ export function AppLayout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const onAgentPage = location.pathname === "/agent";
+
+  // The full /agent page and this panel are two views onto the identical global conversation
+  // (see useGlobalAgentConversation) — showing both at once would just be the same messages
+  // twice, so the panel auto-closes whenever the user navigates to the dedicated page instead.
+  useEffect(() => {
+    if (onAgentPage) setAgentPanelOpen(false);
+  }, [onAgentPage]);
   const { data: health } = useHealth();
   const { data: profile } = useProfile();
   const { data: demoData } = useDemoMode();
@@ -64,12 +78,70 @@ export function AppLayout() {
   const redisHealth = useRedisServerInfo(profile?.config.redisConfig?.caches[0]?.id ?? null);
   const storageHealth = useStorageContainers(profile?.config.storageAccounts[0]?.id ?? null);
   const toggleDemoMode = useToggleDemoMode();
-  const { theme, toggleTheme } = useSettingsStore();
+  const { theme, toggleTheme, setTheme } = useSettingsStore();
+  const { data: userSettings } = useUserSettings();
+  const updateUserSettings = useUpdateUserSettings();
+
+  // Theme lives in the sidecar's user-settings.json, not just this session's Zustand store —
+  // without this, a restart always came back to the "dark" default no matter what was picked.
+  // Applied once per app launch, on the first settings load; later local changes push the other
+  // direction (see the theme toggle button and AppearanceSettings' card clicks).
+  const themeHydratedRef = useRef(false);
+  useEffect(() => {
+    if (themeHydratedRef.current || !userSettings) return;
+    themeHydratedRef.current = true;
+    if (isTheme(userSettings.theme) && userSettings.theme !== theme) {
+      setTheme(userSettings.theme);
+    }
+  }, [userSettings, theme, setTheme]);
+
+  // Apply font-size and density from user settings. The root font-size is a simple rem scaler;
+  // density is surfaced as a data attribute for future CSS and for select controls to reflect.
+  useEffect(() => {
+    if (!userSettings) return;
+    const fontSizeMap: Record<string, string> = { small: "14px", medium: "16px", large: "18px" };
+    document.documentElement.style.fontSize = fontSizeMap[userSettings.fontSize] ?? "16px";
+    document.documentElement.dataset.density = userSettings.density ?? "comfortable";
+  }, [userSettings]);
   const sidecarOk = health?.status === "ok";
   const isDemoMode = demoData?.isDemoMode ?? false;
   const [reconnecting, setReconnecting] = useState(false);
   const queryClient = useQueryClient();
   const { notify } = useNotification();
+
+  // Fathom's "thank you" moment: sessionCount lands on the threshold exactly once (it only ever
+  // increments), so this fires on the one launch that crosses it and never again — no separate
+  // "already celebrated" flag needed server-side.
+  const firedFathomToastRef = useRef(false);
+  useEffect(() => {
+    if (firedFathomToastRef.current || !userSettings) return;
+    if (userSettings.sessionCount === FATHOM_UNLOCK_THRESHOLD && userSettings.fathomUnlocked) {
+      firedFathomToastRef.current = true;
+      notify("success", "New depth reached", "Fathom is unlocked in Settings → Appearance — thanks for taking SwebKit this deep.");
+    }
+  }, [userSettings, notify]);
+
+  // Hidden six-click gesture on the status bar version number: sets a developer-only override
+  // that skips the session-count gate on this machine, without any visible UI for it elsewhere.
+  const versionClicksRef = useRef(0);
+  const versionClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleVersionClick = useCallback(() => {
+    versionClicksRef.current += 1;
+    if (versionClickTimerRef.current) clearTimeout(versionClickTimerRef.current);
+    versionClickTimerRef.current = setTimeout(() => {
+      versionClicksRef.current = 0;
+    }, 1500);
+
+    if (versionClicksRef.current >= 6) {
+      versionClicksRef.current = 0;
+      if (userSettings && !userSettings.fathomDeveloperOverride) {
+        updateUserSettings.mutate(
+          { ...userSettings, fathomDeveloperOverride: true },
+          { onSuccess: () => notify("success", "Developer override armed", "Fathom is unlocked for this profile only.") },
+        );
+      }
+    }
+  }, [userSettings, updateUserSettings, notify]);
 
   // The sidecar previously had no recovery path if it crashed mid-session: `restart_sidecar`
   // existed as a Tauri command but nothing ever called it, so a crash silently broke the app
@@ -89,6 +161,40 @@ export function AppLayout() {
     } finally {
       setReconnecting(false);
     }
+  }, [queryClient, notify]);
+
+  // Complements handleReconnect (manual, user-triggered) with the automatic side: the Rust side
+  // now supervises the sidecar child process itself and respawns it on an unexpected exit without
+  // waiting for the frontend's health poll to notice (see sidecar.rs's watch_for_crash) — this
+  // just reflects that in the UI instead of requiring the user to notice "Disconnected" and click
+  // Reconnect themselves, which was the whole gap: a crash used to be invisible here until someone
+  // manually relaunched the entire app.
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    onSidecarLifecycleEvent({
+      onCrashed: () => {
+        notify("info", "Sidecar disconnected", "Attempting automatic recovery…");
+      },
+      onRestarted: async (port) => {
+        void port; // the Rust side already updated its own state; re-resolving here just syncs ours
+        await initSidecarBaseUrl();
+        await queryClient.invalidateQueries();
+        notify("success", "Sidecar recovered automatically");
+      },
+      onRecoveryFailed: () => {
+        notify("error", "Sidecar recovery failed", "Use the Reconnect button below, or restart the app.");
+      },
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else unlisten = dispose;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, [queryClient, notify]);
 
   const contextTitle = navItems.find((n) => n.to === location.pathname)?.label ?? "SwebKit";
@@ -133,11 +239,18 @@ export function AppLayout() {
     } else if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
       e.preventDefault();
       setNavCollapsed((prev) => !prev);
+    } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "l" || e.key === "L")) {
+      // Not Ctrl+Shift+A: Chrome's built-in "Search tabs" shortcut swallows that combo before it
+      // ever reaches page JS (confirmed empirically — the keydown event never fires at all), and
+      // the packaged app's WebView2 shell is the same Chromium engine, so it would hit the same
+      // wall for real users, not just in tests.
+      e.preventDefault();
+      setAgentPanelOpen((prev) => (onAgentPage ? prev : !prev));
     } else if (((e.key === "?" && e.shiftKey) || (e.key === "/" && e.shiftKey)) && (e.target === document.body || e.target === document.documentElement)) {
       e.preventDefault();
       setShortcutsOpen(true);
     }
-  }, [navigate]);
+  }, [navigate, onAgentPage]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -194,12 +307,25 @@ export function AppLayout() {
           </button>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button
-              onClick={() => toggleTheme()}
+              onClick={() => {
+                toggleTheme();
+                if (userSettings) {
+                  updateUserSettings.mutate({ ...userSettings, theme: useSettingsStore.getState().theme });
+                }
+              }}
               className="rounded-lg border p-2 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
               data-testid="theme-toggle"
               title="Toggle theme"
             >
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : theme === "fancy" ? <Sparkles className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {theme === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : theme === "fancy" ? (
+                <Sparkles className="h-4 w-4" />
+              ) : theme === "fathom-dark" || theme === "fathom-light" ? (
+                <Waves className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
             </button>
             <button
               onClick={() => toggleDemoMode.mutate(!isDemoMode)}
@@ -211,6 +337,16 @@ export function AppLayout() {
               <Beaker className="h-3.5 w-3.5" />
               {toggleDemoMode.isPending ? "..." : isDemoMode ? "Demo" : "Live"}
             </button>
+            {!onAgentPage && (
+              <button
+                onClick={() => setAgentPanelOpen((prev) => !prev)}
+                className={`rounded-lg border p-2 transition-all hover:bg-accent hover:text-foreground ${agentPanelOpen ? "border-primary text-primary" : "text-muted-foreground"}`}
+                data-testid="global-agent-panel-toggle"
+                title="AI Agent (Ctrl+Shift+L)"
+              >
+                <Bot className="h-4 w-4" />
+              </button>
+            )}
             <button
               onClick={() => setShortcutsOpen(true)}
               className="rounded-lg border p-2 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
@@ -274,15 +410,28 @@ export function AppLayout() {
             })}
           </div>
           {health?.version && (
-            <span>v{health.version}</span>
+            <span onClick={handleVersionClick}>v{health.version}</span>
           )}
           {isDemoMode && (
             <span className="text-warning" data-testid="status-bar-demo">Demo Mode</span>
           )}
-          <span className="ml-auto">{theme === "dark" ? "Dark" : theme === "fancy" ? "✨ Fancy ✨" : "Light"} theme</span>
+          <span className="ml-auto">
+            {theme === "dark"
+              ? "Dark"
+              : theme === "fancy"
+                ? "✨ Fancy ✨"
+                : theme === "fathom-dark"
+                  ? "Fathom · Abyss"
+                  : theme === "fathom-light"
+                    ? "Fathom · Shallows"
+                    : "Light"}{" "}
+            theme
+          </span>
           <span>SwebKit</span>
         </footer>
       </div>
+
+      <GlobalAgentPanel open={agentPanelOpen} onClose={() => setAgentPanelOpen(false)} />
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <KeyboardShortcutsPanel open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

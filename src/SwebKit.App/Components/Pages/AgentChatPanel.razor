@@ -2,7 +2,6 @@
 @using SwebKit.App.Services
 @using Markdig
 @inject IAgentChatService Agent
-@inject UserSettingsRepository UserSettings
 @inject IJSRuntime JS
 @inject ILogger<AgentChatPanel> Logger
 @implements IDisposable
@@ -22,7 +21,7 @@
             </span>
             <span class="agent-panel-pills">
                 <span class="shell-pill @(_historyWarning ? "shell-pill--warning" : "shell-pill--muted")">
-                    @Agent.HistoryMessageCount / @UserSettings.Settings.Agent.MaxHistoryMessages
+                    @Agent.HistoryMessageCount messages
                 </span>
                 @if (_historyWarning)
                 {

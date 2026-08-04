@@ -118,7 +118,7 @@ export function DashboardPage() {
     { label: "Cache Hit Rate", value: cacheHitRate ? `${cacheHitRate}%` : "-", to: "/redis", icon: TrendingUp },
   ];
 
-  const pendingCount = pendingApprovals.data?.count ?? 0;
+  const pendingCount = pendingApprovals.data?.length ?? 0;
 
   const resourceRows = [
     {

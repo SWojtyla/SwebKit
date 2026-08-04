@@ -29,6 +29,8 @@ public sealed class GetQueueMessagesTool : IAgentTool
     public string Description =>
         "Retrieves messages from a Service Bus queue. Supports filtering by message count and optionally peeking at dead-letter messages.";
 
+    public FeatureArea FeatureArea => FeatureArea.ServiceBus;
+
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
           "type": "object",

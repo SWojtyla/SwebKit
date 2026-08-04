@@ -1,57 +1,29 @@
 import { useState, useRef, useEffect } from "react";
-import { useAgentChat, useAgentClear, useAgentStatus } from "@/lib/hooks";
-import type { ChatMessage } from "@/lib/types";
-
-let msgIdCounter = 0;
-function nextMsgId() {
-  return `msg-${++msgIdCounter}`;
-}
+import ReactMarkdown from "react-markdown";
+import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
+import { PendingActionCard } from "./PendingActionCard";
+import { AgentReasoningTrace } from "./AgentReasoningTrace";
+import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
+import { ContextUsageIndicator } from "./ContextUsageIndicator";
 
 export function AgentPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const chat = useAgentChat();
-  const clear = useAgentClear();
-  const status = useAgentStatus();
+  const { messages, send, isStreaming, clear, isClearPending, status, pendingApprovals } =
+    useGlobalAgentConversation();
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, chat.isPending]);
+  }, [messages, isStreaming]);
 
   const handleSend = () => {
-    const text = input.trim();
-    if (!text || chat.isPending) return;
-
-    const userMsg: ChatMessage = { id: nextMsgId(), role: "user", content: text };
-    setMessages((prev) => [...prev, userMsg]);
+    if (!input.trim() || isStreaming) return;
+    send(input);
     setInput("");
-
-    chat.mutate(text, {
-      onSuccess: (reply) => {
-        const assistantMsg: ChatMessage = {
-          id: nextMsgId(),
-          role: "assistant",
-          content: reply.text,
-          elapsedMs: reply.elapsedMs,
-          error: reply.error,
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-      },
-      onError: (err) => {
-        const errorMsg: ChatMessage = {
-          id: nextMsgId(),
-          role: "assistant",
-          content: `Error: ${err.message}`,
-          error: true,
-        };
-        setMessages((prev) => [...prev, errorMsg]);
-      },
-    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -62,12 +34,7 @@ export function AgentPage() {
   };
 
   const handleClear = () => {
-    clear.mutate(undefined, {
-      onSuccess: () => {
-        setMessages([]);
-        setShowClearConfirm(false);
-      },
-    });
+    clear(() => setShowClearConfirm(false));
   };
 
   return (
@@ -78,6 +45,13 @@ export function AgentPage() {
           <h1 className="text-2xl font-bold" data-testid="agent-title">AI Agent</h1>
           <span className="text-xs text-muted-foreground" data-testid="agent-history-count">
             {status.data?.historyCount ?? 0} messages in history
+            {status.data && status.data.estimatedTokens > 0 && (
+              <> · ~{status.data.estimatedTokens.toLocaleString()} tokens</>
+            )}
+            <ContextUsageIndicator
+              percent={status.data?.contextUsagePercent ?? 0}
+              warningAt={status.data?.contextUsageWarningPercent ?? 75}
+            />
           </span>
         </div>
         {showClearConfirm ? (
@@ -86,7 +60,8 @@ export function AgentPage() {
             <button
               data-testid="agent-clear-confirm"
               onClick={handleClear}
-              className="rounded-md bg-destructive px-3 py-1 text-sm text-destructive-foreground hover:bg-destructive/90"
+              disabled={isClearPending}
+              className="rounded-md bg-destructive px-3 py-1 text-sm text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
             >
               Yes, clear
             </button>
@@ -109,6 +84,15 @@ export function AgentPage() {
           </button>
         )}
       </div>
+
+      {/* Pending actions awaiting confirmation ("Ask & do" proposals) */}
+      {pendingApprovals.data && pendingApprovals.data.length > 0 && (
+        <div className="space-y-2 border-b px-6 py-3" data-testid="pending-actions-list">
+          {pendingApprovals.data.map((action) => (
+            <PendingActionCard key={action.id} action={action} />
+          ))}
+        </div>
+      )}
 
       {/* Chat messages */}
       <div
@@ -142,17 +126,25 @@ export function AgentPage() {
                     : "bg-muted"
               }`}
             >
-              <div className="whitespace-pre-wrap text-sm font-mono">{msg.content}</div>
+              {msg.role === "assistant" ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none text-sm [&_p]:my-1 [&_pre]:overflow-x-auto">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+              ) : (
+                <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+              )}
               {msg.role === "assistant" && msg.elapsedMs != null && (
                 <div className="mt-1 text-xs text-muted-foreground">
                   {msg.elapsedMs}ms
                 </div>
               )}
+              {msg.role === "assistant" && msg.steps && <AgentReasoningTrace steps={msg.steps} />}
+              {msg.role === "assistant" && msg.summarized && <AgentSummarizedNotice />}
             </div>
           </div>
         ))}
 
-        {chat.isPending && (
+        {isStreaming && messages[messages.length - 1]?.content === "" && (
           <div className="flex justify-start" data-testid="agent-loading">
             <div className="rounded-lg bg-muted px-4 py-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -175,12 +167,12 @@ export function AgentPage() {
             placeholder="Ask the AI agent..."
             rows={2}
             className="flex-1 resize-none rounded-md border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            disabled={chat.isPending}
+            disabled={isStreaming}
           />
           <button
             data-testid="agent-send"
             onClick={handleSend}
-            disabled={!input.trim() || chat.isPending}
+            disabled={!input.trim() || isStreaming}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             Send
@@ -193,4 +185,3 @@ export function AgentPage() {
     </div>
   );
 }
-

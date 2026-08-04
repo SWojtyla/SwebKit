@@ -10,6 +10,7 @@ const shortcuts = [
   { keys: "Ctrl+K", description: "Open command palette" },
   { keys: "Ctrl+G", description: "Go to Settings" },
   { keys: "Ctrl+B", description: "Toggle sidebar navigation" },
+  { keys: "Ctrl+Shift+L", description: "Toggle the AI Agent side panel" },
   { keys: "Shift+?", description: "Show this keyboard shortcuts panel" },
   { keys: "R", description: "Refresh current view (AKS)" },
   { keys: "L", description: "Jump to Pods tab (AKS)" },

@@ -29,12 +29,29 @@ internal sealed class FakeAgentModelClient : IAgentModelClient
 
     public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, CancellationToken ct) =>
         throw new NotSupportedException();
+
+    public async IAsyncEnumerable<AgentStreamEvent> ChatStreamAsync(
+        AgentModelRequest request,
+        Func<string, JsonElement, CancellationToken, Task<string>>? toolExecutor,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        await Task.Yield();
+        LastRequest = request;
+        LastToolExecutor = toolExecutor;
+        yield return new AgentStreamEvent { Kind = AgentStreamEventKind.Token, Token = "canned reply" };
+        yield return new AgentStreamEvent
+        {
+            Kind = AgentStreamEventKind.Done,
+            Result = new AgentChatResult { Text = "canned reply", ToolsUsed = [], Elapsed = TimeSpan.Zero }
+        };
+    }
 }
 
 internal sealed class FakeAgentTool : IAgentTool
 {
     public string Name => "fake_tool";
     public string Description => "A fake tool for testing.";
+    public FeatureArea FeatureArea => FeatureArea.Aks;
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""{"type":"object","properties":{}}""");
 
     public Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct) =>
@@ -113,5 +130,18 @@ public class SidecarAgentChatServiceToolsTests
 
         public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, CancellationToken ct) =>
             throw new NotSupportedException();
+
+        public async IAsyncEnumerable<AgentStreamEvent> ChatStreamAsync(
+            AgentModelRequest request,
+            Func<string, JsonElement, CancellationToken, Task<string>>? toolExecutor,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            await Task.Yield();
+            yield return new AgentStreamEvent
+            {
+                Kind = AgentStreamEventKind.Done,
+                Result = new AgentChatResult { Text = "done", ToolsUsed = toolsUsed, Elapsed = TimeSpan.Zero }
+            };
+        }
     }
 }

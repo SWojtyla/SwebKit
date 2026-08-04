@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SwebKit.Agents.Tools;
 
 namespace SwebKit.Agents;
@@ -15,6 +16,9 @@ public enum AgentActionType
     RenameFolder,
     DeleteFolder,
     ExecuteHttpRequest,
+    DeleteRedisKey,
+    SetRedisKeyTtl,
+    CopyBlob,
 }
 
 /// <summary>
@@ -45,6 +49,15 @@ public sealed class PendingAgentAction
     public required AgentActionRisk Risk { get; init; }
     public required string Preview { get; init; }
     public required string? ExpectedFingerprint { get; init; }
+
+    /// <summary>
+    /// The structured tool-call arguments behind this proposal (e.g. the exact <c>operation</c>/
+    /// <c>request_id</c>/<c>name</c>/<c>method</c>/<c>url</c> fields <c>ProposeApiRequestChangeTool</c>
+    /// received), so the executor applying this action can act on exact values instead of parsing
+    /// the human-readable <see cref="Preview"/> string. Null for action types that don't need it
+    /// (e.g. <see cref="AgentActionType.DeleteRequest"/> only needs <see cref="Target"/>).
+    /// </summary>
+    public JsonElement? Payload { get; init; }
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset ExpiresAt { get; init; } = DateTimeOffset.UtcNow.AddMinutes(5);
     public bool IsExpired => DateTimeOffset.UtcNow > ExpiresAt;

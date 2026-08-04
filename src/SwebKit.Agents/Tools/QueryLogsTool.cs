@@ -27,6 +27,8 @@ public sealed class QueryLogsTool : IAgentTool
         "Executes a KQL query against Application Insights and returns the results. " +
         "Use this to search logs, trace exceptions, or analyze telemetry data.";
 
+    public FeatureArea FeatureArea => FeatureArea.Observability;
+
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
           "type": "object",

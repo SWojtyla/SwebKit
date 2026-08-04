@@ -28,6 +28,8 @@ public sealed class GetPodLogsTool : IAgentTool
         "Returns the most recent log lines from a Kubernetes pod container. " +
         "Defaults to the last 100 lines of the first container.";
 
+    public FeatureArea FeatureArea => FeatureArea.Aks;
+
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
           "type": "object",

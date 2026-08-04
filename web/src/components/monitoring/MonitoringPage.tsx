@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus } from "lucide-react";
-import type { AlertSignalStatus, MonitoringAlertRule, AlertFiredEvent } from "../../lib/api";
+import type { AlertSignalStatus, MonitoringAlertRule, AlertFiredEvent, ProactiveInsightReadyEvent } from "../../lib/api";
 import {
   useMonitoringRules,
   useCreateMonitoringRule,
@@ -8,12 +9,20 @@ import {
   useDeleteMonitoringRule,
   useMonitoringHistory,
   useMonitoringStream,
+  useProactiveInsightsFeed,
 } from "../../lib/hooks";
 import { showNotification } from "../../lib/tauri-bridge";
 import { useNotification } from "../layout/NotificationSystem";
+import { useAgentConversationStore } from "../../lib/stores/agent-conversation";
 import { AlertRuleGroups } from "./AlertRuleGroups";
 import { AlertRuleDialog } from "./AlertRuleDialog";
 import { AlertHistoryPanel } from "./AlertHistoryPanel";
+import { ProactiveInsightCard } from "./ProactiveInsightCard";
+
+let proactiveMsgIdCounter = 0;
+function nextProactiveMsgId() {
+  return `proactive-msg-${++proactiveMsgIdCounter}`;
+}
 
 export function MonitoringPage() {
   const { data: rules = [], isLoading } = useMonitoringRules();
@@ -22,6 +31,8 @@ export function MonitoringPage() {
   const updateRule = useUpdateMonitoringRule();
   const deleteRule = useDeleteMonitoringRule();
   const { notify } = useNotification();
+  const navigate = useNavigate();
+  const addAgentMessage = useAgentConversationStore((s) => s.addMessage);
 
   const [activeTab, setActiveTab] = useState<"rules" | "history">("rules");
   const [showEditor, setShowEditor] = useState(false);
@@ -29,14 +40,36 @@ export function MonitoringPage() {
   // Live status dots, derived from a synthetic evaluation event merged in from the stream + history.
   const [statuses, setStatuses] = useState<Record<string, AlertSignalStatus>>({});
   const [liveEvents, setLiveEvents] = useState<AlertFiredEvent[]>([]);
+  const { insights, addInsight, dismiss } = useProactiveInsightsFeed();
 
-  // Subscribe to the SSE stream: push fired events into history + raise notifications.
-  useMonitoringStream((evt) => {
-    setLiveEvents((prev) => [evt, ...prev].slice(0, 200));
-    setStatuses((s) => ({ ...s, [evt.ruleId]: "Firing" }));
-    void showNotification(evt.ruleName, evt.message);
-    notify(evt.severity === "Critical" ? "error" : "success", evt.ruleName, evt.message);
-  });
+  // Subscribe to the SSE stream: push fired events into history + raise notifications, and surface
+  // any background proactive investigation that completes (workspace-intelligence Module 4).
+  useMonitoringStream(
+    (evt) => {
+      setLiveEvents((prev) => [evt, ...prev].slice(0, 200));
+      setStatuses((s) => ({ ...s, [evt.ruleId]: "Firing" }));
+      void showNotification(evt.ruleName, evt.message);
+      notify(evt.severity === "Critical" ? "error" : "success", evt.ruleName, evt.message);
+    },
+    addInsight,
+  );
+
+  const investigateInsight = (insight: ProactiveInsightReadyEvent) => {
+    // Reuses the global agent conversation rather than opening a separate "view this session"
+    // surface — the sidecar-seeded session (identified by insight.sessionId) is the real source of
+    // truth for any follow-up questions asked from here forward, but the global page/panel only
+    // knows how to render the one global session today, so the summary is injected there directly
+    // as a real, honest scope reduction (documented in status.md) rather than a half-built session
+    // viewer.
+    addAgentMessage({
+      id: nextProactiveMsgId(),
+      role: "user",
+      content: `What's related to the "${insight.ruleName}" alert that just fired?`,
+    });
+    addAgentMessage({ id: nextProactiveMsgId(), role: "assistant", content: insight.summary });
+    dismiss(insight);
+    navigate("/agent");
+  };
 
   const mergedHistory = [...liveEvents, ...history].sort(
     (a, b) => new Date(b.firedAt).getTime() - new Date(a.firedAt).getTime(),
@@ -62,6 +95,19 @@ export function MonitoringPage() {
       <div className="border-b px-6 py-3">
         <h1 className="text-lg font-bold" data-testid="monitoring-title">Monitoring</h1>
         <p className="mt-1 text-sm text-muted-foreground">Alert rules and live alert history</p>
+
+        {insights.length > 0 && (
+          <div className="mt-3 space-y-2" data-testid="proactive-insights-feed">
+            {insights.map((insight) => (
+              <ProactiveInsightCard
+                key={`${insight.ruleId}|${insight.firedAt}`}
+                insight={insight}
+                onInvestigate={investigateInsight}
+                onDismiss={dismiss}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex gap-1 border-b px-6">

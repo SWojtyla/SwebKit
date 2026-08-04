@@ -33,8 +33,7 @@ public sealed class AgentChatService : IAgentChatService
         _settings = settings;
         _contextBuilder = contextBuilder;
 
-        var maxMessages = _settings.Settings.Agent.MaxHistoryMessages;
-        _session = new ConversationSession(maxMessages);
+        _session = new ConversationSession();
     }
 
     public int HistoryMessageCount => _session.Count;
@@ -66,8 +65,6 @@ public sealed class AgentChatService : IAgentChatService
             UserMessage = userMessage,
             Tools = tools,
             History = _session.Messages.Take(_session.Count - 1).ToList(),
-            Temperature = profile?.Temperature ?? 0.7,
-            MaxTokens = profile?.MaxTokens ?? 2048,
         };
 
         AgentChatResult result;

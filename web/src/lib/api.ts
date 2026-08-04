@@ -5,6 +5,10 @@
 // fetches — it can't be a one-shot module-load constant anymore.
 import { getSidecarPort } from "./tauri-bridge";
 import type {
+  AgentChatContext,
+  AgentChatMode,
+  AgentChatScope,
+  AgentStreamEvent,
   RedisKeyspaceHealthReport,
   RedisPrefixMemoryBucket,
   RedisPubSubSnapshot,
@@ -86,6 +90,66 @@ export async function apiSend<T>(
 
   const text = await res.text().catch(() => "");
   return (text ? (JSON.parse(text) as T) : undefined) as T;
+}
+
+export interface StreamAgentChatBody {
+  message: string;
+  sessionId?: string;
+  context?: AgentChatContext;
+  mode?: AgentChatMode;
+  scope?: AgentChatScope;
+}
+
+/**
+ * Posts to the streaming agent chat endpoint and invokes `onEvent` for each
+ * {@link AgentStreamEvent} as it arrives, in order — one call per SSE `data:` line.
+ *
+ * Browsers' built-in `EventSource` can only issue GET requests, and this endpoint needs a JSON
+ * body (message/session/context/mode), so this reads the response body as a raw stream instead:
+ * each chunk is decoded, buffered, and split on the SSE record separator (`\n\n`) so a `data:` line
+ * split across two network chunks is still reassembled correctly before being parsed.
+ *
+ * Resolves once the stream ends (after a "done" or "error" event closes the response body) or
+ * rejects if the initial request itself fails (non-2xx, or aborted before any bytes arrive).
+ */
+export async function streamAgentChat(
+  body: StreamAgentChatBody,
+  onEvent: (event: AgentStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${SIDECAR_BASE_URL}/api/agent/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => "");
+    throw new Error(extractErrorMessage(res.status, res.statusText, text));
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let separatorIndex: number;
+    while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+      const record = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+
+      const dataLine = record.split("\n").find((line) => line.startsWith("data:"));
+      if (!dataLine) continue;
+      const json = dataLine.slice("data:".length).trim();
+      if (!json) continue;
+      onEvent(JSON.parse(json) as AgentStreamEvent);
+    }
+  }
 }
 
 export function apiUpload<T>(
@@ -182,6 +246,17 @@ export interface AlertFiredEvent {
   detail: string;
   firedAt: string;
   profileName: string;
+}
+
+/** Pushed once a background proactive investigation completes (workspace-intelligence Module 4).
+ * `ruleId`+`firedAt` together are the same composite identity the originating `AlertFiredEvent` has
+ * — used to de-dup a dismissed insight against the firing event it came from. */
+export interface ProactiveInsightReadyEvent {
+  ruleId: string;
+  firedAt: string;
+  ruleName: string;
+  summary: string;
+  sessionId: string;
 }
 
 export async function getMonitoringRules(): Promise<MonitoringAlertRule[]> {

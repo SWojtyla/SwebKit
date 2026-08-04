@@ -28,6 +28,8 @@ public sealed class InvestigatePodIssueTool : IAgentTool
         "Investigates a Kubernetes pod issue by fetching its status, recent logs (up to 50 lines), " +
         "and events in parallel. Returns a merged result with all information in one call.";
 
+    public FeatureArea FeatureArea => FeatureArea.Aks;
+
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
           "type": "object",
