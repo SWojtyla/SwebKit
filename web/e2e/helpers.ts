@@ -1,5 +1,8 @@
 import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
+import { sidecarPort } from "./test-config";
+
+const sidecarUrl = `http://127.0.0.1:${sidecarPort}`;
 
 /**
  * Scrolls a virtualized list container (built with @tanstack/react-virtual) step by step until
@@ -70,23 +73,64 @@ export async function mockAgentChatStreamDone(
   });
 }
 
+async function getSidecarDemoMode(page: Page): Promise<boolean> {
+  const res = await page.request.get(`${sidecarUrl}/api/demo-mode`);
+  const body = (await res.json()) as { isDemoMode?: boolean };
+  return body.isDemoMode === true;
+}
+
+async function setSidecarDemoMode(page: Page, enabled: boolean): Promise<void> {
+  await page.request.post(`${sidecarUrl}/api/demo-mode?enabled=${enabled}`);
+}
+
+async function waitForDemoProfile(page: Page, enabled: boolean, timeout = 10_000): Promise<void> {
+  const expected = enabled ? 2 : 0;
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const res = await page.request.get(`${sidecarUrl}/api/config/profiles`);
+    const body = (await res.json()) as { serviceBusNamespaces?: unknown[] };
+    const count = body.serviceBusNamespaces?.length ?? 0;
+    if (count === expected) return;
+    await page.waitForTimeout(200);
+  }
+  throw new Error(`Timed out waiting for demo profile (enabled=${enabled})`);
+}
+
 export async function setDemoMode(page: Page, enabled: boolean) {
+  // Drive the sidecar directly so tests don't depend on the UI's optimistic
+  // mutation state or React Query cache timing.
+  const currentlyOn = await getSidecarDemoMode(page);
+  if (currentlyOn !== enabled) {
+    await setSidecarDemoMode(page, enabled);
+    if (enabled) {
+      // Demo mode overlays exactly 2 Service Bus namespaces, so this is a
+      // reliable signal the sidecar is serving the demo profile.
+      await waitForDemoProfile(page, true);
+    }
+  }
+
   await page.goto("/");
   const toggle = page.getByTestId("demo-mode-toggle");
   await toggle.waitFor();
 
-  // Wait for the demo mode query to resolve and render one of the two stable labels.
-  // The top-bar toggle (AppLayout) reads "Demo" when on, "Live" when off, or "..."
-  // while the mutation is in flight.
-  await expect(toggle).toContainText(/Demo|Live/);
-
-  const text = (await toggle.textContent())?.trim() ?? "";
-  const isOn = text.includes("Demo");
-  if (enabled && !isOn) {
-    await toggle.click();
-    await expect(toggle).toContainText("Demo");
-  } else if (!enabled && isOn) {
-    await toggle.click();
-    await expect(toggle).toContainText("Live");
+  // Force the UI to converge on the correct state. The toggle reads from
+  // /api/demo-mode and the dashboard card from /api/config/profiles.
+  await expect(toggle).toContainText(enabled ? "Demo" : "Live", { timeout: 10000 });
+  if (enabled) {
+    await expect(page.getByTestId("service-card-service-bus")).toContainText(
+      "2 namespaces",
+      { timeout: 10000 },
+    );
   }
+}
+
+/**
+ * Waits for the AKS namespace selector to be populated with "default" and
+ * then selects it. The selector is a hidden native `<select>`, so this waits
+ * for the option to exist before calling `selectOption`.
+ */
+export async function selectAksDefaultNamespace(page: Page) {
+  const select = page.getByTestId("aks-namespace-select");
+  await expect(select.locator("option", { hasText: "default" })).toBeAttached({ timeout: 15000 });
+  await select.selectOption({ label: "default" });
 }
