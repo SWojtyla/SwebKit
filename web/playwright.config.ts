@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { e2eAppDataRoot, sidecarPort, vitePort } from "./e2e/test-config";
+import { sidecarPort, vitePort } from "./e2e/test-config";
 
 /**
  * Playwright E2E configuration for SwebKit.
@@ -8,8 +8,8 @@ import { e2eAppDataRoot, sidecarPort, vitePort } from "./e2e/test-config";
  * isolated ports so they do not collide with a developer's running instances.
  *
  * The throwaway `.e2e-appdata` directory and any leftover sidecar process are
- * handled by `e2e/global-setup.ts` and `e2e/global-teardown.ts`, so the config
- * itself does not try to delete a directory that may still be locked by the
+ * handled by `e2e/global-setup.ts` (which returns a teardown callback), so the
+ * config itself does not try to delete a directory that may still be locked by the
  * previous sidecar run.
  */
 
