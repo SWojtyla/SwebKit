@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
 import { AgentMarkdown } from "./AgentMarkdown";
 import { AgentVisualizationPanel } from "./AgentVisualizationPanel";
@@ -12,6 +13,7 @@ export function AgentPage() {
   const [input, setInput] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showVisuals, setShowVisuals] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { messages, send, isStreaming, clear, isClearPending, status, pendingApprovals } =
@@ -23,6 +25,18 @@ export function AgentPage() {
     }
     return "";
   }, [messages]);
+
+  useEffect(() => {
+    const scenario = searchParams.get("scenario");
+    if (scenario && lastAssistantContent.includes(scenario)) {
+      setShowVisuals(true);
+      if (searchParams.has("scenario")) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("scenario");
+        setSearchParams(next, { replace: true });
+      }
+    }
+  }, [searchParams, lastAssistantContent, setSearchParams]);
 
   useEffect(() => {
     if (scrollRef.current) {

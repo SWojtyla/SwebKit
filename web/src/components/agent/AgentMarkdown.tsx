@@ -39,7 +39,7 @@ export function MermaidBlock({ code }: { code: string }) {
   }, [code, theme, id]);
 
   return (
-    <div className="my-2 rounded border bg-card p-2">
+    <div className="my-2 rounded border bg-card p-2" data-testid="mermaid-diagram">
       {error ? (
         <div className="text-xs text-destructive">{error}</div>
       ) : (

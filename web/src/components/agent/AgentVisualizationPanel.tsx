@@ -131,7 +131,7 @@ function TopologyGraph({ payload }: { payload: TopologyPayload }) {
   }, [payload]);
 
   return (
-    <div className="rounded border bg-card p-2">
+    <div className="rounded border bg-card p-2" data-testid="topology-graph">
       <div className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
         <Network className="h-3.5 w-3.5" /> Topology map
       </div>
@@ -142,7 +142,7 @@ function TopologyGraph({ payload }: { payload: TopologyPayload }) {
 
 function TimelineView({ payload }: { payload: TimelinePayload }) {
   return (
-    <div className="rounded border bg-card p-2">
+    <div className="rounded border bg-card p-2" data-testid="timeline-view">
       <div className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
         <Calendar className="h-3.5 w-3.5" /> Timeline
       </div>
@@ -186,7 +186,7 @@ export function AgentVisualizationPanel({ content }: { content: string }) {
   }
 
   return (
-    <div className="space-y-3" data-testid="agent-visualization-panel">
+    <div className="space-y-3" data-testid="visualization-panel">
       {blocks.map((block) => (
         <div key={block.id}>
           {block.kind === "mermaid" && <MermaidBlock code={block.code} />}

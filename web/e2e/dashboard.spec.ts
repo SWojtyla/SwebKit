@@ -152,4 +152,15 @@ test.describe("Dashboard", () => {
     await page.getByTestId("demo-tour-stop").click();
     await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
   });
+
+  test("runs cross-feature demo scenario and renders visualizations", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("cross-feature-demo-button").click();
+    await expect(page).toHaveURL(/\/agent/);
+    await expect(page.locator("text=My order-api is failing in AKS")).toBeVisible();
+    await expect(page.getByTestId("visualization-panel")).toBeVisible();
+    await expect(page.getByTestId("visualization-panel").getByTestId("mermaid-diagram")).toBeVisible();
+    await expect(page.getByTestId("topology-graph")).toBeVisible();
+    await expect(page.getByTestId("timeline-view")).toBeVisible();
+  });
 });
