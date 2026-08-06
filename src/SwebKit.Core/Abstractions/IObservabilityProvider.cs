@@ -46,6 +46,7 @@ public interface IObservabilityProvider
 public interface IObservabilityResourceDiscovery
 {
     IAsyncEnumerable<ObservabilityResourceInfo> DiscoverResourcesAsync(CancellationToken ct = default);
+    void InvalidateCache() { }
 }
 
 public interface IGuidedKqlCompiler

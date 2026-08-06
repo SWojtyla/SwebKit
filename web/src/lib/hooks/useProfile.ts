@@ -5,6 +5,7 @@ import type {
   UserSettings,
   EnvironmentsResponse,
   FavoriteResource,
+  ObservabilityResource,
 } from "../types";
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -142,5 +143,16 @@ export function useToggleDemoMode() {
     onError: () => {
       qc.invalidateQueries({ queryKey: ["demo-mode"] });
     },
+  });
+}
+
+// ── Observability resources ──────────────────────────────────────────────────
+
+export function useObservabilityResources() {
+  return useQuery({
+    queryKey: ["observability-resources"],
+    queryFn: () => apiFetch<ObservabilityResource[]>("/api/observability/resources"),
+    retry: false,
+    staleTime: 60_000,
   });
 }

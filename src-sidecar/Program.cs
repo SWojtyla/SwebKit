@@ -120,6 +120,8 @@ builder.Services.AddHttpClient<AgentCapabilityTester>();
 // ObservabilityProviderFactory picks demo vs. real Azure App Insights per AppStateService.UseDemoData
 // the same way the tools themselves already branch on it — no separate demo wiring needed here.
 builder.Services.AddSingleton<IObservabilityProviderFactory, ObservabilityProviderFactory>();
+builder.Services.AddSingleton<AppInsightsDiscoveryService>();
+builder.Services.AddSingleton<IObservabilityResourceDiscovery, SwebKit.Sidecar.Services.ObservabilityResourceDiscoverySelector>();
 builder.Services.AddSingleton<IAgentTool, GetMetricsTool>();
 builder.Services.AddSingleton<IAgentTool, QueryLogsTool>();
 
@@ -325,5 +327,9 @@ app.MapMonitoringEndpoints();
 // ── Workspace topology (workspace-intelligence Module 1) ────────────────────
 
 app.MapWorkspaceTopologyEndpoints();
+
+// ── Observability ───────────────────────────────────────────────────────────
+
+app.MapObservabilityEndpoints();
 
 app.Run();

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useProfile, useUpdateProfile, useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
 import { useTestAgentProfile } from "@/lib/hooks/useAgent";
-import type { AgentProfile } from "@/lib/types";
+import { useObservabilityResources } from "@/lib/hooks/useProfile";
+import type { AgentProfile, ProfileData, ObservabilityConfig, ObservabilityResource } from "@/lib/types";
 
 const capabilityLabel: Record<AgentProfile["capability"], string> = {
   Unknown: "Not tested",
@@ -16,6 +17,7 @@ export function AgentSettings() {
   const [testingId, setTestingId] = useState<string | null>(null);
   const { data: profile } = useProfile();
   const updateProfileData = useUpdateProfile();
+  const resources = useObservabilityResources();
 
   if (isLoading || !settings) {
     return <div className="text-muted-foreground">Loading...</div>;
@@ -231,56 +233,125 @@ export function AgentSettings() {
       </section>
 
       {profile && (
-        <section>
-          <h3 className="mb-1 text-base font-semibold">Application Insights (optional)</h3>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Feeds the agent's <code>get_metrics</code>/<code>query_logs</code> tools with your
-            telemetry as extra context when relevant — there's no dedicated Observability page or
-            log/metric browser in this app, only agent-tool access. Authenticates via your Azure
-            CLI/VS login (no credential to enter here).
-          </p>
-          <div className="space-y-2">
+        <ObservabilitySettings
+          profile={profile}
+          resources={resources}
+          onUpdate={(patch) => updateProfileData.mutate({ ...profile, config: { ...profile.config, observabilityConfig: patch } })}
+        />
+      )}
+    </div>
+  );
+}
+
+interface ObservabilitySettingsProps {
+  profile: ProfileData;
+  resources: {
+    data?: ObservabilityResource[];
+    isLoading: boolean;
+    error: Error | null;
+    refetch: () => void;
+  };
+  onUpdate: (config: ObservabilityConfig) => void;
+}
+
+function ObservabilitySettings({ profile, resources, onUpdate }: ObservabilitySettingsProps) {
+  const config = profile.config.observabilityConfig;
+  const selectedResourceId = config?.selectedResourceId ?? null;
+  const selectedResource = resources.data?.find((r) => r.resourceId === selectedResourceId);
+
+  useEffect(() => {
+    if (resources.data?.length === 1 && !selectedResourceId) {
+      const only = resources.data[0];
+      onUpdate({ selectedResourceId: only.resourceId, selectedResourceName: only.name });
+    }
+  }, [resources.data, selectedResourceId, onUpdate]);
+
+  const handleSelect = (resourceId: string) => {
+    if (resourceId === "" || resourceId === "__manual__") {
+      onUpdate({ selectedResourceId: null, selectedResourceName: null });
+      return;
+    }
+    const resource = resources.data?.find((r) => r.resourceId === resourceId);
+    onUpdate({ selectedResourceId: resourceId, selectedResourceName: resource?.name ?? null });
+  };
+
+  const handleManualId = (value: string) => {
+    onUpdate({
+      selectedResourceId: value || null,
+      selectedResourceName: config?.selectedResourceName ?? null,
+    });
+  };
+
+  const handleManualName = (value: string) => {
+    onUpdate({
+      selectedResourceId: config?.selectedResourceId ?? null,
+      selectedResourceName: value || null,
+    });
+  };
+
+  return (
+    <section>
+      <h3 className="mb-1 text-base font-semibold">Application Insights (optional)</h3>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Feeds the agent's <code>get_metrics</code>/<code>query_logs</code> tools with your telemetry
+        as extra context when relevant — no credential here, auth is via your Azure CLI/VS login.
+      </p>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedResourceId ?? ""}
+            onChange={(e) => handleSelect(e.target.value)}
+            className="flex-1 rounded-md border bg-card px-2 py-1.5 text-sm"
+            data-testid="observability-resource-select"
+            disabled={resources.isLoading}
+          >
+            <option value="">None / manual entry</option>
+            {resources.data?.map((r) => (
+              <option key={r.resourceId} value={r.resourceId}>
+                {r.name} ({r.subscriptionName})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => resources.refetch()}
+            disabled={resources.isLoading}
+            className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+            data-testid="observability-refresh"
+          >
+            {resources.isLoading ? "Loading…" : "Refresh"}
+          </button>
+        </div>
+
+        {!selectedResource && (
+          <>
             <input
               type="text"
-              value={profile.config.observabilityConfig?.selectedResourceId ?? ""}
-              onChange={(e) =>
-                updateProfileData.mutate({
-                  ...profile,
-                  config: {
-                    ...profile.config,
-                    observabilityConfig: {
-                      selectedResourceId: e.target.value || null,
-                      selectedResourceName: profile.config.observabilityConfig?.selectedResourceName ?? null,
-                    },
-                  },
-                })
-              }
+              value={config?.selectedResourceId ?? ""}
+              onChange={(e) => handleManualId(e.target.value)}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Resource ID (/subscriptions/.../components/your-app-insights)"
               data-testid="observability-resource-id"
             />
             <input
               type="text"
-              value={profile.config.observabilityConfig?.selectedResourceName ?? ""}
-              onChange={(e) =>
-                updateProfileData.mutate({
-                  ...profile,
-                  config: {
-                    ...profile.config,
-                    observabilityConfig: {
-                      selectedResourceId: profile.config.observabilityConfig?.selectedResourceId ?? null,
-                      selectedResourceName: e.target.value || null,
-                    },
-                  },
-                })
-              }
+              value={config?.selectedResourceName ?? ""}
+              onChange={(e) => handleManualName(e.target.value)}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Display name (optional, e.g. Prod App Insights)"
               data-testid="observability-resource-name"
             />
+          </>
+        )}
+
+        {resources.error && (
+          <div className="text-xs text-destructive" data-testid="observability-error">
+            {resources.error.message.includes("401") || resources.error.message.toLowerCase().includes("unauthorized")
+              ? "Azure credentials not found. Run az login to discover resources."
+              : resources.error.message}
           </div>
-        </section>
-      )}
-    </div>
+        )}
+      </div>
+    </section>
   );
 }
