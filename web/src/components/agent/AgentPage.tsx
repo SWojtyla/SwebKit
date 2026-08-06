@@ -1,18 +1,28 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
 import { AgentMarkdown } from "./AgentMarkdown";
+import { AgentVisualizationPanel } from "./AgentVisualizationPanel";
 import { PendingActionCard } from "./PendingActionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
+import { BarChart3 } from "lucide-react";
 
 export function AgentPage() {
   const [input, setInput] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showVisuals, setShowVisuals] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { messages, send, isStreaming, clear, isClearPending, status, pendingApprovals } =
     useGlobalAgentConversation();
+
+  const lastAssistantContent = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return messages[i].content;
+    }
+    return "";
+  }, [messages]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -74,14 +84,25 @@ export function AgentPage() {
             </button>
           </div>
         ) : (
-          <button
-            data-testid="agent-clear"
-            onClick={() => setShowClearConfirm(true)}
-            disabled={messages.length === 0}
-            className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50"
-          >
-            Clear
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="agent-toggle-visuals"
+              onClick={() => setShowVisuals((v) => !v)}
+              disabled={!lastAssistantContent}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 ${showVisuals ? "bg-accent" : ""}`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Visualize
+            </button>
+            <button
+              data-testid="agent-clear"
+              onClick={() => setShowClearConfirm(true)}
+              disabled={messages.length === 0}
+              className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50"
+            >
+              Clear
+            </button>
+          </div>
         )}
       </div>
 
@@ -156,6 +177,16 @@ export function AgentPage() {
           </div>
         )}
       </div>
+
+      {/* Deep-dive visualizations */}
+      {showVisuals && (
+        <div className="border-t bg-card/30 px-6 py-3" data-testid="agent-visualization-section">
+          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <BarChart3 className="h-4 w-4" /> Deep-dive visualizations
+          </h2>
+          <AgentVisualizationPanel content={lastAssistantContent} />
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t px-6 py-3">

@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
 import { AgentMarkdown } from "./AgentMarkdown";
+import { AgentVisualizationPanel } from "./AgentVisualizationPanel";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { PendingActionCard } from "./PendingActionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
+import { BarChart3 } from "lucide-react";
 
 interface GlobalAgentPanelProps {
   open: boolean;
@@ -33,10 +35,18 @@ interface GlobalAgentPanelProps {
 export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
   const [input, setInput] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showVisuals, setShowVisuals] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { messages, send, isStreaming, clear, isClearPending, status, pendingApprovals } =
     useGlobalAgentConversation();
+
+  const lastAssistantContent = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return messages[i].content;
+    }
+    return "";
+  }, [messages]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -105,14 +115,24 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
               </button>
             </>
           ) : (
-            <button
-              onClick={() => setShowClearConfirm(true)}
-              disabled={messages.length === 0}
-              className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-              data-testid="global-agent-panel-clear"
-            >
-              Clear
-            </button>
+            <>
+              <button
+                onClick={() => setShowVisuals((v) => !v)}
+                disabled={!lastAssistantContent}
+                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50 ${showVisuals ? "bg-accent" : ""}`}
+                data-testid="global-agent-panel-toggle-visuals"
+              >
+                <BarChart3 className="h-3 w-3" /> Visualize
+              </button>
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                disabled={messages.length === 0}
+                className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                data-testid="global-agent-panel-clear"
+              >
+                Clear
+              </button>
+            </>
           )}
           <button
             onClick={onClose}
@@ -168,6 +188,15 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
           </div>
         )}
       </div>
+
+      {showVisuals && (
+        <div className="border-t bg-card/30 px-4 py-3" data-testid="global-agent-panel-visualization-section">
+          <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+            <BarChart3 className="h-3.5 w-3.5" /> Visualizations
+          </h3>
+          <AgentVisualizationPanel content={lastAssistantContent} />
+        </div>
+      )}
 
       <div className="border-t px-4 py-3">
         <div className="flex items-end gap-2">

@@ -7,7 +7,7 @@ function getMermaidTheme(theme: string): "default" | "dark" {
   return theme === "dark" || theme === "fathom-dark" ? "dark" : "default";
 }
 
-function MermaidBlock({ code }: { code: string }) {
+export function MermaidBlock({ code }: { code: string }) {
   const theme = useSettingsStore((s) => s.theme);
   const [svg, setSvg] = useState("");
   const [error, setError] = useState<string | null>(null);
