@@ -140,4 +140,16 @@ test.describe("Dashboard", () => {
     await expect(page.getByTestId("pinned-resource-redis")).toBeVisible();
     await expect(page.getByTestId("pin-resource-redis")).toHaveAttribute("aria-label", "Unpin Redis");
   });
+
+  test("starts demo tour and navigates to the next stop", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("demo-tour-start").click();
+    await expect(page.getByTestId("demo-tour-card")).toBeVisible();
+    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("AI Cockpit");
+    await page.getByTestId("demo-tour-next").click();
+    await expect(page).toHaveURL(/\/aks$/);
+    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("Kubernetes");
+    await page.getByTestId("demo-tour-stop").click();
+    await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
+  });
 });

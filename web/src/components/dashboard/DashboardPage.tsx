@@ -36,6 +36,7 @@ import {
 } from "@/lib/hooks";
 import { useMonitoringStream, useProactiveInsightsFeed } from "@/lib/hooks/useMonitoring";
 import { useAgentConversationStore } from "@/lib/stores/agent-conversation";
+import { StartDemoTourButton } from "@/components/layout/DemoTour";
 import type { FavoriteResource } from "@/lib/types";
 
 export function DashboardPage() {
@@ -206,6 +207,7 @@ export function DashboardPage() {
           <p className="mt-1 text-sm text-muted-foreground">Command center for your cloud workspace</p>
         </div>
         <div className="flex items-center gap-2">
+          <StartDemoTourButton />
           <FlaskConical className={`h-4 w-4 ${isDemo ? "text-primary" : "text-muted-foreground"}`} />
           <button
             data-testid="dashboard-demo-mode-toggle"
