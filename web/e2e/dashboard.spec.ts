@@ -39,7 +39,7 @@ test.describe("Dashboard", () => {
 
   test("loads and shows sidecar connection", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByTestId("dashboard-title")).toHaveText("Dashboard");
+    await expect(page.getByTestId("dashboard-title")).toHaveText("AI Cockpit");
     await expect(page.getByTestId("sidecar-status-text")).toContainText("Connected");
   });
 
