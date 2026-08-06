@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import { useContextualAgent } from "@/lib/hooks/useContextualAgent";
+import { AgentMarkdown } from "./AgentMarkdown";
 import { usePendingApprovals, useUserSettings } from "@/lib/hooks";
 import { PendingActionCard } from "./PendingActionCard";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
@@ -108,11 +109,19 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" data-testid="contextual-assistant-overlay">
       <div className="flex-1" onClick={onClose} />
-      <div
-        className="flex h-full w-full max-w-md flex-col border-l bg-card shadow-xl"
+      <ResizablePanel
+        visible={true}
+        position="right"
+        defaultWidth={384}
+        minWidth={280}
+        maxWidth={600}
+        storageKey="contextual-assistant-panel"
+        showHeader={false}
+        className="h-full shadow-xl"
         data-testid="contextual-assistant-panel"
       >
-        <div className="flex items-center justify-between border-b px-4 py-3">
+        <div className="flex h-full flex-col overflow-hidden">
+          <div className="flex items-center justify-between border-b px-4 py-3">
           <div>
             <h2 className="text-sm font-semibold" data-testid="contextual-assistant-title">
               Ask AI — {title}
@@ -209,9 +218,10 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
                 }`}
               >
                 {msg.role === "assistant" ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_pre]:overflow-x-auto">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  </div>
+                  <AgentMarkdown
+                    content={msg.content}
+                    className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1"
+                  />
                 ) : (
                   <div className="whitespace-pre-wrap">{msg.content}</div>
                 )}
@@ -249,7 +259,8 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
             </button>
           </div>
         </div>
-      </div>
+        </div>
+      </ResizablePanel>
     </div>
   );
 }

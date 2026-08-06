@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
+import { AgentMarkdown } from "./AgentMarkdown";
 import { PendingActionCard } from "./PendingActionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
@@ -127,9 +127,10 @@ export function AgentPage() {
               }`}
             >
               {msg.role === "assistant" ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none text-sm [&_p]:my-1 [&_pre]:overflow-x-auto">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
-                </div>
+                <AgentMarkdown
+                  content={msg.content}
+                  className="prose prose-sm dark:prose-invert max-w-none text-sm [&_p]:my-1"
+                />
               ) : (
                 <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
               )}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
+import { AgentMarkdown } from "./AgentMarkdown";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { PendingActionCard } from "./PendingActionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
@@ -41,8 +42,6 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isStreaming]);
 
-  if (!open) return null;
-
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
     send(input);
@@ -61,11 +60,18 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
   };
 
   return (
-    <div
-      className="flex h-full w-96 flex-shrink-0 flex-col border-l bg-card"
+    <ResizablePanel
+      visible={open}
+      position="right"
+      defaultWidth={384}
+      minWidth={280}
+      maxWidth={600}
+      storageKey="global-agent-panel"
+      showHeader={false}
       data-testid="global-agent-panel"
     >
-      <div className="flex items-center justify-between border-b px-4 py-3">
+      <div className="flex h-full flex-col overflow-hidden">
+        <div className="flex items-center justify-between border-b px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold" data-testid="global-agent-panel-title">AI Agent</h2>
           <p className="text-xs text-muted-foreground" data-testid="global-agent-panel-history-count">
@@ -144,9 +150,10 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
               }`}
             >
               {msg.role === "assistant" ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_pre]:overflow-x-auto">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
-                </div>
+                <AgentMarkdown
+                  content={msg.content}
+                  className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1"
+                />
               ) : (
                 <div className="whitespace-pre-wrap">{msg.content}</div>
               )}
@@ -184,6 +191,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </ResizablePanel>
   );
 }
