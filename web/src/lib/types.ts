@@ -127,6 +127,16 @@ export interface ObservabilityConfig {
   selectedResourceName: string | null;
 }
 
+export interface ObservabilityResource {
+  resourceId: string;
+  name: string;
+  subscriptionId: string;
+  subscriptionName: string;
+  resourceGroup: string;
+  location: string;
+  workspaceType?: string | null;
+}
+
 export interface KeyVaultEntry {
   id: string;
   name: string;

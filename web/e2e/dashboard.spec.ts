@@ -39,7 +39,7 @@ test.describe("Dashboard", () => {
 
   test("loads and shows sidecar connection", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByTestId("dashboard-title")).toHaveText("Dashboard");
+    await expect(page.getByTestId("dashboard-title")).toHaveText("AI Cockpit");
     await expect(page.getByTestId("sidecar-status-text")).toContainText("Connected");
   });
 
@@ -139,5 +139,60 @@ test.describe("Dashboard", () => {
     await page.getByTestId("pin-resource-redis").click();
     await expect(page.getByTestId("pinned-resource-redis")).toBeVisible();
     await expect(page.getByTestId("pin-resource-redis")).toHaveAttribute("aria-label", "Unpin Redis");
+  });
+
+  test("starts demo tour and navigates to the next stop", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("demo-tour-start").click();
+    await expect(page.getByTestId("demo-tour-card")).toBeVisible();
+    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("AI Cockpit");
+    await page.getByTestId("demo-tour-next").click();
+    await expect(page).toHaveURL(/\/aks$/);
+    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("Kubernetes");
+    await page.getByTestId("demo-tour-stop").click();
+    await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
+  });
+
+  test("runs cross-feature demo scenario in a focused visualization workspace", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("cross-feature-demo-button").click();
+    await expect(page).toHaveURL(/\/agent/);
+    await expect(page.locator("text=My order-api is failing in AKS")).toBeVisible();
+
+    const workspace = page.getByTestId("visualization-panel");
+    await expect(workspace).toBeVisible();
+    await expect(page.getByTestId("agent-visualization-count")).toHaveText("3");
+    await expect(page.getByTestId("agent-messages").getByTestId("mermaid-diagram")).toHaveCount(0);
+    await expect(workspace.getByTestId("mermaid-diagram")).toBeVisible();
+    await expect(page.getByTestId("topology-graph")).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "Topology of the impacted system" }).click();
+    await expect(page.getByTestId("topology-graph")).toBeVisible();
+    await expect(workspace.getByTestId("mermaid-diagram")).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "Incident timeline" }).click();
+    await expect(page.getByTestId("timeline-view")).toBeVisible();
+    await expect(page.getByTestId("topology-graph")).toHaveCount(0);
+
+    await page.getByTestId("agent-visualization-close").click();
+    await expect(workspace).toHaveCount(0);
+    await expect(page.getByTestId("agent-toggle-visuals")).toBeFocused();
+    await expect(page.getByTestId("agent-messages").getByTestId("mermaid-diagram")).toBeVisible();
+
+    await page.setViewportSize({ width: 900, height: 700 });
+    await page.getByTestId("agent-toggle-visuals").click();
+    const resizer = page.getByTestId("resizer-0");
+    await expect(resizer).toHaveAttribute("role", "separator");
+    await expect(resizer).toHaveAttribute("aria-label", "Resize conversation and visualization");
+    const visualPanel = page.getByTestId("panel-1");
+    const widthBeforeResize = await visualPanel.evaluate((element) => element.getBoundingClientRect().width);
+    await resizer.focus();
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await expect.poll(() => visualPanel.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(widthBeforeResize);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("panel-widths:agent-visualization-workspace"))).not.toBeNull();
+    await page.keyboard.press("Escape");
+    await expect(workspace).toHaveCount(0);
+    await expect(page.getByTestId("agent-toggle-visuals")).toBeFocused();
   });
 });

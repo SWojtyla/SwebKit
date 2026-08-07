@@ -104,6 +104,21 @@ deviations worth knowing before assuming the design below is exactly what's in t
   surfaces. The "lower priority" raw request/response inspector was deliberately not built — flagged
   as a real follow-up in `technical-plan.md`, not silently dropped.
 
+## Cross-feature visualization workspace (2026-08-07 follow-up)
+
+The cross-feature demo and any agent response containing visual blocks now use one coordinated
+workspace instead of stacking a second half-height scroller beneath the conversation:
+
+- The conversation/composer and visual canvas remain side by side with a persistent draggable divider.
+  Either panel can grow to make a large diagram or a long investigation readable, while minimum widths
+  keep both usable. The divider also supports arrow keys, Shift for larger steps, and double-click reset.
+- Mermaid, topology, and timeline outputs are tabs in one canvas; only the selected view renders.
+  Markdown headings become human-readable tab labels.
+- Visual blocks from the latest response are suppressed in the transcript while the workspace is
+  open, eliminating the duplicate diagram. Closing the workspace restores the inline Mermaid view.
+- The toolbar reports the number of available views. Tabs support arrow/Home/End navigation, the
+  trigger exposes expanded state, and the workspace closes through its button or `Escape`.
+
 ## Non-goals for this UX pass
 
 - No dedicated "workspace intelligence" top-level nav item — the Map view lives in Settings, and

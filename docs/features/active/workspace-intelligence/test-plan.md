@@ -5,6 +5,16 @@ sidecar endpoint handlers extracted as named `internal static` methods for direc
 Playwright specs against demo mode for frontend flows, no real-time-based tests for anything that
 can instead take an injected/fake clock.
 
+## Cross-feature visualization workspace follow-up — done (2026-08-07)
+
+- [x] E2E (`dashboard.spec.ts`): launching the cross-feature scenario opens one visualization
+      workspace with three labeled tabs, keeps the duplicate Mermaid diagram out of the transcript,
+      renders only the selected diagram/topology/timeline, verifies the accessible divider expands the
+      visual panel by keyboard and persists its width, and restores the inline diagram after close.
+- [x] Unit (`agent-visualization.test.ts`, 4 tests): heading-derived labels, kind detection,
+      CRLF fences, duplicate elimination, invalid JSON fallback, and malformed-fence handling.
+- [x] Frontend production build passes, including TypeScript validation.
+
 ## Module 1 — Topology data model — done
 
 - [x] Node/relationship CRUD ended up as **whole-profile PUT**, not dedicated REST verbs (see

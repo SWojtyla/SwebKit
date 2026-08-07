@@ -25,6 +25,7 @@ import {
 import { CommandPalette } from "./CommandPalette";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
 import { GlobalAgentPanel } from "@/components/agent/GlobalAgentPanel";
+import { DemoTour } from "./DemoTour";
 import {
   useAksTestConnection,
   useDemoMode,
@@ -435,6 +436,7 @@ export function AppLayout() {
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <KeyboardShortcutsPanel open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <DemoTour />
     </div>
   );
 }

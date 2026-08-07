@@ -23,6 +23,17 @@ read those before assuming the literal original plan text is still accurate; sev
 deliberately deviated from it for good, documented reasons (e.g. Module 1's whole-profile-PUT
 persistence instead of dedicated CRUD endpoints, Module 4's drop-not-queue rate limit).
 
+## UX follow-up (2026-08-07)
+
+The cross-feature demo's duplicated, vertically stacked visualizations were replaced by a focused
+visual workspace: conversation and composer remain together beside one tabbed diagram/topology/
+timeline canvas. A draggable, keyboard-operable divider lets either panel grow and persists the chosen
+split across sessions; double-click restores the balanced default. The latest response no longer
+repeats its visual blocks in the transcript while that workspace is open. The workspace also has a
+view count, heading-derived labels, keyboard-navigable tabs, a close control, and
+`Escape` dismissal. Four parser unit tests, the focused Playwright scenario, the broader Agent and
+Dashboard E2E specs, and the frontend production build pass.
+
 ## Decision resolved (2026-08-03)
 
 Application Insights: no dedicated Observability page (that non-goal stands), but the agent now has

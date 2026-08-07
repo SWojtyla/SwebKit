@@ -260,7 +260,7 @@ test.describe("Settings", () => {
 
     await expect(page.getByText("Temperature", { exact: true })).not.toBeVisible();
     await expect(page.getByText("Max tokens", { exact: true })).not.toBeVisible();
-    await expect(page.getByText("Timeout (s)", { exact: true })).toBeVisible();
+    await expect(page.getByText("Timeout (s)", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Max History Messages")).not.toBeVisible();
     await expect(page.getByText("Warning Threshold (%)")).not.toBeVisible();
   });

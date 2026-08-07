@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useContextualAgent } from "@/lib/hooks/useContextualAgent";
+import { AgentMarkdown } from "./AgentMarkdown";
+import { AgentVisualizationPanel } from "./AgentVisualizationPanel";
 import { usePendingApprovals, useUserSettings } from "@/lib/hooks";
 import { PendingActionCard } from "./PendingActionCard";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import type { ChatMessage } from "@/lib/types";
+import { BarChart3 } from "lucide-react";
 
 let msgIdCounter = 0;
 function nextMsgId() {
@@ -30,8 +33,16 @@ interface ContextualAssistantProps {
 export function ContextualAssistant({ featureArea, title, selection, onClose }: ContextualAssistantProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [showVisuals, setShowVisuals] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { mode, setMode, scope, setScope, chat, status, sendMessage } = useContextualAgent(featureArea, selection);
+
+  const lastAssistantContent = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return messages[i].content;
+    }
+    return "";
+  }, [messages]);
   const pendingApprovals = usePendingApprovals();
   const { data: userSettings } = useUserSettings();
 
@@ -108,11 +119,19 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" data-testid="contextual-assistant-overlay">
       <div className="flex-1" onClick={onClose} />
-      <div
-        className="flex h-full w-full max-w-md flex-col border-l bg-card shadow-xl"
+      <ResizablePanel
+        visible={true}
+        position="right"
+        defaultWidth={384}
+        minWidth={280}
+        maxWidth={600}
+        storageKey="contextual-assistant-panel"
+        showHeader={false}
+        className="h-full shadow-xl"
         data-testid="contextual-assistant-panel"
       >
-        <div className="flex items-center justify-between border-b px-4 py-3">
+        <div className="flex h-full flex-col overflow-hidden">
+          <div className="flex items-center justify-between border-b px-4 py-3">
           <div>
             <h2 className="text-sm font-semibold" data-testid="contextual-assistant-title">
               Ask AI — {title}
@@ -127,13 +146,23 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-md px-2 py-1 text-sm hover:bg-accent"
-            data-testid="contextual-assistant-close"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowVisuals((v) => !v)}
+              disabled={!lastAssistantContent}
+              className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50 ${showVisuals ? "bg-accent" : ""}`}
+              data-testid="contextual-assistant-toggle-visuals"
+            >
+              <BarChart3 className="h-3 w-3" /> Visualize
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-md px-2 py-1 text-sm hover:bg-accent"
+              data-testid="contextual-assistant-close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-1 border-b px-4 py-2" role="radiogroup" aria-label="Assistant mode">
@@ -209,9 +238,10 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
                 }`}
               >
                 {msg.role === "assistant" ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_pre]:overflow-x-auto">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  </div>
+                  <AgentMarkdown
+                    content={msg.content}
+                    className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1"
+                  />
                 ) : (
                   <div className="whitespace-pre-wrap">{msg.content}</div>
                 )}
@@ -226,6 +256,15 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
             </div>
           )}
         </div>
+
+        {showVisuals && (
+          <div className="border-t bg-card/30 px-4 py-3" data-testid="contextual-assistant-visualization-section">
+            <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+              <BarChart3 className="h-3.5 w-3.5" /> Visualizations
+            </h3>
+            <AgentVisualizationPanel content={lastAssistantContent} />
+          </div>
+        )}
 
         <div className="border-t px-4 py-3">
           <div className="flex items-end gap-2">
@@ -249,7 +288,8 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
             </button>
           </div>
         </div>
-      </div>
+        </div>
+      </ResizablePanel>
     </div>
   );
 }
