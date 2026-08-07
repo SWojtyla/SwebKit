@@ -7,14 +7,17 @@ import { PendingActionCard } from "./PendingActionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
+import { AgentPromptExamples } from "./AgentPromptExamples";
 import { BarChart3 } from "lucide-react";
 
 export function AgentPage() {
   const [input, setInput] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showVisuals, setShowVisuals] = useState(false);
+  const [visualsCollapsed, setVisualsCollapsed] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { messages, send, isStreaming, clear, isClearPending, status, pendingApprovals } =
     useGlobalAgentConversation();
@@ -62,7 +65,7 @@ export function AgentPage() {
   };
 
   return (
-    <div className="flex h-full flex-col" data-testid="agent-page">
+    <div className="flex h-full flex-col overflow-hidden" data-testid="agent-page">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-6 py-3">
         <div className="flex items-center gap-3">
@@ -132,7 +135,7 @@ export function AgentPage() {
       {/* Chat messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-auto px-6 py-4 space-y-4"
+        className="min-h-[180px] flex-1 overflow-auto px-6 py-4 space-y-4"
         data-testid="agent-messages"
       >
         {messages.length === 0 && (
@@ -194,23 +197,42 @@ export function AgentPage() {
 
       {/* Deep-dive visualizations */}
       {showVisuals && (
-        <div className="border-t bg-card/30 px-6 py-3" data-testid="agent-visualization-section">
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-            <BarChart3 className="h-4 w-4" /> Deep-dive visualizations
-          </h2>
-          <AgentVisualizationPanel content={lastAssistantContent} />
+        <div className="shrink-0 border-t bg-card/30" data-testid="agent-visualization-section">
+          <button
+            onClick={() => setVisualsCollapsed((v) => !v)}
+            className="flex w-full items-center justify-between px-6 py-2 text-sm font-semibold text-muted-foreground hover:bg-accent/50"
+            data-testid="agent-visualization-toggle"
+            aria-expanded={!visualsCollapsed}
+          >
+            <span className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" /> Deep-dive visualizations
+            </span>
+            <span>{visualsCollapsed ? "Expand" : "Collapse"}</span>
+          </button>
+          {!visualsCollapsed && (
+            <div className="max-h-[42vh] overflow-y-auto px-6 pb-3">
+              <AgentVisualizationPanel content={lastAssistantContent} />
+            </div>
+          )}
         </div>
       )}
 
       {/* Input */}
-      <div className="border-t px-6 py-3">
-        <div className="flex items-end gap-2">
+      <div className="border-t">
+        <AgentPromptExamples
+          onSelect={(prompt) => {
+            setInput(prompt);
+            inputRef.current?.focus();
+          }}
+        />
+        <div className="flex items-end gap-2 px-6 pb-3">
           <textarea
+            ref={inputRef}
             data-testid="agent-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask the AI agent..."
+            placeholder="Ask the AI agent for a Mermaid diagram, a topology map, or a timeline..."
             rows={2}
             className="flex-1 resize-none rounded-md border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             disabled={isStreaming}
@@ -224,7 +246,7 @@ export function AgentPage() {
             Send
           </button>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="px-6 pb-3 text-xs text-muted-foreground">
           Press Enter to send, Shift+Enter for new line
         </p>
       </div>
