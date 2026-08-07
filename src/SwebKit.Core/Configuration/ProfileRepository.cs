@@ -166,6 +166,17 @@ public class ProfileRepository
         config.Topology.Nodes ??= [];
         config.Topology.Relationships ??= [];
 
+        config.DevOpsConfig ??= new DevOpsConfig();
+        config.DevOpsConfig.PinnedProjects ??= [];
+        config.DevOpsConfig.PipelineGroups ??= [];
+        config.DevOpsConfig.ReleaseGroups ??= [];
+        config.DevOpsConfig.DefaultStageAliases ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["TST"] = "TST",
+            ["STG"] = "STG",
+            ["PRD"] = "PRD"
+        };
+
         if (config.FavoriteResources.Count == 0)
         {
             MigrateLegacyFavorites(config, namespaces);

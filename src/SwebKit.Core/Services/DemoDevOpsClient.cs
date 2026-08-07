@@ -236,16 +236,21 @@ public class DemoDevOpsClient : IDevOpsClient
             .FirstOrDefault(p => p.Id == pipelineId);
         var envs = EnvironmentsByProject.GetValueOrDefault(project) ?? [];
 
+        var normalizedBranch = NormalizeBranchName(branch);
+        var sourceVersion = ComputeDeterministicSha($"{project}:{pipelineId}:{normalizedBranch}");
+
         var run = new AdoPipelineRun(
             _nextRunId++, pipelineId, pipeline?.Name ?? "Unknown",
             "inProgress", "",
             DateTimeOffset.UtcNow, null,
-            branch, "You (demo)",
+            normalizedBranch, "You (demo)",
             $"https://dev.azure.com/demo/{project}/_build/results?buildId={_nextRunId - 1}",
             envs.Select((env, idx) => new AdoPipelineStage(
                 $"Deploy to {env.Name}",
                 idx == 0 ? "inProgress" : "pending",
-                "", idx + 1, env.Name)).ToList());
+                "", idx + 1, env.Name)).ToList(),
+            SourceVersion: sourceVersion,
+            BuildId: _nextRunId - 1);
 
         _triggeredRuns.Add(run);
         return run;
@@ -412,5 +417,152 @@ public class DemoDevOpsClient : IDevOpsClient
         }
 
         return statuses;
+    }
+
+    // ── Release-train primitives ──
+
+    private readonly List<AdoPullRequest> _demoPullRequests = [];
+    private int _nextPullRequestId = 100;
+
+    public async Task<AdoBranchRef?> GetBranchRefAsync(string project, string repositoryId, string branch, CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct).ConfigureAwait(false);
+        var objectId = ComputeDeterministicSha($"{project}:{repositoryId}:{branch}");
+        return new AdoBranchRef(branch, objectId);
+    }
+
+    public async Task<AdoTag?> GetTagAsync(string project, string repositoryId, string name, CancellationToken ct = default)
+    {
+        var tags = await GetTagsAsync(project, repositoryId, ct).ConfigureAwait(false);
+        return tags.FirstOrDefault(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task<List<AdoPullRequest>> GetPullRequestsAsync(
+        string project, string repositoryId, string? sourceBranch = null, string? targetBranch = null,
+        string? status = "active", int? top = null, CancellationToken ct = default)
+    {
+        await Task.Delay(150, ct).ConfigureAwait(false);
+        var matches = _demoPullRequests.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(sourceBranch))
+        {
+            var normalized = NormalizeBranchName(sourceBranch);
+            matches = matches.Where(pr => pr.SourceRefName.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(targetBranch))
+        {
+            var normalized = NormalizeBranchName(targetBranch);
+            matches = matches.Where(pr => pr.TargetRefName.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            matches = matches.Where(pr => pr.Status.Equals(status, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var result = matches.ToList();
+        return top.HasValue ? result.Take(top.Value).ToList() : result;
+    }
+
+    public async Task<AdoPullRequest> GetPullRequestAsync(string project, string repositoryId, int pullRequestId, CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct).ConfigureAwait(false);
+        return _demoPullRequests.FirstOrDefault(pr => pr.PullRequestId == pullRequestId)
+            ?? throw new InvalidOperationException($"Pull request {pullRequestId} not found.");
+    }
+
+    public async Task<AdoPullRequest> CreatePullRequestAsync(
+        string project, string repositoryId, string sourceBranch, string targetBranch,
+        string title, string? description = null, CancellationToken ct = default)
+    {
+        await Task.Delay(300, ct).ConfigureAwait(false);
+        var sourceRef = NormalizeBranchName(sourceBranch);
+        var targetRef = NormalizeBranchName(targetBranch);
+        var sourceVersion = ComputeDeterministicSha($"{project}:{repositoryId}:{sourceRef}");
+
+        var existing = await GetPullRequestsAsync(project, repositoryId, sourceBranch, targetBranch, "active", ct: ct).ConfigureAwait(false);
+        if (existing.Count != 0)
+        {
+            return existing[0];
+        }
+
+        var pr = new AdoPullRequest(
+            PullRequestId: _nextPullRequestId++,
+            Title: title,
+            Description: description,
+            Status: "active",
+            MergeStatus: "succeeded",
+            SourceRefName: sourceRef,
+            TargetRefName: targetRef,
+            SourceCommitId: sourceVersion,
+            TargetCommitId: ComputeDeterministicSha($"{project}:{repositoryId}:{targetRef}"),
+            MergeCommitId: null,
+            CreatedBy: "You (demo)",
+            WebUrl: $"https://dev.azure.com/demo/{project}/_git/{repositoryId}/pullrequest/{_nextPullRequestId - 1}");
+
+        _demoPullRequests.Add(pr);
+        return pr;
+    }
+
+    public async Task<AdoBuildDetails> GetBuildDetailsAsync(string project, int buildId, CancellationToken ct = default)
+    {
+        await Task.Delay(150, ct).ConfigureAwait(false);
+        var run = _triggeredRuns.FirstOrDefault(r => r.Id == buildId);
+        if (run is null)
+            throw new InvalidOperationException($"Build {buildId} not found.");
+
+        var repo = ReposByProject.GetValueOrDefault(project)?[0];
+        return MapRunToBuildDetails(run, repo?.Id);
+    }
+
+    public async Task<List<AdoBuildDetails>> GetBuildsAsync(
+        string project, int? pipelineId = null, string? repositoryId = null, string? sourceVersion = null,
+        string? branchName = null, int? top = null, CancellationToken ct = default)
+    {
+        await Task.Delay(150, ct).ConfigureAwait(false);
+        var matches = _triggeredRuns.AsEnumerable();
+
+        if (pipelineId.HasValue)
+            matches = matches.Where(r => r.PipelineId == pipelineId.Value);
+
+        if (!string.IsNullOrWhiteSpace(sourceVersion))
+            matches = matches.Where(r => (r.SourceVersion ?? string.Empty).Equals(sourceVersion, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(branchName))
+        {
+            var normalized = NormalizeBranchName(branchName);
+            matches = matches.Where(r => (r.SourceBranch ?? string.Empty).Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var result = matches.Select(r => MapRunToBuildDetails(r, repositoryId)).ToList();
+        return top.HasValue ? result.Take(top.Value).ToList() : result;
+    }
+
+    private static AdoBuildDetails MapRunToBuildDetails(AdoPipelineRun run, string? repositoryId) => new(
+        Id: run.Id,
+        BuildNumber: run.Name,
+        SourceBranch: run.SourceBranch,
+        SourceVersion: run.SourceVersion,
+        RepositoryId: repositoryId,
+        RepositoryName: null,
+        State: run.State,
+        Result: run.Result,
+        WebUrl: run.WebUrl,
+        Stages: run.Stages);
+
+    private static string NormalizeBranchName(string branch)
+    {
+        var trimmed = branch.Trim();
+        return trimmed.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
+            ? trimmed
+            : $"refs/heads/{trimmed}";
+    }
+
+    private static string ComputeDeterministicSha(string input)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(input);
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant()[..40];
     }
 }

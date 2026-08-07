@@ -15,6 +15,7 @@ using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
 using SwebKit.Observability;
 using SwebKit.Redis;
+using SwebKit.DevOps;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
 
@@ -55,6 +56,10 @@ builder.Services.AddSingleton<IAksClientFactory, AksClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
 builder.Services.AddSingleton<RedisKeyspaceHealthAnalyzer>();
 builder.Services.AddSingleton<ScheduledMessageRepository>();
+
+// Release-train ADO client support (SwebKit.DevOps). Auth handler pulls the PAT from
+// ICredentialStore per request; it is never persisted in the client.
+builder.Services.AddSwebKitDevOps();
 
 // Monitoring: persisted alert rules + evaluation engine + signal sources
 builder.Services.AddSingleton<SwebKit.Core.Configuration.AlertRuleRepository>();
@@ -283,6 +288,7 @@ userSettingsRepository.Settings.SessionCount++;
 userSettingsRepository.Settings.FathomUnlocked |= userSettingsRepository.Settings.SessionCount >= UserSettings.FathomUnlockThreshold;
 await userSettingsRepository.SaveAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
+await app.Services.GetRequiredService<ReleaseRepository>().LoadAsync();
 // Force-instantiate now so its constructor subscribes to MonitoringAlertEvaluationService.AlertFired
 // before the first alert can possibly fire — a plain AddSingleton registration alone only makes it
 // resolvable, it doesn't construct it until something asks for it.

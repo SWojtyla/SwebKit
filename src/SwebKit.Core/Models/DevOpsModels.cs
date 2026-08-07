@@ -27,7 +27,9 @@ public record AdoPipelineRun(
     string SourceBranch,
     string? TriggeredBy,
     string? WebUrl,
-    List<AdoPipelineStage> Stages);
+    List<AdoPipelineStage> Stages,
+    string? SourceVersion = null,
+    int? BuildId = null);
 
 public record AdoPipelineStage(
     string Name,
@@ -79,6 +81,38 @@ public record AdoCommit(
     string Comment,
     string AuthorName,
     DateTimeOffset AuthorDate);
+
+// ── Release-train models ──
+
+public record AdoBranchRef(
+    string Name,
+    string ObjectId);
+
+public record AdoPullRequest(
+    int PullRequestId,
+    string Title,
+    string? Description,
+    string Status,
+    string? MergeStatus,
+    string SourceRefName,
+    string TargetRefName,
+    string SourceCommitId,
+    string TargetCommitId,
+    string? MergeCommitId,
+    string? CreatedBy,
+    string? WebUrl);
+
+public record AdoBuildDetails(
+    int Id,
+    string? BuildNumber,
+    string SourceBranch,
+    string? SourceVersion,
+    string? RepositoryId,
+    string? RepositoryName,
+    string State,
+    string? Result,
+    string? WebUrl,
+    List<AdoPipelineStage> Stages);
 
 // ── Environment models ──
 

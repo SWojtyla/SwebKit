@@ -64,6 +64,43 @@ public interface IDevOpsClient
         int top = 20,
         CancellationToken ct = default);
 
+    // ── Release-train primitives (no PR completion / approval write / tag move) ──
+
+    Task<AdoBranchRef?> GetBranchRefAsync(string project, string repositoryId, string branch, CancellationToken ct = default);
+
+    Task<AdoTag?> GetTagAsync(string project, string repositoryId, string name, CancellationToken ct = default);
+
+    Task<List<AdoPullRequest>> GetPullRequestsAsync(
+        string project,
+        string repositoryId,
+        string? sourceBranch = null,
+        string? targetBranch = null,
+        string? status = "active",
+        int? top = null,
+        CancellationToken ct = default);
+
+    Task<AdoPullRequest> GetPullRequestAsync(string project, string repositoryId, int pullRequestId, CancellationToken ct = default);
+
+    Task<AdoPullRequest> CreatePullRequestAsync(
+        string project,
+        string repositoryId,
+        string sourceBranch,
+        string targetBranch,
+        string title,
+        string? description = null,
+        CancellationToken ct = default);
+
+    Task<AdoBuildDetails> GetBuildDetailsAsync(string project, int buildId, CancellationToken ct = default);
+
+    Task<List<AdoBuildDetails>> GetBuildsAsync(
+        string project,
+        int? pipelineId = null,
+        string? repositoryId = null,
+        string? sourceVersion = null,
+        string? branchName = null,
+        int? top = null,
+        CancellationToken ct = default);
+
     // ── Environments ──
 
     Task<List<AdoEnvironment>> GetEnvironmentsAsync(string project, CancellationToken ct = default);

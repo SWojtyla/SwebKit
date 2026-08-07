@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\src\SwebKit.Core\SwebKit.Core.csproj" />
+    <ProjectReference Include="..\src\SwebKit.DevOps\SwebKit.DevOps.csproj" />
     <ProjectReference Include="..\src\SwebKit.Azure\SwebKit.Azure.csproj" />
     <ProjectReference Include="..\src\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />
     <ProjectReference Include="..\src\SwebKit.Redis\SwebKit.Redis.csproj" />
@@ -22,12 +23,9 @@
   </ItemGroup>
   <!--
     SwebKit.Observability was dropped from the Tauri rewrite as a *browsing UI* (product decision,
-    2026-07-26) — no Observability page/nav item, no KQL browser, no SLO tracking panel. That part
-    still stands. What changed (workspace-intelligence plan, 2026-08-03): the underlying Application
-    Insights querying capability is now wired in as an agent-tool-only capability
-    (`get_metrics`/`query_logs`, FeatureArea.Observability) — the data is valuable context for the
-    AI agent even without a dedicated place to browse it yourself. SwebKit.DevOps/Pipelines remains
-    fully dropped; nothing here reverses that.
+    2026-07-26). SwebKit.DevOps/Pipelines was also excluded as a generic browsing UI, but the focused
+    Release Train Cockpit feature (2026-08-07) now reuses SwebKit.DevOps for release-train workflow
+    support only — not a MAUI pipeline browser port.
   -->
 
 </Project>

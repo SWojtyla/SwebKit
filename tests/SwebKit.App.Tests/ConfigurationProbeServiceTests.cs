@@ -172,6 +172,13 @@ public sealed class ConfigurationProbeServiceTests
         public Task<List<AdoCommit>> GetCommitsAsync(string project, string repositoryId, string branch, int top = 20, CancellationToken ct = default) => Task.FromResult(new List<AdoCommit>());
         public Task<List<AdoEnvironment>> GetEnvironmentsAsync(string project, CancellationToken ct = default) => Task.FromResult(new List<AdoEnvironment>());
         public Task<List<PipelineEnvironmentStatus>> GetEnvironmentStatusAsync(string project, int pipelineId, int scanDepth = 5, CancellationToken ct = default) => Task.FromResult(new List<PipelineEnvironmentStatus>());
+        public Task<AdoBranchRef?> GetBranchRefAsync(string project, string repositoryId, string branch, CancellationToken ct = default) => Task.FromResult<AdoBranchRef?>(null);
+        public Task<AdoTag?> GetTagAsync(string project, string repositoryId, string name, CancellationToken ct = default) => Task.FromResult<AdoTag?>(null);
+        public Task<List<AdoPullRequest>> GetPullRequestsAsync(string project, string repositoryId, string? sourceBranch = null, string? targetBranch = null, string? status = "active", int? top = null, CancellationToken ct = default) => Task.FromResult(new List<AdoPullRequest>());
+        public Task<AdoPullRequest> GetPullRequestAsync(string project, string repositoryId, int pullRequestId, CancellationToken ct = default) => Task.FromResult<AdoPullRequest>(default!);
+        public Task<AdoPullRequest> CreatePullRequestAsync(string project, string repositoryId, string sourceBranch, string targetBranch, string title, string? description = null, CancellationToken ct = default) => Task.FromResult<AdoPullRequest>(default!);
+        public Task<AdoBuildDetails> GetBuildDetailsAsync(string project, int buildId, CancellationToken ct = default) => Task.FromResult<AdoBuildDetails>(default!);
+        public Task<List<AdoBuildDetails>> GetBuildsAsync(string project, int? pipelineId = null, string? repositoryId = null, string? sourceVersion = null, string? branchName = null, int? top = null, CancellationToken ct = default) => Task.FromResult(new List<AdoBuildDetails>());
     }
 
     private sealed class FakeStorageClientFactory : IStorageClientFactory

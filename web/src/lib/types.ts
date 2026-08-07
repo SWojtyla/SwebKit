@@ -108,9 +108,142 @@ export interface StorageConfig {
 }
 
 export interface DevOpsConfig {
-  organizationUrl: string;
-  project: string;
-  credentialKey: string;
+  organization: string;
+  authenticationMode: "Pat" | "Entra";
+  patCredentialKey: string;
+  pinnedProjects: string[];
+  pipelineGroups: PipelineGroup[];
+  releaseGroups: ReleaseGroup[];
+  defaultStageAliases: Record<string, string>;
+}
+
+export interface PipelineGroup {
+  id: string;
+  name: string;
+  pipelines: PipelineGroupEntry[];
+}
+
+export interface PipelineGroupEntry {
+  projectName: string;
+  pipelineId: number;
+  pipelineName: string;
+}
+
+export type MergeStrategy = "FastForward" | "MergeCommit" | "Squash" | "Rebase";
+
+export interface ReleaseGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  defaultMergeStrategy: MergeStrategy;
+  stageAliases: Record<string, string>;
+  components: ReleaseGroupComponent[];
+}
+
+export interface ReleaseGroupComponent {
+  projectName: string;
+  repositoryId: string;
+  repositoryName: string;
+  sourceBranch: string;
+  targetBranch: string;
+  pipelineId: number;
+  pipelineName: string | null;
+  mergeStrategy: MergeStrategy;
+  stageAliases: Record<string, string>;
+  versionPrefix: string | null;
+}
+
+export type ReleaseTrainStatus =
+  | "Draft"
+  | "Preflight"
+  | "CreatingTags"
+  | "CreatingPullRequests"
+  | "AwaitingMerge"
+  | "MergeCompleted"
+  | "RunningPipelines"
+  | "Monitoring"
+  | "Completed"
+  | "Failed"
+  | "Cancelled";
+
+export type ReleaseTrainComponentStatus =
+  | "NotStarted"
+  | "Tagged"
+  | "PullRequestCreated"
+  | "PullRequestMerged"
+  | "TstPending"
+  | "TstRunning"
+  | "TstSucceeded"
+  | "TstFailed"
+  | "StgPendingApproval"
+  | "StgRunning"
+  | "StgSucceeded"
+  | "StgFailed"
+  | "PrdPendingApproval"
+  | "PrdRunning"
+  | "PrdSucceeded"
+  | "PrdFailed"
+  | "Completed"
+  | "Failed"
+  | "Blocked";
+
+export interface ReleaseTrainRecord {
+  id: string;
+  name: string;
+  label: string | null;
+  groupId: string | null;
+  groupName: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  status: ReleaseTrainStatus;
+  overallRemarks: string | null;
+  components: ReleaseTrainComponent[];
+  auditLog: ReleaseTrainAuditEvent[];
+}
+
+export interface ReleaseTrainComponent {
+  id: string;
+  componentName: string;
+  projectName: string;
+  repositoryId: string;
+  repositoryName: string;
+  sourceBranch: string;
+  targetBranch: string;
+  sourceVersion: string | null;
+  targetVersion: string | null;
+  tagName: string | null;
+  tagObjectId: string | null;
+  pullRequestId: number | null;
+  pullRequestUrl: string | null;
+  mergeCommitId: string | null;
+  pipelineRunId: string | null;
+  pipelineRunUrl: string | null;
+  status: ReleaseTrainComponentStatus;
+  remarks: string | null;
+  stages: ReleaseTrainStage[];
+  auditLog: ReleaseTrainAuditEvent[];
+}
+
+export interface ReleaseTrainStage {
+  slot: string;
+  stageName: string;
+  state: string;
+  result: string | null;
+  runId: string | null;
+  runUrl: string | null;
+  approvalId: string | null;
+  approvalUrl: string | null;
+  approvedBy: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface ReleaseTrainAuditEvent {
+  timestamp: string;
+  action: string;
+  componentId: string | null;
+  message: string;
+  actor: string | null;
 }
 
 /**
