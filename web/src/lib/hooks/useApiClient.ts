@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiSend } from "../api";
+import { apiFetch, apiSend, importCollection } from "../api";
 import type {
   ApiCollection,
   CollectionsStoreResponse,
   ApiClientExecutionResponse,
   HttpRequestEntry,
+  CollectionImportResult,
 } from "../types";
 
 // ── API Client ───────────────────────────────────────────────────────────────
@@ -42,5 +43,16 @@ export function useExecuteRequest() {
       collectionId?: string;
       environmentId?: string;
     }) => apiSend<ApiClientExecutionResponse>("/api/api-client/execute", "POST", vars),
+  });
+}
+
+export function useImportCollection() {
+  const qc = useQueryClient();
+  return useMutation<CollectionImportResult, Error, { folderPath?: string | null; payloadBase64?: string | null }>({
+    mutationFn: importCollection,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["collections"] });
+      qc.invalidateQueries({ queryKey: ["environments"] });
+    },
   });
 }

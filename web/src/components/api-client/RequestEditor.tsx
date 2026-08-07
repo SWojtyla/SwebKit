@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Save, Send, Wand2, Minimize2, Eye, Crosshair, Pencil, Sparkles } from "lucide-react";
+import { Save, Send, Wand2, Minimize2, Eye, Crosshair, Pencil, Sparkles, Search } from "lucide-react";
 import { GenerateApiRequestPanel } from "./GenerateApiRequestPanel";
+import { JsonPathPicker } from "./JsonPathPicker";
+import { RequestActionsPanel } from "./RequestActionsPanel";
 import { EditorState, Compartment } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { json } from "@codemirror/lang-json";
@@ -42,7 +44,7 @@ const authTypes: { value: AuthType; label: string }[] = [
   { value: "OAuth2", label: "OAuth 2.0" },
 ];
 
-type Tab = "params" | "headers" | "body" | "auth" | "graphql" | "websocket" | "capture";
+type Tab = "params" | "headers" | "body" | "auth" | "graphql" | "websocket" | "capture" | "actions";
 
 function bodyLanguage(mode: RequestBodyMode) {
   if (mode === "Json") return json();
@@ -232,6 +234,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   const [dirty, setDirty] = useState(false);
   const [showVarPreview, setShowVarPreview] = useState(false);
   const [showGeneratePanel, setShowGeneratePanel] = useState(false);
+  const [jsonPathPicker, setJsonPathPicker] = useState<{ open: boolean; index: number; path: string } | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSnapshotRef = useRef<HttpRequestEntry>(request);
   const onSaveRef = useRef(onSave);
@@ -524,10 +527,10 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
         <div className="flex min-w-0 flex-1 overflow-x-auto">
         {(() => {
           const tabs: Tab[] = request.method === "GraphQl"
-            ? ["params", "headers", "graphql", "auth", "capture"]
+            ? ["params", "headers", "graphql", "auth", "capture", "actions"]
             : request.method === "WebSocket"
-            ? ["params", "headers", "websocket", "auth", "capture"]
-            : ["params", "headers", "body", "auth", "capture"];
+            ? ["params", "headers", "websocket", "auth", "capture", "actions"]
+            : ["params", "headers", "body", "auth", "capture", "actions"];
           return tabs.map((tab) => (
             <button
               key={tab}
@@ -537,10 +540,15 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
               }`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === "params" ? "Params" : tab === "headers" ? "Headers" : tab === "body" ? "Body" : tab === "auth" ? "Auth" : tab === "graphql" ? "GraphQL" : tab === "capture" ? "Capture" : "WebSocket"}
+              {tab === "params" ? "Params" : tab === "headers" ? "Headers" : tab === "body" ? "Body" : tab === "auth" ? "Auth" : tab === "graphql" ? "GraphQL" : tab === "capture" ? "Capture" : tab === "actions" ? "Actions" : "WebSocket"}
               {tab === "params" && <CountBadge count={request.queryParams.length} />}
               {tab === "headers" && <CountBadge count={request.headers.length} />}
               {tab === "capture" && <CountBadge count={request.captureRules.length} />}
+              {tab === "actions" && (
+                <CountBadge
+                  count={(request.preRequestActions?.length ?? 0) + (request.postRequestActions?.length ?? 0)}
+                />
+              )}
             </button>
           ));
         })()}
@@ -866,14 +874,24 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
                   <option value="StatusCode">Status Code</option>
                 </select>
                 {rule.source === "BodyJsonPath" && (
-                  <input
-                    type="text"
-                    value={rule.jsonPath ?? ""}
-                    onChange={(e) => updateCaptureRule(i, { jsonPath: e.target.value || null })}
-                    placeholder="JSONPath (e.g. $.data.id)"
-                    className="flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
-                    data-testid={`capture-rule-path-${i}`}
-                  />
+                  <div className="flex flex-1 items-center gap-1">
+                    <input
+                      type="text"
+                      value={rule.jsonPath ?? ""}
+                      onChange={(e) => updateCaptureRule(i, { jsonPath: e.target.value || null })}
+                      placeholder="JSONPath (e.g. $.data.id)"
+                      className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
+                      data-testid={`capture-rule-path-${i}`}
+                    />
+                    <button
+                      onClick={() => setJsonPathPicker({ open: true, index: i, path: rule.jsonPath ?? "" })}
+                      className="rounded border px-1.5 py-1 text-xs hover:bg-accent"
+                      title="Pick JSONPath"
+                      data-testid={`capture-rule-picker-${i}`}
+                    >
+                      <Search className="h-3 w-3" />
+                    </button>
+                  </div>
                 )}
                 {rule.source === "ResponseHeader" && (
                   <input
@@ -941,9 +959,21 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
         {activeTab === "websocket" && (
           <WebSocketPanel request={request} onChange={onChange} />
         )}
+
+        {/* Actions tab */}
+        {activeTab === "actions" && (
+          <RequestActionsPanel request={request} onChange={onChange} />
+        )}
       </div>
       {showGeneratePanel && (
         <GenerateApiRequestPanel requestId={request.id} onClose={() => setShowGeneratePanel(false)} />
+      )}
+      {jsonPathPicker?.open && (
+        <JsonPathPicker
+          initialPath={jsonPathPicker.path}
+          onSelect={(path) => updateCaptureRule(jsonPathPicker.index, { jsonPath: path })}
+          onClose={() => setJsonPathPicker(null)}
+        />
       )}
     </div>
   );

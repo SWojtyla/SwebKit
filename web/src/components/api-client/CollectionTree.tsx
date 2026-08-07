@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import type { ApiCollection, ApiCollectionNode } from "@/lib/types";
 import { MethodBadge } from "./method-badge";
+import { CollectionImportButton, CollectionImportDialog } from "./CollectionImportDialog";
 
 interface CollectionTreeProps {
   collections: ApiCollection[];
@@ -113,6 +114,7 @@ export function CollectionTree({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameCollectionId, setRenameCollectionId] = useState<string | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -398,6 +400,7 @@ export function CollectionTree({
             >
               <Folder className="h-4 w-4" />
             </button>
+            <CollectionImportButton onOpen={() => setShowImportDialog(true)} />
           </div>
         </div>
 
@@ -553,6 +556,10 @@ export function CollectionTree({
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </button>
         </div>
+      )}
+
+      {showImportDialog && (
+        <CollectionImportDialog onClose={() => setShowImportDialog(false)} />
       )}
     </>
   );

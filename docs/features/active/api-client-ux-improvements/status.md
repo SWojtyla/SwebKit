@@ -1,13 +1,17 @@
 ---
-status: Proposed
+status: Done
 ---
 
 # API Client UX Improvements — Status
 
-- **Current phase:** Proposed / awaiting approval.
-- **Approved by:** —
-- **Implementation PR:** —
-- **Validation:** —
+- **Current phase:** Done.
+- **Approved by:** Sebastien.
+- **Implementation PR:** (to be linked)
+- **Validation:**
+  - `npm run build` passed.
+  - `dotnet build` passed.
+  - `dotnet test` passed (249 tests).
+  - `npx playwright test e2e/api-client` passed (50 tests, Chromium).
 
 ## Notes
 

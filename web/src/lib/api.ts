@@ -9,6 +9,7 @@ import type {
   AgentChatMode,
   AgentChatScope,
   AgentStreamEvent,
+  CollectionImportResult,
   RedisKeyspaceHealthReport,
   RedisPrefixMemoryBucket,
   RedisPubSubSnapshot,
@@ -418,5 +419,19 @@ export async function previewKeyVaultSecret(keyVaultName: string | null, secretN
   return apiSend<KeyVaultPreviewResult>("/api/api-client/preview-keyvault-secret", "POST", {
     keyVaultName: keyVaultName || null,
     secretName,
+  });
+}
+
+export async function importCollection(payload: {
+  folderPath?: string | null;
+  payloadBase64?: string | null;
+}): Promise<CollectionImportResult> {
+  return apiSend<CollectionImportResult>("/api/config/collections/import", "POST", payload);
+}
+
+export async function evaluateJsonPath(body: string, jsonPath: string): Promise<{ value: string | null; error: string | null }> {
+  return apiSend<{ value: string | null; error: string | null }>("/api/api-client/evaluate-jsonpath", "POST", {
+    body,
+    jsonPath,
   });
 }

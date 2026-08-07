@@ -22,6 +22,8 @@ import type { RequestTab } from "./RequestTabStrip";
 import { buildVariableScope } from "@/lib/variable-utils";
 import { getSecret } from "@/lib/tauri-bridge";
 import { buildResponseExample } from "@/lib/response-example";
+import { runRequestActions } from "@/lib/request-action-runner";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -76,6 +78,8 @@ function emptyRequest(): HttpRequestEntry {
     responseExamples: [],
     createdAt: now(),
     updatedAt: now(),
+    preRequestActions: [],
+    postRequestActions: [],
   };
 }
 
@@ -317,6 +321,7 @@ export function useApiClientPageContext(): ApiClientPageContextValue {
 }
 
 export function ApiClientPageProvider({ children }: { children: ReactNode }): JSX.Element {
+  const { notify } = useNotification();
   const { data: collections = [], isLoading } = useCollections();
   const updateCollections = useUpdateCollections();
   const executeRequest = useExecuteRequest();
@@ -594,11 +599,25 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           request.auth = { ...request.auth, credentialSecret: secret };
         }
       }
+
+      await runRequestActions(
+        request.preRequestActions ?? [],
+        { request },
+        (type, title, message) => notify(type, title, message),
+      );
+
       const result = await executeRequest.mutateAsync({
         request,
         collectionId: tab.collectionId ?? undefined,
         environmentId: activeEnvironmentId ?? undefined,
       });
+
+      await runRequestActions(
+        request.postRequestActions ?? [],
+        { request, response: result },
+        (type, title, message) => notify(type, title, message),
+      );
+
       setTabStates((prev) => ({
         ...prev,
         [activeTabId]: { ...prev[activeTabId], response: result, sending: false, history: appendHistory(prev[activeTabId], result) },
@@ -619,6 +638,13 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         captureWarnings: [],
         graphQlErrors: null,
       };
+
+      await runRequestActions(
+        tabState.draft.postRequestActions ?? [],
+        { request: tabState.draft, response: failure },
+        (type, title, message) => notify(type, title, message),
+      );
+
       setTabStates((prev) => ({
         ...prev,
         [activeTabId]: {

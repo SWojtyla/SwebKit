@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+using Json.Path;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -46,6 +48,44 @@ public static class ApiClientEndpoints
             PreviewKeyVaultSecretRequest req,
             IKeyVaultSecretResolver resolver,
             CancellationToken cancellationToken) => PreviewKeyVaultSecretAsync(req, resolver, cancellationToken));
+
+        app.MapPost("/api/api-client/evaluate-jsonpath", EvaluateJsonPathAsync);
+    }
+
+    internal static IResult EvaluateJsonPathAsync(EvaluateJsonPathRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.JsonPath))
+            return Results.BadRequest(new { error = "JSONPath is required." });
+
+        JsonNode? node;
+        try
+        {
+            node = JsonNode.Parse(req.Body ?? "{}");
+        }
+        catch (Exception ex)
+        {
+            return Results.Ok(new JsonPathEvaluationResponse { Value = null, Error = $"Invalid JSON: {ex.Message}" });
+        }
+
+        if (node is null)
+            return Results.Ok(new JsonPathEvaluationResponse { Value = null, Error = "Invalid JSON." });
+
+        if (!JsonPath.TryParse(req.JsonPath, out var path))
+            return Results.Ok(new JsonPathEvaluationResponse { Value = null, Error = "Invalid JSONPath expression." });
+
+        var results = path.Evaluate(node);
+        var first = results.Matches?.FirstOrDefault();
+        if (first?.Value is null)
+            return Results.Ok(new JsonPathEvaluationResponse { Value = null, Error = null });
+
+        var value = first.Value switch
+        {
+            JsonValue v when v.TryGetValue<string>(out var s) => s,
+            JsonValue v => v.ToJsonString(),
+            _ => first.Value.ToJsonString(),
+        };
+
+        return Results.Ok(new JsonPathEvaluationResponse { Value = value, Error = null });
     }
 
     /// <summary>
@@ -144,3 +184,15 @@ public sealed record KeyVaultPreviewResponse(
     string Status,
     string? MaskedValue,
     string? Error);
+
+public sealed class EvaluateJsonPathRequest
+{
+    public string? Body { get; set; }
+    public string? JsonPath { get; set; }
+}
+
+public sealed class JsonPathEvaluationResponse
+{
+    public string? Value { get; set; }
+    public string? Error { get; set; }
+}

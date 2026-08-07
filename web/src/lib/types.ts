@@ -273,6 +273,7 @@ export interface EnvironmentVariable {
   secretSource: "Plain" | "WindowsCredentialStore" | "AzureKeyVault" | "Generated";
   credentialKey: string | null;
   keyVaultName: string | null;
+  generator?: VariableGeneratorDefinition | null;
   isEnabled: boolean;
 }
 
@@ -341,6 +342,16 @@ export interface CollectionsStoreResponse {
   concurrencyToken: string | null;
 }
 
+export interface CollectionImportResult {
+  collections: ApiCollection[];
+  environments: ApiEnvironment[];
+  requestCount: number;
+  captureRuleCount: number;
+  authConfigsRequiringReEntry: number;
+  variablesExtractedAsEnvironment: number;
+  warnings: string[];
+}
+
 export interface HttpRequestEntry {
   id: string;
   name: string;
@@ -359,6 +370,8 @@ export interface HttpRequestEntry {
   responseExamples: ResponseExample[];
   createdAt: string;
   updatedAt: string;
+  preRequestActions: RequestAction[];
+  postRequestActions: RequestAction[];
 }
 
 export interface RequestBody {
@@ -429,6 +442,27 @@ export interface CaptureRule {
   jsonPath: string | null;
   headerName: string | null;
   isEnabled: boolean;
+}
+
+export type RequestActionKind = "CopyToClipboard" | "Delay";
+
+export type RequestActionSource =
+  | "RequestUrl"
+  | "RequestMethod"
+  | "RequestBody"
+  | "ResponseStatusCode"
+  | "ResponseStatusText"
+  | "ResponseBody"
+  | "ResponseHeader";
+
+export interface RequestAction {
+  id: string;
+  kind: RequestActionKind;
+  name: string;
+  isEnabled: boolean;
+  source: RequestActionSource;
+  selector: string | null;
+  delayMs: number;
 }
 
 export interface ResponseExample {

@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { mkdtempSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { setDemoMode } from "./helpers";
 
 const sidecarBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198"}`;
@@ -593,5 +596,162 @@ test.describe("API Client", () => {
     expect(req.auth.credentialKey).not.toBe(token);
     expect(req.auth.credentialKey).toMatch(/^sw-secret:/);
     expect(JSON.stringify(collections)).not.toContain(token);
+  });
+
+  test("collection import dialog imports a Postman v2.1 file", async ({ page }) => {
+    const collectionName = `Imported Postman ${Date.now()}`;
+    const tmpDir = mkdtempSync(join(tmpdir(), "sw-import-"));
+    const filePath = join(tmpDir, "postman-collection.json");
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        info: {
+          schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+          name: collectionName,
+        },
+        item: [
+          {
+            name: "Get Health",
+            request: { method: "GET", url: `${sidecarBaseUrl}/health` },
+          },
+        ],
+      }),
+    );
+
+    page.once("filechooser", async (fileChooser) => {
+      await fileChooser.setFiles(filePath);
+    });
+
+    await page.getByTestId("collection-import-button").click();
+    await expect(page.getByTestId("collection-import-dialog")).toBeVisible();
+    await page.getByTestId("collection-import-file-btn").click();
+    await expect(page.getByTestId("collection-import-result")).toContainText("Import successful", { timeout: 10_000 });
+    await page.getByTestId("collection-import-close").click();
+    await expect(page.getByTestId("collection-import-dialog")).not.toBeVisible();
+
+    await page.getByTestId("collection-search").fill(collectionName);
+    await expect(page.getByTestId(/collection-root-/).filter({ hasText: collectionName }).first()).toBeVisible();
+  });
+
+  test("collection import is disabled in demo mode", async ({ page }) => {
+    await setDemoMode(page, true);
+    await page.goto("/api-client");
+
+    await page.getByTestId("collection-import-button").click();
+    await expect(page.getByTestId("collection-import-dialog")).toBeVisible();
+    await expect(page.getByText("Import is disabled in demo mode.")).toBeVisible();
+    await expect(page.getByTestId("collection-import-file-btn")).toBeDisabled();
+    await page.getByTestId("collection-import-tab-bruno").click();
+    await expect(page.getByTestId("collection-import-bruno-btn")).toBeDisabled();
+  });
+
+  test("JSONPath picker sets capture rule path", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("JSONPath Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("JSONPath Request");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-node-Request-/).first().click();
+
+    await page.getByTestId("request-tab-capture").click();
+    await page.getByTestId("add-capture-rule").click();
+
+    await page.getByTestId("capture-rule-target-0").fill("requestId");
+    await page.getByTestId("capture-rule-picker-0").click();
+
+    await expect(page.getByTestId("jsonpath-picker-dialog")).toBeVisible();
+
+    await page.getByTestId("jsonpath-picker-body").fill(JSON.stringify({ data: { id: "abc-123" } }));
+    await page.getByTestId("jsonpath-picker-input").fill("$.data.id");
+    await page.getByTestId("jsonpath-picker-evaluate").click();
+    await expect(page.getByTestId("jsonpath-picker-preview")).toContainText("abc-123");
+
+    await page.getByTestId("jsonpath-picker-select").click();
+    await expect(page.getByTestId("jsonpath-picker-dialog")).not.toBeVisible();
+    await expect(page.getByTestId("capture-rule-path-0")).toHaveValue("$.data.id");
+  });
+
+  test("JSONPath picker reports invalid expressions", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("JSONPath Invalid Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("JSONPath Invalid Request");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-node-Request-/).first().click();
+
+    await page.getByTestId("request-tab-capture").click();
+    await page.getByTestId("add-capture-rule").click();
+    await page.getByTestId("capture-rule-picker-0").click();
+
+    await expect(page.getByTestId("jsonpath-picker-dialog")).toBeVisible();
+
+    await page.getByTestId("jsonpath-picker-body").fill("{ not json");
+    await expect(page.getByText("Invalid JSON")).toBeVisible();
+
+    await page.getByTestId("jsonpath-picker-body").fill(JSON.stringify({ a: 1 }));
+    await page.getByTestId("jsonpath-picker-input").fill("$..");
+    await page.getByTestId("jsonpath-picker-evaluate").click();
+    await expect(page.getByTestId("jsonpath-picker-preview")).toContainText("Invalid JSONPath");
+
+    await page.getByTestId("jsonpath-picker-close").click();
+    await expect(page.getByTestId("jsonpath-picker-dialog")).not.toBeVisible();
+  });
+
+  test("post-request action copies the response status code to the clipboard", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-write", "clipboard-read"]);
+
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Action Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("Action Request");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-node-Request-/).first().click();
+
+    await page.getByTestId("request-url-input").fill(`${sidecarBaseUrl}/health`);
+
+    await page.getByTestId("request-tab-actions").click();
+    await page.getByTestId("add-postRequestActions").click();
+    await page.getByTestId("postRequestActions-name-0").fill("Copy status");
+    await page.getByTestId("postRequestActions-source-0").selectOption("ResponseStatusCode");
+
+    await page.getByTestId("request-send-button").click();
+    await expect(page.getByTestId("response-status")).toContainText("200", { timeout: 10_000 });
+    await expect(page.getByText("Copied", { exact: true })).toBeVisible();
+
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboard).toBe("200");
+  });
+
+  test("pre-request action reports nothing to copy when the source has no value", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Pre Action Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("Pre Action Request");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-node-Request-/).first().click();
+
+    await page.getByTestId("request-url-input").fill(`${sidecarBaseUrl}/health`);
+
+    await page.getByTestId("request-tab-actions").click();
+    await page.getByTestId("add-preRequestActions").click();
+    await page.getByTestId("preRequestActions-name-0").fill("Copy body id");
+    await page.getByTestId("preRequestActions-source-0").selectOption("ResponseBody");
+    await page.getByTestId("preRequestActions-selector-0").fill("$.id");
+
+    await page.getByTestId("request-send-button").click();
+    await expect(page.getByText("nothing to copy")).toBeVisible();
+    await expect(page.getByTestId("response-status")).toContainText("200", { timeout: 10_000 });
   });
 });
