@@ -18,12 +18,13 @@ public static class SystemEndpoints
 
     internal static IResult GetHealth() => Results.Ok(new { status = "ok", version = Version });
 
-    internal static IResult GetDemoMode(DemoModeService demo) =>
-        Results.Ok(new { isDemoMode = demo.IsDemoMode });
+    internal static IResult GetDemoMode(AppStateService appState) =>
+        Results.Ok(new { isDemoMode = appState.UseDemoData });
 
-    internal static IResult SetDemoMode(DemoModeService demo, bool enabled)
+    internal static async Task<IResult> SetDemoMode(DemoModeService demo, AppStateService appState, bool enabled)
     {
         demo.IsDemoMode = enabled;
-        return Results.Ok(new { isDemoMode = demo.IsDemoMode });
+        await appState.SetDemoModeAsync(enabled).ConfigureAwait(false);
+        return Results.Ok(new { isDemoMode = appState.UseDemoData });
     }
 }

@@ -21,6 +21,7 @@ import {
   Beaker,
   Keyboard,
   Waves,
+  Train,
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
@@ -46,6 +47,7 @@ import { useNotification } from "./NotificationSystem";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/release-trains", label: "Release Trains", icon: Train },
   { to: "/service-bus", label: "Service Bus", icon: MessageSquare },
   { to: "/aks", label: "AKS", icon: Ship },
   { to: "/api-client", label: "API Client", icon: Code2 },

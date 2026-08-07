@@ -14,6 +14,7 @@ public class DevOpsClient : IDevOpsClient
     private readonly ILogger<DevOpsClient> _logger;
     private readonly string _orgUrl;
     private readonly string _patCredentialKey;
+    private readonly DevOpsAuthenticationMode _authenticationMode;
 
     private static readonly JsonSerializerOptions JsonOptions = SwebKitJsonOptions.Default;
 
@@ -29,6 +30,7 @@ public class DevOpsClient : IDevOpsClient
         _logger = logger;
         _orgUrl = NormalizeOrganizationUrl(config.Organization);
         _patCredentialKey = config.PatCredentialKey;
+        _authenticationMode = config.AuthenticationMode;
     }
 
     private string OrgApi => $"{_orgUrl}/_apis";
@@ -723,6 +725,8 @@ public class DevOpsClient : IDevOpsClient
     {
         var request = new HttpRequestMessage(method, url);
         request.Options.Set(DevOpsAuthHandler.PatCredentialKeyOption, _patCredentialKey);
+        request.Options.Set(DevOpsAuthHandler.AuthModeOption, _authenticationMode.ToString());
+        request.Options.Set(DevOpsAuthHandler.OrganizationUrlOption, _orgUrl);
 
         if (body is not null)
         {

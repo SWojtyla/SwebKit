@@ -15,6 +15,7 @@ public class ReleaseTrainRecord
     public string? CreatedBy { get; set; }
     public ReleaseTrainStatus Status { get; set; } = ReleaseTrainStatus.Draft;
     public string? OverallRemarks { get; set; }
+    public List<string> DriftWarnings { get; set; } = [];
     public List<ReleaseTrainComponent> Components { get; set; } = [];
     public List<ReleaseTrainAuditEvent> AuditLog { get; set; } = [];
 }
@@ -28,6 +29,18 @@ public class ReleaseTrainComponent
     public string RepositoryName { get; set; } = string.Empty;
     public string SourceBranch { get; set; } = "development";
     public string TargetBranch { get; set; } = "main";
+    public string Version { get; set; } = string.Empty;
+    public string? VersionPrefix { get; set; }
+    public int PipelineId { get; set; }
+    public string? PipelineName { get; set; }
+
+    /// <summary>Resolved stage aliases captured at train creation. Merges default / group / component.</summary>
+    public Dictionary<string, string> StageAliases { get; set; } = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["TST"] = "TST",
+        ["STG"] = "STG",
+        ["PRD"] = "PRD"
+    };
 
     /// <summary>Commit/object ID on the source branch at the time of preflight/tagging.</summary>
     public string? SourceVersion { get; set; }

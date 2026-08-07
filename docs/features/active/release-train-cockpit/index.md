@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned → In Progress. Phase 0 (feature contract) and Phase 1–2 foundation (core models, durable state, ADO API expansion) are being implemented on this branch. Phase 3 (sidecar endpoints/PAT), Phase 4–5 (React settings/wizard), Phase 6 (Confluence draft), and Phase 7 (Entra) will follow in later PRs.
+In Progress. All implementation phases (0–7) are present on the `devin/release-train-cockpit-foundation` branch, including the React settings/wizard, active cockpit, Confluence-ready handoff formatter, PAT and Entra authentication paths, and a full demo-mode journey. The work is in final validation; security scans, real-ADO merge-strategy validation, and remaining targeted tests are tracked below.
 
 ## Scope
 
@@ -46,4 +46,5 @@ Entra authentication (Phase 7) is intentionally a separate milestone after PAT i
 - SwebKit monitors PR merge state and discovers the merge-triggered pipeline run using repository/commit evidence.
 - TST/STG/PRD status is shown per component with exact ADO deep links, but no approve/reject controls in v1.
 - A Confluence-ready component table and overall remarks can be previewed and copied.
-- Full demo-mode path works without credentials; real ADO merge strategy and run correlation are validated before final workflow implementation.
+- Full demo-mode path works without credentials and showcases success, partial-failure/retry, and drift scenarios.
+- Real ADO merge strategy and run correlation validation is documented as a post-implementation smoke-test step.

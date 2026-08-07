@@ -539,6 +539,61 @@ public class DemoDevOpsClient : IDevOpsClient
         return top.HasValue ? result.Take(top.Value).ToList() : result;
     }
 
+    public Task OverwritePullRequestAsync(AdoPullRequest pr)
+    {
+        var index = _demoPullRequests.FindIndex(p => p.PullRequestId == pr.PullRequestId);
+        if (index >= 0)
+            _demoPullRequests[index] = pr;
+        else
+            _demoPullRequests.Add(pr);
+        return Task.CompletedTask;
+    }
+
+    public Task AdvanceRunAsync(int runId, bool failStage = false)
+    {
+        var run = _triggeredRuns.FirstOrDefault(r => r.Id == runId);
+        if (run is null)
+            return Task.CompletedTask;
+
+        var stages = run.Stages;
+        var currentIndex = stages.FindIndex(s =>
+            !string.Equals(s.State, "completed", StringComparison.OrdinalIgnoreCase));
+
+        if (currentIndex < 0)
+            return Task.CompletedTask;
+
+        var current = stages[currentIndex];
+        var failed = failStage;
+
+        stages[currentIndex] = current with
+        {
+            State = "completed",
+            Result = failed ? "failed" : "succeeded"
+        };
+
+        if (failed)
+        {
+            run = run with { State = "completed", Result = "failed" };
+            var runIndex = _triggeredRuns.FindIndex(r => r.Id == runId);
+            if (runIndex >= 0) _triggeredRuns[runIndex] = run;
+            return Task.CompletedTask;
+        }
+
+        if (currentIndex + 1 < stages.Count)
+        {
+            var next = stages[currentIndex + 1];
+            stages[currentIndex + 1] = next with { State = "inProgress", Result = "" };
+        }
+        else
+        {
+            run = run with { State = "completed", Result = "succeeded" };
+            var runIndex = _triggeredRuns.FindIndex(r => r.Id == runId);
+            if (runIndex >= 0) _triggeredRuns[runIndex] = run;
+        }
+
+        return Task.CompletedTask;
+    }
+
     private static AdoBuildDetails MapRunToBuildDetails(AdoPipelineRun run, string? repositoryId) => new(
         Id: run.Id,
         BuildNumber: run.Name,

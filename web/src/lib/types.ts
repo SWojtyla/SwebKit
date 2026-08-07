@@ -197,6 +197,7 @@ export interface ReleaseTrainRecord {
   createdBy: string | null;
   status: ReleaseTrainStatus;
   overallRemarks: string | null;
+  driftWarnings: string[] | null;
   components: ReleaseTrainComponent[];
   auditLog: ReleaseTrainAuditEvent[];
 }
@@ -209,6 +210,11 @@ export interface ReleaseTrainComponent {
   repositoryName: string;
   sourceBranch: string;
   targetBranch: string;
+  version: string;
+  versionPrefix: string | null;
+  pipelineId: number;
+  pipelineName: string | null;
+  stageAliases: Record<string, string>;
   sourceVersion: string | null;
   targetVersion: string | null;
   tagName: string | null;

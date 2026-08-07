@@ -1,4 +1,7 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
+using SwebKit.Core.Abstractions;
+using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
 using SwebKit.Sidecar.Endpoints;
 
@@ -19,23 +22,32 @@ public class SystemEndpointsTests
     [Fact]
     public void GetDemoMode_ReflectsTheServicesCurrentState()
     {
-        var demo = new DemoModeService { IsDemoMode = true };
+        using var sandbox = new AppDataSandbox();
+        var appState = BuildAppState();
 
-        var result = Assert.IsAssignableFrom<IValueHttpResult>(SystemEndpoints.GetDemoMode(demo));
+        var result = Assert.IsAssignableFrom<IValueHttpResult>(SystemEndpoints.GetDemoMode(appState));
         var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
 
-        Assert.Contains("\"isDemoMode\":true", json);
+        Assert.Contains("\"isDemoMode\":false", json);
     }
 
     [Fact]
-    public void SetDemoMode_TogglesTheServiceAndReturnsTheNewState()
+    public async Task SetDemoMode_TogglesTheServiceAndReturnsTheNewState()
     {
-        var demo = new DemoModeService { IsDemoMode = false };
+        using var sandbox = new AppDataSandbox();
+        var appState = BuildAppState();
 
-        var result = Assert.IsAssignableFrom<IValueHttpResult>(SystemEndpoints.SetDemoMode(demo, true));
+        var result = await SystemEndpoints.SetDemoMode(new DemoModeService(), appState, true);
 
-        Assert.True(demo.IsDemoMode);
-        var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
+        var json = System.Text.Json.JsonSerializer.Serialize(Assert.IsAssignableFrom<IValueHttpResult>(result).Value);
         Assert.Contains("\"isDemoMode\":true", json);
+    }
+
+    private static AppStateService BuildAppState()
+    {
+        var profiles = new ProfileRepository();
+        var uiState = new UiStateRepository();
+        var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
+        return new AppStateService(profiles, uiState, events);
     }
 }

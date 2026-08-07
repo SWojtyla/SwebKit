@@ -2,6 +2,17 @@
 
 This plan maps to `technical-plan.md` and `ux-plan.md`. Tests for later phases may be skipped until those phases are implemented, but each completed phase should have its tests passing before the PR is opened.
 
+## Verification matrix (last run on this branch)
+
+| Command | Result | Notes |
+| --- | --- | --- |
+| `dotnet test tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj` | ⚠ 805/806 passed | One pre-existing `LinkedCollectionRootTests.GetRemoteCompareUrlAsync_GitHubRemote_ReturnsCompareUrl` failure caused by the Devin git proxy rewriting GitHub remotes. Not related to this feature. |
+| `dotnet test tests/SwebKit.DevOps.Tests/SwebKit.DevOps.Tests.csproj` | ✅ 29/29 passed | |
+| `dotnet test tests/SwebKit.Sidecar.Tests/SwebKit.Sidecar.Tests.csproj` | ✅ 249/249 passed | |
+| `npm run test:unit` | ✅ 120/120 passed | |
+| `npm run build` | ✅ succeeded | |
+| `npm run test:e2e` | ✅ 230/230 passed | Playwright Chromium installed locally for this run. |
+
 ## Unit / Integration
 
 - `SwebKit.Core` model tests
@@ -55,7 +66,7 @@ This plan maps to `technical-plan.md` and `ux-plan.md`. Tests for later phases m
 
 ## Security / compliance
 
-- Aikido full scan for every modified first-party file.
+- Aikido full scan for every modified first-party file. The Aikido MCP server was not available in this environment; this is reported explicitly and should be run before merge.
 - Verify PAT is never written to logs, returned in HTTP bodies, or present in exported bundles.
 - Verify branch/project/PR names are escaped in URLs and query parameters.
 - Verify cancellation and auth-failure paths do not expose raw HTTP responses.

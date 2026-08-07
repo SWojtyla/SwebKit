@@ -281,6 +281,10 @@ await app.Services.GetRequiredService<ProfileRepository>().LoadAsync();
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
 await userSettingsRepository.LoadAsync();
+
+var appState = app.Services.GetRequiredService<AppStateService>();
+await appState.InitializeAsync();
+app.Services.GetRequiredService<DemoModeService>().IsDemoMode = appState.UseDemoData;
 // Fathom theme unlock progress: one increment per launch, and the unlock is sticky once earned
 // (a later SessionCount reset — e.g. via settings import — must not re-lock a theme the user
 // already reached, hence checking FathomUnlocked with ||= rather than recomputing from scratch).
@@ -337,5 +341,9 @@ app.MapWorkspaceTopologyEndpoints();
 // ── Observability ───────────────────────────────────────────────────────────
 
 app.MapObservabilityEndpoints();
+
+// ── Release Train Cockpit ────────────────────────────────────────────────────
+
+app.MapReleaseTrainEndpoints();
 
 app.Run();
