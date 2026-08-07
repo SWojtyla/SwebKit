@@ -28,6 +28,17 @@ public interface IReleaseTrainService
     /// <paramref name="failComponentName"/> causes that component's next stage to fail for the partial-failure path.
     /// </summary>
     Task<ReleaseTrainRecord> AdvanceDemoAsync(Guid id, string? failComponentName = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retries failed or pending actions for a release train. In demo mode this can re-run a failed stage;
+    /// in live mode it only re-attempts tag/PR creation and refreshes state.
+    /// </summary>
+    Task<ReleaseTrainRecord> RetryAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Demo-only helper that simulates source-branch drift for the specified component(s).
+    /// </summary>
+    Task<ReleaseTrainRecord> DriftAsync(Guid id, string? componentName = null, CancellationToken ct = default);
 }
 
 public sealed record ReleaseTrainCreateRequest(

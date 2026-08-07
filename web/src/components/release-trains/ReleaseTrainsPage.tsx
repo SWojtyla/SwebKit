@@ -23,6 +23,8 @@ import {
   useCompleteReleaseTrain,
   useDeleteReleaseTrain,
   useAdvanceDemoReleaseTrain,
+  useRetryReleaseTrain,
+  useDriftReleaseTrain,
   useUpdateReleaseTrainRemarks,
   useDevOpsConfig,
   useProfile,
@@ -143,9 +145,11 @@ function ReleaseTrainDetail({ train }: { train: ReleaseTrainRecord }) {
   const complete = useCompleteReleaseTrain();
   const remove = useDeleteReleaseTrain();
   const advanceDemo = useAdvanceDemoReleaseTrain();
+  const retry = useRetryReleaseTrain();
+  const drift = useDriftReleaseTrain();
   const updateRemarks = useUpdateReleaseTrainRemarks();
   const { notify } = useNotification();
-  const [failComponent, setFailComponent] = useState("");
+  const [demoComponent, setDemoComponent] = useState("");
   const [overallRemarks, setOverallRemarks] = useState(train.overallRemarks ?? "");
 
   useEffect(() => {
@@ -163,6 +167,15 @@ function ReleaseTrainDetail({ train }: { train: ReleaseTrainRecord }) {
   };
 
   const componentOptions = train.components.map((c) => c.componentName);
+
+  const canRetry = train.components.some(
+    (c) =>
+      c.status === "Blocked" ||
+      c.status === "Failed" ||
+      c.status === "TstFailed" ||
+      c.status === "StgFailed" ||
+      c.status === "PrdFailed",
+  );
 
   return (
     <div className="space-y-6">
@@ -209,6 +222,14 @@ function ReleaseTrainDetail({ train }: { train: ReleaseTrainRecord }) {
             <Play className="mr-1 inline h-4 w-4" /> Execute
           </button>
           <button
+            onClick={() => retry.mutate(train.id)}
+            disabled={retry.isPending || !canRetry}
+            className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+            data-testid="release-train-retry"
+          >
+            <RefreshCw className={`mr-1 inline h-4 w-4 ${retry.isPending ? "animate-spin" : ""}`} /> Retry
+          </button>
+          <button
             onClick={() => complete.mutate(train.id)}
             disabled={complete.isPending || train.status !== "Monitoring"}
             className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
@@ -227,27 +248,35 @@ function ReleaseTrainDetail({ train }: { train: ReleaseTrainRecord }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 rounded border p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2 rounded border p-3 text-sm">
         <Bug className="h-4 w-4 text-muted-foreground" />
-        <span className="text-muted-foreground">Demo advance:</span>
+        <span className="text-muted-foreground">Demo component:</span>
         <select
-          value={failComponent}
-          onChange={(e) => setFailComponent(e.target.value)}
+          value={demoComponent}
+          onChange={(e) => setDemoComponent(e.target.value)}
           className="rounded border bg-background px-2 py-1 text-sm"
           data-testid="demo-fail-component"
         >
-          <option value="">No failure</option>
+          <option value="">No component selected</option>
           {componentOptions.map((c) => (
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
         <button
-          onClick={() => advanceDemo.mutate({ id: train.id, failComponent: failComponent || undefined })}
+          onClick={() => advanceDemo.mutate({ id: train.id, failComponent: demoComponent || undefined })}
           disabled={advanceDemo.isPending}
           className="rounded border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50"
           data-testid="release-train-advance-demo"
         >
           Advance demo
+        </button>
+        <button
+          onClick={() => drift.mutate({ id: train.id, componentName: demoComponent || undefined })}
+          disabled={drift.isPending || !demoComponent}
+          className="rounded border px-3 py-1 text-sm text-warning hover:bg-accent disabled:opacity-50"
+          data-testid="release-train-drift"
+        >
+          <AlertTriangle className="mr-1 inline h-4 w-4" /> Inject drift
         </button>
       </div>
 

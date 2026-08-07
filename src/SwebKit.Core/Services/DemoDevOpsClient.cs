@@ -74,6 +74,7 @@ public class DemoDevOpsClient : IDevOpsClient
     private readonly List<AdoApproval> _pendingApprovals = [];
     private readonly List<AdoPipelineRun> _triggeredRuns = [];
     private readonly Dictionary<string, List<AdoTag>> _createdTags = new();
+    private readonly HashSet<string> _driftedSourceRefs = [];
     private int _nextRunId = 5000;
 
     // ── Pre-built demo releases ————————————————————————————————————————————
@@ -427,8 +428,18 @@ public class DemoDevOpsClient : IDevOpsClient
     public async Task<AdoBranchRef?> GetBranchRefAsync(string project, string repositoryId, string branch, CancellationToken ct = default)
     {
         await Task.Delay(100, ct).ConfigureAwait(false);
-        var objectId = ComputeDeterministicSha($"{project}:{repositoryId}:{branch}");
-        return new AdoBranchRef(branch, objectId);
+        var normalizedBranch = NormalizeBranchName(branch);
+        var key = $"{project}:{repositoryId}:{normalizedBranch}";
+        var drifted = _driftedSourceRefs.Contains(key);
+        var objectId = ComputeDeterministicSha(drifted ? $"{key}:drifted" : key);
+        return new AdoBranchRef(normalizedBranch, objectId);
+    }
+
+    public Task DriftSourceBranch(string project, string repositoryId, string branch)
+    {
+        var key = $"{project}:{repositoryId}:{NormalizeBranchName(branch)}";
+        _driftedSourceRefs.Add(key);
+        return Task.CompletedTask;
     }
 
     public async Task<AdoTag?> GetTagAsync(string project, string repositoryId, string name, CancellationToken ct = default)
@@ -442,7 +453,9 @@ public class DemoDevOpsClient : IDevOpsClient
         string? status = "active", int? top = null, CancellationToken ct = default)
     {
         await Task.Delay(150, ct).ConfigureAwait(false);
-        var matches = _demoPullRequests.AsEnumerable();
+        var repoName = ResolveRepositoryName(project, repositoryId);
+        var matches = _demoPullRequests.AsEnumerable()
+            .Where(pr => pr.WebUrl?.Contains($"/_git/{repoName}/pullrequest/", StringComparison.OrdinalIgnoreCase) == true);
 
         if (!string.IsNullOrWhiteSpace(sourceBranch))
         {
@@ -487,6 +500,7 @@ public class DemoDevOpsClient : IDevOpsClient
             return existing[0];
         }
 
+        var repoName = ResolveRepositoryName(project, repositoryId);
         var pr = new AdoPullRequest(
             PullRequestId: _nextPullRequestId++,
             Title: title,
@@ -499,7 +513,7 @@ public class DemoDevOpsClient : IDevOpsClient
             TargetCommitId: ComputeDeterministicSha($"{project}:{repositoryId}:{targetRef}"),
             MergeCommitId: null,
             CreatedBy: "You (demo)",
-            WebUrl: $"https://dev.azure.com/demo/{project}/_git/{repositoryId}/pullrequest/{_nextPullRequestId - 1}");
+            WebUrl: $"https://dev.azure.com/demo/{project}/_git/{repoName}/pullrequest/{_nextPullRequestId - 1}");
 
         _demoPullRequests.Add(pr);
         return pr;
@@ -551,16 +565,32 @@ public class DemoDevOpsClient : IDevOpsClient
 
     public Task AdvanceRunAsync(int runId, bool failStage = false)
     {
-        var run = _triggeredRuns.FirstOrDefault(r => r.Id == runId);
-        if (run is null)
+        var runIndex = _triggeredRuns.FindIndex(r => r.Id == runId);
+        if (runIndex < 0)
             return Task.CompletedTask;
 
+        var run = _triggeredRuns[runIndex];
         var stages = run.Stages;
         var currentIndex = stages.FindIndex(s =>
             !string.Equals(s.State, "completed", StringComparison.OrdinalIgnoreCase));
 
         if (currentIndex < 0)
-            return Task.CompletedTask;
+        {
+            // No stage in progress. If the run failed, retry the first failed stage;
+            // otherwise there is nothing to advance.
+            if (!string.Equals(run.Result, "failed", StringComparison.OrdinalIgnoreCase))
+                return Task.CompletedTask;
+
+            currentIndex = stages.FindIndex(s =>
+                string.Equals(s.Result, "failed", StringComparison.OrdinalIgnoreCase));
+            if (currentIndex < 0)
+                return Task.CompletedTask;
+
+            // Reset the failed stage and run so the next advance can progress it.
+            var failedStage = stages[currentIndex];
+            stages[currentIndex] = failedStage with { State = "inProgress", Result = "" };
+            run = run with { State = "inProgress", Result = "" };
+        }
 
         var current = stages[currentIndex];
         var failed = failStage;
@@ -574,12 +604,8 @@ public class DemoDevOpsClient : IDevOpsClient
         if (failed)
         {
             run = run with { State = "completed", Result = "failed" };
-            var runIndex = _triggeredRuns.FindIndex(r => r.Id == runId);
-            if (runIndex >= 0) _triggeredRuns[runIndex] = run;
-            return Task.CompletedTask;
         }
-
-        if (currentIndex + 1 < stages.Count)
+        else if (currentIndex + 1 < stages.Count)
         {
             var next = stages[currentIndex + 1];
             stages[currentIndex + 1] = next with { State = "inProgress", Result = "" };
@@ -587,11 +613,17 @@ public class DemoDevOpsClient : IDevOpsClient
         else
         {
             run = run with { State = "completed", Result = "succeeded" };
-            var runIndex = _triggeredRuns.FindIndex(r => r.Id == runId);
-            if (runIndex >= 0) _triggeredRuns[runIndex] = run;
         }
 
+        _triggeredRuns[runIndex] = run;
         return Task.CompletedTask;
+    }
+
+    private static string ResolveRepositoryName(string project, string repositoryId)
+    {
+        var repo = ReposByProject.GetValueOrDefault(project)?
+            .FirstOrDefault(r => string.Equals(r.Id, repositoryId, StringComparison.OrdinalIgnoreCase));
+        return repo?.Name ?? repositoryId;
     }
 
     private static AdoBuildDetails MapRunToBuildDetails(AdoPipelineRun run, string? repositoryId) => new(

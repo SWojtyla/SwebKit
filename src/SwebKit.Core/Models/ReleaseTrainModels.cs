@@ -1,3 +1,5 @@
+using SwebKit.Core.Domain;
+
 namespace SwebKit.Core.Models;
 
 /// <summary>
@@ -47,6 +49,9 @@ public class ReleaseTrainComponent
 
     /// <summary>Commit/object ID on the target branch after merge (used for correlation).</summary>
     public string? TargetVersion { get; set; }
+
+    /// <summary>Merge strategy captured at train creation for validation after the PR completes.</summary>
+    public MergeStrategy MergeStrategy { get; set; } = MergeStrategy.MergeCommit;
 
     public string? TagName { get; set; }
     public string? TagObjectId { get; set; }

@@ -67,6 +67,19 @@ public static class ReleaseTrainEndpoints
             CancellationToken ct) =>
             Results.Ok(await service.AdvanceDemoAsync(id, failComponent, ct).ConfigureAwait(false)));
 
+        app.MapPost("/api/release-trains/{id:guid}/retry", async (
+            Guid id,
+            IReleaseTrainService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.RetryAsync(id, ct).ConfigureAwait(false)));
+
+        app.MapPost("/api/release-trains/{id:guid}/drift", async (
+            Guid id,
+            string? componentName,
+            IReleaseTrainService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.DriftAsync(id, componentName, ct).ConfigureAwait(false)));
+
         app.MapPost("/api/release-trains/{id:guid}/components/{componentId:guid}/attach-run", async (
             Guid id,
             Guid componentId,

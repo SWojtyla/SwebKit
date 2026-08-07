@@ -81,6 +81,7 @@ public sealed class ReleaseTrainService : IReleaseTrainService
                 PipelineId = groupComp.PipelineId,
                 PipelineName = groupComp.PipelineName,
                 StageAliases = aliases,
+                MergeStrategy = groupComp.MergeStrategy,
                 Remarks = reqComp.Remarks
             };
             train.Components.Add(component);
@@ -142,16 +143,25 @@ public sealed class ReleaseTrainService : IReleaseTrainService
 
             foreach (var component in train.Components)
             {
-                await ExecuteComponentAsync(client, train, component, ct).ConfigureAwait(false);
+                try
+                {
+                    await ExecuteComponentAsync(client, train, component, ct).ConfigureAwait(false);
+
+                    // In demo mode, allow a single Execute click to retry a failed stage.
+                    if (_appState.UseDemoData && IsFailedStage(component.Status))
+                    {
+                        await AdvanceDemoComponentAsync(client, train, component, false, ct).ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Component {Component} failed during execute", component.ComponentName);
+                    component.Status = ReleaseTrainComponentStatus.Blocked;
+                    component.AuditLog.Add(CreateAudit("Failed", component.Id.ToString("N"), ex.Message));
+                }
             }
 
-            train.Status = train.Components.TrueForAll(c => c.Status == ReleaseTrainComponentStatus.PullRequestCreated)
-                ? ReleaseTrainStatus.AwaitingMerge
-                : ReleaseTrainStatus.Failed;
-
-            if (train.Status == ReleaseTrainStatus.AwaitingMerge)
-                train.AuditLog.Add(CreateAudit("Awaiting merge", null, "All pull requests created; awaiting merge in Azure DevOps."));
-
+            UpdateTrainStatus(train);
             await _releases.UpdateReleaseTrainAsync(train).ConfigureAwait(false);
             return train;
         }
@@ -168,11 +178,11 @@ public sealed class ReleaseTrainService : IReleaseTrainService
 
         try
         {
-            train.Status = ReleaseTrainStatus.Monitoring;
+            train.DriftWarnings.Clear();
 
             foreach (var component in train.Components)
             {
-                await RefreshComponentAsync(client, component, ct).ConfigureAwait(false);
+                await RefreshComponentAsync(client, train, component, ct).ConfigureAwait(false);
             }
 
             UpdateTrainStatus(train);
@@ -293,6 +303,89 @@ public sealed class ReleaseTrainService : IReleaseTrainService
         }
     }
 
+    public async Task<ReleaseTrainRecord> RetryAsync(Guid id, CancellationToken ct = default)
+    {
+        var train = await GetLockedAsync(id, ct).ConfigureAwait(false);
+        var client = GetClient();
+
+        try
+        {
+            train.Status = ReleaseTrainStatus.CreatingTags;
+            train.AuditLog.Add(CreateAudit("Retry", null, "Retrying failed or pending actions."));
+
+            foreach (var component in train.Components)
+            {
+                try
+                {
+                    if (component.Status < ReleaseTrainComponentStatus.PullRequestCreated)
+                    {
+                        await ExecuteComponentAsync(client, train, component, ct).ConfigureAwait(false);
+                    }
+
+                    if (_appState.UseDemoData && IsFailedStage(component.Status))
+                    {
+                        await AdvanceDemoComponentAsync(client, train, component, false, ct).ConfigureAwait(false);
+                    }
+                    else if (component.Status >= ReleaseTrainComponentStatus.PullRequestCreated
+                        && component.Status < ReleaseTrainComponentStatus.Completed)
+                    {
+                        await RefreshComponentAsync(client, train, component, ct).ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Component {Component} failed during retry", component.ComponentName);
+                    component.Status = ReleaseTrainComponentStatus.Blocked;
+                    component.AuditLog.Add(CreateAudit("Retry failed", component.Id.ToString("N"), ex.Message));
+                }
+            }
+
+            UpdateTrainStatus(train);
+            await _releases.UpdateReleaseTrainAsync(train).ConfigureAwait(false);
+            return train;
+        }
+        finally
+        {
+            ReleaseLock(id);
+        }
+    }
+
+    public async Task<ReleaseTrainRecord> DriftAsync(Guid id, string? componentName = null, CancellationToken ct = default)
+    {
+        var train = await GetLockedAsync(id, ct).ConfigureAwait(false);
+
+        try
+        {
+            if (!_appState.UseDemoData)
+                throw new InvalidOperationException("Drift injection is only available in demo mode.");
+
+            foreach (var component in train.Components)
+            {
+                if (!string.IsNullOrWhiteSpace(componentName)
+                    && !component.ComponentName.Contains(componentName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                await _demoClient.DriftSourceBranch(component.ProjectName, component.RepositoryId, component.SourceBranch).ConfigureAwait(false);
+            }
+
+            train.DriftWarnings.Clear();
+            foreach (var component in train.Components)
+            {
+                await RefreshComponentAsync(_demoClient, train, component, ct).ConfigureAwait(false);
+            }
+
+            UpdateTrainStatus(train);
+            await _releases.UpdateReleaseTrainAsync(train).ConfigureAwait(false);
+            return train;
+        }
+        finally
+        {
+            ReleaseLock(id);
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private IDevOpsClient GetClient() => _appState.UseDemoData ? _demoClient : _clientFactory.Create(GetConfig());
@@ -367,11 +460,10 @@ public sealed class ReleaseTrainService : IReleaseTrainService
         {
             component.Status = ReleaseTrainComponentStatus.Blocked;
             component.AuditLog.Add(CreateAudit("Failed", component.Id.ToString("N"), ex.Message));
-            throw;
         }
     }
 
-    private async Task RefreshComponentAsync(IDevOpsClient client, ReleaseTrainComponent component, CancellationToken ct)
+    private async Task RefreshComponentAsync(IDevOpsClient client, ReleaseTrainRecord train, ReleaseTrainComponent component, CancellationToken ct)
     {
         if (component.PullRequestId.HasValue
             && component.Status < ReleaseTrainComponentStatus.PullRequestMerged)
@@ -379,18 +471,61 @@ public sealed class ReleaseTrainService : IReleaseTrainService
             try
             {
                 var pr = await client.GetPullRequestAsync(component.ProjectName, component.RepositoryId, component.PullRequestId.Value, ct).ConfigureAwait(false);
-                if (string.Equals(pr.Status, "completed", StringComparison.OrdinalIgnoreCase)
-                    && !string.IsNullOrWhiteSpace(pr.MergeCommitId))
+
+                // Drift detection: source branch moved after the tag / PR was created.
+                if (!string.IsNullOrWhiteSpace(component.SourceVersion)
+                    && !string.Equals(pr.SourceCommitId, component.SourceVersion, StringComparison.OrdinalIgnoreCase))
                 {
-                    component.MergeCommitId = pr.MergeCommitId;
-                    component.TargetVersion = pr.MergeCommitId;
-                    component.Status = ReleaseTrainComponentStatus.PullRequestMerged;
-                    component.AuditLog.Add(CreateAudit("Merged", component.Id.ToString("N"), $"PR #{pr.PullRequestId} merged."));
+                    train.DriftWarnings.Add($"{component.ComponentName}: PR source commit drifted from {component.SourceVersion[..Math.Min(7, component.SourceVersion.Length)]} to {pr.SourceCommitId[..Math.Min(7, pr.SourceCommitId.Length)]}.");
+                }
+
+                if (string.Equals(pr.Status, "completed", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.IsNullOrWhiteSpace(pr.MergeCommitId))
+                    {
+                        component.MergeCommitId = pr.MergeCommitId;
+                        component.TargetVersion = pr.MergeCommitId;
+                    }
+
+                    // Merge strategy validation.
+                    if (component.MergeStrategy == MergeStrategy.FastForward && !string.IsNullOrWhiteSpace(pr.MergeCommitId))
+                    {
+                        train.DriftWarnings.Add($"{component.ComponentName}: expected fast-forward merge, but PR #{pr.PullRequestId} has a merge commit.");
+                    }
+                    else if (component.MergeStrategy != MergeStrategy.FastForward && string.IsNullOrWhiteSpace(pr.MergeCommitId))
+                    {
+                        train.DriftWarnings.Add($"{component.ComponentName}: expected {component.MergeStrategy} merge, but PR #{pr.PullRequestId} completed without a merge commit.");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(component.TargetVersion))
+                    {
+                        component.Status = ReleaseTrainComponentStatus.PullRequestMerged;
+                        component.AuditLog.Add(CreateAudit("Merged", component.Id.ToString("N"), $"PR #{pr.PullRequestId} merged."));
+                    }
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "Failed to refresh PR for component {Component}", component.ComponentName);
+            }
+        }
+
+        // Drift detection: source branch moved after tagging.
+        if (component.Status >= ReleaseTrainComponentStatus.Tagged
+            && !string.IsNullOrWhiteSpace(component.SourceVersion))
+        {
+            try
+            {
+                var currentSourceRef = await client.GetBranchRefAsync(component.ProjectName, component.RepositoryId, component.SourceBranch, ct).ConfigureAwait(false);
+                if (currentSourceRef is not null
+                    && !string.Equals(currentSourceRef.ObjectId, component.SourceVersion, StringComparison.OrdinalIgnoreCase))
+                {
+                    train.DriftWarnings.Add($"{component.ComponentName}: source branch '{component.SourceBranch}' moved from {component.SourceVersion[..Math.Min(7, component.SourceVersion.Length)]} to {currentSourceRef.ObjectId[..Math.Min(7, currentSourceRef.ObjectId.Length)]} after tagging.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to refresh source branch ref for component {Component}", component.ComponentName);
             }
         }
 
@@ -549,6 +684,7 @@ public sealed class ReleaseTrainService : IReleaseTrainService
         }
 
         if (train.Components.Any(c => c.Status == ReleaseTrainComponentStatus.Failed
+            || c.Status == ReleaseTrainComponentStatus.Blocked
             || c.Status == ReleaseTrainComponentStatus.TstFailed
             || c.Status == ReleaseTrainComponentStatus.StgFailed
             || c.Status == ReleaseTrainComponentStatus.PrdFailed))
@@ -557,10 +693,30 @@ public sealed class ReleaseTrainService : IReleaseTrainService
             return;
         }
 
+        if (train.Components.Any(c => c.Status >= ReleaseTrainComponentStatus.PullRequestMerged))
+        {
+            train.Status = ReleaseTrainStatus.Monitoring;
+            return;
+        }
+
+        if (train.Components.All(c => c.Status == ReleaseTrainComponentStatus.PullRequestCreated))
+        {
+            train.Status = ReleaseTrainStatus.AwaitingMerge;
+            return;
+        }
+
         if (train.Components.Any(c => c.Status >= ReleaseTrainComponentStatus.TstPending))
         {
             train.Status = ReleaseTrainStatus.Monitoring;
         }
+    }
+
+    private static bool IsFailedStage(ReleaseTrainComponentStatus status)
+    {
+        return status == ReleaseTrainComponentStatus.TstFailed
+            || status == ReleaseTrainComponentStatus.StgFailed
+            || status == ReleaseTrainComponentStatus.PrdFailed
+            || status == ReleaseTrainComponentStatus.Failed;
     }
 
     private async Task AdvanceDemoComponentAsync(IDevOpsClient client, ReleaseTrainRecord train, ReleaseTrainComponent component, bool failStage, CancellationToken ct)

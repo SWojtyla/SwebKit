@@ -212,6 +212,35 @@ export function useAdvanceDemoReleaseTrain() {
   });
 }
 
+export function useRetryReleaseTrain() {
+  const qc = useQueryClient();
+  const { notify } = useNotification();
+
+  return useMutation({
+    mutationFn: (id: string) => apiSend<ReleaseTrainRecord>(`/api/release-trains/${id}/retry`, "POST"),
+    onSuccess: (data) => {
+      notify("success", "Retry completed", `Status: ${data.status}`);
+      qc.invalidateQueries({ queryKey: ["release-trains"] });
+    },
+    onError: (err) => notify("error", "Failed to retry release train", String(err)),
+  });
+}
+
+export function useDriftReleaseTrain() {
+  const qc = useQueryClient();
+  const { notify } = useNotification();
+
+  return useMutation({
+    mutationFn: ({ id, componentName }: { id: string; componentName?: string }) =>
+      apiSend<ReleaseTrainRecord>(`/api/release-trains/${id}/drift${componentName ? `?componentName=${encodeURIComponent(componentName)}` : ""}`, "POST"),
+    onSuccess: (data) => {
+      notify("info", "Drift injected", data.driftWarnings?.length ? data.driftWarnings.join("; ") : "No drift detected");
+      qc.invalidateQueries({ queryKey: ["release-trains"] });
+    },
+    onError: (err) => notify("error", "Failed to inject drift", String(err)),
+  });
+}
+
 export function useAttachRunReleaseTrain() {
   const qc = useQueryClient();
   const { notify } = useNotification();
