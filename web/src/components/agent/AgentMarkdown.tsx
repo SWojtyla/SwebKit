@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, isValidElement } from "react";
+import { useEffect, useId, useMemo, useState, isValidElement } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components, ExtraProps } from "react-markdown";
 import { useSettingsStore } from "@/lib/stores/settings";
@@ -87,6 +87,7 @@ function CodeElement({
 type PreElementProps = React.ComponentPropsWithoutRef<"pre"> & ExtraProps;
 
 function PreElement({ children, node, ...rest }: PreElementProps) {
+  if (children == null) return null;
   const first = Array.isArray(children) ? children[0] : children;
   if (isValidElement(first) && first.type === MermaidBlock) {
     return <>{children}</>;
@@ -94,15 +95,37 @@ function PreElement({ children, node, ...rest }: PreElementProps) {
   return <pre {...rest}>{children}</pre>;
 }
 
-const components: Components = {
-  code: CodeElement as unknown as Components["code"],
-  pre: PreElement as unknown as Components["pre"],
-};
+export function AgentMarkdown({
+  content,
+  className,
+  renderVisualBlocks = true,
+}: {
+  content: string;
+  className?: string;
+  renderVisualBlocks?: boolean;
+}) {
+  const components = useMemo<Components>(
+    () => ({
+      code: CodeElement as unknown as Components["code"],
+      pre: PreElement as unknown as Components["pre"],
+    }),
+    [],
+  );
+  const displayedContent = useMemo(() => {
+    if (renderVisualBlocks) return content;
+    const withoutSections = content.replace(
+      /^#{1,6}\s+.*\r?\n```(?:mermaid|json|topology|cytoscape|timeline)\r?\n[\s\S]*?```\s*/gm,
+      "",
+    );
+    return withoutSections.replace(
+      /```(?:mermaid|json|topology|cytoscape|timeline)\r?\n[\s\S]*?```\s*/g,
+      "",
+    );
+  }, [content, renderVisualBlocks]);
 
-export function AgentMarkdown({ content, className }: { content: string; className?: string }) {
   return (
     <div className={className}>
-      <ReactMarkdown components={components}>{content}</ReactMarkdown>
+      <ReactMarkdown components={components}>{displayedContent}</ReactMarkdown>
     </div>
   );
 }

@@ -153,14 +153,46 @@ test.describe("Dashboard", () => {
     await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
   });
 
-  test("runs cross-feature demo scenario and renders visualizations", async ({ page }) => {
+  test("runs cross-feature demo scenario in a focused visualization workspace", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("cross-feature-demo-button").click();
     await expect(page).toHaveURL(/\/agent/);
     await expect(page.locator("text=My order-api is failing in AKS")).toBeVisible();
-    await expect(page.getByTestId("visualization-panel")).toBeVisible();
-    await expect(page.getByTestId("visualization-panel").getByTestId("mermaid-diagram")).toBeVisible();
+
+    const workspace = page.getByTestId("visualization-panel");
+    await expect(workspace).toBeVisible();
+    await expect(page.getByTestId("agent-visualization-count")).toHaveText("3");
+    await expect(page.getByTestId("agent-messages").getByTestId("mermaid-diagram")).toHaveCount(0);
+    await expect(workspace.getByTestId("mermaid-diagram")).toBeVisible();
+    await expect(page.getByTestId("topology-graph")).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "Topology of the impacted system" }).click();
     await expect(page.getByTestId("topology-graph")).toBeVisible();
+    await expect(workspace.getByTestId("mermaid-diagram")).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "Incident timeline" }).click();
     await expect(page.getByTestId("timeline-view")).toBeVisible();
+    await expect(page.getByTestId("topology-graph")).toHaveCount(0);
+
+    await page.getByTestId("agent-visualization-close").click();
+    await expect(workspace).toHaveCount(0);
+    await expect(page.getByTestId("agent-toggle-visuals")).toBeFocused();
+    await expect(page.getByTestId("agent-messages").getByTestId("mermaid-diagram")).toBeVisible();
+
+    await page.setViewportSize({ width: 900, height: 700 });
+    await page.getByTestId("agent-toggle-visuals").click();
+    const resizer = page.getByTestId("resizer-0");
+    await expect(resizer).toHaveAttribute("role", "separator");
+    await expect(resizer).toHaveAttribute("aria-label", "Resize conversation and visualization");
+    const visualPanel = page.getByTestId("panel-1");
+    const widthBeforeResize = await visualPanel.evaluate((element) => element.getBoundingClientRect().width);
+    await resizer.focus();
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await expect.poll(() => visualPanel.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(widthBeforeResize);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("panel-widths:agent-visualization-workspace"))).not.toBeNull();
+    await page.keyboard.press("Escape");
+    await expect(workspace).toHaveCount(0);
+    await expect(page.getByTestId("agent-toggle-visuals")).toBeFocused();
   });
 });
