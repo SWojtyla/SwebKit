@@ -1,5 +1,5 @@
 ---
-status: Proposed
+status: Done
 ---
 
 # API Client Collection / Request Drag-and-Drop Reorder

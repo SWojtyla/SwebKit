@@ -3,8 +3,17 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Plus, Folder, FileText, Trash2, ChevronRight, ChevronDown,
   Search, MoreVertical, Pencil, FolderPlus, FilePlus, Download,
+  GripVertical,
 } from "lucide-react";
 import type { ApiCollection, ApiCollectionNode } from "@/lib/types";
+import {
+  DEMO_COLLECTION_ID,
+  resolveDropTarget,
+  type FlatRow,
+  type MoveNodeTarget,
+  type MoveCollectionTarget,
+  type DragData,
+} from "@/lib/collection-tree-utils";
 import { MethodBadge } from "./method-badge";
 import { CollectionImportButton, CollectionImportDialog } from "./CollectionImportDialog";
 
@@ -18,6 +27,8 @@ interface CollectionTreeProps {
   onAddFolder: (collectionId: string, parentId?: string) => void;
   onDeleteNode: (nodeId: string, collectionId: string) => void;
   onRenameNode: (nodeId: string, collectionId: string, newName: string) => void;
+  onMoveNode: (nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => void;
+  onMoveCollection: (collectionId: string, target: MoveCollectionTarget) => void;
   onExportCollection: (collectionId: string) => void;
 }
 
@@ -49,14 +60,6 @@ interface ContextMenuState {
   collectionId: string;
   isCollection: boolean;
   nodeType: "Folder" | "Request";
-}
-
-interface FlatRow {
-  id: string;
-  node: ApiCollectionNode;
-  collectionId: string;
-  depth: number;
-  isCollection: boolean;
 }
 
 function collectionRootNode(collection: ApiCollection): ApiCollectionNode {
@@ -104,6 +107,8 @@ export function CollectionTree({
   onAddFolder,
   onDeleteNode,
   onRenameNode,
+  onMoveNode,
+  onMoveCollection,
   onExportCollection,
 }: CollectionTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() =>
@@ -115,6 +120,8 @@ export function CollectionTree({
   const [renameValue, setRenameValue] = useState("");
   const [renameCollectionId, setRenameCollectionId] = useState<string | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [draggingRow, setDraggingRow] = useState<FlatRow | null>(null);
+  const [dragOver, setDragOver] = useState<{ index: number; placement: "before" | "after" | "inside" } | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -187,6 +194,90 @@ export function CollectionTree({
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({ x: e.clientX, y: e.clientY, nodeId, collectionId, isCollection, nodeType });
+  };
+
+  const canDragRow = (row: FlatRow) => {
+    if (search) return false;
+    if (row.isCollection && row.id === DEMO_COLLECTION_ID) return false;
+    return true;
+  };
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, row: FlatRow) => {
+    if (!canDragRow(row)) {
+      e.preventDefault();
+      return;
+    }
+    setDraggingRow(row);
+    e.dataTransfer.effectAllowed = "move";
+    const data: DragData = { id: row.id, collectionId: row.collectionId, kind: row.isCollection ? "collection" : "node" };
+    e.dataTransfer.setData("application/json+swebkit-tree-drag", JSON.stringify(data));
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, targetRow: FlatRow, targetIndex: number) => {
+    e.preventDefault();
+    if (!draggingRow || draggingRow.id === targetRow.id) {
+      setDragOver(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const resolved = resolveDropTarget(draggingRow, targetRow, e.clientY, rect);
+    if (!resolved) {
+      setDragOver(null);
+      return;
+    }
+    const placement = resolved.kind === "collection" ? resolved.target.placement : resolved.target.placement;
+    setDragOver({ index: targetIndex, placement });
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetRow: FlatRow) => {
+    e.preventDefault();
+    if (!draggingRow || draggingRow.id === targetRow.id) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const resolved = resolveDropTarget(draggingRow, targetRow, e.clientY, rect);
+    if (!resolved) return;
+    if (resolved.kind === "collection") {
+      onMoveCollection(draggingRow.id, resolved.target);
+    } else {
+      onMoveNode(draggingRow.id, draggingRow.collectionId, resolved.target);
+      if (resolved.target.placement === "inside") {
+        setExpandedIds((prev) => {
+          const next = new Set(prev);
+          next.add(targetRow.id);
+          return next;
+        });
+      }
+    }
+    setDraggingRow(null);
+    setDragOver(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingRow(null);
+    setDragOver(null);
+  };
+
+  const buildNodeTargetFromRow = (targetRow: FlatRow, placement: "before" | "after"): MoveNodeTarget => ({
+    targetCollectionId: targetRow.collectionId,
+    targetNodeId: targetRow.isCollection ? undefined : targetRow.id,
+    placement,
+  });
+
+  const handleKeyboardMove = (sourceIndex: number, direction: "up" | "down") => {
+    if (search) return;
+    const sourceRow = flatRows[sourceIndex];
+    if (!sourceRow) return;
+    if (sourceRow.isCollection && sourceRow.id === DEMO_COLLECTION_ID) return;
+    const targetIndex = direction === "up" ? sourceIndex - 1 : sourceIndex + 1;
+    if (targetIndex < 0 || targetIndex >= flatRows.length) return;
+    const targetRow = flatRows[targetIndex];
+    if (sourceRow.isCollection) {
+      if (!targetRow.isCollection) return;
+      const placement = direction === "up" ? "before" : "after";
+      onMoveCollection(sourceRow.id, { targetCollectionId: targetRow.collectionId, placement });
+      return;
+    }
+    const placement = direction === "up" ? "before" : "after";
+    onMoveNode(sourceRow.id, sourceRow.collectionId, buildNodeTargetFromRow(targetRow, placement));
   };
 
   useEffect(() => {
@@ -272,11 +363,19 @@ export function CollectionTree({
         break;
       case "ArrowDown":
         e.preventDefault();
-        focusRowByFlatIndex(rowIndex + 1);
+        if (e.altKey) {
+          handleKeyboardMove(rowIndex, "down");
+        } else {
+          focusRowByFlatIndex(rowIndex + 1);
+        }
         break;
       case "ArrowUp":
         e.preventDefault();
-        focusRowByFlatIndex(rowIndex - 1);
+        if (e.altKey) {
+          handleKeyboardMove(rowIndex, "up");
+        } else {
+          focusRowByFlatIndex(rowIndex - 1);
+        }
         break;
       default:
         break;
@@ -289,6 +388,11 @@ export function CollectionTree({
     const isSelected = selectedNodeId === node.id;
     const isRenaming = renamingId === node.id;
     const method = node.type === "Request" && node.request ? node.request.method : null;
+
+    const isDragOver = dragOver?.index === rowIndex;
+    const dragPlacement = isDragOver ? dragOver.placement : null;
+    const isDragging = draggingRow?.id === row.id;
+    const draggable = canDragRow(row);
 
     return (
       <div
@@ -305,7 +409,17 @@ export function CollectionTree({
         tabIndex={0}
         className={`group flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-sm ${
           isSelected ? "bg-primary text-primary-foreground" : "hover:bg-accent"
-        } ${isCollection ? "font-medium" : ""}`}
+        } ${isCollection ? "font-medium" : ""} ${
+          isDragging ? "tree-dragging" : ""
+        } ${
+          dragPlacement === "before"
+            ? "tree-drag-over-before"
+            : dragPlacement === "after"
+            ? "tree-drag-over-after"
+            : dragPlacement === "inside"
+            ? "tree-drag-over-inside"
+            : ""
+        }`}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
         onClick={() => onSelectNode(node, collectionId)}
         onDoubleClick={(e) => {
@@ -314,7 +428,20 @@ export function CollectionTree({
         }}
         onContextMenu={(e) => handleContextMenu(e, node.id, collectionId, isCollection, node.type)}
         onKeyDown={(e) => handleRowKeyDown(e, row, rowIndex)}
+        onDragOver={(e) => handleDragOver(e, row, rowIndex)}
+        onDrop={(e) => handleDrop(e, row)}
       >
+        <div
+          data-testid={`drag-handle-${row.id}`}
+          aria-label="Drag to reorder"
+          draggable={draggable}
+          className={`shrink-0 p-0.5 ${draggable ? "cursor-grab hover:text-primary" : "cursor-not-allowed opacity-30"}`}
+          onClick={(e) => e.stopPropagation()}
+          onDragStart={(e) => handleDragStart(e, row)}
+          onDragEnd={handleDragEnd}
+        >
+          <GripVertical className="h-3 w-3" />
+        </div>
         {node.type === "Folder" && (
           <button
             data-testid={`folder-toggle-${node.id}`}

@@ -2,13 +2,14 @@ import { test, expect } from "@playwright/test";
 import { mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { setDemoMode } from "./helpers";
+import { setDemoMode, resetCollections } from "./helpers";
 
 const sidecarBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198"}`;
 
 test.describe("API Client", () => {
   test.beforeEach(async ({ page }) => {
     await setDemoMode(page, false);
+    await resetCollections(page);
     await page.goto("/api-client");
   });
 
@@ -753,5 +754,103 @@ test.describe("API Client", () => {
     await page.getByTestId("request-send-button").click();
     await expect(page.getByText("nothing to copy")).toBeVisible();
     await expect(page.getByTestId("response-status")).toContainText("200", { timeout: 10_000 });
+  });
+
+  test("reorders requests via drag and drop", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Reorder Drag Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("Drag First");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("Drag Second");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    const sourceRow = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Drag Second" });
+    const source = sourceRow.locator('[data-testid^="drag-handle-"]');
+    const target = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Drag First" });
+    await source.dragTo(target, { targetPosition: { x: 10, y: 2 } });
+
+    const texts = await page.getByTestId(/collection-node-Request-/).filter({ hasText: /Drag (First|Second)/ }).allTextContents();
+    expect(texts[0]).toContain("Drag Second");
+    expect(texts[1]).toContain("Drag First");
+  });
+
+  test("reorders collections via drag and drop", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Collection Drag A");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Collection Drag B");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    const sourceRow = page.getByTestId(/collection-root-/).filter({ hasText: "Collection Drag B" });
+    const source = sourceRow.locator('[data-testid^="drag-handle-"]');
+    const target = page.getByTestId(/collection-root-/).filter({ hasText: "Collection Drag A" });
+    await source.dragTo(target, { targetPosition: { x: 10, y: 2 } });
+
+    const texts = await page.getByTestId(/collection-root-/).filter({ hasText: /Collection Drag (A|B)/ }).allTextContents();
+    const indexA = texts.findIndex((t) => t.includes("Collection Drag A"));
+    const indexB = texts.findIndex((t) => t.includes("Collection Drag B"));
+    expect(indexB).toBeLessThan(indexA);
+  });
+
+  test("moves a request into a folder via drag and drop", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Folder Drag Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-folder-button").click();
+    await page.getByTestId("name-dialog-input").fill("Folder Drop");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("Inside Request");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    const sourceRow = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Inside Request" });
+    const source = sourceRow.locator('[data-testid^="drag-handle-"]');
+    const target = page.getByTestId(/collection-node-Folder-/).filter({ hasText: "Folder Drop" });
+    await source.dragTo(target);
+
+    const folder = page.getByTestId(/collection-node-Folder-/).filter({ hasText: "Folder Drop" });
+    await expect(folder).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Inside Request" })).toBeVisible();
+  });
+
+  test("reorders rows via keyboard shortcuts", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Keyboard Reorder Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("Keyboard First");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("Keyboard Second");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    await page.getByTestId(/collection-node-Request-/).filter({ hasText: "Keyboard Second" }).click();
+    await page.keyboard.press("Alt+ArrowUp");
+
+    const texts = await page.getByTestId(/collection-node-Request-/).filter({ hasText: /Keyboard (First|Second)/ }).allTextContents();
+    expect(texts[0]).toContain("Keyboard Second");
+    expect(texts[1]).toContain("Keyboard First");
+  });
+
+  test("demo collection cannot be dragged", async ({ page }) => {
+    await setDemoMode(page, true);
+    await page.goto("/api-client");
+
+    const demoHandle = page.getByTestId("drag-handle-__demo__samples");
+    await expect(demoHandle).toHaveAttribute("draggable", "false");
   });
 });

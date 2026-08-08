@@ -139,6 +139,8 @@ function ApiClientPageContent() {
             onAddFolder={ctx.handleAddFolder}
             onDeleteNode={ctx.handleDeleteNode}
             onRenameNode={ctx.handleRenameNode}
+            onMoveNode={ctx.handleMoveNode}
+            onMoveCollection={ctx.handleMoveCollection}
             onExportCollection={ctx.setExportCollectionId}
           />
 
