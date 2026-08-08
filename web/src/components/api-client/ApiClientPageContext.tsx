@@ -590,9 +590,10 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     const saved = await handleSave();
     if (!saved) return;
     setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], sending: true, response: null } }));
+    let request: HttpRequestEntry | undefined;
     try {
       // Resolve the secret from the persisted store if the editor has not already loaded it.
-      const request = deepClone(tabState.draft);
+      request = deepClone(tabState.draft);
       if (request.auth?.credentialKey && !request.auth.credentialSecret) {
         const secret = await getSecret(request.auth.credentialKey);
         if (secret) {
@@ -612,16 +613,22 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         environmentId: activeEnvironmentId ?? undefined,
       });
 
-      await runRequestActions(
-        request.postRequestActions ?? [],
-        { request, response: result },
-        (type, title, message) => notify(type, title, message),
-      );
-
+      // Commit the response immediately so the UI is not blocked by post-request actions (e.g. Delay).
       setTabStates((prev) => ({
         ...prev,
         [activeTabId]: { ...prev[activeTabId], response: result, sending: false, history: appendHistory(prev[activeTabId], result) },
       }));
+
+      try {
+        await runRequestActions(
+          request.postRequestActions ?? [],
+          { request, response: result },
+          (type, title, message) => notify(type, title, message),
+        );
+      } catch (postErr) {
+        const message = postErr instanceof Error ? postErr.message : "Unknown error";
+        notify("error", "Post-request action failed", message);
+      }
     } catch (err) {
       const failure: ApiClientExecutionResponse = {
         resolvedUrl: tabState.draft.url,
@@ -640,8 +647,8 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
       };
 
       await runRequestActions(
-        tabState.draft.postRequestActions ?? [],
-        { request: tabState.draft, response: failure },
+        request?.postRequestActions ?? tabState.draft.postRequestActions ?? [],
+        { request: request ?? tabState.draft, response: failure },
         (type, title, message) => notify(type, title, message),
       );
 

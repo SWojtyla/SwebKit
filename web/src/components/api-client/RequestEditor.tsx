@@ -970,6 +970,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
       )}
       {jsonPathPicker?.open && (
         <JsonPathPicker
+          initialBody={request.responseExamples[0]?.body ?? undefined}
           initialPath={jsonPathPicker.path}
           onSelect={(path) => updateCaptureRule(jsonPathPicker.index, { jsonPath: path })}
           onClose={() => setJsonPathPicker(null)}

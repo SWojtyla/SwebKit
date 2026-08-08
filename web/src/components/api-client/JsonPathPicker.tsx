@@ -151,6 +151,14 @@ export function JsonPathPicker({ initialBody, initialPath, onSelect, onClose }: 
   );
 }
 
+function jsonPathMember(path: string, key: string): string {
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+    return `${path}.${key}`;
+  }
+  const escaped = key.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `${path}["${escaped}"]`;
+}
+
 interface JsonNodeTreeProps {
   value: unknown;
   path: string;
@@ -192,18 +200,21 @@ function JsonNodeTree({ value, path, onSelect }: JsonNodeTreeProps) {
   const obj = value as Record<string, unknown>;
   return (
     <div className="pl-2">
-      {Object.entries(obj).map(([key, val]) => (
-        <div key={key} className="border-l pl-2">
-          <button
-            onClick={() => onSelect(`${path}.${key}`)}
-            className="block w-full text-left text-xs font-mono hover:bg-accent truncate px-1"
-            data-testid={`jsonpath-node-${key}`}
-          >
-            {key}
-          </button>
-          <JsonNodeTree value={val} path={`${path}.${key}`} onSelect={onSelect} />
-        </div>
-      ))}
+      {Object.entries(obj).map(([key, val]) => {
+        const childPath = jsonPathMember(path, key);
+        return (
+          <div key={key} className="border-l pl-2">
+            <button
+              onClick={() => onSelect(childPath)}
+              className="block w-full text-left text-xs font-mono hover:bg-accent truncate px-1"
+              data-testid={`jsonpath-node-${key.replace(/\W/g, "-")}`}
+            >
+              {key}
+            </button>
+            <JsonNodeTree value={val} path={childPath} onSelect={onSelect} />
+          </div>
+        );
+      })}
     </div>
   );
 }
