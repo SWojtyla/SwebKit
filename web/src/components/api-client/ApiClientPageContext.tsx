@@ -24,6 +24,12 @@ import { getSecret } from "@/lib/tauri-bridge";
 import { buildResponseExample } from "@/lib/response-example";
 import { runRequestActions } from "@/lib/request-action-runner";
 import { useNotification } from "@/components/layout/NotificationSystem";
+import {
+  moveNode,
+  moveCollection,
+  type MoveNodeTarget,
+  type MoveCollectionTarget,
+} from "@/lib/collection-tree-utils";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -279,6 +285,8 @@ export interface ApiClientPageContextValue {
   handleAddFolder: (collectionId: string, parentId?: string) => void;
   handleDeleteNode: (nodeId: string, collectionId: string) => void;
   handleRenameNode: (nodeId: string, collectionId: string, newName: string) => void;
+  handleMoveNode: (nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => void;
+  handleMoveCollection: (collectionId: string, target: MoveCollectionTarget) => void;
 
   handleSave: () => Promise<boolean>;
   handleSend: () => Promise<void>;
@@ -545,6 +553,30 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     updateCollections.mutate(next);
     // Update tab name if open
     setTabs((prev) => prev.map((t) => t.nodeId === _nodeId ? { ...t, name: newName } : t));
+  };
+
+  const handleMoveNode = (nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => {
+    const next = moveNode(collections, nodeId, target);
+    if (next === collections) return;
+    if (target.targetCollectionId !== sourceCollectionId) {
+      setTabs((prev) => prev.map((t) => (t.nodeId === nodeId ? { ...t, collectionId: target.targetCollectionId } : t)));
+      if (selectedNodeId === nodeId) {
+        setSelectedCollectionId(target.targetCollectionId);
+      }
+    }
+    updateCollections.mutate(next, {
+      onSuccess: () => notify("success", "Moved", "Request moved."),
+      onError: (err) => notify("error", "Move failed", err.message),
+    });
+  };
+
+  const handleMoveCollection = (collectionId: string, target: MoveCollectionTarget) => {
+    const next = moveCollection(collections, collectionId, target);
+    if (next === collections) return;
+    updateCollections.mutate(next, {
+      onSuccess: () => notify("success", "Moved", "Collection moved."),
+      onError: (err) => notify("error", "Move failed", err.message),
+    });
   };
 
   const saveActiveTab = async (baseCollections?: ApiCollection[]): Promise<boolean> => {
@@ -847,6 +879,8 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     handleAddFolder,
     handleDeleteNode,
     handleRenameNode,
+    handleMoveNode,
+    handleMoveCollection,
 
     handleSave,
     handleSend,
