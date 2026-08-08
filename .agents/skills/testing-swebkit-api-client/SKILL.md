@@ -82,3 +82,13 @@ None.
 - `CopyToClipboard` post-request actions trigger the browser's clipboard permission prompt on first use. Allow it, then verify with `navigator.clipboard.readText()`.
 
 - Azure Key Vault settings inputs update on every keystroke through a TanStack mutation. Setting values too fast may race with the query invalidation; wait briefly and verify with `outerHTML`/`value`.
+
+## Drag-and-drop reorder testing
+
+- Data-testids: `drag-handle-{id}` on the grip icon, `collection-root-{id}` for collections, `collection-node-Request-{id}` / `collection-node-Folder-{id}` for nodes, `collection-search` / `input[placeholder="Filter..."]` for search, `demo-mode-toggle` for the demo toggle.
+- Keyboard reorder: a tree row must be **focused** (not just clicked) before `Alt+ArrowUp` / `Alt+ArrowDown` will trigger `handleRowKeyDown`. If native clicks don't focus, call `element.focus()` from the browser console first.
+- Native `computer` mouse drag-and-drop cannot reliably drive the browser's HTML5 drag-and-drop events in this harness. For end-to-end verification of the drag gesture, use Playwright `locator.dragTo()` (which works in headless Chromium). To verify persistence without reloading, add a temporary Playwright spec that queries the sidecar store with `request.get('http://127.0.0.1:${sidecarPort}/api/config/collections/store')` and inspects `collections`.
+- Demo guard: in demo mode, the demo collection (`__demo__samples`) is pinned at the top; its drag handle has `draggable="false"` and `cursor-not-allowed opacity-30`, and `Alt+Arrow` on the demo row is a no-op.
+- Search disables drag: when the collection tree is filtered, every `drag-handle-*` switches to `draggable="false"` with `opacity-30`.
+- Layout check: `document.querySelector('[role="tree"]')` should have `scrollWidth === clientWidth` (no horizontal scrollbar) and no text overflow after reordering.
+- All reorder paths (request, collection, folder drop) are persisted through the same `PUT /api/config/collections` mutation, so a keyboard reorder followed by reload is a valid proxy for the persistence behavior of the drag paths.
