@@ -12,4 +12,4 @@ status: Review
   - `dotnet build` passed.
   - `dotnet test` passed (249 tests).
   - `npx playwright test e2e/api-client` passed (25 tests, Chromium).
-  - Devin Review findings addressed and re-validated.
+  - Devin Review findings addressed and re-validated (post-request action ordering, JSONPath key quoting, picker sample body).
