@@ -78,6 +78,36 @@ public sealed class HttpRequestEntry
     public List<ResponseExample> ResponseExamples { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+    public List<RequestAction> PreRequestActions { get; set; } = [];
+    public List<RequestAction> PostRequestActions { get; set; } = [];
+}
+
+public sealed class RequestAction
+{
+    public string Id { get; set; } = string.Empty;
+    public RequestActionKind Kind { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public bool IsEnabled { get; set; } = true;
+    public RequestActionSource Source { get; set; } = RequestActionSource.RequestUrl;
+    public string? Selector { get; set; }
+    public int DelayMs { get; set; }
+}
+
+public enum RequestActionKind
+{
+    CopyToClipboard,
+    Delay,
+}
+
+public enum RequestActionSource
+{
+    RequestUrl,
+    RequestMethod,
+    RequestBody,
+    ResponseStatusCode,
+    ResponseStatusText,
+    ResponseBody,
+    ResponseHeader,
 }
 
 public sealed class ResponseExample

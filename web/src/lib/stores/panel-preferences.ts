@@ -53,8 +53,8 @@ export function savePanelWidths(key: string, widths: (number | null)[]): void {
   }
 }
 
-/** Generic boolean/string view preference, used for the response wrap toggle. */
-export function loadViewPreference<T extends string | boolean>(key: string, fallback: T): T {
+/** Generic JSON view preference (string, boolean, or plain object). */
+export function loadViewPreference<T extends string | boolean | object>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(`view-pref:${key}`);
     if (raw === null) return fallback;
@@ -64,7 +64,7 @@ export function loadViewPreference<T extends string | boolean>(key: string, fall
   }
 }
 
-export function saveViewPreference(key: string, value: string | boolean): void {
+export function saveViewPreference(key: string, value: string | boolean | object): void {
   try {
     localStorage.setItem(`view-pref:${key}`, JSON.stringify(value));
   } catch {

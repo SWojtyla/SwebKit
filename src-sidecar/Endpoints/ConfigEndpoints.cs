@@ -25,6 +25,7 @@ public static class ConfigEndpoints
         app.MapGet("/api/config/collections", GetCollections);
         app.MapGet("/api/config/collections/store", GetCollectionsStore);
         app.MapPut("/api/config/collections", SaveCollectionsAsync);
+        app.MapPost("/api/config/collections/import", ImportCollectionAsync);
 
         app.MapGet("/api/config/user-settings", GetUserSettings);
         app.MapPut("/api/config/user-settings", SaveUserSettingsAsync);
@@ -109,6 +110,83 @@ public static class ConfigEndpoints
     }
 
     internal static IResult GetUserSettings(UserSettingsRepository repo) => Results.Ok(repo.Settings);
+
+    internal static async Task<IResult> ImportCollectionAsync(
+        ImportCollectionRequest req,
+        CollectionImportService importer,
+        DemoModeService demo,
+        CancellationToken cancellationToken)
+    {
+        if (demo.IsDemoMode)
+        {
+            return Results.BadRequest(new { error = "Import is disabled in demo mode." });
+        }
+
+        if (!string.IsNullOrWhiteSpace(req.FolderPath))
+        {
+            var validation = ValidateBrunoFolderPath(req.FolderPath);
+            if (validation is not null)
+            {
+                return validation;
+            }
+
+            var result = await importer.ImportBrunoFolderAsync(Path.GetFullPath(req.FolderPath!), cancellationToken).ConfigureAwait(false);
+            return Results.Ok(result);
+        }
+
+        if (!string.IsNullOrWhiteSpace(req.PayloadBase64))
+        {
+            try
+            {
+                var payload = Convert.FromBase64String(req.PayloadBase64);
+                var result = await importer.ImportCollectionAsync(payload, cancellationToken).ConfigureAwait(false);
+                return Results.Ok(result);
+            }
+            catch (FormatException)
+            {
+                return Results.BadRequest(new { error = "Payload was not valid base64." });
+            }
+        }
+
+        return Results.BadRequest(new { error = "Provide a folder path or a base64-encoded file payload." });
+    }
+
+    private static IResult? ValidateBrunoFolderPath(string? folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath))
+        {
+            return Results.BadRequest(new { error = "Folder path is required." });
+        }
+
+        try
+        {
+            var fullPath = Path.GetFullPath(folderPath);
+            if (!Directory.Exists(fullPath))
+            {
+                return Results.BadRequest(new { error = $"Folder not found: {folderPath}" });
+            }
+
+            var hasBrunoManifest = File.Exists(Path.Combine(fullPath, "bruno.json")) ||
+                Directory.GetDirectories(fullPath).Any(d => File.Exists(Path.Combine(d, "bruno.json")));
+
+            if (!hasBrunoManifest)
+            {
+                return Results.BadRequest(new { error = "The selected folder does not appear to be a Bruno collection (no bruno.json found)." });
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return Results.BadRequest(new { error = $"Invalid folder path: {ex.Message}" });
+        }
+    }
+
+    public sealed class ImportCollectionRequest
+    {
+        public string? FolderPath { get; set; }
+        public string? PayloadBase64 { get; set; }
+    }
 
     internal static async Task<IResult> SaveUserSettingsAsync(UserSettingsRepository repo, UserSettings settings)
     {

@@ -46,6 +46,27 @@ export async function pickFile(title?: string): Promise<string | null> {
   });
 }
 
+export async function pickFileWithContent(title?: string): Promise<{ path: string; content: string } | null> {
+  if (isTauri()) {
+    const path = await invoke<string | null>("pick_file", { title: title ?? null });
+    if (!path) return null;
+    const content = await readFile(path);
+    return { path, content };
+  }
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) { resolve(null); return; }
+      const reader = new FileReader();
+      reader.onload = () => resolve({ path: file.name, content: String(reader.result) });
+      reader.readAsText(file);
+    };
+    input.click();
+  });
+}
+
 export async function pickDirectory(title?: string): Promise<string | null> {
   if (isTauri()) {
     return invoke<string | null>("pick_directory", { title: title ?? null });
@@ -125,6 +146,10 @@ function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
+}
+
+export function stringToBase64(text: string): string {
+  return bytesToBase64(new TextEncoder().encode(text));
 }
 
 function base64ToBytes(base64: string): Uint8Array {

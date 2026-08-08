@@ -134,3 +134,13 @@ export async function selectAksDefaultNamespace(page: Page) {
   await expect(select.locator("option", { hasText: "default" })).toBeAttached({ timeout: 15000 });
   await select.selectOption({ label: "default" });
 }
+
+/**
+ * Resets the API client collections store to an empty state through the sidecar.
+ * Use in test setup to keep drag-and-drop and ordering specs isolated from earlier tests.
+ */
+export async function resetCollections(page: Page) {
+  await page.request.put(`${sidecarUrl}/api/config/collections`, {
+    data: { schemaVersion: 1, collections: [] },
+  });
+}

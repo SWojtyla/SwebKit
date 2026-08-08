@@ -22,6 +22,14 @@ import type { RequestTab } from "./RequestTabStrip";
 import { buildVariableScope } from "@/lib/variable-utils";
 import { getSecret } from "@/lib/tauri-bridge";
 import { buildResponseExample } from "@/lib/response-example";
+import { runRequestActions } from "@/lib/request-action-runner";
+import { useNotification } from "@/components/layout/NotificationSystem";
+import {
+  moveNode,
+  moveCollection,
+  type MoveNodeTarget,
+  type MoveCollectionTarget,
+} from "@/lib/collection-tree-utils";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -76,6 +84,8 @@ function emptyRequest(): HttpRequestEntry {
     responseExamples: [],
     createdAt: now(),
     updatedAt: now(),
+    preRequestActions: [],
+    postRequestActions: [],
   };
 }
 
@@ -275,6 +285,8 @@ export interface ApiClientPageContextValue {
   handleAddFolder: (collectionId: string, parentId?: string) => void;
   handleDeleteNode: (nodeId: string, collectionId: string) => void;
   handleRenameNode: (nodeId: string, collectionId: string, newName: string) => void;
+  handleMoveNode: (nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => void;
+  handleMoveCollection: (collectionId: string, target: MoveCollectionTarget) => void;
 
   handleSave: () => Promise<boolean>;
   handleSend: () => Promise<void>;
@@ -317,6 +329,7 @@ export function useApiClientPageContext(): ApiClientPageContextValue {
 }
 
 export function ApiClientPageProvider({ children }: { children: ReactNode }): JSX.Element {
+  const { notify } = useNotification();
   const { data: collections = [], isLoading } = useCollections();
   const updateCollections = useUpdateCollections();
   const executeRequest = useExecuteRequest();
@@ -542,6 +555,30 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     setTabs((prev) => prev.map((t) => t.nodeId === _nodeId ? { ...t, name: newName } : t));
   };
 
+  const handleMoveNode = (nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => {
+    const next = moveNode(collections, nodeId, target);
+    if (next === collections) return;
+    if (target.targetCollectionId !== sourceCollectionId) {
+      setTabs((prev) => prev.map((t) => (t.nodeId === nodeId ? { ...t, collectionId: target.targetCollectionId } : t)));
+      if (selectedNodeId === nodeId) {
+        setSelectedCollectionId(target.targetCollectionId);
+      }
+    }
+    updateCollections.mutate(next, {
+      onSuccess: () => notify("success", "Moved", "Request moved."),
+      onError: (err) => notify("error", "Move failed", err.message),
+    });
+  };
+
+  const handleMoveCollection = (collectionId: string, target: MoveCollectionTarget) => {
+    const next = moveCollection(collections, collectionId, target);
+    if (next === collections) return;
+    updateCollections.mutate(next, {
+      onSuccess: () => notify("success", "Moved", "Collection moved."),
+      onError: (err) => notify("error", "Move failed", err.message),
+    });
+  };
+
   const saveActiveTab = async (baseCollections?: ApiCollection[]): Promise<boolean> => {
     if (!activeTabId) return false;
     const tabState = tabStates[activeTabId];
@@ -585,24 +622,45 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     const saved = await handleSave();
     if (!saved) return;
     setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], sending: true, response: null } }));
+    let request: HttpRequestEntry | undefined;
     try {
       // Resolve the secret from the persisted store if the editor has not already loaded it.
-      const request = deepClone(tabState.draft);
+      request = deepClone(tabState.draft);
       if (request.auth?.credentialKey && !request.auth.credentialSecret) {
         const secret = await getSecret(request.auth.credentialKey);
         if (secret) {
           request.auth = { ...request.auth, credentialSecret: secret };
         }
       }
+
+      await runRequestActions(
+        request.preRequestActions ?? [],
+        { request },
+        (type, title, message) => notify(type, title, message),
+      );
+
       const result = await executeRequest.mutateAsync({
         request,
         collectionId: tab.collectionId ?? undefined,
         environmentId: activeEnvironmentId ?? undefined,
       });
+
+      // Commit the response immediately so the UI is not blocked by post-request actions (e.g. Delay).
       setTabStates((prev) => ({
         ...prev,
         [activeTabId]: { ...prev[activeTabId], response: result, sending: false, history: appendHistory(prev[activeTabId], result) },
       }));
+
+      try {
+        await runRequestActions(
+          request.postRequestActions ?? [],
+          { request, response: result },
+          (type, title, message) => notify(type, title, message),
+        );
+      } catch (postErr) {
+        const message = postErr instanceof Error ? postErr.message : "Unknown error";
+        notify("error", "Post-request action failed", message);
+      }
     } catch (err) {
       const failure: ApiClientExecutionResponse = {
         resolvedUrl: tabState.draft.url,
@@ -619,6 +677,13 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         captureWarnings: [],
         graphQlErrors: null,
       };
+
+      await runRequestActions(
+        request?.postRequestActions ?? tabState.draft.postRequestActions ?? [],
+        { request: request ?? tabState.draft, response: failure },
+        (type, title, message) => notify(type, title, message),
+      );
+
       setTabStates((prev) => ({
         ...prev,
         [activeTabId]: {
@@ -814,6 +879,8 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     handleAddFolder,
     handleDeleteNode,
     handleRenameNode,
+    handleMoveNode,
+    handleMoveCollection,
 
     handleSave,
     handleSend,

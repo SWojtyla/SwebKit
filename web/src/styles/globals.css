@@ -674,3 +674,20 @@ body {
   --cm-gutter: #6f8f8d;
   --cm-active-line: rgba(184, 137, 46, 8%);
 }
+
+/* Drag-and-drop drop target indicators for the collection tree. */
+.tree-dragging {
+  opacity: 0.4;
+}
+
+.tree-drag-over-before {
+  border-top: 2px solid var(--primary);
+}
+
+.tree-drag-over-after {
+  border-bottom: 2px solid var(--primary);
+}
+
+.tree-drag-over-inside {
+  background-color: var(--primary-glow);
+}
