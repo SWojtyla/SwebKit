@@ -114,11 +114,23 @@ public static class ConfigEndpoints
     internal static async Task<IResult> ImportCollectionAsync(
         ImportCollectionRequest req,
         CollectionImportService importer,
+        DemoModeService demo,
         CancellationToken cancellationToken)
     {
+        if (demo.IsDemoMode)
+        {
+            return Results.BadRequest(new { error = "Import is disabled in demo mode." });
+        }
+
         if (!string.IsNullOrWhiteSpace(req.FolderPath))
         {
-            var result = await importer.ImportBrunoFolderAsync(req.FolderPath!, cancellationToken).ConfigureAwait(false);
+            var validation = ValidateBrunoFolderPath(req.FolderPath);
+            if (validation is not null)
+            {
+                return validation;
+            }
+
+            var result = await importer.ImportBrunoFolderAsync(Path.GetFullPath(req.FolderPath!), cancellationToken).ConfigureAwait(false);
             return Results.Ok(result);
         }
 
@@ -137,6 +149,37 @@ public static class ConfigEndpoints
         }
 
         return Results.BadRequest(new { error = "Provide a folder path or a base64-encoded file payload." });
+    }
+
+    private static IResult? ValidateBrunoFolderPath(string? folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath))
+        {
+            return Results.BadRequest(new { error = "Folder path is required." });
+        }
+
+        try
+        {
+            var fullPath = Path.GetFullPath(folderPath);
+            if (!Directory.Exists(fullPath))
+            {
+                return Results.BadRequest(new { error = $"Folder not found: {folderPath}" });
+            }
+
+            var hasBrunoManifest = File.Exists(Path.Combine(fullPath, "bruno.json")) ||
+                Directory.GetDirectories(fullPath).Any(d => File.Exists(Path.Combine(d, "bruno.json")));
+
+            if (!hasBrunoManifest)
+            {
+                return Results.BadRequest(new { error = "The selected folder does not appear to be a Bruno collection (no bruno.json found)." });
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return Results.BadRequest(new { error = $"Invalid folder path: {ex.Message}" });
+        }
     }
 
     public sealed class ImportCollectionRequest

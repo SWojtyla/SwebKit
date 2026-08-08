@@ -1,18 +1,15 @@
 ---
-status: Done
+status: Review
 ---
 
 # API Client UX Improvements — Status
 
-- **Current phase:** Done.
+- **Current phase:** Review.
 - **Approved by:** Sebastien.
-- **Implementation PR:** (to be linked)
+- **Implementation PR:** https://github.com/SWojtyla/SwebKit/pull/82
 - **Validation:**
   - `npm run build` passed.
   - `dotnet build` passed.
   - `dotnet test` passed (249 tests).
-  - `npx playwright test e2e/api-client` passed (50 tests, Chromium).
-
-## Notes
-
-This feature groups several small UI/UX improvements in the React API client. Implementation must not start until the plan in `technical-plan.md` is explicitly approved.
+  - `npx playwright test e2e/api-client` passed (25 tests, Chromium).
+  - Devin Review findings addressed and re-validated.

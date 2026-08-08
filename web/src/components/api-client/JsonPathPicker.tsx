@@ -42,10 +42,11 @@ export function JsonPathPicker({ initialBody, initialPath, onSelect, onClose }: 
     }
   }, [body]);
 
-  const handleEvaluate = async () => {
-    if (!path.trim()) return;
+  const handleEvaluate = async (expression?: string) => {
+    const target = expression ?? path;
+    if (!target.trim()) return;
     try {
-      const result = await evaluateJsonPath(body, path);
+      const result = await evaluateJsonPath(body, target);
       setPreview(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Evaluation failed";
@@ -104,7 +105,7 @@ export function JsonPathPicker({ initialBody, initialPath, onSelect, onClose }: 
                 data-testid="jsonpath-picker-input"
               />
               <button
-                onClick={handleEvaluate}
+                onClick={() => handleEvaluate()}
                 className="rounded border px-2 py-1 text-xs hover:bg-accent"
                 data-testid="jsonpath-picker-evaluate"
               >
@@ -114,7 +115,7 @@ export function JsonPathPicker({ initialBody, initialPath, onSelect, onClose }: 
 
             {parsed !== null && (
               <div className="mt-3 flex-1 overflow-auto rounded border p-2">
-                <JsonNodeTree value={parsed} path="$" onSelect={(p) => { setPath(p); handleEvaluate(); }} />
+                <JsonNodeTree value={parsed} path="$" onSelect={(p) => { setPath(p); handleEvaluate(p); }} />
               </div>
             )}
 

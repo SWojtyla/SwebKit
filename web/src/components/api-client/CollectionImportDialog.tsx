@@ -28,6 +28,15 @@ export function CollectionImportDialog({ onClose }: CollectionImportDialogProps)
     setResult(null);
     importMutation.mutate(payload, {
       onSuccess: (data) => {
+        if (data.collections.length === 0 && data.environments.length === 0) {
+          const message = data.warnings.length > 0
+            ? data.warnings.join(" ")
+            : "The file did not contain any collections or environments to import.";
+          setError(message);
+          setResult(null);
+          notify("error", "Import failed", message);
+          return;
+        }
         setResult(data);
         notify(
           "success",

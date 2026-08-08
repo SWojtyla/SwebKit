@@ -41,8 +41,9 @@ export function EnvironmentManager({
   useEffect(() => {
     const el = dialogRef.current;
     if (!el) return;
-    const obs = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
+    const obs = new ResizeObserver(() => {
+      const width = el.offsetWidth;
+      const height = el.offsetHeight;
       if (width >= MIN_SIZE.width && height >= MIN_SIZE.height) {
         saveViewPreference("env-manager-size", { width: Math.round(width), height: Math.round(height) });
       }
@@ -77,8 +78,8 @@ export function EnvironmentManager({
       document.body.style.cursor = "";
       if (dialogRef.current) {
         saveViewPreference("env-manager-size", {
-          width: dialogRef.current.clientWidth,
-          height: dialogRef.current.clientHeight,
+          width: dialogRef.current.offsetWidth,
+          height: dialogRef.current.offsetHeight,
         });
       }
     };
