@@ -30,7 +30,7 @@
 
     <!-- Infrastructure -->
     <PackageVersion Include="KubernetesClient" Version="19.0.2" />
-    <PackageVersion Include="StackExchange.Redis" Version="3.1.0" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.1.13" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <PackageVersion Include="Bogus" Version="35.6.5" />
     <PackageVersion Include="JsonPath.Net" Version="3.0.2" />
