@@ -40,7 +40,8 @@ internal sealed record AdoRunResourcesDto(
     [property: JsonPropertyName("repositories")] Dictionary<string, AdoRunRepoDto>? Repositories);
 
 internal sealed record AdoRunRepoDto(
-    [property: JsonPropertyName("refName")] string? RefName);
+    [property: JsonPropertyName("refName")] string? RefName,
+    [property: JsonPropertyName("version")] string? Version);
 
 internal sealed record AdoLinksDto(
     [property: JsonPropertyName("web")] AdoLinkRefDto? Web);
@@ -152,6 +153,53 @@ internal sealed record AdoApprovalPatchDto(
     [property: JsonPropertyName("approvalId")] string ApprovalId,
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("comment")] string? Comment);
+
+// ── Pull requests ──
+
+internal sealed record AdoPullRequestDto(
+    [property: JsonPropertyName("pullRequestId")] int PullRequestId,
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("description")] string? Description,
+    [property: JsonPropertyName("status")] string? Status,
+    [property: JsonPropertyName("mergeStatus")] string? MergeStatus,
+    [property: JsonPropertyName("sourceRefName")] string? SourceRefName,
+    [property: JsonPropertyName("targetRefName")] string? TargetRefName,
+    [property: JsonPropertyName("createdBy")] AdoIdentityRefDto? CreatedBy,
+    [property: JsonPropertyName("webUrl")] string? WebUrl,
+    [property: JsonPropertyName("lastMergeSourceCommit")] AdoPullRequestCommitRefDto? LastMergeSourceCommit,
+    [property: JsonPropertyName("lastMergeTargetCommit")] AdoPullRequestCommitRefDto? LastMergeTargetCommit,
+    [property: JsonPropertyName("mergeCommit")] AdoPullRequestCommitRefDto? MergeCommit);
+
+internal sealed record AdoPullRequestCommitRefDto(
+    [property: JsonPropertyName("commitId")] string? CommitId);
+
+internal sealed record AdoIdentityRefDto(
+    [property: JsonPropertyName("displayName")] string? DisplayName,
+    [property: JsonPropertyName("uniqueName")] string? UniqueName);
+
+internal sealed record AdoPullRequestCreateDto(
+    [property: JsonPropertyName("sourceRefName")] string SourceRefName,
+    [property: JsonPropertyName("targetRefName")] string TargetRefName,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("description")] string? Description);
+
+// ── Builds (run correlation) ──
+
+internal sealed record AdoBuildDto(
+    [property: JsonPropertyName("id")] int Id,
+    [property: JsonPropertyName("buildNumber")] string? BuildNumber,
+    [property: JsonPropertyName("status")] string? Status,
+    [property: JsonPropertyName("result")] string? Result,
+    [property: JsonPropertyName("sourceBranch")] string? SourceBranch,
+    [property: JsonPropertyName("sourceVersion")] string? SourceVersion,
+    [property: JsonPropertyName("repository")] AdoBuildRepositoryDto? Repository,
+    [property: JsonPropertyName("url")] string? Url,
+    [property: JsonPropertyName("_links")] AdoLinksDto? Links);
+
+internal sealed record AdoBuildRepositoryDto(
+    [property: JsonPropertyName("id")] string? Id,
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("type")] string? Type);
 
 // ── Projects (for connection test) ──
 

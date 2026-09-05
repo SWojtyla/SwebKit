@@ -69,6 +69,26 @@ public static class ConfigEndpoints
             {
                 result.Config.StorageAccounts = [demoStorage];
             }
+
+            result.Config.DevOpsConfig ??= new DevOpsConfig();
+            if (result.Config.DevOpsConfig.ReleaseGroups.Count == 0)
+            {
+                result.Config.DevOpsConfig.ReleaseGroups =
+                [
+                    new ReleaseGroup
+                    {
+                        Id = "demo-ecommerce",
+                        Name = "E-commerce Platform",
+                        Description = "Demo release group for the e-commerce services",
+                        StageAliases = new(StringComparer.OrdinalIgnoreCase) { ["TST"] = "TST", ["STG"] = "STG", ["PRD"] = "PRD" },
+                        Components =
+                        [
+                            new ReleaseGroupComponent { ProjectName = "ecommerce-platform", RepositoryId = "repo-1", RepositoryName = "order-api", SourceBranch = "development", TargetBranch = "main", PipelineId = 101, PipelineName = "order-api-ci-cd" },
+                            new ReleaseGroupComponent { ProjectName = "ecommerce-platform", RepositoryId = "repo-3", RepositoryName = "payment-gateway", SourceBranch = "development", TargetBranch = "main", PipelineId = 103, PipelineName = "payment-gateway-ci-cd" },
+                        ]
+                    }
+                ];
+            }
         }
         return Results.Ok(result);
     }

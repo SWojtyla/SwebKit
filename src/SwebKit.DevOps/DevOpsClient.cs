@@ -14,6 +14,7 @@ public class DevOpsClient : IDevOpsClient
     private readonly ILogger<DevOpsClient> _logger;
     private readonly string _orgUrl;
     private readonly string _patCredentialKey;
+    private readonly DevOpsAuthenticationMode _authenticationMode;
 
     private static readonly JsonSerializerOptions JsonOptions = SwebKitJsonOptions.Default;
 
@@ -29,6 +30,7 @@ public class DevOpsClient : IDevOpsClient
         _logger = logger;
         _orgUrl = NormalizeOrganizationUrl(config.Organization);
         _patCredentialKey = config.PatCredentialKey;
+        _authenticationMode = config.AuthenticationMode;
     }
 
     private string OrgApi => $"{_orgUrl}/_apis";
@@ -468,6 +470,148 @@ public class DevOpsClient : IDevOpsClient
         )).ToList() ?? [];
     }
 
+    // ── Release-train primitives ──
+
+    public async Task<AdoBranchRef?> GetBranchRefAsync(string project, string repositoryId, string branch, CancellationToken ct = default)
+    {
+        var filter = $"heads/{branch}";
+        var response = await GetFromJsonAsync<AdoListResponse<AdoRefDto>>(
+            $"{ProjectApi(project)}/git/repositories/{repositoryId}/refs?filter={Uri.EscapeDataString(filter)}&api-version=7.1",
+            JsonOptions, ct).ConfigureAwait(false);
+
+        var match = response?.Value
+            .FirstOrDefault(r => (r.Name ?? string.Empty).Replace("refs/heads/", "", StringComparison.Ordinal).Equals(branch, StringComparison.OrdinalIgnoreCase));
+
+        if (match is null) return null;
+
+        return new AdoBranchRef(
+            (match.Name ?? string.Empty).Replace("refs/heads/", "", StringComparison.Ordinal),
+            match.ObjectId ?? string.Empty);
+    }
+
+    public async Task<AdoTag?> GetTagAsync(string project, string repositoryId, string name, CancellationToken ct = default)
+    {
+        var filter = $"tags/{name}";
+        var response = await GetFromJsonAsync<AdoListResponse<AdoRefDto>>(
+            $"{ProjectApi(project)}/git/repositories/{repositoryId}/refs?filter={Uri.EscapeDataString(filter)}&api-version=7.1",
+            JsonOptions, ct).ConfigureAwait(false);
+
+        var match = response?.Value
+            .FirstOrDefault(r => (r.Name ?? string.Empty).Replace("refs/tags/", "", StringComparison.Ordinal).Equals(name, StringComparison.OrdinalIgnoreCase));
+
+        if (match is null) return null;
+
+        return new AdoTag(
+            (match.Name ?? string.Empty).Replace("refs/tags/", "", StringComparison.Ordinal),
+            match.ObjectId ?? string.Empty,
+            null,
+            match.Creator?.DisplayName,
+            null);
+    }
+
+    public async Task<List<AdoPullRequest>> GetPullRequestsAsync(
+        string project, string repositoryId, string? sourceBranch = null, string? targetBranch = null,
+        string? status = "active", int? top = null, CancellationToken ct = default)
+    {
+        var qs = new List<string> { "api-version=7.1" };
+        if (!string.IsNullOrWhiteSpace(status)) qs.Add($"searchCriteria.status={Uri.EscapeDataString(status)}");
+        if (!string.IsNullOrWhiteSpace(sourceBranch)) qs.Add($"searchCriteria.sourceRefName={Uri.EscapeDataString(NormalizeBranchRef(sourceBranch))}");
+        if (!string.IsNullOrWhiteSpace(targetBranch)) qs.Add($"searchCriteria.targetRefName={Uri.EscapeDataString(NormalizeBranchRef(targetBranch))}");
+        if (top.HasValue) qs.Add($"$top={top.Value}");
+
+        var url = $"{ProjectApi(project)}/git/repositories/{repositoryId}/pullrequests?{string.Join('&', qs)}";
+        var response = await GetFromJsonAsync<AdoListResponse<AdoPullRequestDto>>(url, JsonOptions, ct).ConfigureAwait(false);
+
+        return response?.Value.Select(MapPullRequest).ToList() ?? [];
+    }
+
+    public async Task<AdoPullRequest> GetPullRequestAsync(string project, string repositoryId, int pullRequestId, CancellationToken ct = default)
+    {
+        var dto = await GetFromJsonAsync<AdoPullRequestDto>(
+            $"{ProjectApi(project)}/git/repositories/{repositoryId}/pullrequests/{pullRequestId}?api-version=7.1",
+            JsonOptions, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Pull request {pullRequestId} not found.");
+
+        return MapPullRequest(dto);
+    }
+
+    public async Task<AdoPullRequest> CreatePullRequestAsync(
+        string project, string repositoryId, string sourceBranch, string targetBranch,
+        string title, string? description = null, CancellationToken ct = default)
+    {
+        var body = new AdoPullRequestCreateDto(
+            SourceRefName: NormalizeBranchRef(sourceBranch),
+            TargetRefName: NormalizeBranchRef(targetBranch),
+            Title: title,
+            Description: description);
+
+        using var request = CreateRequest(
+            HttpMethod.Post,
+            $"{ProjectApi(project)}/git/repositories/{repositoryId}/pullrequests?api-version=7.1",
+            body);
+        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+
+        response.EnsureSuccessStatusCode();
+
+        var dto = await response.Content.ReadFromJsonAsync<AdoPullRequestDto>(JsonOptions, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Failed to parse pull request response.");
+
+        return MapPullRequest(dto);
+    }
+
+    public async Task<AdoBuildDetails> GetBuildDetailsAsync(string project, int buildId, CancellationToken ct = default)
+    {
+        var dto = await GetFromJsonAsync<AdoBuildDto>(
+            $"{ProjectApi(project)}/build/builds/{buildId}?api-version=7.1",
+            JsonOptions, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Build {buildId} not found.");
+
+        var stages = await GetBuildTimelineStagesAsync(project, buildId, ct).ConfigureAwait(false);
+        return MapBuildDetails(dto, stages);
+    }
+
+    public async Task<List<AdoBuildDetails>> GetBuildsAsync(
+        string project, int? pipelineId = null, string? repositoryId = null, string? sourceVersion = null,
+        string? branchName = null, int? top = null, CancellationToken ct = default)
+    {
+        var qs = new List<string> { "api-version=7.1" };
+        if (pipelineId.HasValue) qs.Add($"definitions={pipelineId.Value}");
+        if (!string.IsNullOrWhiteSpace(repositoryId))
+        {
+            qs.Add($"repositoryId={Uri.EscapeDataString(repositoryId)}");
+            qs.Add("repositoryType=TfsGit");
+        }
+        if (!string.IsNullOrWhiteSpace(sourceVersion)) qs.Add($"sourceVersion={Uri.EscapeDataString(sourceVersion)}");
+        if (!string.IsNullOrWhiteSpace(branchName)) qs.Add($"branchName={Uri.EscapeDataString(NormalizeBranchRef(branchName))}");
+        if (top.HasValue) qs.Add($"$top={top.Value}");
+
+        var url = $"{ProjectApi(project)}/build/builds?{string.Join('&', qs)}";
+        var response = await GetFromJsonAsync<AdoListResponse<AdoBuildDto>>(url, JsonOptions, ct).ConfigureAwait(false);
+
+        var stagesMap = new Dictionary<int, List<AdoPipelineStage>>();
+        var builds = response?.Value ?? [];
+
+        // Timeline is fetched per build only when a small result set is returned to avoid N+1 hammering.
+        if (builds.Count <= 10)
+        {
+            foreach (var build in builds)
+            {
+                try
+                {
+                    stagesMap[build.Id] = await GetBuildTimelineStagesAsync(project, build.Id, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Failed to fetch timeline for build {BuildId}; returning build without stages", build.Id);
+                    stagesMap[build.Id] = [];
+                }
+            }
+        }
+
+        return builds.Select(b => MapBuildDetails(b, stagesMap.GetValueOrDefault(b.Id) ?? [])).ToList();
+    }
+
     // ── Environment status ──
 
     public async Task<List<PipelineEnvironmentStatus>> GetEnvironmentStatusAsync(
@@ -581,6 +725,8 @@ public class DevOpsClient : IDevOpsClient
     {
         var request = new HttpRequestMessage(method, url);
         request.Options.Set(DevOpsAuthHandler.PatCredentialKeyOption, _patCredentialKey);
+        request.Options.Set(DevOpsAuthHandler.AuthModeOption, _authenticationMode.ToString());
+        request.Options.Set(DevOpsAuthHandler.OrganizationUrlOption, _orgUrl);
 
         if (body is not null)
         {
@@ -600,8 +746,9 @@ public class DevOpsClient : IDevOpsClient
 
     private static AdoPipelineRun MapPipelineRun(AdoPipelineRunDto dto)
     {
-        var sourceBranch = dto.Resources?.Repositories?.GetValueOrDefault("self")?.RefName
-            ?? string.Empty;
+        var self = dto.Resources?.Repositories?.GetValueOrDefault("self");
+        var sourceBranch = self?.RefName ?? string.Empty;
+        var sourceVersion = self?.Version;
 
         if (sourceBranch.StartsWith("refs/heads/", StringComparison.Ordinal))
             sourceBranch = sourceBranch["refs/heads/".Length..];
@@ -617,6 +764,84 @@ public class DevOpsClient : IDevOpsClient
             SourceBranch: sourceBranch,
             TriggeredBy: null,
             WebUrl: dto.Links?.Web?.Href,
-            Stages: []);
+            Stages: [],
+            SourceVersion: sourceVersion);
+    }
+
+    private static AdoPullRequest MapPullRequest(AdoPullRequestDto dto)
+    {
+        var sourceRef = dto.SourceRefName ?? string.Empty;
+        var targetRef = dto.TargetRefName ?? string.Empty;
+
+        return new AdoPullRequest(
+            PullRequestId: dto.PullRequestId,
+            Title: dto.Title ?? string.Empty,
+            Description: dto.Description,
+            Status: dto.Status ?? "unknown",
+            MergeStatus: dto.MergeStatus,
+            SourceRefName: sourceRef,
+            TargetRefName: targetRef,
+            SourceCommitId: dto.LastMergeSourceCommit?.CommitId ?? string.Empty,
+            TargetCommitId: dto.LastMergeTargetCommit?.CommitId ?? string.Empty,
+            MergeCommitId: dto.MergeCommit?.CommitId,
+            CreatedBy: dto.CreatedBy?.DisplayName,
+            WebUrl: dto.WebUrl);
+    }
+
+    private static AdoBuildDetails MapBuildDetails(AdoBuildDto dto, List<AdoPipelineStage> stages)
+    {
+        var sourceBranch = dto.SourceBranch ?? string.Empty;
+        if (sourceBranch.StartsWith("refs/heads/", StringComparison.Ordinal))
+            sourceBranch = sourceBranch["refs/heads/".Length..];
+
+        return new AdoBuildDetails(
+            Id: dto.Id,
+            BuildNumber: dto.BuildNumber,
+            SourceBranch: sourceBranch,
+            SourceVersion: dto.SourceVersion,
+            RepositoryId: dto.Repository?.Id,
+            RepositoryName: dto.Repository?.Name,
+            State: dto.Status ?? "unknown",
+            Result: dto.Result,
+            WebUrl: dto.Links?.Web?.Href ?? dto.Url,
+            Stages: stages);
+    }
+
+    private async Task<List<AdoPipelineStage>> GetBuildTimelineStagesAsync(string project, int buildId, CancellationToken ct)
+    {
+        try
+        {
+            var timeline = await GetFromJsonAsync<AdoTimelineDto>(
+                $"{ProjectApi(project)}/build/builds/{buildId}/timeline?api-version=7.1", JsonOptions, ct).ConfigureAwait(false);
+
+            return timeline?.Records?
+                .Where(r => r.Type == "Stage")
+                .OrderBy(r => r.Order)
+                .Select(r => new AdoPipelineStage(
+                    r.Name ?? string.Empty,
+                    r.State ?? string.Empty,
+                    r.Result ?? string.Empty,
+                    r.Order,
+                    r.Identifier))
+                .ToList() ?? [];
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch build timeline for build {BuildId} in project {Project}", buildId, project);
+            return [];
+        }
+    }
+
+    private static string NormalizeBranchRef(string branch)
+    {
+        if (string.IsNullOrWhiteSpace(branch)) return string.Empty;
+        var trimmed = branch.Trim();
+        return trimmed.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
+            ? trimmed
+            : $"refs/heads/{trimmed}";
     }
 }

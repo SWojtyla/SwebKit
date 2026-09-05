@@ -15,6 +15,7 @@ using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
 using SwebKit.Observability;
 using SwebKit.Redis;
+using SwebKit.DevOps;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
 
@@ -60,6 +61,10 @@ builder.Services.AddSingleton<IAksClientFactory, AksClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
 builder.Services.AddSingleton<RedisKeyspaceHealthAnalyzer>();
 builder.Services.AddSingleton<ScheduledMessageRepository>();
+
+// Release-train ADO client support (SwebKit.DevOps). Auth handler pulls the PAT from
+// ICredentialStore per request; it is never persisted in the client.
+builder.Services.AddSwebKitDevOps();
 
 // Monitoring: persisted alert rules + evaluation engine + signal sources
 builder.Services.AddSingleton<SwebKit.Core.Configuration.AlertRuleRepository>();
@@ -281,6 +286,10 @@ await app.Services.GetRequiredService<ProfileRepository>().LoadAsync();
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
 await userSettingsRepository.LoadAsync();
+
+var appState = app.Services.GetRequiredService<AppStateService>();
+await appState.InitializeAsync();
+app.Services.GetRequiredService<DemoModeService>().IsDemoMode = appState.UseDemoData;
 // Fathom theme unlock progress: one increment per launch, and the unlock is sticky once earned
 // (a later SessionCount reset — e.g. via settings import — must not re-lock a theme the user
 // already reached, hence checking FathomUnlocked with ||= rather than recomputing from scratch).
@@ -288,6 +297,7 @@ userSettingsRepository.Settings.SessionCount++;
 userSettingsRepository.Settings.FathomUnlocked |= userSettingsRepository.Settings.SessionCount >= UserSettings.FathomUnlockThreshold;
 await userSettingsRepository.SaveAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
+await app.Services.GetRequiredService<ReleaseRepository>().LoadAsync();
 // Force-instantiate now so its constructor subscribes to MonitoringAlertEvaluationService.AlertFired
 // before the first alert can possibly fire — a plain AddSingleton registration alone only makes it
 // resolvable, it doesn't construct it until something asks for it.
@@ -336,5 +346,9 @@ app.MapWorkspaceTopologyEndpoints();
 // ── Observability ───────────────────────────────────────────────────────────
 
 app.MapObservabilityEndpoints();
+
+// ── Release Train Cockpit ────────────────────────────────────────────────────
+
+app.MapReleaseTrainEndpoints();
 
 app.Run();

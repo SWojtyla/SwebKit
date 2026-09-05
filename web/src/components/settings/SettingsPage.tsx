@@ -7,12 +7,14 @@ import { RedisSettings } from "./RedisSettings";
 import { StorageSettings } from "./StorageSettings";
 import { AgentSettings } from "./AgentSettings";
 import { GeneralSettings } from "./GeneralSettings";
+import { DevOpsSettings } from "./DevOpsSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { WorkspaceMapSettings } from "./WorkspaceMapSettings";
 
 const tabs = [
   { id: "general", label: "General" },
+  { id: "devops", label: "DevOps" },
   { id: "service-bus", label: "Service Bus" },
   { id: "aks", label: "AKS" },
   { id: "redis", label: "Redis" },
@@ -28,7 +30,7 @@ type TabId = (typeof tabs)[number]["id"];
 // Tabs whose connection fields are inert while demo mode is on — demo mode
 // substitutes fixed sample data for these, so any real values entered here
 // have no effect until demo mode is turned off (Dashboard toggle).
-const DEMO_AFFECTED_TABS: ReadonlySet<TabId> = new Set(["service-bus", "aks", "redis", "storage"]);
+const DEMO_AFFECTED_TABS: ReadonlySet<TabId> = new Set(["devops", "service-bus", "aks", "redis", "storage"]);
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("general");
@@ -87,6 +89,7 @@ export function SettingsPage() {
 
         <div className="flex-1 overflow-auto p-6" data-testid="settings-content">
           {activeTab === "general" && <GeneralSettings />}
+          {activeTab === "devops" && <DevOpsSettings />}
           {activeTab === "service-bus" && <ServiceBusSettings />}
           {activeTab === "aks" && <AksSettings />}
           {activeTab === "redis" && <RedisSettings />}

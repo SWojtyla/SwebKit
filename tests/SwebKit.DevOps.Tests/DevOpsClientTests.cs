@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
+using SwebKit.DevOps.Authentication;
 using SwebKit.DevOps.Tests.Fakes;
 
 namespace SwebKit.DevOps.Tests;
@@ -14,7 +15,9 @@ public sealed class DevOpsClientTests
   public void HttpClientFactory_CanCreateMultipleAzureDevOpsClientsWithoutReusingAuthHandler()
   {
     var services = new ServiceCollection();
-    services.AddSingleton<ICredentialStore>(new FakeCredentialStore());
+    var fakeStore = new FakeCredentialStore();
+    services.AddSingleton<ICredentialStore>(fakeStore);
+    services.AddSingleton<IEnumerable<IAuthenticationTokenProvider>>(new List<IAuthenticationTokenProvider> { new PatTokenProvider(fakeStore) });
     services.AddTransient<DevOpsAuthHandler>();
     services.AddHttpClient("AzureDevOps")
       .ConfigurePrimaryHttpMessageHandler(static () => new FakeHttpMessageHandler())
@@ -42,7 +45,7 @@ public sealed class DevOpsClientTests
     var credentialStore = new FakeCredentialStore();
     credentialStore.Seed(patCredentialKey, "test-pat-value");
 
-    var authHandler = new DevOpsAuthHandler(credentialStore)
+    var authHandler = new DevOpsAuthHandler(new List<IAuthenticationTokenProvider> { new PatTokenProvider(credentialStore) })
     {
       InnerHandler = fakeHandler
     };
@@ -72,7 +75,7 @@ public sealed class DevOpsClientTests
     credentialStore.Seed("pat:key:1", "pat-value-1");
     credentialStore.Seed("pat:key:2", "pat-value-2");
 
-    var authHandler = new DevOpsAuthHandler(credentialStore)
+    var authHandler = new DevOpsAuthHandler(new List<IAuthenticationTokenProvider> { new PatTokenProvider(credentialStore) })
     {
       InnerHandler = fakeHandler
     };
@@ -141,7 +144,7 @@ public sealed class DevOpsClientTests
   {
     var fakeHandler = new FakeHttpMessageHandler();
     var credentialStore = new FakeCredentialStore();
-    var authHandler = new DevOpsAuthHandler(credentialStore) { InnerHandler = fakeHandler };
+    var authHandler = new DevOpsAuthHandler(new List<IAuthenticationTokenProvider> { new PatTokenProvider(credentialStore) }) { InnerHandler = fakeHandler };
     var factory = new FakeHttpClientFactory(new HttpClient(authHandler));
     var config = new DevOpsConfig { Organization = "myorg", PatCredentialKey = "key" };
 

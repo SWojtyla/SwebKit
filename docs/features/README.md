@@ -24,10 +24,15 @@ models) and is fully done — `workspace-intelligence` is its follow-on. Both su
 `tauri-react-primary-tool/`, which shipped (merged to `main` via PR #75) and has been removed from
 `active/`.
 
-**Note (2026-07-26, partially superseded 2026-08-03):** Observability and DevOps/Pipelines were
-dropped from the Tauri + React rewrite by product decision — not deferred, not planned for a later
-pass. See `docs/features/archive/demo-mode-parity/index.md` for the original context (recreated
-stub — see that doc's own note on why). **DevOps/Pipelines remains fully out of scope.**
+A new active feature, [`release-train-cockpit/`](active/release-train-cockpit/index.md), is in
+progress: it adds a focused Tauri + React release-train workflow, reusing `SwebKit.DevOps` and the
+React UI only. It is **not** a generic pipeline browser and does not modify MAUI. See that folder's
+`index.md` for scope, non-goals, and the product-decision reversal.
+
+**Note (2026-07-26, partially superseded 2026-08-03, further superseded 2026-08-07 for Release
+Trains):** Observability and the generic DevOps/Pipelines hub were dropped from the Tauri + React
+rewrite by product decision. `release-train-cockpit/` (2026-08-07) reverses only the specific
+release-train workflow. The generic MAUI Pipelines browser remains out of scope.
 Observability was partially reversed on 2026-08-03 (`ai-augmented-app` Module 13,
 `workspace-intelligence/index.md`'s "Decision resolved" section): there is still no dedicated
 Observability page/menu, but the agent now has direct tool access to Application Insights

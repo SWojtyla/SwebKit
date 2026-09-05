@@ -32,6 +32,9 @@ const MonitoringPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
+const ReleaseTrainsPage = lazy(() =>
+  import("./components/release-trains/ReleaseTrainsPage").then((m) => ({ default: m.ReleaseTrainsPage })),
+);
 
 export default function App() {
   return (
@@ -52,6 +55,7 @@ export default function App() {
         <Route path="/agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
         <Route path="/monitoring" element={<ErrorBoundary><MonitoringPage /></ErrorBoundary>} />
         <Route path="/settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+        <Route path="/release-trains" element={<ErrorBoundary><ReleaseTrainsPage /></ErrorBoundary>} />
       </Route>
     </Routes>
   );

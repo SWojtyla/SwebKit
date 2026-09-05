@@ -13,6 +13,7 @@ export * from "./useAgent";
 export * from "./useMonitoring";
 export * from "./useCommandPalette";
 export * from "./useWorkspaceTopology";
+export * from "./useDevOps";
 
 // Re-exported from the original hooks.ts for callers that imported it from
 // "@/lib/hooks" instead of "@/lib/useNotifyMutation" directly.
