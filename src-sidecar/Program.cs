@@ -244,6 +244,11 @@ app.UseExceptionHandler(ex =>
             InvalidOperationException => 400,
             ArgumentException => 400,
             UnauthorizedAccessException => 401,
+            // Both AKS auth exceptions carry messages that are built to be user-facing and free of
+            // secrets, so they map to real auth statuses and pass their message through rather than
+            // collapsing into an opaque 500 "Internal server error".
+            AksAuthenticationException => 401,
+            AksAccessDeniedException => 403,
             _ => 500,
         };
         context.Response.StatusCode = statusCode;
@@ -254,8 +259,9 @@ app.UseExceptionHandler(ex =>
             context.Response.Headers.AccessControlAllowOrigin = origin;
         }
 
-        // 400/401s here are deliberate, user-actionable messages the app throws itself (e.g.
-        // "AKS is not configured..."), safe to return as-is. A 500 means something unexpected blew
+        // 400/401/403s here are deliberate, user-actionable messages the app throws itself (e.g.
+        // "AKS is not configured...", or an AKS auth failure naming the broken credential plugin),
+        // safe to return as-is. A 500 means something unexpected blew
         // up — often an Azure/K8s/Redis SDK exception whose message can contain connection
         // strings, internal paths, or other detail that shouldn't reach the client. Log the real
         // exception server-side and return a generic message instead.

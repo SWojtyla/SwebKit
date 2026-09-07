@@ -156,6 +156,55 @@ public sealed class AksClientBootstrapperTests
         Assert.Contains("access denied", result.NamespacesWarning, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task BootstrapAsync_WhenListingNamespacesFailsAuthentication_SurfacesTheAuthMessage()
+    {
+        // A 401 (expired Azure sign-in, or a kubelogin/az install that can no longer mint a token)
+        // must reach the user: its message already names the concrete cause and the remedy.
+        const string authMessage =
+            "The cluster rejected the request as unauthorized (HTTP 401)... Sign in again with `az login`.";
+        var client = new RecordingAksClient(
+            contexts: [new KubeContextInfo { Name = "ctx-a", IsCurrent = true }],
+            namespaces: [],
+            namespacesException: new AksAuthenticationException(authMessage));
+        var bootstrapper = MakeBootstrapper();
+
+        var result = await bootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+            client,
+            UseDemoData: false,
+            Config: new AksConfig(),
+            RequestedContext: null,
+            RequestedNamespace: null));
+
+        Assert.Empty(result.Namespaces);
+        Assert.Equal(authMessage, result.NamespacesWarning);
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_WhenListingNamespacesFailsUnexpectedly_StillReportsAWarning()
+    {
+        // Regression: an unexpected failure used to be logged at Debug and returned as an empty
+        // list with no warning, so the picker rendered "No namespaces found" and the user saw
+        // nothing at all — indistinguishable from a cluster that genuinely has no namespaces.
+        var client = new RecordingAksClient(
+            contexts: [new KubeContextInfo { Name = "ctx-a", IsCurrent = true }],
+            namespaces: [],
+            namespacesException: new HttpRequestException("No such host is known."));
+        var bootstrapper = MakeBootstrapper();
+
+        var result = await bootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+            client,
+            UseDemoData: false,
+            Config: new AksConfig(),
+            RequestedContext: null,
+            RequestedNamespace: null));
+
+        Assert.Empty(result.Namespaces);
+        Assert.NotNull(result.NamespacesWarning);
+        Assert.Contains("Could not list namespaces", result.NamespacesWarning, StringComparison.Ordinal);
+        Assert.Contains("No such host is known.", result.NamespacesWarning, StringComparison.Ordinal);
+    }
+
     private static AksClientBootstrapper MakeBootstrapper() =>
         new(new RecordingFactory(), new DemoAksClient(), NullLogger<AksClientBootstrapper>.Instance);
 

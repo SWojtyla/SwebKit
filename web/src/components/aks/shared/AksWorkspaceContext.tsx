@@ -116,6 +116,12 @@ export interface AksWorkspaceContextValue {
   isMultiNamespace: boolean;
   namespaces: string[] | undefined;
   nsLoading: boolean;
+  /**
+   * Why the namespace list is unavailable, or null when it loaded. Without this a failed
+   * `/api/aks/namespaces` (an expired Azure sign-in, a broken kubelogin/az install) rendered as an
+   * empty picker saying "No namespaces found" — indistinguishable from an empty cluster.
+   */
+  nsError: string | null;
   contextLoading: boolean;
   isAksFetching: boolean;
   contexts: KubeContextInfo[] | undefined;
@@ -183,7 +189,13 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
 
-  const { data: namespaces, isLoading: nsLoading, refetch: refetchNamespaces } = useAksNamespaces();
+  const {
+    data: namespaces,
+    isLoading: nsLoading,
+    error: nsErrorRaw,
+    refetch: refetchNamespaces,
+  } = useAksNamespaces();
+  const nsError = nsErrorRaw instanceof Error ? nsErrorRaw.message : nsErrorRaw ? String(nsErrorRaw) : null;
   const { data: contexts } = useAksContexts();
   const { data: testResult, refetch: refetchTest } = useAksTestConnection();
   const { data: profile } = useProfile();
@@ -502,6 +514,7 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
       isMultiNamespace,
       namespaces,
       nsLoading,
+      nsError,
       contextLoading,
       isAksFetching,
       contexts,
@@ -556,6 +569,7 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
       isMultiNamespace,
       namespaces,
       nsLoading,
+      nsError,
       contextLoading,
       isAksFetching,
       contexts,

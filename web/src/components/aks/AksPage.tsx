@@ -59,6 +59,7 @@ function AksPageContent() {
           selected={ws.selectedNamespaces}
           onChange={ws.setSelectedNamespaces}
           isLoading={ws.nsLoading}
+          error={ws.nsError}
         />
 
         {(ws.contextLoading || ws.isAksFetching) && (

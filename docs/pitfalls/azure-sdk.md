@@ -66,4 +66,29 @@ All Entra ID authenticated clients in this repo (Storage, Service Bus, Key Vault
 
 ---
 
+## AZ-5 — A broken `az` install makes AKS look empty, not broken
+
+**Symptom:** Contexts still list and switch fine, but the namespace picker shows `0 total` / "No namespaces found" and **no error appears anywhere** — in both the WinUI and the Tauri/React frontends at once. Nothing changed in the code or the NuGet packages.
+
+**Cause:** Two independent things compound.
+
+1. **Environment.** The kubeconfig AKS writes uses an exec credential plugin: `kubelogin get-token --login azurecli`, which shells out to `az`. If the Azure CLI is uninstalled or half-installed (the classic leftover is `C:\Program Files\Microsoft SDKs\Azure\CLI2` retaining only `Lib\site-packages` and `Scripts\__pycache__`, with no `wbin\az.cmd`), the plugin exits non-zero with `failed to get token: AzureCLICredential: Azure CLI not found on path`. `KubernetesClientConfiguration` leaves `AccessToken` empty, so every API call gets **401**.
+2. **Code.** The 401 was then swallowed three times over: `TryApplyAzureCredentialFallback` had a bare `catch {}`, `WithAuthRetryAsync` only classified **403**, and `AksClientBootstrapper.TryLoadNamespacesAsync`'s generic catch logged at `Debug` and returned an empty list with a `null` warning. An empty namespace list is indistinguishable from a cluster that has none.
+
+**Diagnosis:** Run `kubectl get namespaces` in a terminal — it prints the plugin's real stderr, which the app never captured. Then check `Get-Command az` and whether the install directory actually contains `wbin\az.cmd`. Note that a leftover `%USERPROFILE%\.azure\azureProfile.json` makes it *look* like the CLI is still installed.
+
+**Fix (environment):** Reinstall the Azure CLI and `az login`. Nothing in the app can mint a token otherwise: `AzureCredentialOptions` excludes `InteractiveBrowserCredential`, and the remaining `DefaultAzureCredential` legs need either `az` or the `Az.Accounts` PowerShell module.
+
+**Fix (code — done):** 401 is now first-class, so an auth failure can never again render as "no data":
+
+- `AksAuthenticationException` (401, no identity) sits alongside `AksAccessDeniedException` (403, identity without RBAC).
+- `WithAuthRetryAsync` retries on 401 as well as 403, then classifies via `ToAuthExceptionAsync`.
+- `AksExecCredentialDiagnostics` re-runs the kubeconfig's exec plugin **only on the 401 path** and folds its (whitespace-collapsed, JWT-redacted, truncated) stderr into the message, so the cause reaches the UI.
+- The credential fallback logs each scope failure at `Debug` and one `Warning` when all of them fail.
+- The sidecar maps `AksAuthenticationException` → 401 and `AksAccessDeniedException` → 403 so their curated messages pass through instead of collapsing into a generic 500 `"Internal server error"`.
+
+**Rule:** when a list-shaped AKS call fails, never return an empty collection with no warning — an empty list is a legitimate answer and therefore cannot carry an error. Attach a warning (`NamespacesWarning`, `nsError`) or let the exception propagate.
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [dotnet-csharp.md](dotnet-csharp.md)_

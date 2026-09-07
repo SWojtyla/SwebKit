@@ -1,14 +1,26 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Check } from "lucide-react";
+import { AlertTriangle, Check } from "lucide-react";
 
 interface NamespaceSelectorProps {
   namespaces: string[] | undefined;
   selected: string[];
   isLoading?: boolean;
+  /**
+   * Why the list could not be loaded, if it failed. An empty list on its own is ambiguous — a
+   * cluster with no namespaces looks exactly like an auth failure — so the error has to be shown
+   * rather than left as a bare "No namespaces found".
+   */
+  error?: string | null;
   onChange: (selected: string[]) => void;
 }
 
-export function NamespaceSelector({ namespaces = [], selected, isLoading, onChange }: NamespaceSelectorProps) {
+export function NamespaceSelector({
+  namespaces = [],
+  selected,
+  isLoading,
+  error,
+  onChange,
+}: NamespaceSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState<string[]>(selected);
@@ -111,6 +123,17 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
         </span>
       )}
 
+      {error && (
+        <span
+          className="flex items-center gap-1 text-xs text-destructive"
+          title={error}
+          data-testid="aks-namespace-error"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span className="max-w-[18rem] truncate">Namespaces unavailable</span>
+        </span>
+      )}
+
       {open && (
         <div className="absolute top-full z-50 mt-1 w-96 rounded-md border bg-popover shadow-md">
           <div className="border-b p-2">
@@ -139,9 +162,18 @@ export function NamespaceSelector({ namespaces = [], selected, isLoading, onChan
             </div>
           </div>
           <div className="max-h-72 overflow-auto p-1">
-            {sortedFiltered.length === 0 && (
-              <div className="px-2 py-2 text-xs text-muted-foreground">No namespaces found</div>
-            )}
+            {sortedFiltered.length === 0 &&
+              (error ? (
+                <div
+                  className="flex items-start gap-2 px-2 py-2 text-xs text-destructive"
+                  data-testid="aks-namespace-error-detail"
+                >
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              ) : (
+                <div className="px-2 py-2 text-xs text-muted-foreground">No namespaces found</div>
+              ))}
             {sortedFiltered.map((ns) => {
               const isSelected = pending.includes(ns);
               return (
