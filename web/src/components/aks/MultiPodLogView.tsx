@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { SIDECAR_BASE_URL } from "@/lib/api";
 import { getLogLineClass } from "@/lib/logLevel";
+import { LogLineText } from "./shared/LogLineText";
 
 interface Props {
   ns: string;
@@ -126,7 +127,9 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
           logs.map((log, i) => (
             <div key={i} className="border-b py-0.5 text-xs last:border-0">
               <span className="text-muted-foreground">[{log.timestamp}] {log.pod}: </span>
-              <span className={`log-line font-mono ${getLogLineClass(log.line)}`}>{log.line}</span>
+              <span className={`log-line font-mono ${getLogLineClass(log.line)}`}>
+                <LogLineText line={log.line} />
+              </span>
             </div>
           ))
         )}

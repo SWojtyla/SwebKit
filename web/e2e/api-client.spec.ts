@@ -775,9 +775,14 @@ test.describe("API Client", () => {
     const target = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Drag First" });
     await source.dragTo(target, { targetPosition: { x: 10, y: 2 } });
 
-    const texts = await page.getByTestId(/collection-node-Request-/).filter({ hasText: /Drag (First|Second)/ }).allTextContents();
-    expect(texts[0]).toContain("Drag Second");
-    expect(texts[1]).toContain("Drag First");
+    // Polled, not read once: the reorder is persisted through a save that is
+    // serialized behind the two request creations, so the new order can land a
+    // beat after the drop.
+    const dragRows = page.getByTestId(/collection-node-Request-/).filter({ hasText: /Drag (First|Second)/ });
+    await expect.poll(() => dragRows.allTextContents()).toEqual([
+      expect.stringContaining("Drag Second"),
+      expect.stringContaining("Drag First"),
+    ]);
   });
 
   test("reorders collections via drag and drop", async ({ page }) => {
@@ -794,10 +799,12 @@ test.describe("API Client", () => {
     const target = page.getByTestId(/collection-root-/).filter({ hasText: "Collection Drag A" });
     await source.dragTo(target, { targetPosition: { x: 10, y: 2 } });
 
-    const texts = await page.getByTestId(/collection-root-/).filter({ hasText: /Collection Drag (A|B)/ }).allTextContents();
-    const indexA = texts.findIndex((t) => t.includes("Collection Drag A"));
-    const indexB = texts.findIndex((t) => t.includes("Collection Drag B"));
-    expect(indexB).toBeLessThan(indexA);
+    const rootRows = page.getByTestId(/collection-root-/).filter({ hasText: /Collection Drag (A|B)/ });
+    await expect.poll(async () => {
+      const texts = await rootRows.allTextContents();
+      return texts.findIndex((t) => t.includes("Collection Drag B")) <
+        texts.findIndex((t) => t.includes("Collection Drag A"));
+    }).toBe(true);
   });
 
   test("moves a request into a folder via drag and drop", async ({ page }) => {
@@ -841,9 +848,11 @@ test.describe("API Client", () => {
     await page.getByTestId(/collection-node-Request-/).filter({ hasText: "Keyboard Second" }).click();
     await page.keyboard.press("Alt+ArrowUp");
 
-    const texts = await page.getByTestId(/collection-node-Request-/).filter({ hasText: /Keyboard (First|Second)/ }).allTextContents();
-    expect(texts[0]).toContain("Keyboard Second");
-    expect(texts[1]).toContain("Keyboard First");
+    const keyboardRows = page.getByTestId(/collection-node-Request-/).filter({ hasText: /Keyboard (First|Second)/ });
+    await expect.poll(() => keyboardRows.allTextContents()).toEqual([
+      expect.stringContaining("Keyboard Second"),
+      expect.stringContaining("Keyboard First"),
+    ]);
   });
 
   test("demo collection cannot be dragged", async ({ page }) => {

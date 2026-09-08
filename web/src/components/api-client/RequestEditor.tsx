@@ -16,6 +16,7 @@ import { saveSecret, getSecret, deleteSecret } from "@/lib/tauri-bridge";
 import { swebkitHighlighting } from "@/lib/codemirror-theme";
 import { METHOD_META, methodMeta, toneTextStyle, CountBadge } from "./method-badge";
 import { GraphQlPanel } from "./GraphQlPanel";
+import { VariableInput } from "./VariableInput";
 import { WebSocketPanel } from "./WebSocketPanel";
 
 interface RequestEditorProps {
@@ -442,13 +443,13 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
         {/* The variable-preview toggle belongs to the URL field, so they are
             grouped together rather than sitting as a peer of Send/Save. */}
         <div className="flex min-w-0 flex-1 items-center gap-1">
-          <input
-            data-testid="request-url-input"
-            type="text"
+          <VariableInput
+            testId="request-url-input"
+            ariaLabel="Request URL"
             value={request.url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={setUrl}
+            scope={variableScope}
             placeholder="https://api.example.com/resource"
-            className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded border bg-background px-3 py-1.5 text-sm"
           />
           <button
             data-testid="request-var-preview"
@@ -578,12 +579,14 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
                   placeholder="Key"
                   className="w-32 rounded border bg-background px-2 py-1 text-sm"
                 />
-                <input
-                  type="text"
+                <VariableInput
+                  testId={`query-param-value-${i}`}
+                  ariaLabel={`Query parameter ${i + 1} value`}
                   value={param.value ?? ""}
-                  onChange={(e) => onChange(updateQueryParams(request, i, { value: e.target.value }))}
+                  onChange={(value) => onChange(updateQueryParams(request, i, { value }))}
+                  scope={variableScope}
                   placeholder="Value"
-                  className="flex-1 rounded border bg-background px-2 py-1 text-sm"
+                  metricsClassName="px-2 py-1 text-sm"
                 />
                 <button className="text-xs text-destructive" onClick={() => removeQueryParam(i)}>
                   Remove
@@ -617,12 +620,14 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
                   placeholder="Header"
                   className="w-32 rounded border bg-background px-2 py-1 text-sm"
                 />
-                <input
-                  type="text"
+                <VariableInput
+                  testId={`request-header-value-${i}`}
+                  ariaLabel={`Header ${i + 1} value`}
                   value={header.value ?? ""}
-                  onChange={(e) => onChange(updateHeaders(request, i, { value: e.target.value }))}
+                  onChange={(value) => onChange(updateHeaders(request, i, { value }))}
+                  scope={variableScope}
                   placeholder="Value"
-                  className="flex-1 rounded border bg-background px-2 py-1 text-sm"
+                  metricsClassName="px-2 py-1 text-sm"
                 />
                 <button className="text-xs text-destructive" onClick={() => removeHeader(i)}>
                   Remove

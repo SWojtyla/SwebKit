@@ -40,6 +40,24 @@ interface next to it.
 > `PortForwardSessionInfo` in `native.rs` still has this mismatch (`local_port` vs `localPort` in
 > `tauri-bridge.ts`) — unrelated to the API Client, but the same trap.
 
+### `dragDropEnabled` (on by default) breaks HTML5 drag-and-drop in the window
+
+Tauri installs an OS-level drag/drop handler on the webview unless you turn it off, and on Windows
+that handler swallows HTML5 `dragstart`/`dragover`/`drop` inside WebView2 — you can pick an item up
+and then find nowhere to put it. Tauri's own config doc says as much: *"Disabling it is required to
+use HTML5 drag and drop on the frontend on Windows."*
+
+Set `"dragDropEnabled": false` on the window in `src-tauri/tauri.conf.json` (safe as long as nothing
+listens for `onDragDropEvent` / file drops). **Playwright cannot catch this** — the e2e suite runs in
+a plain browser where HTML5 DnD works fine, so the API Client reorder tests passed for the whole time
+the feature was unusable in the app. Anything drag-related needs a manual check in the Tauri window.
+
+### A `draggable` element is not focused by a click
+
+Chromium suppresses the default mousedown-focus on `draggable` elements, so making a `tabIndex={0}`
+row a drag source silently breaks every keyboard interaction that assumed clicking it focuses it
+(here: `Alt`+`Arrow` reordering). Call `e.currentTarget.focus()` in the row's `onClick`.
+
 ### `AllowedRoots` is in-memory, so a persisted path is not an authorized path
 
 `AllowedRoots` is populated *only* by the native `pick_file`/`pick_directory` dialogs — that is what
@@ -77,6 +95,94 @@ a captured base is correct there.
 ### Set `user-select: none` while dragging
 
 Without it, dragging a divider selects the text underneath it.
+
+## TanStack Query
+
+### `invalidateQueries({ queryKey: ["aks-"] })` matches nothing
+
+Query keys are compared **element by element**, not as string prefixes. `["aks-"]` matches only a
+query keyed exactly `["aks-"]`, and every AKS query is keyed `["aks-pods", ns]`,
+`["aks-deployments", ns]`, and so on — so the AKS Refresh button, the auto-refresh timer, the `r`
+shortcut and the post-apply-YAML refresh were all silent no-ops. It fails *quietly*: the UI shows no
+error, and between ticks the tables usually look identical anyway.
+
+Group-invalidate through a `predicate` instead — see `web/src/lib/aks-query-keys.ts`, which also
+keeps the slow cluster-scoped queries (`aks-namespaces`, ~18s cold) off the periodic timer.
+
+Corollary: **if auto-refresh is invisible, users assume it is broken.** Show when the data was last
+updated (AKS puts a fixed-width "updated 12s ago" in the toolbar) — otherwise a working refresh and
+a broken one look the same.
+
+### A whole-store `PUT` derived from a render snapshot loses concurrent writes
+
+`useUpdateCollections` replaces the entire collections file. Computing the new array from a
+component's `collections` variable means computing it from a *render snapshot*, so two saves close
+together each send a full store built before the other landed and the loser's changes disappear —
+creating two requests quickly left only the second, a collection variable saved and then reopened
+empty, and one of two quick drag-reorders was dropped.
+
+Two things fix it together: take an **updater function** and evaluate it inside `mutationFn` against
+`queryClient.getQueryData`, and give the mutation a **`scope`** so saves to the same store are
+serialized rather than overlapping. Also give such a mutation an `onError` — a silently swallowed
+save is indistinguishable from the user never having typed anything.
+
+Corollary for tests: once saves are serialized, an assertion fired immediately after the action can
+read the pre-save state. Use `expect.poll`, not a single `allTextContents()`.
+
+### Don't guard a mutation with a no-op check against a stale snapshot
+
+`if (moveNode(collections, id, target) === collections) return;` looks like a harmless optimization.
+`moveNode` returns its input unchanged when it cannot find the source node — and a node created a
+moment ago is not in this render's snapshot yet — so the guard cancelled exactly the moves that
+needed the fresh data. Detect the no-op inside the updater, where the data is current, and let a
+genuinely redundant write be a redundant write.
+
+## React Router
+
+### `searchParams` in a callback is a snapshot, so two writes in one tick clobber each other
+
+A helper shaped like `updateParams` that does `new URLSearchParams(searchParams)` builds on the
+params from the render that created it. Two writes before the next commit — selecting an AKS
+namespace and immediately clicking a tab — both build on the same empty base, and the second drops
+the first's parameter, leaving the page on "Select a namespace to view resources".
+
+The functional setter form (`setSearchParams(prev => …)`) does **not** fix this: React Router's
+implementation calls the updater with the same captured `searchParams`. With `<BrowserRouter>`
+(which pushes to history synchronously) read `window.location.search` at call time instead.
+
+### An effect that defaults a URL param can overwrite the user's choice
+
+"Initialize the selection once the list loads" effects race with the interaction the loaded list
+makes possible: the list arriving is what populates the `<select>`, so the change event can land
+after that commit but before React flushes the passive effect it scheduled. The effect still sees
+the pre-selection `searchParams`, decides nothing is selected, and `replace`s the URL back to the
+default. Guard with a ref set by the user-facing setter (`namespacePickedRef` in
+`AksWorkspaceContext`), not with the `searchParams` the effect closed over.
+
+## Inputs
+
+### A native input cannot colour its own content
+
+To highlight inside a single-line field (`{{variable}}` tokens, say), render an `aria-hidden` overlay
+holding the same string with per-token spans and make the input's own text transparent
+(`text-transparent caret-foreground`) — see `components/api-client/VariableInput.tsx`, the same
+technique as the AKS YAML editor's overlay. Two rules keep it from drifting: the two layers must
+share *exact* text metrics (pass one class string to both; put border/background on a wrapper, never
+on the input, where it would paint over the overlay), and the overlay's `scrollLeft` must be mirrored
+from the input in a layout effect — `onScroll` alone misses caret-driven scrolling.
+
+## Tables
+
+### An inline row editor re-lays out the whole table
+
+Swapping a row's `Scale` button for an input plus two more buttons widens the Actions column, so
+every row shifts the moment you click — you lose your place in the list you were acting on. Use a
+modal (`components/aks/ScaleDialog.tsx`), which also has room to say *which* resource and namespace
+is about to change.
+
+With a `table-auto` layout, refreshing data jitters columns too, as an age ticks `9m` → `10m` or a
+metric gains a digit. Put `tabular-nums` on the table and `w-full` on the column that should absorb
+the slack (the name), so every other column is sized to its content and stops re-measuring.
 
 ## Playwright
 

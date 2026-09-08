@@ -19,11 +19,28 @@ export function useCollections(enabled = true) {
   });
 }
 
+/**
+ * Either the full collections array, or a function deriving it from the freshest
+ * stored collections. Prefer the function form for anything that edits what is
+ * already there: a component's `collections` variable is a render snapshot, and
+ * a PUT sends the *whole* store, so deriving from a snapshot taken before an
+ * in-flight save landed silently discards that save's changes.
+ */
+export type CollectionsUpdate = ApiCollection[] | ((previous: ApiCollection[]) => ApiCollection[]);
+
 export function useUpdateCollections() {
   const qc = useQueryClient();
-  return useMutation<CollectionsStoreResponse, Error, ApiCollection[]>({
-    mutationFn: async (collections) => {
+  return useMutation<CollectionsStoreResponse, Error, CollectionsUpdate>({
+    // Serialized on one scope, so two saves are never in flight at once. Without
+    // this, creating two requests in quick succession had each PUT a full snapshot
+    // computed before the other landed and the first request vanished — and the
+    // same race dropped one of two quick drag-reorders.
+    scope: { id: "api-client-collections" },
+    mutationFn: async (update) => {
+      // Read inside `mutationFn`, which the scope defers until the previous save
+      // has settled and written its response back to the cache.
       const current = qc.getQueryData<CollectionsStoreResponse>(["collections"]);
+      const collections = typeof update === "function" ? update(current?.collections ?? []) : update;
       const token = current?.concurrencyToken;
       const path = token
         ? `/api/config/collections?concurrencyToken=${encodeURIComponent(token)}`

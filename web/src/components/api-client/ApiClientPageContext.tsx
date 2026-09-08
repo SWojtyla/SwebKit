@@ -448,7 +448,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           createdAt: now(),
           updatedAt: now(),
         };
-        updateCollections.mutate([...collections, collection]);
+        updateCollections.mutate((prev) => [...prev, collection]);
         setNameDialog(null);
       },
     });
@@ -472,8 +472,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           defaultAuth: null,
           request,
         };
-        const next = insertIntoCollection(collections, collectionId, node, parentId);
-        updateCollections.mutate(next, {
+        updateCollections.mutate((prev) => insertIntoCollection(prev, collectionId, node, parentId), {
           onSuccess: () => {
             setSelectedNodeId(node.id);
             setSelectedCollectionId(collectionId);
@@ -516,8 +515,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           defaultAuth: null,
           request: null,
         };
-        const next = insertIntoCollection(collections, collectionId, node, parentId);
-        updateCollections.mutate(next);
+        updateCollections.mutate((prev) => insertIntoCollection(prev, collectionId, node, parentId));
         setNameDialog(null);
       },
     });
@@ -527,8 +525,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     setConfirmDialog({
       message: "Delete this item? This cannot be undone.",
       onConfirm: () => {
-        const next = removeNode(collections, nodeId);
-        updateCollections.mutate(next, {
+        updateCollections.mutate((prev) => removeNode(prev, nodeId), {
           onSuccess: () => {
             if (selectedNodeId === nodeId) {
               setSelectedNodeId(null);
@@ -549,31 +546,31 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   };
 
   const handleRenameNode = (_nodeId: string, _collectionId: string, newName: string) => {
-    const next = renameNodeInCollections(collections, _nodeId, newName);
-    updateCollections.mutate(next);
+    updateCollections.mutate((prev) => renameNodeInCollections(prev, _nodeId, newName));
     // Update tab name if open
     setTabs((prev) => prev.map((t) => t.nodeId === _nodeId ? { ...t, name: newName } : t));
   };
 
   const handleMoveNode = (nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => {
-    const next = moveNode(collections, nodeId, target);
-    if (next === collections) return;
+    // No snapshot-based no-op guard here on purpose: a node created moments ago
+    // may not be in this render's `collections` yet, `moveNode` returns its input
+    // unchanged when it cannot find the source, and bailing on that swallowed the
+    // move entirely. `moveNode` runs against the freshest store inside the updater
+    // instead, where an impossible move is already a safe no-op.
     if (target.targetCollectionId !== sourceCollectionId) {
       setTabs((prev) => prev.map((t) => (t.nodeId === nodeId ? { ...t, collectionId: target.targetCollectionId } : t)));
       if (selectedNodeId === nodeId) {
         setSelectedCollectionId(target.targetCollectionId);
       }
     }
-    updateCollections.mutate(next, {
+    updateCollections.mutate((prev) => moveNode(prev, nodeId, target), {
       onSuccess: () => notify("success", "Moved", "Request moved."),
       onError: (err) => notify("error", "Move failed", err.message),
     });
   };
 
   const handleMoveCollection = (collectionId: string, target: MoveCollectionTarget) => {
-    const next = moveCollection(collections, collectionId, target);
-    if (next === collections) return;
-    updateCollections.mutate(next, {
+    updateCollections.mutate((prev) => moveCollection(prev, collectionId, target), {
       onSuccess: () => notify("success", "Moved", "Collection moved."),
       onError: (err) => notify("error", "Move failed", err.message),
     });
@@ -590,10 +587,14 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     if (draftForSave.auth) {
       draftForSave.auth = { ...draftForSave.auth, credentialSecret: null };
     }
-    const base = baseCollections ?? collections;
-    const next = updateRequestInCollections(base, tab.nodeId, draftForSave);
     try {
-      await updateCollections.mutateAsync(next);
+      // An explicit base is an overwrite-after-conflict, which must send exactly
+      // what the caller resolved; otherwise derive from the freshest store.
+      await updateCollections.mutateAsync(
+        baseCollections
+          ? updateRequestInCollections(baseCollections, tab.nodeId, draftForSave)
+          : (prev) => updateRequestInCollections(prev, tab.nodeId, draftForSave),
+      );
       setConflict(null);
       setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], dirty: false } }));
       setTabs((prev) => prev.map((t) => t.id === activeTabId ? { ...t, dirty: false } : t));
@@ -717,9 +718,10 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     if (draftForSave.auth) {
       draftForSave.auth = { ...draftForSave.auth, credentialSecret: null };
     }
-    const next = updateRequestInCollections(collections, tab.nodeId, draftForSave);
     try {
-      await updateCollections.mutateAsync(next);
+      await updateCollections.mutateAsync((prev) =>
+        updateRequestInCollections(prev, tab.nodeId, draftForSave),
+      );
     } catch (err) {
       console.error("Failed to save response example", err);
     }
@@ -767,9 +769,8 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     copy.createdAt = now();
     copy.updatedAt = now();
     const node: ApiCollectionNode = { id: copy.id, type: "Request", name: copy.name, isExpanded: true, children: [], defaultAuth: null, request: copy };
-    const next = insertIntoCollection(latest, collection.id, node);
     try {
-      await updateCollections.mutateAsync(next);
+      await updateCollections.mutateAsync((prev) => insertIntoCollection(prev, collection.id, node));
       const tabId = newId();
       setTabs((prev) => [...prev, { id: tabId, nodeId: node.id, collectionId: collection.id, name: node.name, method: copy.method, dirty: false }]);
       setTabStates((prev) => ({ ...prev, [tabId]: emptyTabState(deepClone(copy)) }));
@@ -814,10 +815,15 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
 
   const handleSaveCollectionVariables = (variables: CollectionVariable[]) => {
     if (!selectedCollectionId) return;
-    const next = collections.map((c) =>
-      c.id === selectedCollectionId ? { ...c, variables } : c,
+    updateCollections.mutate(
+      (prev) => prev.map((c) => (c.id === selectedCollectionId ? { ...c, variables } : c)),
+      {
+        // Without this a rejected save (a stale concurrency token, say) was
+        // swallowed, and the editor simply reopened empty — indistinguishable
+        // from never having typed the variable.
+        onError: (err) => notify("error", "Saving collection variables failed", err.message),
+      },
     );
-    updateCollections.mutate(next);
   };
 
   const selectedCollection = useMemo(

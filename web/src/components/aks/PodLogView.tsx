@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { SIDECAR_BASE_URL } from "@/lib/api";
 import { getLogLineClass } from "@/lib/logLevel";
+import { LogLineText } from "./shared/LogLineText";
 
 interface PodLogViewProps {
   ns: string;
@@ -554,7 +555,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
               className={`log-line whitespace-pre-wrap break-all ${entry.cls}`}
               data-testid={`log-line-${visibleStart + i}`}
             >
-              {entry.line}
+              <LogLineText line={entry.line} />
             </div>
           ))
         )}

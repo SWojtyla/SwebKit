@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { useAksDeployments, useAksRestartDeployment, useAksScaleDeployment } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { ScaleDialog } from "./ScaleDialog";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { DeploymentInfo } from "@/lib/types";
 
@@ -16,17 +17,19 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
   const restartMutation = useAksRestartDeployment();
   const scaleMutation = useAksScaleDeployment();
 
-  const [scaling, setScaling] = useState<string | null>(null);
-  const [scaleValue, setScaleValue] = useState(0);
+  // The whole deployment, not just its name: the dialog needs the namespace and
+  // the current replica count, and re-deriving them from `deployments` would
+  // reopen at the wrong value the moment an auto-refresh lands mid-edit.
+  const [scaleTarget, setScaleTarget] = useState<DeploymentInfo | null>(null);
 
-  const scale = useCallback((dep: DeploymentInfo) => {
+  const confirmScale = useCallback((dep: DeploymentInfo, replicas: number) => {
+    setScaleTarget(null);
     ws.requestConfirm({
-      message: `Scale deployment "${dep.name}" to ${scaleValue} replicas?`,
+      message: `Scale deployment "${dep.name}" to ${replicas} replicas?`,
       resourceName: dep.name,
-      onConfirm: () => scaleMutation.mutate({ ns: dep.namespace, name: dep.name, replicas: scaleValue }),
+      onConfirm: () => scaleMutation.mutate({ ns: dep.namespace, name: dep.name, replicas }),
     });
-    setScaling(null);
-  }, [ws, scaleValue, scaleMutation.mutate]);
+  }, [ws, scaleMutation.mutate]);
 
   const restart = useCallback((dep: DeploymentInfo) => {
     ws.requestConfirm({
@@ -57,10 +60,7 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
     { label: "Placement", icon: "📍", onClick: () => {}, disabled: true },
     { label: "", separator: true, onClick: () => {} },
     { label: "Restart Deployment", icon: "↻", onClick: () => restart(dep) },
-    { label: "Scale...", icon: "⇳", onClick: () => {
-      setScaling(dep.name);
-      setScaleValue(dep.replicas);
-    }},
+    { label: "Scale...", icon: "⇳", onClick: () => setScaleTarget(dep) },
   ], [ws, restart]);
 
   const handleRowContextMenu = useCallback(
@@ -76,51 +76,29 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
     )},
     { header: "Status", cell: (dep) => <StatusBadge status={dep.status} /> },
     { header: "Image", cell: (dep) => <span className="text-muted-foreground">{dep.imageTag ?? "—"}</span> },
-    { header: "Actions", cell: (dep) => (
-      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={() => restart(dep)}
-          disabled={restartMutation.isPending}
-          className="rounded border px-2 py-1 text-xs hover:bg-accent"
-        >
-          Restart
-        </button>
-        {scaling === dep.name ? (
-          <>
-            <input
-              type="number"
-              value={scaleValue}
-              onChange={(e) => setScaleValue(parseInt(e.target.value) || 0)}
-              className="w-16 rounded border bg-card px-2 py-1 text-xs"
-              autoFocus
-            />
-            <button
-              onClick={() => scale(dep)}
-              className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground"
-            >
-              OK
-            </button>
-            <button
-              onClick={() => setScaling(null)}
-              className="rounded border px-2 py-1 text-xs"
-            >
-              Cancel
-            </button>
-          </>
-        ) : (
+    {
+      header: "Actions",
+      className: "py-2 pr-4 w-px whitespace-nowrap",
+      cell: (dep) => (
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => {
-              setScaling(dep.name);
-              setScaleValue(dep.replicas);
-            }}
+            onClick={() => restart(dep)}
+            disabled={restartMutation.isPending}
             className="rounded border px-2 py-1 text-xs hover:bg-accent"
+          >
+            Restart
+          </button>
+          <button
+            onClick={() => setScaleTarget(dep)}
+            className="rounded border px-2 py-1 text-xs hover:bg-accent"
+            data-testid={`deployment-scale-${dep.name}`}
           >
             Scale
           </button>
-        )}
-      </div>
-    )},
-  ], [restart, restartMutation.isPending, scaling, scaleValue, scale]);
+        </div>
+      ),
+    },
+  ], [restart, restartMutation.isPending]);
 
   return (
     <div className="p-4">
@@ -134,6 +112,18 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
         onRowContextMenu={handleRowContextMenu}
         columns={columns}
       />
+
+      {scaleTarget && (
+        <ScaleDialog
+          kind="Deployment"
+          name={scaleTarget.name}
+          namespace={scaleTarget.namespace}
+          currentReplicas={scaleTarget.replicas}
+          isSaving={scaleMutation.isPending}
+          onCancel={() => setScaleTarget(null)}
+          onConfirm={(replicas) => confirmScale(scaleTarget, replicas)}
+        />
+      )}
     </div>
   );
 }

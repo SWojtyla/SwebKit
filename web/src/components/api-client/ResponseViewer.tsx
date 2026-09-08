@@ -27,17 +27,21 @@ interface ResponseViewerProps {
 type Tab = "body" | "headers" | "history";
 
 const WRAP_PREF_KEY = "api-client-response-wrap";
+const PRETTY_PREF_KEY = "api-client-response-pretty";
 
 function tryPrettyPrint(content: string, contentType: string | null): string {
-  if (contentType?.includes("json") || content.trim().startsWith("{") || content.trim().startsWith("[")) {
+  const trimmed = content.trimStart();
+  if (contentType?.includes("json") || trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
       return JSON.stringify(JSON.parse(content), null, 2);
     } catch {
       return content;
     }
   }
-  if (contentType?.includes("xml") || content.trim().startsWith("<")) {
-    // Simple XML pretty-print: indent between tags
+  // Only genuine XML, not "anything starting with `<`". Now that Pretty is the
+  // default, the broader test would reflow every HTML page received, inserting
+  // newlines between tags where whitespace can be significant.
+  if (contentType?.includes("xml") || trimmed.startsWith("<?xml")) {
     return content.replace(/></g, ">\n<").replace(/^\s+$/gm, "");
   }
   return content;
@@ -76,7 +80,12 @@ export function ResponseViewer({
 }: ResponseViewerProps) {
   const [activeTab, setActiveTab] = useState<Tab>("body");
   const [copied, setCopied] = useState(false);
-  const [prettyPrinted, setPrettyPrinted] = useState(false);
+  // Pretty by default. A minified JSON payload on one 4000-character line is not
+  // a readable response, and every operator reached for the Pretty toggle on every
+  // single send. Persisted, so choosing Raw sticks.
+  const [prettyPrinted, setPrettyPrinted] = useState<boolean>(() =>
+    loadViewPreference<boolean>(PRETTY_PREF_KEY, true),
+  );
   const [showCurl, setShowCurl] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [showSaveExample, setShowSaveExample] = useState(false);
@@ -88,11 +97,18 @@ export function ResponseViewer({
   const savedExamples: ResponseExample[] = request?.responseExamples ?? [];
 
   useEffect(() => {
-    setPrettyPrinted(false);
+    // Deliberately does not reset `prettyPrinted`: it is a persisted view
+    // preference, not per-response state, and resetting it here is what made the
+    // Pretty toggle feel like it never stuck.
     setCopied(false);
     setShowCurl(false);
     setViewingExampleId(null);
   }, [response]);
+
+  const setPretty = (next: boolean) => {
+    setPrettyPrinted(next);
+    saveViewPreference(PRETTY_PREF_KEY, next);
+  };
 
   const toggleWrap = () => {
     // Computed outside the updater: React may invoke an updater twice in
@@ -126,7 +142,12 @@ export function ResponseViewer({
   const liveBody = isError ? response.errorMessage ?? "" : response.responseBody ?? "";
   const rawBody = viewingExample ? viewingExample.body ?? "" : liveBody;
   const bodyContentType = viewingExample ? viewingExample.contentType : response.contentType;
-  const displayBody = prettyPrinted ? tryPrettyPrint(rawBody, bodyContentType) : rawBody;
+  // Memoized: with Pretty on by default this reformats on every render otherwise,
+  // and a 512 kB body would pay for it on each toolbar interaction.
+  const displayBody = useMemo(
+    () => (prettyPrinted ? tryPrettyPrint(rawBody, bodyContentType) : rawBody),
+    [prettyPrinted, rawBody, bodyContentType],
+  );
 
   const isGraphQlError = !isError && response.contentType?.includes("json") && liveBody.includes("errors");
   let graphQlErrors: string[] = [];
@@ -308,7 +329,7 @@ export function ResponseViewer({
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <div className="flex overflow-hidden rounded border" role="group" aria-label="Body formatting">
                 <button
-                  onClick={() => setPrettyPrinted(true)}
+                  onClick={() => setPretty(true)}
                   aria-pressed={prettyPrinted}
                   className={`px-2 py-0.5 text-xs ${prettyPrinted ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
                   data-testid="response-pretty-toggle"
@@ -316,7 +337,7 @@ export function ResponseViewer({
                   Pretty
                 </button>
                 <button
-                  onClick={() => setPrettyPrinted(false)}
+                  onClick={() => setPretty(false)}
                   aria-pressed={!prettyPrinted}
                   className={`border-l px-2 py-0.5 text-xs ${!prettyPrinted ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
                   data-testid="response-raw-toggle"

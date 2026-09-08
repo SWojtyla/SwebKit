@@ -508,6 +508,61 @@ body {
   color: inherit;
 }
 
+/* Stack frames and `--- End of … ---` separators: dimmed so the exception header
+   they belong to stays legible inside a long trace. Token spans below override
+   this for the parts that carry meaning (types, file locations, line numbers). */
+.log-level-frame {
+  color: var(--muted-foreground);
+}
+
+/* ── AKS log syntax tokens ──────────────────────────────────────────────
+   Reuses the --cm-* custom properties defined further down so pod logs, the
+   API Client body viewer and the YAML viewer share one palette across every
+   theme. Emitted by `lib/logHighlight.ts` via `LogLineText`. */
+.log-line .log-tok-timestamp { color: var(--cm-comment); }
+.log-line .log-tok-level-error { color: var(--destructive); font-weight: 600; }
+.log-line .log-tok-level-warn { color: var(--warning); font-weight: 600; }
+.log-line .log-tok-level-info { color: var(--info); font-weight: 600; }
+.log-line .log-tok-level-debug { color: var(--cm-null); font-weight: 600; }
+.log-line .log-tok-exception { color: var(--destructive); font-weight: 600; }
+.log-line .log-tok-symbol { color: var(--cm-key); }
+.log-line .log-tok-keyword { color: var(--cm-tag); font-weight: 600; }
+.log-line .log-tok-separator { color: var(--muted-foreground); font-style: italic; }
+.log-line .log-tok-location { color: var(--cm-attr); }
+.log-line .log-tok-url { color: var(--cm-attr); text-decoration: underline; text-underline-offset: 2px; }
+.log-line .log-tok-guid { color: var(--cm-number); }
+.log-line .log-tok-key { color: var(--cm-key); font-weight: 600; }
+.log-line .log-tok-string { color: var(--cm-string); }
+.log-line .log-tok-number { color: var(--cm-number); }
+.log-line .log-tok-bool { color: var(--cm-bool); font-weight: 600; }
+.log-line .log-tok-null { color: var(--cm-null); font-style: italic; }
+.log-line .log-tok-punct { color: var(--cm-punct); }
+
+/* ── API Client {{variable}} resolution states ────────────────────────────
+   Rendered by `VariableInput`'s highlight overlay. Amber is deliberately not
+   red: a generated value or a credential-store secret is correctly configured,
+   it just is not previewable before the request is sent. Backgrounds are kept
+   translucent so they tint rather than obscure the text underneath. */
+.var-tok-resolved {
+  color: var(--success);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  border-radius: 2px;
+}
+
+.var-tok-deferred {
+  color: var(--warning);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  border-radius: 2px;
+}
+
+.var-tok-unresolved {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 14%, transparent);
+  border-radius: 2px;
+  text-decoration: underline wavy;
+  text-underline-offset: 3px;
+}
+
 /* ── YAML syntax highlighting ───────────────────────────────────────── */
 .yml-viewer .yml-key {
   color: oklch(0.55 0.18 265);
