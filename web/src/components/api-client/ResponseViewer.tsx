@@ -118,6 +118,25 @@ export function ResponseViewer({
     saveViewPreference(WRAP_PREF_KEY, next);
   };
 
+  // Derived above the early returns below, because it uses a hook: this component
+  // returns early while sending and before the first response, so a `useMemo`
+  // placed after those returns changes the hook count the moment a response
+  // arrives, and React throws instead of rendering it.
+  const viewingExample = viewingExampleId
+    ? savedExamples.find((e) => e.id === viewingExampleId) ?? null
+    : null;
+  const liveBody = response
+    ? (response.errorMessage ? response.errorMessage : response.responseBody ?? "")
+    : "";
+  const rawBody = viewingExample ? viewingExample.body ?? "" : liveBody;
+  const bodyContentType = viewingExample ? viewingExample.contentType : response?.contentType ?? null;
+  // Memoized because Pretty is now the default: without it a 512 kB body would be
+  // reformatted on every render, including every toolbar interaction.
+  const displayBody = useMemo(
+    () => (prettyPrinted ? tryPrettyPrint(rawBody, bodyContentType) : rawBody),
+    [prettyPrinted, rawBody, bodyContentType],
+  );
+
   if (sending) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground" data-testid="response-viewer">
@@ -135,19 +154,6 @@ export function ResponseViewer({
   }
 
   const isError = !!response.errorMessage;
-  const viewingExample = viewingExampleId
-    ? savedExamples.find((e) => e.id === viewingExampleId) ?? null
-    : null;
-
-  const liveBody = isError ? response.errorMessage ?? "" : response.responseBody ?? "";
-  const rawBody = viewingExample ? viewingExample.body ?? "" : liveBody;
-  const bodyContentType = viewingExample ? viewingExample.contentType : response.contentType;
-  // Memoized: with Pretty on by default this reformats on every render otherwise,
-  // and a 512 kB body would pay for it on each toolbar interaction.
-  const displayBody = useMemo(
-    () => (prettyPrinted ? tryPrettyPrint(rawBody, bodyContentType) : rawBody),
-    [prettyPrinted, rawBody, bodyContentType],
-  );
 
   const isGraphQlError = !isError && response.contentType?.includes("json") && liveBody.includes("errors");
   let graphQlErrors: string[] = [];

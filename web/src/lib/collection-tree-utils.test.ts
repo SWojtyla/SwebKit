@@ -159,6 +159,167 @@ describe("moveNode", () => {
   });
 });
 
+describe("moveNode into and within nested folders", () => {
+  /**
+   * outer/
+   *   inner/
+   *     deep-a
+   *     deep-b
+   *   sibling-in-outer
+   * top-level-request
+   * other-top-folder/
+   *   other-child
+   */
+  function nested(): ApiCollection[] {
+    return [
+      collection("c1", [
+        node("outer", "Folder", [
+          node("inner", "Folder", [node("deep-a"), node("deep-b")]),
+          node("sibling-in-outer"),
+        ]),
+        node("top-level-request"),
+        node("other-top-folder", "Folder", [node("other-child")]),
+      ]),
+    ];
+  }
+
+  function names(nodes: ApiCollectionNode[]): string[] {
+    return nodes.map((n) => n.id);
+  }
+
+  function find(nodes: ApiCollectionNode[], id: string): ApiCollectionNode | null {
+    for (const n of nodes) {
+      if (n.id === id) return n;
+      if (n.type === "Folder") {
+        const found = find(n.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  it("keeps the rest of the collection when dropping into a nested folder", () => {
+    // Regression: the insert used to splice the array *directly containing* the
+    // target and then assign it to `collection.nodes`, so dropping into a nested
+    // folder replaced the whole collection with that one inner list — everything
+    // else in it vanished.
+    const result = moveNode(nested(), "top-level-request", {
+      targetCollectionId: "c1",
+      targetNodeId: "inner",
+      placement: "inside",
+    });
+
+    expect(names(result[0].nodes)).toEqual(["outer", "other-top-folder"]);
+    expect(names(find(result[0].nodes, "inner")!.children)).toEqual([
+      "deep-a",
+      "deep-b",
+      "top-level-request",
+    ]);
+    expect(names(find(result[0].nodes, "other-top-folder")!.children)).toEqual(["other-child"]);
+    expect(names(find(result[0].nodes, "outer")!.children)).toEqual(["inner", "sibling-in-outer"]);
+  });
+
+  it("keeps the rest of the collection when reordering inside a nested folder", () => {
+    const result = moveNode(nested(), "deep-b", {
+      targetCollectionId: "c1",
+      targetNodeId: "deep-a",
+      placement: "before",
+    });
+
+    expect(names(result[0].nodes)).toEqual(["outer", "top-level-request", "other-top-folder"]);
+    expect(names(find(result[0].nodes, "inner")!.children)).toEqual(["deep-b", "deep-a"]);
+  });
+
+  it("moves a node out of a nested folder to the collection root", () => {
+    const result = moveNode(nested(), "deep-a", {
+      targetCollectionId: "c1",
+      targetNodeId: "top-level-request",
+      placement: "after",
+    });
+
+    expect(names(result[0].nodes)).toEqual([
+      "outer",
+      "top-level-request",
+      "deep-a",
+      "other-top-folder",
+    ]);
+    expect(names(find(result[0].nodes, "inner")!.children)).toEqual(["deep-b"]);
+  });
+
+  it("moves a whole nested folder into another folder, children intact", () => {
+    const result = moveNode(nested(), "inner", {
+      targetCollectionId: "c1",
+      targetNodeId: "other-top-folder",
+      placement: "inside",
+    });
+
+    expect(names(result[0].nodes)).toEqual(["outer", "top-level-request", "other-top-folder"]);
+    expect(names(find(result[0].nodes, "outer")!.children)).toEqual(["sibling-in-outer"]);
+    expect(names(find(result[0].nodes, "other-top-folder")!.children)).toEqual([
+      "other-child",
+      "inner",
+    ]);
+    expect(names(find(result[0].nodes, "inner")!.children)).toEqual(["deep-a", "deep-b"]);
+  });
+
+  it("treats a drop inside a request as a drop after it", () => {
+    const result = moveNode(nested(), "top-level-request", {
+      targetCollectionId: "c1",
+      targetNodeId: "deep-a",
+      placement: "inside",
+    });
+
+    expect(names(find(result[0].nodes, "inner")!.children)).toEqual([
+      "deep-a",
+      "top-level-request",
+      "deep-b",
+    ]);
+    expect(names(result[0].nodes)).toEqual(["outer", "other-top-folder"]);
+  });
+
+  it("refuses to move a folder into its own descendant", () => {
+    const before = nested();
+    const result = moveNode(before, "outer", {
+      targetCollectionId: "c1",
+      targetNodeId: "deep-a",
+      placement: "after",
+    });
+    expect(result).toBe(before);
+  });
+
+  it("never loses or duplicates a node, whatever the placement", () => {
+    const ids = ["outer", "inner", "deep-a", "deep-b", "sibling-in-outer", "top-level-request", "other-top-folder", "other-child"];
+    const collect = (nodes: ApiCollectionNode[]): string[] =>
+      nodes.flatMap((n) => [n.id, ...(n.type === "Folder" ? collect(n.children) : [])]);
+
+    for (const source of ids) {
+      for (const targetNodeId of ids) {
+        for (const placement of ["before", "after", "inside"] as const) {
+          const result = moveNode(nested(), source, { targetCollectionId: "c1", targetNodeId, placement });
+          const seen = collect(result[0].nodes).sort();
+          expect(seen, `${source} -> ${placement} ${targetNodeId}`).toEqual([...ids].sort());
+        }
+      }
+    }
+  });
+
+  it("moves a node across collections without disturbing either tree", () => {
+    const collections = [
+      ...nested(),
+      collection("c2", [node("c2-folder", "Folder", [node("c2-child")])]),
+    ];
+    const result = moveNode(collections, "deep-a", {
+      targetCollectionId: "c2",
+      targetNodeId: "c2-child",
+      placement: "after",
+    });
+
+    expect(names(find(result[0].nodes, "inner")!.children)).toEqual(["deep-b"]);
+    expect(names(result[0].nodes)).toEqual(["outer", "top-level-request", "other-top-folder"]);
+    expect(names(find(result[1].nodes, "c2-folder")!.children)).toEqual(["c2-child", "deep-a"]);
+  });
+});
+
 describe("moveCollection", () => {
   it("moves a collection before another", () => {
     const collections = [collection("a"), collection("b"), collection("c")];

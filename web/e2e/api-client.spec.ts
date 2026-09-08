@@ -831,6 +831,111 @@ test.describe("API Client", () => {
     await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Inside Request" })).toBeVisible();
   });
 
+  test("dropping into a NESTED folder keeps the rest of the collection", async ({ page }) => {
+    // Regression: the insert spliced the array directly containing the drop target
+    // and assigned it to the collection's root node list. For a nested target that
+    // array is a folder's children, so the whole collection was replaced by one
+    // inner list and everything else in it disappeared. The existing folder-drop
+    // test only ever dropped into a *top-level* folder, where the two arrays are
+    // the same — which is why this went unnoticed.
+    const collectionsUrl = `${sidecarBaseUrl}/api/config/collections`;
+    const now = new Date().toISOString();
+    const req = (id: string, name: string) => ({
+      id,
+      type: "Request",
+      name,
+      isExpanded: true,
+      children: [],
+      defaultAuth: null,
+      request: {
+        id,
+        name,
+        method: "Get",
+        url: "https://example.com",
+        headers: [],
+        queryParams: [],
+        body: { mode: "None", rawContent: null, contentType: null, formFields: [] },
+        auth: null,
+        captureRules: [],
+        preRequestActions: [],
+        postRequestActions: [],
+        responseExamples: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    const folder = (id: string, name: string, children: unknown[]) => ({
+      id,
+      type: "Folder",
+      name,
+      isExpanded: true,
+      children,
+      defaultAuth: null,
+      request: null,
+    });
+
+    await page.request.put(collectionsUrl, {
+      data: {
+        schemaVersion: 1,
+        collections: [
+          {
+            id: "33333333-3333-3333-3333-333333333333",
+            name: "Nested Drop Collection",
+            variables: [],
+            defaultAuth: null,
+            createdAt: now,
+            updatedAt: now,
+            nodes: [
+              folder("44444444-4444-4444-4444-444444444444", "Outer Folder", [
+                folder("55555555-5555-5555-5555-555555555555", "Inner Folder", [
+                  req("66666666-6666-6666-6666-666666666666", "Deep Request"),
+                ]),
+              ]),
+              req("77777777-7777-7777-7777-777777777777", "Root Request"),
+              folder("88888888-8888-8888-8888-888888888888", "Bystander Folder", [
+                req("99999999-9999-9999-9999-999999999999", "Bystander Request"),
+              ]),
+            ],
+          },
+        ],
+      },
+    });
+    await page.goto("/api-client");
+
+    const source = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Root Request" });
+    const innerFolder = page.getByTestId(/collection-node-Folder-/).filter({ hasText: "Inner Folder" });
+    await expect(innerFolder).toBeVisible();
+    await source.dragTo(innerFolder);
+
+    // Everything that was not dragged must still be there, at every depth.
+    for (const name of [
+      "Outer Folder",
+      "Inner Folder",
+      "Deep Request",
+      "Root Request",
+      "Bystander Folder",
+      "Bystander Request",
+    ]) {
+      await expect
+        .poll(
+          () =>
+            page
+              .getByTestId(/collection-node-(Folder|Request)-/)
+              .filter({ hasText: name })
+              .count(),
+          { message: `"${name}" disappeared after the nested drop` },
+        )
+        .toBeGreaterThan(0);
+    }
+
+    // And the drop actually landed: reloading proves it was persisted, not just
+    // reflected in local state.
+    await page.reload();
+    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Bystander Request" })).toBeVisible();
+    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Deep Request" })).toBeVisible();
+    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Root Request" })).toBeVisible();
+  });
+
   test("reorders rows via keyboard shortcuts", async ({ page }) => {
     await page.getByTestId("add-collection-button").click();
     await page.getByTestId("name-dialog-input").fill("Keyboard Reorder Collection");
