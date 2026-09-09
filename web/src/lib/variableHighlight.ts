@@ -9,6 +9,8 @@
 /// `bodyHighlight.ts` does — the text is user input, so letting React escape it
 /// removes any `dangerouslySetInnerHTML` question.
 
+import { isLikelySecret } from "./variable-utils";
+
 /**
  * - `resolved` — in scope with a previewable value.
  * - `deferred` — in scope, but the value is only known at send time (a generated
@@ -28,7 +30,14 @@ export interface VariableToken {
   value?: string | null;
 }
 
-const TOKEN_RE = /\{\{([^{}]*?)\}\}/g;
+/// Source text for the `{{name}}` pattern. Exported because CodeMirror's
+/// `MatchDecorator` needs to own a `RegExp` instance with its own `lastIndex` —
+/// sharing this module's would have the two scanners corrupt each other's cursor.
+/// Keeping the source in one place is what stops the body editor and the URL
+/// field from disagreeing about what counts as a token.
+export const VARIABLE_TOKEN_SOURCE = "\\{\\{([^{}]*?)\\}\\}";
+
+const TOKEN_RE = new RegExp(VARIABLE_TOKEN_SOURCE, "g");
 
 export function classifyVariable(
   name: string,
@@ -78,4 +87,69 @@ export function tokenizeVariables(
 /** True when any `{{token}}` in the text names a variable that is not in scope. */
 export function hasUnresolvedVariables(text: string, scope: Record<string, string | null>): boolean {
   return tokenizeVariables(text, scope).some((t) => t.kind === "unresolved");
+}
+
+/** The names of every `{{token}}` that is not in scope, in order, without duplicates. */
+export function unresolvedVariableNames(
+  text: string,
+  scope: Record<string, string | null>,
+): string[] {
+  const seen = new Set<string>();
+  for (const token of tokenizeVariables(text, scope)) {
+    if (token.kind === "unresolved" && token.name) seen.add(token.name);
+  }
+  return [...seen];
+}
+
+/**
+ * The CSS class a `{{name}}` token should carry, or `null` for a token that names
+ * nothing (`{{}}`) — left as plain text rather than reported as a missing variable
+ * called "".
+ *
+ * Lives here rather than beside the CodeMirror extension that consumes it so it can
+ * be unit-tested: vitest runs node-only, with no DOM for `@codemirror/view`.
+ */
+export function variableMarkClass(
+  rawName: string,
+  scope: Record<string, string | null>,
+): string | null {
+  const name = rawName.trim();
+  if (name === "") return null;
+  return `var-tok-${classifyVariable(name, scope)}`;
+}
+
+/**
+ * The hover target and description for the token covering `offset` within a single
+ * line, or `null` when the offset is not inside one. `from`/`to` are offsets within
+ * `lineText`.
+ */
+export function variableHoverAt(
+  lineText: string,
+  offset: number,
+  scope: Record<string, string | null>,
+): { from: number; to: number; text: string } | null {
+  let cursor = 0;
+  // Tokens concatenate back to the source verbatim, so a running cursor over them
+  // yields exact offsets without a second scan.
+  for (const token of tokenizeVariables(lineText, scope)) {
+    const from = cursor;
+    const to = cursor + token.text.length;
+    if (token.kind !== "text" && offset >= from && offset < to) {
+      const text = describeVariableToken(token);
+      return text === null ? null : { from, to, text };
+    }
+    cursor = to;
+  }
+  return null;
+}
+
+/// The hover description for a single token, shared by the `VariableInput` overlay
+/// and the CodeMirror body editor. Both surfaces must word the same state
+/// identically — a variable that reads "not defined" in the URL bar and shows
+/// nothing in the body is exactly the inconsistency this exists to prevent.
+export function describeVariableToken(token: VariableToken): string | null {
+  if (!token.name) return null;
+  if (token.kind === "unresolved") return `${token.name} — not defined`;
+  if (token.kind === "deferred") return `${token.name} — resolved when sent`;
+  return `${token.name} = ${isLikelySecret(token.name) ? "••••••••" : token.value}`;
 }

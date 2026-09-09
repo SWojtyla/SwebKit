@@ -14,24 +14,41 @@ interface EnvironmentManagerProps {
   environments: ApiEnvironment[];
   collections: ApiCollection[];
   activeEnvironmentId: string | null;
+  /** Read-only, for showing which project environment is active in each group. */
+  activeEnvironmentIdByCollection?: Record<string, string>;
   onSave: (environments: ApiEnvironment[], activeEnvironmentId: string | null) => void;
   onClose: () => void;
 }
 
-const DEFAULT_SIZE = { width: 800, height: 600 };
+const DEFAULT_SIZE = { width: 1040, height: 720 };
 const MIN_SIZE = { width: 640, height: 420 };
+
+/// A remembered size outlives the screen it was chosen on. Without this, a size
+/// saved on a large monitor reopens off the edge of a laptop display with the
+/// resize grip — the only way to shrink it again — out of reach. Never goes below
+/// `MIN_SIZE`, which the inner panel minimums are sized against.
+function fitToViewport(size: { width: number; height: number }) {
+  if (typeof window === "undefined") return size;
+  return {
+    width: Math.max(MIN_SIZE.width, Math.min(size.width, window.innerWidth - 48)),
+    height: Math.max(MIN_SIZE.height, Math.min(size.height, window.innerHeight - 48)),
+  };
+}
 
 export function EnvironmentManager({
   environments,
   collections,
   activeEnvironmentId,
+  activeEnvironmentIdByCollection = {},
   onSave,
   onClose,
 }: EnvironmentManagerProps) {
   const [editingEnv, setEditingEnv] = useState<ApiEnvironment | null>(null);
   const [envList, setEnvList] = useState<ApiEnvironment[]>(environments);
   const [activeId, setActiveId] = useState<string | null>(activeEnvironmentId);
-  const [size, setSize] = useState(() => loadViewPreference("env-manager-size", DEFAULT_SIZE));
+  const [size, setSize] = useState(() =>
+    fitToViewport(loadViewPreference("env-manager-size", DEFAULT_SIZE)),
+  );
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef(false);
@@ -162,7 +179,9 @@ export function EnvironmentManager({
           >
             <EnvironmentList
               environments={envList}
+              collections={collections}
               activeId={activeId}
+              activeByCollection={activeEnvironmentIdByCollection}
               editingEnv={editingEnv}
               onAdd={addEnvironment}
               onSelect={setEditingEnv}
@@ -220,12 +239,65 @@ interface EnvironmentListProps {
   environments: ApiEnvironment[];
   activeId: string | null;
   editingEnv: ApiEnvironment | null;
+  collections: ApiCollection[];
+  /** Active collection-scoped environment per collection id. */
+  activeByCollection: Record<string, string>;
   onAdd: () => void;
   onSelect: (env: ApiEnvironment) => void;
   onDelete: (id: string) => void;
 }
 
-function EnvironmentList({ environments, activeId, editingEnv, onAdd, onSelect, onDelete }: EnvironmentListProps) {
+/// Grouped by scope rather than listed flat.
+///
+/// A flat list of twenty-odd names distinguished only by a small folder-or-globe icon gave
+/// no way to answer the two questions that actually matter — which environments apply to
+/// the collection I am working in, and which one of them is active. Grouping answers both,
+/// and it surfaces environments scoped to a deleted collection, which were previously
+/// invisible and unreachable.
+function EnvironmentList({
+  environments,
+  collections,
+  activeId,
+  activeByCollection,
+  editingEnv,
+  onAdd,
+  onSelect,
+  onDelete,
+}: EnvironmentListProps) {
+  const groups: { key: string; label: string; icon: "globe" | "folder"; items: ApiEnvironment[]; activeId: string | null }[] = [];
+
+  const globals = environments.filter((e) => e.collectionId === null);
+  if (globals.length > 0) {
+    groups.push({ key: "global", label: "Global — applies everywhere", icon: "globe", items: globals, activeId });
+  }
+
+  for (const collection of collections) {
+    const items = environments.filter((e) => e.collectionId === collection.id);
+    if (items.length > 0) {
+      groups.push({
+        key: collection.id,
+        label: collection.name,
+        icon: "folder",
+        items,
+        activeId: activeByCollection[collection.id] ?? null,
+      });
+    }
+  }
+
+  const knownCollectionIds = new Set(collections.map((c) => c.id));
+  const orphans = environments.filter(
+    (e) => e.collectionId !== null && !knownCollectionIds.has(e.collectionId),
+  );
+  if (orphans.length > 0) {
+    groups.push({
+      key: "orphans",
+      label: "Scoped to a collection that no longer exists",
+      icon: "folder",
+      items: orphans,
+      activeId: null,
+    });
+  }
+
   return (
     <div className="flex h-full w-full flex-col border-r bg-card" data-testid="env-list">
       <div className="flex items-center justify-between border-b px-3 py-2">
@@ -245,31 +317,44 @@ function EnvironmentList({ environments, activeId, editingEnv, onAdd, onSelect, 
             No environments. Click + to create one.
           </div>
         )}
-        {environments.map((env) => (
-          <div
-            key={env.id}
-            className={`group flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm ${
-              editingEnv?.id === env.id ? "bg-accent" : "hover:bg-accent/50"
-            }`}
-            onClick={() => onSelect(env)}
-            data-testid={`env-item-${env.id}`}
-          >
-            {env.collectionId ? (
-              <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            ) : (
-              <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            )}
-            <span className="flex-1 truncate">{env.name}</span>
-            {activeId === env.id && (
-              <Check className="h-3 w-3" style={{ color: "var(--success)" }} data-testid={`env-active-${env.id}`} />
-            )}
-            <button
-              className="p-0.5 opacity-0 group-hover:opacity-100 hover:text-destructive"
-              onClick={(e) => { e.stopPropagation(); onDelete(env.id); }}
-              data-testid={`env-delete-${env.id}`}
-            >
-              <Trash2 className="h-3 w-3" />
-            </button>
+        {groups.map((group) => (
+          <div key={group.key}>
+            <div className="flex items-center gap-1.5 bg-muted/40 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {group.icon === "globe" ? (
+                <Globe className="h-3 w-3 shrink-0" />
+              ) : (
+                <Folder className="h-3 w-3 shrink-0" />
+              )}
+              <span className="truncate">{group.label}</span>
+            </div>
+            {group.items.map((env) => (
+              <div
+                key={env.id}
+                className={`group flex cursor-pointer items-center gap-2 px-3 py-1.5 pl-6 text-sm ${
+                  editingEnv?.id === env.id ? "bg-accent" : "hover:bg-accent/50"
+                }`}
+                onClick={() => onSelect(env)}
+                data-testid={`env-item-${env.id}`}
+              >
+                <span className="flex-1 truncate">{env.name}</span>
+                {group.activeId === env.id && (
+                  <span
+                    className="flex items-center gap-1 text-[11px]"
+                    style={{ color: "var(--success)" }}
+                    data-testid={`env-active-${env.id}`}
+                  >
+                    <Check className="h-3 w-3" /> Active
+                  </span>
+                )}
+                <button
+                  className="p-0.5 opacity-0 group-hover:opacity-100 hover:text-destructive"
+                  onClick={(e) => { e.stopPropagation(); onDelete(env.id); }}
+                  data-testid={`env-delete-${env.id}`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
           </div>
         ))}
       </div>

@@ -1,6 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, type JSX, type KeyboardEvent } from "react";
-import { tokenizeVariables } from "@/lib/variableHighlight";
-import { isLikelySecret } from "@/lib/variable-utils";
+import { describeVariableToken, tokenizeVariables } from "@/lib/variableHighlight";
 
 interface VariableInputProps {
   value: string;
@@ -63,13 +62,11 @@ export function VariableInput({
 
   const tokens = tokenizeVariables(value, scope);
 
+  // Shared with the CodeMirror body editor so the same variable cannot be worded
+  // one way in the URL bar and another in the body.
   const summary = tokens
-    .filter((t): t is typeof t & { name: string } => Boolean(t.name))
-    .map((t) => {
-      if (t.kind === "unresolved") return `${t.name} — not defined`;
-      if (t.kind === "deferred") return `${t.name} — resolved when sent`;
-      return `${t.name} = ${isLikelySecret(t.name) ? "••••••••" : t.value}`;
-    });
+    .map(describeVariableToken)
+    .filter((line): line is string => line !== null);
 
   return (
     <div

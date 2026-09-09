@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { VariableList, type VariableListItem } from "./VariableList";
 import { collectionVariableToListItem, listItemToCollectionVariable } from "@/lib/variable-utils";
@@ -10,10 +10,24 @@ interface CollectionVariableEditorProps {
   onClose: () => void;
 }
 
+function toListItems(collection: ApiCollection): VariableListItem[] {
+  return collection.variables?.map((v, i) => collectionVariableToListItem(v, `${collection.id}-${i}`)) ?? [];
+}
+
 export function CollectionVariableEditor({ collection, onSave, onClose }: CollectionVariableEditorProps) {
-  const [variables, setVariables] = useState<VariableListItem[]>(
-    collection.variables?.map((v, i) => collectionVariableToListItem(v, `${collection.id}-${i}`)) ?? []
-  );
+  const [variables, setVariables] = useState<VariableListItem[]>(() => toListItems(collection));
+
+  // Saving closes the dialog while the store write is still in flight. Reopening
+  // before it lands mounts this against the pre-save collection — and since the
+  // initializer only runs once, the list stayed empty even after the fresh data
+  // arrived, so the variables looked lost and saving again really would have lost
+  // them. Re-sync when the stored variables change. Safe against clobbering an edit
+  // in progress: the dialog closes on save, so while it is open this component is
+  // the only writer and an identity change means the data genuinely moved.
+  useEffect(() => {
+    setVariables(toListItems(collection));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collection.id, collection.variables]);
 
   const handleSave = () => {
     onSave(variables.map(listItemToCollectionVariable).filter((v) => v.key.trim()));
@@ -22,7 +36,12 @@ export function CollectionVariableEditor({ collection, onSave, onClose }: Collec
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="col-var-editor-overlay">
-      <div className="w-[500px] rounded-lg border bg-card shadow-lg" data-testid="col-var-editor">
+      {/* Wide enough for a real variable name beside its value, and capped so a
+          collection with twenty of them scrolls instead of running off-screen. */}
+      <div
+        className="flex max-h-[80vh] w-[min(56rem,92vw)] flex-col rounded-lg border bg-card shadow-lg"
+        data-testid="col-var-editor"
+      >
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h2 className="text-sm font-semibold">Collection Variables — {collection.name}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -30,7 +49,7 @@ export function CollectionVariableEditor({ collection, onSave, onClose }: Collec
           </button>
         </div>
 
-        <div className="p-4 space-y-2">
+        <div className="min-h-0 flex-1 space-y-2 overflow-auto p-4">
           <VariableList
             variables={variables}
             keyVaults={[]}

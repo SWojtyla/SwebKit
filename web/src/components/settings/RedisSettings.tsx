@@ -1,5 +1,6 @@
 import { useProfile, useUpdateProfile } from "@/lib/hooks";
 import type { RedisCacheEntry } from "@/lib/types";
+import { DraftInput } from "./DraftInput";
 
 export function RedisSettings() {
   const { data: profile } = useProfile();
@@ -13,14 +14,16 @@ export function RedisSettings() {
     namespaceSeparator: ":",
   };
 
+  // Updater form so concurrent edits queue against current state instead of each
+  // PUTting a profile snapshot taken before the other landed.
   const update = (patch: Partial<typeof redis>) => {
-    updateProfile.mutate({
-      ...profile,
+    updateProfile.mutate((prev) => ({
+      ...prev,
       config: {
-        ...profile.config,
-        redisConfig: { ...redis, ...patch },
+        ...prev.config,
+        redisConfig: { ...(prev.config.redisConfig ?? redis), ...patch },
       },
-    });
+    }));
   };
 
   const addCache = () => {
@@ -64,10 +67,10 @@ export function RedisSettings() {
 
       <div>
         <label className="mb-1 block text-sm font-medium">Namespace Separator</label>
-        <input
+        <DraftInput
           type="text"
           value={redis.namespaceSeparator}
-          onChange={(e) => update({ namespaceSeparator: e.target.value })}
+          onCommit={(v) => update({ namespaceSeparator: v })}
           className="w-24 rounded-md border bg-card px-3 py-1.5 text-sm"
         />
       </div>
@@ -75,10 +78,10 @@ export function RedisSettings() {
       {redis.caches.map((cache) => (
         <div key={cache.id} className="space-y-3 rounded-lg border p-4">
           <div className="flex items-center justify-between">
-            <input
+            <DraftInput
               type="text"
               value={cache.displayName}
-              onChange={(e) => updateCache(cache.id, { displayName: e.target.value })}
+              onCommit={(v) => updateCache(cache.id, { displayName: v })}
               className="flex-1 rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Display name"
             />
@@ -89,24 +92,25 @@ export function RedisSettings() {
               Remove
             </button>
           </div>
-          <input
+          <DraftInput
             type="text"
             value={cache.connectionString}
-            onChange={(e) => updateCache(cache.id, { connectionString: e.target.value })}
+            onCommit={(v) => updateCache(cache.id, { connectionString: v })}
             className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
             placeholder="localhost:6379"
           />
           <div className="flex items-center gap-2">
             <label className="text-sm">Database:</label>
-            <input
+            <DraftInput
               type="number"
-              value={cache.database}
-              onChange={(e) => updateCache(cache.id, { database: parseInt(e.target.value) || 0 })}
+              value={String(cache.database)}
+              onCommit={(v) => updateCache(cache.id, { database: parseInt(v) || 0 })}
               className="w-20 rounded-md border bg-card px-3 py-1.5 text-sm"
             />
             <label className="ml-4 flex items-center gap-2 text-sm">
               <input
                 type="radio"
+                name="redis-active-cache"
                 checked={redis.activeCacheId === cache.id}
                 onChange={() => update({ activeCacheId: cache.id })}
               />

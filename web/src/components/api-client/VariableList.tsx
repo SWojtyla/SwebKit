@@ -161,14 +161,47 @@ export function VariableList({
               onChange={(e) => updateVariable(v.id, { isEnabled: e.target.checked })}
               data-testid={`${testIdPrefix}-enabled-${index}`}
             />
+            {/* Grows with the dialog instead of the old fixed `w-32`, which
+                truncated ordinary names — `AUTH_API_ADDRESS` rendered as
+                `AUTH_API_ADDRE`. The floor keeps the previous width so a narrow
+                dialog is no worse than before, and `title` covers the overflow
+                that remains at the floor. */}
             <input
               type="text"
               value={v.key}
               onChange={(e) => updateVariable(v.id, { key: e.target.value })}
               placeholder="Key"
-              className="w-32 rounded border bg-background px-2 py-1 text-sm font-mono"
+              title={v.key || undefined}
+              className="min-w-32 flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
               data-testid={`${testIdPrefix}-key-${index}`}
             />
+
+            {/* Single-field modes share the key's row, so a variable costs one
+                line rather than two — the reason only four fit on screen. Key Vault
+                and generators keep a row of their own: several controls side by
+                side is the horizontal overflow this layout was stacked to fix. */}
+            {v.mode === "plain" && (
+              <input
+                type="text"
+                value={v.value ?? ""}
+                onChange={(e) => updateVariable(v.id, { value: e.target.value })}
+                placeholder="Value"
+                className="min-w-0 flex-[2] rounded border bg-background px-2 py-1 text-sm font-mono"
+                data-testid={`${testIdPrefix}-value-${index}`}
+              />
+            )}
+
+            {v.mode === "credential" && (
+              <input
+                type="text"
+                value={v.credentialKey ?? ""}
+                onChange={(e) => updateVariable(v.id, { credentialKey: e.target.value })}
+                placeholder="Credential key"
+                className="min-w-0 flex-[2] rounded border bg-background px-2 py-1 text-sm font-mono"
+                data-testid={`${testIdPrefix}-value-${index}`}
+              />
+            )}
+
             <select
               value={optionValueForMode(v.mode)}
               onChange={(e) => setMode(v.id, e.target.value)}
@@ -188,49 +221,29 @@ export function VariableList({
             </button>
           </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {v.mode === "plain" && (
-              <input
-                type="text"
-                value={v.value ?? ""}
-                onChange={(e) => updateVariable(v.id, { value: e.target.value })}
-                placeholder="Value"
-                className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
-                data-testid={`${testIdPrefix}-value-${index}`}
-              />
-            )}
+          {(v.mode === "keyvault" || (v.mode === "generated" && v.generator)) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {v.mode === "keyvault" && (
+                <KeyVaultField
+                  variable={v}
+                  index={index}
+                  keyVaults={keyVaults}
+                  onChange={(patch) => updateVariable(v.id, patch)}
+                  onPreview={() => handlePreview(v)}
+                  preview={previews[v.id]}
+                  testIdPrefix={testIdPrefix}
+                />
+              )}
 
-            {v.mode === "credential" && (
-              <input
-                type="text"
-                value={v.credentialKey ?? ""}
-                onChange={(e) => updateVariable(v.id, { credentialKey: e.target.value })}
-                placeholder="Credential key"
-                className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
-                data-testid={`${testIdPrefix}-value-${index}`}
-              />
-            )}
-
-            {v.mode === "keyvault" && (
-              <KeyVaultField
-                variable={v}
-                index={index}
-                keyVaults={keyVaults}
-                onChange={(patch) => updateVariable(v.id, patch)}
-                onPreview={() => handlePreview(v)}
-                preview={previews[v.id]}
-                testIdPrefix={testIdPrefix}
-              />
-            )}
-
-            {v.mode === "generated" && v.generator && (
-              <GeneratorConfig
-                generator={v.generator}
-                onChange={(generator) => updateVariable(v.id, { generator })}
-                testIdPrefix={`${testIdPrefix}-${index}`}
-              />
-            )}
-          </div>
+              {v.mode === "generated" && v.generator && (
+                <GeneratorConfig
+                  generator={v.generator}
+                  onChange={(generator) => updateVariable(v.id, { generator })}
+                  testIdPrefix={`${testIdPrefix}-${index}`}
+                />
+              )}
+            </div>
+          )}
 
           {v.mode === "generated" && (
             <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">

@@ -394,9 +394,11 @@ export function ServiceBusPage() {
           <SidePanel
             title="Message details"
             onClose={() => selectMessage(null)}
-            defaultWidth={380}
+            defaultWidth={560}
             minWidth={240}
-            maxWidth={600}
+            // 600 was too narrow for the panel's own action row, so the last buttons
+            // (Replay, Schedule) were unreachable at any width the user could drag to.
+            maxWidth={1400}
             storageKey="service-bus-message-detail"
           >
             <MessageDetail

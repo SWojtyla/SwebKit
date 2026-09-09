@@ -375,7 +375,7 @@
 
     private void RefreshScope()
     {
-        _resolvedScope = VariableSubstitution.BuildScope(Collection.Variables, ActiveEnvironment);
+        _resolvedScope = VariableSubstitution.BuildScope(Collection.Variables, [ActiveEnvironment]);
     }
 
     // ── URL / name editing ─────────────────────────────────────────────────────
@@ -530,7 +530,7 @@
         try
         {
             result = await Executor.ExecuteAsync(
-                Request, Collection, ActiveEnvironment, _executionCts.Token);
+                Request, Collection, ActiveEnvironment, cancellationToken: _executionCts.Token);
         }
         catch (OperationCanceledException)
         {

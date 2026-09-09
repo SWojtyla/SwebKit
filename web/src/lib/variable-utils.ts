@@ -67,10 +67,23 @@ export interface VariableListItem {
   generator?: VariableGeneratorDefinition | null;
 }
 
-/** Returns a merged variable scope: collection variables first, then environment variables (env wins on conflict). */
+/**
+ * Returns a merged variable scope. Collection variables go in first, then each
+ * environment in turn, so a later environment overrides an earlier one.
+ *
+ * Callers pass the layers lowest-priority first — in practice the active global
+ * environment then the active collection-scoped one, so a project can override a
+ * shared default while the global layer still fills in everything it does not
+ * mention. `null` entries are skipped, which lets a caller pass a slot that has no
+ * active selection without filtering first.
+ *
+ * This ordering is mirrored by `VariableSubstitutionService.BuildScope` on the
+ * backend. If the two ever diverge, the preview stops describing what is actually
+ * sent — the failure this whole area exists to prevent.
+ */
 export function buildVariableScope(
   collectionVariables: CollectionVariable[] = [],
-  environment: ApiEnvironment | null = null,
+  environments: readonly (ApiEnvironment | null | undefined)[] = [],
 ): Record<string, string | null> {
   const scope: Record<string, string | null> = {};
 
@@ -80,7 +93,8 @@ export function buildVariableScope(
     }
   }
 
-  if (environment) {
+  for (const environment of environments) {
+    if (!environment) continue;
     for (const v of environment.variables) {
       if (v.isEnabled && v.key.trim()) {
         scope[v.key] = resolveEnvironmentVariable(v);

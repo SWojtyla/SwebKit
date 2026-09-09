@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -38,6 +39,7 @@ public partial class KubernetesAksClient
             follow: opts.Follow,
             tailLines: opts.TailLines,
             sinceSeconds: opts.SinceSeconds,
+            timestamps: opts.Timestamps,
             cancellationToken: ct).ConfigureAwait(false);
 
         using var reader = new StreamReader(stream, Encoding.UTF8);
@@ -45,7 +47,9 @@ public partial class KubernetesAksClient
         {
             var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
             if (line is null) break;
-            if (opts.TextFilter is null || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
+            // Filter the message, not the timestamp prefix: with `timestamps` on, a filter of
+            // "2026" would otherwise match every line.
+            if (LogLineTimestamp.MatchesFilter(line, opts.TextFilter))
                 yield return line;
         }
     }

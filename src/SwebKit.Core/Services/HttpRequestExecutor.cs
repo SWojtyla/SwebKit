@@ -29,9 +29,13 @@ public sealed class HttpRequestExecutor(
         HttpRequestEntry request,
         ApiCollection collection,
         ApiEnvironment? activeEnvironment,
+        ApiEnvironment? globalEnvironment = null,
         CancellationToken cancellationToken = default)
     {
-        var scope = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken).ConfigureAwait(false);
+        // Lowest priority first: the collection-scoped environment overrides the global one.
+        var scope = await substitution
+            .BuildScopeAsync(collection.Variables, [globalEnvironment, activeEnvironment], cancellationToken)
+            .ConfigureAwait(false);
 
         // Build the URL (with query params merged in)
         var url = UrlBuilder.Build(request, scope, substitution);

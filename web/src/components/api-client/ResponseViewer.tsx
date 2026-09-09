@@ -8,6 +8,7 @@ import { statusTone, toneChipStyle, CountBadge } from "./method-badge";
 import { selectBodyLanguage, downloadExtension } from "@/lib/response-body";
 import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
 import { ResponseBodyViewer } from "./ResponseBodyViewer";
+import { buildCurl } from "@/lib/curl";
 
 export interface ResponseHistoryEntry {
   id: number;
@@ -22,6 +23,8 @@ interface ResponseViewerProps {
   /** Owned by the page so it survives remount and stays per-tab. */
   history?: ResponseHistoryEntry[];
   onSaveExample?: (name: string, response: ApiClientExecutionResponse) => void;
+  /** Used to resolve `{{tokens}}` in the cURL panel's body and headers. */
+  variableScope?: Record<string, string | null>;
 }
 
 type Tab = "body" | "headers" | "history";
@@ -47,36 +50,13 @@ function tryPrettyPrint(content: string, contentType: string | null): string {
   return content;
 }
 
-function buildCurl(request: HttpRequestEntry, response: ApiClientExecutionResponse): string {
-  const parts = [`curl -X ${request.method.toUpperCase()}`];
-
-  // Request headers (enabled only)
-  for (const h of request.headers) {
-    if (h.isEnabled && h.key) {
-      parts.push(`-H "${h.key}: ${h.value ?? ""}"`);
-    }
-  }
-
-  // Body for raw modes
-  if (request.body.mode === "Json" || request.body.mode === "Xml" || request.body.mode === "Text") {
-    const contentType = request.body.contentType ?? (request.body.mode === "Json" ? "application/json" : request.body.mode === "Xml" ? "application/xml" : "text/plain");
-    parts.push(`-H "Content-Type: ${contentType}"`);
-    if (request.body.rawContent) {
-      parts.push(`-d '${request.body.rawContent.replace(/'/g, "'\\''")}'`);
-    }
-  }
-
-  // Add resolved URL
-  parts.push(`"${response.resolvedUrl}"`);
-  return parts.join(" \\\n  ");
-}
-
 export function ResponseViewer({
   response,
   sending,
   request,
   history = [],
   onSaveExample,
+  variableScope = {},
 }: ResponseViewerProps) {
   const [activeTab, setActiveTab] = useState<Tab>("body");
   const [copied, setCopied] = useState(false);
@@ -174,7 +154,7 @@ export function ResponseViewer({
 
   const copyCurl = async () => {
     if (request) {
-      const curl = buildCurl(request, response);
+      const curl = buildCurl(request, response.resolvedUrl, variableScope);
       await navigator.clipboard.writeText(curl);
       setCopiedCurl(true);
       setTimeout(() => setCopiedCurl(false), 2000);
@@ -266,7 +246,7 @@ export function ResponseViewer({
             </button>
           </div>
           <pre className="overflow-auto whitespace-pre-wrap break-all font-mono text-xs">
-            {buildCurl(request, response)}
+            {buildCurl(request, response.resolvedUrl, variableScope)}
           </pre>
         </div>
       )}

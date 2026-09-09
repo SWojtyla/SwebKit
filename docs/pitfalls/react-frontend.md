@@ -71,6 +71,65 @@ it back after a restart bypasses that entirely: any script in the webview can wr
 It canonicalizes the *parent* directory because a file may not exist yet on write. A directory
 argument needs `validate_dir_within_roots`, which canonicalizes the directory itself.
 
+## Sidecar contract
+
+### A TypeScript union standing in for a C# enum must use the member names exactly
+
+`ServiceBusNamespace.authMode` was typed `"ConnectionString" | "Entra"`, but the C# enum is
+`SbAuthMode { DefaultAzureCredential, ConnectionString, ServicePrincipal }`. There is no `Entra`
+member, so choosing Entra ID sent a value the sidecar could not deserialize, the **whole profile
+save** was rejected, and the radio silently snapped back — the failure surfaced as "the button does
+nothing", nowhere near the type that caused it.
+
+Enums cross the wire as their member names (`profiles.json` stores `"authMode": "ConnectionString"`).
+When mirroring one in `types.ts`, copy the member names verbatim, and remember that one bad field
+fails the entire document, not just that property.
+
+### Settings fields write the whole profile, so commit on blur, not per keystroke
+
+The profile is a single document: every field's save is a full `PUT` plus an atomic rewrite of
+`profiles.json`. Wiring an input's `onChange` straight to the mutation therefore cost a disk write
+and a round trip **per character**, and because the input was controlled off server state, each
+character had to complete that loop before it appeared. Use `DraftInput`, which holds the text
+locally and commits on blur, Enter, or unmount — the unmount case matters because switching settings
+tabs removes the field without firing a blur.
+
+Discrete controls (radio, checkbox, select) commit immediately; there is nothing to debounce.
+
+## Server-sent events
+
+### Close every `EventSource` in the effect cleanup
+
+An SSE stream opened with `follow=true` never ends on its own. Without a cleanup that calls
+`close()`, navigating away leaves it delivering into an unmounted component, and each remount opens
+another one on top. The multi-pod log view holds a `Map<pod, EventSource>` precisely so it can close
+them individually when a pod is deselected and all of them on unmount — see `MultiPodLogView.tsx`.
+This is the React form of BL-7 in `blazor-maui.md`.
+
+It matters more than it looks: browsers cap concurrent HTTP/1.1 connections per origin at six, so a
+handful of leaked streams will silently stall every later request to the sidecar rather than failing
+loudly.
+
+### Never render per received message
+
+A busy pod emits far faster than the browser can paint, and calling `setState` per message saturates
+the render queue until the UI stops responding. Buffer into a ref and flush on a timer — `useLogBuffer`
+does it at 10 fps, and `LogLineText` is memoised so the flush does not re-tokenize every visible line.
+This is BL-8 in `blazor-maui.md`; the React log views hit it just as hard, and `MultiPodLogView`
+shipped violating it (one `setLogs` per line, per pod).
+
+### `EventSource` is GET-only, so every option is a query parameter
+
+There is no way to send a body, which is why the log-stream endpoint takes `container`, `tail`,
+`follow`, `sinceSeconds`, `previousContainer`, `filter` and `timestamps` in the URL. See the note at
+`web/src/lib/api.ts:108`.
+
+### A server-side text filter must not match the timestamp prefix
+
+With `timestamps=true` Kubernetes prefixes every line with an RFC3339 stamp. A filter applied to the
+whole line then matches the prefix, so filtering for a year returns everything. Split the line first —
+`LogLineTimestamp` on the backend, `parseLogLine` on the frontend — and match only the message.
+
 ## Layout
 
 ### Fixed-pixel panels make one pane absorb all extra width

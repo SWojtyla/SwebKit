@@ -570,6 +570,74 @@ public class DemoAksClientTests
     }
 
     [Fact]
+    public async Task StreamPodLogsAsync_WithoutTimestamps_EmitsBareLines()
+    {
+        // The demo client used to prepend a timestamp unconditionally while the real client
+        // never did, so the two disagreed about line shape and any parser was wrong against
+        // one of them.
+        var opts = new LogStreamOptions { Follow = false, TailLines = 3 };
+
+        var lines = new List<string>();
+        await foreach (var line in _client.StreamPodLogsAsync("default", "order-api-pod", "order-api", opts))
+            lines.Add(line);
+
+        Assert.NotEmpty(lines);
+        Assert.All(lines, line => Assert.Null(LogLineTimestamp.Split(line).Timestamp));
+    }
+
+    [Fact]
+    public async Task StreamPodLogsAsync_WithTimestamps_PrefixesEveryLine()
+    {
+        var opts = new LogStreamOptions { Follow = false, TailLines = 3, Timestamps = true };
+
+        var lines = new List<string>();
+        await foreach (var line in _client.StreamPodLogsAsync("default", "order-api-pod", "order-api", opts))
+            lines.Add(line);
+
+        Assert.NotEmpty(lines);
+        Assert.All(lines, line => Assert.NotNull(LogLineTimestamp.Split(line).Timestamp));
+    }
+
+    [Fact]
+    public async Task StreamPodLogsAsync_TextFilter_MatchesTheMessageNotTheTimestamp()
+    {
+        // Filtering on the year used to return every line, because the filter was applied to
+        // the raw line including its timestamp prefix.
+        var opts = new LogStreamOptions
+        {
+            Follow = false,
+            TailLines = 10,
+            Timestamps = true,
+            TextFilter = DateTimeOffset.UtcNow.Year.ToString(),
+        };
+
+        var lines = new List<string>();
+        await foreach (var line in _client.StreamPodLogsAsync("default", "order-api-pod", "order-api", opts))
+            lines.Add(line);
+
+        Assert.Empty(lines);
+    }
+
+    [Fact]
+    public async Task StreamPodLogsAsync_TextFilter_StillMatchesMessageText()
+    {
+        var opts = new LogStreamOptions
+        {
+            Follow = false,
+            TailLines = 40,
+            Timestamps = true,
+            TextFilter = "[ERR]",
+        };
+
+        var lines = new List<string>();
+        await foreach (var line in _client.StreamPodLogsAsync("default", "order-api-pod", "order-api", opts))
+            lines.Add(line);
+
+        Assert.NotEmpty(lines);
+        Assert.All(lines, line => Assert.Contains("[ERR]", LogLineTimestamp.Split(line).Message));
+    }
+
+    [Fact]
     public async Task StreamPodLogsAsync_PreviousContainer_EmitsMarkedLines_AndDoesNotFollow()
     {
         var lines = new List<string>();

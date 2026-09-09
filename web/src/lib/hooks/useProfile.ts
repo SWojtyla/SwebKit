@@ -17,12 +17,39 @@ export function useProfile() {
   });
 }
 
+/** A whole profile, or a function producing one from what is currently cached. */
+export type ProfileUpdate = ProfileData | ((prev: ProfileData) => ProfileData);
+
 export function useUpdateProfile() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: ProfileData) =>
-      apiSend("/api/config/profiles", "PUT", data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
+  return useMutation<ProfileData, Error, ProfileUpdate>({
+    // Serialized on one scope, so two saves are never in flight at once. Without it,
+    // saves raced and their responses landed out of order: clicking the Entra ID radio
+    // while a keystroke's save was still settling had the older response overwrite the
+    // cache, and the radio snapped straight back. Same defect `useUpdateCollections`
+    // was fixed for.
+    scope: { id: "profile" },
+    mutationFn: async (update) => {
+      // Read inside `mutationFn`, which the scope defers until the previous save has
+      // settled and written its result back — so an updater always sees current state
+      // rather than a snapshot taken before the last save.
+      const current = qc.getQueryData<ProfileData>(["profile"]);
+      const data = typeof update === "function" ? update(current as ProfileData) : update;
+      await apiSend("/api/config/profiles", "PUT", data);
+      // The endpoint returns 200 with no body, so the payload we sent *is* the new state.
+      return data;
+    },
+    // Writing the result back rather than invalidating: an invalidate refetched the whole
+    // profile after every save, which on a per-keystroke save meant a disk write, two
+    // round-trips and a full settings re-render per character.
+    onSuccess: (data) => {
+      qc.setQueryData(["profile"], data);
+    },
+    // A failed save leaves the cache describing something the server never accepted, so
+    // resync rather than letting the UI quietly disagree with disk.
+    onError: () => {
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    },
   });
 }
 

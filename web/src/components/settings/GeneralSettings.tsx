@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { CheckCircle2, Circle, Download, Upload } from "lucide-react";
 import { useProfile, useUpdateProfile, useUserSettings, useUpdateUserSettings, useExportSettings, useImportSettings, useDemoMode } from "@/lib/hooks";
 import { useNotification } from "@/components/layout/NotificationSystem";
+import { DraftInput } from "./DraftInput";
 
 export function GeneralSettings() {
   const { data: settings, isLoading } = useUserSettings();
@@ -93,33 +94,30 @@ export function GeneralSettings() {
             </p>
             {profile.config.keyVaults.map((kv, i) => (
               <div key={kv.id} className="mb-2 flex items-center gap-2">
-                <input
+                <DraftInput
                   type="text"
                   value={kv.name}
-                  onChange={(e) => {
-                    const next = { ...profile, config: { ...profile.config, keyVaults: profile.config.keyVaults.map((v) => (v.id === kv.id ? { ...v, name: e.target.value } : v)) } };
-                    updateProfile.mutate(next);
-                  }}
+                  onCommit={(name) =>
+                    updateProfile.mutate((prev) => ({ ...prev, config: { ...prev.config, keyVaults: prev.config.keyVaults.map((v) => (v.id === kv.id ? { ...v, name } : v)) } }))
+                  }
                   placeholder="Name"
                   className="w-40 rounded border bg-background px-2 py-1 text-sm"
                   data-testid={`kv-name-${i}`}
                 />
-                <input
+                <DraftInput
                   type="text"
                   value={kv.url}
-                  onChange={(e) => {
-                    const next = { ...profile, config: { ...profile.config, keyVaults: profile.config.keyVaults.map((v) => (v.id === kv.id ? { ...v, url: e.target.value } : v)) } };
-                    updateProfile.mutate(next);
-                  }}
+                  onCommit={(url) =>
+                    updateProfile.mutate((prev) => ({ ...prev, config: { ...prev.config, keyVaults: prev.config.keyVaults.map((v) => (v.id === kv.id ? { ...v, url } : v)) } }))
+                  }
                   placeholder="https://my-vault.vault.azure.net/"
                   className="flex-1 rounded border bg-background px-2 py-1 text-sm"
                   data-testid={`kv-url-${i}`}
                 />
                 <button
-                  onClick={() => {
-                    const next = { ...profile, config: { ...profile.config, keyVaults: profile.config.keyVaults.filter((v) => v.id !== kv.id) } };
-                    updateProfile.mutate(next);
-                  }}
+                  onClick={() =>
+                    updateProfile.mutate((prev) => ({ ...prev, config: { ...prev.config, keyVaults: prev.config.keyVaults.filter((v) => v.id !== kv.id) } }))
+                  }
                   className="rounded border px-2 py-1 text-xs hover:bg-accent"
                   data-testid={`kv-remove-${i}`}
                 >
@@ -128,10 +126,9 @@ export function GeneralSettings() {
               </div>
             ))}
             <button
-              onClick={() => {
-                const next = { ...profile, config: { ...profile.config, keyVaults: [...profile.config.keyVaults, { id: crypto.randomUUID(), name: "", url: "" }] } };
-                updateProfile.mutate(next);
-              }}
+              onClick={() =>
+                updateProfile.mutate((prev) => ({ ...prev, config: { ...prev.config, keyVaults: [...prev.config.keyVaults, { id: crypto.randomUUID(), name: "", url: "" }] } }))
+              }
               className="mt-1 rounded border px-2 py-1 text-xs hover:bg-accent"
               data-testid="kv-add"
             >

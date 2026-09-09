@@ -2,6 +2,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
 
 namespace SwebKit.Sidecar.Endpoints;
@@ -455,42 +456,67 @@ public static class AksEndpoints
             return Results.Text(string.Join('\n', lines), "text/plain");
         });
 
-        app.MapGet("/api/aks/{ns}/pods/{podName}/logs/stream", async (HttpContext ctx, string ns, string podName, string? container, int tail, bool follow, int? sinceSeconds, bool previousContainer, string? filter, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
-        {
-            var client = GetClient(pool);
-            ctx.Response.ContentType = "text/event-stream";
-            ctx.Response.Headers.CacheControl = "no-cache";
-            ctx.Response.Headers.Connection = "keep-alive";
-
-            var opts = new LogStreamOptions
-            {
-                TailLines = tail > 0 ? tail : 100,
-                Follow = follow,
-                SinceSeconds = sinceSeconds,
-                PreviousContainer = previousContainer,
-            };
-
-            try
-            {
-                await foreach (var line in client.StreamPodLogsAsync(ns, podName, container ?? "", opts, ct))
+        app.MapGet("/api/aks/{ns}/pods/{podName}/logs/stream", (HttpContext ctx, string ns, string podName, string? container, int tail, bool follow, int? sinceSeconds, bool previousContainer, string? filter, bool timestamps, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+            StreamPodLogsAsync(
+                ctx,
+                GetClient(pool),
+                ns,
+                podName,
+                container,
+                new LogStreamOptions
                 {
-                    var output = string.IsNullOrEmpty(filter) || line.Contains(filter, StringComparison.OrdinalIgnoreCase)
-                        ? line
-                        : null;
-                    if (output is not null)
-                    {
-                        await ctx.Response.WriteAsync($"data: {output}\n\n", ct);
-                        await ctx.Response.Body.FlushAsync(ct);
-                    }
+                    TailLines = tail > 0 ? tail : 100,
+                    Follow = follow,
+                    SinceSeconds = sinceSeconds,
+                    PreviousContainer = previousContainer,
+                    Timestamps = timestamps,
+                },
+                filter,
+                ct));
+    }
+
+    /// <summary>
+    /// Handler body for the pod-log SSE endpoint, extracted so it can be unit tested against a
+    /// fake client and a <c>DefaultHttpContext</c> without spinning up the ASP.NET pipeline.
+    /// </summary>
+    /// <remarks>
+    /// The framing is a contract: one <c>data:</c> frame per line, terminated by an
+    /// <c>event: done</c> frame. The browser <c>EventSource</c> in both log views depends on it,
+    /// and <c>web/e2e/aks-ux.spec.ts</c> stubs exactly this shape.
+    /// </remarks>
+    internal static async Task StreamPodLogsAsync(
+        HttpContext ctx,
+        IAksClient client,
+        string ns,
+        string podName,
+        string? container,
+        LogStreamOptions opts,
+        string? filter,
+        CancellationToken ct)
+    {
+        ctx.Response.ContentType = "text/event-stream";
+        ctx.Response.Headers.CacheControl = "no-cache";
+        ctx.Response.Headers.Connection = "keep-alive";
+
+        try
+        {
+            await foreach (var line in client.StreamPodLogsAsync(ns, podName, container ?? "", opts, ct))
+            {
+                // Match the message, never the timestamp prefix -- otherwise a filter of
+                // "2026" matches every line the moment `timestamps` is on.
+                if (LogLineTimestamp.MatchesFilter(line, filter))
+                {
+                    await ctx.Response.WriteAsync($"data: {line}\n\n", ct);
+                    await ctx.Response.Body.FlushAsync(ct);
                 }
             }
-            catch (OperationCanceledException)
-            {
-            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
 
-            await ctx.Response.WriteAsync("event: done\ndata: \n\n", ct);
-            await ctx.Response.Body.FlushAsync(ct);
-        });
+        await ctx.Response.WriteAsync("event: done\ndata: \n\n", ct);
+        await ctx.Response.Body.FlushAsync(ct);
     }
 }
 

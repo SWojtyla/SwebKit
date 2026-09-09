@@ -1,5 +1,6 @@
 import { useProfile, useUpdateProfile } from "@/lib/hooks";
 import type { StorageConfig } from "@/lib/types";
+import { DraftInput } from "./DraftInput";
 
 export function StorageSettings() {
   const { data: profile } = useProfile();
@@ -18,35 +19,37 @@ export function StorageSettings() {
       useAad: false,
       allowMutations: false,
     };
-    updateProfile.mutate({
-      ...profile,
+    // Updater form so concurrent edits queue against current state instead of each
+    // PUTting a profile snapshot taken before the other landed.
+    updateProfile.mutate((prev) => ({
+      ...prev,
       config: {
-        ...profile.config,
-        storageAccounts: [...accounts, entry],
+        ...prev.config,
+        storageAccounts: [...prev.config.storageAccounts, entry],
       },
-    });
+    }));
   };
 
   const removeAccount = (id: string) => {
-    updateProfile.mutate({
-      ...profile,
+    updateProfile.mutate((prev) => ({
+      ...prev,
       config: {
-        ...profile.config,
-        storageAccounts: accounts.filter((a) => a.id !== id),
+        ...prev.config,
+        storageAccounts: prev.config.storageAccounts.filter((a) => a.id !== id),
       },
-    });
+    }));
   };
 
   const updateAccount = (id: string, patch: Partial<StorageConfig>) => {
-    updateProfile.mutate({
-      ...profile,
+    updateProfile.mutate((prev) => ({
+      ...prev,
       config: {
-        ...profile.config,
-        storageAccounts: accounts.map((a) =>
+        ...prev.config,
+        storageAccounts: prev.config.storageAccounts.map((a) =>
           a.id === id ? { ...a, ...patch } : a,
         ),
       },
-    });
+    }));
   };
 
   return (
@@ -64,10 +67,10 @@ export function StorageSettings() {
       {accounts.map((account) => (
         <div key={account.id} className="space-y-3 rounded-lg border p-4">
           <div className="flex items-center justify-between">
-            <input
+            <DraftInput
               type="text"
               value={account.displayName}
-              onChange={(e) => updateAccount(account.id, { displayName: e.target.value })}
+              onCommit={(v) => updateAccount(account.id, { displayName: v })}
               className="flex-1 rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Display name"
             />
@@ -79,10 +82,10 @@ export function StorageSettings() {
             </button>
           </div>
 
-          <input
+          <DraftInput
             type="text"
             value={account.accountName}
-            onChange={(e) => updateAccount(account.id, { accountName: e.target.value })}
+            onCommit={(v) => updateAccount(account.id, { accountName: v })}
             className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
             placeholder="Storage account name"
           />
@@ -91,28 +94,30 @@ export function StorageSettings() {
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="radio"
+                name={`storage-auth-${account.id}`}
                 checked={!account.useAad}
                 onChange={() => updateAccount(account.id, { useAad: false })}
+                data-testid={`storage-auth-connstring-${account.id}`}
               />
               Connection String
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="radio"
+                name={`storage-auth-${account.id}`}
                 checked={account.useAad}
                 onChange={() => updateAccount(account.id, { useAad: true })}
+                data-testid={`storage-auth-entra-${account.id}`}
               />
               Entra ID (AAD)
             </label>
           </div>
 
           {!account.useAad && (
-            <input
+            <DraftInput
               type="text"
               value={account.connectionStringRef ?? ""}
-              onChange={(e) =>
-                updateAccount(account.id, { connectionStringRef: e.target.value || null })
-              }
+              onCommit={(v) => updateAccount(account.id, { connectionStringRef: v || null })}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Credential key for connection string"
             />

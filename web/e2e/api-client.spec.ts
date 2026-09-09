@@ -259,10 +259,9 @@ test.describe("API Client", () => {
   test("environment variable source picker switches fields and lists configured key vaults", async ({ page }) => {
     const uniqueVaultName = `Test Vault ${Date.now()}`;
 
-    // Each field here mutates the whole profile independently (no debounce, no optimistic cache
-    // update), so firing two edits back-to-back races: the second mutate can read a profile
-    // snapshot from before the first one's round trip landed and silently overwrite it. Wait for
-    // each save to land before starting the next edit.
+    // Settings text fields commit on blur, not per keystroke, so each edit is filled and
+    // then blurred. Saves are serialized by `useUpdateProfile`, so back-to-back edits no
+    // longer race — but waiting for each PUT still keeps the assertions below deterministic.
     const saveProfile = () =>
       page.waitForResponse((r) => r.url().includes("/api/config/profiles") && r.request().method() === "PUT");
 
@@ -271,14 +270,14 @@ test.describe("API Client", () => {
     await expect(page.getByTestId("key-vaults-section")).toBeVisible();
     const existingVaultCount = await page.locator('[data-testid^="kv-name-"]').count();
     await Promise.all([saveProfile(), page.getByTestId("kv-add").click()]);
-    await Promise.all([
-      saveProfile(),
-      page.getByTestId(`kv-name-${existingVaultCount}`).fill(uniqueVaultName),
-    ]);
-    await Promise.all([
-      saveProfile(),
-      page.getByTestId(`kv-url-${existingVaultCount}`).fill("https://test-vault.vault.azure.net/"),
-    ]);
+
+    const vaultName = page.getByTestId(`kv-name-${existingVaultCount}`);
+    await vaultName.fill(uniqueVaultName);
+    await Promise.all([saveProfile(), vaultName.blur()]);
+
+    const vaultUrl = page.getByTestId(`kv-url-${existingVaultCount}`);
+    await vaultUrl.fill("https://test-vault.vault.azure.net/");
+    await Promise.all([saveProfile(), vaultUrl.blur()]);
 
     // Reload and confirm the vault persisted before moving on, so the environment editor's fetch
     // below can't race the save.
@@ -365,6 +364,34 @@ test.describe("API Client", () => {
 
     // Active env name should show
     await expect(page.getByTestId("active-env-name")).toContainText("Selector Test Env");
+  });
+
+  test("a collection-scoped environment is selectable from its own picker", async ({ page }) => {
+    // The regression this guards: the global picker lists only global environments, so an
+    // estate of entirely collection-scoped ones had nothing selectable anywhere while the
+    // project picker was hidden until a request tab happened to be open.
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Scoped Env Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    await page.getByTestId("env-manager-button").click();
+    await page.getByTestId("env-add-button").click();
+    await page.getByTestId("env-name-input").fill("Scoped Env");
+    await page.getByTestId("env-scope-select").selectOption({ label: "Scoped Env Collection" });
+    await page.getByTestId("env-save-all").click();
+
+    // Not offered by the global picker, because it is not global.
+    await expect(page.getByTestId("env-selector")).not.toContainText("Scoped Env");
+
+    // Selecting the collection in the tree is enough — no request needs to be open.
+    await page.getByTestId("collection-search").fill("Scoped Env Collection");
+    await page.getByTestId(/collection-root-/).filter({ hasText: "Scoped Env Collection" }).first().click();
+
+    const scoped = page.getByTestId("env-selector-scoped");
+    await expect(scoped).toBeEnabled();
+    await expect(scoped).toContainText("Scoped Env");
+    await scoped.selectOption({ label: "Scoped Env" });
+    await expect(page.getByTestId("active-env-name")).toContainText("Scoped Env");
   });
 
   test("collection variables editor works", async ({ page }) => {

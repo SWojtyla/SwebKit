@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import { Save, Send, Wand2, Minimize2, Eye, Crosshair, Pencil, Sparkles, Search } from "lucide-react";
 import { GenerateApiRequestPanel } from "./GenerateApiRequestPanel";
 import { JsonPathPicker } from "./JsonPathPicker";
@@ -12,8 +12,10 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from "@codemirror/view";
 import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig, CaptureRule, ApiEnvironment } from "@/lib/types";
 import { substituteVariables, previewVariables, isLikelySecret } from "@/lib/variable-utils";
+import { unresolvedVariableNames } from "@/lib/variableHighlight";
 import { saveSecret, getSecret, deleteSecret } from "@/lib/tauri-bridge";
 import { swebkitHighlighting } from "@/lib/codemirror-theme";
+import { variableHighlighting } from "@/lib/codemirror-variables";
 import { METHOD_META, methodMeta, toneTextStyle, CountBadge } from "./method-badge";
 import { GraphQlPanel } from "./GraphQlPanel";
 import { VariableInput } from "./VariableInput";
@@ -57,12 +59,14 @@ interface BodyCodeEditorProps {
   value: string;
   mode: RequestBodyMode;
   onChange: (value: string) => void;
+  scope: Record<string, string | null>;
 }
 
-function BodyCodeEditor({ value, mode, onChange }: BodyCodeEditorProps) {
+function BodyCodeEditor({ value, mode, onChange, scope }: BodyCodeEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const languageRef = useRef(new Compartment());
+  const variablesRef = useRef(new Compartment());
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
@@ -88,6 +92,7 @@ function BodyCodeEditor({ value, mode, onChange }: BodyCodeEditorProps) {
             indentWithTab,
           ]),
           languageRef.current.of(bodyLanguage(mode)),
+          variablesRef.current.of(variableHighlighting(scope)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
           }),
@@ -109,6 +114,18 @@ function BodyCodeEditor({ value, mode, onChange }: BodyCodeEditorProps) {
   useEffect(() => {
     viewRef.current?.dispatch({ effects: languageRef.current.reconfigure(bodyLanguage(mode)) });
   }, [mode]);
+
+  // Keyed on the scope's *contents*, not its identity: `buildVariableScope` returns
+  // a fresh object on every render, so depending on the reference would rebuild the
+  // decorator on every keystroke. Reconfigured through a compartment rather than by
+  // recreating the view, which would drop the cursor, scroll and undo history.
+  const scopeKey = JSON.stringify(scope);
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: variablesRef.current.reconfigure(variableHighlighting(scope)),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -240,6 +257,17 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   const savedSnapshotRef = useRef<HttpRequestEntry>(request);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+
+  // Every place a `{{token}}` is substituted before sending, so the preview and the
+  // warning cover the whole request rather than just the URL. The body was the gap
+  // that mattered: `HttpRequestExecutor` substitutes it, but nothing showed it.
+  const substitutedText = [
+    request.url,
+    request.body.rawContent ?? "",
+    ...request.headers.filter((h) => h.isEnabled).map((h) => h.value ?? ""),
+  ].join("\n");
+  const previewedVariables = previewVariables(substitutedText, variableScope);
+  const unresolvedNames = unresolvedVariableNames(substitutedText, variableScope);
 
   const handleSave = useCallback(async () => {
     if (secretSaveTimer.current) {
@@ -497,6 +525,26 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
         </button>
       </div>
 
+      {/* An undefined variable is substituted with its own literal text, so the
+          request goes out containing `{{NAME}}` and the server rejects it. That was
+          invisible until now: the preview below is behind a toggle nobody opens
+          before a send that they expect to work. This banner is not. */}
+      {unresolvedNames.length > 0 && (
+        <div
+          className="border-b px-3 py-1.5 text-xs"
+          style={{
+            color: "var(--destructive)",
+            backgroundColor: "color-mix(in oklch, var(--destructive) 10%, transparent)",
+          }}
+          data-testid="unresolved-variable-warning"
+        >
+          {unresolvedNames.length === 1
+            ? `1 variable is not defined in this scope and will be sent literally: `
+            : `${unresolvedNames.length} variables are not defined in this scope and will be sent literally: `}
+          <span className="font-mono">{unresolvedNames.join(", ")}</span>
+        </div>
+      )}
+
       {/* Variable preview */}
       {showVarPreview && (
         <div className="border-b bg-muted/30 px-3 py-2" data-testid="variable-preview">
@@ -504,15 +552,15 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
           <div className="break-all font-mono text-xs">
             {substituteVariables(request.url, variableScope)}
           </div>
-          {Object.keys(previewVariables(request.url, variableScope)).length > 0 && (
+          {Object.keys(previewedVariables).length > 0 && (
             <div className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-              {Object.entries(previewVariables(request.url, variableScope)).map(([key, value]) => (
-                <>
-                  <span key={`k-${key}`} className="text-muted-foreground">{key}</span>
-                  <span key={`v-${key}`} className="font-mono">
+              {Object.entries(previewedVariables).map(([key, value]) => (
+                <Fragment key={key}>
+                  <span className="text-muted-foreground">{key}</span>
+                  <span className="font-mono">
                     {value === null ? "<unresolved>" : isLikelySecret(key) ? "••••••••" : value}
                   </span>
-                </>
+                </Fragment>
               ))}
             </div>
           )}
@@ -695,6 +743,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
                 value={request.body.rawContent ?? ""}
                 mode={request.body.mode}
                 onChange={setBodyContent}
+                scope={variableScope}
               />
             )}
           </div>

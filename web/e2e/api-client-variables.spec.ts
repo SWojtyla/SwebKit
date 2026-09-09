@@ -11,7 +11,11 @@ const REQUEST_ID = "22222222-2222-2222-2222-222222222222";
  * asserted against — going through the sidecar rather than the UI so the tests
  * exercise the highlighting, not the collection-variable editor.
  */
-async function seedCollectionWithVariables(page: import("@playwright/test").Page, url: string) {
+async function seedCollectionWithVariables(
+  page: import("@playwright/test").Page,
+  url: string,
+  body: { mode: string; rawContent: string | null } = { mode: "None", rawContent: null },
+) {
   const now = new Date().toISOString();
   await page.request.put(`${sidecarUrl}/api/config/collections`, {
     data: {
@@ -42,7 +46,7 @@ async function seedCollectionWithVariables(page: import("@playwright/test").Page
                 url,
                 headers: [{ key: "X-Trace", value: "{{Phone_Api_Url}}|{{Nope}}", isEnabled: true }],
                 queryParams: [],
-                body: { mode: "None", rawContent: null, contentType: null, formFields: [] },
+                body: { ...body, contentType: null, formFields: [] },
                 auth: null,
                 captureRules: [],
                 preRequestActions: [],
@@ -116,6 +120,39 @@ test.describe("API Client variable highlighting", () => {
     const highlight = page.getByTestId("request-header-value-0-highlight");
     await expect(highlight.locator(".var-tok-resolved")).toHaveText(["{{Phone_Api_Url}}"]);
     await expect(highlight.locator(".var-tok-unresolved")).toHaveText(["{{Nope}}"]);
+  });
+
+  test("highlights variables in the request body, not just the URL", async ({ page }) => {
+    // Short body on purpose: CodeMirror only renders the visible viewport, so a
+    // long document would put the assertion target outside the DOM.
+    await seedCollectionWithVariables(page, "https://plain.example.com/a", {
+      mode: "Json",
+      rawContent: '{"a":"{{Phone_Api_Url}}","b":"{{Nope}}","c":"{{ApiSecret}}"}',
+    });
+    await page.goto("/api-client");
+    await page.getByTestId(/collection-node-Request-/).filter({ hasText: "Highlighted" }).click();
+    await page.getByTestId("request-tab-body").click();
+
+    const editor = page.getByTestId("request-body-codemirror");
+    await expect(editor.locator(".var-tok-resolved")).toHaveText(["{{Phone_Api_Url}}"]);
+    await expect(editor.locator(".var-tok-unresolved")).toHaveText(["{{Nope}}"]);
+    await expect(editor.locator(".var-tok-deferred")).toHaveText(["{{ApiSecret}}"]);
+  });
+
+  test("warns about an undefined body variable without opening the preview", async ({ page }) => {
+    // The regression this guards: an undefined variable is substituted with its own
+    // literal text, so the request goes out containing `{{Nope}}` and the server
+    // rejects it. Nothing used to say so before the send.
+    await seedCollectionWithVariables(page, "https://plain.example.com/a", {
+      mode: "Json",
+      rawContent: '{"b":"{{Nope}}"}',
+    });
+    await page.goto("/api-client");
+    await page.getByTestId(/collection-node-Request-/).filter({ hasText: "Highlighted" }).click();
+
+    await expect(page.getByTestId("variable-preview")).toHaveCount(0);
+    // `{{Nope}}` also appears in the seeded X-Trace header, so the warning names it once.
+    await expect(page.getByTestId("unresolved-variable-warning")).toContainText("Nope");
   });
 });
 

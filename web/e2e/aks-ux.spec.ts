@@ -164,4 +164,55 @@ test.describe("AKS workspace UX", () => {
     // Stack frames stay dimmed so the exception header they belong to stands out.
     await expect(output.locator(".log-level-frame").first()).toBeVisible();
   });
+
+  // The single-pod toolbar had no coverage at all, which is uncomfortable now that both
+  // log views share one implementation of it — a regression here would silently reach the
+  // multi-pod view too.
+  test("the log toolbar filters, pauses and clears", async ({ page }) => {
+    await stubPodLogStream(page);
+
+    await page.goto("/aks");
+    await page.getByTestId("aks-namespace-select").selectOption(NAMESPACE);
+    await page.getByTestId("aks-tab-pods").click();
+    await page.getByTestId("pods-table-body").locator("tr").first().click();
+
+    const output = page.getByTestId("log-output");
+    await expect(output).toContainText("CreateTokenException");
+    await expect(page.getByTestId("log-line-count")).toContainText("of 5");
+
+    // Filtering narrows the window and its summary, and matches the message text.
+    await page.getByTestId("log-filter-input").fill("OfficeId");
+    await expect(page.getByTestId("log-line-count")).toContainText("of 1");
+    await expect(output).not.toContainText("End of inner exception");
+
+    await page.getByTestId("log-filter-input").fill("");
+    await expect(page.getByTestId("log-line-count")).toContainText("of 5");
+
+    // Pause is a toggle, and says which state it will move to.
+    await page.getByTestId("log-pause-btn").click();
+    await expect(page.getByTestId("log-pause-btn")).toContainText("Resume");
+    await page.getByTestId("log-pause-btn").click();
+    await expect(page.getByTestId("log-pause-btn")).toContainText("Pause");
+
+    await page.getByTestId("log-clear-btn").click();
+    await expect(page.getByTestId("log-line-count")).toContainText("0 lines");
+  });
+
+  test("the timestamp display toggle is remembered", async ({ page }) => {
+    await stubPodLogStream(page);
+
+    await page.goto("/aks");
+    await page.getByTestId("aks-namespace-select").selectOption(NAMESPACE);
+    await page.getByTestId("aks-tab-pods").click();
+    await page.getByTestId("pods-table-body").locator("tr").first().click();
+
+    await expect(page.getByTestId("log-timestamp-select")).toBeVisible();
+    await page.getByTestId("log-timestamp-select").selectOption("off");
+
+    // A view preference, not per-stream state, so it survives a reload.
+    await page.reload();
+    await page.getByTestId("aks-tab-pods").click();
+    await page.getByTestId("pods-table-body").locator("tr").first().click();
+    await expect(page.getByTestId("log-timestamp-select")).toHaveValue("off");
+  });
 });

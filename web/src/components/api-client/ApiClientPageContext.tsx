@@ -260,8 +260,18 @@ export interface ApiClientPageContextValue {
 
   environments: ApiEnvironment[];
   activeEnvironmentId: string | null;
+  /** The layer that wins — the scoped one when set, otherwise the global one. */
   activeEnvironment: ApiEnvironment | null;
+  /** The global layer, applied to every collection. */
+  activeGlobalEnvironment: ApiEnvironment | null;
+  /** The layer scoped to the current collection, applied over the global one. */
+  activeScopedEnvironment: ApiEnvironment | null;
+  /** The collection the environment pickers work against: the open tab's, else the tree selection. */
+  currentCollection: ApiCollection | null;
+  /** Active collection-scoped environment per collection id, for display in the manager. */
+  activeEnvironmentIdByCollection: Record<string, string>;
   handleSetActiveEnvironment: (envId: string | null) => void;
+  handleSetScopedEnvironment: (collectionId: string, envId: string | null) => void;
   handleSaveEnvironments: (envs: ApiEnvironment[], activeId: string | null) => void;
 
   selectedNodeId: string | null;
@@ -342,6 +352,33 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   const environments = envData?.environments ?? [];
   const uiState = envData?.uiState;
   const activeEnvironmentId = uiState?.activeEnvironmentId ?? null;
+
+  /// Resolves the two environment layers that apply to a collection: a global one
+  /// and a collection-scoped one, both active at once with the scoped one winning.
+  /// Both slots already existed in the stored UI state
+  /// (`activeEnvironmentId` and `activeEnvironmentIdByCollection`) but only the
+  /// first was ever read, so a value shared by every `DEV (via …)` environment had
+  /// to be duplicated into each of them.
+  ///
+  /// Used by both the preview scope and the send payload. Resolving it twice is how
+  /// the preview would start describing something other than what is sent.
+  const resolveEnvironmentLayers = (collectionId: string | null | undefined) => {
+    const selected = environments.find((e) => e.id === activeEnvironmentId) ?? null;
+
+    // The global slot can still hold a collection-scoped environment picked before
+    // the two layers existed. Honour it as that collection's project selection
+    // rather than applying an environment scoped to somewhere else.
+    const global = selected && selected.collectionId === null ? selected : null;
+
+    const scopedId = collectionId
+      ? uiState?.activeEnvironmentIdByCollection?.[collectionId] ?? null
+      : null;
+    const scoped =
+      (scopedId ? environments.find((e) => e.id === scopedId) ?? null : null) ??
+      (selected && collectionId && selected.collectionId === collectionId ? selected : null);
+
+    return { global, scoped };
+  };
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
@@ -640,10 +677,13 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         (type, title, message) => notify(type, title, message),
       );
 
+      const layers = resolveEnvironmentLayers(tab.collectionId);
       const result = await executeRequest.mutateAsync({
         request,
         collectionId: tab.collectionId ?? undefined,
-        environmentId: activeEnvironmentId ?? undefined,
+        // Both layers travel to the backend, which applies the same precedence.
+        globalEnvironmentId: layers.global?.id ?? undefined,
+        environmentId: layers.scoped?.id ?? undefined,
       });
 
       // Commit the response immediately so the UI is not blocked by post-request actions (e.g. Delay).
@@ -813,6 +853,31 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     });
   };
 
+  /// Sets the collection-scoped layer. Kept separate from the global slot so
+  /// switching a project's target does not disturb the shared environment, which is
+  /// the whole point of having two layers.
+  const handleSetScopedEnvironment = (collectionId: string, envId: string | null) => {
+    const byCollection = { ...(uiState?.activeEnvironmentIdByCollection ?? {}) };
+    if (envId === null) delete byCollection[collectionId];
+    else byCollection[collectionId] = envId;
+
+    updateEnvironments.mutate({
+      schemaVersion: 1,
+      environments,
+      uiState: {
+        // A pre-existing global selection that is really collection-scoped would
+        // keep overriding this one through the compatibility path, so clear it.
+        activeEnvironmentId:
+          activeEnvironmentId &&
+          environments.find((e) => e.id === activeEnvironmentId)?.collectionId === collectionId
+            ? null
+            : activeEnvironmentId,
+        activeEnvironmentIdByCollection: byCollection,
+        lastSelectedRequestIdByCollection: uiState?.lastSelectedRequestIdByCollection ?? {},
+      },
+    });
+  };
+
   const handleSaveCollectionVariables = (variables: CollectionVariable[]) => {
     if (!selectedCollectionId) return;
     updateCollections.mutate(
@@ -836,16 +901,30 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     [collections, exportCollectionId],
   );
 
-  const activeEnvironment = environments.find((e) => e.id === activeEnvironmentId) ?? null;
-
   const activeTab = activeTabId ? tabs.find((t) => t.id === activeTabId) ?? null : null;
   const activeCollection = activeTab
     ? collections.find((c) => c.id === activeTab.collectionId)
     : null;
-  const variableScope = buildVariableScope(
-    activeCollection?.variables ?? [],
-    activeEnvironment,
-  );
+
+  // The collection the environment pickers and the variable scope both work against.
+  // Falls back to the tree selection because `activeCollection` needs an *open request
+  // tab*: gating the project picker on it alone meant that before opening a request there
+  // was no way to choose a collection-scoped environment at all.
+  const currentCollection = activeCollection ?? selectedCollection;
+
+  const { global: activeGlobalEnvironment, scoped: activeScopedEnvironment } =
+    resolveEnvironmentLayers(currentCollection?.id);
+
+  // Lowest priority first: the project layer overrides the global one, and the
+  // global one fills in everything the project does not mention.
+  const variableScope = buildVariableScope(currentCollection?.variables ?? [], [
+    activeGlobalEnvironment,
+    activeScopedEnvironment,
+  ]);
+
+  // The environment whose name the toolbar shows: the project one when there is
+  // one, since that is the layer that wins.
+  const activeEnvironment = activeScopedEnvironment ?? activeGlobalEnvironment;
 
   const dismissConflict = () => setConflict(null);
 
@@ -861,7 +940,12 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     environments,
     activeEnvironmentId,
     activeEnvironment,
+    activeGlobalEnvironment,
+    activeScopedEnvironment,
+    currentCollection: currentCollection ?? null,
+    activeEnvironmentIdByCollection: uiState?.activeEnvironmentIdByCollection ?? {},
     handleSetActiveEnvironment,
+    handleSetScopedEnvironment,
     handleSaveEnvironments,
 
     selectedNodeId,

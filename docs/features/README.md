@@ -24,6 +24,27 @@ models) and is fully done — `workspace-intelligence` is its follow-on. Both su
 `tauri-react-primary-tool/`, which shipped (merged to `main` via PR #75) and has been removed from
 `active/`.
 
+**API client (2026-09-09):** `docs/features/active/api-client-variable-scoping/` is in Review —
+`{{variable}}` highlighting in the request body editor (the URL field already had it, the body
+did not, so an undefined variable was sent literally and came back a 400 with no warning), a cURL
+panel that actually reproduces the request, and a global environment layer that applies underneath
+the collection-scoped one so shared values are defined once. It builds on
+`api-client-ux-improvements/` (Review, shipped as PR #82) and deliberately does not re-plan the
+Environment Manager resizing that shipped there.
+
+**AKS logs (2026-09-09):** `docs/features/active/aks-log-parity/` is in Review — the multi-pod log
+view now streams every pod on open and shares one toolbar, buffer and windowing model with the
+single-pod view, instead of having almost none of its controls. Log lines carry the container's own
+timestamp (the `timestamps` option was never passed to Kubernetes) and multi-pod output is ordered by
+it rather than by arrival. Also normalises the two AKS clients, which disagreed about line shape, and
+fixes a text filter that matched the timestamp prefix.
+
+**Settings (2026-09-09):** `docs/features/active/settings-save-performance/` is in Review — every
+settings field used to save the whole profile on every keystroke (a disk rewrite and a refetch per
+character), saves were not serialized so concurrent edits raced, and the Service Bus Entra ID option
+sent a value that is not a member of the C# `SbAuthMode` enum, so the save was rejected and the radio
+reverted. All seven profile-writing settings pages now commit on blur through `DraftInput`.
+
 **Note (2026-07-26, partially superseded 2026-08-03):** Observability and DevOps/Pipelines were
 dropped from the Tauri + React rewrite by product decision — not deferred, not planned for a later
 pass. See `docs/features/archive/demo-mode-parity/index.md` for the original context (recreated

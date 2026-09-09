@@ -58,7 +58,10 @@ export function useExecuteRequest() {
     mutationFn: (vars: {
       request: HttpRequestEntry;
       collectionId?: string;
+      /** The collection-scoped layer — overrides the global one on a key clash. */
       environmentId?: string;
+      /** The global layer, applied underneath `environmentId`. */
+      globalEnvironmentId?: string;
     }) => apiSend<ApiClientExecutionResponse>("/api/api-client/execute", "POST", vars),
   });
 }

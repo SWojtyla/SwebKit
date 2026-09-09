@@ -10,8 +10,12 @@ import {
 import { downloadText, downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
 import { useNotification } from "@/components/layout/NotificationSystem";
+import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
 import { messageToDownloadObject, safeFileName } from "./exportHelpers";
+
+const BODY_PRETTY_PREF_KEY = "sb-message-body-pretty";
+const BODY_WRAP_PREF_KEY = "sb-message-body-wrap";
 
 interface Props {
   message: SbMessage | null;
@@ -38,19 +42,35 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [propFilter, setPropFilter] = useState("");
+  // Pretty by default, and remembered: a 300-byte payload on one line is not a readable
+  // message, and until now this was not a choice at all.
+  const [prettyPrinted, setPrettyPrinted] = useState<boolean>(() =>
+    loadViewPreference<boolean>(BODY_PRETTY_PREF_KEY, true),
+  );
+  const [wrapBody, setWrapBody] = useState<boolean>(() =>
+    loadViewPreference<boolean>(BODY_WRAP_PREF_KEY, true),
+  );
   const [copyPropKey, setCopyPropKey] = useState<string | null>(null);
   const saveTemplateMutation = useSbSaveTemplate();
 
-  const tryFormatJson = (body: string): string => {
+  /// Strips whatever sits in front of the payload before parsing.
+  ///
+  /// `detectFormat` trimmed but `tryFormatJson` did not, so a body carrying a UTF-8 BOM —
+  /// routine for messages published by .NET — was reported as JSON and then silently
+  /// failed to parse, leaving it rendered as one unreadable line with no explanation.
+  const stripPreamble = (body: string): string => body.replace(/^\uFEFF/, "").trim();
+
+  /** The prettified body, or `null` when it genuinely is not parseable JSON. */
+  const tryFormatJson = (body: string): string | null => {
     try {
-      return JSON.stringify(JSON.parse(body), null, 2);
+      return JSON.stringify(JSON.parse(stripPreamble(body)), null, 2);
     } catch {
-      return body;
+      return null;
     }
   };
 
   const detectFormat = (body: string): "json" | "xml" | "text" => {
-    const trimmed = body.trim();
+    const trimmed = stripPreamble(body);
     if (trimmed.startsWith("{") || trimmed.startsWith("[")) return "json";
     if (trimmed.startsWith("<")) return "xml";
     return "text";
@@ -64,7 +84,10 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
 
   const bodyFormat = message ? detectFormat(message.body) : "text";
   const bodySize = message ? new TextEncoder().encode(message.body).length : 0;
-  const bodyLineCount = message ? message.body.split("\n").length : 0;
+  const prettyBody = message && bodyFormat === "json" ? tryFormatJson(message.body) : null;
+  // What is actually on screen, so Pretty/Raw and the line count cannot disagree.
+  const displayedBody = prettyPrinted && prettyBody !== null ? prettyBody : (message?.body ?? "");
+  const bodyLineCount = displayedBody ? displayedBody.split("\n").length : 0;
 
   const filteredProps = useMemo(() => {
     if (!message) return [];
@@ -98,6 +121,17 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
     } catch {
       // Fallback for environments without clipboard API
     }
+  };
+
+  const togglePretty = (next: boolean) => {
+    setPrettyPrinted(next);
+    saveViewPreference(BODY_PRETTY_PREF_KEY, next);
+  };
+
+  const toggleWrap = () => {
+    const next = !wrapBody;
+    setWrapBody(next);
+    saveViewPreference(BODY_WRAP_PREF_KEY, next);
   };
 
   const copyBody = () => copyToClipboard(message.body, "body");
@@ -203,7 +237,7 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
               Message ID: {message.messageId} · Seq: #{message.sequenceNumber}
             </p>
           </div>
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
             {onClose && (
               <button
                 data-testid="message-detail-close"
@@ -255,8 +289,10 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
           </div>
         </div>
 
-        {/* Action buttons row */}
-        <div className="mt-2 flex items-center gap-2">
+        {/* Action buttons row. Wraps: the panel is resizable down to 240px, and without
+            wrapping the trailing actions were simply clipped off the right edge with no
+            indication they existed. */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             data-testid="message-copy-body"
             onClick={copyBody}
@@ -418,10 +454,50 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
       <div className="flex-1 overflow-auto p-4">
         {activeTab === "body" && (
           <div data-testid="detail-tab-content-body">
-            <div className="mb-2 flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <span data-testid="body-format">Format: {bodyFormat.toUpperCase()}</span>
               <span data-testid="body-size">Size: {formatBytes(bodySize)}</span>
               <span data-testid="body-lines">Lines: {bodyLineCount}</span>
+
+              {bodyFormat === "json" && prettyBody !== null && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => togglePretty(true)}
+                    aria-pressed={prettyPrinted}
+                    className={`rounded border px-2 py-0.5 ${prettyPrinted ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                    data-testid="body-pretty-toggle"
+                  >
+                    Pretty
+                  </button>
+                  <button
+                    onClick={() => togglePretty(false)}
+                    aria-pressed={!prettyPrinted}
+                    className={`rounded border px-2 py-0.5 ${!prettyPrinted ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                    data-testid="body-raw-toggle"
+                  >
+                    Raw
+                  </button>
+                </div>
+              )}
+
+              {/* Says so rather than quietly showing one long line, which is how a body that
+                  looks like JSON but does not parse used to present. */}
+              {bodyFormat === "json" && prettyBody === null && (
+                <span className="text-warning" data-testid="body-unparseable">
+                  Not valid JSON — showing raw
+                </span>
+              )}
+
+              <button
+                onClick={toggleWrap}
+                aria-pressed={wrapBody}
+                className={`rounded border px-2 py-0.5 ${wrapBody ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                data-testid="body-wrap-toggle"
+                title="Wrap long lines"
+              >
+                Wrap
+              </button>
+
               <button
                 onClick={copyBody}
                 className="flex items-center gap-1 rounded border px-2 py-0.5 hover:bg-accent"
@@ -430,11 +506,16 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
                 {copyFeedback === "body" ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
               </button>
             </div>
-            <pre data-testid="message-detail-body" className="max-h-[60vh] overflow-auto rounded-lg border bg-card p-3 text-xs">
+            <pre
+              data-testid="message-detail-body"
+              className={`max-h-[60vh] overflow-auto rounded-lg border bg-card p-3 text-xs ${
+                wrapBody ? "whitespace-pre-wrap break-all" : "whitespace-pre"
+              }`}
+            >
               {bodyFormat === "json" ? (
-                <JsonHighlight text={tryFormatJson(message.body)} />
+                <JsonHighlight text={displayedBody} />
               ) : (
-                <span className="whitespace-pre-wrap break-all">{message.body}</span>
+                displayedBody
               )}
             </pre>
           </div>
@@ -465,12 +546,19 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
                 </div>
                 <div className="rounded-lg border">
                   {filteredProps.map(([key, value]) => (
-                    <div key={key} className="group flex items-start border-b px-3 py-1.5 text-xs last:border-0">
-                      <span className="w-48 shrink-0 font-medium text-muted-foreground">{key}</span>
-                      <span className="flex-1 break-all">{String(value)}</span>
+                    // A two-column grid rather than a fixed-width span: `w-48 shrink-0` gave
+                    // the key a hard 192px with nothing to stop a longer name spilling over
+                    // the value beside it. The key column now grows to the longest name up to
+                    // a cap, then wraps, and the value always starts clear of it.
+                    <div
+                      key={key}
+                      className="group grid grid-cols-[minmax(0,14rem)_1fr_auto] items-start gap-x-3 border-b px-3 py-1.5 text-xs last:border-0"
+                    >
+                      <span className="break-all font-medium text-muted-foreground" title={key}>{key}</span>
+                      <span className="min-w-0 break-all">{String(value)}</span>
                       <button
                         onClick={() => copyProp(key, value)}
-                        className="ml-2 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                        className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
                         data-testid={`prop-copy-${key}`}
                         title="Copy value"
                       >
@@ -490,7 +578,13 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
         )}
 
         {activeTab === "system" && (
-          <div data-testid="detail-tab-content-system" className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          // Fits the columns to the panel rather than always forcing two: the panel is
+          // resizable down to 240px, where two columns leave nothing readable in either.
+          // Container-driven, so a viewport breakpoint would not have worked.
+          <div
+            data-testid="detail-tab-content-system"
+            className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-x-6 gap-y-3 text-sm"
+          >
             <Field label="Message ID" value={message.messageId} />
             <Field label="Correlation ID" value={message.correlationId} />
             <Field label="Subject" value={message.subject} />
@@ -529,9 +623,11 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
 
 function Field({ label, value }: { label: string; value: string | null | undefined }) {
   return (
-    <div>
+    <div className="min-w-0">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <p className="text-sm">{value || "—"}</p>
+      {/* A message id is longer than the column at most panel widths, and without this it
+          ran over the field beside it. */}
+      <p className="break-all text-sm">{value || "—"}</p>
     </div>
   );
 }

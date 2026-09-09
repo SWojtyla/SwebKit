@@ -39,14 +39,16 @@ export function WorkspaceMapSettings() {
 
   const topology = profile.config.topology ?? EMPTY_TOPOLOGY;
 
+  // Updater form so concurrent edits queue against current state instead of each
+  // PUTting a profile snapshot taken before the other landed.
   const save = (patch: Partial<WorkspaceTopology>) => {
-    updateProfile.mutate({
-      ...profile,
+    updateProfile.mutate((prev) => ({
+      ...prev,
       config: {
-        ...profile.config,
-        topology: { ...topology, ...patch },
+        ...prev.config,
+        topology: { ...(prev.config.topology ?? topology), ...patch },
       },
-    });
+    }));
   };
 
   const addNode = (node: Omit<WorkspaceResourceNode, "id">) => {
