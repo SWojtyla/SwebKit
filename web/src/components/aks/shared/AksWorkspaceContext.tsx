@@ -180,6 +180,12 @@ export interface AksWorkspaceContextValue {
 const AUTO_REFRESH_PREF = "aks-auto-refresh";
 const REFRESH_INTERVAL_PREF = "aks-refresh-interval";
 const DEFAULT_REFRESH_SECONDS = 10;
+const SELECTED_NS_PREF_PREFIX = "aks-selected-ns";
+
+/** Per-cluster storage key: each kube context remembers its own last-selected namespace(s). */
+function selectedNsPrefKey(context: string): string {
+  return `${SELECTED_NS_PREF_PREFIX}:${context}`;
+}
 
 /** Selectable auto-refresh cadences, in seconds. */
 export const aksRefreshIntervals = [5, 10, 30, 60] as const;
@@ -287,12 +293,15 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
    */
   const namespacePickedRef = useRef(false);
 
+  const currentContextName = profile?.config.aksConfig?.kubeconfigContext ?? null;
+
   const setSelectedNamespaces = useCallback(
     (namespaces: string[]) => {
       namespacePickedRef.current = true;
       updateParams({ ns: encodeNamespaces(namespaces) });
+      if (currentContextName) saveViewPreference(selectedNsPrefKey(currentContextName), namespaces);
     },
-    [updateParams],
+    [updateParams, currentContextName],
   );
 
   const namespaceToken = useMemo(() => {
@@ -378,15 +387,29 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
   const multiPodNames = useMemo(() => logsParam?.split(",").filter(Boolean) ?? [], [logsParam]);
   const multiPodNamespace = logsNsParam;
 
-  // Initialize namespace selection once namespaces are loaded.
+  // Initialize namespace selection once namespaces are loaded. Prefers this
+  // cluster's last-picked namespace(s) — restored so leaving the AKS view and
+  // coming back doesn't drop the selection — falling back to the configured
+  // default namespace, then the first namespace in the list.
   useEffect(() => {
     if (namespacePickedRef.current) return;
     const nsParam = searchParams.get("ns");
     if (nsParam || !namespaces || namespaces.length === 0) return;
+    const persistedRaw = currentContextName
+      ? loadViewPreference<string[]>(selectedNsPrefKey(currentContextName), [])
+      : [];
+    const persisted = Array.isArray(persistedRaw)
+      ? persistedRaw.filter((ns) => ns === "*" || namespaces.includes(ns))
+      : [];
     const defaultNs = profile?.config.aksConfig?.defaultNamespace;
-    const initial = defaultNs && namespaces.includes(defaultNs) ? [defaultNs] : [namespaces[0]];
+    const initial =
+      persisted.length > 0
+        ? persisted
+        : defaultNs && namespaces.includes(defaultNs)
+          ? [defaultNs]
+          : [namespaces[0]];
     updateParams({ ns: initial.join(",") }, { replace: true });
-  }, [searchParams, namespaces, profile, updateParams]);
+  }, [searchParams, namespaces, profile, currentContextName, updateParams]);
 
   // Apply a namespace selected from the command palette.
   useEffect(() => {
