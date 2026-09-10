@@ -36,6 +36,23 @@ public sealed class AksLogStreamEndpointTests
         }
     }
 
+    /// <summary>Throws partway through, simulating a real-cluster failure (e.g. an ambiguous
+    /// container rejected by the Kubernetes API) instead of yielding anything.</summary>
+    private sealed class ThrowingAksClient(string message) : DemoAksClient
+    {
+        public override async IAsyncEnumerable<string> StreamPodLogsAsync(
+            string ns,
+            string podName,
+            string container,
+            LogStreamOptions opts,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            yield return "before the failure";
+            await Task.CompletedTask;
+            throw new InvalidOperationException(message);
+        }
+    }
+
     private static (DefaultHttpContext Context, MemoryStream Body) NewContext()
     {
         var body = new MemoryStream();
@@ -125,6 +142,28 @@ public sealed class AksLogStreamEndpointTests
         var text = ReadBody(body);
         Assert.Contains("alpha", text);
         Assert.Contains("beta", text);
+    }
+
+    [Fact]
+    public async Task StreamPodLogs_ClientThrows_EmitsStreamErrorThenDone_InsteadOfThrowing()
+    {
+        var (ctx, body) = NewContext();
+        var client = new ThrowingAksClient("a container name must be specified");
+
+        // Must not throw out of the handler — by the time this fails, the response is
+        // already typed text/event-stream, so an unhandled exception here is indistinguishable
+        // on the wire from a stream that simply never delivers anything.
+        await AksEndpoints.StreamPodLogsAsync(
+            ctx, client, "default", "pod-1", null, new LogStreamOptions(), null, CancellationToken.None);
+
+        var text = ReadBody(body);
+        Assert.Contains("data: before the failure\n\n", text);
+        Assert.Contains("event: stream-error\ndata: a container name must be specified\n\n", text);
+        Assert.EndsWith("event: done\ndata: \n\n", text);
+        // Comes after stream-error, not instead of it.
+        Assert.True(
+            text.IndexOf("event: stream-error", StringComparison.Ordinal)
+                < text.IndexOf("event: done", StringComparison.Ordinal));
     }
 
 }

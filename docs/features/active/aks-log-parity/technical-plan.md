@@ -85,12 +85,48 @@ pod set itself changes — `pods` is memoised off the URL param upstream.
 Both request `timestamps=true`. Both persist the display mode under one shared key, so the
 setting follows the user between views.
 
+## 4. Real-cluster fixes and the range selector (2026-09-10)
+
+The manual real-cluster verification this feature's `status.md` had flagged as outstanding
+found the multi-pod view never delivered anything. Two independent causes, both fixed:
+
+1. **Missing required query parameter.** `MultiPodLogView.tsx` never sent `previousContainer`
+   in its `EventSource` URL. The sidecar bound it as a non-nullable `bool` with no default, so
+   ASP.NET's minimal-API model binding 400ed the request *before the handler ran* — invisible to
+   every existing test, since the sidecar unit tests call the extracted handler directly
+   (bypassing binding) and the e2e assertion only checked an empty-state string, true regardless
+   of whether any line ever arrived. Fixed by always sending it (`MultiPodLogView.tsx`,
+   `streamParams`) and, for defense in depth, giving every primitive parameter on the route a
+   default (`AksEndpoints.cs`) so a future caller that omits one degrades instead of 400ing
+   silently. See `docs/pitfalls/react-frontend.md`.
+2. **Ambiguous container against a real multi-container pod.** Every real AKS pod runs at least
+   one sidecar; `KubernetesAksClient.StreamPodLogsAsync` passed an empty `container` straight to
+   `ReadNamespacedPodLogAsync`, which the real Kubernetes API rejects outright (it does not pick
+   one) — unlike `DemoAksClient`, which never validated this, so it was invisible in demo mode
+   too. Fixed by a new `KubernetesAksClient.ResolveContainer` helper: when `container` is empty,
+   fetch the pod and default to its first container, mirroring the precedent
+   `StreamDeploymentLogsAsync` already set. This also fixes `GetPodLogsTool` and
+   `InvestigatePodIssueTool`, which had the identical bug.
+
+Both bugs together meant the 400 was masking the container-ambiguity bug entirely — fixing (1)
+alone would have just traded an invisible 400 for a (still invisible, still swallowed) real-API
+exception, which is why the SSE handler now also frames a failure as `event: stream-error`
+ahead of `event: done` instead of leaving it unhandled, and both log views surface it instead
+of showing "Connecting..." forever.
+
+**Range selector, reversing the original non-goal.** Multi-pod now gets the same `Last 5m / 10m
+/ 1h / All` control as single-pod (not `Previous container` — a pod's own previous instance
+isn't a correlatable concept across multiple pods). `web/src/components/aks/shared/logRange.ts`
+is the shared `LogRange` type and `rangeOptions`/`multiPodLogRangeOptions` single source of
+truth for the `since` mapping; both views now import from it instead of `PodLogView` owning a
+private copy.
+
 ## Files
 
 | Area | Files |
 | --- | --- |
 | New (backend) | `src/SwebKit.Core/Services/LogLineTimestamp.cs` |
-| New (frontend) | `web/src/lib/log-window.ts`, `shared/useLogBuffer.ts`, `shared/useLogWindow.ts`, `shared/LogToolbar.tsx`, `shared/LogOutput.tsx` |
+| New (frontend) | `web/src/lib/log-window.ts`, `shared/useLogBuffer.ts`, `shared/useLogWindow.ts`, `shared/LogToolbar.tsx`, `shared/LogOutput.tsx`, `shared/logRange.ts` |
 | Backend | `AksModels.cs`, `DemoAksClient.cs`, `KubernetesAksClient.LogsExec.cs`, `src-sidecar/Endpoints/AksEndpoints.cs` |
 | Frontend | `PodLogView.tsx`, `MultiPodLogView.tsx` |
-| Docs | `docs/pitfalls/react-frontend.md` (new SSE section), `docs/pitfalls/index.md` |
+| Docs | `docs/pitfalls/react-frontend.md` (SSE section: required-parameter footgun, `event: error` collision), `docs/pitfalls/index.md` |

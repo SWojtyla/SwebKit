@@ -7,6 +7,7 @@ import { LogToolbar } from "./shared/LogToolbar";
 import { LogOutput } from "./shared/LogOutput";
 import { useLogBuffer } from "./shared/useLogBuffer";
 import { useLogWindow } from "./shared/useLogWindow";
+import { multiPodLogRangeOptions, type LogRange } from "./shared/logRange";
 
 interface Props {
   ns: string;
@@ -16,8 +17,29 @@ interface Props {
 
 const VISIBLE = 200;
 const MAX_BUFFER = 50_000;
+const TAIL_INITIAL = 2_000;
 const EXPORT_TAIL = 200_000;
 const TIMESTAMP_PREF_KEY = "aks-log-timestamp-mode";
+
+/// Builds the per-pod stream query. Mirrors `PodLogView`'s `streamParams` so "Last 5m" means
+/// exactly the same thing in both views. `previousContainer` is a required (non-nullable, no
+/// default) query parameter on the sidecar's `/logs/stream` route — omitting it entirely, as
+/// this view previously did, fails ASP.NET's minimal-API model binding with a 400 before any
+/// application code runs, indistinguishable client-side from a stream that just never delivers
+/// anything. Always sending it (single-pod always did) is what actually made every multi-pod
+/// stream request fail, in both demo and real mode alike.
+function streamParams(range: LogRange, container: string, follow: boolean, tail?: number) {
+  const since = multiPodLogRangeOptions.find((r) => r.value === range)?.since;
+  const params = new URLSearchParams({
+    follow: String(follow),
+    tail: String(tail ?? (since ? 100 : TAIL_INITIAL)),
+    timestamps: "true",
+    previousContainer: "false",
+  });
+  if (container) params.set("container", container);
+  if (since) params.set("sinceSeconds", String(since));
+  return params;
+}
 
 export function MultiPodLogView({ ns, pods, onClose }: Props) {
   // Every pod starts streaming. The user opened a correlation view for this exact set of
@@ -31,13 +53,17 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
   }, [pods]);
 
   const [container, setContainer] = useState("");
+  const [range, setRange] = useState<LogRange>("5m");
   const [timestampMode, setTimestampMode] = useState<TimestampMode>(() =>
     loadViewPreference<TimestampMode>(TIMESTAMP_PREF_KEY, "time"),
   );
   const [isExporting, setIsExporting] = useState(false);
+  // Per-pod stream failures (pod deleted mid-correlation, RBAC, etc.) — surfaced instead of
+  // leaving the panel showing "Connecting..." forever with no indication anything went wrong.
+  const [streamErrors, setStreamErrors] = useState<Map<string, string>>(new Map());
 
   const sourcesRef = useRef<Map<string, EventSource>>(new Map());
-  const streamKeyRef = useRef(`${ns}::${container}`);
+  const streamKeyRef = useRef(`${ns}::${container}::${range}`);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const buffer = useLogBuffer({ maxBuffer: MAX_BUFFER, frozen: false });
@@ -61,7 +87,7 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
   // the filter itself changed.
   useEffect(() => {
     const sources = sourcesRef.current;
-    const streamKey = `${ns}::${container}`;
+    const streamKey = `${ns}::${container}::${range}`;
     const filterChanged = streamKeyRef.current !== streamKey;
     streamKeyRef.current = streamKey;
 
@@ -69,26 +95,47 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
       for (const es of sources.values()) es.close();
       sources.clear();
       clear();
+      setStreamErrors(new Map());
     } else {
       for (const [pod, es] of sources) {
         if (!selectedPods.includes(pod)) {
           es.close();
           sources.delete(pod);
+          setStreamErrors((prev) => {
+            if (!prev.has(pod)) return prev;
+            const next = new Map(prev);
+            next.delete(pod);
+            return next;
+          });
         }
       }
     }
 
     for (const pod of selectedPods) {
       if (sources.has(pod)) continue;
+      setStreamErrors((prev) => {
+        if (!prev.has(pod)) return prev;
+        const next = new Map(prev);
+        next.delete(pod);
+        return next;
+      });
       // `timestamps` asks the container runtime for the real emission time. Without it
       // the only clock available is the browser's arrival time, which is what made the
-      // correlation misleading.
-      const params = new URLSearchParams({ tail: "100", follow: "true", timestamps: "true" });
-      if (container) params.set("container", container);
+      // correlation misleading. Leaving `container` unset is safe: the sidecar resolves an
+      // ambiguous multi-container pod to its first container instead of erroring.
+      const params = streamParams(range, container, true);
       const es = new EventSource(
         `${SIDECAR_BASE_URL}/api/aks/${ns}/pods/${pod}/logs/stream?${params}`,
       );
       es.onmessage = (e) => push(e.data, pod);
+      // A named event the sidecar frames ahead of `done` when the underlying stream failed
+      // (pod gone, RBAC, ...). Deliberately not `error` — EventSource reserves that type for
+      // native connection failures, and a server frame named `event: error` would land on the
+      // same listener as one, indistinguishable without inspecting the event shape.
+      es.addEventListener("stream-error", (e) => {
+        const message = (e as MessageEvent).data || "Stream failed";
+        setStreamErrors((prev) => new Map(prev).set(pod, message));
+      });
       es.addEventListener("done", () => {
         es.close();
         sources.delete(pod);
@@ -96,10 +143,11 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
       es.onerror = () => {
         es.close();
         sources.delete(pod);
+        setStreamErrors((prev) => new Map(prev).set(pod, "Connection closed unexpectedly."));
       };
       sources.set(pod, es);
     }
-  }, [selectedPods, ns, container, push, clear]);
+  }, [selectedPods, ns, container, range, push, clear]);
 
   // Full teardown on unmount: an SSE stream left open after the panel closes keeps
   // delivering into a dead component.
@@ -157,12 +205,7 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
     };
 
     for (const pod of selectedPods) {
-      const params = new URLSearchParams({
-        tail: String(EXPORT_TAIL),
-        follow: "false",
-        timestamps: "true",
-      });
-      if (container) params.set("container", container);
+      const params = streamParams(range, container, false, EXPORT_TAIL);
       const es = new EventSource(
         `${SIDECAR_BASE_URL}/api/aks/${ns}/pods/${pod}/logs/stream?${params}`,
       );
@@ -176,7 +219,7 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
         finish();
       };
     }
-  }, [isExporting, selectedPods, ns, container]);
+  }, [isExporting, selectedPods, ns, container, range]);
 
   const handleClear = useCallback(() => {
     clear();
@@ -215,7 +258,24 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
             className="rounded border bg-background px-2 py-1 text-xs"
             data-testid="multi-pod-container-input"
           />
+          <select
+            value={range}
+            onChange={(e) => setRange(e.target.value as LogRange)}
+            className="rounded border bg-background px-2 py-1 text-xs"
+            data-testid="multi-pod-range-select"
+          >
+            {multiPodLogRangeOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
         </div>
+        {streamErrors.size > 0 && (
+          <div className="mt-2 text-xs text-destructive" data-testid="multi-pod-log-error">
+            {[...streamErrors.entries()].map(([pod, message]) => (
+              <div key={pod}>{pod}: {message}</div>
+            ))}
+          </div>
+        )}
       </div>
 
       <LogToolbar

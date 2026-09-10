@@ -23,7 +23,7 @@
 - **GraphQL** — query and variables editors, operation parsing, schema introspection cache, GraphQL error rendering, and `graphql-ws` subscriptions.
 - **WebSocket** — URL/headers/subprotocol, connection state, bounded virtualized message log, text/binary composer, and saved message templates.
 - **Export/import** — SwebKit-native JSON, Postman v2.1 subset import/export, Bruno export, standalone environment import, and full configuration bundle integration.
-- **cURL portability** — copy selected REST/GraphQL requests as masked cURL commands and import cURL commands into the active request target collection.
+- **cURL portability** — copy selected REST/GraphQL requests as masked cURL commands (a masked `-H`/`-u` auth line or query-param suffix per auth type, matching what `SidecarAuthHeaderBuilder` actually sends — never the real secret; an inherited auth is called out as a comment since resolving the request→folder→collection chain client-side is not implemented) and import cURL commands into the active request target collection.
 - **Variable inspector** — list request tokens with source metadata and masked/resolved values.
 - **Response examples** — save named response examples onto a request, persisted with the collection. `Authorization`, `Set-Cookie` and similar headers are dropped and secret-looking header values redacted before an example is written, because collections can be committed to Git. Saved examples are clickable and shown with a "viewing saved example" banner and a return-to-live action.
 - **Request tabs** — always on. A tab strip keeps several requests open at once, each with its own draft, dirty state, in-flight send and response history.
@@ -156,6 +156,11 @@ fixed argument array, passes paths after `--`, and validates the repository dire
 - `git_revert_paths` — the only irreversible operation — re-validates against live status and refuses
   untracked files, and the UI confirms by naming every affected file.
 - Key Vault failure degrades gracefully rather than crashing request execution.
+- The Windows Credential Store side of `src-tauri/src/secrets.rs` stores every request's secret as
+  one shared JSON blob and serializes `save_secret`/`get_secret`/`delete_secret`/`list_secrets`
+  through a single `Mutex` — without it, two saves for different requests' secrets close together
+  (plausible given the field's own save debounce) can race and silently drop one. See
+  `docs/pitfalls/react-frontend.md` (Tauri boundary).
 
 ## Validation Focus
 

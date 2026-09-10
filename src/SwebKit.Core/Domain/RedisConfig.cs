@@ -69,8 +69,15 @@ public class RedisConfig
             throw new InvalidOperationException($"{nameof(RedisConfig)} must have at least one cache entry.");
         foreach (var entry in Caches)
         {
-            if (string.IsNullOrWhiteSpace(entry.ConnectionString))
+            if (entry.UseAad)
+            {
+                if (string.IsNullOrWhiteSpace(entry.CacheName))
+                    throw new InvalidOperationException($"{nameof(RedisCacheEntry)}.{nameof(RedisCacheEntry.CacheName)} is required for cache '{entry.DisplayName}' when {nameof(RedisCacheEntry.UseAad)} is true.");
+            }
+            else if (string.IsNullOrWhiteSpace(entry.ConnectionString))
+            {
                 throw new InvalidOperationException($"{nameof(RedisCacheEntry)}.{nameof(RedisCacheEntry.ConnectionString)} is required for cache '{entry.DisplayName}'.");
+            }
         }
     }
 }
@@ -84,4 +91,10 @@ public class RedisCacheEntry
     public string DisplayName { get; set; } = "Cache";
     public string ConnectionString { get; set; } = string.Empty;
     public int Database { get; set; }
+
+    /// <summary>When true, connects via Entra ID using <see cref="CacheName"/> instead of <see cref="ConnectionString"/>.</summary>
+    public bool UseAad { get; set; }
+
+    /// <summary>Azure Cache for Redis resource name (e.g. "my-cache"), required when <see cref="UseAad"/> is true.</summary>
+    public string CacheName { get; set; } = string.Empty;
 }

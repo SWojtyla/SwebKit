@@ -107,6 +107,42 @@ public class RedisClientTests
         Assert.ThrowsAny<Exception>(() => RedisClient.BuildConnectionOptions(null!));
     }
 
+    // ── BuildAadConnectionOptionsAsync() ──
+    // The Entra ID (AAD) path requires CacheName instead of ConnectionString. These cover
+    // the guard that runs before any token acquisition or network attempt.
+
+    [Fact]
+    public async Task BuildAadConnectionOptionsAsync_NullCacheName_Throws()
+    {
+        var entry = new RedisCacheEntry { UseAad = true, CacheName = null! };
+
+        await Assert.ThrowsAnyAsync<Exception>(() => RedisClient.BuildAadConnectionOptionsAsync(entry));
+    }
+
+    [Fact]
+    public async Task BuildAadConnectionOptionsAsync_EmptyCacheName_Throws()
+    {
+        var entry = new RedisCacheEntry { UseAad = true, CacheName = string.Empty };
+
+        await Assert.ThrowsAnyAsync<Exception>(() => RedisClient.BuildAadConnectionOptionsAsync(entry));
+    }
+
+    [Fact]
+    public async Task BuildAadConnectionOptionsAsync_WhitespaceCacheName_Throws()
+    {
+        var entry = new RedisCacheEntry { UseAad = true, CacheName = "   " };
+
+        await Assert.ThrowsAnyAsync<Exception>(() => RedisClient.BuildAadConnectionOptionsAsync(entry));
+    }
+
+    [Fact]
+    public async Task CreateAsync_UseAad_EmptyCacheName_Throws()
+    {
+        var entry = new RedisCacheEntry { UseAad = true, CacheName = string.Empty };
+
+        await Assert.ThrowsAnyAsync<Exception>(() => RedisClient.CreateAsync(entry));
+    }
+
     // ── RedisConfig.Validate() ──
     // These cover the validation guard that callers must pass before constructing RedisClient.
 
@@ -149,5 +185,43 @@ public class RedisClientTests
 
         var ex = Assert.Throws<InvalidOperationException>(config.Validate);
         Assert.Contains("'B'", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RedisConfig_Validate_UseAad_EmptyCacheName_Throws()
+    {
+        var config = new RedisConfig();
+        config.Caches.Add(new RedisCacheEntry { DisplayName = "Test", UseAad = true, CacheName = string.Empty });
+
+        var ex = Assert.Throws<InvalidOperationException>(config.Validate);
+        Assert.Contains(nameof(RedisCacheEntry.CacheName), ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RedisConfig_Validate_UseAad_ValidCacheName_DoesNotThrow()
+    {
+        var config = new RedisConfig();
+        config.Caches.Add(new RedisCacheEntry { DisplayName = "Test", UseAad = true, CacheName = "my-cache" });
+
+        var ex = Record.Exception(config.Validate);
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void RedisConfig_Validate_UseAad_DoesNotRequireConnectionString()
+    {
+        var config = new RedisConfig();
+        config.Caches.Add(new RedisCacheEntry
+        {
+            DisplayName = "Test",
+            UseAad = true,
+            CacheName = "my-cache",
+            ConnectionString = string.Empty
+        });
+
+        var ex = Record.Exception(config.Validate);
+
+        Assert.Null(ex);
     }
 }

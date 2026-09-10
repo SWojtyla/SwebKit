@@ -71,6 +71,26 @@ it back after a restart bypasses that entirely: any script in the webview can wr
 It canonicalizes the *parent* directory because a file may not exist yet on write. A directory
 argument needs `validate_dir_within_roots`, which canonicalizes the directory itself.
 
+### A shared-blob Tauri command needs its own lock — Tauri's IPC dispatch does not serialize for you
+
+`src-tauri/src/secrets.rs` stores every API Client auth secret as one JSON blob (a
+`HashMap<key, secret>`) under a single OS keychain entry, and `save_secret`/`delete_secret` each did
+an unsynchronized read-modify-write: load the whole vault, mutate one key, write the whole vault
+back. Tauri dispatches plain (non-`async`) commands onto a thread pool, so two `save_secret` calls
+for *different* requests' secrets — realistic whenever a user sets auth on two requests within the
+same couple of seconds their own save debounces already create — can interleave: both read the same
+starting snapshot, both write back, and whichever finishes last silently drops the other's key. The
+symptom on the frontend looked nothing like a race: a token was visible right after typing it
+(served from the in-memory, never-persisted `AuthConfig.credentialSecret`) and then appeared to
+"vanish" only later — on reopening the tab or restarting the app, once `getSecret()` was the only
+source left and it could no longer find the clobbered key. Fixed with a single
+`static VAULT_LOCK: Mutex<()>` held across each command's full load-mutate-save sequence.
+
+**This class of bug is invisible to Playwright.** `web/src/lib/tauri-bridge.ts`'s `isTauri()` check
+is false under Chromium, so every e2e run takes the `localStorage` fallback branch — single-threaded,
+no possible interleaving — never the real keychain path. A Playwright repro of a Tauri-secrets race
+will not reproduce it no matter how the test is written; only the real desktop app can.
+
 ## Sidecar contract
 
 ### A TypeScript union standing in for a C# enum must use the member names exactly
@@ -123,6 +143,35 @@ shipped violating it (one `setLogs` per line, per pod).
 There is no way to send a body, which is why the log-stream endpoint takes `container`, `tail`,
 `follow`, `sinceSeconds`, `previousContainer`, `filter` and `timestamps` in the URL. See the note at
 `web/src/lib/api.ts:108`.
+
+### A required query parameter with no default fails silently — as a 400, not as no data
+
+`MultiPodLogView.tsx` never sent `previousContainer` in its `EventSource` URL; only `PodLogView.tsx`
+did. The sidecar's `/logs/stream` route bound it as `bool previousContainer` — no `?`, no default —
+which ASP.NET's minimal-API model binding treats as **required**: omitting it from the query string
+fails the request with a 400 *before the handler body runs at all*, real client or demo alike. On the
+wire, and to `EventSource.onerror`, that is indistinguishable from a stream that opened fine and just
+never delivered anything — which is exactly what every multi-pod correlation looked like: an
+indefinite "Connecting...".
+
+This is easy to miss in review because every existing test bypassed it: the sidecar unit tests call
+the extracted `AksEndpoints.StreamPodLogsAsync` handler directly with typed C# arguments, never going
+through actual route/query binding, and the e2e assertion only checked that the empty-state string was
+gone — true the instant a pod was selected, regardless of whether any log line ever arrived. Prefer
+giving every primitive query parameter on an SSE route a C# default (`bool previousContainer = false`,
+`int tail = 0`, …) so a caller that reasonably omits a flag degrades instead of 400ing invisibly, and
+write at least one e2e assertion against actual content (a line count, not just an absent placeholder
+string) for any stream-shaped view.
+
+### A custom SSE event name must not be `error`
+
+`EventSource` reserves the event type `"error"` for its own native connection-failure signal, fired to
+both `.onerror` and any `addEventListener("error", ...)` listener as a plain `Event` (no `.data`). If
+the server also frames a named event as `event: error`, it dispatches to the *same* listener as a
+`MessageEvent` (with `.data`) — the two are register-compatible but shape-incompatible, and nothing
+stops a handler written for one from receiving the other. Name an application-level error frame
+something else entirely (`stream-error`, here) so it can never collide with the browser's own error
+delivery.
 
 ### A server-side text filter must not match the timestamp prefix
 

@@ -6,6 +6,7 @@ import { LogToolbar } from "./shared/LogToolbar";
 import { LogOutput } from "./shared/LogOutput";
 import { useLogBuffer } from "./shared/useLogBuffer";
 import { useLogWindow } from "./shared/useLogWindow";
+import { rangeOptions, type LogRange } from "./shared/logRange";
 
 interface PodLogViewProps {
   ns: string;
@@ -19,16 +20,6 @@ const MAX_BUFFER = 50_000;
 const TAIL_INITIAL = 2_000;
 const HISTORY_CAP = 200_000;
 const TIMESTAMP_PREF_KEY = "aks-log-timestamp-mode";
-
-type LogRange = "5m" | "10m" | "1h" | "all" | "previous";
-
-const rangeOptions: { label: string; value: LogRange; since?: number }[] = [
-  { label: "Last 5m", value: "5m", since: 300 },
-  { label: "Last 10m", value: "10m", since: 600 },
-  { label: "Last 1h", value: "1h", since: 3600 },
-  { label: "All", value: "all" },
-  { label: "Previous container", value: "previous" },
-];
 
 /// Builds the stream query shared by the live path and the export path, so the two can
 /// never disagree about which slice of history they are asking for.

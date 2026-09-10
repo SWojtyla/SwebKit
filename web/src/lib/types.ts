@@ -102,6 +102,8 @@ export interface RedisCacheEntry {
   displayName: string;
   connectionString: string;
   database: number;
+  useAad: boolean;
+  cacheName: string;
 }
 
 export interface StorageConfig {

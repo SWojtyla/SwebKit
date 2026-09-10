@@ -16,9 +16,13 @@ status: Review
 | `npx tsc -b` | clean |
 | `npm run test:unit` | 267 passed (18 files) |
 | `dotnet build src-sidecar` | succeeded |
-| `dotnet test tests/SwebKit.Sidecar.Tests --filter AksLogStream` | 5 passed |
+| `dotnet test tests/SwebKit.Sidecar.Tests --filter AksLogStream` | 6 passed (was 5) |
 | `dotnet test tests/SwebKit.Core.Tests --filter LogLineTimestamp\|DemoAksClient` | 73 passed |
+| `dotnet test tests/SwebKit.Kubernetes.Tests --filter ResolveContainer` (2026-09-10) | 5 passed |
 | `npx playwright test e2e/aks{,-ux,-deferred}.spec.ts` | passed |
+
+**2026-09-10 update:** manual real-cluster verification (below) found the multi-pod view
+delivered nothing at all — two bugs, both fixed. See `index.md` and `technical-plan.md` §4.
 
 ## Definition of Done
 
@@ -32,8 +36,16 @@ status: Review
 - [x] Unit tests for every new pure function; first-ever tests for the SSE endpoint.
 - [x] E2E for the multi-pod default and for the single-pod toolbar, which had none.
 - [x] SSE pitfalls written down in `docs/pitfalls/react-frontend.md`.
+- [x] Multi-pod streams actually deliver: the missing `previousContainer` query parameter (a
+      400 on every request, in demo and real alike) and the real-cluster container-ambiguity
+      rejection are both fixed, with regression tests and two new pitfalls entries.
+- [x] A stream failure is surfaced in the panel instead of an indefinite "Connecting...".
+- [x] Multi-pod gets the range selector back (reversing the original non-goal, per request).
 - [ ] Manual verification against a real cluster (see `test-plan.md`) — **owner: Sebastien**.
-      Playwright stubs the log stream, so it cannot check real chronological ordering.
+      Specifically: confirm logs now arrive for a pod with a sidecar container, which is the
+      exact scenario that was broken. Playwright's demo-mode run confirmed the fix at the
+      protocol level (real 200s where every request 400ed before), but cannot check real
+      chronological ordering or the actual Kubernetes API's container-resolution behavior.
 - [ ] Aikido security scan per `docs/security/aikido-mcp-scan.md`.
 
 ## Behaviour changes worth knowing

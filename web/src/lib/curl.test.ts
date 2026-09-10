@@ -1,6 +1,23 @@
 import { describe, it, expect } from "vitest";
 import { buildCurl } from "./curl";
-import type { HttpRequestEntry } from "./types";
+import type { AuthConfig, HttpRequestEntry } from "./types";
+
+function auth(overrides: Partial<AuthConfig>): AuthConfig {
+  return {
+    type: "None",
+    credentialKey: "sw-secret:test",
+    credentialSecret: "totally-secret-value",
+    apiKeyParamName: null,
+    apiKeyLocation: "Header",
+    basicUsername: null,
+    oAuth2ClientId: null,
+    oAuth2GrantType: "ClientCredentials",
+    oAuth2TokenUrl: null,
+    oAuth2AuthUrl: null,
+    oAuth2Scopes: null,
+    ...overrides,
+  };
+}
 
 const scope: Record<string, string | null> = {
   AUTH_SP: "brio",
@@ -114,5 +131,91 @@ describe("buildCurl", () => {
   it("uses the executed URL verbatim, since the backend folds in query parameters", () => {
     const curl = buildCurl(request(), "https://example.test/?a=1&b=2", scope);
     expect(curl).toContain(`"https://example.test/?a=1&b=2"`);
+  });
+});
+
+describe("buildCurl auth", () => {
+  const MASK = "••••••••";
+  const SECRET = "totally-secret-value";
+
+  it("adds nothing for None", () => {
+    const curl = buildCurl(request({ auth: auth({ type: "None" }) }), "https://example.test/", scope);
+    expect(curl).not.toContain("Authorization");
+    expect(curl).not.toContain("-u ");
+  });
+
+  it("adds nothing when auth is null", () => {
+    const curl = buildCurl(request({ auth: null }), "https://example.test/", scope);
+    expect(curl).not.toContain("Authorization");
+  });
+
+  it("masks a Bearer token", () => {
+    const curl = buildCurl(request({ auth: auth({ type: "BearerToken" }) }), "https://example.test/", scope);
+    expect(curl).toContain(`-H "Authorization: Bearer ${MASK}"`);
+    expect(curl).not.toContain(SECRET);
+  });
+
+  it("masks an OAuth2 client secret as a Bearer header, since that's what actually reaches the target", () => {
+    const curl = buildCurl(request({ auth: auth({ type: "OAuth2" }) }), "https://example.test/", scope);
+    expect(curl).toContain(`-H "Authorization: Bearer ${MASK}"`);
+    expect(curl).not.toContain(SECRET);
+  });
+
+  it("masks Basic auth via curl's own -u flag", () => {
+    const curl = buildCurl(
+      request({ auth: auth({ type: "Basic", basicUsername: "alice" }) }),
+      "https://example.test/",
+      scope,
+    );
+    expect(curl).toContain(`-u "alice:${MASK}"`);
+    expect(curl).not.toContain(SECRET);
+  });
+
+  it("masks an API key sent as a header", () => {
+    const curl = buildCurl(
+      request({ auth: auth({ type: "ApiKey", apiKeyParamName: "X-Api-Key", apiKeyLocation: "Header" }) }),
+      "https://example.test/",
+      scope,
+    );
+    expect(curl).toContain(`-H "X-Api-Key: ${MASK}"`);
+    expect(curl).not.toContain(SECRET);
+  });
+
+  it("masks an API key sent as a query param, appending to a bare URL", () => {
+    const curl = buildCurl(
+      request({ auth: auth({ type: "ApiKey", apiKeyParamName: "api_key", apiKeyLocation: "QueryParam" }) }),
+      "https://example.test/",
+      scope,
+    );
+    expect(curl).toContain(`"https://example.test/?api_key=${MASK}"`);
+    expect(curl).not.toContain(SECRET);
+  });
+
+  it("masks a query-param API key by appending with & when the URL already has a query string", () => {
+    const curl = buildCurl(
+      request({ auth: auth({ type: "ApiKey", apiKeyParamName: "api_key", apiKeyLocation: "QueryParam" }) }),
+      "https://example.test/?a=1",
+      scope,
+    );
+    expect(curl).toContain(`"https://example.test/?a=1&api_key=${MASK}"`);
+  });
+
+  it("adds nothing for an API key with no param name configured yet", () => {
+    const curl = buildCurl(
+      request({ auth: auth({ type: "ApiKey", apiKeyParamName: null }) }),
+      "https://example.test/",
+      scope,
+    );
+    expect(curl).not.toContain(MASK);
+  });
+
+  it("notes an inherited auth as a leading comment rather than silently showing nothing", () => {
+    const curl = buildCurl(request({ auth: auth({ type: "Inherited" }) }), "https://example.test/", scope);
+    const lines = curl.split("\n");
+    expect(lines[0].startsWith("# Auth is inherited")).toBe(true);
+    // The comment must be its own line, not inside the `\`-continued command — a `#` there
+    // would swallow the trailing backslash as comment text and orphan every line after it.
+    expect(lines[0].endsWith("\\")).toBe(false);
+    expect(lines[1].startsWith("curl")).toBe(true);
   });
 });

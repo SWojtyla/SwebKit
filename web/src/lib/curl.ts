@@ -14,7 +14,7 @@
 /// `resolveEnvironmentVariable` leaves them `null` in the UI scope for the same
 /// reason.
 
-import type { HttpRequestEntry } from "./types";
+import type { AuthConfig, HttpRequestEntry } from "./types";
 import { substituteVariables } from "./variable-utils";
 
 function shellQuote(value: string): string {
@@ -25,6 +25,67 @@ function defaultContentType(mode: HttpRequestEntry["body"]["mode"]): string {
   if (mode === "Json") return "application/json";
   if (mode === "Xml") return "application/xml";
   return "text/plain";
+}
+
+// Same masking literal used everywhere else a secret is displayed without being revealed
+// (RequestEditor.tsx, variableHighlight.ts, SecretDetailPanel.tsx, ContainerDetailPanel.tsx).
+const MASK = "••••••••";
+
+interface AuthParts {
+  /** `-H`/`-u` flags, joined into the `\`-continued command like every other part. */
+  parts: string[];
+  /** Appended to the URL for an API key sent as a query param (curl has no flag for that). */
+  urlQuerySuffix: string;
+  /**
+   * A standalone note rendered on its own line *before* the command, never inside the
+   * `\`-continued chain — a `#` comment there would swallow the trailing `\` as part of the
+   * comment text, silently breaking the continuation and orphaning every line after it.
+   */
+  leadingComment?: string;
+}
+
+/**
+ * Auth lines to add to the curl command, mirroring exactly what `SidecarAuthHeaderBuilder.cs`
+ * actually sends on the real request — masked, never the real secret, since this panel's whole
+ * purpose is copy-to-clipboard.
+ */
+function buildAuthParts(auth: AuthConfig | null): AuthParts {
+  if (!auth || auth.type === "None") return { parts: [], urlQuerySuffix: "" };
+
+  switch (auth.type) {
+    case "Inherited":
+      // Resolving the actual request → folder → collection chain is backend-only
+      // (IAuthInheritanceResolver) today; showing nothing here would be honest but indistinguishable
+      // from "no auth is applied", which is exactly the confusion this exists to prevent.
+      return {
+        parts: [],
+        urlQuerySuffix: "",
+        leadingComment: "# Auth is inherited from a parent folder/collection — not resolved in this preview",
+      };
+
+    case "BearerToken":
+    case "OAuth2":
+      // OAuth2 client-credentials resolves its token via a separate call at send time, but a
+      // Bearer header is genuinely what reaches the target — showing it masked confirms that.
+      return { parts: [`-H "Authorization: Bearer ${MASK}"`], urlQuerySuffix: "" };
+
+    case "Basic":
+      return { parts: [`-u "${auth.basicUsername ?? ""}:${MASK}"`], urlQuerySuffix: "" };
+
+    case "ApiKey": {
+      if (!auth.apiKeyParamName) return { parts: [], urlQuerySuffix: "" };
+      if (auth.apiKeyLocation === "Header") {
+        return { parts: [`-H "${auth.apiKeyParamName}: ${MASK}"`], urlQuerySuffix: "" };
+      }
+      return {
+        parts: [],
+        urlQuerySuffix: `${encodeURIComponent(auth.apiKeyParamName)}=${MASK}`,
+      };
+    }
+
+    default:
+      return { parts: [], urlQuerySuffix: "" };
+  }
 }
 
 /**
@@ -53,6 +114,13 @@ export function buildCurl(
     }
   }
 
-  parts.push(`"${resolvedUrl}"`);
-  return parts.join(" \\\n  ");
+  const { parts: authParts, urlQuerySuffix, leadingComment } = buildAuthParts(request.auth);
+  parts.push(...authParts);
+
+  const url = urlQuerySuffix
+    ? `${resolvedUrl}${resolvedUrl.includes("?") ? "&" : "?"}${urlQuerySuffix}`
+    : resolvedUrl;
+  parts.push(`"${url}"`);
+  const command = parts.join(" \\\n  ");
+  return leadingComment ? `${leadingComment}\n${command}` : command;
 }

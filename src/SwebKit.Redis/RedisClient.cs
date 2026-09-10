@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
+using Microsoft.Azure.StackExchangeRedis;
 using StackExchange.Redis;
 
 namespace SwebKit.Redis;
@@ -51,10 +53,37 @@ public sealed class RedisClient : IRedisClient
         return options;
     }
 
+    /// <summary>
+    /// Builds the multiplexer options for connecting to Azure Cache for Redis via Entra ID
+    /// (AAD), authenticating with the app-wide <see cref="AzureCredentialFactory"/> credential
+    /// instead of a password embedded in a connection string.
+    /// </summary>
+    /// <param name="cacheEntry">The cache entry; <see cref="RedisCacheEntry.CacheName"/> must be set.</param>
+    public static async Task<ConfigurationOptions> BuildAadConnectionOptionsAsync(RedisCacheEntry cacheEntry)
+    {
+        if (string.IsNullOrWhiteSpace(cacheEntry.CacheName))
+            throw new InvalidOperationException($"{nameof(RedisCacheEntry.CacheName)} is required when {nameof(RedisCacheEntry.UseAad)} is true.");
+
+        var options = new ConfigurationOptions
+        {
+            EndPoints = { $"{cacheEntry.CacheName}.redis.cache.windows.net:6380" }
+        };
+
+        // See AzureCredentialFactory for why EnvironmentCredential is excluded.
+        await options.ConfigureForAzureWithTokenCredentialAsync(AzureCredentialFactory.CreateDefault()).ConfigureAwait(false);
+
+        options.AbortOnConnectFail = false;
+        options.AllowAdmin = true;
+
+        return options;
+    }
+
     public static async Task<RedisClient> CreateAsync(RedisCacheEntry cacheEntry, ILogger<RedisClient>? logger = null)
     {
         logger ??= NullLogger<RedisClient>.Instance;
-        var options = BuildConnectionOptions(cacheEntry.ConnectionString);
+        var options = cacheEntry.UseAad
+            ? await BuildAadConnectionOptionsAsync(cacheEntry).ConfigureAwait(false)
+            : BuildConnectionOptions(cacheEntry.ConnectionString);
         var mux = await ConnectionMultiplexer.ConnectAsync(options).ConfigureAwait(false);
         return new RedisClient(cacheEntry, mux, logger);
     }

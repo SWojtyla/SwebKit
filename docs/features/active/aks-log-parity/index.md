@@ -30,6 +30,14 @@ Three further defects surfaced while investigating and are fixed in the same pas
    once a prefix existed, filtering for `2026` returned every line. Present in the sidecar
    endpoint, the real client and the demo client.
 
+A subsequent real-cluster manual check (this feature's own outstanding verification item)
+found the multi-pod view still delivered nothing at all, for two independent reasons: it never
+sent a required query parameter (`previousContainer`), which failed every request outright
+before the handler ran; and, once that's fixed, a real multi-container pod (every pod on AKS
+runs at least one sidecar) rejects an unqualified container request that the demo client never
+validated. Both are fixed — see `technical-plan.md` §4 — along with surfacing a stream failure
+instead of leaving the panel showing "Connecting..." forever.
+
 ## Outcomes
 
 - Both log views render one toolbar, one buffer and one windowing model, so a control added
@@ -39,13 +47,22 @@ Three further defects surfaced while investigating and are fixed in the same pas
   it — the only thing that makes correlation trustworthy.
 - Timestamp display is off / time / full, persisted as a view preference.
 - The multi-pod view no longer re-renders per received line, per pod.
+- Multi-pod log streams actually deliver against a real cluster: every request carries its
+  required query parameters, and an ambiguous container resolves to the pod's first one
+  instead of being rejected outright.
+- A stream failure is surfaced (per-pod, in the panel) instead of leaving the view stuck on
+  "Connecting..." indefinitely.
+- Multi-pod gets the same `Last 5m / 10m / 1h / All` range selector single-pod has, sharing one
+  source of truth for the range-to-`sinceSeconds` mapping.
 
 ## Non-goals
 
 - Virtualising the log output. The window is capped at 200 rendered lines, which is what
   keeps the DOM small today.
-- Multi-pod does not get the range selector or the `Previous container` option: both are
-  single-pod concepts tied to one container's history.
+- Multi-pod does not get the `Previous container` option — a pod's own previous instance isn't
+  a concept that correlates across multiple pods, unlike the range selector above, which
+  reverses this folder's original decision to omit it (the user asked for it back once the
+  underlying streaming bug was found and fixed).
 
 ## Dependencies
 

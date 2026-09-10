@@ -2,7 +2,8 @@
 
 ## What Is Supported
 
-- Configure multiple Redis cache entries per environment.
+- Configure multiple Redis cache entries per environment, each authenticated either via connection
+  string or Entra ID (AAD) against Azure Cache for Redis (see Credential Modes below).
 - Import Redis connection-list exports (`.txt` or `.json`) from the Redis settings section, merging cache profiles by endpoint and applying the dominant namespace separator when imported files mix separator values.
 - Redis settings uses the wider settings content layout so large imported cache inventories stay readable instead of being constrained to the narrow form width.
 - Select active cache and database index.
@@ -20,6 +21,16 @@
 - Prefix memory analysis workflow.
 - **Keyspace Health Explorer**: read-only risk analysis for no-TTL keys, oversized values, heavy prefixes, and possible hot keys, including severity counts, filtering, and key drill-through.
 - Scan coverage/confidence reporting (loaded keys vs estimated keyspace) to make partial analysis explicit.
+
+## Credential Modes
+
+| Mode                        | Config                    | Connection                                                                                    |
+| ---------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------- |
+| Connection string (default) | `ConnectionString`         | `RedisClient.BuildConnectionOptions(connectionString)` — parsed directly by StackExchange.Redis |
+| Entra ID (`UseAad = true`)  | `CacheName` required       | `RedisClient.BuildAadConnectionOptionsAsync` connects to `<CacheName>.redis.cache.windows.net:6380` using `SwebKit.Core.Services.AzureCredentialFactory.CreateDefault()` via `Microsoft.Azure.StackExchangeRedis`'s `ConfigureForAzureWithTokenCredentialAsync` |
+
+AAD mode targets classic Azure Cache for Redis only (`*.redis.cache.windows.net`), not Azure
+Managed Redis's differently-named endpoints.
 
 ## Core Runtime Flow
 
@@ -56,6 +67,7 @@
 - `src/SwebKit.Core/Models/RedisConnectionImportModels.cs`
 - `src/SwebKit.Core/Services/RedisKeyGrouper.cs`
 - `src/SwebKit.Core/Models/RedisModels.cs` (namespace tree + health report contracts)
+- `web/src/components/settings/RedisSettings.tsx` — connection-string vs Entra ID (AAD) mode toggle
 
 ## Important Notes
 
@@ -82,6 +94,7 @@
 - `tests/SwebKit.Core.Tests/RedisImportParserTests.cs`
 - `tests/SwebKit.Core.Tests/RedisKeyGrouperTests.cs`
 - `tests/SwebKit.Core.Tests/RedisConfigMigrationTests.cs`
+- `tests/SwebKit.Core.Tests/RedisClientTests.cs` — connection-string and Entra ID (AAD) guard tests, `RedisConfig.Validate()` cases for both modes
 - `tests/SwebKit.Core.Tests/RedisScanResponseParserTests.cs`
 - `tests/SwebKit.Core.Tests/RedisValueHelpersTests.cs`
 - `tests/SwebKit.Core.Tests/RedisKeyspaceHealthAnalyzerTests.cs`

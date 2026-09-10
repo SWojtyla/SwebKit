@@ -39,6 +39,12 @@ timestamp (the `timestamps` option was never passed to Kubernetes) and multi-pod
 it rather than by arrival. Also normalises the two AKS clients, which disagreed about line shape, and
 fixes a text filter that matched the timestamp prefix.
 
+**Redis (2026-09-10):** `docs/features/active/redis-entra-auth/` is in Review — the Redis
+settings panel gains an Entra ID (AAD) auth mode alongside connection strings (same shared
+credential Storage/Service Bus already use — just the Azure Cache for Redis resource name, no new
+login flow), plus explanatory helper text for Namespace Separator, Database and Active, which had
+none.
+
 **Settings (2026-09-09):** `docs/features/active/settings-save-performance/` is in Review — every
 settings field used to save the whole profile on every keystroke (a disk rewrite and a refetch per
 character), saves were not serialized so concurrent edits raced, and the Service Bus Entra ID option

@@ -456,7 +456,13 @@ public static class AksEndpoints
             return Results.Text(string.Join('\n', lines), "text/plain");
         });
 
-        app.MapGet("/api/aks/{ns}/pods/{podName}/logs/stream", (HttpContext ctx, string ns, string podName, string? container, int tail, bool follow, int? sinceSeconds, bool previousContainer, string? filter, bool timestamps, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        // Every bool/int parameter here has a default: a required primitive with none (the
+        // shape `previousContainer` had) fails ASP.NET's minimal-API model binding outright
+        // with a 400 the instant it's omitted from the query string — before any application
+        // code runs — which a caller that reasonably leaves out a flag it doesn't care about
+        // will hit silently. That's exactly what broke every multi-pod log request: the
+        // client never sent `previousContainer` at all.
+        app.MapGet("/api/aks/{ns}/pods/{podName}/logs/stream", (HttpContext ctx, string ns, string podName, string? container, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, ILogger<Program> logger, int tail = 0, bool follow = false, int? sinceSeconds = null, bool previousContainer = false, string? filter = null, bool timestamps = false, CancellationToken ct = default) =>
             StreamPodLogsAsync(
                 ctx,
                 GetClient(pool),
@@ -472,7 +478,8 @@ public static class AksEndpoints
                     Timestamps = timestamps,
                 },
                 filter,
-                ct));
+                ct,
+                logger));
     }
 
     /// <summary>
@@ -482,7 +489,16 @@ public static class AksEndpoints
     /// <remarks>
     /// The framing is a contract: one <c>data:</c> frame per line, terminated by an
     /// <c>event: done</c> frame. The browser <c>EventSource</c> in both log views depends on it,
-    /// and <c>web/e2e/aks-ux.spec.ts</c> stubs exactly this shape.
+    /// and <c>web/e2e/aks-ux.spec.ts</c> stubs exactly this shape. A failure that happens before
+    /// or during streaming (e.g. the pod no longer exists, an RBAC denial) is framed as
+    /// <c>event: stream-error</c> ahead of <c>done</c> instead of being left as an unhandled
+    /// exception on an already-<c>text/event-stream</c>-typed response, which is indistinguishable
+    /// on the wire from a stream that simply never delivers anything. Named <c>stream-error</c>
+    /// rather than the reserved SSE name <c>error</c>: the browser's <c>EventSource</c> dispatches
+    /// its own native connection-failure events under the type <c>"error"</c>, so a server frame
+    /// named <c>event: error</c> would land on the exact same <c>onerror</c>/<c>addEventListener</c>
+    /// listener as a real network failure, as a differently-shaped event object — indistinguishable
+    /// without inspecting the event instance.
     /// </remarks>
     internal static async Task StreamPodLogsAsync(
         HttpContext ctx,
@@ -492,7 +508,8 @@ public static class AksEndpoints
         string? container,
         LogStreamOptions opts,
         string? filter,
-        CancellationToken ct)
+        CancellationToken ct,
+        ILogger? logger = null)
     {
         ctx.Response.ContentType = "text/event-stream";
         ctx.Response.Headers.CacheControl = "no-cache";
@@ -513,6 +530,13 @@ public static class AksEndpoints
         }
         catch (OperationCanceledException)
         {
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Pod log stream failed for {Namespace}/{PodName}", ns, podName);
+            var message = ex.Message.Replace("\r", " ").Replace("\n", " ");
+            await ctx.Response.WriteAsync($"event: stream-error\ndata: {message}\n\n", ct);
+            await ctx.Response.Body.FlushAsync(ct);
         }
 
         await ctx.Response.WriteAsync("event: done\ndata: \n\n", ct);
