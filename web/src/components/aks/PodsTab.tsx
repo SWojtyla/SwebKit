@@ -197,9 +197,12 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     )},
     { header: "Node", cell: (pod) => <span className="text-xs text-muted-foreground">{pod.nodeName ?? "—"}</span> },
     { header: "Age", cell: (pod) => <span className="text-xs text-muted-foreground">{formatAge(pod.startTime)}</span> },
-    { header: "Actions", cell: (pod) => (
+    { header: "Actions", className: "py-2 pr-4 w-px whitespace-nowrap", cell: (pod) => (
       <button
-        onClick={() => handleDelete(pod)}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDelete(pod);
+        }}
         disabled={deleteMutation.isPending}
         className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
       >

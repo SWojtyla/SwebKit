@@ -85,7 +85,7 @@ public sealed class VariableGeneratorServiceTests
                     MaxInt = 20,
                 },
             },
-        ], null);
+        ], []);
 
         var age = int.Parse(scope["age"]!);
         Assert.InRange(age, 10, 20);
@@ -109,7 +109,7 @@ public sealed class VariableGeneratorServiceTests
             ],
         };
 
-        var scope = service.BuildScope([new CollectionVariable { Key = "id", Value = "fixed" }], env);
+        var scope = service.BuildScope([new CollectionVariable { Key = "id", Value = "fixed" }], [env]);
 
         Assert.NotEqual("fixed", scope["id"]);
         Assert.True(Guid.TryParse(scope["id"], out _));

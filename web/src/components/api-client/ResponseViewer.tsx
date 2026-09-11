@@ -8,6 +8,7 @@ import { statusTone, toneChipStyle, CountBadge } from "./method-badge";
 import { selectBodyLanguage, downloadExtension } from "@/lib/response-body";
 import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
 import { ResponseBodyViewer } from "./ResponseBodyViewer";
+import { buildCurl } from "@/lib/curl";
 
 export interface ResponseHistoryEntry {
   id: number;
@@ -22,49 +23,31 @@ interface ResponseViewerProps {
   /** Owned by the page so it survives remount and stays per-tab. */
   history?: ResponseHistoryEntry[];
   onSaveExample?: (name: string, response: ApiClientExecutionResponse) => void;
+  /** Used to resolve `{{tokens}}` in the cURL panel's body and headers. */
+  variableScope?: Record<string, string | null>;
 }
 
 type Tab = "body" | "headers" | "history";
 
 const WRAP_PREF_KEY = "api-client-response-wrap";
+const PRETTY_PREF_KEY = "api-client-response-pretty";
 
 function tryPrettyPrint(content: string, contentType: string | null): string {
-  if (contentType?.includes("json") || content.trim().startsWith("{") || content.trim().startsWith("[")) {
+  const trimmed = content.trimStart();
+  if (contentType?.includes("json") || trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
       return JSON.stringify(JSON.parse(content), null, 2);
     } catch {
       return content;
     }
   }
-  if (contentType?.includes("xml") || content.trim().startsWith("<")) {
-    // Simple XML pretty-print: indent between tags
+  // Only genuine XML, not "anything starting with `<`". Now that Pretty is the
+  // default, the broader test would reflow every HTML page received, inserting
+  // newlines between tags where whitespace can be significant.
+  if (contentType?.includes("xml") || trimmed.startsWith("<?xml")) {
     return content.replace(/></g, ">\n<").replace(/^\s+$/gm, "");
   }
   return content;
-}
-
-function buildCurl(request: HttpRequestEntry, response: ApiClientExecutionResponse): string {
-  const parts = [`curl -X ${request.method.toUpperCase()}`];
-
-  // Request headers (enabled only)
-  for (const h of request.headers) {
-    if (h.isEnabled && h.key) {
-      parts.push(`-H "${h.key}: ${h.value ?? ""}"`);
-    }
-  }
-
-  // Body for raw modes
-  if (request.body.mode === "Json" || request.body.mode === "Xml" || request.body.mode === "Text") {
-    const contentType = request.body.contentType ?? (request.body.mode === "Json" ? "application/json" : request.body.mode === "Xml" ? "application/xml" : "text/plain");
-    parts.push(`-H "Content-Type: ${contentType}"`);
-    if (request.body.rawContent) {
-      parts.push(`-d '${request.body.rawContent.replace(/'/g, "'\\''")}'`);
-    }
-  }
-
-  // Add resolved URL
-  parts.push(`"${response.resolvedUrl}"`);
-  return parts.join(" \\\n  ");
 }
 
 export function ResponseViewer({
@@ -73,10 +56,16 @@ export function ResponseViewer({
   request,
   history = [],
   onSaveExample,
+  variableScope = {},
 }: ResponseViewerProps) {
   const [activeTab, setActiveTab] = useState<Tab>("body");
   const [copied, setCopied] = useState(false);
-  const [prettyPrinted, setPrettyPrinted] = useState(false);
+  // Pretty by default. A minified JSON payload on one 4000-character line is not
+  // a readable response, and every operator reached for the Pretty toggle on every
+  // single send. Persisted, so choosing Raw sticks.
+  const [prettyPrinted, setPrettyPrinted] = useState<boolean>(() =>
+    loadViewPreference<boolean>(PRETTY_PREF_KEY, true),
+  );
   const [showCurl, setShowCurl] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [showSaveExample, setShowSaveExample] = useState(false);
@@ -88,11 +77,18 @@ export function ResponseViewer({
   const savedExamples: ResponseExample[] = request?.responseExamples ?? [];
 
   useEffect(() => {
-    setPrettyPrinted(false);
+    // Deliberately does not reset `prettyPrinted`: it is a persisted view
+    // preference, not per-response state, and resetting it here is what made the
+    // Pretty toggle feel like it never stuck.
     setCopied(false);
     setShowCurl(false);
     setViewingExampleId(null);
   }, [response]);
+
+  const setPretty = (next: boolean) => {
+    setPrettyPrinted(next);
+    saveViewPreference(PRETTY_PREF_KEY, next);
+  };
 
   const toggleWrap = () => {
     // Computed outside the updater: React may invoke an updater twice in
@@ -101,6 +97,25 @@ export function ResponseViewer({
     setWrap(next);
     saveViewPreference(WRAP_PREF_KEY, next);
   };
+
+  // Derived above the early returns below, because it uses a hook: this component
+  // returns early while sending and before the first response, so a `useMemo`
+  // placed after those returns changes the hook count the moment a response
+  // arrives, and React throws instead of rendering it.
+  const viewingExample = viewingExampleId
+    ? savedExamples.find((e) => e.id === viewingExampleId) ?? null
+    : null;
+  const liveBody = response
+    ? (response.errorMessage ? response.errorMessage : response.responseBody ?? "")
+    : "";
+  const rawBody = viewingExample ? viewingExample.body ?? "" : liveBody;
+  const bodyContentType = viewingExample ? viewingExample.contentType : response?.contentType ?? null;
+  // Memoized because Pretty is now the default: without it a 512 kB body would be
+  // reformatted on every render, including every toolbar interaction.
+  const displayBody = useMemo(
+    () => (prettyPrinted ? tryPrettyPrint(rawBody, bodyContentType) : rawBody),
+    [prettyPrinted, rawBody, bodyContentType],
+  );
 
   if (sending) {
     return (
@@ -119,14 +134,6 @@ export function ResponseViewer({
   }
 
   const isError = !!response.errorMessage;
-  const viewingExample = viewingExampleId
-    ? savedExamples.find((e) => e.id === viewingExampleId) ?? null
-    : null;
-
-  const liveBody = isError ? response.errorMessage ?? "" : response.responseBody ?? "";
-  const rawBody = viewingExample ? viewingExample.body ?? "" : liveBody;
-  const bodyContentType = viewingExample ? viewingExample.contentType : response.contentType;
-  const displayBody = prettyPrinted ? tryPrettyPrint(rawBody, bodyContentType) : rawBody;
 
   const isGraphQlError = !isError && response.contentType?.includes("json") && liveBody.includes("errors");
   let graphQlErrors: string[] = [];
@@ -147,7 +154,7 @@ export function ResponseViewer({
 
   const copyCurl = async () => {
     if (request) {
-      const curl = buildCurl(request, response);
+      const curl = buildCurl(request, response.resolvedUrl, variableScope);
       await navigator.clipboard.writeText(curl);
       setCopiedCurl(true);
       setTimeout(() => setCopiedCurl(false), 2000);
@@ -239,7 +246,7 @@ export function ResponseViewer({
             </button>
           </div>
           <pre className="overflow-auto whitespace-pre-wrap break-all font-mono text-xs">
-            {buildCurl(request, response)}
+            {buildCurl(request, response.resolvedUrl, variableScope)}
           </pre>
         </div>
       )}
@@ -308,7 +315,7 @@ export function ResponseViewer({
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <div className="flex overflow-hidden rounded border" role="group" aria-label="Body formatting">
                 <button
-                  onClick={() => setPrettyPrinted(true)}
+                  onClick={() => setPretty(true)}
                   aria-pressed={prettyPrinted}
                   className={`px-2 py-0.5 text-xs ${prettyPrinted ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
                   data-testid="response-pretty-toggle"
@@ -316,7 +323,7 @@ export function ResponseViewer({
                   Pretty
                 </button>
                 <button
-                  onClick={() => setPrettyPrinted(false)}
+                  onClick={() => setPretty(false)}
                   aria-pressed={!prettyPrinted}
                   className={`border-l px-2 py-0.5 text-xs ${!prettyPrinted ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
                   data-testid="response-raw-toggle"

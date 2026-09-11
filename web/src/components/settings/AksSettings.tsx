@@ -1,5 +1,6 @@
 import { useProfile, useUpdateProfile } from "@/lib/hooks";
 import type { AksConfig } from "@/lib/types";
+import { DraftInput } from "./DraftInput";
 
 export function AksSettings() {
   const { data: profile } = useProfile();
@@ -18,14 +19,16 @@ export function AksSettings() {
     monitoredNamespaces: [],
   };
 
+  // Updater form so concurrent edits queue against current state instead of each
+  // PUTting a profile snapshot taken before the other landed.
   const update = (patch: Partial<AksConfig>) => {
-    updateProfile.mutate({
-      ...profile,
+    updateProfile.mutate((prev) => ({
+      ...prev,
       config: {
-        ...profile.config,
-        aksConfig: { ...aks, ...patch },
+        ...prev.config,
+        aksConfig: { ...(prev.config.aksConfig ?? aks), ...patch },
       },
-    });
+    }));
   };
 
   return (
@@ -35,10 +38,10 @@ export function AksSettings() {
       <div className="space-y-3 rounded-lg border p-4">
         <div>
           <label className="mb-1 block text-sm font-medium">Kubeconfig Path</label>
-          <input
+          <DraftInput
             type="text"
             value={aks.kubeconfigPath ?? ""}
-            onChange={(e) => update({ kubeconfigPath: e.target.value || null })}
+            onCommit={(v) => update({ kubeconfigPath: v || null })}
             className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
             placeholder="Leave empty for default ~/.kube/config"
           />
@@ -46,10 +49,10 @@ export function AksSettings() {
 
         <div>
           <label className="mb-1 block text-sm font-medium">Kubeconfig Context</label>
-          <input
+          <DraftInput
             type="text"
             value={aks.kubeconfigContext ?? ""}
-            onChange={(e) => update({ kubeconfigContext: e.target.value || null })}
+            onCommit={(v) => update({ kubeconfigContext: v || null })}
             className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
             placeholder="Leave empty for current context"
           />
@@ -57,10 +60,10 @@ export function AksSettings() {
 
         <div>
           <label className="mb-1 block text-sm font-medium">Default Namespace</label>
-          <input
+          <DraftInput
             type="text"
             value={aks.defaultNamespace}
-            onChange={(e) => update({ defaultNamespace: e.target.value })}
+            onCommit={(v) => update({ defaultNamespace: v })}
             className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
             placeholder="default"
           />
@@ -69,23 +72,19 @@ export function AksSettings() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="mb-1 block text-sm font-medium">Auto-refresh (seconds)</label>
-            <input
+            <DraftInput
               type="number"
-              value={aks.autoRefreshIntervalSeconds}
-              onChange={(e) =>
-                update({ autoRefreshIntervalSeconds: parseInt(e.target.value) || 30 })
-              }
+              value={String(aks.autoRefreshIntervalSeconds)}
+              onCommit={(v) => update({ autoRefreshIntervalSeconds: parseInt(v) || 30 })}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
             />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Log Buffer Size</label>
-            <input
+            <DraftInput
               type="number"
-              value={aks.logBufferSize}
-              onChange={(e) =>
-                update({ logBufferSize: parseInt(e.target.value) || 10_000 })
-              }
+              value={String(aks.logBufferSize)}
+              onCommit={(v) => update({ logBufferSize: parseInt(v) || 10_000 })}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
             />
           </div>

@@ -1,5 +1,6 @@
 import { useProfile, useUpdateProfile } from "@/lib/hooks";
 import type { ServiceBusNamespace } from "@/lib/types";
+import { DraftInput } from "./DraftInput";
 
 export function ServiceBusSettings() {
   const { data: profile } = useProfile();
@@ -19,26 +20,29 @@ export function ServiceBusSettings() {
       transportType: "Amqp",
       createdAt: new Date().toISOString(),
     };
-    updateProfile.mutate({
-      ...profile,
-      serviceBusNamespaces: [...namespaces, ns],
-    });
+    // Updater form, not a snapshot: the mutation reads current state inside `mutationFn`,
+    // so two edits in quick succession cannot each PUT a profile computed before the other
+    // landed and silently drop one.
+    updateProfile.mutate((prev) => ({
+      ...prev,
+      serviceBusNamespaces: [...prev.serviceBusNamespaces, ns],
+    }));
   };
 
   const removeNamespace = (id: string) => {
-    updateProfile.mutate({
-      ...profile,
-      serviceBusNamespaces: namespaces.filter((n) => n.id !== id),
-    });
+    updateProfile.mutate((prev) => ({
+      ...prev,
+      serviceBusNamespaces: prev.serviceBusNamespaces.filter((n) => n.id !== id),
+    }));
   };
 
   const updateNamespace = (id: string, patch: Partial<ServiceBusNamespace>) => {
-    updateProfile.mutate({
-      ...profile,
-      serviceBusNamespaces: namespaces.map((n) =>
+    updateProfile.mutate((prev) => ({
+      ...prev,
+      serviceBusNamespaces: prev.serviceBusNamespaces.map((n) =>
         n.id === id ? { ...n, ...patch } : n,
       ),
-    });
+    }));
   };
 
   return (
@@ -62,10 +66,10 @@ export function ServiceBusSettings() {
       {namespaces.map((ns) => (
         <div key={ns.id} className="space-y-3 rounded-lg border p-4">
           <div className="flex items-center justify-between">
-            <input
+            <DraftInput
               type="text"
               value={ns.alias}
-              onChange={(e) => updateNamespace(ns.id, { alias: e.target.value })}
+              onCommit={(alias) => updateNamespace(ns.id, { alias })}
               className="flex-1 rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Alias"
             />
@@ -77,11 +81,11 @@ export function ServiceBusSettings() {
             </button>
           </div>
 
-          <input
+          <DraftInput
             type="text"
             value={ns.fullyQualifiedNamespace}
-            onChange={(e) =>
-              updateNamespace(ns.id, { fullyQualifiedNamespace: e.target.value })
+            onCommit={(fullyQualifiedNamespace) =>
+              updateNamespace(ns.id, { fullyQualifiedNamespace })
             }
             className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
             placeholder="e.g. sb-dev-shared-sb-weu.servicebus.windows.net"
@@ -91,16 +95,20 @@ export function ServiceBusSettings() {
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="radio"
+                name={`sb-auth-${ns.id}`}
                 checked={ns.authMode === "ConnectionString"}
                 onChange={() => updateNamespace(ns.id, { authMode: "ConnectionString" })}
+                data-testid={`sb-auth-connstring-${ns.id}`}
               />
               Connection String
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="radio"
-                checked={ns.authMode === "Entra"}
-                onChange={() => updateNamespace(ns.id, { authMode: "Entra" })}
+                name={`sb-auth-${ns.id}`}
+                checked={ns.authMode === "DefaultAzureCredential"}
+                onChange={() => updateNamespace(ns.id, { authMode: "DefaultAzureCredential" })}
+                data-testid={`sb-auth-entra-${ns.id}`}
               />
               Entra ID
             </label>

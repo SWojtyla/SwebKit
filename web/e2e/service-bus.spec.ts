@@ -156,6 +156,36 @@ test.describe("Service Bus", () => {
     await expect(page.getByTestId("detail-tab-content-system")).toBeVisible();
   });
 
+  test("a JSON body is prettified by default and the choice is remembered", async ({ page }) => {
+    // The body used to render as a single unreadable line with no way to format it, and
+    // when it looked like JSON but did not parse, it said nothing at all.
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
+    await firstMessage.click();
+    await expect(page.getByTestId("message-detail")).toBeVisible();
+
+    await expect(page.getByTestId("body-format")).toContainText("JSON");
+    await expect(page.getByTestId("body-pretty-toggle")).toHaveAttribute("aria-pressed", "true");
+
+    // Prettified means more than one line, and the line count reports what is on screen.
+    // Compared numerically: "Lines: 12" contains the substring "Lines: 1".
+    const lineCount = async () =>
+      Number(/Lines: (\d+)/.exec((await page.getByTestId("body-lines").textContent()) ?? "")?.[1]);
+    expect(await lineCount()).toBeGreaterThan(1);
+
+    await page.getByTestId("body-raw-toggle").click();
+    await expect.poll(lineCount).toBe(1);
+
+    // A view preference, not per-message state, so it survives a reload.
+    await page.reload();
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+    await page.getByTestId("message-list").locator("[data-testid^='message-item-']").first().click();
+    await expect(page.getByTestId("body-raw-toggle")).toHaveAttribute("aria-pressed", "true");
+  });
+
   test("copy body and copy full message buttons work", async ({ browser }) => {
     const context = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
     const page = await context.newPage();

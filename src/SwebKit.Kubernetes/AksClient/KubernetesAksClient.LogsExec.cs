@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -27,17 +28,37 @@ namespace SwebKit.Kubernetes.AksClient;
 
 public partial class KubernetesAksClient
 {
+    /// <summary>
+    /// Resolves which container a log/exec request should target. Kubernetes rejects an
+    /// unqualified request against a multi-container pod outright ("a container name must be
+    /// specified..."), it does not pick one — so an empty request has to resolve to a concrete
+    /// container before it reaches the API. Every real pod on AKS runs at least one sidecar
+    /// (istio-proxy, linkerd, the Azure Monitor agent), so this is the common case, not an edge
+    /// case. Mirrors the same "first container" default <see cref="StreamDeploymentLogsAsync"/>
+    /// already uses.
+    /// </summary>
+    internal static string ResolveContainer(string? requested, IEnumerable<string> availableContainers) =>
+        string.IsNullOrEmpty(requested) ? availableContainers.FirstOrDefault() ?? string.Empty : requested;
+
     public async IAsyncEnumerable<string> StreamPodLogsAsync(
         string ns, string podName, string container,
         LogStreamOptions opts, [EnumeratorCancellation] CancellationToken ct = default)
     {
+        var resolvedContainer = container;
+        if (string.IsNullOrEmpty(resolvedContainer))
+        {
+            var pod = await _client.CoreV1.ReadNamespacedPodAsync(podName, ns, cancellationToken: ct).ConfigureAwait(false);
+            resolvedContainer = ResolveContainer(container, (pod.Spec?.Containers ?? []).Select(c => c.Name));
+        }
+
         var stream = await _client.CoreV1.ReadNamespacedPodLogAsync(
             podName, ns,
-            container: string.IsNullOrEmpty(container) ? null : container,
+            container: string.IsNullOrEmpty(resolvedContainer) ? null : resolvedContainer,
             previous: opts.PreviousContainer,
             follow: opts.Follow,
             tailLines: opts.TailLines,
             sinceSeconds: opts.SinceSeconds,
+            timestamps: opts.Timestamps,
             cancellationToken: ct).ConfigureAwait(false);
 
         using var reader = new StreamReader(stream, Encoding.UTF8);
@@ -45,7 +66,9 @@ public partial class KubernetesAksClient
         {
             var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
             if (line is null) break;
-            if (opts.TextFilter is null || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
+            // Filter the message, not the timestamp prefix: with `timestamps` on, a filter of
+            // "2026" would otherwise match every line.
+            if (LogLineTimestamp.MatchesFilter(line, opts.TextFilter))
                 yield return line;
         }
     }

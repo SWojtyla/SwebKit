@@ -260,8 +260,18 @@ export interface ApiClientPageContextValue {
 
   environments: ApiEnvironment[];
   activeEnvironmentId: string | null;
+  /** The layer that wins — the scoped one when set, otherwise the global one. */
   activeEnvironment: ApiEnvironment | null;
+  /** The global layer, applied to every collection. */
+  activeGlobalEnvironment: ApiEnvironment | null;
+  /** The layer scoped to the current collection, applied over the global one. */
+  activeScopedEnvironment: ApiEnvironment | null;
+  /** The collection the environment pickers work against: the open tab's, else the tree selection. */
+  currentCollection: ApiCollection | null;
+  /** Active collection-scoped environment per collection id, for display in the manager. */
+  activeEnvironmentIdByCollection: Record<string, string>;
   handleSetActiveEnvironment: (envId: string | null) => void;
+  handleSetScopedEnvironment: (collectionId: string, envId: string | null) => void;
   handleSaveEnvironments: (envs: ApiEnvironment[], activeId: string | null) => void;
 
   selectedNodeId: string | null;
@@ -342,6 +352,33 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   const environments = envData?.environments ?? [];
   const uiState = envData?.uiState;
   const activeEnvironmentId = uiState?.activeEnvironmentId ?? null;
+
+  /// Resolves the two environment layers that apply to a collection: a global one
+  /// and a collection-scoped one, both active at once with the scoped one winning.
+  /// Both slots already existed in the stored UI state
+  /// (`activeEnvironmentId` and `activeEnvironmentIdByCollection`) but only the
+  /// first was ever read, so a value shared by every `DEV (via …)` environment had
+  /// to be duplicated into each of them.
+  ///
+  /// Used by both the preview scope and the send payload. Resolving it twice is how
+  /// the preview would start describing something other than what is sent.
+  const resolveEnvironmentLayers = (collectionId: string | null | undefined) => {
+    const selected = environments.find((e) => e.id === activeEnvironmentId) ?? null;
+
+    // The global slot can still hold a collection-scoped environment picked before
+    // the two layers existed. Honour it as that collection's project selection
+    // rather than applying an environment scoped to somewhere else.
+    const global = selected && selected.collectionId === null ? selected : null;
+
+    const scopedId = collectionId
+      ? uiState?.activeEnvironmentIdByCollection?.[collectionId] ?? null
+      : null;
+    const scoped =
+      (scopedId ? environments.find((e) => e.id === scopedId) ?? null : null) ??
+      (selected && collectionId && selected.collectionId === collectionId ? selected : null);
+
+    return { global, scoped };
+  };
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
@@ -448,7 +485,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           createdAt: now(),
           updatedAt: now(),
         };
-        updateCollections.mutate([...collections, collection]);
+        updateCollections.mutate((prev) => [...prev, collection]);
         setNameDialog(null);
       },
     });
@@ -472,8 +509,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           defaultAuth: null,
           request,
         };
-        const next = insertIntoCollection(collections, collectionId, node, parentId);
-        updateCollections.mutate(next, {
+        updateCollections.mutate((prev) => insertIntoCollection(prev, collectionId, node, parentId), {
           onSuccess: () => {
             setSelectedNodeId(node.id);
             setSelectedCollectionId(collectionId);
@@ -516,8 +552,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           defaultAuth: null,
           request: null,
         };
-        const next = insertIntoCollection(collections, collectionId, node, parentId);
-        updateCollections.mutate(next);
+        updateCollections.mutate((prev) => insertIntoCollection(prev, collectionId, node, parentId));
         setNameDialog(null);
       },
     });
@@ -527,8 +562,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     setConfirmDialog({
       message: "Delete this item? This cannot be undone.",
       onConfirm: () => {
-        const next = removeNode(collections, nodeId);
-        updateCollections.mutate(next, {
+        updateCollections.mutate((prev) => removeNode(prev, nodeId), {
           onSuccess: () => {
             if (selectedNodeId === nodeId) {
               setSelectedNodeId(null);
@@ -549,31 +583,31 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   };
 
   const handleRenameNode = (_nodeId: string, _collectionId: string, newName: string) => {
-    const next = renameNodeInCollections(collections, _nodeId, newName);
-    updateCollections.mutate(next);
+    updateCollections.mutate((prev) => renameNodeInCollections(prev, _nodeId, newName));
     // Update tab name if open
     setTabs((prev) => prev.map((t) => t.nodeId === _nodeId ? { ...t, name: newName } : t));
   };
 
   const handleMoveNode = (nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => {
-    const next = moveNode(collections, nodeId, target);
-    if (next === collections) return;
+    // No snapshot-based no-op guard here on purpose: a node created moments ago
+    // may not be in this render's `collections` yet, `moveNode` returns its input
+    // unchanged when it cannot find the source, and bailing on that swallowed the
+    // move entirely. `moveNode` runs against the freshest store inside the updater
+    // instead, where an impossible move is already a safe no-op.
     if (target.targetCollectionId !== sourceCollectionId) {
       setTabs((prev) => prev.map((t) => (t.nodeId === nodeId ? { ...t, collectionId: target.targetCollectionId } : t)));
       if (selectedNodeId === nodeId) {
         setSelectedCollectionId(target.targetCollectionId);
       }
     }
-    updateCollections.mutate(next, {
+    updateCollections.mutate((prev) => moveNode(prev, nodeId, target), {
       onSuccess: () => notify("success", "Moved", "Request moved."),
       onError: (err) => notify("error", "Move failed", err.message),
     });
   };
 
   const handleMoveCollection = (collectionId: string, target: MoveCollectionTarget) => {
-    const next = moveCollection(collections, collectionId, target);
-    if (next === collections) return;
-    updateCollections.mutate(next, {
+    updateCollections.mutate((prev) => moveCollection(prev, collectionId, target), {
       onSuccess: () => notify("success", "Moved", "Collection moved."),
       onError: (err) => notify("error", "Move failed", err.message),
     });
@@ -590,10 +624,14 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     if (draftForSave.auth) {
       draftForSave.auth = { ...draftForSave.auth, credentialSecret: null };
     }
-    const base = baseCollections ?? collections;
-    const next = updateRequestInCollections(base, tab.nodeId, draftForSave);
     try {
-      await updateCollections.mutateAsync(next);
+      // An explicit base is an overwrite-after-conflict, which must send exactly
+      // what the caller resolved; otherwise derive from the freshest store.
+      await updateCollections.mutateAsync(
+        baseCollections
+          ? updateRequestInCollections(baseCollections, tab.nodeId, draftForSave)
+          : (prev) => updateRequestInCollections(prev, tab.nodeId, draftForSave),
+      );
       setConflict(null);
       setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], dirty: false } }));
       setTabs((prev) => prev.map((t) => t.id === activeTabId ? { ...t, dirty: false } : t));
@@ -639,10 +677,13 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         (type, title, message) => notify(type, title, message),
       );
 
+      const layers = resolveEnvironmentLayers(tab.collectionId);
       const result = await executeRequest.mutateAsync({
         request,
         collectionId: tab.collectionId ?? undefined,
-        environmentId: activeEnvironmentId ?? undefined,
+        // Both layers travel to the backend, which applies the same precedence.
+        globalEnvironmentId: layers.global?.id ?? undefined,
+        environmentId: layers.scoped?.id ?? undefined,
       });
 
       // Commit the response immediately so the UI is not blocked by post-request actions (e.g. Delay).
@@ -717,9 +758,10 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     if (draftForSave.auth) {
       draftForSave.auth = { ...draftForSave.auth, credentialSecret: null };
     }
-    const next = updateRequestInCollections(collections, tab.nodeId, draftForSave);
     try {
-      await updateCollections.mutateAsync(next);
+      await updateCollections.mutateAsync((prev) =>
+        updateRequestInCollections(prev, tab.nodeId, draftForSave),
+      );
     } catch (err) {
       console.error("Failed to save response example", err);
     }
@@ -767,9 +809,8 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     copy.createdAt = now();
     copy.updatedAt = now();
     const node: ApiCollectionNode = { id: copy.id, type: "Request", name: copy.name, isExpanded: true, children: [], defaultAuth: null, request: copy };
-    const next = insertIntoCollection(latest, collection.id, node);
     try {
-      await updateCollections.mutateAsync(next);
+      await updateCollections.mutateAsync((prev) => insertIntoCollection(prev, collection.id, node));
       const tabId = newId();
       setTabs((prev) => [...prev, { id: tabId, nodeId: node.id, collectionId: collection.id, name: node.name, method: copy.method, dirty: false }]);
       setTabStates((prev) => ({ ...prev, [tabId]: emptyTabState(deepClone(copy)) }));
@@ -812,12 +853,42 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     });
   };
 
+  /// Sets the collection-scoped layer. Kept separate from the global slot so
+  /// switching a project's target does not disturb the shared environment, which is
+  /// the whole point of having two layers.
+  const handleSetScopedEnvironment = (collectionId: string, envId: string | null) => {
+    const byCollection = { ...(uiState?.activeEnvironmentIdByCollection ?? {}) };
+    if (envId === null) delete byCollection[collectionId];
+    else byCollection[collectionId] = envId;
+
+    updateEnvironments.mutate({
+      schemaVersion: 1,
+      environments,
+      uiState: {
+        // A pre-existing global selection that is really collection-scoped would
+        // keep overriding this one through the compatibility path, so clear it.
+        activeEnvironmentId:
+          activeEnvironmentId &&
+          environments.find((e) => e.id === activeEnvironmentId)?.collectionId === collectionId
+            ? null
+            : activeEnvironmentId,
+        activeEnvironmentIdByCollection: byCollection,
+        lastSelectedRequestIdByCollection: uiState?.lastSelectedRequestIdByCollection ?? {},
+      },
+    });
+  };
+
   const handleSaveCollectionVariables = (variables: CollectionVariable[]) => {
     if (!selectedCollectionId) return;
-    const next = collections.map((c) =>
-      c.id === selectedCollectionId ? { ...c, variables } : c,
+    updateCollections.mutate(
+      (prev) => prev.map((c) => (c.id === selectedCollectionId ? { ...c, variables } : c)),
+      {
+        // Without this a rejected save (a stale concurrency token, say) was
+        // swallowed, and the editor simply reopened empty — indistinguishable
+        // from never having typed the variable.
+        onError: (err) => notify("error", "Saving collection variables failed", err.message),
+      },
     );
-    updateCollections.mutate(next);
   };
 
   const selectedCollection = useMemo(
@@ -830,16 +901,30 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     [collections, exportCollectionId],
   );
 
-  const activeEnvironment = environments.find((e) => e.id === activeEnvironmentId) ?? null;
-
   const activeTab = activeTabId ? tabs.find((t) => t.id === activeTabId) ?? null : null;
   const activeCollection = activeTab
     ? collections.find((c) => c.id === activeTab.collectionId)
     : null;
-  const variableScope = buildVariableScope(
-    activeCollection?.variables ?? [],
-    activeEnvironment,
-  );
+
+  // The collection the environment pickers and the variable scope both work against.
+  // Falls back to the tree selection because `activeCollection` needs an *open request
+  // tab*: gating the project picker on it alone meant that before opening a request there
+  // was no way to choose a collection-scoped environment at all.
+  const currentCollection = activeCollection ?? selectedCollection;
+
+  const { global: activeGlobalEnvironment, scoped: activeScopedEnvironment } =
+    resolveEnvironmentLayers(currentCollection?.id);
+
+  // Lowest priority first: the project layer overrides the global one, and the
+  // global one fills in everything the project does not mention.
+  const variableScope = buildVariableScope(currentCollection?.variables ?? [], [
+    activeGlobalEnvironment,
+    activeScopedEnvironment,
+  ]);
+
+  // The environment whose name the toolbar shows: the project one when there is
+  // one, since that is the layer that wins.
+  const activeEnvironment = activeScopedEnvironment ?? activeGlobalEnvironment;
 
   const dismissConflict = () => setConflict(null);
 
@@ -855,7 +940,12 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     environments,
     activeEnvironmentId,
     activeEnvironment,
+    activeGlobalEnvironment,
+    activeScopedEnvironment,
+    currentCollection: currentCollection ?? null,
+    activeEnvironmentIdByCollection: uiState?.activeEnvironmentIdByCollection ?? {},
     handleSetActiveEnvironment,
+    handleSetScopedEnvironment,
     handleSaveEnvironments,
 
     selectedNodeId,

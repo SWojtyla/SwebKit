@@ -136,10 +136,21 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
             _logger.LogWarning(ex, "Access denied listing AKS namespaces during bootstrap");
             return ([], "Cannot list namespaces in this cluster (access denied). You may still have access to specific namespaces directly — ask your cluster administrator about a ClusterRole granting `list` on `namespaces`.");
         }
+        catch (AksAuthenticationException ex)
+        {
+            // Not authorized *at all* — an expired sign-in or a broken credential plugin. The
+            // message is already user-facing and carries the concrete cause, so pass it through.
+            _logger.LogWarning(ex, "Authentication failed listing AKS namespaces during bootstrap");
+            return ([], ex.Message);
+        }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to load AKS namespaces during bootstrap");
-            return ([], null);
+            // Returning an empty list with no warning made every non-RBAC failure (expired
+            // credentials, a broken exec-credential plugin, DNS/proxy trouble) look identical to a
+            // cluster that genuinely has no namespaces: the picker rendered "No namespaces found"
+            // and nothing reached the user. Always surface something actionable.
+            _logger.LogWarning(ex, "Failed to load AKS namespaces during bootstrap");
+            return ([], $"Could not list namespaces for this cluster: {ex.Message}");
         }
     }
 

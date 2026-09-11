@@ -33,9 +33,20 @@ public static class ApiClientEndpoints
                     return Results.NotFound("Environment not found");
             }
 
+            // The global layer sits underneath the collection-scoped one, so a value
+            // shared by a family of environments is defined once instead of copied
+            // into each of them.
+            ApiEnvironment? globalEnvironment = null;
+            if (!string.IsNullOrWhiteSpace(req.GlobalEnvironmentId))
+            {
+                globalEnvironment = environments.Environments.FirstOrDefault(e => e.Id == req.GlobalEnvironmentId);
+                if (globalEnvironment is null)
+                    return Results.NotFound("Global environment not found");
+            }
+
             try
             {
-                var result = await executor.ExecuteAsync(req.Request, collection, activeEnvironment, ct);
+                var result = await executor.ExecuteAsync(req.Request, collection, activeEnvironment, globalEnvironment, ct);
                 return Results.Ok(Map(result));
             }
             catch (Exception ex)
@@ -158,7 +169,12 @@ public sealed class ExecuteRequestRequest
 {
     public HttpRequestEntry Request { get; set; } = new();
     public string? CollectionId { get; set; }
+
+    /// <summary>The collection-scoped environment layer. Overrides <see cref="GlobalEnvironmentId"/>.</summary>
     public string? EnvironmentId { get; set; }
+
+    /// <summary>The global environment layer, applied underneath <see cref="EnvironmentId"/>.</summary>
+    public string? GlobalEnvironmentId { get; set; }
 }
 
 public sealed record ApiClientExecutionResponse(

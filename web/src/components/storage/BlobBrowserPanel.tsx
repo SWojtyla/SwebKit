@@ -12,7 +12,7 @@ export function BlobBrowserPanel() {
   const ctx = useStoragePageContext();
 
   return (
-    <div className="w-1/3 border-r overflow-hidden flex flex-col" data-testid="storage-blob-browser">
+    <div className="flex h-full w-full flex-col overflow-hidden" data-testid="storage-blob-browser">
       {!ctx.selectedContainer ? (
         <div className="flex h-full items-center justify-center text-muted-foreground" data-testid="storage-no-container">
           Select a container
@@ -166,7 +166,7 @@ export function BlobBrowserPanel() {
                       <div
                         data-testid={`storage-item-${item.name}`}
                         onClick={() => ctx.multiSelectMode && !item.isPrefix ? ctx.toggleBlobSelection(item.name) : item.isPrefix ? ctx.handleNavigatePrefix(item.name) : ctx.handleSelectBlob(item.name)}
-                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent cursor-pointer ${
+                        className={`flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent cursor-pointer ${
                           ctx.multiSelectMode && !item.isPrefix ? ctx.selectedBlobs.has(item.name) ? "bg-primary/20" : "" : !item.isPrefix && ctx.selectedBlob === item.name ? "bg-accent" : ""
                         }`}
                       >
@@ -176,20 +176,23 @@ export function BlobBrowserPanel() {
                             checked={ctx.selectedBlobs.has(item.name)}
                             onChange={() => ctx.toggleBlobSelection(item.name)}
                             onClick={(e) => e.stopPropagation()}
-                            className="h-3.5 w-3.5"
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0"
                             data-testid={`storage-blob-checkbox-${item.name}`}
                           />
                         )}
                         {item.isPrefix ? (
-                          <Folder className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+                          <Folder className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-400" />
                         ) : (
-                          <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <File className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         )}
-                        <span className="truncate font-mono">
-                          {item.isPrefix ? item.name.replace(ctx.currentPrefix, "") : item.name.replace(ctx.currentPrefix, "")}
+                        {/* Wraps rather than truncates: blob names here run to 80+ characters
+                            and the distinguishing part sits at the end. The virtualizer measures
+                            each row, so taller rows lay out correctly. */}
+                        <span className="min-w-0 flex-1 break-all font-mono" title={item.name}>
+                          {item.name.replace(ctx.currentPrefix, "")}
                         </span>
                         {!item.isPrefix && (
-                          <span className="ml-auto text-xs text-muted-foreground">{formatBytes(item.sizeBytes)}</span>
+                          <span className="shrink-0 self-start text-xs text-muted-foreground">{formatBytes(item.sizeBytes)}</span>
                         )}
                       </div>
                     </div>

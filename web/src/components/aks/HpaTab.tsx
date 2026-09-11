@@ -3,6 +3,8 @@ import { useAksHpas, useAksScaleHpa, useAksDeleteHpa, useAksSetHpaScalingEnabled
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import { YamlViewer } from "./YamlViewer";
+import { Dialog } from "@/components/shared/Dialog";
+import { X } from "lucide-react";
 import type { HpaInfo } from "@/lib/types";
 
 export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
@@ -70,7 +72,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
               )}
             </div>
           )},
-          { header: "Actions", cell: (hpa) => (
+          { header: "Actions", className: "py-2 pr-4 w-px whitespace-nowrap", cell: (hpa) => (
             <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
               <button
                 onClick={() => setScaleTarget(hpa)}
@@ -137,6 +139,11 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   );
 }
 
+/**
+ * A modal, not the inline panel this used to render under the table: the panel
+ * appeared and disappeared below the rows, shifting everything under it and
+ * scrolling the HPA you were acting on out of view.
+ */
 function ScaleHpaForm({
   hpa,
   onCancel,
@@ -150,46 +157,87 @@ function ScaleHpaForm({
 }) {
   const [min, setMin] = useState(hpa.minReplicas);
   const [max, setMax] = useState(hpa.maxReplicas);
+  const invalid = min > max;
 
   return (
-    <div className="mt-4 rounded border p-4">
-      <h4 className="mb-2 text-sm font-medium">Scale {hpa.name}</h4>
-      <div className="flex items-end gap-2">
-        <label className="text-xs">
-          Min replicas
-          <input
-            type="number"
-            min={1}
-            value={min}
-            onChange={(e) => setMin(Math.max(1, parseInt(e.target.value, 10) || 0))}
-            className="mt-1 block w-24 rounded border bg-background px-2 py-1 text-sm"
-          />
-        </label>
-        <label className="text-xs">
-          Max replicas
-          <input
-            type="number"
-            min={1}
-            value={max}
-            onChange={(e) => setMax(Math.max(1, parseInt(e.target.value, 10) || 0))}
-            className="mt-1 block w-24 rounded border bg-background px-2 py-1 text-sm"
-          />
-        </label>
+    <Dialog onClose={onCancel} label={`Scale HPA ${hpa.name}`} testId="aks-hpa-scale-dialog" widthClassName="w-[420px]">
+      <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Scale autoscaler</h2>
+          <p className="truncate text-xs text-muted-foreground" title={`${hpa.namespace}/${hpa.name}`}>
+            {hpa.namespace} / <span className="font-medium text-foreground">{hpa.name}</span>
+          </p>
+        </div>
         <button
-          onClick={() => onSave(min, max)}
-          disabled={isSaving || min > max}
-          className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50"
+          onClick={onCancel}
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          aria-label="Close"
+          data-testid="aks-hpa-scale-close"
         >
-          Save
+          <X className="h-4 w-4" />
         </button>
+      </div>
+
+      <div className="space-y-3 p-4">
+        <div className="flex items-end gap-3">
+          <label className="text-xs">
+            Min replicas
+            <input
+              type="number"
+              min={1}
+              value={min}
+              onChange={(e) => setMin(Math.max(1, parseInt(e.target.value, 10) || 0))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !invalid && !isSaving) onSave(min, max);
+              }}
+              autoFocus
+              className="mt-1 block w-24 rounded-md border bg-background px-2 py-1.5 text-sm tabular-nums"
+              data-testid="aks-hpa-scale-min"
+            />
+          </label>
+          <label className="text-xs">
+            Max replicas
+            <input
+              type="number"
+              min={1}
+              value={max}
+              onChange={(e) => setMax(Math.max(1, parseInt(e.target.value, 10) || 0))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !invalid && !isSaving) onSave(min, max);
+              }}
+              className="mt-1 block w-24 rounded-md border bg-background px-2 py-1.5 text-sm tabular-nums"
+              data-testid="aks-hpa-scale-max"
+            />
+          </label>
+          <span className="pb-1.5 text-xs text-muted-foreground">
+            currently {hpa.minReplicas}–{hpa.maxReplicas}
+          </span>
+        </div>
+        {invalid && (
+          <p className="text-xs text-destructive" data-testid="aks-hpa-scale-error">
+            Min replicas cannot exceed max replicas.
+          </p>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2 border-t px-4 py-3">
         <button
           onClick={onCancel}
           disabled={isSaving}
-          className="rounded border border-border px-3 py-1 text-xs hover:bg-accent/50"
+          className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+          data-testid="aks-hpa-scale-cancel"
         >
           Cancel
         </button>
+        <button
+          onClick={() => onSave(min, max)}
+          disabled={isSaving || invalid}
+          className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          data-testid="aks-hpa-scale-save"
+        >
+          {isSaving ? "Scaling…" : "Save"}
+        </button>
       </div>
-    </div>
+    </Dialog>
   );
 }

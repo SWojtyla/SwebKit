@@ -3,6 +3,7 @@ import { StoragePageProvider, useStoragePageContext } from "./StoragePageContext
 import { BlobBrowserPanel } from "./BlobBrowserPanel";
 import { BlobDetailPanel } from "./BlobDetailPanel";
 import { BlobRecoveryPanel } from "./BlobRecoveryPanel";
+import { ResizablePanels } from "@/components/ui/ResizablePanels";
 
 export function StoragePage() {
   return (
@@ -26,11 +27,65 @@ function StoragePageContent() {
     );
   }
 
+  const recovery = ctx.storageViewMode === "recovery";
+
+  const containerList = (
+    <div key="containers" className="h-full w-full overflow-auto" data-testid="storage-container-list">
+      <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase">Containers</div>
+      {ctx.containers.isLoading && (
+        <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
+      )}
+      {ctx.containers.error && (
+        <div className="px-3 py-2 text-sm text-destructive" data-testid="storage-container-error">
+          Error: {ctx.containers.error.message}
+        </div>
+      )}
+      {ctx.containers.data?.map((c) => (
+        <button
+          key={c.name}
+          data-testid={`storage-container-${c.name}`}
+          onClick={() => ctx.handleSelectContainer(c.name)}
+          className={`flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
+            ctx.selectedContainer === c.name ? "bg-accent" : ""
+          }`}
+          title={c.name}
+        >
+          <span className="truncate font-mono">{c.name}</span>
+        </button>
+      ))}
+      {(!ctx.containers.data || ctx.containers.data.length === 0) && !ctx.containers.isLoading && (
+        <div className="px-3 py-2 text-sm text-muted-foreground">No containers</div>
+      )}
+    </div>
+  );
+
+  // An explicit array, not a conditional fragment: ResizablePanels sizes one pane per
+  // direct child, and a fragment would collapse the browser and detail panes into one.
+  const panels = recovery
+    ? [containerList, <BlobRecoveryPanel key="recovery" />]
+    : [containerList, <BlobBrowserPanel key="browser" />, <BlobDetailPanel key="detail" />];
+
   return (
     <div className="flex h-full flex-col" data-testid="storage-page">
       <div className="border-b px-6 py-3">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold" data-testid="storage-title">Storage</h1>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold" data-testid="storage-title">Storage</h1>
+            {ctx.accounts.length > 1 && (
+              <select
+                data-testid="storage-account-select"
+                value={ctx.resolvedAccountId ?? ""}
+                onChange={(e) => ctx.handleSelectAccount(e.target.value)}
+                className="rounded-md border bg-background px-2 py-1 text-sm"
+              >
+                {ctx.accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.displayName}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
           <div className="flex gap-1">
             <button
               onClick={() => ctx.setStorageViewMode("browser")}
@@ -52,46 +107,19 @@ function StoragePageContent() {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Container list */}
-        <div className="w-48 border-r overflow-auto" data-testid="storage-container-list">
-          <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase">Containers</div>
-          {ctx.containers.isLoading && (
-            <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
-          )}
-          {ctx.containers.error && (
-            <div className="px-3 py-2 text-sm text-destructive" data-testid="storage-container-error">
-              Error: {ctx.containers.error.message}
-            </div>
-          )}
-          {ctx.containers.data?.map((c) => (
-            <button
-              key={c.name}
-              data-testid={`storage-container-${c.name}`}
-              onClick={() => ctx.handleSelectContainer(c.name)}
-              className={`flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
-                ctx.selectedContainer === c.name ? "bg-accent" : ""
-              }`}
-            >
-              <span className="truncate font-mono">{c.name}</span>
-            </button>
-          ))}
-          {(!ctx.containers.data || ctx.containers.data.length === 0) && !ctx.containers.isLoading && (
-            <div className="px-3 py-2 text-sm text-muted-foreground">No containers</div>
-          )}
-        </div>
-
-        {/* Recovery mode */}
-        {ctx.storageViewMode === "recovery" ? (
-          <div className="flex-1 overflow-auto">
-            <BlobRecoveryPanel />
-          </div>
-        ) : (
-          <>
-            <BlobBrowserPanel />
-            <BlobDetailPanel />
-          </>
-        )}
+      <div className="flex min-w-0 flex-1 overflow-hidden">
+        {/* Recovery mode drops the detail pane, so it persists under its own key — a stored
+            3-panel layout is discarded rather than migrated on a panel-count change. */}
+        <ResizablePanels
+          key={recovery ? "recovery" : "browser"}
+          initialWidths={recovery ? [220, "1fr"] : [220, "1fr", "1fr"]}
+          minWidths={recovery ? [160, 320] : [160, 280, 320]}
+          storageKey={recovery ? "storage-recovery-panels" : "storage-panels"}
+          panelLabels={recovery ? ["containers", "recovery"] : ["containers", "blobs", "blob detail"]}
+          className="w-full min-w-0"
+        >
+          {panels}
+        </ResizablePanels>
       </div>
     </div>
   );

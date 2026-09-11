@@ -88,4 +88,27 @@ test.describe("AKS", () => {
     await expect(page.getByTestId("helm-tab-history")).toBeVisible();
     await expect(page.getByTestId("helm-tab-values")).toBeVisible();
   });
+
+  test("surfaces the reason when namespaces cannot be listed", async ({ page }) => {
+    // Regression: a failing /api/aks/namespaces used to render as an empty picker reading
+    // "0 total / No namespaces found", which looks identical to a cluster with no namespaces.
+    // The auth failure has to be visible instead.
+    const authError =
+      "The cluster rejected the request as unauthorized (HTTP 401): no valid Azure AD token could be obtained.";
+    await page.route("**/api/aks/namespaces", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: authError }),
+      });
+    });
+
+    await page.goto("/aks");
+
+    await expect(page.getByTestId("aks-namespace-error")).toBeVisible();
+
+    await page.getByTestId("aks-namespace-dropdown").click();
+    await expect(page.getByTestId("aks-namespace-error-detail")).toContainText(authError);
+    await expect(page.getByText("No namespaces found")).toHaveCount(0);
+  });
 });

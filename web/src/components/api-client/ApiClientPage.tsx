@@ -1,4 +1,4 @@
-import { Globe, Settings2, GitBranch, AlertTriangle } from "lucide-react";
+import { Globe, Folder, Settings2, GitBranch, AlertTriangle } from "lucide-react";
 import { ApiClientPageProvider, useApiClientPageContext } from "./ApiClientPageContext";
 import { CollectionTree } from "./CollectionTree";
 import { RequestEditor } from "./RequestEditor";
@@ -30,24 +30,79 @@ function ApiClientPageContent() {
     );
   }
 
+  // Split once so each picker offers only environments of its own scope. An environment
+  // scoped to some *other* collection is deliberately in neither list — it cannot apply
+  // here — but the Environment Manager still shows it, so it is never lost.
+  const globalEnvironments = ctx.environments.filter((env) => env.collectionId === null);
+  const scopedEnvironments = ctx.currentCollection
+    ? ctx.environments.filter((env) => env.collectionId === ctx.currentCollection!.id)
+    : [];
+
   return (
     // `relative` anchors the Git drawer to the page content area instead of the
     // whole viewport, so it no longer covers the app titlebar and status bar.
     <div className="relative flex h-full min-w-0 flex-col" data-testid="api-client-page">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 bg-card">
-        <Globe className="h-4 w-4 text-muted-foreground" />
-        <select
-          data-testid="env-selector"
-          value={ctx.activeEnvironmentId ?? ""}
-          onChange={(e) => ctx.handleSetActiveEnvironment(e.target.value || null)}
-          className="rounded border bg-background px-2 py-1 text-xs"
+        {/* Two layers apply at once, so both pickers are always shown: a Global
+            environment shared by every collection, and one scoped to the current
+            collection that overrides it. The project picker is rendered even with no
+            collection in context — disabled and saying why — because hiding it was how
+            an estate of entirely collection-scoped environments ended up with nothing
+            selectable anywhere. */}
+        <div className="flex items-center gap-1" title="Global environment — applies to every collection">
+          <Globe className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Global</span>
+          <select
+            data-testid="env-selector"
+            value={ctx.activeGlobalEnvironment?.id ?? ""}
+            onChange={(e) => ctx.handleSetActiveEnvironment(e.target.value || null)}
+            className="rounded border bg-background px-2 py-1 text-xs"
+          >
+            <option value="">— None —</option>
+            {globalEnvironments.map((env) => (
+              <option key={env.id} value={env.id}>{env.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <span className="text-xs text-muted-foreground">+</span>
+
+        <div
+          className="flex items-center gap-1"
+          title={
+            ctx.currentCollection
+              ? `Environment for ${ctx.currentCollection.name} — overrides the global one`
+              : "Select a collection to choose its environment"
+          }
         >
-          <option value="">— No environment —</option>
-          {ctx.environments.map((env) => (
-            <option key={env.id} value={env.id}>{env.name}</option>
-          ))}
-        </select>
+          <Folder className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">
+            {ctx.currentCollection ? ctx.currentCollection.name : "Project"}
+          </span>
+          <select
+            data-testid="env-selector-scoped"
+            disabled={!ctx.currentCollection}
+            value={ctx.activeScopedEnvironment?.id ?? ""}
+            onChange={(e) =>
+              ctx.currentCollection &&
+              ctx.handleSetScopedEnvironment(ctx.currentCollection.id, e.target.value || null)
+            }
+            className="rounded border bg-background px-2 py-1 text-xs disabled:opacity-50"
+          >
+            {ctx.currentCollection ? (
+              <>
+                <option value="">— None —</option>
+                {scopedEnvironments.map((env) => (
+                  <option key={env.id} value={env.id}>{env.name}</option>
+                ))}
+              </>
+            ) : (
+              <option value="">— Select a collection first —</option>
+            )}
+          </select>
+        </div>
+
         <button
           onClick={() => ctx.setShowEnvManager(true)}
           className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
@@ -64,9 +119,11 @@ function ApiClientPageContent() {
             Collection Variables
           </button>
         )}
+        {/* What the two layers actually resolve to. The count is of the *merged* scope,
+            which is the number that matters and which neither layer's own count gives. */}
         {ctx.activeEnvironment && (
           <span className="text-xs text-muted-foreground" data-testid="active-env-name">
-            {ctx.activeEnvironment.name} ({ctx.activeEnvironment.variables.filter((v) => v.isEnabled).length} vars)
+            {ctx.activeEnvironment.name} ({Object.keys(ctx.variableScope).length} vars in scope)
           </span>
         )}
         <div className="ml-auto" />
@@ -180,6 +237,7 @@ function ApiClientPageContent() {
               request={ctx.activeTabId ? ctx.tabStates[ctx.activeTabId]?.draft ?? null : null}
               history={ctx.activeTabId ? ctx.tabStates[ctx.activeTabId]?.history ?? [] : []}
               onSaveExample={ctx.handleSaveExample}
+              variableScope={ctx.variableScope}
             />
           </div>
         </ResizablePanels>
@@ -208,6 +266,7 @@ function ApiClientPageContent() {
           environments={ctx.environments}
           collections={ctx.collections}
           activeEnvironmentId={ctx.activeEnvironmentId}
+          activeEnvironmentIdByCollection={ctx.activeEnvironmentIdByCollection}
           onSave={ctx.handleSaveEnvironments}
           onClose={() => ctx.setShowEnvManager(false)}
         />

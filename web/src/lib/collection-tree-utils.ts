@@ -108,36 +108,55 @@ function removeNode(
   return null;
 }
 
-interface ParentListResult {
-  list: ApiCollectionNode[];
-  parentId?: string;
-  index: number;
+function withCollection(
+  collections: ApiCollection[],
+  index: number,
+  collection: ApiCollection,
+): ApiCollection[] {
+  return [...collections.slice(0, index), collection, ...collections.slice(index + 1)];
 }
 
-function findParentList(
+/**
+ * Rebuilds `nodes` with `node` inserted relative to `targetNodeId`, recursing into
+ * folders so a nested target is rewritten in place. Returns `null` when the target
+ * is not in this subtree, which is how the caller distinguishes "nothing to do"
+ * from "inserted at the root".
+ *
+ * This recursion replaced a `findParentList` helper that returned the array
+ * *directly containing* the target and let the caller splice it — then assigned
+ * the result to `collection.nodes`. For a nested target that array is a folder's
+ * `children`, so dropping a request into a nested folder overwrote the whole
+ * collection with the contents of one inner list: everything else in it
+ * disappeared. Only a top-level target happened to be correct, which is exactly
+ * what the drag-and-drop tests covered.
+ */
+function insertRelativeToNode(
   nodes: ApiCollectionNode[],
-  targetId: string,
-  parentId?: string,
-): ParentListResult | null {
+  targetNodeId: string,
+  node: ApiCollectionNode,
+  placement: "before" | "after" | "inside",
+): ApiCollectionNode[] | null {
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i];
-    if (n.id === targetId) {
-      return { list: nodes, parentId, index: i };
+    if (n.id === targetNodeId) {
+      if (placement === "inside") {
+        if (n.type === "Folder") {
+          return [...nodes.slice(0, i), { ...n, children: [...n.children, node] }, ...nodes.slice(i + 1)];
+        }
+        // A request cannot hold children, so treat "inside a request" as "after it".
+        return [...nodes.slice(0, i + 1), node, ...nodes.slice(i + 1)];
+      }
+      const index = placement === "before" ? i : i + 1;
+      return [...nodes.slice(0, index), node, ...nodes.slice(index)];
     }
     if (n.type === "Folder") {
-      const found = findParentList(n.children, targetId, n.id);
-      if (found) return found;
+      const children = insertRelativeToNode(n.children, targetNodeId, node, placement);
+      if (children) {
+        return [...nodes.slice(0, i), { ...n, children }, ...nodes.slice(i + 1)];
+      }
     }
   }
   return null;
-}
-
-function insertNodeIntoNodes(
-  nodes: ApiCollectionNode[],
-  index: number,
-  node: ApiCollectionNode,
-): ApiCollectionNode[] {
-  return [...nodes.slice(0, index), node, ...nodes.slice(index)];
 }
 
 function insertNode(
@@ -151,53 +170,15 @@ function insertNode(
   const collection = collections[collectionIndex];
 
   if (!target.targetNodeId) {
-    // Dropping onto the collection root.
-    if (target.placement === "before") {
-      return [
-        ...collections.slice(0, collectionIndex),
-        { ...collection, nodes: [node, ...collection.nodes] },
-        ...collections.slice(collectionIndex + 1),
-      ];
-    }
-    // "after" or "inside" -> append to root.
-    return [
-      ...collections.slice(0, collectionIndex),
-      { ...collection, nodes: [...collection.nodes, node] },
-      ...collections.slice(collectionIndex + 1),
-    ];
+    // Dropping onto the collection root: prepend for "before", append otherwise.
+    const nodes =
+      target.placement === "before" ? [node, ...collection.nodes] : [...collection.nodes, node];
+    return withCollection(collections, collectionIndex, { ...collection, nodes });
   }
 
-  const located = findParentList(collection.nodes, target.targetNodeId);
-  if (!located) return collections;
-
-  const targetNode = located.list[located.index];
-
-  if (target.placement === "inside") {
-    if (targetNode.type === "Folder") {
-      const newChildren = [...targetNode.children, node];
-      const updatedTarget: ApiCollectionNode = { ...targetNode, children: newChildren };
-      const newList = [
-        ...located.list.slice(0, located.index),
-        updatedTarget,
-        ...located.list.slice(located.index + 1),
-      ];
-      return [
-        ...collections.slice(0, collectionIndex),
-        { ...collection, nodes: newList },
-        ...collections.slice(collectionIndex + 1),
-      ];
-    }
-    // Cannot drop inside a request; fall through to "after".
-    target.placement = "after";
-  }
-
-  const insertIndex = target.placement === "before" ? located.index : located.index + 1;
-  const newList = insertNodeIntoNodes(located.list, insertIndex, node);
-  return [
-    ...collections.slice(0, collectionIndex),
-    { ...collection, nodes: newList },
-    ...collections.slice(collectionIndex + 1),
-  ];
+  const nodes = insertRelativeToNode(collection.nodes, target.targetNodeId, node, target.placement);
+  if (!nodes) return collections;
+  return withCollection(collections, collectionIndex, { ...collection, nodes });
 }
 
 /** Moves a node (request or folder) to a new position. Returns a new collections array. */

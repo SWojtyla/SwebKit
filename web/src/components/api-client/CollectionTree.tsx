@@ -421,13 +421,26 @@ export function CollectionTree({
             : ""
         }`}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
-        onClick={() => onSelectNode(node, collectionId)}
+        // Focus explicitly: Chromium does not focus a `draggable` element on
+        // mousedown, so making the row a drag source otherwise silently broke
+        // click-then-Alt+Arrow keyboard reordering.
+        onClick={(e) => {
+          e.currentTarget.focus();
+          onSelectNode(node, collectionId);
+        }}
         onDoubleClick={(e) => {
           e.stopPropagation();
           startRename(node.id, node.name, collectionId);
         }}
         onContextMenu={(e) => handleContextMenu(e, node.id, collectionId, isCollection, node.type)}
         onKeyDown={(e) => handleRowKeyDown(e, row, rowIndex)}
+        // The whole row is a drag source, not just the 12px grip — the grip stays
+        // as the affordance, but nobody should have to hit it. Suspended while
+        // renaming, because a `draggable` ancestor blocks text selection in the
+        // rename input.
+        draggable={draggable && !isRenaming}
+        onDragStart={(e) => handleDragStart(e, row)}
+        onDragEnd={handleDragEnd}
         onDragOver={(e) => handleDragOver(e, row, rowIndex)}
         onDrop={(e) => handleDrop(e, row)}
       >

@@ -887,6 +887,54 @@ users:
             ]);
     }
 
+    // ── ResolveContainer() ──
+    // Kubernetes rejects an unqualified log/exec request against a multi-container pod
+    // outright rather than picking one, so an empty request has to resolve to a concrete
+    // container before it reaches the API. These cover the resolution logic without needing
+    // a live cluster.
+
+    [Fact]
+    public void ResolveContainer_EmptyRequested_ReturnsFirstAvailable()
+    {
+        var resolved = KubernetesAksClient.ResolveContainer(string.Empty, ["app", "istio-proxy"]);
+
+        Assert.Equal("app", resolved);
+    }
+
+    [Fact]
+    public void ResolveContainer_NullRequested_ReturnsFirstAvailable()
+    {
+        var resolved = KubernetesAksClient.ResolveContainer(null, ["app", "istio-proxy"]);
+
+        Assert.Equal("app", resolved);
+    }
+
+    [Fact]
+    public void ResolveContainer_NonEmptyRequested_IsPassedThroughUnchanged()
+    {
+        var resolved = KubernetesAksClient.ResolveContainer("istio-proxy", ["app", "istio-proxy"]);
+
+        Assert.Equal("istio-proxy", resolved);
+    }
+
+    [Fact]
+    public void ResolveContainer_NonEmptyRequested_IsPassedThrough_EvenWhenNotInAvailableList()
+    {
+        // Not this method's job to validate the name exists — the API call itself is the
+        // validation; this just decides whether to substitute a default.
+        var resolved = KubernetesAksClient.ResolveContainer("sidecar-not-listed", ["app"]);
+
+        Assert.Equal("sidecar-not-listed", resolved);
+    }
+
+    [Fact]
+    public void ResolveContainer_EmptyRequested_EmptyAvailableList_ReturnsEmpty()
+    {
+        var resolved = KubernetesAksClient.ResolveContainer(string.Empty, []);
+
+        Assert.Equal(string.Empty, resolved);
+    }
+
     private sealed class TempKubeconfig(DirectoryInfo directory, string path) : IDisposable
     {
         public string Path { get; } = path;

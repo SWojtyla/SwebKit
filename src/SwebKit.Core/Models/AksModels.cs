@@ -7,6 +7,17 @@ public class LogStreamOptions
     public int? SinceSeconds { get; set; }
     public string? TextFilter { get; set; }
     public bool PreviousContainer { get; set; }
+
+    /// <summary>
+    /// Prefix every line with the timestamp the container emitted it at (RFC3339Nano, as
+    /// Kubernetes formats it). Off by default: the agent tools parse bare lines, and a caller
+    /// that does not ask should not have its output shape changed underneath it.
+    /// </summary>
+    /// <remarks>
+    /// Use <see cref="SwebKit.Core.Services.LogLineTimestamp"/> to split the prefix back off —
+    /// in particular before applying a text filter, which would otherwise match the timestamp.
+    /// </remarks>
+    public bool Timestamps { get; set; }
 }
 
 public enum PortForwardStatus { Starting, Active, Stopping, Stopped, Error }

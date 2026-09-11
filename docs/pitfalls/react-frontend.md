@@ -40,6 +40,24 @@ interface next to it.
 > `PortForwardSessionInfo` in `native.rs` still has this mismatch (`local_port` vs `localPort` in
 > `tauri-bridge.ts`) — unrelated to the API Client, but the same trap.
 
+### `dragDropEnabled` (on by default) breaks HTML5 drag-and-drop in the window
+
+Tauri installs an OS-level drag/drop handler on the webview unless you turn it off, and on Windows
+that handler swallows HTML5 `dragstart`/`dragover`/`drop` inside WebView2 — you can pick an item up
+and then find nowhere to put it. Tauri's own config doc says as much: *"Disabling it is required to
+use HTML5 drag and drop on the frontend on Windows."*
+
+Set `"dragDropEnabled": false` on the window in `src-tauri/tauri.conf.json` (safe as long as nothing
+listens for `onDragDropEvent` / file drops). **Playwright cannot catch this** — the e2e suite runs in
+a plain browser where HTML5 DnD works fine, so the API Client reorder tests passed for the whole time
+the feature was unusable in the app. Anything drag-related needs a manual check in the Tauri window.
+
+### A `draggable` element is not focused by a click
+
+Chromium suppresses the default mousedown-focus on `draggable` elements, so making a `tabIndex={0}`
+row a drag source silently breaks every keyboard interaction that assumed clicking it focuses it
+(here: `Alt`+`Arrow` reordering). Call `e.currentTarget.focus()` in the row's `onClick`.
+
 ### `AllowedRoots` is in-memory, so a persisted path is not an authorized path
 
 `AllowedRoots` is populated *only* by the native `pick_file`/`pick_directory` dialogs — that is what
@@ -52,6 +70,114 @@ it back after a restart bypasses that entirely: any script in the webview can wr
 
 It canonicalizes the *parent* directory because a file may not exist yet on write. A directory
 argument needs `validate_dir_within_roots`, which canonicalizes the directory itself.
+
+### A shared-blob Tauri command needs its own lock — Tauri's IPC dispatch does not serialize for you
+
+`src-tauri/src/secrets.rs` stores every API Client auth secret as one JSON blob (a
+`HashMap<key, secret>`) under a single OS keychain entry, and `save_secret`/`delete_secret` each did
+an unsynchronized read-modify-write: load the whole vault, mutate one key, write the whole vault
+back. Tauri dispatches plain (non-`async`) commands onto a thread pool, so two `save_secret` calls
+for *different* requests' secrets — realistic whenever a user sets auth on two requests within the
+same couple of seconds their own save debounces already create — can interleave: both read the same
+starting snapshot, both write back, and whichever finishes last silently drops the other's key. The
+symptom on the frontend looked nothing like a race: a token was visible right after typing it
+(served from the in-memory, never-persisted `AuthConfig.credentialSecret`) and then appeared to
+"vanish" only later — on reopening the tab or restarting the app, once `getSecret()` was the only
+source left and it could no longer find the clobbered key. Fixed with a single
+`static VAULT_LOCK: Mutex<()>` held across each command's full load-mutate-save sequence.
+
+**This class of bug is invisible to Playwright.** `web/src/lib/tauri-bridge.ts`'s `isTauri()` check
+is false under Chromium, so every e2e run takes the `localStorage` fallback branch — single-threaded,
+no possible interleaving — never the real keychain path. A Playwright repro of a Tauri-secrets race
+will not reproduce it no matter how the test is written; only the real desktop app can.
+
+## Sidecar contract
+
+### A TypeScript union standing in for a C# enum must use the member names exactly
+
+`ServiceBusNamespace.authMode` was typed `"ConnectionString" | "Entra"`, but the C# enum is
+`SbAuthMode { DefaultAzureCredential, ConnectionString, ServicePrincipal }`. There is no `Entra`
+member, so choosing Entra ID sent a value the sidecar could not deserialize, the **whole profile
+save** was rejected, and the radio silently snapped back — the failure surfaced as "the button does
+nothing", nowhere near the type that caused it.
+
+Enums cross the wire as their member names (`profiles.json` stores `"authMode": "ConnectionString"`).
+When mirroring one in `types.ts`, copy the member names verbatim, and remember that one bad field
+fails the entire document, not just that property.
+
+### Settings fields write the whole profile, so commit on blur, not per keystroke
+
+The profile is a single document: every field's save is a full `PUT` plus an atomic rewrite of
+`profiles.json`. Wiring an input's `onChange` straight to the mutation therefore cost a disk write
+and a round trip **per character**, and because the input was controlled off server state, each
+character had to complete that loop before it appeared. Use `DraftInput`, which holds the text
+locally and commits on blur, Enter, or unmount — the unmount case matters because switching settings
+tabs removes the field without firing a blur.
+
+Discrete controls (radio, checkbox, select) commit immediately; there is nothing to debounce.
+
+## Server-sent events
+
+### Close every `EventSource` in the effect cleanup
+
+An SSE stream opened with `follow=true` never ends on its own. Without a cleanup that calls
+`close()`, navigating away leaves it delivering into an unmounted component, and each remount opens
+another one on top. The multi-pod log view holds a `Map<pod, EventSource>` precisely so it can close
+them individually when a pod is deselected and all of them on unmount — see `MultiPodLogView.tsx`.
+This is the React form of BL-7 in `blazor-maui.md`.
+
+It matters more than it looks: browsers cap concurrent HTTP/1.1 connections per origin at six, so a
+handful of leaked streams will silently stall every later request to the sidecar rather than failing
+loudly.
+
+### Never render per received message
+
+A busy pod emits far faster than the browser can paint, and calling `setState` per message saturates
+the render queue until the UI stops responding. Buffer into a ref and flush on a timer — `useLogBuffer`
+does it at 10 fps, and `LogLineText` is memoised so the flush does not re-tokenize every visible line.
+This is BL-8 in `blazor-maui.md`; the React log views hit it just as hard, and `MultiPodLogView`
+shipped violating it (one `setLogs` per line, per pod).
+
+### `EventSource` is GET-only, so every option is a query parameter
+
+There is no way to send a body, which is why the log-stream endpoint takes `container`, `tail`,
+`follow`, `sinceSeconds`, `previousContainer`, `filter` and `timestamps` in the URL. See the note at
+`web/src/lib/api.ts:108`.
+
+### A required query parameter with no default fails silently — as a 400, not as no data
+
+`MultiPodLogView.tsx` never sent `previousContainer` in its `EventSource` URL; only `PodLogView.tsx`
+did. The sidecar's `/logs/stream` route bound it as `bool previousContainer` — no `?`, no default —
+which ASP.NET's minimal-API model binding treats as **required**: omitting it from the query string
+fails the request with a 400 *before the handler body runs at all*, real client or demo alike. On the
+wire, and to `EventSource.onerror`, that is indistinguishable from a stream that opened fine and just
+never delivered anything — which is exactly what every multi-pod correlation looked like: an
+indefinite "Connecting...".
+
+This is easy to miss in review because every existing test bypassed it: the sidecar unit tests call
+the extracted `AksEndpoints.StreamPodLogsAsync` handler directly with typed C# arguments, never going
+through actual route/query binding, and the e2e assertion only checked that the empty-state string was
+gone — true the instant a pod was selected, regardless of whether any log line ever arrived. Prefer
+giving every primitive query parameter on an SSE route a C# default (`bool previousContainer = false`,
+`int tail = 0`, …) so a caller that reasonably omits a flag degrades instead of 400ing invisibly, and
+write at least one e2e assertion against actual content (a line count, not just an absent placeholder
+string) for any stream-shaped view.
+
+### A custom SSE event name must not be `error`
+
+`EventSource` reserves the event type `"error"` for its own native connection-failure signal, fired to
+both `.onerror` and any `addEventListener("error", ...)` listener as a plain `Event` (no `.data`). If
+the server also frames a named event as `event: error`, it dispatches to the *same* listener as a
+`MessageEvent` (with `.data`) — the two are register-compatible but shape-incompatible, and nothing
+stops a handler written for one from receiving the other. Name an application-level error frame
+something else entirely (`stream-error`, here) so it can never collide with the browser's own error
+delivery.
+
+### A server-side text filter must not match the timestamp prefix
+
+With `timestamps=true` Kubernetes prefixes every line with an RFC3339 stamp. A filter applied to the
+whole line then matches the prefix, so filtering for a year returns everything. Split the line first —
+`LogLineTimestamp` on the backend, `parseLogLine` on the frontend — and match only the message.
 
 ## Layout
 
@@ -77,6 +203,94 @@ a captured base is correct there.
 ### Set `user-select: none` while dragging
 
 Without it, dragging a divider selects the text underneath it.
+
+## TanStack Query
+
+### `invalidateQueries({ queryKey: ["aks-"] })` matches nothing
+
+Query keys are compared **element by element**, not as string prefixes. `["aks-"]` matches only a
+query keyed exactly `["aks-"]`, and every AKS query is keyed `["aks-pods", ns]`,
+`["aks-deployments", ns]`, and so on — so the AKS Refresh button, the auto-refresh timer, the `r`
+shortcut and the post-apply-YAML refresh were all silent no-ops. It fails *quietly*: the UI shows no
+error, and between ticks the tables usually look identical anyway.
+
+Group-invalidate through a `predicate` instead — see `web/src/lib/aks-query-keys.ts`, which also
+keeps the slow cluster-scoped queries (`aks-namespaces`, ~18s cold) off the periodic timer.
+
+Corollary: **if auto-refresh is invisible, users assume it is broken.** Show when the data was last
+updated (AKS puts a fixed-width "updated 12s ago" in the toolbar) — otherwise a working refresh and
+a broken one look the same.
+
+### A whole-store `PUT` derived from a render snapshot loses concurrent writes
+
+`useUpdateCollections` replaces the entire collections file. Computing the new array from a
+component's `collections` variable means computing it from a *render snapshot*, so two saves close
+together each send a full store built before the other landed and the loser's changes disappear —
+creating two requests quickly left only the second, a collection variable saved and then reopened
+empty, and one of two quick drag-reorders was dropped.
+
+Two things fix it together: take an **updater function** and evaluate it inside `mutationFn` against
+`queryClient.getQueryData`, and give the mutation a **`scope`** so saves to the same store are
+serialized rather than overlapping. Also give such a mutation an `onError` — a silently swallowed
+save is indistinguishable from the user never having typed anything.
+
+Corollary for tests: once saves are serialized, an assertion fired immediately after the action can
+read the pre-save state. Use `expect.poll`, not a single `allTextContents()`.
+
+### Don't guard a mutation with a no-op check against a stale snapshot
+
+`if (moveNode(collections, id, target) === collections) return;` looks like a harmless optimization.
+`moveNode` returns its input unchanged when it cannot find the source node — and a node created a
+moment ago is not in this render's snapshot yet — so the guard cancelled exactly the moves that
+needed the fresh data. Detect the no-op inside the updater, where the data is current, and let a
+genuinely redundant write be a redundant write.
+
+## React Router
+
+### `searchParams` in a callback is a snapshot, so two writes in one tick clobber each other
+
+A helper shaped like `updateParams` that does `new URLSearchParams(searchParams)` builds on the
+params from the render that created it. Two writes before the next commit — selecting an AKS
+namespace and immediately clicking a tab — both build on the same empty base, and the second drops
+the first's parameter, leaving the page on "Select a namespace to view resources".
+
+The functional setter form (`setSearchParams(prev => …)`) does **not** fix this: React Router's
+implementation calls the updater with the same captured `searchParams`. With `<BrowserRouter>`
+(which pushes to history synchronously) read `window.location.search` at call time instead.
+
+### An effect that defaults a URL param can overwrite the user's choice
+
+"Initialize the selection once the list loads" effects race with the interaction the loaded list
+makes possible: the list arriving is what populates the `<select>`, so the change event can land
+after that commit but before React flushes the passive effect it scheduled. The effect still sees
+the pre-selection `searchParams`, decides nothing is selected, and `replace`s the URL back to the
+default. Guard with a ref set by the user-facing setter (`namespacePickedRef` in
+`AksWorkspaceContext`), not with the `searchParams` the effect closed over.
+
+## Inputs
+
+### A native input cannot colour its own content
+
+To highlight inside a single-line field (`{{variable}}` tokens, say), render an `aria-hidden` overlay
+holding the same string with per-token spans and make the input's own text transparent
+(`text-transparent caret-foreground`) — see `components/api-client/VariableInput.tsx`, the same
+technique as the AKS YAML editor's overlay. Two rules keep it from drifting: the two layers must
+share *exact* text metrics (pass one class string to both; put border/background on a wrapper, never
+on the input, where it would paint over the overlay), and the overlay's `scrollLeft` must be mirrored
+from the input in a layout effect — `onScroll` alone misses caret-driven scrolling.
+
+## Tables
+
+### An inline row editor re-lays out the whole table
+
+Swapping a row's `Scale` button for an input plus two more buttons widens the Actions column, so
+every row shifts the moment you click — you lose your place in the list you were acting on. Use a
+modal (`components/aks/ScaleDialog.tsx`), which also has room to say *which* resource and namespace
+is about to change.
+
+With a `table-auto` layout, refreshing data jitters columns too, as an age ticks `9m` → `10m` or a
+metric gains a digit. Put `tabular-nums` on the table and `w-full` on the column that should absorb
+the slack (the name), so every other column is sized to its content and stops re-measuring.
 
 ## Playwright
 

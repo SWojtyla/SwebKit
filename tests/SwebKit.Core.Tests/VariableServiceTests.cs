@@ -54,7 +54,7 @@ public sealed class VariableSubstitutionServiceTests
             new CollectionVariable { Key = "version", Value = "v2" },
         };
 
-        var scope = svc.BuildScope(vars, null);
+        var scope = svc.BuildScope(vars, []);
 
         Assert.Equal("https://api.acme.com", scope["base_url"]);
         Assert.Equal("v2", scope["version"]);
@@ -75,9 +75,135 @@ public sealed class VariableSubstitutionServiceTests
             ],
         };
 
-        var scope = svc.BuildScope(colVars, env);
+        var scope = svc.BuildScope(colVars, [env]);
 
         Assert.Equal("production", scope["env"]);
+    }
+
+    // ── Layered environments (global + collection-scoped) ──────────────────────
+
+    private static ApiEnvironment Env(string id, params (string Key, string Value)[] variables) => new()
+    {
+        Id = id,
+        Name = id,
+        Variables = [.. variables.Select(v => new EnvironmentVariable { Key = v.Key, Value = v.Value, IsEnabled = true })],
+    };
+
+    [Fact]
+    public void BuildScope_LaterLayerOverridesEarlierLayer()
+    {
+        var svc = Create();
+        var global = Env("global", ("AUTH_SP", "shared"), ("TIMEOUT", "30"));
+        var scoped = Env("scoped", ("AUTH_SP", "project"));
+
+        var scope = svc.BuildScope([], [global, scoped]);
+
+        Assert.Equal("project", scope["AUTH_SP"]);
+    }
+
+    [Fact]
+    public void BuildScope_EarlierLayerFillsGapsTheLaterOneLeaves()
+    {
+        var svc = Create();
+        var global = Env("global", ("AUTH_SP", "shared"), ("TIMEOUT", "30"));
+        var scoped = Env("scoped", ("AUTH_SP", "project"));
+
+        var scope = svc.BuildScope([], [global, scoped]);
+
+        // The point of the global layer: a value shared by a family of environments
+        // is defined once instead of copied into each of them.
+        Assert.Equal("30", scope["TIMEOUT"]);
+    }
+
+    [Fact]
+    public void BuildScope_SkipsNullLayers()
+    {
+        var svc = Create();
+
+        var scope = svc.BuildScope([], [null, Env("scoped", ("A", "1")), null]);
+
+        Assert.Equal("1", scope["A"]);
+    }
+
+    [Fact]
+    public void BuildScope_NoLayers_LeavesCollectionVarsIntact()
+    {
+        var svc = Create();
+        var colVars = new[] { new CollectionVariable { Key = "A", Value = "collection" } };
+
+        var scope = svc.BuildScope(colVars, []);
+
+        Assert.Equal("collection", scope["A"]);
+    }
+
+    [Fact]
+    public void BuildScope_EveryLayerOverridesCollectionVars()
+    {
+        var svc = Create();
+        var colVars = new[] { new CollectionVariable { Key = "A", Value = "collection" } };
+
+        Assert.Equal("global", svc.BuildScope(colVars, [Env("g", ("A", "global")), null])["A"]);
+        Assert.Equal("scoped", svc.BuildScope(colVars, [null, Env("s", ("A", "scoped"))])["A"]);
+    }
+
+    [Fact]
+    public async Task BuildScopeAsync_KeyVaultVarInLaterLayerWinsOverEarlierPlainVar()
+    {
+        var svc = Create(kvResolver: new StubKeyVaultResolver(
+            available: true,
+            secrets: new Dictionary<string, string> { ["api-key"] = "from-vault" }));
+
+        var global = Env("global", ("API_KEY", "plain-shared"));
+        var scoped = new ApiEnvironment
+        {
+            Id = "scoped",
+            Name = "scoped",
+            Variables =
+            [
+                new EnvironmentVariable
+                {
+                    Key = "API_KEY",
+                    SecretSource = EnvironmentVariableSecretSource.AzureKeyVault,
+                    CredentialKey = "api-key",
+                    IsEnabled = true,
+                },
+            ],
+        };
+
+        var scope = await svc.BuildScopeAsync([], [global, scoped]);
+
+        Assert.Equal("from-vault", scope["API_KEY"]);
+    }
+
+    [Fact]
+    public async Task BuildScopeAsync_PlainVarInLaterLayerWinsOverEarlierKeyVaultVar()
+    {
+        var svc = Create(kvResolver: new StubKeyVaultResolver(
+            available: true,
+            secrets: new Dictionary<string, string> { ["api-key"] = "from-vault" }));
+
+        var global = new ApiEnvironment
+        {
+            Id = "global",
+            Name = "global",
+            Variables =
+            [
+                new EnvironmentVariable
+                {
+                    Key = "API_KEY",
+                    SecretSource = EnvironmentVariableSecretSource.AzureKeyVault,
+                    CredentialKey = "api-key",
+                    IsEnabled = true,
+                },
+            ],
+        };
+        var scoped = Env("scoped", ("API_KEY", "plain-project"));
+
+        var scope = await svc.BuildScopeAsync([], [global, scoped]);
+
+        // Key Vault resolution walks the layers in the same order as the plain pass,
+        // so an earlier layer's secret cannot overwrite a later layer's override.
+        Assert.Equal("plain-project", scope["API_KEY"]);
     }
 
     [Fact]
@@ -94,7 +220,7 @@ public sealed class VariableSubstitutionServiceTests
             ],
         };
 
-        var scope = svc.BuildScope([], env);
+        var scope = svc.BuildScope([], [env]);
 
         Assert.False(scope.ContainsKey("key"));
     }
@@ -122,7 +248,7 @@ public sealed class VariableSubstitutionServiceTests
             ],
         };
 
-        var scope = svc.BuildScope([], env);
+        var scope = svc.BuildScope([], [env]);
 
         Assert.Equal("super-secret", scope["token"]);
     }
@@ -147,7 +273,7 @@ public sealed class VariableSubstitutionServiceTests
             ],
         };
 
-        var scope = svc.BuildScope([], env);
+        var scope = svc.BuildScope([], [env]);
 
         Assert.True(scope.ContainsKey("token"));
         Assert.Null(scope["token"]);
@@ -356,7 +482,7 @@ public sealed class VariableSubstitutionServicePhase3Tests
             new CollectionVariable { Key = "inactive", Value = "no", IsEnabled = false },
         };
 
-        var scope = svc.BuildScope(vars, null);
+        var scope = svc.BuildScope(vars, []);
 
         Assert.True(scope.ContainsKey("active"));
         Assert.False(scope.ContainsKey("inactive"));
@@ -382,7 +508,7 @@ public sealed class VariableSubstitutionServicePhase3Tests
             ],
         };
 
-        var scope = await svc.BuildScopeAsync([], env);
+        var scope = await svc.BuildScopeAsync([], [env]);
 
         Assert.True(scope.ContainsKey("kv_secret"));
         Assert.Null(scope["kv_secret"]);
@@ -411,7 +537,7 @@ public sealed class VariableSubstitutionServicePhase3Tests
             ],
         };
 
-        var scope = await svc.BuildScopeAsync([], env);
+        var scope = await svc.BuildScopeAsync([], [env]);
 
         Assert.Equal("resolved-value", scope["kv_secret"]);
     }
@@ -430,7 +556,7 @@ public sealed class VariableSubstitutionServicePhase3Tests
             ],
         };
 
-        var scope = await svc.BuildScopeAsync([], env);
+        var scope = await svc.BuildScopeAsync([], [env]);
 
         Assert.Equal("api.test.com", scope["host"]);
     }
@@ -457,7 +583,7 @@ public sealed class VariableSubstitutionServicePhase3Tests
             ],
         };
 
-        var scope = await svc.BuildScopeAsync([], env);
+        var scope = await svc.BuildScopeAsync([], [env]);
 
         // The sync pass leaves KV vars null; the async pass must skip blank CredentialKey
         Assert.True(scope.ContainsKey("kv_empty"));

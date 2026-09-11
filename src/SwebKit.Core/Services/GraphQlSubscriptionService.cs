@@ -30,7 +30,7 @@ public sealed class GraphQlSubscriptionService(
         Func<GraphQlSubscriptionMessage, Task> onMessage,
         CancellationToken cancellationToken = default)
     {
-        var scope = substitution.BuildScope(collection.Variables, activeEnvironment);
+        var scope = substitution.BuildScope(collection.Variables, [activeEnvironment]);
         var resolvedUrl = substitution.Substitute(endpointUrl, scope);
 
         // Convert HTTP(S) URL to WS(S)

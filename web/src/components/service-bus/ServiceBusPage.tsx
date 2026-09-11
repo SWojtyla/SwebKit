@@ -15,6 +15,7 @@ import { ScheduledMessages } from "./ScheduledMessages";
 import { EntityCommandPalette, type EntityAction } from "./EntityCommandPalette";
 import { BatchReplayPanel } from "./BatchReplayPanel";
 import { loadSbPreferences } from "@/lib/stores/sb-preferences";
+import { loadLastNamespace, saveLastNamespace, loadLastEntity, saveLastEntity } from "@/lib/stores/sb-selection";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 
 function maxSequenceNumber(messages: SbMessage[]): number | null {
@@ -58,7 +59,10 @@ export function ServiceBusPage() {
   // Drill-down state is read from the URL so back/forward and deep links work.
   const selectedNsId = searchParams.get("ns");
   const setSelectedNsId = useCallback(
-    (id: string | null) => updateParams({ ns: id, entity: null, entityName: null, msg: null, seq: null, view: null }),
+    (id: string | null) => {
+      updateParams({ ns: id, entity: null, entityName: null, msg: null, seq: null, view: null });
+      if (id) saveLastNamespace(id);
+    },
     [updateParams],
   );
 
@@ -76,15 +80,39 @@ export function ServiceBusPage() {
     return { ...urlEntity, stats: entityStats.data ?? null };
   }, [urlEntity, entityStats.data]);
   const setSelectedEntity = useCallback(
-    (entity: SbEntityInfo | null) =>
+    (entity: SbEntityInfo | null) => {
       updateParams({
         entity: entity?.entityPath ?? null,
         entityName: entity?.name ?? null,
         msg: null,
         seq: null,
-      }),
-    [updateParams],
+      });
+      if (selectedNsId && entity) saveLastEntity(selectedNsId, { entityPath: entity.entityPath, name: entity.name });
+    },
+    [updateParams, selectedNsId],
   );
+
+  // Restore the last-selected namespace once the namespace list loads, and
+  // within it the last-selected entity — mirroring the AKS workspace's
+  // per-cluster namespace restoration. Only when the URL carries no selection
+  // yet, so a fresh pick or a deep link always wins over a stored one.
+  useEffect(() => {
+    if (searchParams.get("ns") || namespaces.length === 0) return;
+    const lastNs = loadLastNamespace();
+    if (!lastNs || !namespaces.some((ns) => ns.id === lastNs)) return;
+    const lastEntity = loadLastEntity(lastNs);
+    updateParams(
+      { ns: lastNs, entity: lastEntity?.entityPath ?? null, entityName: lastEntity?.name ?? null },
+      { replace: true },
+    );
+  }, [searchParams, namespaces, updateParams]);
+
+  useEffect(() => {
+    if (!selectedNsId || searchParams.get("entity")) return;
+    const lastEntity = loadLastEntity(selectedNsId);
+    if (!lastEntity) return;
+    updateParams({ entity: lastEntity.entityPath, entityName: lastEntity.name }, { replace: true });
+  }, [selectedNsId, searchParams, updateParams]);
 
   const viewMode = useMemo<"active" | "dlq">(() => {
     const v = searchParams.get("view");
@@ -394,9 +422,11 @@ export function ServiceBusPage() {
           <SidePanel
             title="Message details"
             onClose={() => selectMessage(null)}
-            defaultWidth={380}
+            defaultWidth={560}
             minWidth={240}
-            maxWidth={600}
+            // 600 was too narrow for the panel's own action row, so the last buttons
+            // (Replay, Schedule) were unreachable at any width the user could drag to.
+            maxWidth={1400}
             storageKey="service-bus-message-detail"
           >
             <MessageDetail

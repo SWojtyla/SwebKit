@@ -5,8 +5,11 @@ using SwebKit.Core.Domain;
 namespace SwebKit.Core.Services;
 
 /// <summary>
-/// Resolves <c>{{variable}}</c> tokens by merging collection variables and the active environment.
-/// Resolution order: collection variables first, then environment variables (env wins on conflict).
+/// Resolves <c>{{variable}}</c> tokens by merging collection variables with an ordered list of
+/// environment layers — in practice the active global environment followed by the active
+/// collection-scoped one.
+/// Resolution order: collection variables first, then each environment layer in turn, so a later
+/// layer wins on conflict.
 /// Secrets are fetched from the credential store (sync) or Key Vault (async) at scope-build time.
 /// </summary>
 public sealed class VariableSubstitutionService : IVariableSubstitutionService
@@ -38,7 +41,7 @@ public sealed class VariableSubstitutionService : IVariableSubstitutionService
 
     public IReadOnlyDictionary<string, string?> BuildScope(
         IEnumerable<CollectionVariable> collectionVars,
-        ApiEnvironment? activeEnvironment)
+        IReadOnlyList<ApiEnvironment?> environmentLayers)
     {
         var scope = new Dictionary<string, string?>(StringComparer.Ordinal);
 
@@ -47,9 +50,14 @@ public sealed class VariableSubstitutionService : IVariableSubstitutionService
             scope[variable.Key] = ResolveCollectionVariable(variable, scope);
         }
 
-        if (activeEnvironment is not null)
+        foreach (var environment in environmentLayers)
         {
-            foreach (var variable in activeEnvironment.Variables.Where(static variable => variable.IsEnabled && !string.IsNullOrWhiteSpace(variable.Key)))
+            if (environment is null)
+            {
+                continue;
+            }
+
+            foreach (var variable in environment.Variables.Where(static variable => variable.IsEnabled && !string.IsNullOrWhiteSpace(variable.Key)))
             {
                 scope[variable.Key] = ResolveEnvironmentVariableSync(variable, scope);
             }
@@ -60,25 +68,45 @@ public sealed class VariableSubstitutionService : IVariableSubstitutionService
 
     public async Task<IReadOnlyDictionary<string, string?>> BuildScopeAsync(
         IEnumerable<CollectionVariable> collectionVars,
-        ApiEnvironment? activeEnvironment,
+        IReadOnlyList<ApiEnvironment?> environmentLayers,
         CancellationToken cancellationToken = default)
     {
-        var scope = new Dictionary<string, string?>(BuildScope(collectionVars, activeEnvironment), StringComparer.Ordinal);
+        var scope = new Dictionary<string, string?>(BuildScope(collectionVars, environmentLayers), StringComparer.Ordinal);
 
-        if (activeEnvironment is not null && _keyVaultResolver.IsAvailable)
+        if (!_keyVaultResolver.IsAvailable)
         {
-            var kvVars = activeEnvironment.Variables
-                .Where(static variable => variable.IsEnabled
-                            && variable.SecretSource == EnvironmentVariableSecretSource.AzureKeyVault
-                            && !string.IsNullOrWhiteSpace(variable.Key)
-                            && !string.IsNullOrWhiteSpace(variable.CredentialKey))
-                .ToList();
+            return scope;
+        }
 
-            foreach (var variable in kvVars)
+        // Resolve Key Vault only for the definition that actually won. Walking the
+        // layers and resolving each one's Key Vault variables in turn would let an
+        // earlier layer's secret overwrite a later layer's plain override — the global
+        // layer would silently beat the project layer for exactly the keys backed by a
+        // vault.
+        var winningDefinitions = new Dictionary<string, EnvironmentVariable>(StringComparer.Ordinal);
+        foreach (var environment in environmentLayers)
+        {
+            if (environment is null)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                scope[variable.Key] = await _keyVaultResolver.GetSecretAsync(variable.CredentialKey!, variable.KeyVaultName, cancellationToken).ConfigureAwait(false);
+                continue;
             }
+
+            foreach (var variable in environment.Variables.Where(static variable => variable.IsEnabled && !string.IsNullOrWhiteSpace(variable.Key)))
+            {
+                winningDefinitions[variable.Key] = variable;
+            }
+        }
+
+        foreach (var (key, variable) in winningDefinitions)
+        {
+            if (variable.SecretSource != EnvironmentVariableSecretSource.AzureKeyVault
+                || string.IsNullOrWhiteSpace(variable.CredentialKey))
+            {
+                continue;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            scope[key] = await _keyVaultResolver.GetSecretAsync(variable.CredentialKey!, variable.KeyVaultName, cancellationToken).ConfigureAwait(false);
         }
 
         return scope;

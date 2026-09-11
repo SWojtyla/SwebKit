@@ -1,4 +1,13 @@
-import { AksWorkspaceProvider, useAksWorkspace, directTabs, networkTabs, extraTabs, networkTabIds } from "./shared/AksWorkspaceContext";
+import { useEffect, useState } from "react";
+import {
+  AksWorkspaceProvider,
+  useAksWorkspace,
+  aksRefreshIntervals,
+  directTabs,
+  networkTabs,
+  extraTabs,
+  networkTabIds,
+} from "./shared/AksWorkspaceContext";
 import { DeploymentsTab } from "./DeploymentsTab";
 import { PodsTab } from "./PodsTab";
 import { ServicesTab } from "./ServicesTab";
@@ -27,7 +36,7 @@ import { AksConfirmBar } from "./AksConfirmBar";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { NamespaceSelector } from "./NamespaceSelector";
 import { ContextSelector } from "./ContextSelector";
-import { RefreshCw, Clock, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2 } from "lucide-react";
 
 export function AksPage() {
   return (
@@ -43,8 +52,11 @@ function AksPageContent() {
 
   return (
     <div className="flex h-full flex-col" data-testid="aks-page">
-      {/* Header with context and namespace selectors */}
-      <div className="flex items-center gap-3 border-b px-4 py-2">
+      {/* Header with context and namespace selectors. `flex-wrap` because at 1280px
+          the toolbar genuinely does not fit on one line — without it the last
+          controls were squeezed until their labels wrapped to three lines and the
+          connection status was clipped off the right edge. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2">
         <span className="text-sm font-medium">Context:</span>
         <ContextSelector
           contexts={ws.contexts}
@@ -59,19 +71,26 @@ function AksPageContent() {
           selected={ws.selectedNamespaces}
           onChange={ws.setSelectedNamespaces}
           isLoading={ws.nsLoading}
+          error={ws.nsError}
         />
 
-        {(ws.contextLoading || ws.isAksFetching) && (
+        {ws.contextLoading && (
           <div className="flex items-center gap-1.5 text-xs text-primary" data-testid="aks-loading-indicator">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            {ws.contextLoading ? "Switching context…" : "Loading resources…"}
+            Switching context…
           </div>
         )}
 
-        {/* Auto-refresh controls */}
+        {/* Auto-refresh controls. The in-flight state lives on the Refresh button's
+            icon rather than a separate "Loading resources…" label — with auto-refresh
+            on, that label appeared and vanished every few seconds and shoved the rest
+            of the toolbar sideways each time. */}
         <div className="ml-auto flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs" data-testid="aks-auto-refresh">
-            <Clock className="h-3.5 w-3.5" />
+          <label
+            className="flex items-center gap-1.5 text-xs"
+            data-testid="aks-auto-refresh"
+            title="Automatically re-fetch the resources in view"
+          >
             <input
               type="checkbox"
               checked={ws.autoRefresh}
@@ -81,26 +100,28 @@ function AksPageContent() {
             />
             <span>Auto</span>
           </label>
-          {ws.autoRefresh && (
-            <select
-              value={ws.refreshInterval}
-              onChange={(e) => ws.setRefreshInterval(Number(e.target.value))}
-              className="rounded-md border bg-card px-2 py-1 text-xs"
-              data-testid="aks-refresh-interval"
-            >
-              <option value={5}>5s</option>
-              <option value={10}>10s</option>
-              <option value={30}>30s</option>
-              <option value={60}>60s</option>
-            </select>
-          )}
+          <select
+            value={ws.refreshInterval}
+            onChange={(e) => ws.setRefreshInterval(Number(e.target.value))}
+            disabled={!ws.autoRefresh || !ws.namespaceToken}
+            className="rounded-md border bg-card px-2 py-1 text-xs disabled:opacity-40"
+            aria-label="Auto-refresh interval"
+            data-testid="aks-refresh-interval"
+          >
+            {aksRefreshIntervals.map((seconds) => (
+              <option key={seconds} value={seconds}>
+                {seconds}s
+              </option>
+            ))}
+          </select>
+          <LastRefreshed at={ws.lastRefreshedAt} isFetching={ws.isAksFetching} paused={ws.autoRefreshPaused} />
           <button
             onClick={ws.handleManualRefresh}
             disabled={!ws.namespaceToken}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
             data-testid="aks-refresh-btn"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+            <RefreshCw className={`h-3.5 w-3.5 ${ws.isAksFetching ? "animate-spin" : ""}`} />
             Refresh
           </button>
           <button
@@ -109,7 +130,7 @@ function AksPageContent() {
               ws.openMultiPodLogs(pods);
             }}
             disabled={!ws.namespaceToken || ws.podsFetching}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
             data-testid="aks-multi-pod-logs"
           >
             Multi-Pod Logs
@@ -118,7 +139,7 @@ function AksPageContent() {
 
         {ws.testResult && (
           <span
-            className={`flex items-center gap-1.5 text-xs ${ws.testResult.connected ? "text-success" : "text-destructive"}`}
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${ws.testResult.connected ? "text-success" : "text-destructive"}`}
             data-testid="aks-connection-status"
           >
             <span
@@ -379,5 +400,51 @@ function AksPageContent() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * "Updated 12s ago" next to the refresh controls. Without it, auto-refresh is
+ * invisible — the tables are usually identical between ticks, so there was no way
+ * to tell a working refresh from a broken one (and for a while it *was* broken:
+ * see `lib/aks-query-keys.ts`).
+ *
+ * Fixed-width and `tabular-nums` so the counter ticking does not nudge the
+ * toolbar buttons.
+ */
+function LastRefreshed({
+  at,
+  isFetching,
+  paused,
+}: {
+  at: number | null;
+  isFetching: boolean;
+  paused: boolean;
+}) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (at === null) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [at]);
+
+  const label = (() => {
+    if (isFetching) return "refreshing…";
+    if (paused) return "auto paused";
+    if (at === null) return "";
+    const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
+    if (seconds < 60) return `updated ${seconds}s ago`;
+    return `updated ${Math.floor(seconds / 60)}m ago`;
+  })();
+
+  return (
+    <span
+      className="w-[7.5rem] shrink-0 truncate text-right text-xs tabular-nums text-muted-foreground"
+      title={paused ? "Auto-refresh is held while a detail panel is open" : label || undefined}
+      data-testid="aks-last-refreshed"
+    >
+      {label}
+    </span>
   );
 }

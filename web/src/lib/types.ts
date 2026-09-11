@@ -68,7 +68,13 @@ export interface ServiceBusNamespace {
   id: string;
   alias: string;
   fullyQualifiedNamespace: string;
-  authMode: "ConnectionString" | "Entra";
+  /**
+   * Must match the C# `SbAuthMode` enum member names exactly — the sidecar deserializes
+   * this as an enum, and an unknown value fails the whole profile save. This said
+   * `"Entra"`, which is not a member, so selecting Entra ID in Settings was rejected and
+   * silently reverted. Entra ID auth is `DefaultAzureCredential`.
+   */
+  authMode: "DefaultAzureCredential" | "ConnectionString" | "ServicePrincipal";
   credentialKey: string;
   transportType: "Amqp" | "AmqpWebSockets";
   createdAt: string;
@@ -96,6 +102,8 @@ export interface RedisCacheEntry {
   displayName: string;
   connectionString: string;
   database: number;
+  useAad: boolean;
+  cacheName: string;
 }
 
 export interface StorageConfig {

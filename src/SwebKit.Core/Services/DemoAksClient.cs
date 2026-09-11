@@ -14,9 +14,6 @@ namespace SwebKit.Core.Services;
 public class DemoAksClient : IAksClient
 {
     private static readonly Random Rng = new(42);
-    private static readonly Regex LogTimestampPrefixRegex = new(
-        @"^(?<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private readonly Lock _jobLock = new();
     private readonly Dictionary<string, List<JobInfo>> _createdJobsByNamespace = new(StringComparer.Ordinal);
     private readonly Dictionary<string, bool> _cronJobSuspendOverrides = new(StringComparer.Ordinal);
@@ -1184,16 +1181,7 @@ public class DemoAksClient : IAksClient
         return 0;
     }
 
-    private static DateTimeOffset? TryExtractLogTimestamp(string line)
-    {
-        var match = LogTimestampPrefixRegex.Match(line);
-        if (match.Success && DateTimeOffset.TryParse(match.Groups["timestamp"].Value, out var parsed))
-            return parsed;
-
-        return null;
-    }
-
-    public async IAsyncEnumerable<string> StreamPodLogsAsync(
+    public virtual async IAsyncEnumerable<string> StreamPodLogsAsync(
         string ns, string podName, string container, LogStreamOptions opts,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -1201,10 +1189,9 @@ public class DemoAksClient : IAksClient
         var start = ResolveLogStartIndex(opts);
         for (var i = start; i < LogLines.Length; i++)
         {
-            var ts = DateTimeOffset.UtcNow.AddSeconds(-(LogLines.Length - i)).ToString("yyyy-MM-dd HH:mm:ss.fff");
             var payload = opts.PreviousContainer ? $"[PREVIOUS] {LogLines[i]}" : LogLines[i];
-            var line = $"{ts}  {payload}";
-            if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
+            var line = FormatDemoLogLine(opts, DateTimeOffset.UtcNow.AddSeconds(-(LogLines.Length - i)), payload);
+            if (LogLineTimestamp.MatchesFilter(line, opts.TextFilter))
                 yield return line;
         }
 
@@ -1215,13 +1202,27 @@ public class DemoAksClient : IAksClient
         while (!ct.IsCancellationRequested)
         {
             await Task.Delay(800 + Rng.Next(1500), ct).ConfigureAwait(false);
-            var ts = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
-            var line = $"{ts}  {LogLines[idx % LogLines.Length]}";
+            var line = FormatDemoLogLine(opts, DateTimeOffset.UtcNow, LogLines[idx % LogLines.Length]);
             idx++;
-            if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
+            if (LogLineTimestamp.MatchesFilter(line, opts.TextFilter))
                 yield return line;
         }
     }
+
+    /// <summary>
+    /// Shapes one demo log line to match what the real client would return for the same options.
+    /// </summary>
+    /// <remarks>
+    /// This used to prepend a timestamp unconditionally while <c>KubernetesAksClient</c> never
+    /// emitted one, so demo and real disagreed about the line format and any parser was wrong
+    /// against one of them. Honouring <see cref="LogStreamOptions.Timestamps"/> is what makes
+    /// the two agree. RFC3339 with a <c>Z</c>, matching Kubernetes rather than the old
+    /// space-separated local form.
+    /// </remarks>
+    private static string FormatDemoLogLine(LogStreamOptions opts, DateTimeOffset at, string payload) =>
+        opts.Timestamps
+            ? $"{at.ToUniversalTime():yyyy-MM-ddTHH:mm:ss.fffffffZ} {payload}"
+            : payload;
 
     public Task<PortForwardSession> StartPortForwardAsync(string ns, string resourceName, int localPort, int remotePort, CancellationToken ct = default)
     {
@@ -1427,18 +1428,21 @@ public class DemoAksClient : IAksClient
             for (var i = start; i < LogLines.Length; i++)
             {
                 if (linkedCts.Token.IsCancellationRequested) break;
-                var ts = DateTimeOffset.UtcNow.AddSeconds(-(LogLines.Length - i)).ToString("yyyy-MM-dd HH:mm:ss.fff");
+                var at = DateTimeOffset.UtcNow.AddSeconds(-(LogLines.Length - i));
                 var payload = LogLines[(i + offset) % LogLines.Length];
                 if (opts.PreviousContainer)
                     payload = $"[PREVIOUS] {payload}";
-                var line = $"{ts}  {payload}";
-                if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
+                var line = FormatDemoLogLine(opts, at, payload);
+                if (LogLineTimestamp.MatchesFilter(line, opts.TextFilter))
                 {
                     await channel.Writer.WriteAsync(new AggregatedLogLine
                     {
                         PodName = pod.Name,
                         Line = line,
-                        Timestamp = TryExtractLogTimestamp(line)
+                        // Taken from the value used to format the line rather than re-parsed
+                        // out of it: this field must stay populated even when the caller did
+                        // not ask for an in-line timestamp prefix.
+                        Timestamp = at
                     }, linkedCts.Token).ConfigureAwait(false);
                 }
             }
@@ -1448,16 +1452,16 @@ public class DemoAksClient : IAksClient
             while (!linkedCts.Token.IsCancellationRequested)
             {
                 await Task.Delay(800 + Rng.Next(1500), linkedCts.Token).ConfigureAwait(false);
-                var ts = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
-                var line = $"{ts}  {LogLines[lineIdx % LogLines.Length]}";
+                var at = DateTimeOffset.UtcNow;
+                var line = FormatDemoLogLine(opts, at, LogLines[lineIdx % LogLines.Length]);
                 lineIdx++;
-                if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
+                if (LogLineTimestamp.MatchesFilter(line, opts.TextFilter))
                 {
                     await channel.Writer.WriteAsync(new AggregatedLogLine
                     {
                         PodName = pod.Name,
                         Line = line,
-                        Timestamp = TryExtractLogTimestamp(line)
+                        Timestamp = at
                     }, linkedCts.Token).ConfigureAwait(false);
                 }
             }

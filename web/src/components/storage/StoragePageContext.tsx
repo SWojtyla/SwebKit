@@ -25,9 +25,10 @@ import {
   useDeletedBlobs,
   useSetBlobMetadata,
 } from "@/lib/hooks";
-import type { StorageBlobItem, StorageConfig } from "@/lib/types";
+import type { StorageBlobContent, StorageBlobItem, StorageConfig } from "@/lib/types";
+import { apiFetch } from "@/lib/api";
 import { buildZip } from "@/lib/zip";
-import { downloadBlob } from "@/lib/download";
+import { downloadBlob, downloadText } from "@/lib/download";
 import { useNotification } from "@/components/layout/NotificationSystem";
 
 export interface StoragePageContextValue {
@@ -36,6 +37,7 @@ export interface StoragePageContextValue {
   resolvedAccountId: string | null;
   activeAccount: StorageConfig | undefined;
   allowMutations: boolean;
+  handleSelectAccount: (id: string) => void;
 
   blobListRef: React.MutableRefObject<HTMLDivElement | null>;
   selectedContainer: string | null;
@@ -218,6 +220,16 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     disabled: !allowMutations,
   });
 
+  const handleSelectAccount = (id: string) => {
+    setActiveAccountId(id);
+    setSelectedContainer(null);
+    setCurrentPrefix("");
+    setPrefixHistory([]);
+    setSelectedBlob(null);
+    setContinuationToken(null);
+    setAllItems([]);
+  };
+
   const handleSelectContainer = (name: string) => {
     setSelectedContainer(name);
     setCurrentPrefix("");
@@ -274,7 +286,9 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
   });
 
   const handleCopyUrl = (blobName: string) => {
-    const url = `https://${resolvedAccountId}.blob.core.windows.net/${selectedContainer}/${blobName}`;
+    // The Azure host uses the storage account name; `resolvedAccountId` is SwebKit's own
+    // config id (a random 8-char slug), which produced a URL pointing at nothing.
+    const url = `https://${activeAccount?.accountName}.blob.core.windows.net/${selectedContainer}/${blobName}`;
     navigator.clipboard.writeText(url);
     setCopiedUrl(true);
     setTimeout(() => setCopiedUrl(false), 2000);
@@ -288,22 +302,23 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     }
   };
 
+  // Goes through `apiFetch` rather than a bare relative `fetch`: the sidecar listens on
+  // its own OS-assigned port, so "/api/..." resolved against the Tauri asset server and
+  // came back as index.html, surfacing as "Unexpected token '<'" instead of a download.
+  const fetchBlobContent = (blobName: string) =>
+    apiFetch<StorageBlobContent>(
+      `/api/storage/${resolvedAccountId}/containers/${encodeURIComponent(selectedContainer!)}/blobs/content?${new URLSearchParams({ blobName })}`,
+    );
+
   const handleDownloadBlob = async (blobName: string) => {
     try {
-      const params = new URLSearchParams({ blobName });
-      const response = await fetch(`/api/storage/${resolvedAccountId}/containers/${selectedContainer}/blobs/content?${params}`);
-      if (!response.ok) throw new Error(`API ${response.status}`);
-      const data = await response.json();
-      if (data.content) {
-        const blob = new Blob([data.content], { type: data.contentType || "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = blobName.split("/").pop() || blobName;
-        a.click();
-        URL.revokeObjectURL(url);
-        notify("success", "Download started", blobName);
-      }
+      const data = await fetchBlobContent(blobName);
+      downloadText(
+        blobName.split("/").pop() || blobName,
+        data.content,
+        data.contentType || "text/plain",
+      );
+      notify("success", "Download started", blobName);
     } catch (e) {
       console.error("Download failed:", e);
       notify("error", "Download failed", String(e));
@@ -318,10 +333,7 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     try {
       const files: Record<string, string> = {};
       for (const blobName of blobNames) {
-        const params = new URLSearchParams({ blobName });
-        const response = await fetch(`/api/storage/${resolvedAccountId}/containers/${selectedContainer}/blobs/content?${params}`);
-        if (!response.ok) throw new Error(`API ${response.status}`);
-        const data = await response.json();
+        const data = await fetchBlobContent(blobName);
         if (data.content) {
           files[blobName.split("/").pop() || blobName] = data.content;
         }
@@ -423,6 +435,7 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     resolvedAccountId,
     activeAccount,
     allowMutations,
+    handleSelectAccount,
 
     blobListRef,
     selectedContainer,

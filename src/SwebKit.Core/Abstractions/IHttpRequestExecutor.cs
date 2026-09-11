@@ -13,9 +13,18 @@ public interface IHttpRequestExecutor
     /// Never throws for HTTP-level errors (4xx, 5xx) — those are returned in the result.
     /// Only throws for hard infrastructure failures (network unavailable, etc.) or cancellation.
     /// </summary>
+    /// <param name="activeEnvironment">
+    /// The collection-scoped environment layer. Overrides <paramref name="globalEnvironment"/>
+    /// on a key clash.
+    /// </param>
+    /// <param name="globalEnvironment">
+    /// The global environment layer, applied underneath <paramref name="activeEnvironment"/> so
+    /// a value shared by a family of environments need only be defined once.
+    /// </param>
     Task<HttpRequestResult> ExecuteAsync(
         HttpRequestEntry request,
         ApiCollection collection,
         ApiEnvironment? activeEnvironment,
+        ApiEnvironment? globalEnvironment = null,
         CancellationToken cancellationToken = default);
 }

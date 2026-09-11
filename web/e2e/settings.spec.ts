@@ -83,6 +83,62 @@ test.describe("Settings", () => {
     await expect(page.getByTestId("appearance-density")).toHaveValue("compact");
   });
 
+  test("Service Bus auth mode switches to Entra ID and survives a reload", async ({ page }) => {
+    // The reported bug: clicking Entra ID appeared to do nothing. Profile saves were not
+    // serialized, so a refetch triggered by an earlier keystroke landed after this click's
+    // PUT and overwrote the cache with pre-click state — the radio snapped back.
+    //
+    // Scoped to the row this test adds: the e2e sidecar's appdata is shared by every test
+    // in the file, so namespaces left by earlier tests are still present.
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-service-bus").click();
+    await page.getByRole("button", { name: "Add Namespace" }).click();
+
+    const entra = page.locator('[data-testid^="sb-auth-entra-"]').last();
+    await expect(entra).toBeVisible();
+    const testId = await entra.getAttribute("data-testid");
+    await expect(entra).not.toBeChecked();
+
+    // Click rather than `check()`: the state change round-trips through a save, and
+    // `check()` asserts synchronously right after clicking.
+    await entra.click();
+    await expect(entra).toBeChecked();
+
+    await page.reload();
+    await page.getByTestId("settings-tab-service-bus").click();
+    await expect(page.getByTestId(testId!)).toBeChecked();
+  });
+
+  test("Service Bus text fields commit on blur rather than per keystroke", async ({ page }) => {
+    // Typing used to fire a whole-profile PUT, an atomic rewrite of profiles.json and a
+    // refetch for every character, which is what made the page sluggish.
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-service-bus").click();
+    await page.getByRole("button", { name: "Add Namespace" }).click();
+
+    let saves = 0;
+    await page.route("**/api/config/profiles", async (route) => {
+      if (route.request().method() === "PUT") saves += 1;
+      await route.fallback();
+    });
+
+    const fqdn = page
+      .getByPlaceholder("e.g. sb-dev-shared-sb-weu.servicebus.windows.net")
+      .last();
+    await fqdn.click();
+    await fqdn.pressSequentially("sb-demo.servicebus.windows.net");
+    expect(saves).toBe(0);
+
+    await fqdn.blur();
+    await expect.poll(() => saves).toBe(1);
+
+    await page.reload();
+    await page.getByTestId("settings-tab-service-bus").click();
+    await expect(
+      page.getByPlaceholder("e.g. sb-dev-shared-sb-weu.servicebus.windows.net").last(),
+    ).toHaveValue("sb-demo.servicebus.windows.net");
+  });
+
   test("agent profile base URL persists across reload", async ({ page }) => {
     await page.goto("/settings");
     await page.getByTestId("settings-tab-agent").click();

@@ -28,7 +28,8 @@
 - Success notifications for batch actions include the created Job name and trigger a background Jobs refresh.
 - View Kubernetes events with warning highlighting.
 - Stream pod logs with filtering.
-- Pod and multi-pod log viewers include a range selector (`Last 5m`, `Last 10m`, `Last 1h`, `All`, `Previous container`). `Live` maps directly to follow mode; selecting `Previous container` forces `Live` off and disables it until another range is selected.
+- Pod and multi-pod log lines are syntax highlighted per token (`lib/logHighlight.ts` → `LogLineText`): timestamps, severity levels, exception type names, dotted symbols, `--->` inner-exception arrows, source locations including `:line N`, URLs, GUIDs, and embedded JSON keys/strings/numbers/booleans. Stack frames and `--- End of … ---` separators are dimmed so the exception header stands out of a long trace. Colours come from the shared `--cm-*` custom properties, so logs, the API Client body viewer and the YAML viewer read as one system in every theme.
+- Pod and multi-pod log viewers include a range selector (`Last 5m`, `Last 10m`, `Last 1h`, `All`). Single-pod also gets `Previous container`; multi-pod does not — a pod's own previous instance isn't a concept that correlates across multiple pods. `Live` maps directly to follow mode; selecting `Previous container` forces `Live` off and disables it until another range is selected.
 - Pod logs expose the actual container list for multi-container pods so operators can switch tails without leaving the panel.
 - Log viewers render a buffered history window with `Older`, `Newer`, and `Latest` navigation instead of trimming the UI to the last 500 rendered lines.
 - While an operator pauses or browses history, incoming lines keep buffering without shifting the currently visible window; `Copy visible` preserves the current investigation slice while `Export all` downloads the full underlying stream.
@@ -39,7 +40,7 @@
 - YAML edit mode preserves blank lines and inserts an indented newline on `Enter` so the highlighted overlay stays aligned with the editable textarea.
 - **Port-forward sessions panel** — tracked, observable sessions with `Starting / Active / Stopping / Stopped / Error` lifecycle; dialog to configure local port; sticky sessions panel; status bar count badge; all sessions cancelled on app exit.
 - Pod shell launch (externally via `wt.exe` or `cmd.exe` with `kubectl exec`).
-- Deployment restart, scale operations, and pod delete.
+- Deployment restart, scale operations, and pod delete. Scaling a Deployment, StatefulSet or HPA opens a modal (`ScaleDialog`, and the HPA min/max form) rather than an inline row editor or a native `prompt()`: it names the namespace and resource, shows the current count and the pending delta, offers 0/1/2/3/5/10 quick-set plus steppers, warns when scaling to 0, and leaves the table layout untouched.
 - StatefulSet visibility — browse, restart, and scale StatefulSets; degraded sets are highlighted.
 - ConfigMap viewer — filterable key/value table; YAML view and edit.
 - Secret viewer — key-names-only list by default; individual values revealed on demand (never bulk-loaded).
@@ -69,7 +70,7 @@
 9. Long-running and side-panel operations keep the main grid responsive.
 10. HTTPRoute rows render in a non-virtualized grid path so variable-height route chips do not hide later rows when several routes are present.
 11. HPA detail-panel YAML actions route through `AksDetailPanels.OpenYamlAsync("HPA", ...)`, and `AksYamlViewer` now treats `HPA` / `HorizontalPodAutoscaler` as editable resource kinds so operators can apply YAML changes through the same guarded flow used by Deployment, StatefulSet, ConfigMap, Secret, and Ingress edits.
-12. Auto-refresh starts enabled at 10 seconds, pauses whenever any side panel (logs, YAML, container details, HPA, ingress analysis, network analysis, etc.) is open or the Events section is expanded, and resumes on panel close.
+12. Auto-refresh starts enabled at 10 seconds, pauses whenever any side panel (logs, YAML, container details, HPA, ingress analysis, network analysis, etc.) is open or the Events section is expanded, and resumes on panel close. The interval choice and the on/off state persist per user (`view-pref:aks-auto-refresh`, `view-pref:aks-refresh-interval`); the toolbar reports "updated Ns ago" / "auto paused" so a working refresh is distinguishable from a broken one, and a tick is skipped while the window is hidden. Group invalidation goes through the predicate helpers in `lib/aks-query-keys.ts` — the periodic timer deliberately excludes the cluster-scoped `aks-namespaces` / `aks-contexts` / `aks-test` queries, which only the explicit Refresh button refetches.
 13. On Windows, tray lifecycle service subscribes to `PodHealthMonitorService.PodHealthDetected` and updates unread tray indicator only while app is hidden.
 
 ## Key Design Notes

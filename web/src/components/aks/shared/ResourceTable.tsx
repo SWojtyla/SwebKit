@@ -48,13 +48,18 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
 
   return (
     <div className="p-4">
-      <table className="w-full text-sm">
+      {/* `tabular-nums` plus a `w-full` Name column keeps the layout still while
+          data refreshes: every other column is sized to its content, all slack
+          lands in the name, and digits are equal width so a counter ticking from
+          `9m` to `10m` (or a metric gaining a digit) no longer re-lays out the
+          whole table under the pointer. */}
+      <table className="w-full text-sm tabular-nums">
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
-            <th className="py-2 pr-4">Name</th>
-            {isMulti && <th className="py-2 pr-4">Namespace</th>}
+            <th className="w-full py-2 pr-4">Name</th>
+            {isMulti && <th className="whitespace-nowrap py-2 pr-4">Namespace</th>}
             {columns.map((col, i) => (
-              <th key={i} className={col.className ?? "py-2 pr-4"}>
+              <th key={i} className={col.className ?? "whitespace-nowrap py-2 pr-4"}>
                 {col.header}
               </th>
             ))}
@@ -92,14 +97,14 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
                   }
                 }}
               >
-                <td className="py-2 pr-4 font-medium">{row.name}</td>
+                <td className="w-full py-2 pr-4 font-medium">{row.name}</td>
                 {isMulti && (
-                  <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  <td className="whitespace-nowrap py-2 pr-4 text-xs text-muted-foreground">
                     {row.namespace ?? "—"}
                   </td>
                 )}
                 {columns.map((col, i) => (
-                  <td key={i} className={col.className ?? "py-2 pr-4"}>
+                  <td key={i} className={col.className ?? "whitespace-nowrap py-2 pr-4"}>
                     {col.cell(row)}
                   </td>
                 ))}

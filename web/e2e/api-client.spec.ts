@@ -259,10 +259,9 @@ test.describe("API Client", () => {
   test("environment variable source picker switches fields and lists configured key vaults", async ({ page }) => {
     const uniqueVaultName = `Test Vault ${Date.now()}`;
 
-    // Each field here mutates the whole profile independently (no debounce, no optimistic cache
-    // update), so firing two edits back-to-back races: the second mutate can read a profile
-    // snapshot from before the first one's round trip landed and silently overwrite it. Wait for
-    // each save to land before starting the next edit.
+    // Settings text fields commit on blur, not per keystroke, so each edit is filled and
+    // then blurred. Saves are serialized by `useUpdateProfile`, so back-to-back edits no
+    // longer race — but waiting for each PUT still keeps the assertions below deterministic.
     const saveProfile = () =>
       page.waitForResponse((r) => r.url().includes("/api/config/profiles") && r.request().method() === "PUT");
 
@@ -271,14 +270,14 @@ test.describe("API Client", () => {
     await expect(page.getByTestId("key-vaults-section")).toBeVisible();
     const existingVaultCount = await page.locator('[data-testid^="kv-name-"]').count();
     await Promise.all([saveProfile(), page.getByTestId("kv-add").click()]);
-    await Promise.all([
-      saveProfile(),
-      page.getByTestId(`kv-name-${existingVaultCount}`).fill(uniqueVaultName),
-    ]);
-    await Promise.all([
-      saveProfile(),
-      page.getByTestId(`kv-url-${existingVaultCount}`).fill("https://test-vault.vault.azure.net/"),
-    ]);
+
+    const vaultName = page.getByTestId(`kv-name-${existingVaultCount}`);
+    await vaultName.fill(uniqueVaultName);
+    await Promise.all([saveProfile(), vaultName.blur()]);
+
+    const vaultUrl = page.getByTestId(`kv-url-${existingVaultCount}`);
+    await vaultUrl.fill("https://test-vault.vault.azure.net/");
+    await Promise.all([saveProfile(), vaultUrl.blur()]);
 
     // Reload and confirm the vault persisted before moving on, so the environment editor's fetch
     // below can't race the save.
@@ -365,6 +364,34 @@ test.describe("API Client", () => {
 
     // Active env name should show
     await expect(page.getByTestId("active-env-name")).toContainText("Selector Test Env");
+  });
+
+  test("a collection-scoped environment is selectable from its own picker", async ({ page }) => {
+    // The regression this guards: the global picker lists only global environments, so an
+    // estate of entirely collection-scoped ones had nothing selectable anywhere while the
+    // project picker was hidden until a request tab happened to be open.
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Scoped Env Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    await page.getByTestId("env-manager-button").click();
+    await page.getByTestId("env-add-button").click();
+    await page.getByTestId("env-name-input").fill("Scoped Env");
+    await page.getByTestId("env-scope-select").selectOption({ label: "Scoped Env Collection" });
+    await page.getByTestId("env-save-all").click();
+
+    // Not offered by the global picker, because it is not global.
+    await expect(page.getByTestId("env-selector")).not.toContainText("Scoped Env");
+
+    // Selecting the collection in the tree is enough — no request needs to be open.
+    await page.getByTestId("collection-search").fill("Scoped Env Collection");
+    await page.getByTestId(/collection-root-/).filter({ hasText: "Scoped Env Collection" }).first().click();
+
+    const scoped = page.getByTestId("env-selector-scoped");
+    await expect(scoped).toBeEnabled();
+    await expect(scoped).toContainText("Scoped Env");
+    await scoped.selectOption({ label: "Scoped Env" });
+    await expect(page.getByTestId("active-env-name")).toContainText("Scoped Env");
   });
 
   test("collection variables editor works", async ({ page }) => {
@@ -775,9 +802,14 @@ test.describe("API Client", () => {
     const target = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Drag First" });
     await source.dragTo(target, { targetPosition: { x: 10, y: 2 } });
 
-    const texts = await page.getByTestId(/collection-node-Request-/).filter({ hasText: /Drag (First|Second)/ }).allTextContents();
-    expect(texts[0]).toContain("Drag Second");
-    expect(texts[1]).toContain("Drag First");
+    // Polled, not read once: the reorder is persisted through a save that is
+    // serialized behind the two request creations, so the new order can land a
+    // beat after the drop.
+    const dragRows = page.getByTestId(/collection-node-Request-/).filter({ hasText: /Drag (First|Second)/ });
+    await expect.poll(() => dragRows.allTextContents()).toEqual([
+      expect.stringContaining("Drag Second"),
+      expect.stringContaining("Drag First"),
+    ]);
   });
 
   test("reorders collections via drag and drop", async ({ page }) => {
@@ -794,10 +826,12 @@ test.describe("API Client", () => {
     const target = page.getByTestId(/collection-root-/).filter({ hasText: "Collection Drag A" });
     await source.dragTo(target, { targetPosition: { x: 10, y: 2 } });
 
-    const texts = await page.getByTestId(/collection-root-/).filter({ hasText: /Collection Drag (A|B)/ }).allTextContents();
-    const indexA = texts.findIndex((t) => t.includes("Collection Drag A"));
-    const indexB = texts.findIndex((t) => t.includes("Collection Drag B"));
-    expect(indexB).toBeLessThan(indexA);
+    const rootRows = page.getByTestId(/collection-root-/).filter({ hasText: /Collection Drag (A|B)/ });
+    await expect.poll(async () => {
+      const texts = await rootRows.allTextContents();
+      return texts.findIndex((t) => t.includes("Collection Drag B")) <
+        texts.findIndex((t) => t.includes("Collection Drag A"));
+    }).toBe(true);
   });
 
   test("moves a request into a folder via drag and drop", async ({ page }) => {
@@ -824,6 +858,111 @@ test.describe("API Client", () => {
     await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Inside Request" })).toBeVisible();
   });
 
+  test("dropping into a NESTED folder keeps the rest of the collection", async ({ page }) => {
+    // Regression: the insert spliced the array directly containing the drop target
+    // and assigned it to the collection's root node list. For a nested target that
+    // array is a folder's children, so the whole collection was replaced by one
+    // inner list and everything else in it disappeared. The existing folder-drop
+    // test only ever dropped into a *top-level* folder, where the two arrays are
+    // the same — which is why this went unnoticed.
+    const collectionsUrl = `${sidecarBaseUrl}/api/config/collections`;
+    const now = new Date().toISOString();
+    const req = (id: string, name: string) => ({
+      id,
+      type: "Request",
+      name,
+      isExpanded: true,
+      children: [],
+      defaultAuth: null,
+      request: {
+        id,
+        name,
+        method: "Get",
+        url: "https://example.com",
+        headers: [],
+        queryParams: [],
+        body: { mode: "None", rawContent: null, contentType: null, formFields: [] },
+        auth: null,
+        captureRules: [],
+        preRequestActions: [],
+        postRequestActions: [],
+        responseExamples: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    const folder = (id: string, name: string, children: unknown[]) => ({
+      id,
+      type: "Folder",
+      name,
+      isExpanded: true,
+      children,
+      defaultAuth: null,
+      request: null,
+    });
+
+    await page.request.put(collectionsUrl, {
+      data: {
+        schemaVersion: 1,
+        collections: [
+          {
+            id: "33333333-3333-3333-3333-333333333333",
+            name: "Nested Drop Collection",
+            variables: [],
+            defaultAuth: null,
+            createdAt: now,
+            updatedAt: now,
+            nodes: [
+              folder("44444444-4444-4444-4444-444444444444", "Outer Folder", [
+                folder("55555555-5555-5555-5555-555555555555", "Inner Folder", [
+                  req("66666666-6666-6666-6666-666666666666", "Deep Request"),
+                ]),
+              ]),
+              req("77777777-7777-7777-7777-777777777777", "Root Request"),
+              folder("88888888-8888-8888-8888-888888888888", "Bystander Folder", [
+                req("99999999-9999-9999-9999-999999999999", "Bystander Request"),
+              ]),
+            ],
+          },
+        ],
+      },
+    });
+    await page.goto("/api-client");
+
+    const source = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Root Request" });
+    const innerFolder = page.getByTestId(/collection-node-Folder-/).filter({ hasText: "Inner Folder" });
+    await expect(innerFolder).toBeVisible();
+    await source.dragTo(innerFolder);
+
+    // Everything that was not dragged must still be there, at every depth.
+    for (const name of [
+      "Outer Folder",
+      "Inner Folder",
+      "Deep Request",
+      "Root Request",
+      "Bystander Folder",
+      "Bystander Request",
+    ]) {
+      await expect
+        .poll(
+          () =>
+            page
+              .getByTestId(/collection-node-(Folder|Request)-/)
+              .filter({ hasText: name })
+              .count(),
+          { message: `"${name}" disappeared after the nested drop` },
+        )
+        .toBeGreaterThan(0);
+    }
+
+    // And the drop actually landed: reloading proves it was persisted, not just
+    // reflected in local state.
+    await page.reload();
+    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Bystander Request" })).toBeVisible();
+    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Deep Request" })).toBeVisible();
+    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Root Request" })).toBeVisible();
+  });
+
   test("reorders rows via keyboard shortcuts", async ({ page }) => {
     await page.getByTestId("add-collection-button").click();
     await page.getByTestId("name-dialog-input").fill("Keyboard Reorder Collection");
@@ -841,9 +980,11 @@ test.describe("API Client", () => {
     await page.getByTestId(/collection-node-Request-/).filter({ hasText: "Keyboard Second" }).click();
     await page.keyboard.press("Alt+ArrowUp");
 
-    const texts = await page.getByTestId(/collection-node-Request-/).filter({ hasText: /Keyboard (First|Second)/ }).allTextContents();
-    expect(texts[0]).toContain("Keyboard Second");
-    expect(texts[1]).toContain("Keyboard First");
+    const keyboardRows = page.getByTestId(/collection-node-Request-/).filter({ hasText: /Keyboard (First|Second)/ });
+    await expect.poll(() => keyboardRows.allTextContents()).toEqual([
+      expect.stringContaining("Keyboard Second"),
+      expect.stringContaining("Keyboard First"),
+    ]);
   });
 
   test("demo collection cannot be dragged", async ({ page }) => {

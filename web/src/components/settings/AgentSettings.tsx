@@ -236,7 +236,7 @@ export function AgentSettings() {
         <ObservabilitySettings
           profile={profile}
           resources={resources}
-          onUpdate={(patch) => updateProfileData.mutate({ ...profile, config: { ...profile.config, observabilityConfig: patch } })}
+          onUpdate={(patch) => updateProfileData.mutate((prev) => ({ ...prev, config: { ...prev.config, observabilityConfig: patch } }))}
         />
       )}
     </div>

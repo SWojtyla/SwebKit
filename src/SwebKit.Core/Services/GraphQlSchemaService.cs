@@ -55,7 +55,7 @@ public sealed class GraphQlSchemaService(
         ApiEnvironment? activeEnvironment,
         CancellationToken cancellationToken = default)
     {
-        var scope = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken).ConfigureAwait(false);
+        var scope = await substitution.BuildScopeAsync(collection.Variables, [activeEnvironment], cancellationToken).ConfigureAwait(false);
         var resolvedUrl = substitution.Substitute(endpointUrl, scope);
 
         try

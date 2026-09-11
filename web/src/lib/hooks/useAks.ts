@@ -11,6 +11,7 @@ import {
   getHelmReleaseManifest,
 } from "../api";
 import { useNotifyMutation } from "../useNotifyMutation";
+import { invalidateAksQueries } from "../aks-query-keys";
 import type {
   DeploymentInfo,
   PodInfo,
@@ -210,7 +211,9 @@ export function useAksScaleDeployment() {
       apiSend(`/api/aks/${vars.ns}/deployments/${vars.name}/scale?replicas=${vars.replicas}`, "POST"),
     successMessage: (_data, vars) => `Deployment ${vars.name} scaled to ${vars.replicas} replicas`,
     errorPrefix: "Scale deployment failed",
-    invalidateKeys: [["aks-deployments"]],
+    // Pods too: scaling is precisely the operation whose result the operator then
+    // watches on the Pods tab.
+    invalidateKeys: [["aks-deployments"], ["aks-pods"]],
   });
 }
 
@@ -238,7 +241,7 @@ export function useAksScaleStatefulSet() {
       apiSend(`/api/aks/${vars.ns}/statefulsets/${vars.name}/scale?replicas=${vars.replicas}`, "POST"),
     successMessage: (_data, vars) => `StatefulSet ${vars.name} scaled to ${vars.replicas} replicas`,
     errorPrefix: "Scale StatefulSet failed",
-    invalidateKeys: [["aks-statefulsets"]],
+    invalidateKeys: [["aks-statefulsets"], ["aks-pods"]],
   });
 }
 
@@ -379,7 +382,8 @@ export function useAksApplyYaml() {
       ),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["aks-yaml", vars.ns, vars.kind, vars.name] });
-      qc.invalidateQueries({ queryKey: ["aks-"] });
+      // Applying arbitrary YAML can change any resource kind, so refresh them all.
+      void invalidateAksQueries(qc);
     },
   });
 }

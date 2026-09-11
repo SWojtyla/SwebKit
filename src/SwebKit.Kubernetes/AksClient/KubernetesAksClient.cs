@@ -121,7 +121,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         _logger = logger ?? NullLogger<KubernetesAksClient>.Instance;
 
         var config = BuildClientConfiguration(kubeconfigContext, kubeconfigPath);
-        TryApplyAzureCredentialFallback(config, kubeconfigPath);
+        TryApplyAzureCredentialFallback(config, kubeconfigPath, _logger);
 
         _client = new k8s.Kubernetes(config);
     }
@@ -145,7 +145,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 return;
 
             var config = BuildClientConfiguration(_kubeconfigContext, _kubeconfigPath);
-            TryApplyAzureCredentialFallback(config, _kubeconfigPath);
+            TryApplyAzureCredentialFallback(config, _kubeconfigPath, _logger);
             _client = new k8s.Kubernetes(config);
             _lastRebuild = DateTime.UtcNow;
         }
@@ -161,16 +161,16 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         {
             return await action().ConfigureAwait(false);
         }
-        catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.Forbidden)
+        catch (k8s.Autorest.HttpOperationException ex) when (IsRetriableAuthStatus(ex))
         {
             RebuildClient();
             try
             {
                 return await action().ConfigureAwait(false);
             }
-            catch (k8s.Autorest.HttpOperationException ex2) when (ex2.Response.StatusCode == HttpStatusCode.Forbidden)
+            catch (k8s.Autorest.HttpOperationException ex2) when (IsRetriableAuthStatus(ex2))
             {
-                throw ToAccessDeniedException(ex2);
+                throw await ToAuthExceptionAsync(ex2).ConfigureAwait(false);
             }
         }
     }
@@ -181,18 +181,55 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         {
             await action().ConfigureAwait(false);
         }
-        catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.Forbidden)
+        catch (k8s.Autorest.HttpOperationException ex) when (IsRetriableAuthStatus(ex))
         {
             RebuildClient();
             try
             {
                 await action().ConfigureAwait(false);
             }
-            catch (k8s.Autorest.HttpOperationException ex2) when (ex2.Response.StatusCode == HttpStatusCode.Forbidden)
+            catch (k8s.Autorest.HttpOperationException ex2) when (IsRetriableAuthStatus(ex2))
             {
-                throw ToAccessDeniedException(ex2);
+                throw await ToAuthExceptionAsync(ex2).ConfigureAwait(false);
             }
         }
+    }
+
+    /// <summary>
+    /// Both 403 and 401 are worth one client rebuild: a 403 can be a stale token that a refreshed
+    /// credential resolves, and a 401 means no usable token was attached at all (a failed
+    /// exec-credential plugin, or an expired Azure sign-in). 401 used to fall straight through as a
+    /// raw <c>HttpOperationException</c>, which callers then swallowed as "no data" — see
+    /// <see cref="ToAuthExceptionAsync"/>.
+    /// </summary>
+    private static bool IsRetriableAuthStatus(k8s.Autorest.HttpOperationException exception)
+        => exception.Response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized;
+
+    /// <summary>
+    /// Maps a persistent auth failure to the matching library-agnostic exception: 403 to
+    /// <see cref="AksAccessDeniedException"/> (valid identity, missing RBAC) and 401 to
+    /// <see cref="AksAuthenticationException"/> (no identity at all), the latter enriched with a
+    /// probe of the kubeconfig's credential plugin so the real cause is reported instead of a bare
+    /// "Unauthorized".
+    /// </summary>
+    private async Task<Exception> ToAuthExceptionAsync(k8s.Autorest.HttpOperationException exception)
+    {
+        if (exception.Response.StatusCode == HttpStatusCode.Forbidden)
+            return ToAccessDeniedException(exception);
+
+        var diagnostic = await AksExecCredentialDiagnostics
+            .TryDescribeFailureAsync(_kubeconfigPath, _kubeconfigContext, _logger)
+            .ConfigureAwait(false);
+
+        _logger.LogError(
+            exception,
+            "AKS authentication failed (401) for context {Context}. Credential plugin diagnostic: {Diagnostic}",
+            _kubeconfigContext ?? "<current>",
+            diagnostic ?? "none (the credential plugin itself looks healthy)");
+
+        return new AksAuthenticationException(
+            AksExecCredentialDiagnostics.BuildAuthenticationMessage(diagnostic),
+            exception);
     }
 
     /// <summary>
@@ -249,7 +286,10 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         }
     }
 
-    internal static void TryApplyAzureCredentialFallback(KubernetesClientConfiguration config, string? kubeconfigPath)
+    internal static void TryApplyAzureCredentialFallback(
+        KubernetesClientConfiguration config,
+        string? kubeconfigPath,
+        ILogger? logger = null)
     {
         if (!AksAzureAuthHelpers.ShouldUseAzureCredentialFallback(config.Host, config.AccessToken))
             return;
@@ -265,6 +305,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
             serverId = AksAzureAuthHelpers.TryExtractServerIdFromKubeconfig(kubeconfigContent);
         }
 
+        Exception? lastFailure = null;
         foreach (var scope in AksAzureAuthHelpers.BuildAksTokenScopes(serverId ?? DefaultAksServerAppId))
         {
             try
@@ -278,11 +319,23 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                     return;
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Keep kubeconfig-based auth as the primary mechanism and silently continue fallback attempts.
+                // Keep kubeconfig-based auth as the primary mechanism and continue with the
+                // remaining scopes — but record why, instead of discarding it.
+                lastFailure = ex;
+                logger?.LogDebug(ex, "Azure credential fallback failed for AKS token scope {Scope}.", scope);
             }
         }
+
+        // Every scope failed, so the client goes out with no bearer token and the API server will
+        // answer 401 on the first call. This used to be swallowed entirely by a bare `catch`, which
+        // is why a broken `az`/kubelogin install surfaced as an empty namespace list rather than an
+        // error — log it once so the cause is recoverable from the log even before the 401 lands.
+        logger?.LogWarning(
+            lastFailure,
+            "Azure credential fallback could not obtain an AKS token for {Host}; requests will be unauthenticated.",
+            config.Host);
     }
 
     public async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default)

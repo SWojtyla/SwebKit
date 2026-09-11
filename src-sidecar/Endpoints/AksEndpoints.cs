@@ -2,6 +2,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
 
 namespace SwebKit.Sidecar.Endpoints;
@@ -455,42 +456,91 @@ public static class AksEndpoints
             return Results.Text(string.Join('\n', lines), "text/plain");
         });
 
-        app.MapGet("/api/aks/{ns}/pods/{podName}/logs/stream", async (HttpContext ctx, string ns, string podName, string? container, int tail, bool follow, int? sinceSeconds, bool previousContainer, string? filter, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
-        {
-            var client = GetClient(pool);
-            ctx.Response.ContentType = "text/event-stream";
-            ctx.Response.Headers.CacheControl = "no-cache";
-            ctx.Response.Headers.Connection = "keep-alive";
-
-            var opts = new LogStreamOptions
-            {
-                TailLines = tail > 0 ? tail : 100,
-                Follow = follow,
-                SinceSeconds = sinceSeconds,
-                PreviousContainer = previousContainer,
-            };
-
-            try
-            {
-                await foreach (var line in client.StreamPodLogsAsync(ns, podName, container ?? "", opts, ct))
+        // Every bool/int parameter here has a default: a required primitive with none (the
+        // shape `previousContainer` had) fails ASP.NET's minimal-API model binding outright
+        // with a 400 the instant it's omitted from the query string — before any application
+        // code runs — which a caller that reasonably leaves out a flag it doesn't care about
+        // will hit silently. That's exactly what broke every multi-pod log request: the
+        // client never sent `previousContainer` at all.
+        app.MapGet("/api/aks/{ns}/pods/{podName}/logs/stream", (HttpContext ctx, string ns, string podName, string? container, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, ILogger<Program> logger, int tail = 0, bool follow = false, int? sinceSeconds = null, bool previousContainer = false, string? filter = null, bool timestamps = false, CancellationToken ct = default) =>
+            StreamPodLogsAsync(
+                ctx,
+                GetClient(pool),
+                ns,
+                podName,
+                container,
+                new LogStreamOptions
                 {
-                    var output = string.IsNullOrEmpty(filter) || line.Contains(filter, StringComparison.OrdinalIgnoreCase)
-                        ? line
-                        : null;
-                    if (output is not null)
-                    {
-                        await ctx.Response.WriteAsync($"data: {output}\n\n", ct);
-                        await ctx.Response.Body.FlushAsync(ct);
-                    }
+                    TailLines = tail > 0 ? tail : 100,
+                    Follow = follow,
+                    SinceSeconds = sinceSeconds,
+                    PreviousContainer = previousContainer,
+                    Timestamps = timestamps,
+                },
+                filter,
+                ct,
+                logger));
+    }
+
+    /// <summary>
+    /// Handler body for the pod-log SSE endpoint, extracted so it can be unit tested against a
+    /// fake client and a <c>DefaultHttpContext</c> without spinning up the ASP.NET pipeline.
+    /// </summary>
+    /// <remarks>
+    /// The framing is a contract: one <c>data:</c> frame per line, terminated by an
+    /// <c>event: done</c> frame. The browser <c>EventSource</c> in both log views depends on it,
+    /// and <c>web/e2e/aks-ux.spec.ts</c> stubs exactly this shape. A failure that happens before
+    /// or during streaming (e.g. the pod no longer exists, an RBAC denial) is framed as
+    /// <c>event: stream-error</c> ahead of <c>done</c> instead of being left as an unhandled
+    /// exception on an already-<c>text/event-stream</c>-typed response, which is indistinguishable
+    /// on the wire from a stream that simply never delivers anything. Named <c>stream-error</c>
+    /// rather than the reserved SSE name <c>error</c>: the browser's <c>EventSource</c> dispatches
+    /// its own native connection-failure events under the type <c>"error"</c>, so a server frame
+    /// named <c>event: error</c> would land on the exact same <c>onerror</c>/<c>addEventListener</c>
+    /// listener as a real network failure, as a differently-shaped event object — indistinguishable
+    /// without inspecting the event instance.
+    /// </remarks>
+    internal static async Task StreamPodLogsAsync(
+        HttpContext ctx,
+        IAksClient client,
+        string ns,
+        string podName,
+        string? container,
+        LogStreamOptions opts,
+        string? filter,
+        CancellationToken ct,
+        ILogger? logger = null)
+    {
+        ctx.Response.ContentType = "text/event-stream";
+        ctx.Response.Headers.CacheControl = "no-cache";
+        ctx.Response.Headers.Connection = "keep-alive";
+
+        try
+        {
+            await foreach (var line in client.StreamPodLogsAsync(ns, podName, container ?? "", opts, ct))
+            {
+                // Match the message, never the timestamp prefix -- otherwise a filter of
+                // "2026" matches every line the moment `timestamps` is on.
+                if (LogLineTimestamp.MatchesFilter(line, filter))
+                {
+                    await ctx.Response.WriteAsync($"data: {line}\n\n", ct);
+                    await ctx.Response.Body.FlushAsync(ct);
                 }
             }
-            catch (OperationCanceledException)
-            {
-            }
-
-            await ctx.Response.WriteAsync("event: done\ndata: \n\n", ct);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Pod log stream failed for {Namespace}/{PodName}", ns, podName);
+            var message = ex.Message.Replace("\r", " ").Replace("\n", " ");
+            await ctx.Response.WriteAsync($"event: stream-error\ndata: {message}\n\n", ct);
             await ctx.Response.Body.FlushAsync(ct);
-        });
+        }
+
+        await ctx.Response.WriteAsync("event: done\ndata: \n\n", ct);
+        await ctx.Response.Body.FlushAsync(ct);
     }
 }
 
