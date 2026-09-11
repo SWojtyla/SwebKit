@@ -1,8 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Download, Link as LinkIcon, Check, Plus, Trash2, Copy as CopyIcon, Sparkles } from "lucide-react";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { useStoragePageContext } from "./StoragePageContext";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
+import { tryPrettifyJson } from "@/lib/pretty-json";
+import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
+
+const CONTENT_PRETTY_PREF_KEY = "storage-blob-content-pretty";
 
 function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null) return "-";
@@ -23,9 +27,22 @@ function formatDate(date: string | null | undefined): string {
 export function BlobDetailPanel() {
   const ctx = useStoragePageContext();
   const [askAiOpen, setAskAiOpen] = useState(false);
+  // Pretty by default and remembered, matching the Service Bus message body viewer.
+  const [prettyPrinted, setPrettyPrinted] = useState<boolean>(() =>
+    loadViewPreference<boolean>(CONTENT_PRETTY_PREF_KEY, true),
+  );
+
+  const rawContent = ctx.blobContent.data?.content ?? "";
+  const prettyContent = useMemo(() => tryPrettifyJson(rawContent), [rawContent]);
+  const displayedContent = prettyPrinted && prettyContent !== null ? prettyContent : rawContent;
+
+  const togglePretty = (next: boolean) => {
+    setPrettyPrinted(next);
+    saveViewPreference(CONTENT_PRETTY_PREF_KEY, next);
+  };
 
   return (
-    <div className="flex-1 overflow-auto" data-testid="storage-blob-detail">
+    <div className="h-full w-full overflow-auto" data-testid="storage-blob-detail">
       {!ctx.selectedBlob ? (
         <div className="flex h-full items-center justify-center text-muted-foreground" data-testid="storage-no-blob-selected">
           Select a blob to view details
@@ -337,11 +354,31 @@ export function BlobDetailPanel() {
                         </div>
                       ) : (
                         <>
+                          {prettyContent !== null && (
+                            <div className="mb-2 flex items-center gap-1 text-xs">
+                              <button
+                                onClick={() => togglePretty(true)}
+                                aria-pressed={prettyPrinted}
+                                className={`rounded border px-2 py-0.5 ${prettyPrinted ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                                data-testid="storage-content-pretty-toggle"
+                              >
+                                Pretty
+                              </button>
+                              <button
+                                onClick={() => togglePretty(false)}
+                                aria-pressed={!prettyPrinted}
+                                className={`rounded border px-2 py-0.5 ${!prettyPrinted ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                                data-testid="storage-content-raw-toggle"
+                              >
+                                Raw
+                              </button>
+                            </div>
+                          )}
                           <pre
                             className="rounded-md border bg-black p-4 text-sm font-mono overflow-y-auto max-h-96 whitespace-pre-wrap break-words text-green-400"
                             data-testid="storage-blob-content"
                           >
-                            {ctx.blobContent.data.content}
+                            {displayedContent}
                           </pre>
                           {ctx.blobContent.data.wasTruncated && (
                             <div className="mt-2 text-xs text-muted-foreground">

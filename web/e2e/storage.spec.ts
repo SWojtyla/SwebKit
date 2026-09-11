@@ -1,5 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { setDemoMode } from "./helpers";
+
+async function panelWidth(page: Page, index: number): Promise<number> {
+  const panel = page.getByTestId(`panel-${index}`);
+  await panel.waitFor();
+  return (await panel.boundingBox())?.width ?? 0;
+}
 
 test.describe("Storage", () => {
   test.beforeEach(async ({ page }) => {
@@ -178,6 +184,113 @@ test.describe("Storage", () => {
     await expect(page.getByTestId("storage-version-restore-confirm")).toBeVisible();
     await page.getByTestId("storage-version-restore-confirm-yes").click();
     await expect(page.getByTestId("storage-version-restore-confirm")).not.toBeVisible();
+  });
+
+  test("downloads a blob", async ({ page }) => {
+    // Regression: the download handler used a relative `/api/...` fetch, which resolves
+    // against the frontend host rather than the sidecar's own port — it came back as
+    // index.html and failed with "Unexpected token '<'" instead of downloading.
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-configs").click();
+    await page.getByTestId("storage-item-app-settings.json").click();
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByTestId("storage-download-btn").click(),
+    ]);
+
+    expect(download.suggestedFilename()).toBe("app-settings.json");
+  });
+
+  test("downloads selected blobs as a single ZIP", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-exports").click();
+    await page.getByTestId("storage-multi-select-toggle").click();
+    await page.getByTestId("storage-blob-checkbox-2026-03-21-report.csv").check();
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByTestId("storage-batch-download").click(),
+    ]);
+
+    expect(download.suggestedFilename()).toMatch(/^exports-blobs-.*\.zip$/);
+  });
+
+  test("prettifies JSON content and toggles back to raw", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-configs").click();
+    await page.getByTestId("storage-item-app-settings.json").click();
+    await page.getByTestId("storage-blob-tab-content").click();
+
+    // Asserted on raw textContent, not toContainText: the latter collapses whitespace,
+    // which is the only thing that distinguishes prettified output from the raw payload.
+    const content = page.getByTestId("storage-blob-content");
+
+    // Pretty is the default, so the demo payload's inline nested objects are expanded.
+    await expect(page.getByTestId("storage-content-pretty-toggle")).toBeVisible();
+    await expect.poll(() => content.textContent()).toContain('"Logging": {\n');
+
+    await page.getByTestId("storage-content-raw-toggle").click();
+    await expect.poll(() => content.textContent()).toContain('"Logging": { "LogLevel"');
+
+    await page.getByTestId("storage-content-pretty-toggle").click();
+    await expect.poll(() => content.textContent()).toContain('"Logging": {\n');
+  });
+
+  test("offers no prettify toggle when the content is not JSON", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-exports").click();
+    await page.getByTestId("storage-item-2026-03-21-report.csv").click();
+    await page.getByTestId("storage-blob-tab-content").click();
+
+    await expect(page.getByTestId("storage-blob-content")).toContainText("OrderId");
+    await expect(page.getByTestId("storage-content-pretty-toggle")).toHaveCount(0);
+  });
+
+  test("exposes the full blob name on hover, however long it is", async ({ page }) => {
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-configs").click();
+
+    const name = page.getByTestId("storage-item-app-settings.json").locator("span[title]");
+    await expect(name).toHaveAttribute("title", "app-settings.json");
+  });
+
+  test("dragging a resizer moves width between the blob list and the detail pane", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-configs").click();
+
+    const before = { list: await panelWidth(page, 1), detail: await panelWidth(page, 2) };
+
+    const resizer = page.getByTestId("resizer-1");
+    const box = (await resizer.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 150, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.up();
+
+    const after = { list: await panelWidth(page, 1), detail: await panelWidth(page, 2) };
+    expect(after.list).toBeGreaterThan(before.list);
+    expect(after.detail).toBeLessThan(before.detail);
+  });
+
+  test("dragged storage widths survive a reload", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.goto("/storage");
+
+    const resizer = page.getByTestId("resizer-0");
+    const box = (await resizer.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.up();
+
+    const widened = await panelWidth(page, 0);
+    expect(widened).toBeGreaterThan(300);
+
+    await page.reload();
+    await page.getByTestId("resizer-0").waitFor();
+    expect(await panelWidth(page, 0)).toBeGreaterThan(280);
   });
 
   test("uses a container picker and guards overwrite copies", async ({ page }) => {
