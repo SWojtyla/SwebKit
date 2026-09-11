@@ -50,6 +50,11 @@ public sealed class HttpRequestExecutor(
             var (resolvedAuth, _) = authResolver.Resolve(request, collection);
             await authHeaderBuilder.ApplyAsync(httpRequest, resolvedAuth, cancellationToken).ConfigureAwait(false);
 
+            // Snapshot here and nowhere earlier: this is the last point before the request is
+            // handed to the socket, so it is the only place that sees auth headers and the body's
+            // content headers together.
+            var sentHeaders = CollectSentHeaders(httpRequest);
+
             using var response = await client.SendAsync(
                 httpRequest,
                 HttpCompletionOption.ResponseHeadersRead,
@@ -58,6 +63,7 @@ public sealed class HttpRequestExecutor(
             sw.Stop();
 
             var result = await BuildResultAsync(response, url, request.Method.ToString().ToUpperInvariant(), sw.Elapsed, cancellationToken).ConfigureAwait(false);
+            result.SentHeaders = sentHeaders;
 
             // Parse GraphQL errors from the response body when the method is GraphQL
             if (request.Method == ApiRequestMethod.GraphQl && result.ResponseBody is not null)
@@ -84,6 +90,21 @@ public sealed class HttpRequestExecutor(
         }
     }
 
+    /// <summary>Request headers plus the content headers, which live on separate collections.</summary>
+    private static List<(string Name, string Value)> CollectSentHeaders(HttpRequestMessage message)
+    {
+        var headers = message.Headers
+            .Select(h => (h.Key, Values: string.Join(", ", h.Value)));
+
+        if (message.Content is not null)
+        {
+            headers = headers.Concat(message.Content.Headers
+                .Select(h => (h.Key, Values: string.Join(", ", h.Value))));
+        }
+
+        return headers.Select(h => (h.Key, h.Values)).ToList();
+    }
+
     // ── Request building ───────────────────────────────────────────────────────
 
     private HttpRequestMessage BuildHttpRequest(
@@ -94,18 +115,32 @@ public sealed class HttpRequestExecutor(
         var method = MapMethod(request.Method);
         var msg = new HttpRequestMessage(method, resolvedUrl);
 
-        // Headers
-        foreach (var h in request.Headers.Where(h => h.IsEnabled && !string.IsNullOrWhiteSpace(h.Key)))
-        {
-            var value = substitution.Substitute(h.Value ?? string.Empty, scope);
-            if (!msg.Headers.TryAddWithoutValidation(h.Key, value))
-                msg.Content?.Headers.TryAddWithoutValidation(h.Key, value);
-        }
-
-        // Body — for GraphQL, the body is built from the structured fields, not the raw body
+        // Body first — for GraphQL, built from the structured fields, not the raw body.
+        //
+        // Order matters: a content header (`Content-Type` above all) is rejected by
+        // `msg.Headers` and belongs on the content instead. While this ran before the body
+        // was assigned, that fallback dereferenced a null `msg.Content` and did nothing, so
+        // every user-set Content-Type was silently dropped and the body mode's own
+        // `application/json; charset=utf-8` went out instead — producing a request that
+        // matched neither the user's headers nor the cURL preview shown beside it.
         msg.Content = request.Method == ApiRequestMethod.GraphQl
             ? BuildGraphQlContent(request, scope)
             : BuildContent(request.Body, scope);
+
+        foreach (var h in request.Headers.Where(h => h.IsEnabled && !string.IsNullOrWhiteSpace(h.Key)))
+        {
+            var value = substitution.Substitute(h.Value ?? string.Empty, scope);
+            if (msg.Headers.TryAddWithoutValidation(h.Key, value))
+                continue;
+
+            // A content header. Replace rather than add: the body mode already set a default
+            // Content-Type, and appending would send the header twice.
+            if (msg.Content is not null)
+            {
+                msg.Content.Headers.Remove(h.Key);
+                msg.Content.Headers.TryAddWithoutValidation(h.Key, value);
+            }
+        }
 
         return msg;
     }

@@ -283,14 +283,28 @@ public sealed class RedisClient : IRedisClient
     {
         ct.ThrowIfCancellationRequested();
 
-        var metrics = ParseInfo(_server.Info());
-        var keyspace = ParseDbStats(_server.Info("keyspace"));
+        return Task.FromResult(BuildServerInfo(_server.Info(), _server.Info("keyspace")));
+    }
+
+    /// <summary>
+    /// Projects the raw INFO / INFO keyspace sections onto <see cref="RedisServerInfo"/>.
+    /// </summary>
+    /// <remarks>
+    /// Extracted from <see cref="GetServerInfoAsync"/> so the field mapping and the
+    /// keyspace hit-ratio arithmetic are unit-testable without a live Redis server.
+    /// </remarks>
+    internal static RedisServerInfo BuildServerInfo(
+        IGrouping<string, KeyValuePair<string, string>>[] infoSections,
+        IGrouping<string, KeyValuePair<string, string>>[] keyspaceSections)
+    {
+        var metrics = ParseInfo(infoSections);
+        var keyspace = ParseDbStats(keyspaceSections);
 
         var hits = GetLong(metrics, "keyspace_hits");
         var misses = GetLong(metrics, "keyspace_misses");
         var ratio = hits + misses == 0 ? 0 : (double)hits / (hits + misses);
 
-        var info = new RedisServerInfo
+        return new RedisServerInfo
         {
             RedisVersion = GetString(metrics, "redis_version"),
             UptimeSeconds = GetLong(metrics, "uptime_in_seconds"),
@@ -302,8 +316,6 @@ public sealed class RedisClient : IRedisClient
             KeyspaceHitRatio = ratio,
             Databases = keyspace
         };
-
-        return Task.FromResult(info);
     }
 
     public async Task UpdateSortedSetScoreAsync(string key, string member, double score, CancellationToken ct = default)
@@ -535,7 +547,9 @@ public sealed class RedisClient : IRedisClient
         }
     }
 
-    private static string ToTypeString(RedisType type) => type switch
+    /// <summary>Maps a StackExchange.Redis type onto the app-facing type token.</summary>
+    /// <remarks>Internal rather than private so the mapping is unit-testable.</remarks>
+    internal static string ToTypeString(RedisType type) => type switch
     {
         RedisType.String => "string",
         RedisType.Hash => "hash",
@@ -612,7 +626,8 @@ public sealed class RedisClient : IRedisClient
     private static long GetLong(Dictionary<string, string> metrics, string key) =>
         ParseLong(GetString(metrics, key));
 
-    private static IReadOnlyList<RedisSlowLogEntryInfo> ParseSlowLogEntries(RedisResult result)
+    /// <remarks>Internal rather than private so SLOWLOG parsing is unit-testable.</remarks>
+    internal static IReadOnlyList<RedisSlowLogEntryInfo> ParseSlowLogEntries(RedisResult result)
     {
         if (result.IsNull)
             return [];
@@ -658,7 +673,8 @@ public sealed class RedisClient : IRedisClient
         return entries;
     }
 
-    private static List<RedisPubSubChannelInfo> ParseNumsubResult(RedisResult result, List<string> channels)
+    /// <remarks>Internal rather than private so PUBSUB NUMSUB parsing is unit-testable.</remarks>
+    internal static List<RedisPubSubChannelInfo> ParseNumsubResult(RedisResult result, List<string> channels)
     {
         if (result.IsNull)
             return channels.Select(c => new RedisPubSubChannelInfo(c, 0)).ToList();
@@ -675,7 +691,8 @@ public sealed class RedisClient : IRedisClient
         return channelInfos;
     }
 
-    private static bool IsPermissionError(string message) =>
+    /// <remarks>Internal rather than private so the error classification is unit-testable.</remarks>
+    internal static bool IsPermissionError(string message) =>
         message.Contains("NOPERM", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("permission", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("denied", StringComparison.OrdinalIgnoreCase) ||

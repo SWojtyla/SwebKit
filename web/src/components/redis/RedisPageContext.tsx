@@ -11,7 +11,6 @@ import {
 } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import {
   useProfile,
   useRedisServerInfo,
@@ -154,7 +153,6 @@ export interface RedisPageContextValue {
   namespaceTree: NamespaceNode[];
   flatRedisRows: FlatRedisRow[];
   redisTreeRef: React.MutableRefObject<HTMLDivElement | null>;
-  redisVirtualizer: Virtualizer<HTMLDivElement, Element>;
 
   renaming: boolean;
   setRenaming: (v: boolean) => void;
@@ -255,7 +253,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const location = useLocation();
   const navigate = useNavigate();
   const redisConfig = profile?.config?.redisConfig;
-  const caches = redisConfig?.caches ?? [];
+  const caches = useMemo(() => redisConfig?.caches ?? [], [redisConfig]);
   const [activeCacheId, setActiveCacheId] = useState<string | null>(null);
   const resolvedCacheId = activeCacheId ?? caches[0]?.id ?? null;
   const queryClient = useQueryClient();
@@ -374,8 +372,11 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadAllActive, scanResult.data]);
 
-  const scanKeys = scanResult.data?.keys ?? [];
-  const displayKeys = cursor === 0 ? scanKeys : allKeys.length > 0 ? [...allKeys, ...scanKeys] : scanKeys;
+  const scanKeys = useMemo(() => scanResult.data?.keys ?? [], [scanResult.data?.keys]);
+  const displayKeys = useMemo(
+    () => (cursor === 0 ? scanKeys : allKeys.length > 0 ? [...allKeys, ...scanKeys] : scanKeys),
+    [cursor, scanKeys, allKeys],
+  );
   const health = useRedisKeyspaceHealth(resolvedCacheId, displayKeys, separator);
   const prefixMemory = useRedisPrefixMemory(resolvedCacheId, displayKeys, separator);
 
@@ -388,14 +389,6 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     () => flattenNamespaceTree(namespaceTree, expandedNamespaces),
     [namespaceTree, expandedNamespaces],
   );
-
-  const redisVirtualizer = useVirtualizer({
-    count: flatRedisRows.length,
-    getScrollElement: () => redisTreeRef.current,
-    estimateSize: () => 28,
-    getItemKey: (index) => redisRowKey(flatRedisRows[index]),
-    measureElement: (el) => el?.getBoundingClientRect().height ?? 28,
-  });
 
   useEffect(() => {
     if (namespaceTree.length === 0) return;
@@ -591,7 +584,6 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     namespaceTree,
     flatRedisRows,
     redisTreeRef,
-    redisVirtualizer,
 
     renaming,
     setRenaming,

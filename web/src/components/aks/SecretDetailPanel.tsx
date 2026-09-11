@@ -52,7 +52,9 @@ export function SecretDetailPanel({ secret, onClose }: Props) {
       await navigator.clipboard.writeText(value);
       setCopiedKey(key);
       setTimeout(() => setCopiedKey(null), 2000);
-    } catch {}
+    } catch {
+      // Clipboard API unavailable — the copy simply does not happen.
+    }
   };
 
   return (

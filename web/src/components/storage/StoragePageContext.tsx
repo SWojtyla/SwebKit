@@ -1,14 +1,15 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
   type JSX,
 } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import { useDropzone } from "react-dropzone";
 import {
   useProfile,
@@ -58,7 +59,6 @@ export interface StoragePageContextValue {
   setBlobFilter: (v: string) => void;
   displayItems: StorageBlobItem[];
   filteredItems: StorageBlobItem[];
-  blobVirtualizer: Virtualizer<HTMLDivElement, Element>;
 
   multiSelectMode: boolean;
   setMultiSelectMode: (v: boolean) => void;
@@ -149,7 +149,7 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
   const { data: profile } = useProfile();
   const location = useLocation();
   const navigate = useNavigate();
-  const accounts = profile?.config?.storageAccounts ?? [];
+  const accounts = useMemo(() => profile?.config?.storageAccounts ?? [], [profile]);
   const [activeAccountId, setActiveAccountId] = useState<string | null>(accounts[0]?.id ?? null);
   const resolvedAccountId = activeAccountId ?? accounts[0]?.id ?? null;
   const activeAccount = accounts.find((a) => a.id === resolvedAccountId);
@@ -220,7 +220,7 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     disabled: !allowMutations,
   });
 
-  const handleSelectAccount = (id: string) => {
+  const handleSelectAccount = useCallback((id: string) => {
     setActiveAccountId(id);
     setSelectedContainer(null);
     setCurrentPrefix("");
@@ -228,89 +228,91 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     setSelectedBlob(null);
     setContinuationToken(null);
     setAllItems([]);
-  };
+  }, []);
 
-  const handleSelectContainer = (name: string) => {
+  const handleSelectContainer = useCallback((name: string) => {
     setSelectedContainer(name);
     setCurrentPrefix("");
     setPrefixHistory([]);
     setSelectedBlob(null);
     setContinuationToken(null);
     setAllItems([]);
-  };
+  }, []);
 
-  const handleNavigatePrefix = (prefix: string) => {
+  const handleNavigatePrefix = useCallback((prefix: string) => {
     setPrefixHistory((prev) => [...prev, currentPrefix]);
     setCurrentPrefix(prefix);
     setSelectedBlob(null);
     setContinuationToken(null);
     setAllItems([]);
-  };
+  }, [currentPrefix]);
 
-  const handleBreadcrumb = (index: number) => {
+  const handleBreadcrumb = useCallback((index: number) => {
     const newPrefix = index === 0 ? "" : prefixHistory[index - 1] ?? "";
     setPrefixHistory((prev) => prev.slice(0, index));
     setCurrentPrefix(newPrefix);
     setSelectedBlob(null);
     setContinuationToken(null);
     setAllItems([]);
-  };
+  }, [prefixHistory]);
 
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     if (blobs.data?.continuationToken) {
       setAllItems((prev) => [...prev, ...(blobs.data?.items ?? [])]);
       setContinuationToken(blobs.data.continuationToken);
     }
-  };
+  }, [blobs.data]);
 
-  const handleSelectBlob = (name: string) => {
+  const handleSelectBlob = useCallback((name: string) => {
     setSelectedBlob(name);
     setVersionBaseId(null);
     setVersionCompareId(null);
     setVersionCompareRequested(false);
     setVersionRestoreId(null);
-  };
+  }, []);
 
-  const displayItems = continuationToken === null ? (blobs.data?.items ?? []) : [...allItems, ...(blobs.data?.items ?? [])];
+  const displayItems = useMemo(
+    () => (continuationToken === null ? (blobs.data?.items ?? []) : [...allItems, ...(blobs.data?.items ?? [])]),
+    [continuationToken, blobs.data?.items, allItems],
+  );
 
-  const filteredItems = blobFilter
-    ? displayItems.filter((item) => item.name.toLowerCase().includes(blobFilter.toLowerCase()))
-    : displayItems;
+  const filteredItems = useMemo(
+    () =>
+      blobFilter
+        ? displayItems.filter((item) => item.name.toLowerCase().includes(blobFilter.toLowerCase()))
+        : displayItems,
+    [blobFilter, displayItems],
+  );
 
-  const blobVirtualizer = useVirtualizer({
-    count: filteredItems.length,
-    getScrollElement: () => blobListRef.current,
-    estimateSize: () => 30,
-    getItemKey: (index) => filteredItems[index].name,
-    measureElement: (el) => el?.getBoundingClientRect().height ?? 30,
-  });
-
-  const handleCopyUrl = (blobName: string) => {
+  const handleCopyUrl = useCallback((blobName: string) => {
     // The Azure host uses the storage account name; `resolvedAccountId` is SwebKit's own
     // config id (a random 8-char slug), which produced a URL pointing at nothing.
     const url = `https://${activeAccount?.accountName}.blob.core.windows.net/${selectedContainer}/${blobName}`;
     navigator.clipboard.writeText(url);
     setCopiedUrl(true);
     setTimeout(() => setCopiedUrl(false), 2000);
-  };
+  }, [activeAccount?.accountName, selectedContainer]);
 
-  const handleCopySasUrl = () => {
+  const handleCopySasUrl = useCallback(() => {
     if (sasUrl.data?.sasUrl) {
       navigator.clipboard.writeText(sasUrl.data.sasUrl);
       setCopiedUrl(true);
       setTimeout(() => setCopiedUrl(false), 2000);
     }
-  };
+  }, [sasUrl.data?.sasUrl]);
 
   // Goes through `apiFetch` rather than a bare relative `fetch`: the sidecar listens on
   // its own OS-assigned port, so "/api/..." resolved against the Tauri asset server and
   // came back as index.html, surfacing as "Unexpected token '<'" instead of a download.
-  const fetchBlobContent = (blobName: string) =>
-    apiFetch<StorageBlobContent>(
-      `/api/storage/${resolvedAccountId}/containers/${encodeURIComponent(selectedContainer!)}/blobs/content?${new URLSearchParams({ blobName })}`,
-    );
+  const fetchBlobContent = useCallback(
+    (blobName: string) =>
+      apiFetch<StorageBlobContent>(
+        `/api/storage/${resolvedAccountId}/containers/${encodeURIComponent(selectedContainer!)}/blobs/content?${new URLSearchParams({ blobName })}`,
+      ),
+    [resolvedAccountId, selectedContainer],
+  );
 
-  const handleDownloadBlob = async (blobName: string) => {
+  const handleDownloadBlob = useCallback(async (blobName: string) => {
     try {
       const data = await fetchBlobContent(blobName);
       downloadText(
@@ -323,12 +325,12 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
       console.error("Download failed:", e);
       notify("error", "Download failed", String(e));
     }
-  };
+  }, [fetchBlobContent, notify]);
 
   // Bundles the selected blobs into a single ZIP, matching the pattern Service Bus's message
   // list already uses (lib/zip.ts) — previously this looped handleDownloadBlob per file, firing
   // N separate browser downloads instead of one archive.
-  const handleBatchDownloadBlobs = async (blobNames: string[]) => {
+  const handleBatchDownloadBlobs = useCallback(async (blobNames: string[]) => {
     if (blobNames.length === 0) return;
     try {
       const files: Record<string, string> = {};
@@ -346,18 +348,18 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
       console.error("Batch download failed:", e);
       notify("error", "Batch download failed", String(e));
     }
-  };
+  }, [fetchBlobContent, selectedContainer, notify]);
 
-  const toggleBlobSelection = (name: string) => {
+  const toggleBlobSelection = useCallback((name: string) => {
     setSelectedBlobs((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
       return next;
     });
-  };
+  }, []);
 
-  const handleUploadConfirm = () => {
+  const handleUploadConfirm = useCallback(() => {
     if (uploadBlobName.trim() && uploadFile) {
       uploadBlob.mutate(
         { blobName: uploadBlobName.trim(), file: uploadFile, onProgress: setUploadProgress },
@@ -373,9 +375,9 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
         },
       );
     }
-  };
+  }, [uploadBlobName, uploadFile, uploadBlob, notify]);
 
-  const handleMetadataSave = () => {
+  const handleMetadataSave = useCallback(() => {
     setBlobMetadata.mutate(metadataDraft, {
       onSuccess: () => {
         notify("success", "Metadata saved");
@@ -383,9 +385,9 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
       },
       onError: (e) => notify("error", "Metadata save failed", String(e)),
     });
-  };
+  }, [setBlobMetadata, metadataDraft, notify]);
 
-  const handleCopyConfirm = () => {
+  const handleCopyConfirm = useCallback(() => {
     if (copyOverwrite) {
       setCopyConfirming(true);
       return;
@@ -401,9 +403,9 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
         onError: (e) => { setCopyStatus(`Error: ${e}`); notify("error", "Copy failed", String(e)); },
       },
     );
-  };
+  }, [copyOverwrite, copyBlob, selectedContainer, selectedBlob, copyDestContainer, copyDestBlob, notify]);
 
-  const handleCopyOverwriteConfirm = () => {
+  const handleCopyOverwriteConfirm = useCallback(() => {
     copyBlob.mutate(
       { sourceContainer: selectedContainer!, sourceBlob: selectedBlob!, destContainer: copyDestContainer, destBlob: copyDestBlob, overwrite: true },
       {
@@ -416,9 +418,9 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
         onError: (e) => { setCopyStatus(`Error: ${e}`); notify("error", "Copy failed", String(e)); },
       },
     );
-  };
+  }, [copyBlob, selectedContainer, selectedBlob, copyDestContainer, copyDestBlob, notify]);
 
-  const handleVersionRestoreConfirm = () => {
+  const handleVersionRestoreConfirm = useCallback(() => {
     if (!versionRestoreId) return;
     restoreBlobVersion.mutate(versionRestoreId, {
       onSuccess: () => {
@@ -427,9 +429,10 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
       },
       onError: (e) => notify("error", "Restore failed", String(e)),
     });
-  };
+  }, [versionRestoreId, restoreBlobVersion, notify]);
 
-  const value: StoragePageContextValue = {
+  const value: StoragePageContextValue = useMemo(
+    () => ({
     accounts,
     activeAccountId,
     resolvedAccountId,
@@ -456,7 +459,6 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     setBlobFilter,
     displayItems,
     filteredItems,
-    blobVirtualizer,
 
     multiSelectMode,
     setMultiSelectMode,
@@ -533,7 +535,97 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     copyBlob,
     restoreBlobVersion,
     setBlobMetadata,
-  };
+  }),
+    [
+      accounts,
+      activeAccountId,
+      resolvedAccountId,
+      activeAccount,
+      allowMutations,
+      handleSelectAccount,
+      blobListRef,
+      selectedContainer,
+      handleSelectContainer,
+      currentPrefix,
+      prefixHistory,
+      handleNavigatePrefix,
+      handleBreadcrumb,
+      selectedBlob,
+      handleSelectBlob,
+      continuationToken,
+      handleLoadMore,
+      blobFilter,
+      setBlobFilter,
+      displayItems,
+      filteredItems,
+      multiSelectMode,
+      setMultiSelectMode,
+      selectedBlobs,
+      setSelectedBlobs,
+      toggleBlobSelection,
+      copiedUrl,
+      handleCopyUrl,
+      handleCopySasUrl,
+      handleDownloadBlob,
+      handleBatchDownloadBlobs,
+      metadataEditing,
+      setMetadataEditing,
+      metadataDraft,
+      setMetadataDraft,
+      handleMetadataSave,
+      storageViewMode,
+      setStorageViewMode,
+      blobDetailTab,
+      setBlobDetailTab,
+      showSasUrl,
+      setShowSasUrl,
+      showUpload,
+      setShowUpload,
+      uploadBlobName,
+      setUploadBlobName,
+      uploadFile,
+      setUploadFile,
+      uploadProgress,
+      setUploadProgress,
+      uploadDropzone,
+      handleUploadConfirm,
+      showCopyDialog,
+      setShowCopyDialog,
+      copyDestContainer,
+      setCopyDestContainer,
+      copyDestBlob,
+      setCopyDestBlob,
+      copyOverwrite,
+      setCopyOverwrite,
+      copyConfirming,
+      setCopyConfirming,
+      copyStatus,
+      setCopyStatus,
+      handleCopyConfirm,
+      handleCopyOverwriteConfirm,
+      versionBaseId,
+      setVersionBaseId,
+      versionCompareId,
+      setVersionCompareId,
+      versionCompareRequested,
+      setVersionCompareRequested,
+      versionRestoreId,
+      setVersionRestoreId,
+      handleVersionRestoreConfirm,
+      containers,
+      blobs,
+      blobProps,
+      blobContent,
+      sasUrl,
+      blobVersions,
+      versionComparison,
+      deletedBlobs,
+      uploadBlob,
+      copyBlob,
+      restoreBlobVersion,
+      setBlobMetadata,
+    ],
+  );
 
   return <StoragePageContext.Provider value={value}>{children}</StoragePageContext.Provider>;
 }

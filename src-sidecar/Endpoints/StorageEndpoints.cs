@@ -19,7 +19,7 @@ public static class StorageEndpoints
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
-            if (config is null) return Results.NotFound("Storage account not found");
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
 
             try
             {
@@ -46,7 +46,7 @@ public static class StorageEndpoints
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
-            if (config is null) return Results.NotFound("Storage account not found");
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
 
             var client = CreateClient(config, factory, demo);
             var containers = await client.ListContainersAsync(ct);
@@ -67,7 +67,7 @@ public static class StorageEndpoints
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
-            if (config is null) return Results.NotFound("Storage account not found");
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
 
             var client = CreateClient(config, factory, demo);
             var page = await client.ListBlobsAsync(container, prefix ?? "", continuationToken, pageSize ?? 100, ct);
@@ -90,8 +90,8 @@ public static class StorageEndpoints
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
-            if (config is null) return Results.NotFound("Storage account not found");
-            if (string.IsNullOrWhiteSpace(blobName)) return Results.BadRequest("blobName is required");
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
+            if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
             var client = CreateClient(config, factory, demo);
             var content = await client.GetBlobContentAsync(container, blobName, ct: ct);
@@ -110,8 +110,8 @@ public static class StorageEndpoints
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
-            if (config is null) return Results.NotFound("Storage account not found");
-            if (string.IsNullOrWhiteSpace(blobName)) return Results.BadRequest("blobName is required");
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
+            if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
             var client = CreateClient(config, factory, demo);
             var versions = await client.ListBlobVersionsAsync(container, blobName, ct);
@@ -136,9 +136,9 @@ public static class StorageEndpoints
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
-            if (config is null) return Results.NotFound("Storage account not found");
-            if (string.IsNullOrWhiteSpace(blobName)) return Results.BadRequest("blobName is required");
-            if (string.IsNullOrWhiteSpace(baseVersionId)) return Results.BadRequest("baseVersionId is required");
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
+            if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
+            if (string.IsNullOrWhiteSpace(baseVersionId)) return ApiErrors.BadRequest("baseVersionId is required");
 
             var client = CreateClient(config, factory, demo);
             var comparison = await client.GetVersionComparisonAsync(container, blobName, baseVersionId, compareVersionId, ct);
@@ -156,9 +156,9 @@ public static class StorageEndpoints
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
-            if (config is null) return Results.NotFound("Storage account not found");
-            if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
-            if (string.IsNullOrWhiteSpace(blobName)) return Results.BadRequest("blobName is required");
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
+            if (!config.AllowMutations) return ApiErrors.Forbidden("Mutations are disabled for this storage account. Enable allowMutations in Settings.");
+            if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
             var client = CreateClient(config, factory, demo);
             var result = await client.RestoreBlobVersionAsync(container, blobName, versionId, ct);
@@ -183,7 +183,7 @@ public static class StorageEndpoints
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
-            if (config is null) return Results.NotFound("Storage account not found");
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
 
             var client = CreateClient(config, factory, demo);
             var deleted = await client.ListDeletedBlobsAsync(container, prefix, ct);
@@ -225,8 +225,8 @@ public static class StorageEndpoints
         CancellationToken ct)
     {
         var config = ResolveStorage(accountId, profile, demo);
-        if (config is null) return Results.NotFound("Storage account not found");
-        if (string.IsNullOrWhiteSpace(blobName)) return Results.BadRequest("blobName is required");
+        if (config is null) return ApiErrors.NotFound("Storage account not found");
+        if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
         var client = CreateClient(config, factory, demo);
         var props = await client.GetBlobPropertiesAsync(container, blobName, ct);
@@ -245,8 +245,8 @@ public static class StorageEndpoints
         CancellationToken ct)
     {
         var config = ResolveStorage(accountId, profile, demo);
-        if (config is null) return Results.NotFound("Storage account not found");
-        if (string.IsNullOrWhiteSpace(blobName)) return Results.BadRequest("blobName is required");
+        if (config is null) return ApiErrors.NotFound("Storage account not found");
+        if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
         var client = CreateClient(config, factory, demo);
         var sasUrl = await client.GetBlobSasUrlAsync(container, blobName, TimeSpan.FromMinutes(expiryMinutes), ct);
@@ -265,14 +265,14 @@ public static class StorageEndpoints
         CancellationToken ct)
     {
         var config = ResolveStorage(accountId, profile, demo);
-        if (config is null) return Results.NotFound("Storage account not found");
-        if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
-        if (string.IsNullOrWhiteSpace(blobName)) return Results.BadRequest("blobName is required");
-        if (!httpRequest.HasFormContentType) return Results.BadRequest("Upload requires multipart/form-data");
+        if (config is null) return ApiErrors.NotFound("Storage account not found");
+        if (!config.AllowMutations) return ApiErrors.Forbidden("Mutations are disabled for this storage account. Enable allowMutations in Settings.");
+        if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
+        if (!httpRequest.HasFormContentType) return ApiErrors.BadRequest("Upload requires multipart/form-data");
 
         var form = await httpRequest.ReadFormAsync(ct);
         var file = form.Files.GetFile("file");
-        if (file is null || file.Length == 0) return Results.BadRequest("A non-empty file is required");
+        if (file is null || file.Length == 0) return ApiErrors.BadRequest("A non-empty file is required");
 
         var client = CreateClient(config, factory, demo);
         var options = new BlobUploadOptions(container, blobName, Overwrite: false, file.ContentType);
@@ -291,8 +291,8 @@ public static class StorageEndpoints
         CancellationToken ct)
     {
         var config = ResolveStorage(accountId, profile, demo);
-        if (config is null) return Results.NotFound("Storage account not found");
-        if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
+        if (config is null) return ApiErrors.NotFound("Storage account not found");
+        if (!config.AllowMutations) return ApiErrors.Forbidden("Mutations are disabled for this storage account. Enable allowMutations in Settings.");
 
         var client = CreateClient(config, factory, demo);
         var options = new BlobCopyOptions(
@@ -317,9 +317,9 @@ public static class StorageEndpoints
         CancellationToken ct)
     {
         var config = ResolveStorage(accountId, profile, demo);
-        if (config is null) return Results.NotFound("Storage account not found");
-        if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
-        if (string.IsNullOrWhiteSpace(blobName)) return Results.BadRequest("blobName is required");
+        if (config is null) return ApiErrors.NotFound("Storage account not found");
+        if (!config.AllowMutations) return ApiErrors.Forbidden("Mutations are disabled for this storage account. Enable allowMutations in Settings.");
+        if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
         var client = CreateClient(config, factory, demo);
         var result = await client.SetBlobMetadataAsync(container, blobName, metadata, ct: ct);
@@ -337,9 +337,9 @@ public static class StorageEndpoints
         CancellationToken ct)
     {
         var config = ResolveStorage(accountId, profile, demo);
-        if (config is null) return Results.NotFound("Storage account not found");
-        if (!config.AllowMutations) return Results.Problem("Mutations are disabled for this storage account. Enable allowMutations in Settings.", statusCode: 403);
-        if (string.IsNullOrWhiteSpace(blobName)) return Results.BadRequest("blobName is required");
+        if (config is null) return ApiErrors.NotFound("Storage account not found");
+        if (!config.AllowMutations) return ApiErrors.Forbidden("Mutations are disabled for this storage account. Enable allowMutations in Settings.");
+        if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
         var client = CreateClient(config, factory, demo);
         var result = await client.UndeleteBlobAsync(container, blobName, ct);

@@ -14,8 +14,25 @@
 /// `resolveEnvironmentVariable` leaves them `null` in the UI scope for the same
 /// reason.
 
-import type { AuthConfig, HttpRequestEntry } from "./types";
+import type { AuthConfig, HttpRequestEntry, ResponseHeaderDto } from "./types";
 import { substituteVariables } from "./variable-utils";
+
+/**
+ * Headers whose value is masked until the user asks to see it. Everything else in an
+ * echoed request is shown verbatim — the point of the panel is to be reproducible.
+ */
+const SENSITIVE_HEADERS = ["authorization", "proxy-authorization", "cookie", "set-cookie"];
+
+function isSensitiveHeader(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    SENSITIVE_HEADERS.includes(lower) ||
+    lower.includes("api-key") ||
+    lower.includes("apikey") ||
+    lower.includes("token") ||
+    lower.includes("secret")
+  );
+}
 
 function shellQuote(value: string): string {
   return value.replace(/'/g, "'\\''");
@@ -97,8 +114,29 @@ export function buildCurl(
   request: HttpRequestEntry,
   resolvedUrl: string,
   scope: Record<string, string | null> = {},
+  sentHeaders: ResponseHeaderDto[] | null = null,
+  revealSecrets = false,
 ): string {
   const parts = [`curl -X ${request.method.toUpperCase()}`];
+
+  // When the sidecar echoed the headers it actually put on the wire, render those and
+  // nothing else. Reconstructing them here could only ever approximate the real request —
+  // it emitted the body mode's Content-Type alongside any the user had set, and it could
+  // not see auth resolved through the folder/collection chain at all.
+  if (sentHeaders && sentHeaders.length > 0) {
+    for (const h of sentHeaders) {
+      const value = revealSecrets || !isSensitiveHeader(h.name) ? h.value : MASK;
+      parts.push(`-H "${h.name}: ${value}"`);
+    }
+
+    const { rawContent: sentBody } = request.body;
+    if (sentBody) {
+      parts.push(`-d '${shellQuote(substituteVariables(sentBody, scope))}'`);
+    }
+
+    parts.push(`"${resolvedUrl}"`);
+    return parts.join(" \\\n  ");
+  }
 
   for (const h of request.headers) {
     if (h.isEnabled && h.key) {

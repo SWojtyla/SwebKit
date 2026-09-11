@@ -9,6 +9,7 @@ import { selectBodyLanguage, downloadExtension } from "@/lib/response-body";
 import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
 import { ResponseBodyViewer } from "./ResponseBodyViewer";
 import { buildCurl } from "@/lib/curl";
+import { tryPrettifyJson } from "@/lib/pretty-json";
 
 export interface ResponseHistoryEntry {
   id: number;
@@ -35,11 +36,9 @@ const PRETTY_PREF_KEY = "api-client-response-pretty";
 function tryPrettyPrint(content: string, contentType: string | null): string {
   const trimmed = content.trimStart();
   if (contentType?.includes("json") || trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    try {
-      return JSON.stringify(JSON.parse(content), null, 2);
-    } catch {
-      return content;
-    }
+    // Falls back to the raw content when it does not parse, as before — but now also
+    // handles a leading UTF-8 BOM, which .NET endpoints routinely emit.
+    return tryPrettifyJson(content) ?? content;
   }
   // Only genuine XML, not "anything starting with `<`". Now that Pretty is the
   // default, the broader test would reflow every HTML page received, inserting
@@ -67,6 +66,7 @@ export function ResponseViewer({
     loadViewPreference<boolean>(PRETTY_PREF_KEY, true),
   );
   const [showCurl, setShowCurl] = useState(false);
+  const [revealCurlSecrets, setRevealCurlSecrets] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [showSaveExample, setShowSaveExample] = useState(false);
   const [exampleName, setExampleName] = useState("");
@@ -82,6 +82,7 @@ export function ResponseViewer({
     // Pretty toggle feel like it never stuck.
     setCopied(false);
     setShowCurl(false);
+    setRevealCurlSecrets(false);
     setViewingExampleId(null);
   }, [response]);
 
@@ -141,9 +142,11 @@ export function ResponseViewer({
     try {
       const parsed = JSON.parse(liveBody);
       if (parsed.errors && Array.isArray(parsed.errors)) {
-        graphQlErrors = parsed.errors.map((e: any) => e.message || String(e));
+        graphQlErrors = parsed.errors.map((e: { message?: string }) => e.message || String(e));
       }
-    } catch {}
+    } catch {
+      // Body is not the GraphQL error envelope after all; leave the list empty.
+    }
   }
 
   const copyBody = async () => {
@@ -154,7 +157,7 @@ export function ResponseViewer({
 
   const copyCurl = async () => {
     if (request) {
-      const curl = buildCurl(request, response.resolvedUrl, variableScope);
+      const curl = buildCurl(request, response.resolvedUrl, variableScope, response.sentHeaders ?? null, revealCurlSecrets);
       await navigator.clipboard.writeText(curl);
       setCopiedCurl(true);
       setTimeout(() => setCopiedCurl(false), 2000);
@@ -235,18 +238,30 @@ export function ResponseViewer({
       {showCurl && request && !isError && (
         <div className="border-b bg-muted/30 p-3" data-testid="response-curl-panel">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">cURL command</span>
-            <button
-              onClick={copyCurl}
-              className="flex items-center gap-1 text-xs text-primary hover:underline"
-              data-testid="response-copy-curl"
-            >
-              {copiedCurl ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              {copiedCurl ? "Copied!" : "Copy"}
-            </button>
+            <span className="text-xs font-medium text-muted-foreground">
+              cURL command
+              {response.sentHeaders && response.sentHeaders.length > 0 && " (as sent)"}
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setRevealCurlSecrets(!revealCurlSecrets)}
+                className="text-xs text-primary hover:underline"
+                data-testid="response-curl-reveal"
+              >
+                {revealCurlSecrets ? "Hide secrets" : "Reveal secrets"}
+              </button>
+              <button
+                onClick={copyCurl}
+                className="flex items-center gap-1 text-xs text-primary hover:underline"
+                data-testid="response-copy-curl"
+              >
+                {copiedCurl ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                {copiedCurl ? "Copied!" : "Copy"}
+              </button>
+            </div>
           </div>
           <pre className="overflow-auto whitespace-pre-wrap break-all font-mono text-xs">
-            {buildCurl(request, response.resolvedUrl, variableScope)}
+            {buildCurl(request, response.resolvedUrl, variableScope, response.sentHeaders ?? null, revealCurlSecrets)}
           </pre>
         </div>
       )}

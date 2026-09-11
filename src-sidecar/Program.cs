@@ -249,6 +249,10 @@ app.UseExceptionHandler(ex =>
             // collapsing into an opaque 500 "Internal server error".
             AksAuthenticationException => 401,
             AksAccessDeniedException => 403,
+            // Azure.Identity's failure for "nobody is signed in / the credential chain is broken".
+            // Mapped centrally rather than per-endpoint so every Azure-backed route answers the same
+            // way — and so it is logged, which the old endpoint-local `catch` never did.
+            Azure.Identity.AuthenticationFailedException => 401,
             _ => 500,
         };
         context.Response.StatusCode = statusCode;
@@ -265,16 +269,28 @@ app.UseExceptionHandler(ex =>
         // up — often an Azure/K8s/Redis SDK exception whose message can contain connection
         // strings, internal paths, or other detail that shouldn't reach the client. Log the real
         // exception server-side and return a generic message instead.
+        //
+        // Azure.Identity is the one exception to "pass the message through": its
+        // AuthenticationFailedException message is a multi-paragraph credential-chain dump carrying
+        // tenant/client ids, so it gets a fixed replacement.
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
         string message;
         if (statusCode == 500)
         {
-            context.RequestServices.GetRequiredService<ILogger<Program>>()
-                .LogError(exception, "Unhandled exception on {Method} {Path}", context.Request.Method, context.Request.Path);
+            logger.LogError(exception, "Unhandled exception on {Method} {Path}", context.Request.Method, context.Request.Path);
             message = "Internal server error";
         }
         else
         {
-            message = exception?.Message ?? "Internal server error";
+            // Every handled failure is logged too: endpoints no longer catch these themselves, so
+            // this is the only place a 400/401/403 leaves a server-side trace.
+            logger.LogWarning(exception, "Request failed with {StatusCode} on {Method} {Path}", statusCode, context.Request.Method, context.Request.Path);
+            message = exception switch
+            {
+                Azure.Identity.AuthenticationFailedException => "Azure authentication failed. Sign in again (for example `az login`) and retry.",
+                not null => exception.Message,
+                null => "Internal server error",
+            };
         }
 
         var payload = System.Text.Json.JsonSerializer.Serialize(new { error = message });

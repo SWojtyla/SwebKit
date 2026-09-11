@@ -119,7 +119,7 @@ public static class ConfigEndpoints
     {
         if (demo.IsDemoMode)
         {
-            return Results.BadRequest(new { error = "Import is disabled in demo mode." });
+            return ApiErrors.BadRequest("Import is disabled in demo mode.");
         }
 
         if (!string.IsNullOrWhiteSpace(req.FolderPath))
@@ -144,18 +144,18 @@ public static class ConfigEndpoints
             }
             catch (FormatException)
             {
-                return Results.BadRequest(new { error = "Payload was not valid base64." });
+                return ApiErrors.BadRequest("Payload was not valid base64.");
             }
         }
 
-        return Results.BadRequest(new { error = "Provide a folder path or a base64-encoded file payload." });
+        return ApiErrors.BadRequest("Provide a folder path or a base64-encoded file payload.");
     }
 
     private static IResult? ValidateBrunoFolderPath(string? folderPath)
     {
         if (string.IsNullOrWhiteSpace(folderPath))
         {
-            return Results.BadRequest(new { error = "Folder path is required." });
+            return ApiErrors.BadRequest("Folder path is required.");
         }
 
         try
@@ -163,7 +163,7 @@ public static class ConfigEndpoints
             var fullPath = Path.GetFullPath(folderPath);
             if (!Directory.Exists(fullPath))
             {
-                return Results.BadRequest(new { error = $"Folder not found: {folderPath}" });
+                return ApiErrors.BadRequest($"Folder not found: {folderPath}");
             }
 
             var hasBrunoManifest = File.Exists(Path.Combine(fullPath, "bruno.json")) ||
@@ -171,14 +171,18 @@ public static class ConfigEndpoints
 
             if (!hasBrunoManifest)
             {
-                return Results.BadRequest(new { error = "The selected folder does not appear to be a Bruno collection (no bruno.json found)." });
+                return ApiErrors.BadRequest("The selected folder does not appear to be a Bruno collection (no bruno.json found).");
             }
 
             return null;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException or NotSupportedException)
         {
-            return Results.BadRequest(new { error = $"Invalid folder path: {ex.Message}" });
+            // Only the "this string isn't a usable path" family is turned into a 400 here — it is a
+            // genuine user-input problem with a message that names nothing but the input. Anything
+            // else (IO failures, permission errors) propagates to the global exception handler,
+            // which logs it and returns the same {error} shape with an honest status code.
+            return ApiErrors.BadRequest($"Invalid folder path: {ex.Message}");
         }
     }
 

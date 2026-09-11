@@ -21,7 +21,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             try
             {
@@ -49,7 +49,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var info = await client.GetServerInfoAsync(ct);
@@ -68,7 +68,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var infos = await LoadKeyInfosAsync(client, req.Keys, ct);
@@ -91,7 +91,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var infos = await LoadKeyInfosAsync(client, req.Keys, ct);
@@ -112,7 +112,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var result = await client.ScanKeysAsync(pattern ?? "*", cursor ?? 0, pageSize ?? 50, ct);
@@ -130,7 +130,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var info = await client.GetKeyInfoAsync(key, ct);
@@ -146,7 +146,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var value = await client.GetKeyValueAsync(key, ct);
@@ -162,7 +162,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var fields = await client.GetHashFieldsAsync(key, ct);
@@ -180,7 +180,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var items = await client.GetListItemsAsync(key, start ?? 0, stop ?? -1, ct);
@@ -196,7 +196,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var members = await client.GetSetMembersAsync(key, ct);
@@ -214,7 +214,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var members = await client.GetSortedSetMembersAsync(key, start ?? 0, stop ?? -1, ct);
@@ -230,7 +230,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var data = new Dictionary<string, object?>();
@@ -271,7 +271,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             await client.DeleteKeysAsync([key], ct);
@@ -292,7 +292,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             TimeSpan? expiry = req.TtlSeconds.HasValue ? TimeSpan.FromSeconds(req.TtlSeconds.Value) : null;
@@ -323,7 +323,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var result = await client.GetSetMembersPageAsync(key, cursor ?? 0, pageSize ?? 50, ct);
@@ -341,7 +341,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var slowlog = await client.GetSlowLogAsync(top ?? 50, ct);
@@ -360,7 +360,7 @@ public static class RedisEndpoints
             CancellationToken ct) =>
         {
             var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return Results.NotFound("Cache not found");
+            if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await CreateClientAsync(cache, factory, demo, ct);
             var snapshot = await client.GetPubSubSnapshotAsync(pattern, maxChannels ?? 200, ct);
@@ -380,10 +380,10 @@ public static class RedisEndpoints
         DemoModeService demo,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Field)) return Results.BadRequest("field is required");
+        if (string.IsNullOrWhiteSpace(req.Field)) return ApiErrors.BadRequest("field is required");
 
         var cache = ResolveCache(cacheId, profile, demo);
-        if (cache is null) return Results.NotFound("Cache not found");
+        if (cache is null) return ApiErrors.NotFound("Cache not found");
 
         var client = await CreateClientAsync(cache, factory, demo, ct);
         await client.SetHashFieldAsync(key, req.Field, req.Value ?? "", ct);
@@ -400,10 +400,10 @@ public static class RedisEndpoints
         DemoModeService demo,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Field)) return Results.BadRequest("field is required");
+        if (string.IsNullOrWhiteSpace(req.Field)) return ApiErrors.BadRequest("field is required");
 
         var cache = ResolveCache(cacheId, profile, demo);
-        if (cache is null) return Results.NotFound("Cache not found");
+        if (cache is null) return ApiErrors.NotFound("Cache not found");
 
         var client = await CreateClientAsync(cache, factory, demo, ct);
         await client.DeleteHashFieldAsync(key, req.Field, ct);
@@ -420,10 +420,10 @@ public static class RedisEndpoints
         DemoModeService demo,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Member)) return Results.BadRequest("member is required");
+        if (string.IsNullOrWhiteSpace(req.Member)) return ApiErrors.BadRequest("member is required");
 
         var cache = ResolveCache(cacheId, profile, demo);
-        if (cache is null) return Results.NotFound("Cache not found");
+        if (cache is null) return ApiErrors.NotFound("Cache not found");
 
         var client = await CreateClientAsync(cache, factory, demo, ct);
         await client.UpdateSortedSetScoreAsync(key, req.Member, req.Score, ct);
@@ -440,10 +440,10 @@ public static class RedisEndpoints
         DemoModeService demo,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.NewKey)) return Results.BadRequest("newKey is required");
+        if (string.IsNullOrWhiteSpace(req.NewKey)) return ApiErrors.BadRequest("newKey is required");
 
         var cache = ResolveCache(cacheId, profile, demo);
-        if (cache is null) return Results.NotFound("Cache not found");
+        if (cache is null) return ApiErrors.NotFound("Cache not found");
 
         var client = await CreateClientAsync(cache, factory, demo, ct);
         await client.RenameKeyAsync(key, req.NewKey, ct);
@@ -461,7 +461,7 @@ public static class RedisEndpoints
         CancellationToken ct)
     {
         var cache = ResolveCache(cacheId, profile, demo);
-        if (cache is null) return Results.NotFound("Cache not found");
+        if (cache is null) return ApiErrors.NotFound("Cache not found");
 
         var client = await CreateClientAsync(cache, factory, demo, ct);
         if (req.RemoveTtl)

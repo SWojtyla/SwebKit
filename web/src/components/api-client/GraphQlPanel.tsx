@@ -1,18 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { Wand2, Play, Square, Radio } from "lucide-react";
 import type { HttpRequestEntry } from "@/lib/types";
+import { tryPrettifyJson } from "@/lib/pretty-json";
 
 interface GraphQlPanelProps {
   request: HttpRequestEntry;
   onChange: (request: HttpRequestEntry) => void;
 }
 
+/** Leaves non-JSON content untouched, which is what the callers below expect. */
 function tryPrettyPrintJson(content: string): string {
-  try {
-    return JSON.stringify(JSON.parse(content), null, 2);
-  } catch {
-    return content;
-  }
+  return tryPrettifyJson(content) ?? content;
 }
 
 export function GraphQlPanel({ request, onChange }: GraphQlPanelProps) {
@@ -57,7 +55,10 @@ export function GraphQlPanel({ request, onChange }: GraphQlPanelProps) {
       };
       ws.onerror = () => { setSubscribed(false); };
       ws.onclose = () => { setSubscribed(false); };
-    } catch {}
+    } catch {
+      // `new WebSocket` throws on a malformed URL; stay unsubscribed rather than crashing
+      // the panel — the Subscribe button remains available to retry.
+    }
   };
 
   const stopSubscription = () => {

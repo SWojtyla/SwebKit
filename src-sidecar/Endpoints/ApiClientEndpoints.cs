@@ -21,7 +21,7 @@ public static class ApiClientEndpoints
         {
             var collection = await ResolveCollectionAsync(req.CollectionId, collections, demo);
             if (collection is null && req.CollectionId is not null)
-                return Results.NotFound("Collection not found");
+                return ApiErrors.NotFound("Collection not found");
 
             collection ??= new ApiCollection();
 
@@ -30,7 +30,7 @@ public static class ApiClientEndpoints
             {
                 activeEnvironment = environments.Environments.FirstOrDefault(e => e.Id == req.EnvironmentId);
                 if (activeEnvironment is null)
-                    return Results.NotFound("Environment not found");
+                    return ApiErrors.NotFound("Environment not found");
             }
 
             // The global layer sits underneath the collection-scoped one, so a value
@@ -41,18 +41,15 @@ public static class ApiClientEndpoints
             {
                 globalEnvironment = environments.Environments.FirstOrDefault(e => e.Id == req.GlobalEnvironmentId);
                 if (globalEnvironment is null)
-                    return Results.NotFound("Global environment not found");
+                    return ApiErrors.NotFound("Global environment not found");
             }
 
-            try
-            {
-                var result = await executor.ExecuteAsync(req.Request, collection, activeEnvironment, globalEnvironment, ct);
-                return Results.Ok(Map(result));
-            }
-            catch (Exception ex)
-            {
-                return Results.Problem($"Request failed: {ex.Message}");
-            }
+            // No catch here on purpose: the global exception handler in Program.cs logs the failure
+            // and maps it (an InvalidOperationException from request building stays a 400, an
+            // UnauthorizedAccessException stays a 401), whereas catching it here collapsed
+            // everything into a 500 that echoed a raw, unlogged ex.Message back to the client.
+            var result = await executor.ExecuteAsync(req.Request, collection, activeEnvironment, globalEnvironment, ct);
+            return Results.Ok(Map(result));
         });
 
         app.MapPost("/api/api-client/preview-keyvault-secret", (
@@ -66,7 +63,7 @@ public static class ApiClientEndpoints
     internal static IResult EvaluateJsonPathAsync(EvaluateJsonPathRequest req)
     {
         if (string.IsNullOrWhiteSpace(req.JsonPath))
-            return Results.BadRequest(new { error = "JSONPath is required." });
+            return ApiErrors.BadRequest("JSONPath is required.");
 
         JsonNode? node;
         try
@@ -109,10 +106,10 @@ public static class ApiClientEndpoints
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(req.SecretName))
-            return Results.BadRequest(new { error = "Secret name is required" });
+            return ApiErrors.BadRequest("Secret name is required");
 
         if (!resolver.IsAvailable)
-            return Results.Problem("No key vaults are configured");
+            return ApiErrors.Status(StatusCodes.Status500InternalServerError, "No key vaults are configured");
 
         var raw = await resolver.GetSecretAsync(req.SecretName, req.KeyVaultName, cancellationToken).ConfigureAwait(false);
 
@@ -162,7 +159,8 @@ public static class ApiClientEndpoints
             result.ResponseBodyTruncated,
             result.ResponseHeaders.Select(h => new ResponseHeaderDto(h.Name, h.Value)).ToList(),
             result.CaptureWarnings.ToList(),
-            result.GraphQlErrors);
+            result.GraphQlErrors,
+            result.SentHeaders.Select(h => new ResponseHeaderDto(h.Name, h.Value)).ToList());
 }
 
 public sealed class ExecuteRequestRequest
@@ -190,7 +188,8 @@ public sealed record ApiClientExecutionResponse(
     bool ResponseBodyTruncated,
     IReadOnlyList<ResponseHeaderDto> Headers,
     IReadOnlyList<string> CaptureWarnings,
-    IReadOnlyList<GraphQlError>? GraphQlErrors);
+    IReadOnlyList<GraphQlError>? GraphQlErrors,
+    IReadOnlyList<ResponseHeaderDto> SentHeaders);
 
 public sealed record ResponseHeaderDto(string Name, string Value);
 

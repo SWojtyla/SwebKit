@@ -66,7 +66,7 @@ function CodeElement({
   inline,
   className,
   children,
-  node,
+  node: _node,
   ...rest
 }: CodeElementProps) {
   const match = /language-(\w+)/.exec(className || "");
@@ -86,7 +86,7 @@ function CodeElement({
 
 type PreElementProps = React.ComponentPropsWithoutRef<"pre"> & ExtraProps;
 
-function PreElement({ children, node, ...rest }: PreElementProps) {
+function PreElement({ children, node: _node, ...rest }: PreElementProps) {
   if (children == null) return null;
   const first = Array.isArray(children) ? children[0] : children;
   if (isValidElement(first) && first.type === MermaidBlock) {

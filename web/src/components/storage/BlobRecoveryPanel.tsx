@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { useUndeleteBlob } from "@/lib/hooks";
 import { useStoragePageContext } from "./StoragePageContext";
+import { formatBytes } from "@/lib/format-bytes";
 
 interface DeletedBlob {
   name: string;
@@ -9,13 +10,6 @@ interface DeletedBlob {
   daysRemaining: number;
   contentType: string;
   sizeBytes: number | null;
-}
-
-function formatBytes(bytes: number | null): string {
-  if (bytes == null) return "-";
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
 export function BlobRecoveryPanel() {
