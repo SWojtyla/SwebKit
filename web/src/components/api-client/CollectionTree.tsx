@@ -97,6 +97,15 @@ function flattenTree(filteredCollections: ApiCollection[], expandedIds: Set<stri
   return rows;
 }
 
+function collectExpandedFolderIds(nodes: ApiCollectionNode[], into: Set<string>) {
+  for (const n of nodes) {
+    if (n.type === "Folder") {
+      if (n.isExpanded) into.add(n.id);
+      collectExpandedFolderIds(n.children, into);
+    }
+  }
+}
+
 export function CollectionTree({
   collections,
   selectedNodeId,
@@ -111,9 +120,11 @@ export function CollectionTree({
   onMoveCollection,
   onExportCollection,
 }: CollectionTreeProps) {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() =>
-    new Set(collections.map((c) => c.id)),
-  );
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
+    const ids = new Set(collections.map((c) => c.id));
+    collections.forEach((c) => collectExpandedFolderIds(c.nodes, ids));
+    return ids;
+  });
   const [search, setSearch] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
