@@ -8,6 +8,7 @@ import {
   deleteMonitoringRule,
   getMonitoringHistory,
 } from "../api";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type { MonitoringAlertRule, AlertFiredEvent, AlertSignalStatus, ProactiveInsightReadyEvent } from "../api";
 
 // ── Monitoring hooks ──────────────────────────────────────────────────────────
@@ -21,31 +22,37 @@ export function useMonitoringRules() {
 
 export function useCreateMonitoringRule() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (rule: MonitoringAlertRule) => createMonitoringRule(rule),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["monitoring", "rules"] });
     },
+    onError: (error) => notify("error", "Couldn't create alert rule", String(error)),
   });
 }
 
 export function useUpdateMonitoringRule() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (rule: MonitoringAlertRule) => updateMonitoringRule(rule),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["monitoring", "rules"] });
     },
+    onError: (error) => notify("error", "Couldn't save alert rule", String(error)),
   });
 }
 
 export function useDeleteMonitoringRule() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (id: string) => deleteMonitoringRule(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["monitoring", "rules"] });
     },
+    onError: (error) => notify("error", "Couldn't delete alert rule", String(error)),
   });
 }
 

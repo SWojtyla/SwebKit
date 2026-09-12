@@ -9,6 +9,7 @@ import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { AgentPromptExamples } from "./AgentPromptExamples";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { BarChart3 } from "lucide-react";
 
 export function AgentPage() {
@@ -214,27 +215,7 @@ export function AgentPage() {
             />
           </span>
         </div>
-        {showClearConfirm ? (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Clear conversation?</span>
-            <button
-              data-testid="agent-clear-confirm"
-              onClick={handleClear}
-              disabled={isClearPending}
-              className="rounded-md bg-destructive px-3 py-1 text-sm text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
-            >
-              Yes, clear
-            </button>
-            <button
-              data-testid="agent-clear-cancel"
-              onClick={() => setShowClearConfirm(false)}
-              className="rounded-md border px-3 py-1 text-sm hover:bg-accent"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
             <button
               ref={visualToggleRef}
               data-testid="agent-toggle-visuals"
@@ -267,9 +248,21 @@ export function AgentPage() {
             >
               Clear
             </button>
-          </div>
-        )}
+        </div>
       </div>
+
+      {showClearConfirm && (
+        <ConfirmBar
+          message="Clear conversation? This cannot be undone."
+          confirmLabel="Yes, clear"
+          confirmDisabled={isClearPending}
+          onConfirm={handleClear}
+          onCancel={() => setShowClearConfirm(false)}
+          testId="agent-clear-confirm-bar"
+          confirmTestId="agent-clear-confirm"
+          cancelTestId="agent-clear-cancel"
+        />
+      )}
 
       {/* Pending actions awaiting confirmation ("Ask & do" proposals) */}
       {pendingApprovals.data && pendingApprovals.data.length > 0 && (

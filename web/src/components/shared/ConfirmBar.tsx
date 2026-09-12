@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AlertTriangle, Check, X } from "lucide-react";
 
 interface ConfirmBarProps {
-  message: string;
+  message: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
   confirmLabel?: string;
@@ -12,6 +12,8 @@ interface ConfirmBarProps {
    * exact string into an inline input.
    */
   requireTypedName?: string;
+  /** Disables the confirm button while the action it triggers is in flight. */
+  confirmDisabled?: boolean;
   testId?: string;
   confirmTestId?: string;
   cancelTestId?: string;
@@ -25,13 +27,14 @@ export function ConfirmBar({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   requireTypedName,
+  confirmDisabled = false,
   testId = "confirm-bar",
   confirmTestId,
   cancelTestId,
   typedNameTestId,
 }: ConfirmBarProps) {
   const [typed, setTyped] = useState("");
-  const canConfirm = !requireTypedName || typed === requireTypedName;
+  const canConfirm = !confirmDisabled && (!requireTypedName || typed === requireTypedName);
 
   return (
     <div

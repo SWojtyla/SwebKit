@@ -3,6 +3,7 @@ import { CheckCircle2, Circle, Download, Upload } from "lucide-react";
 import { useProfile, useUpdateProfile, useUserSettings, useUpdateUserSettings, useExportSettings, useImportSettings, useDemoMode } from "@/lib/hooks";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import { DraftInput } from "./DraftInput";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 
 export function GeneralSettings() {
   const { data: settings, isLoading } = useUserSettings();
@@ -15,7 +16,21 @@ export function GeneralSettings() {
   const importSettings = useImportSettings();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [pendingImportBundle, setPendingImportBundle] = useState<unknown>(null);
   const { notify } = useNotification();
+
+  const runImport = async (bundle: unknown) => {
+    try {
+      await importSettings.mutateAsync(bundle);
+      notify("success", "Settings imported", "Restart the app to ensure all changes are loaded.");
+      setImportStatus("Import successful. Restart the app to ensure all changes are loaded.");
+    } catch {
+      setImportStatus("Import failed: invalid file");
+      notify("error", "Import failed", "Invalid settings file");
+    } finally {
+      setPendingImportBundle(null);
+    }
+  };
 
   if (isLoading || !settings) {
     return <div className="text-muted-foreground">Loading...</div>;
@@ -200,11 +215,7 @@ export function GeneralSettings() {
               try {
                 const text = await file.text();
                 const bundle = JSON.parse(text);
-                if (window.confirm("Importing will replace your current profiles, collections, environments, and settings. Continue?")) {
-                  await importSettings.mutateAsync(bundle);
-                  notify("success", "Settings imported", "Restart the app to ensure all changes are loaded.");
-                  setImportStatus("Import successful. Restart the app to ensure all changes are loaded.");
-                }
+                setPendingImportBundle(bundle);
               } catch {
                 setImportStatus("Import failed: invalid file");
                 notify("error", "Import failed", "Invalid settings file");
@@ -214,6 +225,17 @@ export function GeneralSettings() {
             }}
           />
         </div>
+        {pendingImportBundle !== null && (
+          <div className="mt-2">
+            <ConfirmBar
+              message="Importing will replace your current profiles, collections, environments, and settings. Continue?"
+              confirmLabel="Import"
+              onConfirm={() => runImport(pendingImportBundle)}
+              onCancel={() => setPendingImportBundle(null)}
+              testId="settings-import-confirm"
+            />
+          </div>
+        )}
         {importStatus && (
           <p className="mt-2 text-xs text-muted-foreground">{importStatus}</p>
         )}

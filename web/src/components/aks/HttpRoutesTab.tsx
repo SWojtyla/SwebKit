@@ -32,7 +32,7 @@ const columns: Column<HttpRouteInfo>[] = [
 ];
 
 export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
-  const { data: routes, isLoading } = useAksHttpRoutes(ns);
+  const { data: routes, isLoading, error } = useAksHttpRoutes(ns);
   const ws = useAksWorkspace();
   const deleteHttpRoute = useAksDeleteHttpRoute();
 
@@ -64,10 +64,12 @@ export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
     <ResourceTable
       data={routes}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="httproute"
       tableBodyTestId="httproutes-table-body"
       emptyMessage="No HTTP routes found"
+      onRowClick={(route) => ws.openYaml("httproute", route.name, route.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
     />
