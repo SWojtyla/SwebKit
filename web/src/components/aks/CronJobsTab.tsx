@@ -11,7 +11,7 @@ interface CronJobsTabProps {
 }
 
 export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
-  const { data: cronjobs, isLoading } = useAksCronJobs(ns);
+  const { data: cronjobs, isLoading, error } = useAksCronJobs(ns);
   const ws = useAksWorkspace();
   const suspendMutation = useAksSuspendCronJob();
 
@@ -50,7 +50,10 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
     )},
     { header: "Actions", cell: (cj) => (
       <button
-        onClick={() => toggle(cj)}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggle(cj);
+        }}
         disabled={suspendMutation.isPending}
         className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
       >
@@ -63,10 +66,12 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
     <ResourceTable
       data={cronjobs}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="cronjob"
       tableBodyTestId="cronjobs-table-body"
       emptyMessage="No cron jobs found"
+      onRowClick={(cj) => ws.openYaml("cronjob", cj.name, cj.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
     />

@@ -3,6 +3,7 @@ import { X, FileText, Pencil, Save, Eye, Loader2, Check, AlertCircle } from "luc
 import { useAksResourceYaml, useAksApplyYaml, useAksValidateYaml } from "@/lib/hooks";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import { highlightYaml } from "@/lib/yamlHighlight";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 
 interface YamlViewerProps {
   ns: string;
@@ -20,6 +21,7 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
   const [editMode, setEditMode] = useState(false);
   const [editedYaml, setEditedYaml] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [showApplyConfirm, setShowApplyConfirm] = useState(false);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(yaml ?? "");
@@ -62,7 +64,11 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
   };
 
   const handleApply = () => {
-    if (!window.confirm(`Apply ${kind}/${name} in ${ns}? This will update the cluster resource.`)) return;
+    setShowApplyConfirm(true);
+  };
+
+  const runApply = () => {
+    setShowApplyConfirm(false);
     setValidationError(null);
     validateMutation.mutate(
       { ns, yaml: editedYaml },
@@ -157,6 +163,15 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
           </button>
         </div>
       </div>
+      {showApplyConfirm && (
+        <ConfirmBar
+          message={`Apply ${kind}/${name} in ${ns}? This will update the cluster resource.`}
+          confirmLabel="Apply"
+          onConfirm={runApply}
+          onCancel={() => setShowApplyConfirm(false)}
+          testId="yaml-apply-confirm"
+        />
+      )}
       <div className="flex-1 overflow-auto bg-card p-3">
         {isLoading ? (
           <div className="text-primary text-xs font-mono">Loading YAML...</div>

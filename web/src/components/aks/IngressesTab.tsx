@@ -22,7 +22,7 @@ const columns: Column<IngressInfo>[] = [
 ];
 
 export function IngressesTab({ ns, isMulti }: IngressesTabProps) {
-  const { data: ingresses, isLoading } = useAksIngresses(ns);
+  const { data: ingresses, isLoading, error } = useAksIngresses(ns);
   const ws = useAksWorkspace();
   const deleteIngress = useAksDeleteIngress();
 
@@ -55,10 +55,12 @@ export function IngressesTab({ ns, isMulti }: IngressesTabProps) {
     <ResourceTable
       data={ingresses}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="ingress"
       tableBodyTestId="ingresses-table-body"
       emptyMessage="No ingresses found"
+      onRowClick={(ing) => ws.openYaml("ingress", ing.name, ing.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
     />

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend, importCollection } from "../api";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
   ApiCollection,
   CollectionsStoreResponse,
@@ -30,6 +31,7 @@ export type CollectionsUpdate = ApiCollection[] | ((previous: ApiCollection[]) =
 
 export function useUpdateCollections() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation<CollectionsStoreResponse, Error, CollectionsUpdate>({
     // Serialized on one scope, so two saves are never in flight at once. Without
     // this, creating two requests in quick succession had each PUT a full snapshot
@@ -50,10 +52,12 @@ export function useUpdateCollections() {
     onSuccess: (data) => {
       qc.setQueryData(["collections"], data);
     },
+    onError: (error) => notify("error", "Couldn't save collections", String(error)),
   });
 }
 
 export function useExecuteRequest() {
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: {
       request: HttpRequestEntry;
@@ -63,16 +67,19 @@ export function useExecuteRequest() {
       /** The global layer, applied underneath `environmentId`. */
       globalEnvironmentId?: string;
     }) => apiSend<ApiClientExecutionResponse>("/api/api-client/execute", "POST", vars),
+    onError: (error) => notify("error", "Couldn't execute request", String(error)),
   });
 }
 
 export function useImportCollection() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation<CollectionImportResult, Error, { folderPath?: string | null; payloadBase64?: string | null }>({
     mutationFn: importCollection,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["collections"] });
       qc.invalidateQueries({ queryKey: ["environments"] });
     },
+    onError: (error) => notify("error", "Couldn't import collection", String(error)),
   });
 }

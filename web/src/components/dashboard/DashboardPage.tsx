@@ -20,6 +20,7 @@ import {
   Zap,
   Network,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 import {
   useHealth,
@@ -29,7 +30,9 @@ import {
   useAksNamespaces,
   useAksDeployments,
   useAksPods,
+  useAksTestConnection,
   useRedisServerInfo,
+  useSbTestConnection,
   useStorageContainers,
   usePendingApprovals,
   useTogglePinnedResource,
@@ -64,6 +67,12 @@ export function DashboardPage() {
   const aksPods = useAksPods(activeAksNs ?? null);
   const redisInfo = useRedisServerInfo(redisCaches[0]?.id ?? null);
   const storageContainers = useStorageContainers(storageAccounts[0]?.id ?? null);
+  // Same query keys AppLayout's footer status bar already fetches (useSbTestConnection/
+  // useAksTestConnection), so this reuses the shared cache instead of firing a second request —
+  // and, critically, reports the same real connectivity the footer shows, instead of a
+  // config-presence-only "Ready" that can contradict it on screen at the same time.
+  const sbHealth = useSbTestConnection(sbNamespaces[0]?.id ?? null);
+  const aksHealth = useAksTestConnection();
   const pendingApprovals = usePendingApprovals();
   const togglePinned = useTogglePinnedResource();
 
@@ -110,18 +119,46 @@ export function DashboardPage() {
     { name: "AI Agent", icon: Bot, to: "/agent", enabled: profile?.config ? true : false },
   ];
 
+  // Same real-connectivity signal AppLayout's footer status bar shows for these four services
+  // (useSbTestConnection/useAksTestConnection/useRedisServerInfo/useStorageContainers) — a tile
+  // that says "Ready" while the footer says "Unavailable" for the same service was the previous
+  // behavior (config-presence only), and the two could contradict each other on screen at once.
   const healthTiles = [
-    { name: "Service Bus", ok: sbNamespaces.length > 0, to: "/service-bus" },
-    { name: "AKS", ok: aksConfigured, to: "/aks" },
-    { name: "Redis", ok: redisCaches.length > 0, to: "/redis" },
-    { name: "Storage", ok: storageAccounts.length > 0, to: "/storage" },
+    {
+      name: "Service Bus",
+      to: "/service-bus",
+      configured: isDemo || sbNamespaces.length > 0,
+      connected: sbHealth.data?.connected ?? false,
+      checking: sbHealth.isLoading,
+    },
+    {
+      name: "AKS",
+      to: "/aks",
+      configured: aksConfigured,
+      connected: aksHealth.data?.connected ?? false,
+      checking: aksHealth.isLoading,
+    },
+    {
+      name: "Redis",
+      to: "/redis",
+      configured: isDemo || redisCaches.length > 0,
+      connected: redisInfo.data != null,
+      checking: redisInfo.isLoading,
+    },
+    {
+      name: "Storage",
+      to: "/storage",
+      configured: isDemo || storageAccounts.length > 0,
+      connected: storageContainers.data != null,
+      checking: storageContainers.isLoading,
+    },
   ];
 
   const watchTiles = [
-    { label: "Deployments", value: deploymentCount, to: "/aks", icon: Ship },
-    { label: "Pods", value: podCount, to: "/aks", icon: Activity },
+    { label: "Deployments", value: deploymentCount, to: "/aks?tab=deployments", icon: Ship },
+    { label: "Pods", value: podCount, to: "/aks?tab=pods", icon: Activity },
     { label: "Containers", value: containerCount, to: "/storage", icon: FolderOpen },
-    { label: "Cache Hit Rate", value: cacheHitRate ? `${cacheHitRate}%` : "-", to: "/redis", icon: TrendingUp },
+    { label: "Cache Hit Rate", value: cacheHitRate ? `${cacheHitRate}%` : "-", to: "/redis?tab=info", icon: TrendingUp },
   ];
 
   const pendingCount = pendingApprovals.data?.length ?? 0;
@@ -277,18 +314,42 @@ export function DashboardPage() {
             <Zap className="h-4 w-4" /> Service Health
           </h2>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="health-tiles">
-            {healthTiles.map((tile) => (
-              <Link
-                key={tile.name}
-                to={tile.to}
-                data-testid={`health-tile-${tile.name.toLowerCase().replace(/\s+/g, "-")}`}
-                className="flex items-center gap-2 glass-card rounded-xl p-3 transition-all hover:border-primary hover:shadow-md"
-              >
-                {tile.ok ? <CheckCircle2 className="h-4 w-4 text-success" /> : <AlertCircle className="h-4 w-4 text-muted-foreground" />}
-                <span className="text-sm font-medium">{tile.name}</span>
-                <span className={`ml-auto text-xs ${tile.ok ? "text-success" : "text-muted-foreground"}`}>{tile.ok ? "Ready" : "Not configured"}</span>
-              </Link>
-            ))}
+            {healthTiles.map((tile) => {
+              const status = !tile.configured
+                ? "not-configured"
+                : tile.checking
+                  ? "checking"
+                  : tile.connected
+                    ? "connected"
+                    : "unavailable";
+              const statusLabel = {
+                "not-configured": "Not configured",
+                checking: "Checking…",
+                connected: "Connected",
+                unavailable: "Unavailable",
+              }[status];
+              const statusClassName = {
+                "not-configured": "text-muted-foreground",
+                checking: "text-muted-foreground",
+                connected: "text-success",
+                unavailable: "text-destructive",
+              }[status];
+              return (
+                <Link
+                  key={tile.name}
+                  to={tile.to}
+                  data-testid={`health-tile-${tile.name.toLowerCase().replace(/\s+/g, "-")}`}
+                  className="flex items-center gap-2 glass-card rounded-xl p-3 transition-all hover:border-primary hover:shadow-md"
+                >
+                  {status === "connected" && <CheckCircle2 className="h-4 w-4 text-success" />}
+                  {status === "unavailable" && <XCircle className="h-4 w-4 text-destructive" />}
+                  {status === "checking" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  {status === "not-configured" && <AlertCircle className="h-4 w-4 text-muted-foreground" />}
+                  <span className="text-sm font-medium">{tile.name}</span>
+                  <span className={`ml-auto text-xs ${statusClassName}`}>{statusLabel}</span>
+                </Link>
+              );
+            })}
           </div>
 
           {/* Watch */}

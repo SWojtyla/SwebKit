@@ -6,7 +6,12 @@ interface Props {
   onClose: () => void;
 }
 
-const shortcuts = [
+/**
+ * Every keyboard shortcut bound anywhere in the app, so this panel can never silently omit one.
+ * When adding a `window`-level keydown binding elsewhere (see `AksWorkspaceContext.tsx` for AKS's
+ * r/l/y, `ServiceBusPage.tsx` for Ctrl+Shift+E), add its entry here in the same change.
+ */
+export const KEYBOARD_SHORTCUTS = [
   { keys: "Ctrl+K", description: "Open command palette" },
   { keys: "Ctrl+G", description: "Go to Settings" },
   { keys: "Ctrl+B", description: "Toggle sidebar navigation" },
@@ -15,6 +20,7 @@ const shortcuts = [
   { keys: "R", description: "Refresh current view (AKS)" },
   { keys: "L", description: "Jump to Pods tab (AKS)" },
   { keys: "Y", description: "View YAML for selected resource (AKS)" },
+  { keys: "Ctrl+Shift+E", description: "Search entities (Service Bus)" },
   { keys: "Ctrl+S", description: "Save current request (API Client)" },
   { keys: "Ctrl+Enter", description: "Send request (API Client)" },
 ];
@@ -32,7 +38,7 @@ export function KeyboardShortcutsPanel({ open, onClose }: Props) {
           </button>
         </div>
         <div className="space-y-2">
-          {shortcuts.map((s) => (
+          {KEYBOARD_SHORTCUTS.map((s) => (
             <div key={s.keys} className="flex items-center justify-between py-1">
               <span className="text-sm text-muted-foreground">{s.description}</span>
               <kbd className="rounded border bg-muted px-2 py-1 text-xs font-mono">{s.keys}</kbd>

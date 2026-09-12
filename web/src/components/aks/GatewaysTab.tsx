@@ -28,7 +28,7 @@ const columns: Column<GatewayInfo>[] = [
 ];
 
 export function GatewaysTab({ ns, isMulti }: GatewaysTabProps) {
-  const { data: gateways, isLoading } = useAksGateways(ns);
+  const { data: gateways, isLoading, error } = useAksGateways(ns);
   const ws = useAksWorkspace();
 
   const buildMenu = useCallback((gw: GatewayInfo): ContextMenuItem[] => [
@@ -46,10 +46,12 @@ export function GatewaysTab({ ns, isMulti }: GatewaysTabProps) {
     <ResourceTable
       data={gateways}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="gateway"
       tableBodyTestId="gateways-table-body"
       emptyMessage="No gateways found"
+      onRowClick={(gw) => ws.openYaml("gateway", gw.name, gw.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
     />

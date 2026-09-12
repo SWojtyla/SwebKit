@@ -7,6 +7,7 @@ import {
   analyzeRedisKeyspace,
   getRedisPrefixMemory,
 } from "../api";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
   RedisKeyScanResult,
   RedisKeyInfo,
@@ -123,16 +124,19 @@ export function useRedisPubSub(cacheId: string | null, pattern: string | null = 
 
 export function useRedisDeleteKey(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (key: string) => apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/delete`, "POST"),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't delete key", String(error)),
   });
 }
 
 export function useRedisSetTtl(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; ttlSeconds?: number; removeTtl?: boolean }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/ttl`, "POST", {
@@ -142,22 +146,26 @@ export function useRedisSetTtl(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't update TTL", String(error)),
   });
 }
 
 export function useRedisRenameKey(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; newKey: string }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/rename`, "POST", { newKey: vars.newKey }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't rename key", String(error)),
   });
 }
 
 export function useRedisSetValue(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; value: string; ttlSeconds?: number }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/value`, "POST", {
@@ -167,11 +175,13 @@ export function useRedisSetValue(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't save value", String(error)),
   });
 }
 
 export function useRedisSetHashField(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; field: string; value: string }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/hash/field`, "POST", {
@@ -182,11 +192,13 @@ export function useRedisSetHashField(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "hash"] });
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't save hash field", String(error)),
   });
 }
 
 export function useRedisDeleteHashField(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; field: string }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/hash/field/delete`, "POST", {
@@ -196,11 +208,13 @@ export function useRedisDeleteHashField(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "hash"] });
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't delete hash field", String(error)),
   });
 }
 
 export function useRedisUpdateSortedSetScore(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; member: string; score: number }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/zset/score`, "POST", {
@@ -211,12 +225,15 @@ export function useRedisUpdateSortedSetScore(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "zset"] });
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't update sorted-set score", String(error)),
   });
 }
 
 export function useRedisExportKeys(cacheId: string | null) {
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (keys: string[]) => exportRedisKeys(cacheId!, keys),
+    onError: (error) => notify("error", "Couldn't export keys", String(error)),
   });
 }
 
