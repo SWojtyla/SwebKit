@@ -14,6 +14,24 @@ namespace SwebKit.Sidecar.Tests;
 /// is genuine — including the actual JSON (de)serialization path — without touching the developer's
 /// real %APPDATA%.
 /// </summary>
+/// <summary>No-op <see cref="IStorageConnectionPool"/> for tests that don't care about storage caching.</summary>
+internal sealed class NoopStorageConnectionPool : IStorageConnectionPool
+{
+    public IStorageClient GetOrCreate(StorageConfig config) => throw new NotSupportedException();
+    public void Evict(string accountId) { }
+    public void InvalidateAll() { }
+}
+
+/// <summary>Records whether <see cref="InvalidateAll"/> was called, so a save's cache-busting can be asserted.</summary>
+internal sealed class TrackingStorageConnectionPool : IStorageConnectionPool
+{
+    public int InvalidateAllCallCount { get; private set; }
+
+    public IStorageClient GetOrCreate(StorageConfig config) => throw new NotSupportedException();
+    public void Evict(string accountId) { }
+    public void InvalidateAll() => InvalidateAllCallCount++;
+}
+
 public class ConfigEndpointsTests
 {
     private static ConfigurationBundleService BuildService(out CollectionRepository collections, out ProfileRepository profiles)
@@ -131,11 +149,26 @@ public class ConfigEndpointsTests
         var data = profile.GetProfileData();
         data.Config.Name = "saved-via-endpoint";
 
-        await ConfigEndpoints.SaveProfileAsync(profile, data);
+        await ConfigEndpoints.SaveProfileAsync(profile, data, new NoopStorageConnectionPool());
 
         var reloaded = new ProfileRepository();
         await reloaded.LoadAsync();
         Assert.Equal("saved-via-endpoint", reloaded.Config.Name);
+    }
+
+    [Fact]
+    public async Task SaveProfileAsync_InvalidatesTheStorageConnectionPool()
+    {
+        // A save may have edited a storage account's connection string, credential key or auth
+        // mode — any cached client must be dropped so the next request picks up the new config.
+        using var sandbox = new AppDataSandbox();
+        var profile = new ProfileRepository();
+        var data = profile.GetProfileData();
+        var storagePool = new TrackingStorageConnectionPool();
+
+        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool);
+
+        Assert.Equal(1, storagePool.InvalidateAllCallCount);
     }
 
     // ── Environments ─────────────────────────────────────────────────────────

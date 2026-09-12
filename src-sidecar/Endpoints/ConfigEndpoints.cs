@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
@@ -73,10 +74,14 @@ public static class ConfigEndpoints
         return Results.Ok(result);
     }
 
-    internal static async Task<IResult> SaveProfileAsync(ProfileRepository repo, ProfileData data)
+    internal static async Task<IResult> SaveProfileAsync(ProfileRepository repo, ProfileData data, IStorageConnectionPool storagePool)
     {
         repo.ReplaceProfileData(data);
         await repo.SaveAsync();
+        // A save may have edited a storage account's connection string, credential key or auth
+        // mode; drop any cached client so the very next request picks up the new config instead
+        // of reusing a client built from stale credentials.
+        storagePool.InvalidateAll();
         return Results.Ok();
     }
 
