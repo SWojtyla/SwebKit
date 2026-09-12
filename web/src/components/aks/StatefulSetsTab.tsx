@@ -22,7 +22,7 @@ const columns: Column<StatefulSetInfo>[] = [
 ];
 
 export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
-  const { data: statefulsets, isLoading } = useAksStatefulSets(ns);
+  const { data: statefulsets, isLoading, error } = useAksStatefulSets(ns);
   const ws = useAksWorkspace();
   const restartSts = useAksRestartStatefulSet();
   const scaleSts = useAksScaleStatefulSet();
@@ -93,10 +93,12 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
       <ResourceTable
         data={statefulsets}
         isLoading={isLoading}
+        error={error}
         isMulti={isMulti}
         testIdPrefix="statefulset"
         tableBodyTestId="statefulsets-table-body"
         emptyMessage="No stateful sets found"
+        onRowClick={(sts) => ws.openYaml("statefulset", sts.name, sts.namespace)}
         onRowContextMenu={handleRowContextMenu}
         columns={allColumns}
       />

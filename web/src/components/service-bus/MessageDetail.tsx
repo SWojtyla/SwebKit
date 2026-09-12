@@ -10,6 +10,7 @@ import {
 import { downloadText, downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
 import { useNotification } from "@/components/layout/NotificationSystem";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
 import { tryPrettifyJson } from "@/lib/pretty-json";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
@@ -401,28 +402,21 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
 
       {/* Purge confirmation dialog */}
       {showPurgeConfirm && (
-        <div className="flex items-center gap-3 border-b bg-destructive/10 px-4 py-3" data-testid="purge-confirm">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
-          <span className="flex-1 text-sm">
-            Purge all {viewMode === "dlq" ? "dead-lettered" : "active"} messages from <strong>{entity?.entityPath}</strong>?
-            This cannot be undone.
-          </span>
-          <button
-            data-testid="purge-confirm-yes"
-            onClick={onPurge}
-            disabled={purgeMutation.isPending}
-            className="rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            Purge
-          </button>
-          <button
-            data-testid="purge-confirm-cancel"
-            onClick={() => setShowPurgeConfirm(false)}
-            className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
-          >
-            Cancel
-          </button>
-        </div>
+        <ConfirmBar
+          message={
+            <>
+              Purge all {viewMode === "dlq" ? "dead-lettered" : "active"} messages from <strong>{entity?.entityPath}</strong>?
+              This cannot be undone.
+            </>
+          }
+          confirmLabel="Purge"
+          confirmDisabled={purgeMutation.isPending}
+          onConfirm={onPurge}
+          onCancel={() => setShowPurgeConfirm(false)}
+          testId="purge-confirm"
+          confirmTestId="purge-confirm-yes"
+          cancelTestId="purge-confirm-cancel"
+        />
       )}
 
       {/* Tabs */}
