@@ -3,8 +3,6 @@ import { useAksPods, useAksDeletePod, useAksPodMetrics } from "@/lib/hooks";
 import { showNotification } from "@/lib/tauri-bridge";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
-import { PodShellPanel } from "./PodShellPanel";
-import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { PodInfo, PodMetricInfo } from "@/lib/types";
 
@@ -78,15 +76,13 @@ function PodStatusBadge({ status }: { status: string }) {
 }
 
 export function PodsTab({ ns, isMulti }: PodsTabProps) {
-  const { data: pods, isLoading } = useAksPods(ns);
+  const { data: pods, isLoading, error } = useAksPods(ns);
   const { data: metrics } = useAksPodMetrics(ns);
   const [hideCompleted, setHideCompleted] = useState(true);
   const deleteMutation = useAksDeletePod();
   const ws = useAksWorkspace();
   const prevStatusesRef = useRef<Map<string, string>>(new Map());
   const prevNsRef = useRef(ns);
-  const [shellPod, setShellPod] = useState<PodInfo | null>(null);
-  const [askAiPod, setAskAiPod] = useState<PodInfo | null>(null);
 
   // Fires a native notification the moment a pod actually transitions into
   // Failed (not on initial load, which would spam notifications for
@@ -139,9 +135,9 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     { label: "Container Details", icon: "⚙", onClick: () => ws.openContainerDetails(pod.name, pod.namespace) },
     { label: "Analyze network", icon: "📶", onClick: () => ws.navigateToAnalysis() },
     { label: "", separator: true, onClick: () => {} },
-    { label: "Open shell in pod", icon: ">", onClick: () => setShellPod(pod) },
+    { label: "Open shell in pod", icon: ">", onClick: () => ws.setShellPod(pod) },
     { label: "Port-forward…", icon: "→", onClick: () => ws.openPortForward(pod) },
-    { label: "Ask AI about this pod", icon: "✨", onClick: () => setAskAiPod(pod) },
+    { label: "Ask AI about this pod", icon: "✨", onClick: () => ws.setAskAiPod(pod) },
     { label: "", separator: true, onClick: () => {} },
     { label: "Delete Pod", icon: "✕", onClick: () => handleDelete(pod), destructive: true },
   ], [ws, handleDelete]);
@@ -226,6 +222,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
       <ResourceTable
         data={visiblePods}
         isLoading={isLoading}
+        error={error}
         isMulti={isMulti}
         testIdPrefix="pod"
         tableBodyTestId="pods-table-body"
@@ -234,23 +231,6 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
         onRowContextMenu={handleRowContextMenu}
         columns={columns}
       />
-      {shellPod && (
-        <PodShellPanel
-          namespace={shellPod.namespace}
-          pod={shellPod.name}
-          container={shellPod.containers[0] ?? null}
-          context={ws.currentContext}
-          onClose={() => setShellPod(null)}
-        />
-      )}
-      {askAiPod && (
-        <ContextualAssistant
-          featureArea="Aks"
-          title={`pod ${askAiPod.name}`}
-          selection={{ namespace: askAiPod.namespace, pod: askAiPod.name }}
-          onClose={() => setAskAiPod(null)}
-        />
-      )}
     </div>
   );
 }

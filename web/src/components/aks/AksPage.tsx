@@ -28,9 +28,12 @@ import { HelmDetailPanel } from "./HelmDetailPanel";
 import { PortForwardPanel } from "./PortForwardPanel";
 import { AnalysisPanel } from "./AnalysisPanel";
 import { SecretDetailPanel } from "./SecretDetailPanel";
+import { ConfigMapDetailPanel } from "./ConfigMapDetailPanel";
 import { MultiPodLogView } from "./MultiPodLogView";
 import { ContextMenu } from "./ContextMenu";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
+import { PodShellPanel } from "./PodShellPanel";
+import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
@@ -322,8 +325,28 @@ function AksPageContent() {
               ns={ws.selectedPod.namespace}
               onClose={() => ws.setPodKey(null)}
               onViewYaml={() => ws.openYaml("pod", ws.selectedPod!.name, ws.selectedPod!.namespace)}
+              onOpenShell={() => ws.setShellPod(ws.selectedPod)}
+              onPortForward={() => ws.openPortForward(ws.selectedPod!)}
+              onAskAi={() => ws.setAskAiPod(ws.selectedPod)}
             />
           </ResizablePanel>
+        )}
+        {ws.shellPod && (
+          <PodShellPanel
+            namespace={ws.shellPod.namespace}
+            pod={ws.shellPod.name}
+            container={ws.shellPod.containers[0] ?? null}
+            context={ws.currentContext}
+            onClose={() => ws.setShellPod(null)}
+          />
+        )}
+        {ws.askAiPod && (
+          <ContextualAssistant
+            featureArea="Aks"
+            title={`pod ${ws.askAiPod.name}`}
+            selection={{ namespace: ws.askAiPod.namespace, pod: ws.askAiPod.name }}
+            onClose={() => ws.setAskAiPod(null)}
+          />
         )}
         {ws.yamlResource && (
           <ResizablePanel
@@ -366,6 +389,17 @@ function AksPageContent() {
             showHeader={false}
           >
             <SecretDetailPanel secret={ws.selectedSecret} onClose={() => ws.setSelectedSecret(null)} />
+          </ResizablePanel>
+        )}
+        {ws.selectedConfigMap && (
+          <ResizablePanel
+            storageKey="aks-configmap-detail"
+            defaultWidth={620}
+            minWidth={320}
+            maxWidth={1200}
+            showHeader={false}
+          >
+            <ConfigMapDetailPanel configMap={ws.selectedConfigMap} onClose={() => ws.setSelectedConfigMap(null)} />
           </ResizablePanel>
         )}
         {ws.showMultiPodLogs && ws.multiPodNamespace && (

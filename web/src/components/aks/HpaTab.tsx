@@ -9,7 +9,7 @@ import type { HpaInfo } from "@/lib/types";
 
 export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   const ws = useAksWorkspace();
-  const { data: hpas, isLoading } = useAksHpas(ns);
+  const { data: hpas, isLoading, error } = useAksHpas(ns);
   const scaleMutation = useAksScaleHpa();
   const deleteMutation = useAksDeleteHpa();
   const toggleMutation = useAksSetHpaScalingEnabled();
@@ -17,11 +17,19 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   const [scaleTarget, setScaleTarget] = useState<HpaInfo | null>(null);
   const [yamlTarget, setYamlTarget] = useState<HpaInfo | null>(null);
 
-  const handleScale = useCallback(async (min: number, max: number) => {
+  const handleScale = useCallback((min: number, max: number) => {
     if (!scaleTarget) return;
-    scaleMutation.mutate({ ns: scaleTarget.namespace, name: scaleTarget.name, minReplicas: min, maxReplicas: max });
+    const hpa = scaleTarget;
     setScaleTarget(null);
-  }, [scaleTarget, scaleMutation.mutate]);
+    // Route through the same confirm step Delete/Toggle-scaling already use on this same tab —
+    // scaling min/max replicas is at least as consequential as either, and Deployments/
+    // StatefulSets' own Scale flows already confirm this way.
+    ws.requestConfirm({
+      message: `Scale HPA "${hpa.name}" to min ${min} / max ${max} replicas?`,
+      resourceName: hpa.name,
+      onConfirm: () => scaleMutation.mutate({ ns: hpa.namespace, name: hpa.name, minReplicas: min, maxReplicas: max }),
+    });
+  }, [ws, scaleTarget, scaleMutation.mutate]);
 
   const handleDelete = useCallback((hpa: HpaInfo) => {
     ws.requestConfirm({
@@ -109,6 +117,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
       <ResourceTable
         data={hpas}
         isLoading={isLoading}
+        error={error}
         isMulti={isMulti}
         testIdPrefix="hpa"
         tableBodyTestId="hpas-table-body"

@@ -21,6 +21,7 @@ import type { ContextMenuItem } from "../ContextMenu";
 import type {
   PodInfo,
   SecretInfo,
+  ConfigMapInfo,
   HelmReleaseInfo,
   KubeContextInfo,
 } from "@/lib/types";
@@ -141,6 +142,9 @@ export interface AksWorkspaceContextValue {
   yamlResource: { kind: string; namespace: string; name: string } | null;
   helmRelease: HelmReleaseInfo | null;
   selectedSecret: SecretInfo | null;
+  selectedConfigMap: ConfigMapInfo | null;
+  shellPod: PodInfo | null;
+  askAiPod: PodInfo | null;
   containerDetail: { podName: string; namespace: string } | null;
   multiPodNames: string[];
   multiPodNamespace: string | null;
@@ -161,6 +165,9 @@ export interface AksWorkspaceContextValue {
   openContainerDetails: (podName: string, namespace: string) => void;
   setHelmRelease: (rel: HelmReleaseInfo | null) => void;
   setSelectedSecret: (secret: SecretInfo | null) => void;
+  setSelectedConfigMap: (configMap: ConfigMapInfo | null) => void;
+  setShellPod: (pod: PodInfo | null) => void;
+  setAskAiPod: (pod: PodInfo | null) => void;
   setPodKey: (pod: PodInfo | null, options?: { clearOthers?: boolean }) => void;
   setYamlResource: (res: { kind: string; namespace: string; name: string } | null) => void;
   setContainerDetail: (detail: { podName: string; namespace: string } | null) => void;
@@ -222,6 +229,9 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
   });
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const [selectedSecret, setSelectedSecret] = useState<SecretInfo | null>(null);
+  const [selectedConfigMap, setSelectedConfigMap] = useState<ConfigMapInfo | null>(null);
+  const [shellPod, setShellPod] = useState<PodInfo | null>(null);
+  const [askAiPod, setAskAiPod] = useState<PodInfo | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
 
@@ -448,6 +458,11 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
         logsNs: null,
       });
       setSelectedSecret(null);
+      setSelectedConfigMap(null);
+      // A pod shell or "Ask AI about this pod" targeting the previous cluster must never be left
+      // running/silently reconnected under the new context for a pod of the same name.
+      setShellPod(null);
+      setAskAiPod(null);
       setContextMutation.mutate(
         { context, defaultNamespace },
         {
@@ -510,7 +525,10 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
    */
   const autoRefreshPaused =
     autoRefresh &&
-    Boolean(selectedPod || yamlResource || helmRelease || selectedSecret || containerDetail || showMultiPodLogs);
+    Boolean(
+      selectedPod || yamlResource || helmRelease || selectedSecret || selectedConfigMap ||
+      shellPod || askAiPod || containerDetail || showMultiPodLogs,
+    );
 
   useEffect(() => {
     if (!autoRefresh || autoRefreshPaused || !namespaceToken) return;
@@ -551,6 +569,7 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
     (pod: PodInfo) => {
       setPodKey(pod, { clearOthers: true });
       setSelectedSecret(null);
+      setSelectedConfigMap(null);
     },
     [setPodKey],
   );
@@ -566,6 +585,7 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
         logsNs: null,
       });
       setSelectedSecret(null);
+      setSelectedConfigMap(null);
     },
     [updateParams],
   );
@@ -581,6 +601,7 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
         logsNs: null,
       });
       setSelectedSecret(null);
+      setSelectedConfigMap(null);
     },
     [updateParams],
   );
@@ -598,6 +619,7 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
         container: null,
       });
       setSelectedSecret(null);
+      setSelectedConfigMap(null);
     },
     [namespaceToken, updateParams],
   );
@@ -611,6 +633,7 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
     (pod: PodInfo) => {
       updateParams({ tab: "portforward", pod: makeKey(pod.namespace, pod.name) });
       setSelectedSecret(null);
+      setSelectedConfigMap(null);
     },
     [updateParams],
   );
@@ -646,6 +669,9 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
       yamlResource,
       helmRelease,
       selectedSecret,
+      selectedConfigMap,
+      shellPod,
+      askAiPod,
       containerDetail,
       multiPodNames,
       multiPodNamespace,
@@ -664,6 +690,9 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
       openContainerDetails,
       setHelmRelease,
       setSelectedSecret,
+      setSelectedConfigMap,
+      setShellPod,
+      setAskAiPod,
       setPodKey,
       setYamlResource,
       setContainerDetail,
@@ -703,6 +732,9 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
       yamlResource,
       helmRelease,
       selectedSecret,
+      selectedConfigMap,
+      shellPod,
+      askAiPod,
       containerDetail,
       multiPodNames,
       multiPodNamespace,
@@ -721,6 +753,9 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
       openContainerDetails,
       setHelmRelease,
       setSelectedSecret,
+      setSelectedConfigMap,
+      setShellPod,
+      setAskAiPod,
       setPodKey,
       setYamlResource,
       setContainerDetail,

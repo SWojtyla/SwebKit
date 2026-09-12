@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Terminal, Box, FileText } from "lucide-react";
+import { X, Terminal, Box, FileText, TerminalSquare, ArrowRightLeft, Sparkles } from "lucide-react";
 import { PodLogView } from "./PodLogView";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
 import type { PodInfo } from "@/lib/types";
@@ -9,11 +9,14 @@ interface PodDetailPanelProps {
   ns: string;
   onClose: () => void;
   onViewYaml?: () => void;
+  onOpenShell?: () => void;
+  onPortForward?: () => void;
+  onAskAi?: () => void;
 }
 
 type DetailTab = "logs" | "containers";
 
-export function PodDetailPanel({ pod, ns, onClose, onViewYaml }: PodDetailPanelProps) {
+export function PodDetailPanel({ pod, ns, onClose, onViewYaml, onOpenShell, onPortForward, onAskAi }: PodDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>("logs");
 
   return (
@@ -44,6 +47,36 @@ export function PodDetailPanel({ pod, ns, onClose, onViewYaml }: PodDetailPanelP
               data-testid="pod-yaml-btn"
             >
               <FileText className="h-3 w-3" /> YAML
+            </button>
+          )}
+          {onOpenShell && (
+            <button
+              onClick={onOpenShell}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-accent"
+              data-testid="pod-shell-btn"
+              title="Open shell in pod"
+            >
+              <TerminalSquare className="h-3 w-3" /> Shell
+            </button>
+          )}
+          {onPortForward && (
+            <button
+              onClick={onPortForward}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-accent"
+              data-testid="pod-port-forward-btn"
+              title="Port-forward…"
+            >
+              <ArrowRightLeft className="h-3 w-3" /> Port-Forward
+            </button>
+          )}
+          {onAskAi && (
+            <button
+              onClick={onAskAi}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-accent"
+              data-testid="pod-ask-ai-btn"
+              title="Ask AI about this pod"
+            >
+              <Sparkles className="h-3 w-3" /> Ask AI
             </button>
           )}
           <button onClick={onClose} className="rounded p-1 hover:bg-accent">
