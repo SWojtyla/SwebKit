@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend, streamAgentChat } from "../api";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
   AgentActionApplyResult,
   AgentCapabilityTestResult,
@@ -37,18 +38,22 @@ export function useConfirmAction() {
   // would otherwise remove it — the backend's GetPendingActions() already excludes applied actions,
   // so an immediate invalidation would unmount the very card showing the result before the user
   // reads it. The list's own refetchInterval clears it out naturally once the user has moved on.
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (actionId: string) =>
       apiSend<AgentActionApplyResult>(`/api/agent/pending-approvals/${actionId}/confirm`, "POST"),
+    onError: (error) => notify("error", "Couldn't confirm action", String(error)),
   });
 }
 
 export function useRejectAction() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (actionId: string) =>
       apiSend(`/api/agent/pending-approvals/${actionId}/reject`, "POST"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["pending-approvals"] }),
+    onError: (error) => notify("error", "Couldn't reject action", String(error)),
   });
 }
 
@@ -81,12 +86,14 @@ interface SendMessageVars {
 
 export function useAgentChat(sessionId?: string) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: ({ message, context, mode, scope }: SendMessageVars) =>
       apiSend<AgentReply>("/api/agent/chat", "POST", { message, sessionId, context, mode, scope }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agent", "status", sessionKey(sessionId)] });
     },
+    onError: (error) => notify("error", "Couldn't send message to the agent", String(error)),
   });
 }
 
@@ -171,6 +178,7 @@ export function useAgentChatStream(sessionId?: string) {
 
 export function useAgentClear(sessionId?: string) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: () =>
       apiSend(
@@ -180,6 +188,7 @@ export function useAgentClear(sessionId?: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agent", "status", sessionKey(sessionId)] });
     },
+    onError: (error) => notify("error", "Couldn't clear conversation", String(error)),
   });
 }
 
@@ -190,8 +199,10 @@ export function useAgentClear(sessionId?: string) {
  * looking the profile up by id alone could race that save and silently test a stale value.
  */
 export function useTestAgentProfile() {
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (profile: AgentProfile) =>
       apiSend<AgentCapabilityTestResult>(`/api/agent/profiles/${profile.id}/test`, "POST", profile),
+    onError: (error) => notify("error", "Couldn't test agent connection", String(error)),
   });
 }

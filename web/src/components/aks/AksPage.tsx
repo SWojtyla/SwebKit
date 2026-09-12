@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   AksWorkspaceProvider,
   useAksWorkspace,
@@ -32,7 +31,8 @@ import { SecretDetailPanel } from "./SecretDetailPanel";
 import { MultiPodLogView } from "./MultiPodLogView";
 import { ContextMenu } from "./ContextMenu";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
-import { AksConfirmBar } from "./AksConfirmBar";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { NamespaceSelector } from "./NamespaceSelector";
 import { ContextSelector } from "./ContextSelector";
@@ -114,7 +114,13 @@ function AksPageContent() {
               </option>
             ))}
           </select>
-          <LastRefreshed at={ws.lastRefreshedAt} isFetching={ws.isAksFetching} paused={ws.autoRefreshPaused} />
+          <LastRefreshed
+            at={ws.lastRefreshedAt}
+            isFetching={ws.isAksFetching}
+            paused={ws.autoRefreshPaused}
+            pausedReason="Auto-refresh is held while a detail panel is open"
+            testId="aks-last-refreshed"
+          />
           <button
             onClick={ws.handleManualRefresh}
             disabled={!ws.namespaceToken}
@@ -152,11 +158,15 @@ function AksPageContent() {
       </div>
 
       {ws.pendingConfirm && (
-        <AksConfirmBar
+        <ConfirmBar
           message={ws.pendingConfirm.message}
           requireTypedName={ws.pendingConfirm.requireTypedName}
           onConfirm={ws.pendingConfirm.onConfirm}
           onCancel={() => ws.setPendingConfirm(null)}
+          testId="aks-confirm-bar"
+          confirmTestId="aks-confirm-yes"
+          cancelTestId="aks-confirm-cancel"
+          typedNameTestId="aks-confirm-typed-name"
         />
       )}
 
@@ -400,51 +410,5 @@ function AksPageContent() {
         />
       )}
     </div>
-  );
-}
-
-/**
- * "Updated 12s ago" next to the refresh controls. Without it, auto-refresh is
- * invisible — the tables are usually identical between ticks, so there was no way
- * to tell a working refresh from a broken one (and for a while it *was* broken:
- * see `lib/aks-query-keys.ts`).
- *
- * Fixed-width and `tabular-nums` so the counter ticking does not nudge the
- * toolbar buttons.
- */
-function LastRefreshed({
-  at,
-  isFetching,
-  paused,
-}: {
-  at: number | null;
-  isFetching: boolean;
-  paused: boolean;
-}) {
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    if (at === null) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, [at]);
-
-  const label = (() => {
-    if (isFetching) return "refreshing…";
-    if (paused) return "auto paused";
-    if (at === null) return "";
-    const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
-    if (seconds < 60) return `updated ${seconds}s ago`;
-    return `updated ${Math.floor(seconds / 60)}m ago`;
-  })();
-
-  return (
-    <span
-      className="w-[7.5rem] shrink-0 truncate text-right text-xs tabular-nums text-muted-foreground"
-      title={paused ? "Auto-refresh is held while a detail panel is open" : label || undefined}
-      data-testid="aks-last-refreshed"
-    >
-      {label}
-    </span>
   );
 }

@@ -7,6 +7,7 @@ import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
 import { useNotification } from "@/components/layout/NotificationSystem";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { messageToDownloadObject, safeFileName, messageKey as sbMessageKey } from "./exportHelpers";
 import { applyFilters } from "./filterLogic";
 import { AdvancedFilterPanel } from "./AdvancedFilterPanel";
@@ -223,6 +224,9 @@ export function MessageList({
   const completeMutation = useSbCompleteMessages();
   const completeDlqMutation = useSbCompleteDlq();
   const resubmitDlqMutation = useSbResubmitDlq();
+  const [pendingBulkConfirm, setPendingBulkConfirm] = useState<
+    { kind: "complete" | "resubmit"; seqNumbers: number[] } | null
+  >(null);
 
   const handleBulkComplete = useCallback(() => {
     if (!nsId || !entity || selectedMsgs.size === 0) return;
@@ -231,14 +235,8 @@ export function MessageList({
       .map((m) => m.sequenceNumber)
       .filter((n): n is number => n !== null);
     if (seqNumbers.length === 0) return;
-    if (!confirm(`Complete ${seqNumbers.length} message(s)?`)) return;
-    if (viewMode === "active") {
-      completeMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers });
-    } else {
-      completeDlqMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers.map(String) });
-    }
-    setSelectedMsgs(new Set());
-  }, [nsId, entity, selectedMsgs, messages, viewMode, completeMutation, completeDlqMutation]);
+    setPendingBulkConfirm({ kind: "complete", seqNumbers });
+  }, [nsId, entity, selectedMsgs, messages]);
 
   const handleBulkResubmit = useCallback(() => {
     if (!nsId || !entity || selectedMsgs.size === 0) return;
@@ -247,10 +245,24 @@ export function MessageList({
       .map((m) => m.sequenceNumber)
       .filter((n): n is number => n !== null);
     if (seqNumbers.length === 0) return;
-    if (!confirm(`Resubmit ${seqNumbers.length} message(s)?`)) return;
-    resubmitDlqMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers.map(String), targetEntityPath: null });
+    setPendingBulkConfirm({ kind: "resubmit", seqNumbers });
+  }, [nsId, entity, selectedMsgs, messages]);
+
+  const runPendingBulkConfirm = useCallback(() => {
+    if (!nsId || !entity || !pendingBulkConfirm) return;
+    const { kind, seqNumbers } = pendingBulkConfirm;
+    if (kind === "complete") {
+      if (viewMode === "active") {
+        completeMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers });
+      } else {
+        completeDlqMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers.map(String) });
+      }
+    } else {
+      resubmitDlqMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers.map(String), targetEntityPath: null });
+    }
     setSelectedMsgs(new Set());
-  }, [nsId, entity, selectedMsgs, messages, resubmitDlqMutation]);
+    setPendingBulkConfirm(null);
+  }, [nsId, entity, viewMode, pendingBulkConfirm, completeMutation, completeDlqMutation, resubmitDlqMutation]);
 
   const toggleSelect = (msg: SbMessage) => {
     const key = sbMessageKey(msg);
@@ -746,6 +758,20 @@ export function MessageList({
             </button>
           </div>
         </div>
+      )}
+
+      {pendingBulkConfirm && (
+        <ConfirmBar
+          message={
+            pendingBulkConfirm.kind === "complete"
+              ? `Complete ${pendingBulkConfirm.seqNumbers.length} message(s)?`
+              : `Resubmit ${pendingBulkConfirm.seqNumbers.length} message(s)?`
+          }
+          confirmLabel={pendingBulkConfirm.kind === "complete" ? "Complete" : "Resubmit"}
+          onConfirm={runPendingBulkConfirm}
+          onCancel={() => setPendingBulkConfirm(null)}
+          testId="bulk-action-confirm"
+        />
       )}
 
       {/* Message list — a real data table (columns, not a stacked card per

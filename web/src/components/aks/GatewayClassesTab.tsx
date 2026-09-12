@@ -19,7 +19,7 @@ const columns: Column<GatewayClassInfo>[] = [
 ];
 
 export function GatewayClassesTab() {
-  const { data: classes, isLoading } = useAksGatewayClasses();
+  const { data: classes, isLoading, error } = useAksGatewayClasses();
   const ws = useAksWorkspace();
 
   const buildMenu = useCallback((gc: GatewayClassInfo): ContextMenuItem[] => [
@@ -36,10 +36,12 @@ export function GatewayClassesTab() {
     <ResourceTable
       data={classes}
       isLoading={isLoading}
+      error={error}
       isMulti={false}
       testIdPrefix="gatewayclass"
       tableBodyTestId="gatewayclasses-table-body"
       emptyMessage="No gateway classes found"
+      onRowClick={(gc) => ws.openYaml("gatewayclass", gc.name, "default")}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
     />

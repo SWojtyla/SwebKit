@@ -32,7 +32,7 @@ const columns: Column<JobInfo>[] = [
 ];
 
 export function JobsTab({ ns, isMulti }: JobsTabProps) {
-  const { data: jobs, isLoading } = useAksJobs(ns);
+  const { data: jobs, isLoading, error } = useAksJobs(ns);
   const ws = useAksWorkspace();
 
   const buildMenu = useCallback((job: JobInfo): ContextMenuItem[] => [
@@ -49,10 +49,12 @@ export function JobsTab({ ns, isMulti }: JobsTabProps) {
     <ResourceTable
       data={jobs}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="job"
       tableBodyTestId="jobs-table-body"
       emptyMessage="No jobs found"
+      onRowClick={(job) => ws.openYaml("job", job.name, job.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
     />

@@ -12,7 +12,7 @@ interface DeploymentsTabProps {
 }
 
 export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
-  const { data: deployments, isLoading } = useAksDeployments(ns);
+  const { data: deployments, isLoading, error } = useAksDeployments(ns);
   const ws = useAksWorkspace();
   const restartMutation = useAksRestartDeployment();
   const scaleMutation = useAksScaleDeployment();
@@ -105,10 +105,12 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
       <ResourceTable
         data={deployments}
         isLoading={isLoading}
+        error={error}
         isMulti={isMulti}
         testIdPrefix="deployment"
         tableBodyTestId="deployments-table-body"
         emptyMessage="No deployments found"
+        onRowClick={(dep) => ws.openYaml("deployment", dep.name, dep.namespace)}
         onRowContextMenu={handleRowContextMenu}
         columns={columns}
       />

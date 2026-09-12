@@ -23,7 +23,7 @@ const columns: Column<SecretInfo>[] = [
 ];
 
 export function SecretsTab({ ns, isMulti }: SecretsTabProps) {
-  const { data: secrets, isLoading } = useAksSecrets(ns);
+  const { data: secrets, isLoading, error } = useAksSecrets(ns);
   const ws = useAksWorkspace();
 
   const buildMenu = useCallback((secret: SecretInfo): ContextMenuItem[] => [
@@ -41,10 +41,12 @@ export function SecretsTab({ ns, isMulti }: SecretsTabProps) {
     <ResourceTable
       data={secrets}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="secret"
       tableBodyTestId="secrets-table-body"
       emptyMessage="No secrets found"
+      onRowClick={(secret) => ws.setSelectedSecret(secret)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
     />

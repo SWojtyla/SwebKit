@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend, exportSettings, importSettings } from "../api";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
   ProfileData,
   UserSettings,
@@ -22,6 +23,7 @@ export type ProfileUpdate = ProfileData | ((prev: ProfileData) => ProfileData);
 
 export function useUpdateProfile() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation<ProfileData, Error, ProfileUpdate>({
     // Serialized on one scope, so two saves are never in flight at once. Without it,
     // saves raced and their responses landed out of order: clicking the Entra ID radio
@@ -47,8 +49,9 @@ export function useUpdateProfile() {
     },
     // A failed save leaves the cache describing something the server never accepted, so
     // resync rather than letting the UI quietly disagree with disk.
-    onError: () => {
+    onError: (error) => {
       qc.invalidateQueries({ queryKey: ["profile"] });
+      notify("error", "Couldn't save setting", String(error));
     },
   });
 }
@@ -63,6 +66,7 @@ export function usePinnedResources() {
 
 export function useTogglePinnedResource() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { profile: ProfileData; resource: FavoriteResource; pinned: boolean }) => {
       const favorites = vars.pinned
@@ -82,6 +86,7 @@ export function useTogglePinnedResource() {
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
+    onError: (error) => notify("error", "Couldn't update pinned resources", String(error)),
   });
 }
 
@@ -96,19 +101,26 @@ export function useUserSettings() {
 
 export function useUpdateUserSettings() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (data: UserSettings) =>
       apiSend("/api/config/user-settings", "PUT", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["user-settings"] }),
+    onError: (error) => notify("error", "Couldn't save setting", String(error)),
   });
 }
 
 export function useExportSettings() {
-  return useMutation({ mutationFn: exportSettings });
+  const { notify } = useNotification();
+  return useMutation({
+    mutationFn: exportSettings,
+    onError: (error) => notify("error", "Couldn't export settings", String(error)),
+  });
 }
 
 export function useImportSettings() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: importSettings,
     onSuccess: () => {
@@ -116,6 +128,7 @@ export function useImportSettings() {
       qc.invalidateQueries({ queryKey: ["user-settings"] });
       qc.invalidateQueries({ queryKey: ["config"] });
     },
+    onError: (error) => notify("error", "Couldn't import settings", String(error)),
   });
 }
 
@@ -130,6 +143,7 @@ export function useEnvironments() {
 
 export function useUpdateEnvironments() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (store: {
       schemaVersion: number;
@@ -137,6 +151,7 @@ export function useUpdateEnvironments() {
       uiState: import("../types").ApiClientUiState;
     }) => apiSend("/api/config/environments", "PUT", store),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["environments"] }),
+    onError: (error) => notify("error", "Couldn't save environments", String(error)),
   });
 }
 
@@ -161,14 +176,16 @@ export function useDemoMode() {
 
 export function useToggleDemoMode() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (enabled: boolean) =>
       apiSend(`/api/demo-mode?enabled=${enabled}`, "POST"),
     onSuccess: () => {
       qc.invalidateQueries();
     },
-    onError: () => {
+    onError: (error) => {
       qc.invalidateQueries({ queryKey: ["demo-mode"] });
+      notify("error", "Couldn't toggle demo mode", String(error));
     },
   });
 }

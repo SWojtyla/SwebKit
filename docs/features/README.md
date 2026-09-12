@@ -61,6 +61,16 @@ Observability page/menu, but the agent now has direct tool access to Application
 (`get_metrics`/`query_logs`, exempt from the per-feature-area tool filter), with a minimal
 resource-id/name Settings widget — a genuine middle ground the user chose, not a full reversal.
 
+**UX consistency (2026-09-12):** `docs/features/active/ux-interaction-consistency/` is Proposed —
+a full audit of all nine feature areas (AKS, Redis, Service Bus, API Client, Monitoring, Storage,
+Agent, Settings, Dashboard), triggered by two reports (AKS rows need a right-click to do anything;
+Redis isn't collapsed by default) and scoped much wider per the request to go in depth on every
+feature, AKS weighted highest as the most-used one. 58 work units across 10 batches, covering
+missing click affordances, inconsistent destructive-action confirmation, silent mutation failures,
+misleading loading/empty states, and a few outright correctness bugs (Storage's Download silently
+corrupts binary blobs; a breadcrumb renders blank/mislabeled segments; AKS can leave a pod shell
+connected to the wrong cluster after a context switch). Nothing has been implemented yet.
+
 ## Folder Contract
 
 Each feature folder contains:
