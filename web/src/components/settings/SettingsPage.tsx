@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { AlertTriangle } from "lucide-react";
 import { useProfile, useDemoMode } from "@/lib/hooks";
 import { ServiceBusSettings } from "./ServiceBusSettings";
@@ -25,6 +26,8 @@ const tabs = [
 
 type TabId = (typeof tabs)[number]["id"];
 
+const TAB_IDS: ReadonlySet<string> = new Set(tabs.map((tab) => tab.id));
+
 // Tabs whose connection fields are inert while demo mode is on — demo mode
 // substitutes fixed sample data for these, so any real values entered here
 // have no effect until demo mode is turned off (Dashboard toggle).
@@ -34,6 +37,19 @@ export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("general");
   const { data: profile, isLoading } = useProfile();
   const { data: demoMode } = useDemoMode();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Jump straight to a section requested from the command palette (each Settings sub-section is
+  // registered there as a nav item carrying `state: { tab }`), mirroring the same `location.state`
+  // deep-link convention every other feature area's palette entries already use.
+  useEffect(() => {
+    const state = location.state as { tab?: string } | null;
+    if (state?.tab && TAB_IDS.has(state.tab)) {
+      setActiveTab(state.tab as TabId);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate]);
 
   if (isLoading) {
     return (

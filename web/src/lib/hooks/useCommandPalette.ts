@@ -11,10 +11,14 @@ import {
   Bot,
   Settings,
   Activity,
+  Network,
+  Stethoscope,
+  Palette,
 } from "lucide-react";
 import { useProfile } from "./useProfile";
 import { useCollections } from "./useApiClient";
 import { useAksNamespaces } from "./useAks";
+import { useMonitoringRules } from "./useMonitoring";
 import type { ApiCollectionNode } from "../types";
 
 // ── Command Palette Resource Registry ─────────────────────────────────────────
@@ -40,6 +44,20 @@ const staticCommandPaletteItems: CommandPaletteItem[] = [
   { id: "agent", type: "nav", label: "AI Agent", keywords: "ai agent chat assistant", icon: Bot, to: "/agent" },
   { id: "monitoring", type: "nav", label: "Monitoring", keywords: "monitoring alerts rules health", icon: Activity, to: "/monitoring" },
   { id: "settings", type: "nav", label: "Settings", keywords: "settings config preferences", icon: Settings, to: "/settings" },
+
+  // Settings sub-sections, so the palette can jump straight to a specific section instead of only
+  // the top-level Settings page (defaulting to General). Each carries `state.tab` for SettingsPage
+  // to pick up, mirroring the `state`-based deep-link convention already used by every other
+  // resource item below (e.g. `state: { cacheId }`, `state: { nsId }`).
+  { id: "settings-general", type: "nav", label: "General Settings", keywords: "settings general preferences profile import export", icon: Settings, to: "/settings", state: { tab: "general" } },
+  { id: "settings-service-bus", type: "nav", label: "Service Bus Settings", keywords: "settings service bus namespace connection string credential", icon: MessageSquare, to: "/settings", state: { tab: "service-bus" } },
+  { id: "settings-aks", type: "nav", label: "AKS Settings", keywords: "settings aks kubernetes kubeconfig context cluster", icon: Ship, to: "/settings", state: { tab: "aks" } },
+  { id: "settings-redis", type: "nav", label: "Redis Settings", keywords: "settings redis cache connection", icon: Database, to: "/settings", state: { tab: "redis" } },
+  { id: "settings-storage", type: "nav", label: "Storage Settings", keywords: "settings storage account connection", icon: FolderOpen, to: "/settings", state: { tab: "storage" } },
+  { id: "settings-agent", type: "nav", label: "AI Agent Settings", keywords: "settings agent ai model test connection", icon: Bot, to: "/settings", state: { tab: "agent" } },
+  { id: "settings-map", type: "nav", label: "Workspace Map Settings", keywords: "settings workspace map topology relationships", icon: Network, to: "/settings", state: { tab: "map" } },
+  { id: "settings-diagnostics", type: "nav", label: "Diagnostics Settings", keywords: "settings diagnostics logs debug", icon: Stethoscope, to: "/settings", state: { tab: "diagnostics" } },
+  { id: "settings-appearance", type: "nav", label: "Appearance Settings", keywords: "settings appearance theme dark light", icon: Palette, to: "/settings", state: { tab: "appearance" } },
 ];
 
 function flattenCollectionNodes(nodes: ApiCollectionNode[]): ApiCollectionNode[] {
@@ -58,6 +76,7 @@ export function useCommandPaletteItems(open = false): CommandPaletteItem[] {
   const { data: collections = [] } = useCollections(open);
   const queryClient = useQueryClient();
   const aksNamespaces = useAksNamespaces(false);
+  const { data: alertRules = [] } = useMonitoringRules(open);
 
   return useMemo(() => {
     const items: CommandPaletteItem[] = [...staticCommandPaletteItems];
@@ -142,6 +161,19 @@ export function useCommandPaletteItems(open = false): CommandPaletteItem[] {
       });
     }
 
+    for (const rule of alertRules) {
+      items.push({
+        id: `monitoring-rule-${rule.id}`,
+        type: "resource",
+        label: rule.name,
+        subtitle: `Alert rule • ${rule.severity}${rule.enabled ? "" : " • disabled"}`,
+        keywords: `monitoring alert rule ${rule.name} ${rule.source} ${rule.severity}`,
+        icon: Activity,
+        to: "/monitoring",
+        state: { ruleId: rule.id },
+      });
+    }
+
     return items;
-  }, [profile, collections, aksNamespaces.data, queryClient]);
+  }, [profile, collections, aksNamespaces.data, queryClient, alertRules]);
 }

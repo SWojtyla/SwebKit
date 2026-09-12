@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { Plus } from "lucide-react";
 import type { AlertSignalStatus, MonitoringAlertRule, AlertFiredEvent, ProactiveInsightReadyEvent } from "../../lib/api";
 import {
@@ -32,11 +32,28 @@ export function MonitoringPage() {
   const deleteRule = useDeleteMonitoringRule();
   const { notify } = useNotification();
   const navigate = useNavigate();
+  const location = useLocation();
   const addAgentMessage = useAgentConversationStore((s) => s.addMessage);
 
   const [activeTab, setActiveTab] = useState<"rules" | "history">("rules");
   const [showEditor, setShowEditor] = useState(false);
   const [editingRule, setEditingRule] = useState<MonitoringAlertRule | null>(null);
+
+  // Open a specific rule's editor when arriving from the command palette (a Monitoring alert-rule
+  // resource item carries `state: { ruleId }`), mirroring the same deep-link convention used by
+  // every other feature area's palette entries (e.g. Redis's `state.cacheId`).
+  useEffect(() => {
+    const state = location.state as { ruleId?: string } | null;
+    if (state?.ruleId) {
+      const rule = rules.find((r) => r.id === state.ruleId);
+      if (rule) {
+        setActiveTab("rules");
+        setEditingRule(rule);
+        setShowEditor(true);
+        navigate(location.pathname, { replace: true, state: null });
+      }
+    }
+  }, [location, rules, navigate]);
   // Live status dots, derived from a synthetic evaluation event merged in from the stream + history.
   const [statuses, setStatuses] = useState<Record<string, AlertSignalStatus>>({});
   const [liveEvents, setLiveEvents] = useState<AlertFiredEvent[]>([]);

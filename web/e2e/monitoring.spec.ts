@@ -72,6 +72,25 @@ test.describe("Monitoring", () => {
     await expect(page.getByTestId("alert-rule-name")).not.toHaveValue("");
   });
 
+  test("a rule is discoverable and directly editable from the command palette", async ({ page }) => {
+    await page.goto("/monitoring");
+    const ruleName = `Palette Alert ${Date.now()}`;
+    await createRule(page, ruleName);
+
+    // Navigate away, then find and open the same rule from the global command palette —
+    // it must land straight on that rule's editor, not just the Monitoring page in general.
+    await page.goto("/");
+    await page.getByTestId("command-palette-trigger").click();
+    await page.getByTestId("command-palette-input").fill(ruleName);
+    const paletteItem = page.locator("[data-testid^='command-palette-item-monitoring-rule-']", { hasText: ruleName });
+    await expect(paletteItem).toBeVisible();
+    await paletteItem.click();
+
+    await expect(page).toHaveURL(/\/monitoring$/);
+    await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
+    await expect(page.getByTestId("alert-rule-name")).toHaveValue(ruleName);
+  });
+
   test("delete rule removes from table", async ({ page }) => {
     await page.goto("/monitoring");
     const name = `Delete Me ${Date.now()}`;

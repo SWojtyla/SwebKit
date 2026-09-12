@@ -21,6 +21,12 @@ export const DEMO_TOUR_STEPS: DemoTourStep[] = [
     target: "[data-testid='aks-page']",
   },
   {
+    route: "/aks",
+    title: "Rows: click vs. right-click",
+    description: "Left-click any row to open its details or YAML — every resource tab (Pods, Deployments, Services, Secrets, and the rest) works this way. Right-click a row for the full action menu: scale, delete, restart, port-forward, and more.",
+    target: "[data-testid='aks-content']",
+  },
+  {
     route: "/service-bus",
     title: "Service Bus",
     description: "Browse namespaces, queues, topics, and subscriptions. Peek, send, and dead-letter messages without affecting a real namespace.",
