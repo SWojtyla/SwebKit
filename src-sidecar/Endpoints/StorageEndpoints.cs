@@ -13,7 +13,7 @@ public static class StorageEndpoints
         app.MapGet("/api/storage/{accountId}/test", async (
             string accountId,
             ProfileRepository profile,
-            IStorageClientFactory factory,
+            IStorageConnectionPool pool,
             DemoModeService demo,
             ILogger<Program> logger,
             CancellationToken ct) =>
@@ -23,7 +23,7 @@ public static class StorageEndpoints
 
             try
             {
-                var client = CreateClient(config, factory, demo);
+                var client = CreateClient(config, pool, demo);
                 var ok = await client.TestConnectionAsync(ct);
                 return Results.Ok(new { connected = ok });
             }
@@ -41,14 +41,14 @@ public static class StorageEndpoints
         app.MapGet("/api/storage/{accountId}/containers", async (
             string accountId,
             ProfileRepository profile,
-            IStorageClientFactory factory,
+            IStorageConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
             if (config is null) return ApiErrors.NotFound("Storage account not found");
 
-            var client = CreateClient(config, factory, demo);
+            var client = CreateClient(config, pool, demo);
             var containers = await client.ListContainersAsync(ct);
             return Results.Ok(containers);
         });
@@ -62,14 +62,14 @@ public static class StorageEndpoints
             string? continuationToken,
             int? pageSize,
             ProfileRepository profile,
-            IStorageClientFactory factory,
+            IStorageConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
             if (config is null) return ApiErrors.NotFound("Storage account not found");
 
-            var client = CreateClient(config, factory, demo);
+            var client = CreateClient(config, pool, demo);
             var page = await client.ListBlobsAsync(container, prefix ?? "", continuationToken, pageSize ?? 100, ct);
             return Results.Ok(page);
         });
@@ -85,7 +85,7 @@ public static class StorageEndpoints
             string container,
             string blobName,
             ProfileRepository profile,
-            IStorageClientFactory factory,
+            IStorageConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
@@ -93,7 +93,7 @@ public static class StorageEndpoints
             if (config is null) return ApiErrors.NotFound("Storage account not found");
             if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
-            var client = CreateClient(config, factory, demo);
+            var client = CreateClient(config, pool, demo);
             var content = await client.GetBlobContentAsync(container, blobName, ct: ct);
             return Results.Ok(content);
         });
@@ -105,7 +105,7 @@ public static class StorageEndpoints
             string container,
             string blobName,
             ProfileRepository profile,
-            IStorageClientFactory factory,
+            IStorageConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
@@ -113,7 +113,7 @@ public static class StorageEndpoints
             if (config is null) return ApiErrors.NotFound("Storage account not found");
             if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
-            var client = CreateClient(config, factory, demo);
+            var client = CreateClient(config, pool, demo);
             var versions = await client.ListBlobVersionsAsync(container, blobName, ct);
             return Results.Ok(versions.Select(v => new
             {
@@ -131,7 +131,7 @@ public static class StorageEndpoints
             string baseVersionId,
             string? compareVersionId,
             ProfileRepository profile,
-            IStorageClientFactory factory,
+            IStorageConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
@@ -140,7 +140,7 @@ public static class StorageEndpoints
             if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
             if (string.IsNullOrWhiteSpace(baseVersionId)) return ApiErrors.BadRequest("baseVersionId is required");
 
-            var client = CreateClient(config, factory, demo);
+            var client = CreateClient(config, pool, demo);
             var comparison = await client.GetVersionComparisonAsync(container, blobName, baseVersionId, compareVersionId, ct);
             return Results.Ok(comparison);
         });
@@ -151,7 +151,7 @@ public static class StorageEndpoints
             string blobName,
             string versionId,
             ProfileRepository profile,
-            IStorageClientFactory factory,
+            IStorageConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
@@ -160,7 +160,7 @@ public static class StorageEndpoints
             if (!config.AllowMutations) return ApiErrors.Forbidden("Mutations are disabled for this storage account. Enable allowMutations in Settings.");
             if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
-            var client = CreateClient(config, factory, demo);
+            var client = CreateClient(config, pool, demo);
             var result = await client.RestoreBlobVersionAsync(container, blobName, versionId, ct);
             return result.State == BlobRecoveryState.Restored
                 ? Results.Ok(result)
@@ -178,14 +178,14 @@ public static class StorageEndpoints
             string container,
             string? prefix,
             ProfileRepository profile,
-            IStorageClientFactory factory,
+            IStorageConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
             var config = ResolveStorage(accountId, profile, demo);
             if (config is null) return ApiErrors.NotFound("Storage account not found");
 
-            var client = CreateClient(config, factory, demo);
+            var client = CreateClient(config, pool, demo);
             var deleted = await client.ListDeletedBlobsAsync(container, prefix, ct);
             return Results.Ok(deleted.Select(d => new
             {
@@ -220,7 +220,7 @@ public static class StorageEndpoints
         string container,
         string blobName,
         ProfileRepository profile,
-        IStorageClientFactory factory,
+        IStorageConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -228,7 +228,7 @@ public static class StorageEndpoints
         if (config is null) return ApiErrors.NotFound("Storage account not found");
         if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
-        var client = CreateClient(config, factory, demo);
+        var client = CreateClient(config, pool, demo);
         var props = await client.GetBlobPropertiesAsync(container, blobName, ct);
         return Results.Ok(props);
     }
@@ -240,7 +240,7 @@ public static class StorageEndpoints
         string blobName,
         int expiryMinutes,
         ProfileRepository profile,
-        IStorageClientFactory factory,
+        IStorageConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -248,7 +248,7 @@ public static class StorageEndpoints
         if (config is null) return ApiErrors.NotFound("Storage account not found");
         if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
-        var client = CreateClient(config, factory, demo);
+        var client = CreateClient(config, pool, demo);
         var sasUrl = await client.GetBlobSasUrlAsync(container, blobName, TimeSpan.FromMinutes(expiryMinutes), ct);
         return Results.Ok(new { sasUrl = sasUrl.ToString() });
     }
@@ -260,7 +260,7 @@ public static class StorageEndpoints
         string blobName,
         HttpRequest httpRequest,
         ProfileRepository profile,
-        IStorageClientFactory factory,
+        IStorageConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -274,7 +274,7 @@ public static class StorageEndpoints
         var file = form.Files.GetFile("file");
         if (file is null || file.Length == 0) return ApiErrors.BadRequest("A non-empty file is required");
 
-        var client = CreateClient(config, factory, demo);
+        var client = CreateClient(config, pool, demo);
         var options = new BlobUploadOptions(container, blobName, Overwrite: false, file.ContentType);
         await using var stream = file.OpenReadStream();
         var result = await client.UploadBlobAsync(options, stream, ct: ct);
@@ -286,7 +286,7 @@ public static class StorageEndpoints
         string accountId,
         BlobCopyRequest request,
         ProfileRepository profile,
-        IStorageClientFactory factory,
+        IStorageConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -294,7 +294,7 @@ public static class StorageEndpoints
         if (config is null) return ApiErrors.NotFound("Storage account not found");
         if (!config.AllowMutations) return ApiErrors.Forbidden("Mutations are disabled for this storage account. Enable allowMutations in Settings.");
 
-        var client = CreateClient(config, factory, demo);
+        var client = CreateClient(config, pool, demo);
         var options = new BlobCopyOptions(
             request.SourceContainer,
             request.SourceBlob,
@@ -312,7 +312,7 @@ public static class StorageEndpoints
         string blobName,
         Dictionary<string, string> metadata,
         ProfileRepository profile,
-        IStorageClientFactory factory,
+        IStorageConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -321,7 +321,7 @@ public static class StorageEndpoints
         if (!config.AllowMutations) return ApiErrors.Forbidden("Mutations are disabled for this storage account. Enable allowMutations in Settings.");
         if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
-        var client = CreateClient(config, factory, demo);
+        var client = CreateClient(config, pool, demo);
         var result = await client.SetBlobMetadataAsync(container, blobName, metadata, ct: ct);
         return result.Success ? Results.Ok(result) : Results.BadRequest(result);
     }
@@ -332,7 +332,7 @@ public static class StorageEndpoints
         string container,
         string blobName,
         ProfileRepository profile,
-        IStorageClientFactory factory,
+        IStorageConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -341,7 +341,7 @@ public static class StorageEndpoints
         if (!config.AllowMutations) return ApiErrors.Forbidden("Mutations are disabled for this storage account. Enable allowMutations in Settings.");
         if (string.IsNullOrWhiteSpace(blobName)) return ApiErrors.BadRequest("blobName is required");
 
-        var client = CreateClient(config, factory, demo);
+        var client = CreateClient(config, pool, demo);
         var result = await client.UndeleteBlobAsync(container, blobName, ct);
         return result.State is BlobRecoveryState.Undeleted or BlobRecoveryState.Restored
             ? Results.Ok(result)
@@ -362,13 +362,13 @@ public static class StorageEndpoints
 
     private static IStorageClient CreateClient(
         StorageConfig config,
-        IStorageClientFactory factory,
+        IStorageConnectionPool pool,
         DemoModeService demo)
     {
         if (demo.IsDemoMode)
             return demo.GetStorageClient();
 
-        return factory.Create(config);
+        return pool.GetOrCreate(config);
     }
 }
 

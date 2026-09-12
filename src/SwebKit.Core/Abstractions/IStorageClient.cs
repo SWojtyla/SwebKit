@@ -98,3 +98,24 @@ public interface IStorageClientFactory
 {
     IStorageClient Create(StorageConfig config);
 }
+
+/// <summary>
+/// Caches <see cref="IStorageClient"/> instances per storage account (keyed by <see cref="StorageConfig.Id"/>)
+/// so a burst of requests against the same account — listing containers, then opening several blobs'
+/// properties and content panes — reuses one client (and, for AAD-backed accounts, one already-acquired
+/// credential/token chain) instead of paying to rebuild both on every request. See docs/pitfalls/azure-sdk.md.
+///
+/// <para>Call <see cref="InvalidateAll"/> whenever storage account config may have changed (e.g. after a
+/// profile save) so a rotated connection string or flipped auth mode takes effect on the next request.</para>
+/// </summary>
+public interface IStorageConnectionPool
+{
+    /// <summary>Returns the cached client for the account, creating and caching one if absent.</summary>
+    IStorageClient GetOrCreate(StorageConfig config);
+
+    /// <summary>Evicts and disposes the cached client for a single account, if any.</summary>
+    void Evict(string accountId);
+
+    /// <summary>Evicts and disposes every cached client. Safe to call liberally — clients are recreated lazily.</summary>
+    void InvalidateAll();
+}
