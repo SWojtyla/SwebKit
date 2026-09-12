@@ -15,6 +15,13 @@ public sealed class HttpRequestResult
     /// <summary>The HTTP method that was used (as a string for display).</summary>
     public string Method { get; init; } = string.Empty;
 
+    /// <summary>
+    /// The headers as they were actually put on the wire — after variable substitution, after the
+    /// body's own content headers, and after auth was applied. The cURL panel renders these rather
+    /// than reconstructing the request client-side, which could only ever approximate it.
+    /// </summary>
+    public IReadOnlyList<(string Name, string Value)> SentHeaders { get; set; } = [];
+
     // ── Response metadata ─────────────────────────────────────────────────────
 
     /// <summary>HTTP status code returned by the server, or <c>0</c> if the request never reached it.</summary>

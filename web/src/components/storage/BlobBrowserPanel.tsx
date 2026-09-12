@@ -1,15 +1,22 @@
 import { Download, Upload, File, Folder } from "lucide-react";
 import { useStoragePageContext } from "./StoragePageContext";
-
-function formatBytes(bytes: number | null | undefined): string {
-  if (bytes == null) return "-";
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
-}
+import { formatBytes } from "@/lib/format-bytes";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 export function BlobBrowserPanel() {
   const ctx = useStoragePageContext();
+
+  // Owned here rather than in the page context: `useVirtualizer` returns a stable
+  // instance whose internals mutate on scroll, so a memoized context value holding it
+  // would keep handing consumers the same object and the list would stop re-rendering
+  // as you scroll.
+  const blobVirtualizer = useVirtualizer({
+    count: ctx.filteredItems.length,
+    getScrollElement: () => ctx.blobListRef.current,
+    estimateSize: () => 30,
+    getItemKey: (index) => ctx.filteredItems[index].name,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 30,
+  });
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden" data-testid="storage-blob-browser">
@@ -145,16 +152,16 @@ export function BlobBrowserPanel() {
             )}
             {ctx.filteredItems.length > 0 && (
               <div
-                style={{ height: `${ctx.blobVirtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
+                style={{ height: `${blobVirtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
                 data-testid="storage-blob-list-virtualizer"
               >
-                {ctx.blobVirtualizer.getVirtualItems().map((virtualItem) => {
+                {blobVirtualizer.getVirtualItems().map((virtualItem) => {
                   const item = ctx.filteredItems[virtualItem.index];
                   return (
                     <div
                       key={virtualItem.key}
                       data-index={virtualItem.index}
-                      ref={ctx.blobVirtualizer.measureElement}
+                      ref={blobVirtualizer.measureElement}
                       style={{
                         position: "absolute",
                         top: 0,

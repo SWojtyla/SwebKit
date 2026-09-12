@@ -1,4 +1,3 @@
-using Azure.Identity;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
 
@@ -21,19 +20,16 @@ public static class ObservabilityEndpoints
             discovery.InvalidateCache();
         }
 
-        try
+        // Azure's AuthenticationFailedException used to be caught here and turned into a bodyless
+        // 401. That mapping belongs in the global exception handler (Program.cs) alongside the other
+        // auth exceptions: it applies to every Azure-backed endpoint, it logs, and it returns the
+        // standard {error} body with an actionable message instead of an empty response.
+        var resources = new List<ObservabilityResourceInfo>();
+        await foreach (var resource in discovery.DiscoverResourcesAsync(ct).ConfigureAwait(false))
         {
-            var resources = new List<ObservabilityResourceInfo>();
-            await foreach (var resource in discovery.DiscoverResourcesAsync(ct).ConfigureAwait(false))
-            {
-                resources.Add(resource);
-            }
+            resources.Add(resource);
+        }
 
-            return Results.Ok(resources);
-        }
-        catch (AuthenticationFailedException)
-        {
-            return Results.Unauthorized();
-        }
+        return Results.Ok(resources);
     }
 }

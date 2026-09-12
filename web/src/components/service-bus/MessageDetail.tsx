@@ -11,8 +11,10 @@ import { downloadText, downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
+import { tryPrettifyJson } from "@/lib/pretty-json";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
 import { messageToDownloadObject, safeFileName } from "./exportHelpers";
+import { formatBytesLong } from "@/lib/format-bytes";
 
 const BODY_PRETTY_PREF_KEY = "sb-message-body-pretty";
 const BODY_WRAP_PREF_KEY = "sb-message-body-wrap";
@@ -53,21 +55,13 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
   const [copyPropKey, setCopyPropKey] = useState<string | null>(null);
   const saveTemplateMutation = useSbSaveTemplate();
 
-  /// Strips whatever sits in front of the payload before parsing.
+  /// Strips whatever sits in front of the payload before sniffing its format.
   ///
-  /// `detectFormat` trimmed but `tryFormatJson` did not, so a body carrying a UTF-8 BOM —
+  /// This once trimmed while the prettifier did not, so a body carrying a UTF-8 BOM —
   /// routine for messages published by .NET — was reported as JSON and then silently
   /// failed to parse, leaving it rendered as one unreadable line with no explanation.
+  /// `tryPrettifyJson` strips the same preamble, so the two now agree by construction.
   const stripPreamble = (body: string): string => body.replace(/^\uFEFF/, "").trim();
-
-  /** The prettified body, or `null` when it genuinely is not parseable JSON. */
-  const tryFormatJson = (body: string): string | null => {
-    try {
-      return JSON.stringify(JSON.parse(stripPreamble(body)), null, 2);
-    } catch {
-      return null;
-    }
-  };
 
   const detectFormat = (body: string): "json" | "xml" | "text" => {
     const trimmed = stripPreamble(body);
@@ -76,15 +70,9 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
     return "text";
   };
 
-  const formatBytes = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   const bodyFormat = message ? detectFormat(message.body) : "text";
   const bodySize = message ? new TextEncoder().encode(message.body).length : 0;
-  const prettyBody = message && bodyFormat === "json" ? tryFormatJson(message.body) : null;
+  const prettyBody = message && bodyFormat === "json" ? tryPrettifyJson(message.body) : null;
   // What is actually on screen, so Pretty/Raw and the line count cannot disagree.
   const displayedBody = prettyPrinted && prettyBody !== null ? prettyBody : (message?.body ?? "");
   const bodyLineCount = displayedBody ? displayedBody.split("\n").length : 0;
@@ -96,6 +84,14 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
     const q = propFilter.toLowerCase();
     return entries.filter(([k, v]) => k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q));
   }, [message, propFilter]);
+
+  // Above the early return below: a hook after a conditional return changes the hook
+  // count the moment `message` goes from null to a value, which React rejects outright.
+  const baseFileName = useMemo(() => {
+    if (!message) return "";
+    const seq = message.sequenceNumber != null ? `-${message.sequenceNumber}` : "";
+    return `message-${safeFileName(message.messageId)}${seq}`;
+  }, [message]);
 
   if (!message) {
     return (
@@ -110,7 +106,9 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
       await navigator.clipboard.writeText(String(value));
       setCopyPropKey(key);
       setTimeout(() => setCopyPropKey(null), 2000);
-    } catch {}
+    } catch {
+      // Clipboard API unavailable — the copy simply does not happen.
+    }
   };
 
   const copyToClipboard = async (text: string, feedbackKey: string) => {
@@ -139,11 +137,6 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
   const copyFullMessage = () => {
     copyToClipboard(JSON.stringify(messageToDownloadObject(message), null, 2), "full");
   };
-
-  const baseFileName = useMemo(() => {
-    const seq = message.sequenceNumber != null ? `-${message.sequenceNumber}` : "";
-    return `message-${safeFileName(message.messageId)}${seq}`;
-  }, [message]);
 
   const downloadJson = () => {
     downloadText(`${baseFileName}.json`, JSON.stringify(messageToDownloadObject(message), null, 2));
@@ -456,7 +449,7 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
           <div data-testid="detail-tab-content-body">
             <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <span data-testid="body-format">Format: {bodyFormat.toUpperCase()}</span>
-              <span data-testid="body-size">Size: {formatBytes(bodySize)}</span>
+              <span data-testid="body-size">Size: {formatBytesLong(bodySize)}</span>
               <span data-testid="body-lines">Lines: {bodyLineCount}</span>
 
               {bodyFormat === "json" && prettyBody !== null && (
@@ -635,7 +628,7 @@ function Field({ label, value }: { label: string; value: string | null | undefin
 function JsonHighlight({ text }: { text: string }) {
   const tokens = useMemo(() => {
     const parts: { text: string; cls: string }[] = [];
-    const regex = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g;
+    const regex = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g;
     let lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = regex.exec(text)) !== null) {

@@ -25,7 +25,7 @@ public static class ServiceBusEndpoints
             CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             try
             {
@@ -50,7 +50,7 @@ public static class ServiceBusEndpoints
             CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             var info = await client.GetNamespaceInfoAsync(ct);
@@ -65,7 +65,7 @@ public static class ServiceBusEndpoints
             CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             var queues = await client.ListQueuesAsync(ct);
@@ -80,7 +80,7 @@ public static class ServiceBusEndpoints
             CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             var topics = await client.ListTopicsAsync(ct);
@@ -96,7 +96,7 @@ public static class ServiceBusEndpoints
             CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             var subs = await client.ListSubscriptionsAsync(topic, ct);
@@ -113,7 +113,7 @@ public static class ServiceBusEndpoints
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             var stats = await client.GetEntityStatsAsync(entityPath, ct);
@@ -135,7 +135,7 @@ public static class ServiceBusEndpoints
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             await client.SendMessageAsync(entityPath, message, ct);
@@ -153,7 +153,7 @@ public static class ServiceBusEndpoints
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             await client.SendBatchAsync(entityPath, messages, ct);
@@ -172,7 +172,7 @@ public static class ServiceBusEndpoints
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             var seq = await client.ScheduleMessageAsync(entityPath, req.Message, req.ScheduledEnqueueTime, ct);
@@ -199,7 +199,7 @@ public static class ServiceBusEndpoints
         {
             entityPath = DecodeEntityPath(entityPath);
             if (!Guid.TryParse(nsId, out var id))
-                return Results.BadRequest("Invalid namespace ID");
+                return ApiErrors.BadRequest("Invalid namespace ID");
 
             var entries = schedRepo.GetByEntity(id, entityPath);
             return Results.Ok(entries);
@@ -217,7 +217,7 @@ public static class ServiceBusEndpoints
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             await client.CancelScheduledMessageAsync(entityPath, sequenceNumber, ct);
@@ -245,7 +245,7 @@ public static class ServiceBusEndpoints
         {
             entityPath = DecodeEntityPath(entityPath);
             var ns = ResolveNamespace(nsId, profile, demo);
-            if (ns is null) return Results.NotFound("Namespace not found");
+            if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
             var client = CreateClient(ns, factory, demo);
             await client.CompleteDeadLetterAsync(entityPath, sequenceNumbers, ct);
@@ -267,7 +267,7 @@ public static class ServiceBusEndpoints
         app.MapDelete("/api/servicebus/templates/{id}", (string id, ProfileRepository profile) =>
         {
             if (!Guid.TryParse(id, out var guid))
-                return Results.BadRequest("Invalid template ID");
+                return ApiErrors.BadRequest("Invalid template ID");
 
             profile.DeleteMessageTemplate(guid);
             return Results.Ok();
@@ -289,7 +289,7 @@ public static class ServiceBusEndpoints
     {
         entityPath = DecodeEntityPath(entityPath);
         var ns = ResolveNamespace(nsId, profile, demo);
-        if (ns is null) return Results.NotFound("Namespace not found");
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
         var client = CreateClient(ns, factory, demo);
         var messages = await client.PeekMessagesAsync(entityPath, count, ct, fromSequenceNumber: fromSeq);
@@ -309,7 +309,7 @@ public static class ServiceBusEndpoints
     {
         entityPath = DecodeEntityPath(entityPath);
         var ns = ResolveNamespace(nsId, profile, demo);
-        if (ns is null) return Results.NotFound("Namespace not found");
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
         var client = CreateClient(ns, factory, demo);
         var messages = await client.PeekDeadLetterAsync(entityPath, count, ct, fromSequenceNumber: fromSeq);
@@ -334,7 +334,7 @@ public static class ServiceBusEndpoints
     {
         entityPath = DecodeEntityPath(entityPath);
         var ns = ResolveNamespace(nsId, profile, demo);
-        if (ns is null) return Results.NotFound("Namespace not found");
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
         var client = CreateClient(ns, factory, demo);
         var count = await client.CompleteMessagesAsync(entityPath, sequenceNumbers, ct);
@@ -353,7 +353,7 @@ public static class ServiceBusEndpoints
     {
         entityPath = DecodeEntityPath(entityPath);
         var ns = ResolveNamespace(nsId, profile, demo);
-        if (ns is null) return Results.NotFound("Namespace not found");
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
         var client = CreateClient(ns, factory, demo);
         var count = await client.PurgeMessagesAsync(entityPath, deadLetter, ct);
@@ -376,7 +376,7 @@ public static class ServiceBusEndpoints
     {
         entityPath = DecodeEntityPath(entityPath);
         var ns = ResolveNamespace(nsId, profile, demo);
-        if (ns is null) return Results.NotFound("Namespace not found");
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
         var client = CreateClient(ns, factory, demo);
         await client.ResubmitDeadLetterAsync(entityPath, req.SequenceNumbers, req.TargetEntityPath, req.RemapRules, ct);

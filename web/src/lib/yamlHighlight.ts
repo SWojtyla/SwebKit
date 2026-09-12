@@ -63,7 +63,7 @@ export function highlightYaml(text: string, preserveBlankLines = false): string 
       if (/^(---|\.\.\.)\s*$/.test(line.trim())) return span("doc-marker", line);
       if (/^%/.test(line.trim())) return span("directive", line);
 
-      const kvMatch = line.match(/^(\s*)([\w\-\.\/]+)(\s*:\s*)(.*)$/);
+      const kvMatch = line.match(/^(\s*)([\w\-./]+)(\s*:\s*)(.*)$/);
       if (kvMatch) {
         const [, indent, key, colon, rest] = kvMatch;
         let inlineComment = "";
@@ -79,7 +79,7 @@ export function highlightYaml(text: string, preserveBlankLines = false): string 
       const listMatch = line.match(/^(\s*)-\s*(.*)$/);
       if (listMatch) {
         const [, listIndent, listRest] = listMatch;
-        const innerKv = listRest.match(/^([\w\-\.\/]+)(\s*:\s*)(.*)$/);
+        const innerKv = listRest.match(/^([\w\-./]+)(\s*:\s*)(.*)$/);
         if (innerKv) {
           const [, innerKey, innerColon, innerRest] = innerKv;
           return (

@@ -16,7 +16,8 @@ import type {
 } from "./types";
 
 let SIDECAR_BASE_URL = (() => {
-  return (import.meta as any).env?.VITE_SIDECAR_URL ?? "http://localhost:5199";
+  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+  return env?.VITE_SIDECAR_URL ?? "http://localhost:5199";
 })();
 
 /// Resolves the real sidecar port from Tauri (production: OS-assigned; dev:

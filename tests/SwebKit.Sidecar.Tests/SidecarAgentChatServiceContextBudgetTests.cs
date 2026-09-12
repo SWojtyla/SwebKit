@@ -182,9 +182,9 @@ public class SidecarAgentChatServiceContextBudgetTests
     public void ResolveSummarizationThreshold_SmallWindow_IsLowerThanLargeWindow()
     {
         // workspace-intelligence Module 7: tiny local windows summarize earlier than big cloud ones.
-        var small = SidecarAgentChatService.ResolveSummarizationThreshold(4096);
-        var large = SidecarAgentChatService.ResolveSummarizationThreshold(131072);
-        var mid = SidecarAgentChatService.ResolveSummarizationThreshold(32_000);
+        var small = AgentContextBudgetPlanner.ResolveSummarizationThreshold(4096);
+        var large = AgentContextBudgetPlanner.ResolveSummarizationThreshold(131072);
+        var mid = AgentContextBudgetPlanner.ResolveSummarizationThreshold(32_000);
 
         Assert.Equal(0.50, small, precision: 2);
         Assert.Equal(0.75, large, precision: 2);

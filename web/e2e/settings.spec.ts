@@ -90,9 +90,12 @@ test.describe("Settings", () => {
     //
     // Scoped to the row this test adds: the e2e sidecar's appdata is shared by every test
     // in the file, so namespaces left by earlier tests are still present.
+    const saveProfile = (method: string) =>
+      page.waitForResponse((r) => r.request().method() === method && r.url().includes("/api/config/profiles"));
+
     await page.goto("/settings");
     await page.getByTestId("settings-tab-service-bus").click();
-    await page.getByRole("button", { name: "Add Namespace" }).click();
+    await Promise.all([saveProfile("PUT"), page.getByRole("button", { name: "Add Namespace" }).click()]);
 
     const entra = page.locator('[data-testid^="sb-auth-entra-"]').last();
     await expect(entra).toBeVisible();
@@ -100,8 +103,10 @@ test.describe("Settings", () => {
     await expect(entra).not.toBeChecked();
 
     // Click rather than `check()`: the state change round-trips through a save, and
-    // `check()` asserts synchronously right after clicking.
-    await entra.click();
+    // `check()` asserts synchronously right after clicking. Wait for that save's PUT
+    // explicitly rather than only polling the checked state, so a slow CI runner can't
+    // time out the UI poll before the round-trip that actually flips it has landed.
+    await Promise.all([saveProfile("PUT"), entra.click()]);
     await expect(entra).toBeChecked();
 
     await page.reload();

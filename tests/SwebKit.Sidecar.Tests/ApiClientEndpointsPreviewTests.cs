@@ -32,22 +32,23 @@ public class ApiClientEndpointsPreviewTests
 
         var result = await ApiClientEndpoints.PreviewKeyVaultSecretAsync(req, resolver, CancellationToken.None);
 
-        // The body is an anonymous type (Results.BadRequest(new { error = ... })), so assert via the
-        // status-code interface rather than the unnameable generic BadRequest<T>.
         var statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(400, statusResult.StatusCode);
+        Assert.Equal("Secret name is required", Assert.IsType<ApiErrorResponse>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value).Error);
     }
 
     [Fact]
-    public async Task NoVaultsConfigured_ReturnsProblem()
+    public async Task NoVaultsConfigured_ReturnsErrorBody()
     {
         var resolver = new FakeKeyVaultSecretResolver(isAvailable: false);
         var req = new PreviewKeyVaultSecretRequest(null, "my-secret");
 
         var result = await ApiClientEndpoints.PreviewKeyVaultSecretAsync(req, resolver, CancellationToken.None);
 
-        var problem = Assert.IsType<ProblemHttpResult>(result);
-        Assert.Equal("No key vaults are configured", problem.ProblemDetails.Detail);
+        // Was a ProblemDetails body; the sidecar now returns one error shape everywhere. The status
+        // is unchanged (Results.Problem defaulted to 500), only the envelope moved to { error }.
+        Assert.Equal(500, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        Assert.Equal("No key vaults are configured", Assert.IsType<ApiErrorResponse>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value).Error);
     }
 
     [Fact]

@@ -72,7 +72,7 @@ export function resolvePanelWidths(options: ResolveOptions): number[] {
   if (fractionIndexes.length === 0) return resolved;
 
   const fractionTotal = fractionIndexes.reduce((sum, i) => sum + fractions[i]!, 0);
-  let leftover = Math.max(0, available - fixedTotal);
+  const leftover = Math.max(0, available - fixedTotal);
 
   // First pass: proportional share, floored at each panel's minimum.
   for (const i of fractionIndexes) {

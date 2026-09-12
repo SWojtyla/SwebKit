@@ -14,6 +14,13 @@ namespace SwebKit.Sidecar.Services;
 /// path the REST endpoints use (ProfileRepository + DemoModeService + the client factories), so
 /// a rule configured in the UI evaluates against the same backend the pages talk to.
 /// </summary>
+/// <remarks>
+/// The pool owns every client it caches and disposes it on eviction — a cached Redis client wraps a
+/// <c>ConnectionMultiplexer</c> with live sockets, so simply <c>Clear()</c>-ing the dictionary (the
+/// previous behaviour) leaked one connection per invalidation. Demo-mode clients are deliberately
+/// <em>not</em> cached here: <see cref="DemoModeService"/> hands out long-lived singletons it
+/// disposes itself, and caching them would make this pool dispose something it does not own.
+/// </remarks>
 public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
 {
     private readonly ProfileRepository _profile;
@@ -48,15 +55,18 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
     public IAksClient? GetAksClient(string? context)
     {
         if (_demo.IsDemoMode)
-            return _aksCache.GetOrAdd("demo", _ => _demo.GetAksClient());
+            return _demo.GetAksClient();
 
         var aksConfig = _profile.GetProfileData().Config.AksConfig;
         if (aksConfig is null)
             return null;
 
         var key = context ?? aksConfig.KubeconfigContext ?? "default";
-        return _aksCache.GetOrAdd(key, _ =>
-            _aksFactory.Create(aksConfig.KubeconfigContext, aksConfig.KubeconfigPath));
+        return GetOrCreate(
+            _aksCache,
+            key,
+            () => _aksFactory.Create(aksConfig.KubeconfigContext, aksConfig.KubeconfigPath),
+            "AKS");
     }
 
     public IServiceBusClient? GetServiceBusClient(string alias)
@@ -69,7 +79,7 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
             var demoNs = _demo.GetDemoNamespaces()
                 .FirstOrDefault(n => string.Equals(n.Alias, alias, StringComparison.OrdinalIgnoreCase)
                                   || n.Id.ToString("N") == alias);
-            return demoNs is null ? null : _sbCache.GetOrAdd(alias, _ => _demo.GetSbClient(demoNs));
+            return demoNs is null ? null : _demo.GetSbClient(demoNs);
         }
 
         var ns = _profile.ServiceBusNamespaces
@@ -78,10 +88,13 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
         if (ns is null)
             return null;
 
-        return _sbCache.GetOrAdd(alias, _ =>
-            ns.AuthMode == SbAuthMode.ConnectionString
+        return GetOrCreate(
+            _sbCache,
+            alias,
+            () => ns.AuthMode == SbAuthMode.ConnectionString
                 ? _sbFactory.Create(ns.CredentialKey, ns.TransportType)
-                : _sbFactory.CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType));
+                : _sbFactory.CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType),
+            "Service Bus");
     }
 
     public async ValueTask<IRedisClient?> GetRedisClientAsync(string displayName, CancellationToken ct = default)
@@ -94,7 +107,7 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
             var demoCache = _demo.GetDemoRedisCache(DemoModeService.DemoRedisCacheId);
             if (demoCache is null || !string.Equals(demoCache.DisplayName, displayName, StringComparison.OrdinalIgnoreCase))
                 return null;
-            return _redisCache.GetOrAdd(displayName, _ => _demo.GetRedisClient(demoCache));
+            return _demo.GetRedisClient(demoCache);
         }
 
         var config = _profile.GetProfileData().Config.RedisConfig;
@@ -104,30 +117,107 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
             || c.Id == displayName);
         if (cache is null)
             return null;
-        if (_redisCache.TryGetValue(displayName, out var cached) && cached is not null)
+        if (_redisCache.TryGetValue(displayName, out var cached))
             return cached;
 
-        var entry = await _redisFactory.CreateAsync(cache, ct).ConfigureAwait(false);
-        _redisCache[displayName] = entry;
-        return entry;
+        var created = await _redisFactory.CreateAsync(cache, ct).ConfigureAwait(false);
+        return Publish(_redisCache, displayName, created, "Redis");
     }
 
     public void InvalidateStaleConnections()
     {
-        _aksCache.Clear();
-        _sbCache.Clear();
-        _redisCache.Clear();
+        DrainAndDispose(_aksCache, "AKS");
+        DrainAndDispose(_sbCache, "Service Bus");
+        DrainAndDispose(_redisCache, "Redis");
     }
 
     public void EvictServiceBusClient(string alias)
     {
-        if (!string.IsNullOrWhiteSpace(alias))
-            _sbCache.TryRemove(alias, out _);
+        if (!string.IsNullOrWhiteSpace(alias) && _sbCache.TryRemove(alias, out var client))
+            DisposeEntry(client, "Service Bus", alias);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         InvalidateStaleConnections();
-        await ValueTask.CompletedTask.ConfigureAwait(false);
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Caches one client per key without ever leaking a second one. <c>ConcurrentDictionary</c> has
+    /// no atomic "create exactly once" primitive — <c>GetOrAdd</c>'s factory overload can run on two
+    /// threads at once and silently discard one result — so the client is built outside the
+    /// dictionary and the loser of the race is disposed rather than orphaned.
+    /// </summary>
+    private T GetOrCreate<T>(ConcurrentDictionary<string, T> cache, string key, Func<T> factory, string kind)
+        where T : class
+    {
+        if (cache.TryGetValue(key, out var existing))
+            return existing;
+
+        return Publish(cache, key, factory(), kind);
+    }
+
+    /// <summary>Adds <paramref name="created"/> unless another thread got there first, in which case
+    /// the loser is disposed and the winner returned.</summary>
+    private T Publish<T>(ConcurrentDictionary<string, T> cache, string key, T created, string kind)
+        where T : class
+    {
+        var winner = cache.GetOrAdd(key, created);
+        if (!ReferenceEquals(winner, created))
+            DisposeEntry(created, kind, key);
+        return winner;
+    }
+
+    /// <summary>Removes every entry and disposes it. <c>TryRemove</c> (rather than <c>Clear</c>)
+    /// guarantees exactly one caller disposes each client even under concurrent invalidation.</summary>
+    private void DrainAndDispose<T>(ConcurrentDictionary<string, T> cache, string kind)
+        where T : class
+    {
+        foreach (var key in cache.Keys.ToArray())
+        {
+            if (cache.TryRemove(key, out var client))
+                DisposeEntry(client, kind, key);
+        }
+    }
+
+    private void DisposeEntry(object? client, string kind, string key)
+    {
+        switch (client)
+        {
+            case null:
+                return;
+
+            case IDisposable sync:
+                try
+                {
+                    sync.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to dispose pooled {Kind} client '{Key}'", kind, key);
+                }
+                return;
+
+            case IAsyncDisposable async:
+                // InvalidateStaleConnections/EvictServiceBusClient are synchronous on
+                // IMonitoringConnectionPool, and blocking a caller on an async SDK teardown would
+                // just move the stall somewhere else — so an async-only client is torn down on a
+                // detached task whose failures are still logged.
+                _ = DisposeAsyncSafeAsync(async, kind, key);
+                return;
+        }
+    }
+
+    private async Task DisposeAsyncSafeAsync(IAsyncDisposable client, string kind, string key)
+    {
+        try
+        {
+            await client.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to dispose pooled {Kind} client '{Key}'", kind, key);
+        }
     }
 }

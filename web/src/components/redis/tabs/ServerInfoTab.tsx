@@ -1,4 +1,4 @@
-import { formatBytes } from "@/lib/redis-format";
+import { formatBytes } from "@/lib/format-bytes";
 import { useRedisPageContext } from "../RedisPageContext";
 
 function InfoCard({ label, value, testId }: { label: string; value: string; testId: string }) {

@@ -490,7 +490,8 @@ public class AzureStorageClient : IStorageClient
         return result;
     }
 
-    private static string ProduceSimpleLineDiff(string baseText, string compareText)
+    /// <remarks>Internal rather than private so the diff rendering is unit-testable.</remarks>
+    internal static string ProduceSimpleLineDiff(string baseText, string compareText)
     {
         var baseLines = baseText.Split('\n');
         var compareLines = compareText.Split('\n');
@@ -518,7 +519,7 @@ public class AzureStorageClient : IStorageClient
     /// extension of <paramref name="blobName"/> so that .txt/.log/.json/etc. files are still
     /// shown as text even if the blob was uploaded without an explicit content type.
     /// </summary>
-    private static bool IsTextContentType(string? contentType, string? blobName = null)
+    internal static bool IsTextContentType(string? contentType, string? blobName = null)
     {
         if (string.IsNullOrWhiteSpace(contentType))
             return true; // no content type set — attempt text preview
@@ -561,7 +562,7 @@ public class AzureStorageClient : IStorageClient
     /// <summary>
     /// Returns true when the blob name's extension is a well-known plain-text format.
     /// </summary>
-    private static bool HasTextExtension(string? blobName)
+    internal static bool HasTextExtension(string? blobName)
     {
         if (string.IsNullOrEmpty(blobName)) return false;
         var ext = Path.GetExtension(blobName).ToLowerInvariant();

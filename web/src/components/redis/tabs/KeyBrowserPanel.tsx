@@ -1,5 +1,6 @@
 import { ChevronRight, ChevronsDownUp, Folder } from "lucide-react";
-import { useRedisPageContext, type FlatRedisRow } from "../RedisPageContext";
+import { useRedisPageContext, redisRowKey, type FlatRedisRow } from "../RedisPageContext";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 // Vertical guide rules connecting a row to its ancestors, VSCode-file-tree style — the thing
 // that was missing before and made the whole tree read as a flat, undifferentiated wall of text.
@@ -16,6 +17,18 @@ function IndentGuides({ depth }: { depth: number }) {
 
 export function KeyBrowserPanel() {
   const ctx = useRedisPageContext();
+
+  // Owned here rather than in the page context: `useVirtualizer` returns a stable
+  // instance whose internals mutate on scroll, so a memoized context value holding it
+  // would keep handing consumers the same object and the tree would stop re-rendering
+  // as you scroll.
+  const redisVirtualizer = useVirtualizer({
+    count: ctx.flatRedisRows.length,
+    getScrollElement: () => ctx.redisTreeRef.current,
+    estimateSize: () => 28,
+    getItemKey: (index) => redisRowKey(ctx.flatRedisRows[index]),
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 28,
+  });
 
   const renderFlatRedisRow = (row: FlatRedisRow) => {
     if (row.kind === "namespace") {
@@ -165,16 +178,16 @@ export function KeyBrowserPanel() {
         )}
         {ctx.flatRedisRows.length > 0 && (
           <div
-            style={{ height: `${ctx.redisVirtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
+            style={{ height: `${redisVirtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
             data-testid="redis-key-tree-virtualizer"
           >
-            {ctx.redisVirtualizer.getVirtualItems().map((item) => {
+            {redisVirtualizer.getVirtualItems().map((item) => {
               const row = ctx.flatRedisRows[item.index];
               return (
                 <div
                   key={item.key}
                   data-index={item.index}
-                  ref={ctx.redisVirtualizer.measureElement}
+                  ref={redisVirtualizer.measureElement}
                   style={{
                     position: "absolute",
                     top: 0,

@@ -506,6 +506,8 @@ export interface ApiClientExecutionResponse {
   headers: ResponseHeaderDto[];
   captureWarnings: string[];
   graphQlErrors: GraphQlError[] | null;
+  /** Headers exactly as sent, echoed by the sidecar so the cURL panel can be truthful. */
+  sentHeaders?: ResponseHeaderDto[] | null;
 }
 
 export interface ResponseHeaderDto {

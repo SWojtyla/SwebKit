@@ -1,6 +1,6 @@
 import { ResizablePanel, type ResizablePanelProps } from "@/components/ui/ResizablePanel";
 
-export interface SidePanelProps extends ResizablePanelProps {}
+export type SidePanelProps = ResizablePanelProps;
 
 export function SidePanel({
   "data-testid": panelTestId = "side-panel",

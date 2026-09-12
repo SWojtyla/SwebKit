@@ -339,23 +339,6 @@ export function useAksHelmRollback() {
   });
 }
 
-export function useAksPodLogs(ns: string | null, pod: string | null, container?: string, tail = 100) {
-  return useQuery({
-    queryKey: ["aks-pod-logs", ns, pod, container, tail],
-    queryFn: async () => {
-      const params = new URLSearchParams({ tail: String(tail) });
-      if (container) params.set("container", container);
-      const res = await fetch(`/api/aks/${ns}/pods/${pod}/logs?${params}`);
-      const ct = res.headers.get("content-type") ?? "";
-      if (ct.includes("text/html")) {
-        return "";
-      }
-      return res.text();
-    },
-    enabled: !!ns && !!pod,
-  });
-}
-
 export function useAksResourceYaml(ns: string | null, kind: string | null, name: string | null) {
   return useQuery({
     queryKey: ["aks-yaml", ns, kind, name],

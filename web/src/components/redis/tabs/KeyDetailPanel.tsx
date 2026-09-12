@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy, Pencil, Check, X, Clock, Trash2, Plus, Sparkles } from "lucide-react";
-import { formatTtl, parseTtl, getTtlColorClass, formatBytes } from "@/lib/redis-format";
+import { formatTtl, parseTtl, getTtlColorClass } from "@/lib/redis-format";
+import { formatBytes } from "@/lib/format-bytes";
 import { useRedisPageContext } from "../RedisPageContext";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 

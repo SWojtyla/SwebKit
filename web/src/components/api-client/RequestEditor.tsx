@@ -1,25 +1,22 @@
 import { useState, useEffect, useRef, useCallback, Fragment } from "react";
-import { Save, Send, Wand2, Minimize2, Eye, Crosshair, Pencil, Sparkles, Search } from "lucide-react";
+import { Save, Send, Eye, Sparkles } from "lucide-react";
 import { GenerateApiRequestPanel } from "./GenerateApiRequestPanel";
 import { JsonPathPicker } from "./JsonPathPicker";
 import { RequestActionsPanel } from "./RequestActionsPanel";
-import { EditorState, Compartment } from "@codemirror/state";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { json } from "@codemirror/lang-json";
-import { xml } from "@codemirror/lang-xml";
-import { bracketMatching, foldGutter, foldKeymap, codeFolding } from "@codemirror/language";
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from "@codemirror/view";
-import type { HttpRequestEntry, ApiRequestMethod, RequestBodyMode, AuthType, AuthConfig, CaptureRule, ApiEnvironment } from "@/lib/types";
+import type { HttpRequestEntry, ApiRequestMethod, AuthType, AuthConfig, CaptureRule, ApiEnvironment } from "@/lib/types";
 import { substituteVariables, previewVariables, isLikelySecret } from "@/lib/variable-utils";
 import { unresolvedVariableNames } from "@/lib/variableHighlight";
 import { saveSecret, getSecret, deleteSecret } from "@/lib/tauri-bridge";
-import { swebkitHighlighting } from "@/lib/codemirror-theme";
-import { variableHighlighting } from "@/lib/codemirror-variables";
 import { METHOD_META, methodMeta, toneTextStyle, CountBadge } from "./method-badge";
 import { GraphQlPanel } from "./GraphQlPanel";
 import { VariableInput } from "./VariableInput";
 import { WebSocketPanel } from "./WebSocketPanel";
+import { RequestNameHeading } from "./request-editor/RequestNameHeading";
+import { ParamsPanel } from "./request-editor/ParamsPanel";
+import { HeadersPanel } from "./request-editor/HeadersPanel";
+import { BodyPanel } from "./request-editor/BodyPanel";
+import { AuthPanel } from "./request-editor/AuthPanel";
+import { CapturePanel } from "./request-editor/CapturePanel";
 
 interface RequestEditorProps {
   request: HttpRequestEntry;
@@ -36,216 +33,7 @@ const methods: ApiRequestMethod[] = [
   "Get", "Post", "Put", "Patch", "Delete", "Head", "Options", "GraphQl", "WebSocket",
 ];
 
-const bodyModes: RequestBodyMode[] = ["None", "Json", "Xml", "Text", "FormData"];
-
-const authTypes: { value: AuthType; label: string }[] = [
-  { value: "None", label: "None" },
-  { value: "Inherited", label: "Inherited" },
-  { value: "BearerToken", label: "Bearer Token" },
-  { value: "Basic", label: "Basic" },
-  { value: "ApiKey", label: "API Key" },
-  { value: "OAuth2", label: "OAuth 2.0" },
-];
-
 type Tab = "params" | "headers" | "body" | "auth" | "graphql" | "websocket" | "capture" | "actions";
-
-function bodyLanguage(mode: RequestBodyMode) {
-  if (mode === "Json") return json();
-  if (mode === "Xml") return xml();
-  return [];
-}
-
-interface BodyCodeEditorProps {
-  value: string;
-  mode: RequestBodyMode;
-  onChange: (value: string) => void;
-  scope: Record<string, string | null>;
-}
-
-function BodyCodeEditor({ value, mode, onChange, scope }: BodyCodeEditorProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<EditorView | null>(null);
-  const languageRef = useRef(new Compartment());
-  const variablesRef = useRef(new Compartment());
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const view = new EditorView({
-      state: EditorState.create({
-        doc: value,
-        extensions: [
-          lineNumbers(),
-          codeFolding(),
-          foldGutter(),
-          highlightActiveLine(),
-          highlightActiveLineGutter(),
-          bracketMatching(),
-          closeBrackets(),
-          history(),
-          keymap.of([
-            ...closeBracketsKeymap,
-            ...defaultKeymap,
-            ...historyKeymap,
-            ...foldKeymap,
-            indentWithTab,
-          ]),
-          languageRef.current.of(bodyLanguage(mode)),
-          variablesRef.current.of(variableHighlighting(scope)),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
-          }),
-          // Replaces CodeMirror's light-only `defaultHighlightStyle`, whose dark
-          // blues and reds were effectively invisible against the dark theme's
-          // near-black background — the reason body highlighting read as absent.
-          swebkitHighlighting(),
-        ],
-      }),
-      parent: containerRef.current,
-    });
-    viewRef.current = view;
-    return () => {
-      view.destroy();
-      viewRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    viewRef.current?.dispatch({ effects: languageRef.current.reconfigure(bodyLanguage(mode)) });
-  }, [mode]);
-
-  // Keyed on the scope's *contents*, not its identity: `buildVariableScope` returns
-  // a fresh object on every render, so depending on the reference would rebuild the
-  // decorator on every keystroke. Reconfigured through a compartment rather than by
-  // recreating the view, which would drop the cursor, scroll and undo history.
-  const scopeKey = JSON.stringify(scope);
-  useEffect(() => {
-    viewRef.current?.dispatch({
-      effects: variablesRef.current.reconfigure(variableHighlighting(scope)),
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeKey]);
-
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view || view.state.doc.toString() === value) return;
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: value },
-    });
-  }, [value]);
-
-  return (
-    <div
-      className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded border bg-background"
-      data-testid="request-body-codemirror"
-    >
-      <div ref={containerRef} className="min-h-0 flex-1" />
-      <textarea
-        data-testid="request-body-editor"
-        aria-hidden="true"
-        tabIndex={-1}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="absolute left-0 top-0 z-20 h-4 w-4 opacity-0"
-      />
-    </div>
-  );
-}
-
-interface RequestNameHeadingProps {
-  name: string;
-  onRename: (name: string) => void;
-}
-
-/**
- * The request name as a title that becomes an input on click or F2, rather than a
- * permanently visible form field.
- */
-function RequestNameHeading({ name, onRename }: RequestNameHeadingProps) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(name);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== name) onRename(trimmed);
-    setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <input
-        ref={inputRef}
-        type="text"
-        data-testid="request-name-input"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-          if (e.key === "Escape") { setDraft(name); setEditing(false); }
-        }}
-        className="mr-2 w-48 shrink-0 rounded border bg-background px-2 py-1 text-sm"
-        placeholder="Request name"
-      />
-    );
-  }
-
-  return (
-    <button
-      data-testid="request-name-heading"
-      onClick={() => { setDraft(name); setEditing(true); }}
-      onKeyDown={(e) => { if (e.key === "F2") { setDraft(name); setEditing(true); } }}
-      title="Click to rename"
-      className="group mr-2 flex max-w-[14rem] shrink-0 items-center gap-1.5 rounded px-2 py-1 text-sm font-semibold hover:bg-accent"
-    >
-      <span className="truncate">{name}</span>
-      <Pencil className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
-    </button>
-  );
-}
-
-function updateHeaders(
-  request: HttpRequestEntry,
-  index: number,
-  patch: Partial<{ key: string; value: string | null; isEnabled: boolean }>,
-): HttpRequestEntry {
-  const headers = request.headers.map((h, i) => (i === index ? { ...h, ...patch } : h));
-  return { ...request, headers };
-}
-
-function updateQueryParams(
-  request: HttpRequestEntry,
-  index: number,
-  patch: Partial<{ key: string; value: string | null; isEnabled: boolean }>,
-): HttpRequestEntry {
-  const queryParams = request.queryParams.map((p, i) => (i === index ? { ...p, ...patch } : p));
-  return { ...request, queryParams };
-}
-
-function tryPrettyPrintJson(content: string): string {
-  try {
-    return JSON.stringify(JSON.parse(content), null, 2);
-  } catch {
-    return content;
-  }
-}
-
-function tryMinifyJson(content: string): string {
-  try {
-    return JSON.stringify(JSON.parse(content));
-  } catch {
-    return content;
-  }
-}
 
 export function RequestEditor({ request, onChange, onSend, onSave, sending, variableScope = {}, environments = [], captureWarnings = [] }: RequestEditorProps) {
   const [activeTab, setActiveTab] = useState<Tab>("params");
@@ -316,32 +104,6 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
 
   const setMethod = (method: ApiRequestMethod) => onChange({ ...request, method });
   const setUrl = (url: string) => onChange({ ...request, url });
-  const setBodyMode = (mode: RequestBodyMode) => {
-    const contentType =
-      mode === "Json" ? "application/json" :
-      mode === "Xml" ? "application/xml" :
-      mode === "Text" ? (request.body.contentType ?? "text/plain") :
-      request.body.contentType;
-    onChange({ ...request, body: { ...request.body, mode, contentType } });
-  };
-  const setBodyContent = (rawContent: string) =>
-    onChange({ ...request, body: { ...request.body, rawContent } });
-
-  const addHeader = () =>
-    onChange({
-      ...request,
-      headers: [...request.headers, { key: "", value: "", isEnabled: true }],
-    });
-  const removeHeader = (index: number) =>
-    onChange({ ...request, headers: request.headers.filter((_, i) => i !== index) });
-
-  const addQueryParam = () =>
-    onChange({
-      ...request,
-      queryParams: [...request.queryParams, { key: "", value: "", isEnabled: true }],
-    });
-  const removeQueryParam = (index: number) =>
-    onChange({ ...request, queryParams: request.queryParams.filter((_, i) => i !== index) });
 
   const setCaptureRules = (rules: CaptureRule[]) => onChange({ ...request, captureRules: rules });
   const updateCaptureRule = (index: number, patch: Partial<CaptureRule>) => {
@@ -437,18 +199,6 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
       secretSaveTimer.current = null;
     }
     void persistSecret();
-  };
-
-  const prettyPrint = () => {
-    if (request.body.rawContent) {
-      setBodyContent(tryPrettyPrintJson(request.body.rawContent));
-    }
-  };
-
-  const minify = () => {
-    if (request.body.rawContent) {
-      setBodyContent(tryMinifyJson(request.body.rawContent));
-    }
   };
 
   return (
@@ -612,288 +362,29 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
       <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4">
         {/* Params tab */}
         {activeTab === "params" && (
-          <div data-testid="params-tab">
-            {request.queryParams.map((param, i) => (
-              <div key={i} className="mb-1 flex items-center gap-2" data-testid={`query-param-row-${i}`}>
-                <input
-                  type="checkbox"
-                  checked={param.isEnabled}
-                  onChange={(e) => onChange(updateQueryParams(request, i, { isEnabled: e.target.checked }))}
-                />
-                <input
-                  type="text"
-                  value={param.key}
-                  onChange={(e) => onChange(updateQueryParams(request, i, { key: e.target.value }))}
-                  placeholder="Key"
-                  className="w-32 rounded border bg-background px-2 py-1 text-sm"
-                />
-                <VariableInput
-                  testId={`query-param-value-${i}`}
-                  ariaLabel={`Query parameter ${i + 1} value`}
-                  value={param.value ?? ""}
-                  onChange={(value) => onChange(updateQueryParams(request, i, { value }))}
-                  scope={variableScope}
-                  placeholder="Value"
-                  metricsClassName="px-2 py-1 text-sm"
-                />
-                <button className="text-xs text-destructive" onClick={() => removeQueryParam(i)}>
-                  Remove
-                </button>
-              </div>
-            ))}
-            <button
-              data-testid="add-query-param-button"
-              className="text-sm text-primary hover:underline"
-              onClick={addQueryParam}
-            >
-              + Add parameter
-            </button>
-          </div>
+          <ParamsPanel request={request} onChange={onChange} variableScope={variableScope} />
         )}
 
         {/* Headers tab */}
         {activeTab === "headers" && (
-          <div data-testid="headers-tab">
-            {request.headers.map((header, i) => (
-              <div key={i} className="mb-1 flex items-center gap-2" data-testid={`request-header-row-${i}`}>
-                <input
-                  type="checkbox"
-                  checked={header.isEnabled}
-                  onChange={(e) => onChange(updateHeaders(request, i, { isEnabled: e.target.checked }))}
-                />
-                <input
-                  type="text"
-                  value={header.key}
-                  onChange={(e) => onChange(updateHeaders(request, i, { key: e.target.value }))}
-                  placeholder="Header"
-                  className="w-32 rounded border bg-background px-2 py-1 text-sm"
-                />
-                <VariableInput
-                  testId={`request-header-value-${i}`}
-                  ariaLabel={`Header ${i + 1} value`}
-                  value={header.value ?? ""}
-                  onChange={(value) => onChange(updateHeaders(request, i, { value }))}
-                  scope={variableScope}
-                  placeholder="Value"
-                  metricsClassName="px-2 py-1 text-sm"
-                />
-                <button className="text-xs text-destructive" onClick={() => removeHeader(i)}>
-                  Remove
-                </button>
-              </div>
-            ))}
-            <button
-              data-testid="add-request-header-button"
-              className="text-sm text-primary hover:underline"
-              onClick={addHeader}
-            >
-              + Add header
-            </button>
-          </div>
+          <HeadersPanel request={request} onChange={onChange} variableScope={variableScope} />
         )}
 
         {/* Body tab */}
         {activeTab === "body" && (
-          <div className="flex min-h-0 flex-1 flex-col" data-testid="body-tab">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium">Body</span>
-              <select
-                data-testid="request-body-mode-select"
-                value={request.body.mode}
-                onChange={(e) => setBodyMode(e.target.value as RequestBodyMode)}
-                className="rounded border bg-background px-2 py-1 text-xs"
-              >
-                {bodyModes.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-              {request.body.mode === "Text" && (
-                <input
-                  data-testid="request-body-content-type"
-                  type="text"
-                  value={request.body.contentType ?? "text/plain"}
-                  onChange={(e) => onChange({ ...request, body: { ...request.body, contentType: e.target.value } })}
-                  placeholder="text/plain"
-                  className="w-40 rounded border bg-background px-2 py-1 text-xs font-mono"
-                />
-              )}
-              {request.body.mode === "Json" && request.body.rawContent && (
-                <>
-                  <button
-                    onClick={prettyPrint}
-                    title="Pretty print JSON"
-                    className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent"
-                    data-testid="body-pretty-print"
-                  >
-                    <Wand2 className="h-3 w-3" /> Format
-                  </button>
-                  <button
-                    onClick={minify}
-                    title="Minify JSON"
-                    className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent"
-                    data-testid="body-minify"
-                  >
-                    <Minimize2 className="h-3 w-3" /> Minify
-                  </button>
-                </>
-              )}
-            </div>
-            {request.body.mode !== "None" && (
-              <BodyCodeEditor
-                value={request.body.rawContent ?? ""}
-                mode={request.body.mode}
-                onChange={setBodyContent}
-                scope={variableScope}
-              />
-            )}
-          </div>
+          <BodyPanel request={request} onChange={onChange} variableScope={variableScope} />
         )}
 
         {/* Auth tab */}
         {activeTab === "auth" && (
-          <div data-testid="auth-tab">
-            <select
-              data-testid="auth-type-select"
-              value={auth.type}
-              onChange={(e) => setAuthType(e.target.value as AuthType)}
-              className="mb-2 rounded border bg-background px-2 py-1 text-sm"
-            >
-              {authTypes.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-
-            {auth.type === "BearerToken" && (
-              <input
-                data-testid="auth-bearer-input"
-                type="password"
-                value={authSecretInput}
-                onChange={(e) => handleSecretChange(e.target.value)}
-                onBlur={handleSecretBlur}
-                placeholder="Bearer token"
-                className="w-full rounded border bg-background px-2 py-1 text-sm"
-              />
-            )}
-
-            {auth.type === "Basic" && (
-              <div className="flex gap-2">
-                <input
-                  data-testid="auth-basic-username"
-                  type="text"
-                  value={auth.basicUsername ?? ""}
-                  onChange={(e) => updateAuth({ basicUsername: e.target.value })}
-                  placeholder="Username"
-                  className="flex-1 rounded border bg-background px-2 py-1 text-sm"
-                />
-                <input
-                  data-testid="auth-basic-password"
-                  type="password"
-                  value={authSecretInput}
-                  onChange={(e) => handleSecretChange(e.target.value)}
-                  onBlur={handleSecretBlur}
-                  placeholder="Password"
-                  className="flex-1 rounded border bg-background px-2 py-1 text-sm"
-                />
-              </div>
-            )}
-
-            {auth.type === "ApiKey" && (
-              <div className="flex gap-2">
-                <input
-                  data-testid="auth-apikey-name"
-                  type="text"
-                  value={auth.apiKeyParamName ?? ""}
-                  onChange={(e) => updateAuth({ apiKeyParamName: e.target.value })}
-                  placeholder="Key name"
-                  className="w-32 rounded border bg-background px-2 py-1 text-sm"
-                />
-                <select
-                  data-testid="auth-apikey-location"
-                  value={auth.apiKeyLocation}
-                  onChange={(e) => updateAuth({ apiKeyLocation: e.target.value as "Header" | "QueryParam" })}
-                  className="rounded border bg-background px-2 py-1 text-sm"
-                >
-                  <option value="Header">Header</option>
-                  <option value="QueryParam">Query</option>
-                </select>
-                <input
-                  data-testid="auth-apikey-value"
-                  type="password"
-                  value={authSecretInput}
-                  onChange={(e) => handleSecretChange(e.target.value)}
-                  onBlur={handleSecretBlur}
-                  placeholder="API key value"
-                  className="flex-1 rounded border bg-background px-2 py-1 text-sm"
-                />
-              </div>
-            )}
-
-            {auth.type === "OAuth2" && (
-              <div className="space-y-2">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Grant Type</label>
-                  <select
-                    data-testid="auth-oauth2-grant"
-                    value={auth.oAuth2GrantType}
-                    onChange={(e) => updateAuth({ oAuth2GrantType: e.target.value as "ClientCredentials" | "AuthorizationCode" })}
-                    className="w-full rounded border bg-background px-2 py-1 text-sm"
-                  >
-                    <option value="ClientCredentials">Client Credentials</option>
-                    <option value="AuthorizationCode">Authorization Code</option>
-                  </select>
-                </div>
-                <input
-                  data-testid="auth-oauth2-client-id"
-                  type="text"
-                  value={auth.oAuth2ClientId ?? ""}
-                  onChange={(e) => updateAuth({ oAuth2ClientId: e.target.value })}
-                  placeholder="Client ID"
-                  className="w-full rounded border bg-background px-2 py-1 text-sm"
-                />
-                <input
-                  data-testid="auth-oauth2-token-url"
-                  type="text"
-                  value={auth.oAuth2TokenUrl ?? ""}
-                  onChange={(e) => updateAuth({ oAuth2TokenUrl: e.target.value })}
-                  placeholder="Token URL"
-                  className="w-full rounded border bg-background px-2 py-1 text-sm"
-                />
-                {auth.oAuth2GrantType === "AuthorizationCode" && (
-                  <input
-                    data-testid="auth-oauth2-auth-url"
-                    type="text"
-                    value={auth.oAuth2AuthUrl ?? ""}
-                    onChange={(e) => updateAuth({ oAuth2AuthUrl: e.target.value })}
-                    placeholder="Authorization URL"
-                    className="w-full rounded border bg-background px-2 py-1 text-sm"
-                  />
-                )}
-                <input
-                  data-testid="auth-oauth2-scopes"
-                  type="text"
-                  value={auth.oAuth2Scopes ?? ""}
-                  onChange={(e) => updateAuth({ oAuth2Scopes: e.target.value })}
-                  placeholder="Scopes (space-separated)"
-                  className="w-full rounded border bg-background px-2 py-1 text-sm"
-                />
-                <input
-                  data-testid="auth-oauth2-secret"
-                  type="password"
-                  value={authSecretInput}
-                  onChange={(e) => handleSecretChange(e.target.value)}
-                  onBlur={handleSecretBlur}
-                  placeholder="Client Secret"
-                  className="w-full rounded border bg-background px-2 py-1 text-sm"
-                />
-              </div>
-            )}
-
-            {auth.type === "Inherited" && (
-              <div className="text-xs text-muted-foreground">
-                This request inherits authentication from its parent collection.
-              </div>
-            )}
-          </div>
+          <AuthPanel
+            auth={auth}
+            secretInput={authSecretInput}
+            onAuthTypeChange={setAuthType}
+            onAuthPatch={updateAuth}
+            onSecretChange={handleSecretChange}
+            onSecretBlur={handleSecretBlur}
+          />
         )}
 
         {/* GraphQL tab */}
@@ -903,110 +394,15 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
 
         {/* Capture rules tab */}
         {activeTab === "capture" && (
-          <div data-testid="capture-tab">
-            <div className="mb-2 flex items-center gap-2">
-              <Crosshair className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Capture Rules</span>
-            </div>
-            <p className="mb-3 text-xs text-muted-foreground">Extract values from responses and save them to variables automatically.</p>
-            {request.captureRules.map((rule, i) => (
-              <div key={rule.id} className="mb-2 flex flex-wrap items-center gap-2" data-testid={`capture-rule-row-${i}`}>
-                <input
-                  type="checkbox"
-                  checked={rule.isEnabled}
-                  onChange={(e) => updateCaptureRule(i, { isEnabled: e.target.checked })}
-                  data-testid={`capture-rule-enabled-${i}`}
-                />
-                <select
-                  value={rule.source}
-                  onChange={(e) => updateCaptureRule(i, { source: e.target.value as CaptureRule["source"] })}
-                  className="rounded border bg-background px-2 py-1 text-xs"
-                  data-testid={`capture-rule-source-${i}`}
-                >
-                  <option value="BodyJsonPath">Body (JSONPath)</option>
-                  <option value="ResponseHeader">Header</option>
-                  <option value="StatusCode">Status Code</option>
-                </select>
-                {rule.source === "BodyJsonPath" && (
-                  <div className="flex flex-1 items-center gap-1">
-                    <input
-                      type="text"
-                      value={rule.jsonPath ?? ""}
-                      onChange={(e) => updateCaptureRule(i, { jsonPath: e.target.value || null })}
-                      placeholder="JSONPath (e.g. $.data.id)"
-                      className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
-                      data-testid={`capture-rule-path-${i}`}
-                    />
-                    <button
-                      onClick={() => setJsonPathPicker({ open: true, index: i, path: rule.jsonPath ?? "" })}
-                      className="rounded border px-1.5 py-1 text-xs hover:bg-accent"
-                      title="Pick JSONPath"
-                      data-testid={`capture-rule-picker-${i}`}
-                    >
-                      <Search className="h-3 w-3" />
-                    </button>
-                  </div>
-                )}
-                {rule.source === "ResponseHeader" && (
-                  <input
-                    type="text"
-                    value={rule.headerName ?? ""}
-                    onChange={(e) => updateCaptureRule(i, { headerName: e.target.value || null })}
-                    placeholder="Header name (e.g. X-Request-Id)"
-                    className="flex-1 rounded border bg-background px-2 py-1 text-sm"
-                    data-testid={`capture-rule-header-${i}`}
-                  />
-                )}
-                {rule.source === "StatusCode" && (
-                  <span className="flex-1 rounded border bg-background px-2 py-1 text-sm text-muted-foreground" data-testid={`capture-rule-static-${i}`}>
-                    status code
-                  </span>
-                )}
-                <span className="text-sm text-muted-foreground">→</span>
-                <input
-                  type="text"
-                  value={rule.targetVariable}
-                  onChange={(e) => updateCaptureRule(i, { targetVariable: e.target.value })}
-                  placeholder="Variable name"
-                  className="w-32 rounded border bg-background px-2 py-1 text-sm"
-                  data-testid={`capture-rule-target-${i}`}
-                />
-                <select
-                  value={rule.targetScope}
-                  onChange={(e) => updateCaptureRule(i, { targetScope: e.target.value })}
-                  className="rounded border bg-background px-2 py-1 text-xs"
-                  data-testid={`capture-rule-scope-${i}`}
-                >
-                  <option value="collection">Collection</option>
-                  {environments.map((env) => (
-                    <option key={env.id} value={env.id}>{env.name}</option>
-                  ))}
-                </select>
-                <button
-                  className="text-xs text-destructive"
-                  onClick={() => removeCaptureRule(i)}
-                  data-testid={`capture-rule-remove-${i}`}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-            <button
-              className="text-sm text-primary hover:underline"
-              onClick={addCaptureRule}
-              data-testid="add-capture-rule"
-            >
-              + Add capture rule
-            </button>
-            {captureWarnings.length > 0 && (
-              <div className="mt-3 border-t pt-2" data-testid="capture-warnings">
-                <div className="mb-1 text-xs font-medium" style={{ color: "var(--warning)" }}>Capture warnings</div>
-                {captureWarnings.map((w, i) => (
-                  <div key={i} className="text-xs" style={{ color: "var(--warning)" }}>{w}</div>
-                ))}
-              </div>
-            )}
-          </div>
+          <CapturePanel
+            rules={request.captureRules}
+            environments={environments}
+            captureWarnings={captureWarnings}
+            onUpdateRule={updateCaptureRule}
+            onAddRule={addCaptureRule}
+            onRemoveRule={removeCaptureRule}
+            onPickJsonPath={(index, path) => setJsonPathPicker({ open: true, index, path })}
+          />
         )}
 
         {/* WebSocket tab */}

@@ -1,5 +1,3 @@
-using System.Text;
-using System.Text.Json;
 using Microsoft.AspNetCore.Http.HttpResults;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
@@ -9,12 +7,6 @@ namespace SwebKit.Sidecar.Endpoints;
 
 public static class MonitoringEndpoints
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-    };
-
     public static void MapMonitoringEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/monitoring");
@@ -37,54 +29,46 @@ public static class MonitoringEndpoints
 
         // ── Live SSE stream of fired alerts ─────────────────────────────────
 
-        group.MapGet("/stream", async (HttpContext context, MonitoringAlertEvaluationService engine, ProactiveInsightService insights) =>
+        group.MapGet("/stream", (
+            HttpContext context,
+            MonitoringAlertEvaluationService engine,
+            ProactiveInsightService insights,
+            ILogger<MonitoringEventStream> logger) => StreamAsync(context, engine, insights, logger));
+    }
+
+    /// <summary>
+    /// Request handler for <c>GET /api/monitoring/stream</c>. Subscribes to the alert engine and the
+    /// proactive-insight service, then pumps everything they raise to the client over SSE.
+    /// </summary>
+    /// <remarks>
+    /// The event handlers only enqueue — all socket I/O happens on this request's own loop. That is
+    /// the whole point: the handlers run on the alert-evaluation background thread, so a previous
+    /// implementation that blocked on <c>WriteAsync(...).GetAwaiter().GetResult()</c> let one stalled
+    /// SSE client freeze rule evaluation for every rule, silently.
+    /// </remarks>
+    internal static async Task StreamAsync(
+        HttpContext context,
+        MonitoringAlertEvaluationService engine,
+        ProactiveInsightService insights,
+        ILogger? logger = null)
+    {
+        var stream = new MonitoringEventStream(logger);
+
+        void OnAlertFired(AlertFiredEvent evt) => stream.Enqueue("alertFired", evt);
+        void OnInsightReady(ProactiveInsightReadyEvent evt) => stream.Enqueue("proactiveInsightReady", evt);
+
+        engine.AlertFired += OnAlertFired;
+        insights.InsightReady += OnInsightReady;
+        try
         {
-            context.Response.Headers.CacheControl = "no-cache";
-            context.Response.Headers.Connection = "keep-alive";
-            context.Response.ContentType = "text/event-stream; charset=utf-8";
-
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
-
-            await context.Response.WriteAsync(": connected\n\n", cts.Token);
-
-            // Wrapped in a {kind, event} envelope (workspace-intelligence Module 4) so this one
-            // stream can carry both the pre-existing AlertFiredEvent and the new
-            // ProactiveInsightReadyEvent — see useMonitoringStream on the frontend for the matching
-            // parsing side.
-            void WriteEvent(string kind, object evt)
-            {
-                try
-                {
-                    var json = JsonSerializer.Serialize(new { kind, @event = evt }, JsonOptions);
-                    context.Response.WriteAsync($"data: {json}\n\n", cts.Token).GetAwaiter().GetResult();
-                    context.Response.Body.FlushAsync(cts.Token).GetAwaiter().GetResult();
-                }
-                catch (OperationCanceledException) { /* client gone */ }
-                catch (Exception) { /* swallow — stream resilience */ }
-            }
-
-            void OnAlertFired(AlertFiredEvent evt) => WriteEvent("alertFired", evt);
-            void OnInsightReady(ProactiveInsightReadyEvent evt) => WriteEvent("proactiveInsightReady", evt);
-
-            engine.AlertFired += OnAlertFired;
-            insights.InsightReady += OnInsightReady;
-            try
-            {
-                using var timer = new PeriodicTimer(TimeSpan.FromSeconds(20));
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    try { await timer.WaitForNextTickAsync(cts.Token); }
-                    catch (OperationCanceledException) { break; }
-                    await context.Response.WriteAsync(": heartbeat\n\n", cts.Token);
-                    await context.Response.Body.FlushAsync(cts.Token);
-                }
-            }
-            finally
-            {
-                engine.AlertFired -= OnAlertFired;
-                insights.InsightReady -= OnInsightReady;
-            }
-        });
+            await stream.RunAsync(context, context.RequestAborted);
+        }
+        finally
+        {
+            engine.AlertFired -= OnAlertFired;
+            insights.InsightReady -= OnInsightReady;
+            stream.Complete();
+        }
     }
 
     internal static async Task<Ok<IReadOnlyList<MonitoringAlertRule>>> GetRulesAsync(IAlertRuleRepository repo) =>

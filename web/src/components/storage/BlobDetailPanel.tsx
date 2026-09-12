@@ -4,16 +4,10 @@ import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { useStoragePageContext } from "./StoragePageContext";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { tryPrettifyJson } from "@/lib/pretty-json";
+import { formatBytes } from "@/lib/format-bytes";
 import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
 
 const CONTENT_PRETTY_PREF_KEY = "storage-blob-content-pretty";
-
-function formatBytes(bytes: number | null | undefined): string {
-  if (bytes == null) return "-";
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
-}
 
 function formatDate(date: string | null | undefined): string {
   if (!date) return "-";
