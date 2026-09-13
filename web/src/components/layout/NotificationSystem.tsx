@@ -3,16 +3,23 @@ import { X, CheckCircle, AlertCircle, Info, Bell } from "lucide-react";
 
 type NotificationType = "success" | "error" | "info";
 
+interface NotificationAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface NotificationItem {
   id: string;
   type: NotificationType;
   title: string;
   body?: string;
   timestamp: number;
+  /** Optional recovery action rendered as a button on the toast (e.g. "Undo"). Never persisted to history. */
+  action?: NotificationAction;
 }
 
 interface NotificationContextValue {
-  notify: (type: NotificationType, title: string, body?: string) => void;
+  notify: (type: NotificationType, title: string, body?: string, action?: NotificationAction) => void;
   notifications: NotificationItem[];
   dismiss: (id: string) => void;
 }
@@ -38,9 +45,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const notify = (type: NotificationType, title: string, body?: string) => {
+  const notify = (type: NotificationType, title: string, body?: string, action?: NotificationAction) => {
     const id = crypto.randomUUID();
-    const item: NotificationItem = { id, type, title, body, timestamp: Date.now() };
+    const item: NotificationItem = { id, type, title, body, timestamp: Date.now(), action };
     setNotifications((prev) => [...prev, item]);
     setTimeout(() => dismiss(id), 5000);
   };
@@ -113,6 +120,18 @@ function Toast({ notification, onDismiss }: { notification: NotificationItem; on
       <div className="flex-1">
         <div className="text-sm font-medium">{notification.title}</div>
         {notification.body && <div className="mt-0.5 text-xs text-muted-foreground">{notification.body}</div>}
+        {notification.action && (
+          <button
+            onClick={() => {
+              notification.action?.onClick();
+              onDismiss();
+            }}
+            className="mt-1 text-xs font-medium text-primary hover:underline"
+            data-testid={`notification-action-${notification.id}`}
+          >
+            {notification.action.label}
+          </button>
+        )}
       </div>
       <button onClick={onDismiss} className="text-muted-foreground hover:text-foreground" data-testid={`notification-dismiss-${notification.id}`}>
         <X className="h-3.5 w-3.5" />

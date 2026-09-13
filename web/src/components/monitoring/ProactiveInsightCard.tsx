@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import type { ProactiveInsightReadyEvent } from "../../lib/api";
 
 interface ProactiveInsightCardProps {
@@ -32,10 +33,11 @@ export function ProactiveInsightCard({ insight, onInvestigate, onDismiss }: Proa
         </button>
         <button
           onClick={() => onDismiss(insight)}
-          className="rounded-md px-2 py-1.5 text-xs hover:bg-accent"
+          className="rounded-md p-1.5 hover:bg-accent"
+          title="Dismiss"
           data-testid={`proactive-insight-dismiss-${insight.ruleId}-${insight.firedAt}`}
         >
-          ✕
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>
