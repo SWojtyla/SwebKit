@@ -23,7 +23,7 @@ status: Proposed
 | 5 — Monitoring | 5.1–5.4 | Done — merged (commit `31beb3d`) |
 | 6 — Storage | 6.1–6.6 | Done — merged (commit `6ed1874`) |
 | 7 — Agent | 7.1–7.7 | Done — merged (commit `cb5cb5e`); Aikido scan not run (MCP unavailable this session) |
-| 8 — Settings | 8.1–8.9 | In progress (background agent) |
+| 8 — Settings | 8.1–8.9 | Done — merged (commit `f6a27d4`) |
 | 9 — Dashboard | 9.1–9.3 | Done — merged as `52587d4` (commit `c9160ee`) |
 
 Batches 2–8 are each being implemented in their own git worktree (`.claude/worktrees/agent-*`) by

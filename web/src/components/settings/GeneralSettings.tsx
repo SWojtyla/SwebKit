@@ -74,6 +74,10 @@ export function GeneralSettings() {
           />
           Verify SSL certificates
         </label>
+        <p className="mb-2 mt-0.5 pl-6 text-xs text-muted-foreground">
+          Reject requests to hosts with an invalid/self-signed TLS certificate. Turn off only
+          for local/dev endpoints you trust.
+        </p>
         <label className="mt-2 flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -87,6 +91,10 @@ export function GeneralSettings() {
           />
           Enable request tabs
         </label>
+        <p className="mb-2 mt-0.5 pl-6 text-xs text-muted-foreground">
+          Open each request in its own tab so several stay open side by side, instead of one
+          request replacing the last.
+        </p>
         <label className="mt-2 flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -100,6 +108,10 @@ export function GeneralSettings() {
           />
           Auto-save request changes
         </label>
+        <p className="mb-2 mt-0.5 pl-6 text-xs text-muted-foreground">
+          Save edits to a request (URL, headers, body) back to its collection as you make
+          them, instead of only when you explicitly save.
+        </p>
 
         {profile && (
           <div className="mt-5" data-testid="key-vaults-section">
@@ -168,6 +180,10 @@ export function GeneralSettings() {
           />
           Warm up connections on startup
         </label>
+        <p className="mt-0.5 pl-6 text-xs text-muted-foreground">
+          Connect to your configured AKS/Service Bus/Redis/Storage services as soon as the app
+          opens, so the first tab you visit isn't the one waiting on a cold connection.
+        </p>
       </section>
 
       <section>

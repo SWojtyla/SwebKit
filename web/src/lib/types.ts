@@ -73,8 +73,15 @@ export interface ServiceBusNamespace {
    * this as an enum, and an unknown value fails the whole profile save. This said
    * `"Entra"`, which is not a member, so selecting Entra ID in Settings was rejected and
    * silently reverted. Entra ID auth is `DefaultAzureCredential`.
+   *
+   * The C# enum also has a `ServicePrincipal` member, but no code path (UI or sidecar
+   * connection factory) actually implements it — the active connection factory only
+   * branches on `ConnectionString` vs. everything else falling through to
+   * `DefaultAzureCredential`, so selecting it would silently behave like Entra ID with no
+   * indication why. Deliberately omitted here until it's really wired up end to end; add it
+   * back only alongside real client id/secret (or cert) fields and sidecar support.
    */
-  authMode: "DefaultAzureCredential" | "ConnectionString" | "ServicePrincipal";
+  authMode: "DefaultAzureCredential" | "ConnectionString";
   credentialKey: string;
   transportType: "Amqp" | "AmqpWebSockets";
   createdAt: string;

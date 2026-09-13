@@ -1,10 +1,23 @@
+import { useState } from "react";
 import { useProfile, useUpdateProfile } from "@/lib/hooks";
+import { useRedisTestConnection } from "@/lib/hooks/useRedis";
+import { useNotification } from "@/components/layout/NotificationSystem";
+import { clampInt } from "@/lib/clamp-int";
 import type { RedisCacheEntry } from "@/lib/types";
 import { DraftInput } from "./DraftInput";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
+
+/** A cache is worth confirming removal of once it has real configured data — an untouched
+ * "New Cache" placeholder can go without the extra click. */
+function isConfigured(cache: RedisCacheEntry): boolean {
+  return cache.connectionString.trim() !== "" || cache.cacheName.trim() !== "";
+}
 
 export function RedisSettings() {
   const { data: profile } = useProfile();
   const updateProfile = useUpdateProfile();
+  const { notify } = useNotification();
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
 
   if (!profile) return null;
 
@@ -49,10 +62,32 @@ export function RedisSettings() {
     });
   };
 
+  const requestRemove = (cache: RedisCacheEntry) => {
+    if (isConfigured(cache)) {
+      setPendingRemoveId(cache.id);
+    } else {
+      removeCache(cache.id);
+    }
+  };
+
   const updateCache = (id: string, patch: Partial<RedisCacheEntry>) => {
     update({
       caches: redis.caches.map((c) => (c.id === id ? { ...c, ...patch } : c)),
     });
+  };
+
+  const commitDatabase = (cache: RedisCacheEntry, raw: string) => {
+    const result = clampInt(raw, { min: 0, max: 15, fallback: cache.database });
+    if (result.invalid) {
+      notify("error", "Invalid database index", `"${raw}" isn't a number — kept at ${cache.database}.`);
+    } else if (result.clamped) {
+      notify(
+        "error",
+        "Database index out of range",
+        `Redis logical databases are numbered 0–15. Clamped to ${result.value}.`,
+      );
+    }
+    updateCache(cache.id, { database: result.value });
   };
 
   return (
@@ -81,100 +116,174 @@ export function RedisSettings() {
       </div>
 
       {redis.caches.map((cache) => (
-        <div key={cache.id} className="space-y-3 rounded-lg border p-4">
-          <div className="flex items-center justify-between">
-            <DraftInput
-              type="text"
-              value={cache.displayName}
-              onCommit={(v) => updateCache(cache.id, { displayName: v })}
-              className="flex-1 rounded-md border bg-card px-3 py-1.5 text-sm"
-              placeholder="Display name"
-            />
-            <button
-              onClick={() => removeCache(cache.id)}
-              className="ml-2 text-sm text-destructive hover:opacity-80"
-            >
-              Remove
-            </button>
-          </div>
+        <CacheRow
+          key={cache.id}
+          cache={cache}
+          isActive={redis.activeCacheId === cache.id}
+          onUpdate={(patch) => updateCache(cache.id, patch)}
+          onCommitDatabase={(raw) => commitDatabase(cache, raw)}
+          onSetActive={() => update({ activeCacheId: cache.id })}
+          onRequestRemove={() => requestRemove(cache)}
+          pendingRemove={pendingRemoveId === cache.id}
+          onConfirmRemove={() => {
+            removeCache(cache.id);
+            setPendingRemoveId(null);
+          }}
+          onCancelRemove={() => setPendingRemoveId(null)}
+        />
+      ))}
+    </div>
+  );
+}
 
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name={`redis-auth-${cache.id}`}
-                checked={!cache.useAad}
-                onChange={() => updateCache(cache.id, { useAad: false })}
-                data-testid={`redis-auth-connstring-${cache.id}`}
-              />
-              Connection String
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name={`redis-auth-${cache.id}`}
-                checked={cache.useAad}
-                onChange={() => updateCache(cache.id, { useAad: true })}
-                data-testid={`redis-auth-entra-${cache.id}`}
-              />
-              Entra ID (AAD)
-            </label>
-          </div>
+interface CacheRowProps {
+  cache: RedisCacheEntry;
+  isActive: boolean;
+  onUpdate: (patch: Partial<RedisCacheEntry>) => void;
+  onCommitDatabase: (raw: string) => void;
+  onSetActive: () => void;
+  onRequestRemove: () => void;
+  pendingRemove: boolean;
+  onConfirmRemove: () => void;
+  onCancelRemove: () => void;
+}
 
-          {cache.useAad ? (
-            <div>
-              <DraftInput
-                type="text"
-                value={cache.cacheName}
-                onCommit={(v) => updateCache(cache.id, { cacheName: v })}
-                className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-                placeholder="my-cache"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                The cache's resource name from the Azure portal — connects to{" "}
-                <code>&lt;name&gt;.redis.cache.windows.net</code> using your signed-in Azure identity.
-              </p>
-            </div>
-          ) : (
-            <div>
-              <DraftInput
-                type="text"
-                value={cache.connectionString}
-                onCommit={(v) => updateCache(cache.id, { connectionString: v })}
-                className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-                placeholder="localhost:6379"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                StackExchange.Redis connection string, e.g. <code>localhost:6379</code> or{" "}
-                <code>mycache.redis.cache.windows.net:6380,ssl=True,password=...</code>.
-              </p>
-            </div>
-          )}
+function CacheRow({
+  cache,
+  isActive,
+  onUpdate,
+  onCommitDatabase,
+  onSetActive,
+  onRequestRemove,
+  pendingRemove,
+  onConfirmRemove,
+  onCancelRemove,
+}: CacheRowProps) {
+  // `enabled: false`: only fires when "Test connection" is clicked, not on every render.
+  const test = useRedisTestConnection(cache.id, { enabled: false });
 
-          <div className="flex items-center gap-2">
-            <label className="text-sm">Database:</label>
-            <DraftInput
-              type="number"
-              value={String(cache.database)}
-              onCommit={(v) => updateCache(cache.id, { database: parseInt(v) || 0 })}
-              className="w-20 rounded-md border bg-card px-3 py-1.5 text-sm"
-            />
-            <label className="ml-4 flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="redis-active-cache"
-                checked={redis.activeCacheId === cache.id}
-                onChange={() => update({ activeCacheId: cache.id })}
-              />
-              Active
-            </label>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Database: Redis logical database index (0–15). Leave 0 unless this cache uses multiple
-            databases. Active: the cache used when you open the Redis browser page.
+  return (
+    <div className="space-y-3 rounded-lg border p-4" data-testid={`redis-cache-${cache.id}`}>
+      <div className="flex items-center justify-between">
+        <DraftInput
+          type="text"
+          value={cache.displayName}
+          onCommit={(v) => onUpdate({ displayName: v })}
+          className="flex-1 rounded-md border bg-card px-3 py-1.5 text-sm"
+          placeholder="Display name"
+        />
+        <button
+          onClick={onRequestRemove}
+          className="ml-2 text-sm text-destructive hover:opacity-80"
+          data-testid={`redis-remove-${cache.id}`}
+        >
+          Remove
+        </button>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            name={`redis-auth-${cache.id}`}
+            checked={!cache.useAad}
+            onChange={() => onUpdate({ useAad: false })}
+            data-testid={`redis-auth-connstring-${cache.id}`}
+          />
+          Connection String
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            name={`redis-auth-${cache.id}`}
+            checked={cache.useAad}
+            onChange={() => onUpdate({ useAad: true })}
+            data-testid={`redis-auth-entra-${cache.id}`}
+          />
+          Entra ID (AAD)
+        </label>
+      </div>
+
+      {cache.useAad ? (
+        <div>
+          <DraftInput
+            type="text"
+            value={cache.cacheName}
+            onCommit={(v) => onUpdate({ cacheName: v })}
+            className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+            placeholder="my-cache"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            The cache's resource name from the Azure portal — connects to{" "}
+            <code>&lt;name&gt;.redis.cache.windows.net</code> using your signed-in Azure identity.
           </p>
         </div>
-      ))}
+      ) : (
+        <div>
+          <DraftInput
+            type="text"
+            value={cache.connectionString}
+            onCommit={(v) => onUpdate({ connectionString: v })}
+            className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+            placeholder="localhost:6379"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            StackExchange.Redis connection string, e.g. <code>localhost:6379</code> or{" "}
+            <code>mycache.redis.cache.windows.net:6380,ssl=True,password=...</code>. Unlike
+            Storage/Service Bus's credential-store key indirection, this is stored as plain
+            text in your local profile (<code>profiles.json</code>), password included.
+          </p>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <label className="text-sm">Database:</label>
+        <DraftInput
+          type="number"
+          value={String(cache.database)}
+          onCommit={onCommitDatabase}
+          className="w-20 rounded-md border bg-card px-3 py-1.5 text-sm"
+          data-testid={`redis-database-${cache.id}`}
+        />
+        <label className="ml-4 flex items-center gap-2 text-sm">
+          <input type="radio" name="redis-active-cache" checked={isActive} onChange={onSetActive} />
+          Active
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Database: Redis logical database index (0–15). Leave 0 unless this cache uses multiple
+        databases. Active: the cache used when you open the Redis browser page.
+      </p>
+
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          onClick={() => test.refetch()}
+          disabled={test.isFetching}
+          className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+          data-testid={`redis-test-connection-${cache.id}`}
+        >
+          {test.isFetching ? "Testing…" : "Test connection"}
+        </button>
+        {test.data && (
+          <span
+            className={`text-xs ${test.data.connected ? "text-success" : "text-destructive"}`}
+            data-testid={`redis-test-result-${cache.id}`}
+          >
+            {test.data.connected ? "Connected" : `Failed: ${test.data.error ?? "unknown error"}`}
+          </span>
+        )}
+        {test.isError && <span className="text-xs text-destructive">{String(test.error)}</span>}
+      </div>
+
+      {pendingRemove && (
+        <ConfirmBar
+          message={`Remove "${cache.displayName}"? This deletes its configuration from your profile — the cache itself is unaffected.`}
+          confirmLabel="Remove"
+          onConfirm={onConfirmRemove}
+          onCancel={onCancelRemove}
+          testId={`redis-remove-confirm-${cache.id}`}
+        />
+      )}
     </div>
   );
 }

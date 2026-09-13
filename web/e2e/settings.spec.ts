@@ -145,13 +145,26 @@ test.describe("Settings", () => {
   });
 
   test("agent profile base URL persists across reload", async ({ page }) => {
+    // Batch 8.4 migrated this field to DraftInput (commit on blur/Enter), matching every
+    // other settings section — so the edit must be committed with a blur before reloading.
+    // `blur()` alone starts the save but doesn't wait for it — reloading before that PUT
+    // actually reaches the sidecar loses the edit, so wait for the real round trip, same as
+    // the Service Bus "commit on blur" test below. Agent profiles live under user settings
+    // (`/api/config/user-settings`), not the project profile endpoint.
+    const saveUserSettings = (method: string) =>
+      page.waitForResponse((r) => r.request().method() === method && r.url().includes("/api/config/user-settings"));
+
     await page.goto("/settings");
     await page.getByTestId("settings-tab-agent").click();
-    await page.getByTestId("agent-add-profile").click();
+    // Wait for "Add Profile"'s own save too — both it and the field commit below share one
+    // `scope: { id: "user-settings" }`-serialized mutation, so committing the field before
+    // this one settles would just queue behind it rather than run concurrently.
+    await Promise.all([saveUserSettings("PUT"), page.getByTestId("agent-add-profile").click()]);
 
     const baseUrlInput = page.getByTestId("agent-profile-base-url-0");
     await baseUrlInput.fill("http://localhost:9999/v1");
     await expect(baseUrlInput).toHaveValue("http://localhost:9999/v1");
+    await Promise.all([saveUserSettings("PUT"), baseUrlInput.blur()]);
 
     await page.reload();
     await page.getByTestId("settings-tab-agent").click();
@@ -170,6 +183,7 @@ test.describe("Settings", () => {
     const contextWindowInput = page.getByTestId("agent-profile-context-window-0");
     await contextWindowInput.fill("32000");
     await expect(contextWindowInput).toHaveValue("32000");
+    await contextWindowInput.blur();
     await expect(page.getByTestId("agent-profile-capability-0")).toContainText("32,000-token window");
 
     await page.reload();
@@ -184,13 +198,25 @@ test.describe("Settings", () => {
     await page.goto("/settings");
     await page.getByTestId("settings-tab-agent").click();
 
+    // Batch 8.4 migrated these to DraftInput (commit on blur/Enter). Both fields share one
+    // `scope: { id: "profile" }`-serialized mutation, so the ID field's commit and the Name
+    // field's commit run one after another rather than concurrently — the second one is
+    // queued behind the first until it settles, and its PUT is only actually sent once that
+    // happens. Reloading before that queued request goes out would lose it, so — like the
+    // "Service Bus text fields commit on blur" test above — wait for each save's real PUT
+    // before moving on, rather than assuming `blur()` alone means it's landed.
+    const saveProfile = (method: string) =>
+      page.waitForResponse((r) => r.request().method() === method && r.url().includes("/api/config/profiles"));
+
     const resourceIdInput = page.getByTestId("observability-resource-id");
     await resourceIdInput.fill("/subscriptions/abc/resourceGroups/rg/providers/microsoft.insights/components/my-app");
     await expect(resourceIdInput).toHaveValue("/subscriptions/abc/resourceGroups/rg/providers/microsoft.insights/components/my-app");
+    await Promise.all([saveProfile("PUT"), resourceIdInput.blur()]);
 
     const resourceNameInput = page.getByTestId("observability-resource-name");
     await resourceNameInput.fill("My App Insights");
     await expect(resourceNameInput).toHaveValue("My App Insights");
+    await Promise.all([saveProfile("PUT"), resourceNameInput.blur()]);
 
     await page.reload();
     await page.getByTestId("settings-tab-agent").click();
@@ -238,9 +264,17 @@ test.describe("Settings", () => {
     await expect(page.getByTestId("workspace-map-relationships")).toContainText("consumes");
 
     // Removing the node also removes the relationship that referenced it — dangling relationships
-    // pointing at a deleted node would be silent, confusing garbage otherwise.
+    // pointing at a deleted node would be silent, confusing garbage otherwise. Batch 8.7 added a
+    // confirm step (map removals are always "configured" — there's no blank-placeholder state to
+    // skip it for), so the removal only takes effect after confirming.
     const nodeRow = page.locator('[data-testid^="workspace-node-"]', { hasText: "api (prod)" });
+    const nodeTestId = await nodeRow.getAttribute("data-testid");
+    const nodeId = nodeTestId!.replace("workspace-node-", "");
     await nodeRow.getByRole("button", { name: "Remove" }).click();
+    await expect(
+      page.getByTestId(`workspace-node-remove-confirm-${nodeId}`),
+    ).toContainText("1 relationship(s)");
+    await page.getByTestId(`workspace-node-remove-confirm-${nodeId}-yes`).click();
     await expect(page.getByTestId("workspace-map-relationships").locator("tbody tr")).toHaveCount(0);
   });
 
@@ -391,5 +425,131 @@ test.describe("Settings", () => {
     await page.getByTestId("appearance-theme-dark").click();
     await expect(page.locator("html")).toHaveClass(/dark/);
     await expect(page.locator("html")).not.toHaveClass(/fancy/);
+  });
+
+  // ── Batch 8 (Settings) ───────────────────────────────────────────────────
+
+  test("Service Bus Connection String mode exposes a credential-key field that persists (unit 8.1)", async ({ page }) => {
+    // Previously `credentialKey` was initialized on a new namespace but never bound to any
+    // input, so Connection String auth could not actually be configured through the UI.
+    const saveProfile = (method: string) =>
+      page.waitForResponse((r) => r.request().method() === method && r.url().includes("/api/config/profiles"));
+
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-service-bus").click();
+    await Promise.all([saveProfile("PUT"), page.getByRole("button", { name: "Add Namespace" }).click()]);
+
+    const connString = page.locator('[data-testid^="sb-auth-connstring-"]').last();
+    await expect(connString).toBeChecked();
+
+    const credKeyTestId = await page.locator('[data-testid^="sb-credential-key-"]').last().getAttribute("data-testid");
+    const credKey = page.getByTestId(credKeyTestId!);
+    await expect(credKey).toBeVisible();
+    await credKey.fill("sb-conn-my-namespace");
+    // Wait for the real round trip, not just the local `blur()` call, before reloading —
+    // reloading before the PUT actually reaches the sidecar would lose the edit.
+    await Promise.all([saveProfile("PUT"), credKey.blur()]);
+
+    await page.reload();
+    await page.getByTestId("settings-tab-service-bus").click();
+    await expect(page.getByTestId(credKeyTestId!)).toHaveValue("sb-conn-my-namespace");
+  });
+
+  test("Test connection is available for AKS, Service Bus, Redis, and Storage (unit 8.2)", async ({ page }) => {
+    await page.route("**/api/aks/test", (route) => route.fulfill({ json: { connected: true } }));
+    await page.route("**/api/servicebus/*/test", (route) => route.fulfill({ json: { connected: true } }));
+    await page.route("**/api/redis/*/test", (route) => route.fulfill({ json: { connected: false, error: "timeout" } }));
+    await page.route("**/api/storage/*/test", (route) => route.fulfill({ json: { connected: true } }));
+
+    await page.goto("/settings");
+
+    await page.getByTestId("settings-tab-aks").click();
+    await page.getByTestId("aks-test-connection").click();
+    await expect(page.getByTestId("aks-test-result")).toHaveText("Connected");
+
+    await page.getByTestId("settings-tab-service-bus").click();
+    await page.getByRole("button", { name: "Add Namespace" }).click();
+    await page.locator('[data-testid^="sb-test-connection-"]').last().click();
+    await expect(page.locator('[data-testid^="sb-test-result-"]').last()).toHaveText("Connected");
+
+    await page.getByTestId("settings-tab-redis").click();
+    await page.getByRole("button", { name: "Add Cache" }).click();
+    await page.locator('[data-testid^="redis-test-connection-"]').last().click();
+    await expect(page.locator('[data-testid^="redis-test-result-"]').last()).toHaveText("Failed: timeout");
+
+    await page.getByTestId("settings-tab-storage").click();
+    await page.getByRole("button", { name: "Add Account" }).click();
+    await page.locator('[data-testid^="storage-test-connection-"]').last().click();
+    await expect(page.locator('[data-testid^="storage-test-result-"]').last()).toHaveText("Connected");
+  });
+
+  test("AKS auto-refresh interval and Redis database index clamp out-of-range values (unit 8.5)", async ({ page }) => {
+    // `parseInt(v) || default` only caught falsy results, so a negative number passed through
+    // unchanged and only surfaced later as an opaque connection failure.
+    await page.goto("/settings");
+
+    await page.getByTestId("settings-tab-aks").click();
+    const interval = page.getByTestId("aks-auto-refresh-interval");
+    await interval.fill("-5");
+    await interval.blur();
+    await expect(interval).toHaveValue("5");
+    await expect(page.getByTestId("notification-toasts")).toContainText("out of range");
+
+    await page.getByTestId("settings-tab-redis").click();
+    await page.getByRole("button", { name: "Add Cache" }).click();
+    const database = page.locator('[data-testid^="redis-database-"]').last();
+    await database.fill("99");
+    await database.blur();
+    await expect(database).toHaveValue("15");
+  });
+
+  test("removing a configured Redis cache requires confirmation; an untouched one does not (unit 8.7)", async ({ page }) => {
+    // The confirm-or-not decision reads the saved profile, not just the local input value —
+    // wait for the connection-string save to actually land before asking for its removal.
+    const saveProfile = (method: string) =>
+      page.waitForResponse((r) => r.request().method() === method && r.url().includes("/api/config/profiles"));
+
+    await page.goto("/settings");
+    await page.getByTestId("settings-tab-redis").click();
+
+    // A freshly-added, still-blank cache has nothing to lose — no confirm needed.
+    await Promise.all([saveProfile("PUT"), page.getByRole("button", { name: "Add Cache" }).click()]);
+    const blankRemove = page.locator('[data-testid^="redis-remove-"]').last();
+    const blankTestId = await blankRemove.getAttribute("data-testid");
+    const blankCacheId = blankTestId!.replace("redis-remove-", "");
+    await blankRemove.click();
+    await expect(page.getByTestId(`redis-cache-${blankCacheId}`)).toHaveCount(0);
+
+    // A cache with a real connection string is worth confirming before it's gone. Wait for
+    // "Add Cache"'s own save too — it and the connection-string commit below share one
+    // `scope: { id: "profile" }`-serialized mutation, so committing the field before this
+    // one settles would just queue behind it rather than run concurrently.
+    await Promise.all([saveProfile("PUT"), page.getByRole("button", { name: "Add Cache" }).click()]);
+    const connInput = page.locator('[data-testid^="redis-cache-"] input[placeholder="localhost:6379"]').last();
+    await connInput.fill("localhost:6379");
+    await Promise.all([saveProfile("PUT"), connInput.blur()]);
+
+    const configuredRemove = page.locator('[data-testid^="redis-remove-"]').last();
+    const configuredTestId = await configuredRemove.getAttribute("data-testid");
+    const configuredCacheId = configuredTestId!.replace("redis-remove-", "");
+    await configuredRemove.click();
+    await expect(page.getByTestId(`redis-cache-${configuredCacheId}`)).toBeVisible();
+    await expect(page.getByTestId(`redis-remove-confirm-${configuredCacheId}`)).toBeVisible();
+
+    await page.getByTestId(`redis-remove-confirm-${configuredCacheId}-cancel`).click();
+    await expect(page.getByTestId(`redis-cache-${configuredCacheId}`)).toBeVisible();
+
+    await page.getByTestId(`redis-remove-${configuredCacheId}`).click();
+    await page.getByTestId(`redis-remove-confirm-${configuredCacheId}-yes`).click();
+    await expect(page.getByTestId(`redis-cache-${configuredCacheId}`)).toHaveCount(0);
+  });
+
+  test("settings tabs show a configured/not-configured readiness signal (unit 8.9)", async ({ page }) => {
+    await page.goto("/settings");
+    for (const id of ["aks", "service-bus", "redis", "storage"]) {
+      await expect(page.getByTestId(`settings-tab-readiness-${id}`)).toBeVisible();
+    }
+    // General/Agent/Map/Diagnostics/Appearance have no "configured" concept and show no dot.
+    await expect(page.getByTestId("settings-tab-readiness-general")).toHaveCount(0);
   });
 });

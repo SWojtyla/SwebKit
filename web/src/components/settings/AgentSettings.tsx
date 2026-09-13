@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useProfile, useUpdateProfile, useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
 import { useTestAgentProfile } from "@/lib/hooks/useAgent";
 import { useObservabilityResources } from "@/lib/hooks/useProfile";
+import { DraftInput } from "./DraftInput";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import type { AgentProfile, ProfileData, ObservabilityConfig, ObservabilityResource } from "@/lib/types";
 
 const capabilityLabel: Record<AgentProfile["capability"], string> = {
@@ -10,11 +12,18 @@ const capabilityLabel: Record<AgentProfile["capability"], string> = {
   ToolCalling: "Tool calling supported",
 };
 
+/** A profile is worth confirming removal of once it has real configured data — an untouched
+ * "New Profile" placeholder can go without the extra click. */
+function isConfigured(p: AgentProfile): boolean {
+  return p.baseUrl.trim() !== "" || p.model.trim() !== "" || p.credentialKey.trim() !== "";
+}
+
 export function AgentSettings() {
   const { data: settings, isLoading } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
   const testProfile = useTestAgentProfile();
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
   const { data: profile } = useProfile();
   const updateProfileData = useUpdateProfile();
   const resources = useObservabilityResources();
@@ -36,6 +45,25 @@ export function AgentSettings() {
     const profiles = [...agent.profiles];
     profiles[index] = { ...profiles[index], ...patch };
     update({ profiles });
+  };
+
+  const removeProfileAt = (index: number) => {
+    const profiles = agent.profiles.filter((_, idx) => idx !== index);
+    update({
+      profiles,
+      activeProfileId:
+        agent.activeProfileId === agent.profiles[index].id
+          ? (profiles[0]?.id ?? "")
+          : agent.activeProfileId,
+    });
+  };
+
+  const requestRemoveProfile = (index: number) => {
+    if (isConfigured(agent.profiles[index])) {
+      setPendingRemoveId(agent.profiles[index].id);
+    } else {
+      removeProfileAt(index);
+    }
   };
 
   const runTest = (index: number) => {
@@ -83,25 +111,17 @@ export function AgentSettings() {
         {agent.profiles.map((p, i) => (
           <div key={p.id} className="mb-3 space-y-2 rounded-lg border p-3">
             <div className="flex items-center justify-between">
-              <input
+              <DraftInput
                 type="text"
                 value={p.displayName}
-                onChange={(e) => updateProfile(i, { displayName: e.target.value })}
+                onCommit={(v) => updateProfile(i, { displayName: v })}
                 className="flex-1 rounded-md border bg-card px-3 py-1.5 text-sm"
                 placeholder="Profile name"
               />
               <button
-                onClick={() => {
-                  const profiles = agent.profiles.filter((_, idx) => idx !== i);
-                  update({
-                    profiles,
-                    activeProfileId:
-                      agent.activeProfileId === p.id
-                        ? (profiles[0]?.id ?? "")
-                        : agent.activeProfileId,
-                  });
-                }}
+                onClick={() => requestRemoveProfile(i)}
                 className="ml-2 text-sm text-destructive hover:opacity-80"
+                data-testid={`agent-profile-remove-${i}`}
               >
                 Remove
               </button>
@@ -117,29 +137,35 @@ export function AgentSettings() {
               <option value="OpenAiCompatible">OpenAI-compatible</option>
               <option value="Mistral">Mistral AI</option>
             </select>
-            <input
+            <DraftInput
               type="text"
               value={p.baseUrl}
-              onChange={(e) => updateProfile(i, { baseUrl: e.target.value })}
+              onCommit={(v) => updateProfile(i, { baseUrl: v })}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Base URL (e.g. http://localhost:1234/v1)"
               data-testid={`agent-profile-base-url-${i}`}
             />
-            <input
+            <DraftInput
               type="text"
               value={p.model}
-              onChange={(e) => updateProfile(i, { model: e.target.value })}
+              onCommit={(v) => updateProfile(i, { model: v })}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Model name"
             />
             {p.provider !== "LmStudio" && (
-              <input
-                type="text"
-                value={p.credentialKey}
-                onChange={(e) => updateProfile(i, { credentialKey: e.target.value })}
-                className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-                placeholder="Credential key (resolved via the OS credential store)"
-              />
+              <div>
+                <DraftInput
+                  type="text"
+                  value={p.credentialKey}
+                  onCommit={(v) => updateProfile(i, { credentialKey: v })}
+                  className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                  placeholder="Credential key (resolved via the OS credential store)"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Looked up in your OS credential store — save the provider's actual API key
+                  there under this key (not typed here).
+                </p>
+              </div>
             )}
             {/* Temperature and max output tokens are deliberately not exposed here — those are
                 generation parameters the provider (LM Studio, etc.) already controls, and
@@ -149,13 +175,11 @@ export function AgentSettings() {
             <div className="flex gap-3">
               <div className="w-32">
                 <label className="mb-1 block text-xs text-muted-foreground">Timeout (s)</label>
-                <input
+                <DraftInput
                   type="number"
                   min="1"
-                  value={p.timeoutSeconds}
-                  onChange={(e) =>
-                    updateProfile(i, { timeoutSeconds: parseInt(e.target.value) || 60 })
-                  }
+                  value={String(p.timeoutSeconds)}
+                  onCommit={(v) => updateProfile(i, { timeoutSeconds: parseInt(v) || 60 })}
                   className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
                 />
               </div>
@@ -163,13 +187,13 @@ export function AgentSettings() {
                 <label className="mb-1 block text-xs text-muted-foreground">
                   Context window (tokens)
                 </label>
-                <input
+                <DraftInput
                   type="number"
                   min="1"
-                  value={p.contextWindowTokens ?? ""}
-                  onChange={(e) =>
+                  value={p.contextWindowTokens != null ? String(p.contextWindowTokens) : ""}
+                  onCommit={(v) =>
                     updateProfile(i, {
-                      contextWindowTokens: e.target.value ? parseInt(e.target.value) || null : null,
+                      contextWindowTokens: v ? parseInt(v) || null : null,
                     })
                   }
                   placeholder="Auto/unknown"
@@ -203,6 +227,18 @@ export function AgentSettings() {
                 ? ` · ${p.contextWindowTokens.toLocaleString()}-token window`
                 : " · unknown context window (using a 4,096-token conservative default)"}
             </div>
+            {pendingRemoveId === p.id && (
+              <ConfirmBar
+                message={`Remove "${p.displayName}"? This deletes its configuration from your profile.`}
+                confirmLabel="Remove"
+                onConfirm={() => {
+                  removeProfileAt(i);
+                  setPendingRemoveId(null);
+                }}
+                onCancel={() => setPendingRemoveId(null)}
+                testId={`agent-profile-remove-confirm-${i}`}
+              />
+            )}
           </div>
         ))}
         <button
@@ -236,7 +272,28 @@ export function AgentSettings() {
         <ObservabilitySettings
           profile={profile}
           resources={resources}
-          onUpdate={(patch) => updateProfileData.mutate((prev) => ({ ...prev, config: { ...prev.config, observabilityConfig: patch } }))}
+          // Merge against `prev.config.observabilityConfig` (read fresh inside the updater,
+          // same as every other field in this hook) rather than a whole replacement object —
+          // `handleManualId`/`handleManualName` fire from two separate `DraftInput`s, and each
+          // closes over whatever `config` was current at its own last render. Without this
+          // merge, committing the ID field then the Name field in quick succession (the
+          // common "fill both, tab through") had the second commit's stale closure silently
+          // blank out whatever the first had just set.
+          onUpdate={(patch) =>
+            updateProfileData.mutate((prev) => ({
+              ...prev,
+              config: {
+                ...prev.config,
+                observabilityConfig: {
+                  ...(prev.config.observabilityConfig ?? {
+                    selectedResourceId: null,
+                    selectedResourceName: null,
+                  }),
+                  ...patch,
+                },
+              },
+            }))
+          }
         />
       )}
     </div>
@@ -251,7 +308,9 @@ interface ObservabilitySettingsProps {
     error: Error | null;
     refetch: () => void;
   };
-  onUpdate: (config: ObservabilityConfig) => void;
+  /** A partial patch, merged onto the current `observabilityConfig` — see the call site's
+   * comment for why this can't be a whole replacement object. */
+  onUpdate: (config: Partial<ObservabilityConfig>) => void;
 }
 
 function ObservabilitySettings({ profile, resources, onUpdate }: ObservabilitySettingsProps) {
@@ -276,17 +335,11 @@ function ObservabilitySettings({ profile, resources, onUpdate }: ObservabilitySe
   };
 
   const handleManualId = (value: string) => {
-    onUpdate({
-      selectedResourceId: value || null,
-      selectedResourceName: config?.selectedResourceName ?? null,
-    });
+    onUpdate({ selectedResourceId: value || null });
   };
 
   const handleManualName = (value: string) => {
-    onUpdate({
-      selectedResourceId: config?.selectedResourceId ?? null,
-      selectedResourceName: value || null,
-    });
+    onUpdate({ selectedResourceName: value || null });
   };
 
   return (
@@ -325,18 +378,18 @@ function ObservabilitySettings({ profile, resources, onUpdate }: ObservabilitySe
 
         {!selectedResource && (
           <>
-            <input
+            <DraftInput
               type="text"
               value={config?.selectedResourceId ?? ""}
-              onChange={(e) => handleManualId(e.target.value)}
+              onCommit={handleManualId}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Resource ID (/subscriptions/.../components/your-app-insights)"
               data-testid="observability-resource-id"
             />
-            <input
+            <DraftInput
               type="text"
               value={config?.selectedResourceName ?? ""}
-              onChange={(e) => handleManualName(e.target.value)}
+              onCommit={handleManualName}
               className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
               placeholder="Display name (optional, e.g. Prod App Insights)"
               data-testid="observability-resource-name"
