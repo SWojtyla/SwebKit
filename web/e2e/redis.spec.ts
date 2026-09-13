@@ -278,4 +278,98 @@ test.describe("Redis", () => {
     await expect(container.getByText("electronics")).toBeVisible();
     await expect(container.getByText("food")).toBeVisible();
   });
+
+  // --- ux-interaction-consistency, Batch 2 (Redis) coverage ---
+
+  test("collapse all persists across a manual refresh (the reported default-expanded bug)", async ({ page }) => {
+    await page.goto("/redis");
+    await expect(page.getByTestId("redis-key-browser")).toBeVisible();
+    await scrollToKey(page, "user:1001");
+    await expect(page.getByTestId("redis-key-user:1001")).toBeVisible();
+
+    await page.getByTestId("redis-collapse-all").click();
+    await expect(page.getByTestId("redis-key-user:1001")).not.toBeVisible();
+
+    // A manual refresh invalidates the same query prefix a mutation, pagination, or
+    // auto-refresh tick would — exactly the class of event that used to force every namespace
+    // back open. Collapse must survive it.
+    await page.getByTestId("redis-refresh-btn").click();
+    await page.waitForTimeout(500);
+    await expect(page.getByTestId("redis-key-user:1001")).not.toBeVisible();
+  });
+
+  test("expand all reveals nested namespaces after collapse all", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-collapse-all").click();
+    await expect(page.getByTestId("redis-key-user:1001")).not.toBeVisible();
+
+    await page.getByTestId("redis-expand-all").click();
+    await scrollToKey(page, "user:1001");
+    await expect(page.getByTestId("redis-key-user:1001")).toBeVisible();
+  });
+
+  test("keyspace health shows an explicit empty state, not indefinite Loading, when no keys are scanned", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-key-search").fill("zzz-does-not-exist:*");
+    await page.getByTestId("redis-key-search-btn").click();
+    await expect(page.getByTestId("redis-key-count")).toContainText("0 keys loaded");
+
+    await page.getByTestId("redis-tab-keyspace").click();
+    await expect(page.getByTestId("keyspace-health-empty")).toBeVisible();
+    await expect(page.getByTestId("keyspace-health-loading")).toHaveCount(0);
+  });
+
+  test("shows a freshness indicator for the last Redis refresh", async ({ page }) => {
+    await page.goto("/redis");
+    await expect(page.getByTestId("redis-key-browser")).toBeVisible();
+    await expect(page.getByTestId("redis-last-refreshed")).toBeVisible();
+    await expect(page.getByTestId("redis-last-refreshed")).toContainText(/updated \d+s ago|refreshing/);
+  });
+
+  test("prefix panel drill-through switches to Keys tab scoped to that prefix", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-tab-prefix").click();
+    await expect(page.getByTestId("prefix-memory-table")).toBeVisible();
+
+    await page.getByTestId("prefix-open-user").click();
+    await expect(page.getByTestId("redis-key-search")).toHaveValue("user:*");
+    await expect(page.getByTestId("redis-key-browser")).toBeVisible();
+    await scrollToKey(page, "user:1001");
+    await expect(page.getByTestId("redis-key-user:1001")).toBeVisible();
+  });
+
+  test("ops tab slow-log entry drills through to key detail", async ({ page }) => {
+    await page.goto("/redis");
+    await page.getByTestId("redis-tab-ops").click();
+    await expect(page.getByTestId("ops-insights-panel")).toBeVisible();
+
+    // Demo slow-log entry #1 is HGETALL against "user:profile:1001", a real key.
+    await page.getByTestId("ops-open-slow-1").click();
+    await expect(page.getByTestId("redis-detail-key-name")).toHaveText("user:profile:1001");
+  });
+
+  test("key rows show a type-color dot and TTL badge", async ({ page }) => {
+    await page.goto("/redis");
+    await scrollToKey(page, "user:1001");
+    await expect(page.getByTestId("redis-key-type-dot-user:1001")).toBeVisible();
+    await expect(page.getByTestId("redis-key-ttl-badge-user:1001")).toBeVisible();
+    await expect(page.getByTestId("redis-key-ttl-badge-user:1001")).toContainText(/\d/);
+  });
+
+  test("removing a key's TTL requires confirmation", async ({ page }) => {
+    await page.goto("/redis");
+    await scrollToKey(page, "session:abc123");
+    await page.getByTestId("redis-key-session:abc123").click();
+    await expect(page.getByTestId("redis-detail-key-ttl")).not.toHaveText("TTL: No expiry");
+
+    await page.getByTestId("redis-ttl-edit-btn").click();
+    await expect(page.getByTestId("redis-ttl-editor")).toBeVisible();
+    await page.getByTestId("redis-ttl-remove-btn").click();
+
+    await expect(page.getByTestId("redis-confirm-bar")).toBeVisible();
+    await expect(page.getByTestId("redis-confirm-yes")).toContainText("Remove TTL");
+    await page.getByTestId("redis-confirm-yes").click();
+
+    await expect(page.getByTestId("redis-detail-key-ttl")).toHaveText("TTL: No expiry");
+  });
 });

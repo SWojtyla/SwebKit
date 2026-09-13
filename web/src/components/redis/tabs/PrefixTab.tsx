@@ -2,7 +2,7 @@ import { PrefixMemoryPanel } from "../AdvancedPanels";
 import { useRedisPageContext } from "../RedisPageContext";
 
 export function PrefixTab() {
-  const { prefixMemory, separator } = useRedisPageContext();
+  const { prefixMemory, separator, openPrefixInKeys } = useRedisPageContext();
 
   return (
     <div className="flex-1 overflow-auto p-6" data-testid="redis-prefix">
@@ -10,6 +10,7 @@ export function PrefixTab() {
         buckets={prefixMemory.data}
         loading={prefixMemory.isLoading}
         separator={separator}
+        onOpenPrefix={openPrefixInKeys}
       />
     </div>
   );

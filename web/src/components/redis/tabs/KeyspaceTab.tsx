@@ -9,6 +9,7 @@ export function KeyspaceTab() {
       <KeyspaceHealthPanel
         info={ctx.serverInfo.data}
         report={ctx.health.data}
+        hasKeys={ctx.displayKeys.length > 0}
         onOpenKey={(key) => {
           ctx.setSelectedKey(key);
           ctx.setActiveTab("keys");

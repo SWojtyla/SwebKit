@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Radio, RefreshCw, Search } from "lucide-react";
+import { Radio, Search } from "lucide-react";
 import { useRedisPubSub } from "@/lib/hooks";
 
 interface Props {
@@ -9,7 +9,7 @@ interface Props {
 export function PubSubPanel({ cacheId }: Props) {
   const [pattern, setPattern] = useState("");
   const [appliedPattern, setAppliedPattern] = useState<string | null>(null);
-  const { data: snapshot, isLoading, error, refetch } = useRedisPubSub(cacheId, appliedPattern);
+  const { data: snapshot, isLoading, error } = useRedisPubSub(cacheId, appliedPattern);
 
   const handleFilter = () => {
     setAppliedPattern(pattern.trim() || null);
@@ -17,24 +17,16 @@ export function PubSubPanel({ cacheId }: Props) {
 
   return (
     <div className="space-y-4" data-testid="redis-pubsub-panel">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Radio className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Pub/Sub</h2>
-        </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isLoading}
-          className="flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
-          data-testid="redis-pubsub-refresh-btn"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+      <div className="flex items-center gap-2">
+        <Radio className="h-5 w-5 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">Pub/Sub</h2>
       </div>
 
       <p className="text-xs text-muted-foreground">
         Read-only snapshot from PUBSUB CHANNELS / NUMSUB. Live publish/subscribe is not supported.
+        {/* This tab's own bespoke refresh button was removed in favor of the shared Refresh /
+            "updated Ns ago" control in the Redis toolbar (RedisPage.tsx), which already
+            invalidates this panel's query (its key is prefixed "redis") — see unit 2.4. */}
       </p>
 
       <div className="flex items-center gap-2">
