@@ -1,9 +1,10 @@
 import { useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
+import { usePendingActionsFeed } from "@/lib/hooks/useAgent";
 import { AgentMarkdown } from "./AgentMarkdown";
 import { AgentVisualizationPanel, parseVisualBlocks } from "./AgentVisualizationPanel";
-import { PendingActionCard } from "./PendingActionCard";
+import { PendingActionCard, PendingActionExpiredNotice } from "./PendingActionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
@@ -21,8 +22,9 @@ export function AgentPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const visualToggleRef = useRef<HTMLButtonElement>(null);
 
-  const { messages, send, isStreaming, clear, isClearPending, status, pendingApprovals } =
+  const { messages, send, isStreaming, cancel, toolStatus, clear, isClearPending, status } =
     useGlobalAgentConversation();
+  const { feed: pendingActionFeed, dismissExpired } = usePendingActionsFeed();
 
   const lastAssistantMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -135,6 +137,11 @@ export function AgentPage() {
               )}
               {msg.role === "assistant" && msg.steps && <AgentReasoningTrace steps={msg.steps} />}
               {msg.role === "assistant" && msg.summarized && <AgentSummarizedNotice />}
+              {msg.role === "assistant" && msg.stopped && (
+                <div className="mt-1 text-xs italic text-muted-foreground" data-testid="agent-message-stopped">
+                  Stopped by user.
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -144,7 +151,7 @@ export function AgentPage() {
             <div className="rounded-lg bg-muted px-4 py-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-current"></span>
-                Thinking...
+                {toolStatus ? `Thinking… (${toolStatus})` : "Thinking..."}
               </div>
             </div>
           </div>
@@ -171,14 +178,24 @@ export function AgentPage() {
             className="flex-1 resize-none rounded-md border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             disabled={isStreaming}
           />
-          <button
-            data-testid="agent-send"
-            onClick={handleSend}
-            disabled={!input.trim() || isStreaming}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            Send
-          </button>
+          {isStreaming ? (
+            <button
+              data-testid="agent-stop"
+              onClick={cancel}
+              className="rounded-md border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10"
+            >
+              Stop
+            </button>
+          ) : (
+            <button
+              data-testid="agent-send"
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              Send
+            </button>
+          )}
         </div>
         <p className="px-6 pb-3 text-xs text-muted-foreground">
           Press Enter to send, Shift+Enter for new line
@@ -204,6 +221,13 @@ export function AgentPage() {
       <div className="flex items-center justify-between border-b px-6 py-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold" data-testid="agent-title">AI Agent</h1>
+          <span
+            className="cursor-not-allowed rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+            data-testid="agent-mode-indicator"
+            title="This conversation can only answer questions. Open a contextual &quot;Ask AI&quot; panel from a feature page (e.g. a pod or Redis key) to propose actions like scale, delete, or resubmit."
+          >
+            Ask only
+          </span>
           <span className="text-xs text-muted-foreground" data-testid="agent-history-count">
             {status.data?.historyCount ?? 0} messages in history
             {status.data && status.data.estimatedTokens > 0 && (
@@ -265,11 +289,19 @@ export function AgentPage() {
       )}
 
       {/* Pending actions awaiting confirmation ("Ask & do" proposals) */}
-      {pendingApprovals.data && pendingApprovals.data.length > 0 && (
+      {pendingActionFeed.length > 0 && (
         <div className="space-y-2 border-b px-6 py-3" data-testid="pending-actions-list">
-          {pendingApprovals.data.map((action) => (
-            <PendingActionCard key={action.id} action={action} />
-          ))}
+          {pendingActionFeed.map((item) =>
+            item.expired ? (
+              <PendingActionExpiredNotice
+                key={item.action.id}
+                action={item.action}
+                onDismiss={() => dismissExpired(item.action.id)}
+              />
+            ) : (
+              <PendingActionCard key={item.action.id} action={item.action} />
+            ),
+          )}
         </div>
       )}
 

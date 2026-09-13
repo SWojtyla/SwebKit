@@ -1009,6 +1009,9 @@ export interface AgentChatStep {
   toolName?: string;
   summary?: string;
   elapsed?: string;
+  /** True for a "tool_result" step whose tool call failed (ux-interaction-consistency unit 7.4) —
+   * always false/absent for "tool_call" steps. */
+  isFailure?: boolean;
 }
 
 export interface AgentReply {
@@ -1100,6 +1103,11 @@ export interface ChatMessage {
   steps?: AgentChatStep[];
   /** True if this reply's turn triggered rolling summarization of older history (Module 5). */
   summarized?: boolean;
+  /** True when the user clicked "Stop" mid-stream (ux-interaction-consistency unit 7.3) —
+   * rendered as a neutral "Stopped" notice rather than the red error state `error` produces, since
+   * this was a deliberate user action, not a failure. Whatever partial `content` had already
+   * streamed in is preserved, not overwritten. */
+  stopped?: boolean;
 }
 
 export interface ContainerDetail {

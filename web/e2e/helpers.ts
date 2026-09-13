@@ -47,7 +47,7 @@ export async function mockAgentChatStreamDone(
     elapsedMs?: number;
     status?: string;
     error?: boolean;
-    steps?: { type: string; toolName?: string; summary?: string; elapsed?: string }[];
+    steps?: { type: string; toolName?: string; summary?: string; elapsed?: string; isFailure?: boolean }[];
     summarized?: boolean;
     contextUsagePercent?: number;
   },

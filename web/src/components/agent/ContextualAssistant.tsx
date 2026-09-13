@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useContextualAgent } from "@/lib/hooks/useContextualAgent";
+import { describeAgentToolEvent, isAbortError, usePendingActionsFeed } from "@/lib/hooks/useAgent";
 import { AgentMarkdown } from "./AgentMarkdown";
-import { AgentVisualizationPanel } from "./AgentVisualizationPanel";
-import { usePendingApprovals, useUserSettings } from "@/lib/hooks";
-import { PendingActionCard } from "./PendingActionCard";
+import { AgentVisualizationPanel, parseVisualBlocks } from "./AgentVisualizationPanel";
+import { useUserSettings } from "@/lib/hooks";
+import { PendingActionCard, PendingActionExpiredNotice } from "./PendingActionCard";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
@@ -34,6 +35,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [showVisuals, setShowVisuals] = useState(false);
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { mode, setMode, scope, setScope, chat, status, sendMessage } = useContextualAgent(featureArea, selection);
 
@@ -43,7 +45,8 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
     }
     return "";
   }, [messages]);
-  const pendingApprovals = usePendingApprovals();
+  const visualCount = useMemo(() => parseVisualBlocks(lastAssistantContent).length, [lastAssistantContent]);
+  const { feed: pendingActionFeed, dismissExpired } = usePendingActionsFeed();
   const { data: userSettings } = useUserSettings();
 
   const activeProfile = userSettings?.agent.profiles.find(
@@ -78,6 +81,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
       { id: assistantId, role: "assistant", content: "" },
     ]);
     setInput("");
+    setToolStatus(null);
 
     sendMessage(text, {
       onToken: (token) => {
@@ -85,7 +89,9 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
           prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + token } : m)),
         );
       },
+      onToolEvent: (event) => setToolStatus(describeAgentToolEvent(event)),
       onSuccess: (reply) => {
+        setToolStatus(null);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -102,8 +108,15 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
         );
       },
       onError: (err) => {
+        setToolStatus(null);
         setMessages((prev) =>
-          prev.map((m) => (m.id === assistantId ? { ...m, content: `Error: ${err.message}`, error: true } : m)),
+          prev.map((m) =>
+            m.id === assistantId
+              ? isAbortError(err)
+                ? { ...m, stopped: true }
+                : { ...m, content: `Error: ${err.message}`, error: true }
+              : m,
+          ),
         );
       },
     });
@@ -149,9 +162,16 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowVisuals((v) => !v)}
-              disabled={!lastAssistantContent}
+              disabled={visualCount === 0}
               className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50 ${showVisuals ? "bg-accent" : ""}`}
               data-testid="contextual-assistant-toggle-visuals"
+              title={
+                visualCount === 0
+                  ? "No visuals in the latest response"
+                  : showVisuals
+                    ? "Close visualization workspace"
+                    : "Open visualization workspace"
+              }
             >
               <BarChart3 className="h-3 w-3" /> Visualize
             </button>
@@ -212,11 +232,19 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
           )}
         </div>
 
-        {pendingApprovals.data && pendingApprovals.data.length > 0 && (
+        {pendingActionFeed.length > 0 && (
           <div className="space-y-2 border-b px-4 py-3" data-testid="contextual-assistant-pending-actions">
-            {pendingApprovals.data.map((action) => (
-              <PendingActionCard key={action.id} action={action} />
-            ))}
+            {pendingActionFeed.map((item) =>
+              item.expired ? (
+                <PendingActionExpiredNotice
+                  key={item.action.id}
+                  action={item.action}
+                  onDismiss={() => dismissExpired(item.action.id)}
+                />
+              ) : (
+                <PendingActionCard key={item.action.id} action={item.action} />
+              ),
+            )}
           </div>
         )}
 
@@ -247,12 +275,19 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
                 )}
                 {msg.role === "assistant" && msg.steps && <AgentReasoningTrace steps={msg.steps} />}
                 {msg.role === "assistant" && msg.summarized && <AgentSummarizedNotice />}
+                {msg.role === "assistant" && msg.stopped && (
+                  <div className="mt-1 text-xs italic text-muted-foreground" data-testid="contextual-assistant-stopped-notice">
+                    Stopped by user.
+                  </div>
+                )}
               </div>
             </div>
           ))}
           {chat.isStreaming && messages[messages.length - 1]?.content === "" && (
             <div className="flex justify-start" data-testid="contextual-assistant-loading">
-              <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">Thinking…</div>
+              <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                {toolStatus ? `Thinking… (${toolStatus})` : "Thinking…"}
+              </div>
             </div>
           )}
         </div>
@@ -278,14 +313,24 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
               disabled={chat.isStreaming}
               data-testid="contextual-assistant-input"
             />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || chat.isStreaming}
-              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              data-testid="contextual-assistant-send"
-            >
-              Send
-            </button>
+            {chat.isStreaming ? (
+              <button
+                onClick={chat.cancel}
+                className="rounded-md border border-destructive/40 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10"
+                data-testid="contextual-assistant-stop"
+              >
+                Stop
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!input.trim()}
+                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                data-testid="contextual-assistant-send"
+              >
+                Send
+              </button>
+            )}
           </div>
         </div>
         </div>

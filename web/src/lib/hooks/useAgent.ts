@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend, streamAgentChat } from "../api";
 import { useNotification } from "@/components/layout/NotificationSystem";
@@ -30,6 +30,108 @@ export function usePendingApprovals() {
     queryFn: () => apiFetch<PendingAction[]>("/api/agent/pending-approvals"),
     refetchInterval: 30_000,
   });
+}
+
+/** One entry in a {@link usePendingActionsFeed} feed: either a still-live proposal, or one that was
+ * previously shown and has since expired server-side (see {@link reconcilePendingActionsFeed}). */
+export interface PendingActionFeedItem {
+  action: PendingAction;
+  /** True once this action has disappeared from a poll after its own `expiresAt` had passed —
+   * distinguishes a silent server-side timeout from a confirm/reject the user just triggered
+   * themselves (both also remove the action from the next poll, but neither is silent to the user:
+   * confirm keeps rendering its own result inline, and reject is an immediate, user-caused removal). */
+  expired: boolean;
+}
+
+/**
+ * Reconciles the raw `["pending-approvals"]` poll result against what was previously shown, so an
+ * action that quietly times out (5 minutes, server-side) gets an explicit "This proposal expired"
+ * notice instead of just vanishing on the next 30s poll with no explanation (ux-interaction-
+ * consistency unit 7.6). Pure so it's unit-testable without mocking React Query or timers.
+ *
+ * An action missing from `latest` is treated as expired only if its own `expiresAt` had already
+ * passed `now` — an action removed *before* its expiry is assumed to have been resolved by the user
+ * (confirmed — the card already showed that result inline — or rejected, which invalidates and
+ * removes it immediately as a direct, non-silent consequence of the user's own click), not silently
+ * dropped, so it's removed from the feed with no notice, same as before this fix.
+ */
+export function reconcilePendingActionsFeed(
+  previous: PendingActionFeedItem[],
+  latest: PendingAction[] | undefined,
+  now: number,
+): PendingActionFeedItem[] {
+  if (!latest) return previous;
+
+  const latestIds = new Set(latest.map((a) => a.id));
+  const active: PendingActionFeedItem[] = latest.map((action) => ({ action, expired: false }));
+  const stillExpired = previous.filter((item) => item.expired && !latestIds.has(item.action.id));
+  const newlyExpired = previous
+    .filter(
+      (item) =>
+        !item.expired &&
+        !latestIds.has(item.action.id) &&
+        new Date(item.action.expiresAt).getTime() <= now,
+    )
+    .map((item): PendingActionFeedItem => ({ action: item.action, expired: true }));
+
+  return [...active, ...stillExpired, ...newlyExpired];
+}
+
+/**
+ * Wraps {@link usePendingApprovals} with the expiry reconciliation above, for the chat surfaces
+ * that render a live list of {@link PendingAction} cards (`AgentPage`, `GlobalAgentPanel`,
+ * `ContextualAssistant`). Kept separate from `usePendingApprovals` itself since a couple of other
+ * call sites (`DashboardPage`, `GenerateApiRequestPanel`) only need the raw count/list, not expiry
+ * tracking.
+ */
+export function usePendingActionsFeed() {
+  const query = usePendingApprovals();
+  const [feed, setFeed] = useState<PendingActionFeedItem[]>([]);
+
+  useEffect(() => {
+    setFeed((prev) => reconcilePendingActionsFeed(prev, query.data, Date.now()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `query.data` alone is intentional: a
+    // new Date.now() every render would defeat the reconciliation instead of only running it once
+    // per actual poll result.
+  }, [query.data]);
+
+  const dismissExpired = useCallback((actionId: string) => {
+    setFeed((prev) => prev.filter((item) => item.action.id !== actionId));
+  }, []);
+
+  return { feed, dismissExpired, isLoading: query.isLoading };
+}
+
+/** Turns a snake_case tool name into a short present-tense phrase for the "Thinking… (…)" loading
+ * indicator (ux-interaction-consistency unit 7.3) — e.g. "get_pod_logs" → "fetching pod logs".
+ * Deliberately derived from the name rather than a hardcoded per-tool map, so a newly added tool
+ * gets a reasonable label for free instead of falling back to nothing. */
+const TOOL_EVENT_VERBS: Record<string, string> = {
+  get: "fetching",
+  list: "listing",
+  search: "searching",
+  analyze: "analyzing",
+  investigate: "investigating",
+  propose: "preparing",
+  prepare: "preparing",
+};
+
+export function describeAgentToolEvent(event: Pick<AgentStreamEvent, "toolName">): string {
+  const toolName = event.toolName?.trim();
+  if (!toolName) return "";
+
+  const [verbKey, ...rest] = toolName.split("_");
+  const verb = TOOL_EVENT_VERBS[verbKey] ?? "running";
+  const subject = (rest.length > 0 ? rest : [verbKey]).join(" ");
+  return `${verb} ${subject}`;
+}
+
+/** True for the `AbortError` a `fetch`/`ReadableStreamDefaultReader` rejects with when its
+ * controller's `signal.abort()` is called — i.e. the user clicked "Stop" (unit 7.3), as opposed to
+ * a genuine network/stream failure. Checked by `.name` rather than `instanceof DOMException` so it
+ * also recognizes a plain `{ name: "AbortError" }`-shaped rejection in tests. */
+export function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { name?: unknown }).name === "AbortError";
 }
 
 export function useConfirmAction() {

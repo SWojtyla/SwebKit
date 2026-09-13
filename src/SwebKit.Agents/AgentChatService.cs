@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using SwebKit.Agents.Tools;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -96,7 +97,8 @@ public sealed class AgentChatService : IAgentChatService
                         Type = "tool_result",
                         ToolName = toolName,
                         Summary = SummarizeToolResult(toolResult),
-                        Elapsed = toolSw.Elapsed
+                        Elapsed = toolSw.Elapsed,
+                        IsFailure = IsErrorResult(toolResult)
                     });
 
                     return toolResult;
@@ -205,5 +207,26 @@ public sealed class AgentChatService : IAgentChatService
 
         // Truncate for step summary — don't expose full result in step log
         return result.Length > 80 ? result[..80] + "…" : result;
+    }
+
+    /// <summary>Same convention-reading check as the sidecar's
+    /// <c>AgentToolCallOrchestrator.IsErrorResult</c> (this class' sidecar-side counterpart) — every
+    /// tool reports failure via a top-level JSON <c>"error"</c> property, so this surfaces that
+    /// existing signal rather than inventing a new one (unit 7.4).</summary>
+    private static bool IsErrorResult(string result)
+    {
+        if (string.IsNullOrWhiteSpace(result))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(result);
+            return doc.RootElement.ValueKind == JsonValueKind.Object &&
+                   doc.RootElement.TryGetProperty("error", out _);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 }

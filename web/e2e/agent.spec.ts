@@ -113,8 +113,15 @@ test.describe("Agent", () => {
     await expect(page.getByTestId("pending-action-action-1")).toBeVisible();
     await expect(page.getByTestId("pending-action-summary-action-1")).toHaveText("Delete request 'Get token'");
     await expect(page.getByTestId("pending-action-risk-action-1")).toHaveText(/High risk/);
+    await expect(page.getByTestId("pending-action-origin-action-1")).toHaveText(
+      "Proposed from: API Client · Request 'Get token' (r1)",
+    );
 
+    // High-risk actions require an extra explicit confirmation step, proportional to what's being
+    // approved (unit 7.1) — the first click doesn't apply the action yet.
     await page.getByTestId("pending-action-confirm-action-1").click();
+    await expect(page.getByTestId("pending-action-high-risk-confirm-action-1")).toBeVisible();
+    await page.getByTestId("pending-action-high-risk-confirm-yes-action-1").click();
 
     await expect(page.getByTestId("pending-action-result-action-1")).toHaveText("Deleted request 'Get token'");
   });
@@ -185,6 +192,37 @@ test.describe("Agent", () => {
     await toggle.click();
     await expect(page.getByTestId("agent-reasoning-trace-steps")).toContainText("Calling get_pod_status");
     await expect(page.getByTestId("agent-reasoning-trace-steps")).toContainText("Running");
+  });
+
+  test("a failed tool call is called out in the collapsed toggle label and styled distinctly when expanded", async ({ page }) => {
+    await mockAgentChatStreamDone(page, {
+      text: "I couldn't check the queue, but the pod looks healthy.",
+      steps: [
+        { type: "tool_call", toolName: "get_pod_status", summary: "Calling get_pod_status" },
+        { type: "tool_result", toolName: "get_pod_status", summary: "Running", elapsed: "00:00:00.1000000" },
+        { type: "tool_call", toolName: "get_queue_stats", summary: "Calling get_queue_stats" },
+        {
+          type: "tool_result",
+          toolName: "get_queue_stats",
+          summary: '{"error":"Queue \'orders\' not found."}',
+          elapsed: "00:00:00.2000000",
+          isFailure: true,
+        },
+      ],
+    });
+
+    await page.goto("/agent");
+    await page.getByTestId("agent-input").fill("is the pod healthy?");
+    await page.getByTestId("agent-send").click();
+
+    // A failed data source isn't buried behind the disclosure — the toggle itself says so before
+    // the user ever expands it (unit 7.4).
+    const toggle = page.getByTestId("agent-reasoning-trace-toggle");
+    await expect(toggle).toHaveText("Show reasoning (4 steps, 1 failed)");
+
+    await toggle.click();
+    await expect(page.getByTestId("agent-reasoning-trace-step-failed")).toContainText("not found");
+    await expect(page.getByTestId("agent-reasoning-trace-step-failed")).toHaveCount(1);
   });
 
   test("a reply with no tool steps shows no reasoning disclosure at all", async ({ page }) => {

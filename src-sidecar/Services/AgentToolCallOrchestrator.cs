@@ -107,6 +107,7 @@ public sealed class AgentToolCallOrchestrator
                 ToolName = toolName,
                 Summary = SummarizeToolResult(result),
                 Elapsed = toolSw.Elapsed,
+                IsFailure = IsErrorResult(result),
             });
 
             return result;
@@ -119,5 +120,31 @@ public sealed class AgentToolCallOrchestrator
             return "Empty result";
 
         return result.Length > 80 ? result[..80] + "…" : result;
+    }
+
+    /// <summary>
+    /// Every tool in <c>SwebKit.Agents.Tools</c> reports a failure the same way: a top-level JSON
+    /// <c>"error"</c> property in its string result (e.g. <c>{"error":"..."}</c>, sometimes alongside
+    /// other context fields) — see e.g. <c>AnalyzeQueueHealthTool</c>, <c>ApiClientTools</c>,
+    /// <c>Storage/*Tool.cs</c>, <c>Redis/*Tool.cs</c>. This reads that existing, already-established
+    /// convention rather than inventing a new one, so a failed step (unit 7.4) is detected the same
+    /// way for every tool without each one needing to change. Non-JSON or shapeless results (a plain
+    /// success string) simply don't match and are treated as success, never a false positive.
+    /// </summary>
+    internal static bool IsErrorResult(string result)
+    {
+        if (string.IsNullOrWhiteSpace(result))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(result);
+            return doc.RootElement.ValueKind == JsonValueKind.Object &&
+                   doc.RootElement.TryGetProperty("error", out _);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 }
