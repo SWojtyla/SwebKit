@@ -153,6 +153,21 @@ test.describe("Dashboard", () => {
     await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
   });
 
+  test("demo tour calls out AKS's left-click vs. right-click row convention", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("demo-tour-start").click();
+    await page.getByTestId("demo-tour-next").click();
+    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("Kubernetes");
+    await page.getByTestId("demo-tour-next").click();
+    // Still on /aks — this step just re-spotlights the same page's resource table.
+    await expect(page).toHaveURL(/\/aks$/);
+    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("Rows: click vs. right-click");
+    await expect(page.getByTestId("demo-tour-step-description")).toContainText("Left-click");
+    await expect(page.getByTestId("demo-tour-step-description")).toContainText("Right-click");
+    await page.getByTestId("demo-tour-stop").click();
+    await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
+  });
+
   test("runs cross-feature demo scenario in a focused visualization workspace", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("cross-feature-demo-button").click();

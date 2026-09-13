@@ -75,4 +75,15 @@ test.describe("Layout", () => {
     await expect(page.getByTestId("command-palette-item-redis")).toBeVisible();
     await expect(page.getByTestId("command-palette-item-dashboard")).not.toBeVisible();
   });
+
+  test("command palette opens a specific Settings section", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("command-palette-trigger").click();
+    await page.getByTestId("command-palette-input").fill("AKS Settings");
+    await expect(page.getByTestId("command-palette-item-settings-aks")).toBeVisible();
+    await page.getByTestId("command-palette-item-settings-aks").click();
+    await expect(page).toHaveURL(/\/settings$/);
+    // Confirms the palette landed on the AKS sub-section specifically, not just Settings' default.
+    await expect(page.getByRole("heading", { name: "AKS / Kubernetes" })).toBeVisible();
+  });
 });

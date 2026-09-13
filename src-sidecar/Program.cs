@@ -56,6 +56,9 @@ builder.Services.AddSingleton<SwebKit.Core.Services.CollectionImportService>();
 builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
 builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
 builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.SidecarStorageConnectionPool>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IStorageConnectionPool>(
+    sp => sp.GetRequiredService<SwebKit.Sidecar.Services.SidecarStorageConnectionPool>());
 builder.Services.AddSingleton<IAksClientFactory, AksClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
 builder.Services.AddSingleton<RedisKeyspaceHealthAnalyzer>();

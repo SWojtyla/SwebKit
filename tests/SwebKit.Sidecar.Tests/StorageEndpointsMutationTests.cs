@@ -75,8 +75,14 @@ internal sealed class FaultInjectingStorageClient : IStorageClient
         _inner.ListDeletedBlobsAsync(containerName, prefix, ct);
 }
 
-/// <summary>Records the config passed to each creation call and returns a configurable client.</summary>
-internal sealed class FakeStorageClientFactory : IStorageClientFactory
+/// <summary>
+/// Records the config passed to each creation call and returns a configurable client. Also
+/// stands in directly for <see cref="IStorageConnectionPool"/> (uncached — every call creates
+/// afresh) so these handler-level tests keep asserting one <see cref="Create"/> call per request,
+/// independent of the real pool's caching behavior (covered separately for
+/// <c>SidecarStorageConnectionPool</c>).
+/// </summary>
+internal sealed class FakeStorageClientFactory : IStorageClientFactory, IStorageConnectionPool
 {
     public IStorageClient Client { get; set; } = new FaultInjectingStorageClient(new DemoStorageClient());
     public List<StorageConfig> Calls { get; } = [];
@@ -86,6 +92,10 @@ internal sealed class FakeStorageClientFactory : IStorageClientFactory
         Calls.Add(config);
         return Client;
     }
+
+    public IStorageClient GetOrCreate(StorageConfig config) => Create(config);
+    public void Evict(string accountId) { }
+    public void InvalidateAll() { }
 }
 
 /// <summary>Minimal <see cref="IFormFile"/> double so upload tests don't need a real multipart body.</summary>

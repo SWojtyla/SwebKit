@@ -13,10 +13,11 @@ import type { MonitoringAlertRule, AlertFiredEvent, AlertSignalStatus, Proactive
 
 // ── Monitoring hooks ──────────────────────────────────────────────────────────
 
-export function useMonitoringRules() {
+export function useMonitoringRules(enabled = true) {
   return useQuery({
     queryKey: ["monitoring", "rules"],
     queryFn: () => getMonitoringRules(),
+    enabled,
   });
 }
 
