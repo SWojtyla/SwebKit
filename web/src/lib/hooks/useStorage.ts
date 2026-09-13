@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { apiFetch, apiSend, apiUpload } from "../api";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
@@ -30,6 +30,12 @@ export function useStorageBlobs(accountId: string | null, container: string | nu
       return apiFetch<StorageBlobPage>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs?${params}`);
     },
     enabled: !!accountId && !!container,
+    // 6.5 fix: each "Load more" click changes `continuationToken`, which is part of the
+    // query key — without this, that's a brand-new query with no data yet, so `isLoading`
+    // flips true and flashes a "Loading blobs..." banner over the already-populated list
+    // for the duration of the fetch. Keeping the previous page's data as placeholder data
+    // means the list stays visible (and `isLoading` stays false) while the next page loads.
+    placeholderData: keepPreviousData,
   });
 }
 

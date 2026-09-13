@@ -46,4 +46,24 @@ test.describe("Storage Blob Recovery", () => {
       await expect(page.getByTestId("blob-recovery-no-results")).toBeVisible();
     }
   });
+
+  test("recovering a deleted blob requires confirmation (unit 6.3)", async ({ page }) => {
+    // Regression: Recover used to fire immediately with no confirmation and no explanation
+    // of what happens on a same-name collision with a live blob.
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-configs").click();
+    await page.getByTestId("storage-view-recovery").click();
+    await expect(page.getByTestId("blob-recovery-panel")).toBeVisible();
+
+    await page.getByTestId("blob-recover-btn-deleted-config.json").click();
+    await expect(page.getByTestId("blob-recover-confirm")).toBeVisible();
+
+    await page.getByTestId("blob-recover-confirm-yes").click();
+    await expect(page.getByTestId("blob-recover-confirm")).not.toBeVisible();
+    // "deleted-config.json" is the only seeded deleted blob in "configs" — once recovery
+    // succeeds and the deleted-blobs query invalidates, the table empties out entirely
+    // (rather than asserting the transient local "Recovered" label, which can lose the
+    // race against that same invalidation removing the row first).
+    await expect(page.getByTestId("blob-recovery-no-results")).toBeVisible();
+  });
 });

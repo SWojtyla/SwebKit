@@ -26,10 +26,12 @@ import {
   useDeletedBlobs,
   useSetBlobMetadata,
 } from "@/lib/hooks";
-import type { StorageBlobContent, StorageBlobItem, StorageConfig } from "@/lib/types";
+import type { BlobProperties, StorageBlobContent, StorageBlobItem, StorageConfig } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 import { buildZip } from "@/lib/zip";
 import { downloadBlob, downloadText } from "@/lib/download";
+import { planBlobDownload } from "@/lib/storage-blob-download";
+import { sortStorageBlobItems, type StorageBlobSortDir, type StorageBlobSortKey } from "@/lib/storage-blob-sort";
 import { useNotification } from "@/components/layout/NotificationSystem";
 
 export interface StoragePageContextValue {
@@ -57,6 +59,10 @@ export interface StoragePageContextValue {
 
   blobFilter: string;
   setBlobFilter: (v: string) => void;
+  blobSortKey: StorageBlobSortKey;
+  setBlobSortKey: (v: StorageBlobSortKey) => void;
+  blobSortDir: StorageBlobSortDir;
+  setBlobSortDir: (v: StorageBlobSortDir) => void;
   displayItems: StorageBlobItem[];
   filteredItems: StorageBlobItem[];
 
@@ -95,6 +101,11 @@ export interface StoragePageContextValue {
   setUploadProgress: (v: number) => void;
   uploadDropzone: ReturnType<typeof useDropzone>;
   handleUploadConfirm: () => void;
+  uploadCheckingOverwrite: boolean;
+  uploadOverwriteConfirm: { blobName: string; file: File } | null;
+  setUploadOverwriteConfirm: (v: { blobName: string; file: File } | null) => void;
+  handleUploadOverwriteConfirm: () => void;
+  checkBlobExists: (blobName: string) => Promise<boolean>;
 
   showCopyDialog: boolean;
   setShowCopyDialog: (v: boolean) => void;
@@ -164,6 +175,8 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
   const [continuationToken, setContinuationToken] = useState<string | null>(null);
   const [allItems, setAllItems] = useState<StorageBlobItem[]>([]);
   const [blobFilter, setBlobFilter] = useState("");
+  const [blobSortKey, setBlobSortKey] = useState<StorageBlobSortKey>("name");
+  const [blobSortDir, setBlobSortDir] = useState<StorageBlobSortDir>("asc");
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedBlobs, setSelectedBlobs] = useState<Set<string>>(new Set());
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -176,6 +189,8 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
   const [uploadBlobName, setUploadBlobName] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadCheckingOverwrite, setUploadCheckingOverwrite] = useState(false);
+  const [uploadOverwriteConfirm, setUploadOverwriteConfirm] = useState<{ blobName: string; file: File } | null>(null);
   const [showCopyDialog, setShowCopyDialog] = useState(false);
   const [copyDestContainer, setCopyDestContainer] = useState("");
   const [copyDestBlob, setCopyDestBlob] = useState("");
@@ -271,18 +286,38 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     setVersionRestoreId(null);
   }, []);
 
-  const displayItems = useMemo(
-    () => (continuationToken === null ? (blobs.data?.items ?? []) : [...allItems, ...(blobs.data?.items ?? [])]),
-    [continuationToken, blobs.data?.items, allItems],
-  );
+  // Dedupes by name against `allItems`: with `useStorageBlobs`'s `placeholderData:
+  // keepPreviousData` (6.5), while the next page is loading `blobs.data` still holds the
+  // *previous* page's items (the ones `handleLoadMore` just copied into `allItems`) rather
+  // than briefly going empty — without this filter those would render twice (and collide
+  // as virtualizer keys) for the duration of that fetch.
+  const displayItems = useMemo(() => {
+    if (continuationToken === null) return blobs.data?.items ?? [];
+    const seen = new Set(allItems.map((item) => item.name));
+    const incoming = (blobs.data?.items ?? []).filter((item) => !seen.has(item.name));
+    return [...allItems, ...incoming];
+  }, [continuationToken, blobs.data?.items, allItems]);
 
-  const filteredItems = useMemo(
-    () =>
-      blobFilter
-        ? displayItems.filter((item) => item.name.toLowerCase().includes(blobFilter.toLowerCase()))
-        : displayItems,
-    [blobFilter, displayItems],
-  );
+  const filteredItems = useMemo(() => {
+    const filtered = blobFilter
+      ? displayItems.filter((item) => item.name.toLowerCase().includes(blobFilter.toLowerCase()))
+      : displayItems;
+    return sortStorageBlobItems(filtered, blobSortKey, blobSortDir);
+  }, [blobFilter, displayItems, blobSortKey, blobSortDir]);
+
+  // 6.5: there's no server-side search, so the filter above only ever searches whatever
+  // pages `handleLoadMore` has already pulled in — stopping at zero local matches looks
+  // identical to "no such blob exists." While a filter is active, has no local matches yet,
+  // and more pages remain, keep paging automatically instead of leaving the user to notice
+  // and click "Load more" themselves. Stops as soon as a match appears or the last page (no
+  // continuation token) is reached, so it can't loop forever on a genuinely absent name.
+  useEffect(() => {
+    if (!blobFilter.trim()) return;
+    if (filteredItems.length > 0) return;
+    if (blobs.isFetching) return;
+    if (!blobs.data?.continuationToken) return;
+    handleLoadMore();
+  }, [blobFilter, filteredItems.length, blobs.isFetching, blobs.data?.continuationToken, handleLoadMore]);
 
   const handleCopyUrl = useCallback((blobName: string) => {
     // The Azure host uses the storage account name; `resolvedAccountId` is SwebKit's own
@@ -312,43 +347,94 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     [resolvedAccountId, selectedContainer],
   );
 
+  // P0 fix: this used to hand `data.content` straight to a text-file writer even when
+  // `data.isBinary` was true — for a binary blob the sidecar returns an *empty* `content`
+  // (see AzureStorageClient.GetBlobContentAsync), so this silently wrote a 0-byte file with
+  // no warning. The Content tab already trusts `isBinary` to decide whether `content` is
+  // safe to render (BlobDetailPanel.tsx); Download must trust the same flag. `planBlobDownload`
+  // (lib/storage-blob-download.ts, unit-tested) is the single decision point both this and the
+  // batch version below go through. There's no binary-safe download endpoint, so binary blobs
+  // are redirected to the existing signed "Generate SAS URL" flow instead of ever writing a
+  // corrupted/empty file.
   const handleDownloadBlob = useCallback(async (blobName: string) => {
     try {
       const data = await fetchBlobContent(blobName);
-      downloadText(
-        blobName.split("/").pop() || blobName,
-        data.content,
-        data.contentType || "text/plain",
-      );
+      const plan = planBlobDownload(blobName, data);
+      if (plan.kind === "blocked-binary") {
+        notify(
+          "error",
+          "Can't download as text",
+          `"${blobName}" isn't a text blob, so Download would write an empty/corrupted file. Use "Generate SAS URL" instead to get a direct link to the real bytes.`,
+        );
+        if (blobName === selectedBlob) setShowSasUrl(true);
+        return;
+      }
+      downloadText(plan.filename, plan.content, plan.mimeType);
       notify("success", "Download started", blobName);
     } catch (e) {
       console.error("Download failed:", e);
       notify("error", "Download failed", String(e));
     }
-  }, [fetchBlobContent, notify]);
+  }, [fetchBlobContent, notify, selectedBlob]);
 
   // Bundles the selected blobs into a single ZIP, matching the pattern Service Bus's message
   // list already uses (lib/zip.ts) — previously this looped handleDownloadBlob per file, firing
-  // N separate browser downloads instead of one archive.
+  // N separate browser downloads instead of one archive. Binary blobs are skipped (their
+  // content would be empty/corrupted, same reasoning as handleDownloadBlob above) rather than
+  // silently zipped as empty files — the user is told which ones were skipped and why.
   const handleBatchDownloadBlobs = useCallback(async (blobNames: string[]) => {
     if (blobNames.length === 0) return;
     try {
       const files: Record<string, string> = {};
+      const skippedBinary: string[] = [];
       for (const blobName of blobNames) {
         const data = await fetchBlobContent(blobName);
-        if (data.content) {
-          files[blobName.split("/").pop() || blobName] = data.content;
+        const plan = planBlobDownload(blobName, data);
+        if (plan.kind === "blocked-binary") {
+          skippedBinary.push(blobName);
+          continue;
+        }
+        if (plan.content) {
+          files[plan.filename] = plan.content;
         }
       }
-      const zipped = await buildZip(files);
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
-      downloadBlob(`${selectedContainer}-blobs-${timestamp}.zip`, zipped);
-      notify("success", `Downloaded ${Object.keys(files).length} blob(s) as ZIP`);
+      const downloadedCount = Object.keys(files).length;
+      if (downloadedCount > 0) {
+        const zipped = await buildZip(files);
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        downloadBlob(`${selectedContainer}-blobs-${timestamp}.zip`, zipped);
+      }
+      if (skippedBinary.length > 0) {
+        notify(
+          "error",
+          downloadedCount > 0
+            ? `Downloaded ${downloadedCount} blob(s), skipped ${skippedBinary.length} binary`
+            : "No blobs downloaded — all binary",
+          `Binary blobs can't be zipped as text: ${skippedBinary.join(", ")}. Use "Generate SAS URL" on each to download them directly.`,
+        );
+      } else {
+        notify("success", `Downloaded ${downloadedCount} blob(s) as ZIP`);
+      }
     } catch (e) {
       console.error("Batch download failed:", e);
       notify("error", "Batch download failed", String(e));
     }
   }, [fetchBlobContent, selectedContainer, notify]);
+
+  // Used by both Upload (6.3) and Recovery (6.3) to warn before silently overwriting/
+  // colliding with an existing blob, instead of relying on whatever page of the (paginated,
+  // possibly filtered) list happens to be loaded client-side.
+  const checkBlobExists = useCallback(async (blobName: string): Promise<boolean> => {
+    if (!resolvedAccountId || !selectedContainer) return false;
+    try {
+      await apiFetch<BlobProperties>(
+        `/api/storage/${resolvedAccountId}/containers/${encodeURIComponent(selectedContainer)}/blobs/properties?${new URLSearchParams({ blobName })}`,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }, [resolvedAccountId, selectedContainer]);
 
   const toggleBlobSelection = useCallback((name: string) => {
     setSelectedBlobs((prev) => {
@@ -359,23 +445,48 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     });
   }, []);
 
-  const handleUploadConfirm = useCallback(() => {
-    if (uploadBlobName.trim() && uploadFile) {
-      uploadBlob.mutate(
-        { blobName: uploadBlobName.trim(), file: uploadFile, onProgress: setUploadProgress },
-        {
-          onSuccess: () => {
-            notify("success", "Blob uploaded", uploadBlobName.trim());
-            setUploadBlobName("");
-            setUploadFile(null);
-            setUploadProgress(100);
-            setShowUpload(false);
-          },
-          onError: (e) => notify("error", "Upload failed", String(e)),
+  const performUpload = useCallback((blobName: string, file: File) => {
+    uploadBlob.mutate(
+      { blobName, file, onProgress: setUploadProgress },
+      {
+        onSuccess: () => {
+          notify("success", "Blob uploaded", blobName);
+          setUploadBlobName("");
+          setUploadFile(null);
+          setUploadProgress(100);
+          setShowUpload(false);
+          setUploadOverwriteConfirm(null);
         },
-      );
+        onError: (e) => notify("error", "Upload failed", String(e)),
+      },
+    );
+  }, [uploadBlob, notify]);
+
+  // Upload previously overwrote an existing blob of the same name with no warning at all,
+  // unlike the Copy flow's explicit "Allow overwrite" + confirm guard. Since there's no
+  // manual "allow overwrite" toggle for Upload (the user just types a name), an existence
+  // check against the target name stands in for it.
+  const handleUploadConfirm = useCallback(async () => {
+    const blobName = uploadBlobName.trim();
+    if (!blobName || !uploadFile) return;
+    const file = uploadFile;
+    setUploadCheckingOverwrite(true);
+    try {
+      const exists = await checkBlobExists(blobName);
+      if (exists) {
+        setUploadOverwriteConfirm({ blobName, file });
+        return;
+      }
+      performUpload(blobName, file);
+    } finally {
+      setUploadCheckingOverwrite(false);
     }
-  }, [uploadBlobName, uploadFile, uploadBlob, notify]);
+  }, [uploadBlobName, uploadFile, checkBlobExists, performUpload]);
+
+  const handleUploadOverwriteConfirm = useCallback(() => {
+    if (!uploadOverwriteConfirm) return;
+    performUpload(uploadOverwriteConfirm.blobName, uploadOverwriteConfirm.file);
+  }, [uploadOverwriteConfirm, performUpload]);
 
   const handleMetadataSave = useCallback(() => {
     setBlobMetadata.mutate(metadataDraft, {
@@ -457,6 +568,10 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
 
     blobFilter,
     setBlobFilter,
+    blobSortKey,
+    setBlobSortKey,
+    blobSortDir,
+    setBlobSortDir,
     displayItems,
     filteredItems,
 
@@ -496,6 +611,11 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
     setUploadProgress,
     uploadDropzone,
     handleUploadConfirm,
+    uploadCheckingOverwrite,
+    uploadOverwriteConfirm,
+    setUploadOverwriteConfirm,
+    handleUploadOverwriteConfirm,
+    checkBlobExists,
 
     showCopyDialog,
     setShowCopyDialog,
@@ -556,6 +676,10 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
       handleLoadMore,
       blobFilter,
       setBlobFilter,
+      blobSortKey,
+      setBlobSortKey,
+      blobSortDir,
+      setBlobSortDir,
       displayItems,
       filteredItems,
       multiSelectMode,
@@ -589,6 +713,11 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
       setUploadProgress,
       uploadDropzone,
       handleUploadConfirm,
+      uploadCheckingOverwrite,
+      uploadOverwriteConfirm,
+      setUploadOverwriteConfirm,
+      handleUploadOverwriteConfirm,
+      checkBlobExists,
       showCopyDialog,
       setShowCopyDialog,
       copyDestContainer,

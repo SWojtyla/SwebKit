@@ -1,7 +1,11 @@
-import { Download, Upload, File, Folder } from "lucide-react";
+import { Download, Upload, File, Folder, ArrowUp, ArrowDown } from "lucide-react";
 import { useStoragePageContext } from "./StoragePageContext";
 import { formatBytes } from "@/lib/format-bytes";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { buildStorageBreadcrumbAncestors, storageCurrentPrefixLabel } from "@/lib/storage-breadcrumb";
+import type { StorageBlobSortKey } from "@/lib/storage-blob-sort";
+import { LastRefreshed } from "@/components/shared/LastRefreshed";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 
 export function BlobBrowserPanel() {
   const ctx = useStoragePageContext();
@@ -17,6 +21,16 @@ export function BlobBrowserPanel() {
     getItemKey: (index) => ctx.filteredItems[index].name,
     measureElement: (el) => el?.getBoundingClientRect().height ?? 30,
   });
+
+  // 6.2 fix: labels used to be computed by string-replacing each ancestor prefix against
+  // `ctx.currentPrefix` (the deepest prefix, a constant across the whole loop) instead of
+  // against that ancestor's own immediate parent — see lib/storage-breadcrumb.ts for the
+  // full explanation and lib/storage-breadcrumb.test.ts for regression coverage.
+  const breadcrumbAncestors = buildStorageBreadcrumbAncestors(ctx.prefixHistory);
+  const currentSegmentLabel = storageCurrentPrefixLabel(ctx.prefixHistory, ctx.currentPrefix);
+
+  const hasMoreBlobs = !!ctx.blobs.data?.continuationToken;
+  const isFilterActive = ctx.blobFilter.trim().length > 0;
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden" data-testid="storage-blob-browser">
@@ -36,20 +50,20 @@ export function BlobBrowserPanel() {
               >
                 {ctx.selectedContainer}
               </button>
-              {ctx.prefixHistory.map((p, i) => (
-                <span key={i} className="flex items-center gap-1">
+              {breadcrumbAncestors.map((ancestor) => (
+                <span key={ancestor.prefix} className="flex items-center gap-1">
                   <span className="text-muted-foreground">/</span>
                   <button
-                    data-testid={`storage-breadcrumb-${i + 1}`}
-                    onClick={() => ctx.handleBreadcrumb(i + 1)}
+                    data-testid={`storage-breadcrumb-${ancestor.navigateIndex}`}
+                    onClick={() => ctx.handleBreadcrumb(ancestor.navigateIndex)}
                     className="text-primary hover:underline"
                   >
-                    {p.replace(ctx.currentPrefix, "").replace(/\//g, "") || p}
+                    {ancestor.label}
                   </button>
                 </span>
               ))}
-              {ctx.currentPrefix && (
-                <span className="text-muted-foreground">/ {ctx.currentPrefix.replace(ctx.prefixHistory[ctx.prefixHistory.length - 1] ?? "", "")}</span>
+              {currentSegmentLabel && (
+                <span className="text-muted-foreground">/ {currentSegmentLabel}</span>
               )}
             </div>
             <div className="mt-2 flex items-center gap-2">
@@ -61,6 +75,25 @@ export function BlobBrowserPanel() {
                 className="flex-1 rounded border bg-card px-2 py-1 text-xs"
                 data-testid="storage-blob-filter"
               />
+              <select
+                value={ctx.blobSortKey}
+                onChange={(e) => ctx.setBlobSortKey(e.target.value as StorageBlobSortKey)}
+                className="rounded border bg-card px-2 py-1 text-xs"
+                data-testid="storage-sort-key"
+                title="Sort by"
+              >
+                <option value="name">Name</option>
+                <option value="size">Size</option>
+                <option value="modified">Modified</option>
+              </select>
+              <button
+                onClick={() => ctx.setBlobSortDir(ctx.blobSortDir === "asc" ? "desc" : "asc")}
+                className="rounded border px-1.5 py-1 hover:bg-accent"
+                data-testid="storage-sort-dir"
+                title={ctx.blobSortDir === "asc" ? "Ascending — click for descending" : "Descending — click for ascending"}
+              >
+                {ctx.blobSortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+              </button>
               <button
                 onClick={() => { ctx.setMultiSelectMode(!ctx.multiSelectMode); ctx.setSelectedBlobs(new Set()); }}
                 className={`rounded border px-2 py-1 text-xs ${ctx.multiSelectMode ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
@@ -87,7 +120,19 @@ export function BlobBrowserPanel() {
                   <button onClick={() => ctx.setSelectedBlobs(new Set())} className="text-xs text-muted-foreground" data-testid="storage-batch-clear">Clear</button>
                 </>
               )}
+              <LastRefreshed
+                at={ctx.blobs.dataUpdatedAt || null}
+                isFetching={ctx.blobs.isFetching}
+                testId="storage-last-refreshed"
+              />
             </div>
+            {isFilterActive && hasMoreBlobs && (
+              <div className="mt-1 text-xs text-muted-foreground" data-testid="storage-filter-scope-notice">
+                {ctx.filteredItems.length === 0
+                  ? `No matches in the ${ctx.displayItems.length} blob(s) loaded so far — loading more automatically…`
+                  : `Showing ${ctx.filteredItems.length} of ${ctx.displayItems.length} loaded (total unknown) — Load more to search further.`}
+              </div>
+            )}
             {ctx.showUpload && (
               <div className="border-b p-3" data-testid="storage-upload-panel">
                 <h4 className="mb-2 text-xs font-semibold">Upload Blob</h4>
@@ -126,13 +171,29 @@ export function BlobBrowserPanel() {
                   )}
                   <button
                     onClick={ctx.handleUploadConfirm}
-                    disabled={!ctx.uploadBlobName.trim() || !ctx.uploadFile || ctx.uploadBlob.isPending}
+                    disabled={!ctx.uploadBlobName.trim() || !ctx.uploadFile || ctx.uploadBlob.isPending || ctx.uploadCheckingOverwrite}
                     className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50"
                     data-testid="storage-upload-confirm"
                   >
-                    {ctx.uploadBlob.isPending ? "Uploading..." : "Upload"}
+                    {ctx.uploadBlob.isPending ? "Uploading..." : ctx.uploadCheckingOverwrite ? "Checking..." : "Upload"}
                   </button>
                 </div>
+                {/* 6.3: Upload used to silently overwrite an existing blob of the same name
+                    with no warning at all, unlike Copy's "Allow overwrite" + confirm guard.
+                    `handleUploadConfirm` checks for a name collision first and populates
+                    `uploadOverwriteConfirm` instead of uploading immediately when one exists. */}
+                {ctx.uploadOverwriteConfirm && (
+                  <ConfirmBar
+                    message={`"${ctx.uploadOverwriteConfirm.blobName}" already exists in this container. Uploading will overwrite it.`}
+                    confirmLabel="Overwrite"
+                    onConfirm={ctx.handleUploadOverwriteConfirm}
+                    onCancel={() => ctx.setUploadOverwriteConfirm(null)}
+                    confirmDisabled={ctx.uploadBlob.isPending}
+                    testId="storage-upload-overwrite-confirm"
+                    confirmTestId="storage-upload-overwrite-confirm-yes"
+                    cancelTestId="storage-upload-overwrite-confirm-cancel"
+                  />
+                )}
               </div>
             )}
           </div>
@@ -198,6 +259,11 @@ export function BlobBrowserPanel() {
                         <span className="min-w-0 flex-1 break-all font-mono" title={item.name}>
                           {item.name.replace(ctx.currentPrefix, "")}
                         </span>
+                        {!item.isPrefix && item.lastModified && (
+                          <span className="w-32 shrink-0 self-start text-right text-xs text-muted-foreground" data-testid={`storage-item-modified-${item.name}`}>
+                            {new Date(item.lastModified).toLocaleString()}
+                          </span>
+                        )}
                         {!item.isPrefix && (
                           <span className="shrink-0 self-start text-xs text-muted-foreground">{formatBytes(item.sizeBytes)}</span>
                         )}

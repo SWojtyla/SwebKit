@@ -169,6 +169,40 @@ test.describe("Storage", () => {
     await expect(page.getByTestId("storage-item-e2e-upload.json")).toBeVisible();
   });
 
+  test("uploading over an existing blob name requires confirmation (unit 6.3)", async ({ page }) => {
+    // Regression: Upload used to silently overwrite a same-named blob with no warning at
+    // all, unlike Copy's "Allow overwrite" + confirm guard. Uploads its own throwaway blob
+    // first (rather than reusing seeded demo data another test depends on) so the second
+    // upload of the same name is a guaranteed collision.
+    await page.goto("/storage");
+    await page.getByTestId("storage-container-configs").click();
+    await page.getByTestId("storage-upload-toggle").click();
+
+    await page.getByTestId("storage-upload-file").setInputFiles({
+      name: "e2e-overwrite-target.json",
+      mimeType: "application/json",
+      buffer: Buffer.from('{"version":1}'),
+    });
+    await page.getByTestId("storage-upload-confirm").click();
+    await expect(page.getByTestId("storage-item-e2e-overwrite-target.json")).toBeVisible();
+
+    await page.getByTestId("storage-upload-toggle").click();
+    await page.getByTestId("storage-upload-file").setInputFiles({
+      name: "e2e-overwrite-target.json",
+      mimeType: "application/json",
+      buffer: Buffer.from('{"version":2}'),
+    });
+    await page.getByTestId("storage-upload-confirm").click();
+
+    // The collision check happens first — the upload must not start until confirmed.
+    await expect(page.getByTestId("storage-upload-overwrite-confirm")).toBeVisible();
+    await expect(page.getByTestId("storage-upload-panel")).toBeVisible();
+
+    await page.getByTestId("storage-upload-overwrite-confirm-yes").click();
+    await expect(page.getByTestId("storage-upload-overwrite-confirm")).not.toBeVisible();
+    await expect(page.getByTestId("storage-upload-panel")).not.toBeVisible();
+  });
+
   test("compares and restores blob versions", async ({ page }) => {
     await page.goto("/storage");
     await page.getByTestId("storage-container-configs").click();

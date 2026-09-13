@@ -3,12 +3,12 @@ import { RotateCcw, Search } from "lucide-react";
 import { useUndeleteBlob } from "@/lib/hooks";
 import { useStoragePageContext } from "./StoragePageContext";
 import { formatBytes } from "@/lib/format-bytes";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 
 interface DeletedBlob {
   name: string;
   deletedAt: string;
   daysRemaining: number;
-  contentType: string;
   sizeBytes: number | null;
 }
 
@@ -23,13 +23,14 @@ export function BlobRecoveryPanel() {
     name: b.name,
     deletedAt: b.deletedOn,
     daysRemaining: b.remainingDays,
-    contentType: "unknown",
     sizeBytes: null,
   }));
   const [filter, setFilter] = useState("");
   const [recovering, setRecovering] = useState<Set<string>>(new Set());
   const [recovered, setRecovered] = useState<Set<string>>(new Set());
   const [errorByBlob, setErrorByBlob] = useState<Record<string, string>>({});
+  const [checkingCollision, setCheckingCollision] = useState<Set<string>>(new Set());
+  const [confirmRecover, setConfirmRecover] = useState<{ name: string; collision: boolean } | null>(null);
   const undeleteBlob = useUndeleteBlob(accountId, container);
 
   const filtered = filter
@@ -51,6 +52,31 @@ export function BlobRecoveryPanel() {
         return next;
       });
     }
+  };
+
+  // Recover previously fired immediately with no confirmation and no explanation of what
+  // happens if a live blob of the same name already exists — Azure's undelete behavior in
+  // that case depends on the account, so the confirm states both possible outcomes rather
+  // than guessing one.
+  const handleRecoverClick = async (name: string) => {
+    setCheckingCollision((prev) => new Set(prev).add(name));
+    try {
+      const collision = await ctx.checkBlobExists(name);
+      setConfirmRecover({ name, collision });
+    } finally {
+      setCheckingCollision((prev) => {
+        const next = new Set(prev);
+        next.delete(name);
+        return next;
+      });
+    }
+  };
+
+  const handleRecoverConfirm = () => {
+    if (!confirmRecover) return;
+    const { name } = confirmRecover;
+    setConfirmRecover(null);
+    void handleRecover(name);
   };
 
   if (!accountId || !container) {
@@ -102,6 +128,7 @@ export function BlobRecoveryPanel() {
               {filtered.map((blob) => {
                 const isRecovered = recovered.has(blob.name);
                 const isRecovering = recovering.has(blob.name);
+                const isCheckingCollision = checkingCollision.has(blob.name);
                 const error = errorByBlob[blob.name];
                 return (
                   <tr key={blob.name} className="border-b last:border-0">
@@ -123,13 +150,13 @@ export function BlobRecoveryPanel() {
                       ) : (
                         <span title={allowMutations ? "Recover deleted blob" : "Mutations are disabled for this storage account. Enable allowMutations in Settings."}>
                           <button
-                            onClick={() => handleRecover(blob.name)}
-                            disabled={isRecovering || !allowMutations}
+                            onClick={() => handleRecoverClick(blob.name)}
+                            disabled={isRecovering || isCheckingCollision || !allowMutations}
                             className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                             data-testid={`blob-recover-btn-${blob.name}`}
                           >
                             <RotateCcw className="h-3 w-3" />
-                            {isRecovering ? "Recovering..." : "Recover"}
+                            {isRecovering ? "Recovering..." : isCheckingCollision ? "Checking..." : "Recover"}
                           </button>
                           {error && <span className="block text-xs text-destructive">{error}</span>}
                         </span>
@@ -142,6 +169,22 @@ export function BlobRecoveryPanel() {
           </table>
         )}
       </div>
+
+      {confirmRecover && (
+        <ConfirmBar
+          message={
+            confirmRecover.collision
+              ? `Restore "${confirmRecover.name}" to ${container}? A live blob with this name already exists — depending on the account's configuration, recovering may overwrite it or fail.`
+              : `Restore "${confirmRecover.name}" to ${container}?`
+          }
+          confirmLabel="Recover"
+          onConfirm={handleRecoverConfirm}
+          onCancel={() => setConfirmRecover(null)}
+          testId="blob-recover-confirm"
+          confirmTestId="blob-recover-confirm-yes"
+          cancelTestId="blob-recover-confirm-cancel"
+        />
+      )}
     </div>
   );
 }

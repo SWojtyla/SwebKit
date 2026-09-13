@@ -190,12 +190,23 @@ public sealed class DemoStorageClient : IStorageClient
         var allBlobs = _blobsByContainer.Values.SelectMany(b => b).Where(b => !b.IsPrefix).ToList();
         var blob = allBlobs.FirstOrDefault(b => string.Equals($"{containerName}/{b.Name}", key, StringComparison.OrdinalIgnoreCase));
 
+        // Fix (batch 6, unit 6.3): this used to fabricate properties for *any* blob name,
+        // existent or not, unlike `AzureStorageClient.GetBlobPropertiesAsync`, which throws when
+        // the real Azure SDK's `GetPropertiesAsync()` 404s. The frontend's upload/undelete
+        // overwrite-collision check (`checkBlobExists`, StoragePageContext.tsx) relies on this
+        // request failing for a name that doesn't exist yet — with the old always-succeeds
+        // behavior, demo mode reported every upload as a collision, even for a brand-new name.
+        if (blob is null)
+        {
+            throw new InvalidOperationException($"Blob '{blobName}' was not found in container '{containerName}'.");
+        }
+
         return Task.FromResult(new BlobProperties(
             blobName,
-            blob?.SizeBytes ?? 0,
-            blob?.ContentType ?? "application/octet-stream",
-            blob?.LastModified ?? DateTimeOffset.UtcNow,
-            blob?.ETag ?? "\"demo-etag\"",
+            blob.SizeBytes ?? 0,
+            blob.ContentType ?? "application/octet-stream",
+            blob.LastModified ?? DateTimeOffset.UtcNow,
+            blob.ETag ?? "\"demo-etag\"",
             "unlocked",
             "available",
             "Hot",
