@@ -433,8 +433,7 @@ export type VariableGeneratorKind =
   | "Guid"
   | "DateTime"
   | "List"
-  | "Faker"
-  | "Template";
+  | "Faker";
 
 export interface VariableGeneratorDefinition {
   kind: VariableGeneratorKind;
@@ -445,7 +444,6 @@ export interface VariableGeneratorDefinition {
   decimalPlaces?: number;
   trueWeightPercent?: number | null;
   fakerCategory?: string | null;
-  template?: string | null;
   values?: string[];
 }
 

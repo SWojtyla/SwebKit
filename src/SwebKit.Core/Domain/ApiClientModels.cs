@@ -218,7 +218,6 @@ public sealed class VariableGeneratorDefinition
     public int DecimalPlaces { get; set; } = 2;
     public int? TrueWeightPercent { get; set; }
     public string? FakerCategory { get; set; } = "person.firstName";
-    public string? Template { get; set; }
     public List<string> Values { get; set; } = [];
 }
 
@@ -231,7 +230,6 @@ public enum VariableGeneratorKind
     DateTime,
     List,
     Faker,
-    Template,
 }
 
 // ─── Environments ────────────────────────────────────────────────────────────

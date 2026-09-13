@@ -15,7 +15,6 @@ const DEFAULTS: Record<VariableGeneratorKind, Partial<VariableGeneratorDefinitio
   DateTime: {},
   List: { values: [] },
   Faker: { fakerCategory: "person.firstName" },
-  Template: { template: "" },
 };
 
 // The only categories `VariableGeneratorService.GenerateFakerValue` on the sidecar actually
@@ -27,9 +26,27 @@ const FAKER_CATEGORIES: { value: string; label: string }[] = [
   { value: "person.firstName", label: "Person — first name" },
   { value: "person.lastName", label: "Person — last name" },
   { value: "person.fullName", label: "Person — full name" },
+  { value: "person.jobTitle", label: "Person — job title" },
   { value: "internet.email", label: "Internet — email address" },
+  { value: "internet.username", label: "Internet — username" },
+  { value: "internet.url", label: "Internet — URL" },
+  { value: "internet.ip", label: "Internet — IP address" },
   { value: "phone.number", label: "Phone — number" },
   { value: "company.name", label: "Company — name" },
+  { value: "company.catchPhrase", label: "Company — catchphrase" },
+  { value: "address.city", label: "Address — city" },
+  { value: "address.streetAddress", label: "Address — street address" },
+  { value: "address.zipCode", label: "Address — zip code" },
+  { value: "address.country", label: "Address — country" },
+  { value: "address.fullAddress", label: "Address — full address" },
+  { value: "lorem.word", label: "Lorem — word" },
+  { value: "lorem.sentence", label: "Lorem — sentence" },
+  { value: "lorem.paragraph", label: "Lorem — paragraph" },
+  { value: "commerce.productName", label: "Commerce — product name" },
+  { value: "commerce.price", label: "Commerce — price" },
+  { value: "date.past", label: "Date — in the past" },
+  { value: "date.future", label: "Date — in the future" },
+  { value: "date.recent", label: "Date — recent" },
 ];
 
 const GENERATOR_HELP: Record<VariableGeneratorKind, string> = {
@@ -40,7 +57,6 @@ const GENERATOR_HELP: Record<VariableGeneratorKind, string> = {
   DateTime: "The current date and time (UTC, ISO 8601) at the moment the request is sent.",
   List: "One value chosen at random from the comma-separated list each time.",
   Faker: "Realistic-looking sample data from the category you pick below.",
-  Template: "Combines this text with other variables: any {{variableName}} is replaced with that variable's current value. A name that doesn't match an existing variable is left as literal text, unchanged — it will not error.",
 };
 
 export function GeneratorConfig({ generator, onChange, testIdPrefix }: GeneratorConfigProps) {
@@ -73,7 +89,6 @@ export function GeneratorConfig({ generator, onChange, testIdPrefix }: Generator
           <option value="Boolean">Boolean</option>
           <option value="List">List</option>
           <option value="Faker">Faker</option>
-          <option value="Template">Template</option>
         </select>
 
         {generator.kind === "Integer" && (
@@ -154,26 +169,12 @@ export function GeneratorConfig({ generator, onChange, testIdPrefix }: Generator
           </select>
         )}
 
-        {(generator.kind === "List" || generator.kind === "Template") && (
+        {generator.kind === "List" && (
           <input
             type="text"
-            value={
-              generator.kind === "List"
-                ? (generator.values ?? []).join(", ")
-                : generator.template ?? ""
-            }
-            onChange={(e) => {
-              const patch: Partial<VariableGeneratorDefinition> =
-                generator.kind === "List"
-                  ? { values: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) }
-                  : { template: e.target.value };
-              update(patch);
-            }}
-            placeholder={
-              generator.kind === "List"
-                ? "one, two, three"
-                : "order-{{orderId}}"
-            }
+            value={(generator.values ?? []).join(", ")}
+            onChange={(e) => update({ values: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })}
+            placeholder="one, two, three"
             className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-xs font-mono"
             data-testid={`${testIdPrefix}-generator-input`}
           />

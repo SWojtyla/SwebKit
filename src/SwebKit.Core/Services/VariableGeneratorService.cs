@@ -1,15 +1,17 @@
 using System.Globalization;
-using System.Text.RegularExpressions;
 using Bogus;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 
 namespace SwebKit.Core.Services;
 
-public sealed partial class VariableGeneratorService : IVariableGeneratorService
+public sealed class VariableGeneratorService : IVariableGeneratorService
 {
     private readonly Faker _faker = new();
 
+    // `scope` is unused now that the Template generator kind (the only one that referenced other
+    // variables' values) has been removed, but it stays on the interface — VariableSubstitutionService
+    // still builds and passes a real scope, and a future generator kind may want it again.
     public VariableGenerationResult Generate(
         VariableGeneratorDefinition definition,
         IReadOnlyDictionary<string, string?> scope)
@@ -23,7 +25,6 @@ public sealed partial class VariableGeneratorService : IVariableGeneratorService
             VariableGeneratorKind.DateTime => VariableGenerationResult.Success(DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)),
             VariableGeneratorKind.List => GenerateListValue(definition),
             VariableGeneratorKind.Faker => GenerateFakerValue(definition),
-            VariableGeneratorKind.Template => GenerateTemplate(definition, scope),
             _ => VariableGenerationResult.Failure($"Unsupported generator kind '{definition.Kind}'."),
         };
     }
@@ -81,9 +82,27 @@ public sealed partial class VariableGeneratorService : IVariableGeneratorService
             "person.firstName" => _faker.Name.FirstName(),
             "person.lastName" => _faker.Name.LastName(),
             "person.fullName" => _faker.Name.FullName(),
+            "person.jobTitle" => _faker.Name.JobTitle(),
             "internet.email" => _faker.Internet.Email(),
+            "internet.username" => _faker.Internet.UserName(),
+            "internet.url" => _faker.Internet.Url(),
+            "internet.ip" => _faker.Internet.Ip(),
             "phone.number" => _faker.Phone.PhoneNumber(),
             "company.name" => _faker.Company.CompanyName(),
+            "company.catchPhrase" => _faker.Company.CatchPhrase(),
+            "address.city" => _faker.Address.City(),
+            "address.streetAddress" => _faker.Address.StreetAddress(),
+            "address.zipCode" => _faker.Address.ZipCode(),
+            "address.country" => _faker.Address.Country(),
+            "address.fullAddress" => _faker.Address.FullAddress(),
+            "lorem.word" => _faker.Lorem.Word(),
+            "lorem.sentence" => _faker.Lorem.Sentence(),
+            "lorem.paragraph" => _faker.Lorem.Paragraph(),
+            "commerce.productName" => _faker.Commerce.ProductName(),
+            "commerce.price" => _faker.Commerce.Price(),
+            "date.past" => _faker.Date.Past().ToString("O", CultureInfo.InvariantCulture),
+            "date.future" => _faker.Date.Future().ToString("O", CultureInfo.InvariantCulture),
+            "date.recent" => _faker.Date.Recent().ToString("O", CultureInfo.InvariantCulture),
             _ => null,
         };
 
@@ -91,27 +110,4 @@ public sealed partial class VariableGeneratorService : IVariableGeneratorService
             ? VariableGenerationResult.Failure($"Unsupported faker category '{category}'.")
             : VariableGenerationResult.Success(value);
     }
-
-    private static VariableGenerationResult GenerateTemplate(
-        VariableGeneratorDefinition definition,
-        IReadOnlyDictionary<string, string?> scope)
-    {
-        if (string.IsNullOrWhiteSpace(definition.Template))
-        {
-            return VariableGenerationResult.Failure("Template generator requires a template.");
-        }
-
-        var result = TokenPattern().Replace(definition.Template, match =>
-        {
-            var key = match.Groups[1].Value.Trim();
-            return scope.TryGetValue(key, out var value) && value is not null
-                ? value
-                : match.Value;
-        });
-
-        return VariableGenerationResult.Success(result);
-    }
-
-    [GeneratedRegex(@"\{\{([^{}]+?)\}\}", RegexOptions.CultureInvariant)]
-    private static partial Regex TokenPattern();
 }
