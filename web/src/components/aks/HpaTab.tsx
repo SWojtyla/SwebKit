@@ -51,10 +51,10 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
 
   const columns: Column<HpaInfo>[] = useMemo(() => [
           { header: "Target", cell: (hpa) => <span className="text-xs text-muted-foreground">{hpa.targetKind}/{hpa.targetName}</span> },
-          { header: "Min", cell: (hpa) => hpa.minReplicas },
-          { header: "Max", cell: (hpa) => hpa.maxReplicas },
-          { header: "Current", cell: (hpa) => hpa.currentReplicas },
-          { header: "Desired", cell: (hpa) => <span className="text-success">{hpa.desiredReplicas}</span> },
+          { header: "Min", cell: (hpa) => hpa.minReplicas, sortValue: (hpa) => hpa.minReplicas },
+          { header: "Max", cell: (hpa) => hpa.maxReplicas, sortValue: (hpa) => hpa.maxReplicas },
+          { header: "Current", cell: (hpa) => hpa.currentReplicas, sortValue: (hpa) => hpa.currentReplicas },
+          { header: "Desired", cell: (hpa) => <span className="text-success">{hpa.desiredReplicas}</span>, sortValue: (hpa) => hpa.desiredReplicas },
           { header: "CPU%", cell: (hpa) => (
             hpa.currentCpuUtilizationPercent != null ? (
               <span className={
@@ -64,7 +64,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                 {hpa.currentCpuUtilizationPercent}%
               </span>
             ) : "—"
-          )},
+          ), sortValue: (hpa) => hpa.currentCpuUtilizationPercent ?? -1 },
           { header: "Type", cell: (hpa) => (
             <div className="flex flex-wrap gap-1">
               {hpa.isKedaManaged ? (
@@ -123,6 +123,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
         tableBodyTestId="hpas-table-body"
         emptyMessage="No HPAs found"
         columns={columns}
+        defaultSort={{ sortValue: (hpa) => (hpa.isScalingDisabled ? -1 : hpa.currentReplicas === hpa.desiredReplicas ? 1 : 0), direction: "asc" }}
       />
 
       {scaleTarget && (

@@ -40,8 +40,8 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
     { header: "Schedule", cell: (cj) => <span className="font-mono text-xs">{cj.schedule ?? "—"}</span> },
     { header: "Suspend", cell: (cj) => (
       cj.suspend ? <span className="text-warning">Yes</span> : <span className="text-success">No</span>
-    )},
-    { header: "Active", cell: (cj) => cj.activeCount },
+    ), sortValue: (cj) => (cj.suspend ? 0 : 1) },
+    { header: "Active", cell: (cj) => cj.activeCount, sortValue: (cj) => cj.activeCount },
     { header: "Last Schedule", cell: (cj) => (
       <span className="text-xs text-muted-foreground">{cj.lastScheduleTime ? new Date(cj.lastScheduleTime).toLocaleString() : "—"}</span>
     )},

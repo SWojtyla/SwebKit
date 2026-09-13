@@ -284,7 +284,25 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
 
   const activeTab = useMemo(() => parseTab(searchParams.get("tab")), [searchParams]);
   const setActiveTab = useCallback(
-    (tab: TabId) => updateParams({ tab: tab === "deployments" ? null : tab }),
+    (tab: TabId) => {
+      // Switching the main resource tab must not leave a detail panel from the *previous* tab
+      // open and stale — e.g. a Secret's values panel staying visible while browsing HPA/Helm/
+      // Events, showing content unrelated to what's now on screen. Every "open X" action already
+      // clears these on its own way in; this is the one place a tab click itself needs to.
+      updateParams({
+        tab: tab === "deployments" ? null : tab,
+        pod: null,
+        yaml: null,
+        helm: null,
+        container: null,
+        logs: null,
+        logsNs: null,
+      });
+      setSelectedSecret(null);
+      setSelectedConfigMap(null);
+      setShellPod(null);
+      setAskAiPod(null);
+    },
     [updateParams],
   );
 

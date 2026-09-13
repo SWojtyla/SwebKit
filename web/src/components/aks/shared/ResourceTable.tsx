@@ -118,7 +118,7 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
   const header = (
     <thead>
       <tr className="border-b text-left text-xs text-muted-foreground">
-        <th className="w-full py-2 pr-4">
+        <th className="max-w-[320px] py-2 pr-4">
           <button
             onClick={() => toggleSort("name")}
             className="flex items-center gap-1 hover:text-foreground"
@@ -165,12 +165,14 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
     return (
       <div className="p-4">
         {filterBar}
-        <table className="w-full text-sm tabular-nums">
-          {header}
-          <tbody>
-            <SkeletonTableRows columns={columnCount} />
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm tabular-nums">
+            {header}
+            <tbody>
+              <SkeletonTableRows columns={columnCount} />
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
@@ -191,56 +193,66 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
            data refreshes: every other column is sized to its content, all slack
            lands in the name, and digits are equal width so a counter ticking from
            `9m` to `10m` (or a metric gaining a digit) no longer re-lays out the
-           whole table under the pointer. */
-        <table className="w-full text-sm tabular-nums">
-          {header}
-          <tbody data-testid={tableBodyTestId ?? `${testIdPrefix}s-table-body`}>
-            {visibleRows.map((row) => {
-              const rowKey = getKey(row);
-              const isSelected = selectedKey === rowKey;
-              return (
-                <tr
-                  key={rowKey}
-                  data-testid={`${testIdPrefix}-row-${row.name}`}
-                  className={`border-b last:border-0 ${
-                    clickable ? "cursor-pointer hover:bg-accent/50" : "hover:bg-accent/30"
-                  } ${isSelected ? "bg-accent" : ""} ${getRowClassName?.(row) ?? ""}`}
-                  tabIndex={clickable ? 0 : undefined}
-                  aria-selected={clickable ? isSelected : undefined}
-                  onClick={() => onRowClick?.(row)}
-                  onKeyDown={
-                    onRowClick
-                      ? (e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onRowClick(row);
+           whole table under the pointer.
+
+           The wrapping `overflow-x-auto` plus a real `min-width` on the table matters
+           whenever a side detail panel is open and narrows the available space: without
+           it, `w-full` forces the table to always fit its container, so `whitespace-nowrap`
+           columns (Status, Restarts, Actions, ...) get silently crushed/clipped with no way
+           to reach them, instead of the table overflowing into a scrollbar. */
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-sm tabular-nums">
+            {header}
+            <tbody data-testid={tableBodyTestId ?? `${testIdPrefix}s-table-body`}>
+              {visibleRows.map((row) => {
+                const rowKey = getKey(row);
+                const isSelected = selectedKey === rowKey;
+                return (
+                  <tr
+                    key={rowKey}
+                    data-testid={`${testIdPrefix}-row-${row.name}`}
+                    className={`border-b last:border-0 ${
+                      clickable ? "cursor-pointer hover:bg-accent/50" : "hover:bg-accent/30"
+                    } ${isSelected ? "bg-accent" : ""} ${getRowClassName?.(row) ?? ""}`}
+                    tabIndex={clickable ? 0 : undefined}
+                    aria-selected={clickable ? isSelected : undefined}
+                    onClick={() => onRowClick?.(row)}
+                    onKeyDown={
+                      onRowClick
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onRowClick(row);
+                            }
                           }
-                        }
-                      : undefined
-                  }
-                  onContextMenu={(e) => {
-                    if (onRowContextMenu) {
-                      e.preventDefault();
-                      onRowContextMenu(e, row);
+                        : undefined
                     }
-                  }}
-                >
-                  <td className="w-full py-2 pr-4 font-medium">{row.name}</td>
-                  {isMulti && (
-                    <td className="whitespace-nowrap py-2 pr-4 text-xs text-muted-foreground">
-                      {row.namespace ?? "—"}
+                    onContextMenu={(e) => {
+                      if (onRowContextMenu) {
+                        e.preventDefault();
+                        onRowContextMenu(e, row);
+                      }
+                    }}
+                  >
+                    <td className="max-w-[320px] py-2 pr-4 font-medium">
+                      <span className="block truncate" title={row.name}>{row.name}</span>
                     </td>
-                  )}
-                  {columns.map((col, i) => (
-                    <td key={i} className={col.className ?? "whitespace-nowrap py-2 pr-4"}>
-                      {col.cell(row)}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    {isMulti && (
+                      <td className="whitespace-nowrap py-2 pr-4 text-xs text-muted-foreground">
+                        {row.namespace ?? "—"}
+                      </td>
+                    )}
+                    {columns.map((col, i) => (
+                      <td key={i} className={col.className ?? "whitespace-nowrap py-2 pr-4"}>
+                        {col.cell(row)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

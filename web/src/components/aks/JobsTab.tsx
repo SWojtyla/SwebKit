@@ -10,6 +10,12 @@ interface JobsTabProps {
   isMulti?: boolean;
 }
 
+function jobStatusRank(job: JobInfo): number {
+  if (job.status === "Failed") return -1;
+  if (job.status === "Completed") return 1;
+  return 0;
+}
+
 const columns: Column<JobInfo>[] = [
   { header: "Status", cell: (job) => (
     <span className={
@@ -19,10 +25,10 @@ const columns: Column<JobInfo>[] = [
     }>
       {job.status}
     </span>
-  )},
-  { header: "Active", cell: (job) => job.active },
-  { header: "Succeeded", cell: (job) => <span className="text-success">{job.succeeded}</span> },
-  { header: "Failed", cell: (job) => <span className="text-destructive">{job.failed}</span> },
+  ), sortValue: jobStatusRank },
+  { header: "Active", cell: (job) => job.active, sortValue: (job) => job.active },
+  { header: "Succeeded", cell: (job) => <span className="text-success">{job.succeeded}</span>, sortValue: (job) => job.succeeded },
+  { header: "Failed", cell: (job) => <span className="text-destructive">{job.failed}</span>, sortValue: (job) => job.failed },
   { header: "Completions", cell: (job) => <span className="text-muted-foreground">{job.desiredCompletions ?? "—"}</span> },
   { header: "Source", cell: (job) => (
     <span className="text-xs text-muted-foreground">
@@ -57,6 +63,7 @@ export function JobsTab({ ns, isMulti }: JobsTabProps) {
       onRowClick={(job) => ws.openYaml("job", job.name, job.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
+      defaultSort={{ sortValue: jobStatusRank, direction: "asc" }}
     />
   );
 }

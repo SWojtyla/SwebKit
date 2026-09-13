@@ -16,7 +16,7 @@ const columns: Column<StatefulSetInfo>[] = [
     <span className={sts.readyReplicas === sts.replicas ? "text-success" : "text-warning"}>
       {sts.readyReplicas}/{sts.replicas}
     </span>
-  )},
+  ), sortValue: (sts) => (sts.readyReplicas === sts.replicas ? 1 : 0) },
   { header: "Current Rev", cell: (sts) => <span className="text-xs text-muted-foreground">{sts.currentRevision ?? "—"}</span> },
   { header: "Update Rev", cell: (sts) => <span className="text-xs text-muted-foreground">{sts.updateRevision ?? "—"}</span> },
 ];
@@ -101,6 +101,7 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
         onRowClick={(sts) => ws.openYaml("statefulset", sts.name, sts.namespace)}
         onRowContextMenu={handleRowContextMenu}
         columns={allColumns}
+        defaultSort={{ sortValue: (sts) => (sts.readyReplicas === sts.replicas ? 1 : 0), direction: "asc" }}
       />
 
       {scaleTarget && (

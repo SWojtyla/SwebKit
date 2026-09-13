@@ -11,7 +11,7 @@ interface ServicesTabProps {
 }
 
 const columns: Column<ServiceInfo>[] = [
-  { header: "Type", cell: (svc) => svc.type },
+  { header: "Type", cell: (svc) => svc.type, sortValue: (svc) => svc.type },
   { header: "Cluster IP", cell: (svc) => <span className="text-muted-foreground">{svc.clusterIp}</span> },
   { header: "External", cell: (svc) => (
     <span className="text-muted-foreground">

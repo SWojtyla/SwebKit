@@ -10,15 +10,25 @@ interface HelmTabProps {
   isMulti?: boolean;
 }
 
+// `failed` is a hard failure and gets the same destructive-red every other broken resource in
+// the app uses (Pods' Failed/Error, Deployments' Unavailable) — it was previously the same
+// warning-yellow as an in-progress `pending-*` state, which reads as "still working on it"
+// rather than "this release is actually broken."
+function helmStatusClass(status: string): string {
+  if (status === "deployed") return "text-success";
+  if (status === "failed") return "text-destructive";
+  return "text-warning";
+}
+
 const columns: Column<HelmReleaseInfo>[] = [
   { header: "Chart", cell: (rel) => <span className="text-muted-foreground">{rel.chart ?? "—"}</span> },
   { header: "Version", cell: (rel) => <span className="text-muted-foreground">{rel.appVersion ?? rel.chartVersion ?? "—"}</span> },
-  { header: "Revision", cell: (rel) => rel.revision },
+  { header: "Revision", cell: (rel) => rel.revision, sortValue: (rel) => rel.revision },
   { header: "Status", cell: (rel) => (
-    <span className={rel.status === "deployed" ? "text-success" : "text-warning"}>
+    <span className={helmStatusClass(rel.status)}>
       {rel.status}
     </span>
-  )},
+  ), sortValue: (rel) => (rel.status === "deployed" ? 1 : rel.status === "failed" ? -1 : 0) },
   { header: "Updated", cell: (rel) => (
     <span className="text-xs text-muted-foreground">{rel.updated ? new Date(rel.updated).toLocaleString() : "—"}</span>
   )},
@@ -55,6 +65,7 @@ export function HelmTab({ ns, isMulti }: HelmTabProps) {
       onRowClick={handleRowClick}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
+      defaultSort={{ sortValue: (rel) => (rel.status === "deployed" ? 1 : rel.status === "failed" ? -1 : 0), direction: "asc" }}
     />
   );
 }

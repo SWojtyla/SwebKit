@@ -5,6 +5,10 @@ import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { GatewayClassInfo } from "@/lib/types";
 
+function gatewayClassStatusRank(gc: GatewayClassInfo): number {
+  return gc.status === "Accepted" ? 1 : gc.status === "Pending" ? 0 : -1;
+}
+
 const columns: Column<GatewayClassInfo>[] = [
   { header: "Controller", cell: (gc) => <span className="text-xs text-muted-foreground">{gc.controllerName ?? "—"}</span> },
   { header: "Status", cell: (gc) => (
@@ -15,7 +19,7 @@ const columns: Column<GatewayClassInfo>[] = [
     }>
       {gc.status}
     </span>
-  )},
+  ), sortValue: gatewayClassStatusRank },
 ];
 
 export function GatewayClassesTab() {
@@ -44,6 +48,7 @@ export function GatewayClassesTab() {
       onRowClick={(gc) => ws.openYaml("gatewayclass", gc.name, "default")}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
+      defaultSort={{ sortValue: gatewayClassStatusRank, direction: "asc" }}
     />
   );
 }

@@ -18,7 +18,7 @@ const columns: Column<IngressInfo>[] = [
   { header: "Addresses", cell: (ing) => (
     <span className="text-xs text-muted-foreground">{ing.addresses.length > 0 ? ing.addresses.join(", ") : "—"}</span>
   )},
-  { header: "Rules", cell: (ing) => <span className="text-xs text-muted-foreground">{ing.rules.length} rule(s)</span> },
+  { header: "Rules", cell: (ing) => <span className="text-xs text-muted-foreground">{ing.rules.length} rule(s)</span>, sortValue: (ing) => ing.rules.length },
 ];
 
 export function IngressesTab({ ns, isMulti }: IngressesTabProps) {

@@ -10,6 +10,10 @@ interface GatewaysTabProps {
   isMulti?: boolean;
 }
 
+function gatewayStatusRank(gw: GatewayInfo): number {
+  return gw.status === "Ready" ? 1 : gw.status === "Pending" ? 0 : -1;
+}
+
 const columns: Column<GatewayInfo>[] = [
   { header: "Class", cell: (gw) => <span className="text-xs text-muted-foreground">{gw.gatewayClass ?? "—"}</span> },
   { header: "Status", cell: (gw) => (
@@ -20,11 +24,11 @@ const columns: Column<GatewayInfo>[] = [
     }>
       {gw.status}
     </span>
-  )},
+  ), sortValue: gatewayStatusRank },
   { header: "Addresses", cell: (gw) => (
     <span className="text-xs text-muted-foreground">{gw.addresses.length > 0 ? gw.addresses.join(", ") : "—"}</span>
   )},
-  { header: "Attached Routes", cell: (gw) => gw.attachedRoutes },
+  { header: "Attached Routes", cell: (gw) => gw.attachedRoutes, sortValue: (gw) => gw.attachedRoutes },
 ];
 
 export function GatewaysTab({ ns, isMulti }: GatewaysTabProps) {
@@ -54,6 +58,7 @@ export function GatewaysTab({ ns, isMulti }: GatewaysTabProps) {
       onRowClick={(gw) => ws.openYaml("gateway", gw.name, gw.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
+      defaultSort={{ sortValue: gatewayStatusRank, direction: "asc" }}
     />
   );
 }

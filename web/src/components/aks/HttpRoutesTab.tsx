@@ -10,6 +10,10 @@ interface HttpRoutesTabProps {
   isMulti?: boolean;
 }
 
+function httpRouteStatusRank(route: HttpRouteInfo): number {
+  return route.status === "Accepted" ? 1 : route.status === "Pending" ? 0 : -1;
+}
+
 const columns: Column<HttpRouteInfo>[] = [
   { header: "Hosts", cell: (route) => (
     <span className="text-xs">{route.hostnames.length > 0 ? route.hostnames.join(", ") : "—"}</span>
@@ -28,7 +32,7 @@ const columns: Column<HttpRouteInfo>[] = [
     }>
       {route.status}
     </span>
-  )},
+  ), sortValue: httpRouteStatusRank },
 ];
 
 export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
@@ -72,6 +76,7 @@ export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
       onRowClick={(route) => ws.openYaml("httproute", route.name, route.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
+      defaultSort={{ sortValue: httpRouteStatusRank, direction: "asc" }}
     />
   );
 }
