@@ -56,8 +56,6 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
       if (pods.length > 0) ws.openContainerDetails(pods[0].name, pods[0].namespace);
     } },
     { label: "Analyze network", icon: "📶", onClick: () => ws.navigateToAnalysis() },
-    { label: "Probe failures", icon: "🚧", onClick: () => {}, disabled: true, title: "Not yet implemented" },
-    { label: "Placement", icon: "📍", onClick: () => {}, disabled: true, title: "Not yet implemented" },
     { label: "", separator: true, onClick: () => {} },
     { label: "Restart Deployment", icon: "↻", onClick: () => restart(dep) },
     { label: "Scale...", icon: "⇳", onClick: () => setScaleTarget(dep) },
