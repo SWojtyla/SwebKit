@@ -1,5 +1,12 @@
-import { useCallback } from "react";
-import { useAgentChatStream, useAgentClear, useAgentStatus, usePendingApprovals } from "./useAgent";
+import { useCallback, useState } from "react";
+import {
+  describeAgentToolEvent,
+  isAbortError,
+  useAgentChatStream,
+  useAgentClear,
+  useAgentStatus,
+  usePendingApprovals,
+} from "./useAgent";
 import { useAgentConversationStore } from "@/lib/stores/agent-conversation";
 
 let msgIdCounter = 0;
@@ -25,6 +32,7 @@ export function useGlobalAgentConversation() {
   const clear = useAgentClear();
   const status = useAgentStatus();
   const pendingApprovals = usePendingApprovals();
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
 
   const send = useCallback(
     (text: string) => {
@@ -34,10 +42,15 @@ export function useGlobalAgentConversation() {
       const assistantId = nextMsgId();
       addMessage({ id: nextMsgId(), role: "user", content: trimmed });
       addMessage({ id: assistantId, role: "assistant", content: "" });
+      setToolStatus(null);
 
       chat
-        .send(trimmed, { onToken: (token) => appendToken(assistantId, token) })
+        .send(trimmed, {
+          onToken: (token) => appendToken(assistantId, token),
+          onToolEvent: (event) => setToolStatus(describeAgentToolEvent(event)),
+        })
         .then((reply) => {
+          setToolStatus(null);
           updateMessage(assistantId, {
             content: reply.text,
             elapsedMs: reply.elapsedMs,
@@ -47,7 +60,12 @@ export function useGlobalAgentConversation() {
           });
         })
         .catch((err: Error) => {
-          updateMessage(assistantId, { content: `Error: ${err.message}`, error: true });
+          setToolStatus(null);
+          if (isAbortError(err)) {
+            updateMessage(assistantId, { stopped: true });
+          } else {
+            updateMessage(assistantId, { content: `Error: ${err.message}`, error: true });
+          }
         });
     },
     [chat, addMessage, updateMessage, appendToken],
@@ -69,6 +87,8 @@ export function useGlobalAgentConversation() {
     messages,
     send,
     isStreaming: chat.isStreaming,
+    cancel: chat.cancel,
+    toolStatus,
     clear: clearConversation,
     isClearPending: clear.isPending,
     status,

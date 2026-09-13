@@ -22,7 +22,7 @@ status: Proposed
 | 4 — API Client | 4.1–4.5 | In progress (background agent) |
 | 5 — Monitoring | 5.1–5.4 | In progress (background agent) |
 | 6 — Storage | 6.1–6.6 | In progress (background agent) |
-| 7 — Agent | 7.1–7.7 | In progress (background agent) |
+| 7 — Agent | 7.1–7.7 | Done — merged (commit `cb5cb5e`); Aikido scan not run (MCP unavailable this session) |
 | 8 — Settings | 8.1–8.9 | In progress (background agent) |
 | 9 — Dashboard | 9.1–9.3 | Done — merged as `52587d4` (commit `c9160ee`) |
 

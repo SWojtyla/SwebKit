@@ -22,7 +22,11 @@ export function ContextUsageIndicator({ percent, warningAt = 75 }: ContextUsageI
     <span
       className={isGettingFull ? "text-warning" : "text-muted-foreground"}
       data-testid="agent-context-usage"
-      title="Percentage of the model's context window used by the current conversation"
+      title={
+        isGettingFull
+          ? "Nearing the limit — older messages will be summarized automatically"
+          : "Percentage of the model's context window used by the current conversation"
+      }
     >
       · {Math.round(percent)}% of context window
     </span>
