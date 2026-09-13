@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import {
   apiFetch,
   apiSend,
@@ -63,6 +63,25 @@ export function useRedisKeyInfo(cacheId: string | null, key: string | null) {
     queryKey: ["redis", cacheId, "keys", key, "info"],
     queryFn: () => apiFetch<RedisKeyInfo>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/info`),
     enabled: !!cacheId && !!key,
+  });
+}
+
+/**
+ * Bulk variant of `useRedisKeyInfo`, for the small set of key rows currently rendered in the
+ * browser tree — feeds the type-color dot and TTL badge shown on each row as it scrolls into
+ * view. There's no bulk key-info endpoint, so this issues one request per key; it shares its
+ * cache with `useRedisKeyInfo` (identical query key) so a row's hint and its detail panel are
+ * never a second fetch for the same key, and callers should pass only the currently-visible keys
+ * (e.g. a virtualizer's rendered window) to keep the request count bounded.
+ */
+export function useRedisKeyInfoBatch(cacheId: string | null, keys: string[]) {
+  return useQueries({
+    queries: keys.map((key) => ({
+      queryKey: ["redis", cacheId, "keys", key, "info"],
+      queryFn: () => apiFetch<RedisKeyInfo>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/info`),
+      enabled: !!cacheId,
+      staleTime: 60_000,
+    })),
   });
 }
 

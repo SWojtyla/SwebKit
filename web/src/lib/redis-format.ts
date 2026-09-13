@@ -111,3 +111,17 @@ export function getTtlColorClass(ms: number | null): string {
   if (ms < 300_000) return "bg-yellow-500";
   return "bg-green-500";
 }
+
+/**
+ * Best-effort extraction of the Redis key a slow-log entry touched, from its raw `arguments`
+ * string (e.g. `"user:profile:1001"` or `"cache:products 0 -1"`) — used by the Ops tab to drill a
+ * slow command through to the Keys tab. Most commands that show up in the slow log take the key
+ * as their first argument; there's no reliable way to tell a keyless command (`PING`, `DBSIZE`,
+ * ...) apart from this string alone, so this is a heuristic hint, not a guarantee the key still
+ * exists.
+ */
+export function extractSlowLogKey(rawArguments: string | null | undefined): string | null {
+  const trimmed = rawArguments?.trim();
+  if (!trimmed) return null;
+  return trimmed.split(/\s+/)[0] || null;
+}

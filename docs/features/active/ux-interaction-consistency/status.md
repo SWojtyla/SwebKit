@@ -16,7 +16,7 @@ status: Proposed
 | --- | --- | --- |
 | 0 — Shared infrastructure | 0.1–0.6 | Not started |
 | 1 — AKS | 1.1–1.8 | Not started |
-| 2 — Redis | 2.1–2.4 | Not started |
+| 2 — Redis | 2.1–2.4 | Done |
 | 3 — Service Bus | 3.1–3.5 | Not started |
 | 4 — API Client | 4.1–4.5 | Not started |
 | 5 — Monitoring | 5.1–5.4 | Not started |

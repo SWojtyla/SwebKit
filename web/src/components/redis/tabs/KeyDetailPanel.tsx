@@ -5,7 +5,9 @@ import { formatBytes } from "@/lib/format-bytes";
 import { useRedisPageContext } from "../RedisPageContext";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 
-const typeColors: Record<string, string> = {
+// Exported so `KeyBrowserPanel` can reuse the same type→color mapping for the tree's type dot
+// (derived by swapping the `text-` prefix for `bg-`) instead of duplicating the color choices.
+export const typeColors: Record<string, string> = {
   string: "text-green-400",
   hash: "text-blue-400",
   list: "text-yellow-400",
@@ -110,7 +112,7 @@ export function KeyDetailPanel() {
                     autoFocus
                   />
                   <button onClick={() => ctx.handleSetTtl(ctx.keyInfo.data!.key)} className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground" data-testid="redis-ttl-set-btn">Set TTL</button>
-                  <button onClick={() => ctx.handleRemoveTtl(ctx.keyInfo.data!.key)} className="rounded border px-2 py-1 text-xs" data-testid="redis-ttl-remove-btn">Remove TTL</button>
+                  <button onClick={() => ctx.requestRemoveTtl(ctx.keyInfo.data!.key)} className="rounded border px-2 py-1 text-xs" data-testid="redis-ttl-remove-btn">Remove TTL</button>
                   <button onClick={() => ctx.setShowTtlEditor(false)} className="text-xs text-muted-foreground">Cancel</button>
                 </div>
               ) : (

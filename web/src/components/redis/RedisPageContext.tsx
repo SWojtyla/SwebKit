@@ -10,7 +10,7 @@ import {
   type JSX,
 } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useIsFetching } from "@tanstack/react-query";
 import {
   useProfile,
   useRedisServerInfo,
@@ -118,9 +118,43 @@ export function redisRowKey(row: FlatRedisRow): string {
   return row.kind === "namespace" ? `ns:${row.node.path}` : `key:${row.key}`;
 }
 
+/**
+ * Every namespace path in the tree, recursively. Used by "Expand all" — the deliberate,
+ * user-triggered counterpart to "Collapse all" — and, previously, by the reactive effect that
+ * used to re-expand everything on any `namespaceTree` identity change (the reported "not
+ * collapsed by default" bug: search, pagination, cache switch and every key mutation all produce
+ * a new tree, so that effect fired constantly and silently undid "Collapse all").
+ */
+export function collectAllNamespacePaths(nodes: NamespaceNode[]): Set<string> {
+  const paths = new Set<string>();
+  const walk = (list: NamespaceNode[]) => {
+    for (const node of list) {
+      paths.add(node.path);
+      walk([...node.children.values()]);
+    }
+  };
+  walk(nodes);
+  return paths;
+}
+
+/**
+ * The default expansion for a freshly loaded tree: only the root-level namespaces, not every
+ * descendant. A multi-level keyspace (`user:profile:*`, `cache:search:results:*`, ...) opens
+ * showing its top-level groups instead of every nested folder at once — this is what "collapsed
+ * by default" means in practice for a hierarchical keyspace. Applied once per genuine
+ * search/cache change (see the ref-guarded seed effect in `RedisPageProvider`), never as a
+ * reaction to incidental data changes like pagination or a mutation's refetch.
+ */
+export function defaultExpandedNamespacePaths(nodes: NamespaceNode[]): Set<string> {
+  return new Set(nodes.map((node) => node.path));
+}
+
 interface PendingConfirm {
   message: string;
   onConfirm: () => void;
+  /** Defaults to "Delete" — most `pendingConfirm` actions are deletions, but a non-deleting one
+   * (e.g. Remove TTL) should say what it actually does instead of borrowing that label. */
+  confirmLabel?: string;
 }
 
 export interface RedisPageContextValue {
@@ -142,12 +176,16 @@ export interface RedisPageContextValue {
   handleLoadMore: () => void;
   handleLoadAll: () => void;
   loadAllActive: boolean;
+  /** Sets a new search pattern (updating both the input and the applied pattern) and switches
+   * to the Keys tab — the drill-through target used by Prefix/Ops panels. */
+  openPrefixInKeys: (prefix: string) => void;
 
   separator: string;
   setSeparator: (v: string) => void;
   expandedNamespaces: Set<string>;
   toggleNamespace: (path: string) => void;
   collapseAllNamespaces: () => void;
+  expandAllNamespaces: () => void;
 
   displayKeys: string[];
   namespaceTree: NamespaceNode[];
@@ -172,6 +210,7 @@ export interface RedisPageContextValue {
   setTtlSeconds: (v: number) => void;
   handleSetTtl: (key: string) => void;
   handleRemoveTtl: (key: string) => void;
+  requestRemoveTtl: (key: string) => void;
 
   selectedKeys: Set<string>;
   batchMode: boolean;
@@ -186,6 +225,11 @@ export interface RedisPageContextValue {
   refreshInterval: number;
   setRefreshInterval: (v: number) => void;
   handleManualRefresh: () => void;
+  /** `Date.now()` of the last completed Redis fetch, or null before the first one — feeds the
+   * shared `LastRefreshed` indicator. */
+  lastRefreshedAt: number | null;
+  /** True while any Redis query is in flight. */
+  isFetching: boolean;
 
   pendingConfirm: PendingConfirm | null;
   setPendingConfirm: (v: PendingConfirm | null) => void;
@@ -286,6 +330,12 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [loadAllActive, setLoadAllActive] = useState(false);
   const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(new Set());
+  // Guards the one-time expansion seed below: true once this search/cache's tree has been
+  // seeded, so later namespaceTree changes (pagination, load-more, a key mutation's refetch)
+  // never re-trigger it. Reset to false only at a genuine search or cache change, which is what
+  // makes "Collapse all" durable instead of silently undone by the next unrelated refresh.
+  const hasSeededExpansionRef = useRef(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const [hashAdding, setHashAdding] = useState(false);
   const [newHashField, setNewHashField] = useState("");
   const [newHashValue, setNewHashValue] = useState("");
@@ -326,11 +376,26 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
 
   useEffect(() => {
     if (!autoRefresh || !resolvedCacheId) return;
+    // Toggling auto-refresh on must have an immediate, visible effect — waiting a full
+    // `refreshInterval` before anything happens is indistinguishable from auto-refresh being
+    // broken (see docs/pitfalls/react-frontend.md's TanStack Query section).
+    queryClient.invalidateQueries({ queryKey: ["redis"] });
     const id = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: ["redis"] });
     }, refreshInterval * 1000);
     return () => clearInterval(id);
   }, [autoRefresh, refreshInterval, resolvedCacheId, queryClient]);
+
+  // Stamped whenever Redis fetching settles (first load, auto-refresh, the manual Refresh
+  // button, or a mutation's invalidation), the same pattern AKS's `LastRefreshed` uses — derived
+  // from fetch state rather than each call site, so a failed refetch still moves the label
+  // instead of freezing it, and "updated Ns ago" always describes what's on screen.
+  const isFetching = useIsFetching({ queryKey: ["redis"] }) > 0;
+  const wasFetchingRef = useRef(false);
+  useEffect(() => {
+    if (wasFetchingRef.current && !isFetching) setLastRefreshedAt(Date.now());
+    wasFetchingRef.current = isFetching;
+  }, [isFetching]);
 
   useEffect(() => {
     setHashAdding(false);
@@ -343,12 +408,31 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     setZsetEditScore("");
   }, [selectedKey]);
 
-  const handleSearch = () => {
-    setPattern(searchInput);
+  // Shared by the Search button and the Prefix/Ops drill-through links below. Setting `pattern`
+  // directly (rather than `setSearchInput` followed by a separate call reading `searchInput`)
+  // avoids a stale-closure bug: a `setState` update isn't visible to code later in the same
+  // handler, only on the next render (see the "searchParams in a callback is a snapshot" pitfall
+  // in docs/pitfalls/react-frontend.md — the same class of bug).
+  const applySearchPattern = useCallback((newPattern: string) => {
+    setSearchInput(newPattern);
+    setPattern(newPattern);
     setCursor(0);
     setAllKeys([]);
+    hasSeededExpansionRef.current = false;
     setExpandedNamespaces(new Set());
-  };
+  }, []);
+
+  const handleSearch = () => applySearchPattern(searchInput);
+
+  // Drill-through target for the Prefix/Ops panels, mirroring Keyspace's existing
+  // onOpenKey-then-switch-tab pattern.
+  const openPrefixInKeys = useCallback(
+    (prefix: string) => {
+      applySearchPattern(`${prefix}${separator}*`);
+      setActiveTab("keys");
+    },
+    [applySearchPattern, separator],
+  );
 
   const handleLoadMore = () => {
     if (scanResult.data && !scanResult.data.isComplete) {
@@ -390,17 +474,17 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     [namespaceTree, expandedNamespaces],
   );
 
+  // One-time seed per genuine search/cache change, guarded by `hasSeededExpansionRef` (reset to
+  // false only in `applySearchPattern`/`handleCacheChange`) — NOT a reactive effect on every
+  // `namespaceTree` identity change. That was the reported bug: pagination, "load more", and any
+  // key mutation's refetch all produce a new tree, so a plain `[namespaceTree]` effect fired
+  // constantly and silently re-expanded everything, undoing "Collapse all" moments after it was
+  // clicked. Firing once per genuine change instead makes "Collapse all" durable.
   useEffect(() => {
+    if (hasSeededExpansionRef.current) return;
     if (namespaceTree.length === 0) return;
-    const allPaths = new Set<string>();
-    const collect = (nodes: NamespaceNode[]) => {
-      for (const node of nodes) {
-        allPaths.add(node.path);
-        collect([...node.children.values()]);
-      }
-    };
-    collect(namespaceTree);
-    setExpandedNamespaces((prev) => (prev.size === 0 ? allPaths : prev));
+    hasSeededExpansionRef.current = true;
+    setExpandedNamespaces(defaultExpandedNamespacePaths(namespaceTree));
   }, [namespaceTree]);
 
   const toggleNamespace = (path: string) => {
@@ -413,6 +497,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   };
 
   const collapseAllNamespaces = () => setExpandedNamespaces(new Set());
+  const expandAllNamespaces = () => setExpandedNamespaces(collectAllNamespacePaths(namespaceTree));
 
   const handleDeleteKey = (key: string) => {
     deleteKey.mutate(key, {
@@ -452,6 +537,14 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const handleRemoveTtl = (key: string) => {
     setTtl.mutate({ key, removeTtl: true }, {
       onSuccess: () => setShowTtlEditor(false),
+    });
+  };
+
+  const requestRemoveTtl = (key: string) => {
+    setPendingConfirm({
+      message: `Remove TTL from "${key}"? It will no longer expire automatically.`,
+      onConfirm: () => handleRemoveTtl(key),
+      confirmLabel: "Remove TTL",
     });
   };
 
@@ -551,6 +644,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     setCursor(0);
     setAllKeys([]);
     setSelectedKey(null);
+    hasSeededExpansionRef.current = false;
     setExpandedNamespaces(new Set());
   };
 
@@ -573,12 +667,14 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     handleLoadMore,
     handleLoadAll,
     loadAllActive,
+    openPrefixInKeys,
 
     separator,
     setSeparator,
     expandedNamespaces,
     toggleNamespace,
     collapseAllNamespaces,
+    expandAllNamespaces,
 
     displayKeys,
     namespaceTree,
@@ -603,6 +699,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     setTtlSeconds,
     handleSetTtl,
     handleRemoveTtl,
+    requestRemoveTtl,
 
     selectedKeys,
     batchMode,
@@ -617,6 +714,8 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     refreshInterval,
     setRefreshInterval,
     handleManualRefresh,
+    lastRefreshedAt,
+    isFetching,
 
     pendingConfirm,
     setPendingConfirm,

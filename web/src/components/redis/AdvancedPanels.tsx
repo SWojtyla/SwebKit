@@ -7,6 +7,7 @@ import type {
   RedisSlowLogSummary,
 } from "@/lib/types";
 import { formatBytes } from "@/lib/format-bytes";
+import { extractSlowLogKey } from "@/lib/redis-format";
 
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);
@@ -20,13 +21,27 @@ function formatUptime(seconds: number): string {
 export function KeyspaceHealthPanel({
   info,
   report,
+  hasKeys,
   onOpenKey,
 }: {
   info: RedisServerInfo | undefined;
   report: RedisKeyspaceHealthReport | undefined;
+  /** Whether any keys are currently loaded to analyze. The health query is disabled (not
+   * loading) when this is false, so that case must be told apart from a query actually in
+   * flight — otherwise the panel shows an indefinite "Loading..." for a keyspace with nothing
+   * scanned yet. */
+  hasKeys: boolean;
   onOpenKey: (key: string) => void;
 }) {
   const [severityFilter, setSeverityFilter] = useState<"All" | "Critical" | "Warning" | "Info">("All");
+
+  if (!hasKeys) {
+    return (
+      <div className="text-sm text-muted-foreground" data-testid="keyspace-health-empty">
+        No keys loaded to analyze yet — search for keys in the Keys tab first.
+      </div>
+    );
+  }
 
   if (!info || !report) {
     return <div className="text-sm text-muted-foreground" data-testid="keyspace-health-loading">Loading...</div>;
@@ -131,10 +146,13 @@ export function PrefixMemoryPanel({
   buckets,
   loading,
   separator = ":",
+  onOpenPrefix,
 }: {
   buckets: RedisPrefixMemoryBucket[] | undefined;
   loading: boolean;
   separator?: string;
+  /** Drills through to the Keys tab, scoped to this prefix — mirrors Keyspace's `onOpenKey`. */
+  onOpenPrefix?: (prefix: string) => void;
 }) {
   const sorted = buckets ?? [];
 
@@ -155,19 +173,36 @@ export function PrefixMemoryPanel({
           </thead>
           <tbody>
             {loading && <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">Sampling memory usage...</td></tr>}
-            {!loading && sorted.map((bucket) => (
-              <tr key={bucket.prefix} className="border-b last:border-0">
-                <td className="px-3 py-2 font-mono text-xs">{bucket.prefix.includes(separator) ? bucket.prefix : `${bucket.prefix}${separator}`}</td>
-                <td className="px-3 py-2 text-right">{bucket.keyCount}</td>
-                <td className="px-3 py-2 text-right">{formatBytes(bucket.totalBytes)}</td>
-                <td className="px-3 py-2 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <div className="h-1.5 w-20 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, bucket.percentage)}%` }} /></div>
-                    {bucket.percentage.toFixed(1)}%
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {!loading && sorted.map((bucket) => {
+              const label = bucket.prefix.includes(separator) ? bucket.prefix : `${bucket.prefix}${separator}`;
+              return (
+                <tr key={bucket.prefix} className="border-b last:border-0">
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {onOpenPrefix ? (
+                      <button
+                        type="button"
+                        className="hover:underline"
+                        onClick={() => onOpenPrefix(bucket.prefix)}
+                        data-testid={`prefix-open-${bucket.prefix}`}
+                        title={`Browse keys under ${label}`}
+                      >
+                        {label}
+                      </button>
+                    ) : (
+                      label
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">{bucket.keyCount}</td>
+                  <td className="px-3 py-2 text-right">{formatBytes(bucket.totalBytes)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <div className="h-1.5 w-20 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, bucket.percentage)}%` }} /></div>
+                      {bucket.percentage.toFixed(1)}%
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
             {!loading && sorted.length === 0 && (
               <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">No keys sampled yet</td></tr>
             )}
@@ -207,7 +242,16 @@ function HealthFindingRow({
   );
 }
 
-export function OpsInsightsPanel({ info, slowLog }: { info: RedisServerInfo | undefined, slowLog: RedisSlowLogSummary | undefined }) {
+export function OpsInsightsPanel({
+  info,
+  slowLog,
+  onOpenKey,
+}: {
+  info: RedisServerInfo | undefined;
+  slowLog: RedisSlowLogSummary | undefined;
+  /** Drills a slow-log entry's key through to the Keys tab — mirrors Keyspace's `onOpenKey`. */
+  onOpenKey?: (key: string) => void;
+}) {
   if (!info) {
     return <div className="text-sm text-muted-foreground" data-testid="ops-insights-loading">Loading...</div>;
   }
@@ -247,14 +291,31 @@ export function OpsInsightsPanel({ info, slowLog }: { info: RedisServerInfo | un
             </tr>
           </thead>
           <tbody>
-            {topSlow.map((entry) => (
-              <tr key={entry.id} className="border-b last:border-0">
-                <td className="px-3 py-2 font-mono text-xs">{entry.command}</td>
-                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{entry.arguments}</td>
-                <td className="px-3 py-2 text-right text-xs">{entry.duration}</td>
-                <td className="px-3 py-2 text-xs">{entry.clientName ?? "-"}</td>
-              </tr>
-            ))}
+            {topSlow.map((entry) => {
+              const candidateKey = extractSlowLogKey(entry.arguments);
+              return (
+                <tr key={entry.id} className="border-b last:border-0">
+                  <td className="px-3 py-2 font-mono text-xs">{entry.command}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                    {onOpenKey && candidateKey ? (
+                      <button
+                        type="button"
+                        className="hover:underline"
+                        onClick={() => onOpenKey(candidateKey)}
+                        data-testid={`ops-open-slow-${entry.id}`}
+                        title={`Open key "${candidateKey}"`}
+                      >
+                        {entry.arguments}
+                      </button>
+                    ) : (
+                      entry.arguments
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs">{entry.duration}</td>
+                  <td className="px-3 py-2 text-xs">{entry.clientName ?? "-"}</td>
+                </tr>
+              );
+            })}
             {topSlow.length === 0 && (
               <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">No slow log entries</td></tr>
             )}
