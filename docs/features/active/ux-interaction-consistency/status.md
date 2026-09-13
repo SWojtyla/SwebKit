@@ -4,29 +4,32 @@ status: Proposed
 
 # App-Wide UX & Interaction Consistency — Status
 
-- **Current phase:** Proposed — plan complete, no implementation started.
+- **Current phase:** In progress — implementation underway on branch `ux-interaction-consistency`,
+  local only (no push, no PR yet, per instruction).
 - **Reported by:** Sebastien: AKS rows need a right-click to do anything (no left-click
   affordance); Redis isn't collapsed by default. Asked for a full, in-depth pass across every
-  feature, weighted toward AKS as the most-used one.
-- **Implementation PR:** none yet.
+  feature, weighted toward AKS as the most-used one. Then asked to implement the plan fully.
+- **Implementation PR:** none yet — local branch only.
 
 ## Batch status
 
 | Batch | Units | Status |
 | --- | --- | --- |
-| 0 — Shared infrastructure | 0.1–0.6 | Not started |
-| 1 — AKS | 1.1–1.8 | Not started |
-| 2 — Redis | 2.1–2.4 | Not started |
-| 3 — Service Bus | 3.1–3.5 | Not started |
-| 4 — API Client | 4.1–4.5 | Not started |
-| 5 — Monitoring | 5.1–5.4 | Not started |
-| 6 — Storage | 6.1–6.6 | Not started |
-| 7 — Agent | 7.1–7.7 | Not started |
-| 8 — Settings | 8.1–8.9 | Not started |
-| 9 — Dashboard | 9.1–9.3 | Not started |
+| 0 — Shared infrastructure | 0.1–0.6 | Done — commit `abd5a6e` |
+| 1 — AKS | 1.1–1.8 | Done — commits `0d38176`, `e476925` |
+| 2 — Redis | 2.1–2.4 | In progress (background agent) |
+| 3 — Service Bus | 3.1–3.5 | In progress (background agent) |
+| 4 — API Client | 4.1–4.5 | In progress (background agent) |
+| 5 — Monitoring | 5.1–5.4 | In progress (background agent) |
+| 6 — Storage | 6.1–6.6 | In progress (background agent) |
+| 7 — Agent | 7.1–7.7 | In progress (background agent) |
+| 8 — Settings | 8.1–8.9 | In progress (background agent) |
+| 9 — Dashboard | 9.1–9.3 | Done — merged as `52587d4` (commit `c9160ee`) |
 
-Update each unit's row to `In progress`/`Review`/`Done` (with a PR link) as work lands, per the
-Worker instructions in `technical-plan.md`.
+Batches 2–8 are each being implemented in their own git worktree (`.claude/worktrees/agent-*`) by
+a background agent, then merged into this branch once verified. Update each unit's row to
+`In progress`/`Review`/`Done` (with a commit hash) as work lands, per the Worker instructions in
+`technical-plan.md`.
 
 ## Definition of Done
 
