@@ -34,6 +34,159 @@ interface RemovalResult {
   collectionsAfterRemoval: ApiCollection[];
 }
 
+/** True when `node` (or, for a folder, any descendant) matches `query` by name, URL or method. */
+export function matchesSearch(node: ApiCollectionNode, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  if (node.name.toLowerCase().includes(q)) return true;
+  if (node.type === "Request" && node.request) {
+    if (node.request.url.toLowerCase().includes(q)) return true;
+    if (node.request.method.toLowerCase().includes(q)) return true;
+  }
+  if (node.type === "Folder") {
+    return node.children.some((c) => matchesSearch(c, q));
+  }
+  return false;
+}
+
+/**
+ * Filters a node list down to matches, keeping a folder whenever any
+ * descendant matches (even if the folder's own name does not) and pruning
+ * its non-matching children — a folder that survives this filter is
+ * therefore guaranteed to contain at least one match somewhere inside it.
+ */
+export function filterNodes(nodes: ApiCollectionNode[], query: string): ApiCollectionNode[] {
+  if (!query) return nodes;
+  return nodes
+    .filter((n) => matchesSearch(n, query))
+    .map((n) => (n.type === "Folder" ? { ...n, children: filterNodes(n.children, query) } : n));
+}
+
+/** Synthesizes the collection-root row a `CollectionTree` renders above its top-level nodes. */
+export function collectionRootNode(collection: ApiCollection): ApiCollectionNode {
+  return {
+    id: collection.id,
+    type: "Folder",
+    name: collection.name,
+    isExpanded: true,
+    children: collection.nodes,
+    defaultAuth: collection.defaultAuth,
+    request: null,
+  };
+}
+
+/**
+ * Flattens the (possibly filtered) collection/node tree into the rows a
+ * virtualized list renders, honoring which folders are expanded.
+ *
+ * `forceExpandAll` is set while a search is active: `filterNodes` has already
+ * dropped every folder that contains no match, so every folder still present
+ * here is guaranteed to contain one. Rendering them collapsed anyway (because
+ * the user happened to have them collapsed before searching) would silently
+ * hide a real result — this expands them for rendering purposes only,
+ * without touching the persisted `expandedIds` the user will see again once
+ * they clear the search.
+ */
+export function flattenTree(
+  filteredCollections: ApiCollection[],
+  expandedIds: Set<string>,
+  forceExpandAll = false,
+): FlatRow[] {
+  const rows: FlatRow[] = [];
+
+  function walk(nodes: ApiCollectionNode[], collectionId: string, depth: number) {
+    for (const n of nodes) {
+      rows.push({ id: n.id, node: n, collectionId, depth, isCollection: false });
+      if (n.type === "Folder" && (forceExpandAll || expandedIds.has(n.id))) {
+        walk(n.children, collectionId, depth + 1);
+      }
+    }
+  }
+
+  for (const c of filteredCollections) {
+    const root = collectionRootNode(c);
+    rows.push({ id: c.id, node: root, collectionId: c.id, depth: 0, isCollection: true });
+    if (forceExpandAll || expandedIds.has(c.id)) {
+      walk(c.nodes, c.id, 1);
+    }
+  }
+
+  return rows;
+}
+
+/** Collects the id of every folder whose persisted `isExpanded` is true, recursively. */
+export function collectExpandedFolderIds(nodes: ApiCollectionNode[], into: Set<string>) {
+  for (const n of nodes) {
+    if (n.type === "Folder") {
+      if (n.isExpanded) into.add(n.id);
+      collectExpandedFolderIds(n.children, into);
+    }
+  }
+}
+
+/** Finds a node (folder or request) anywhere in `nodes` by id, recursing into folders. */
+export function findRequestNode(nodes: ApiCollectionNode[], nodeId: string): ApiCollectionNode | null {
+  for (const node of nodes) {
+    if (node.id === nodeId) return node;
+    if (node.children) {
+      const found = findRequestNode(node.children, nodeId);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** Counts every node (folders and requests alike) under `nodes`, recursively. */
+export function countDescendants(nodes: ApiCollectionNode[]): number {
+  let count = 0;
+  for (const n of nodes) {
+    count += 1;
+    if (n.type === "Folder") count += countDescendants(n.children);
+  }
+  return count;
+}
+
+export interface NodeDeleteInfo {
+  name: string;
+  typeLabel: "collection" | "folder" | "request";
+  descendantCount: number;
+}
+
+/**
+ * Resolves the display name/type/descendant-count for a delete confirmation,
+ * so the message can say exactly what is about to be removed instead of a
+ * generic "this item" — including for a whole collection, which shares the
+ * same delete path as a folder or request.
+ */
+export function describeNodeForDelete(
+  collections: ApiCollection[],
+  nodeId: string,
+  collectionId: string,
+): NodeDeleteInfo {
+  const collection = collections.find((c) => c.id === collectionId);
+  if (collection && collection.id === nodeId) {
+    return { name: collection.name, typeLabel: "collection", descendantCount: countDescendants(collection.nodes) };
+  }
+  const node = collection ? findRequestNode(collection.nodes, nodeId) : null;
+  if (node) {
+    return {
+      name: node.name,
+      typeLabel: node.type === "Folder" ? "folder" : "request",
+      descendantCount: node.type === "Folder" ? countDescendants(node.children) : 0,
+    };
+  }
+  return { name: "this item", typeLabel: "request", descendantCount: 0 };
+}
+
+/** Renders `describeNodeForDelete`'s result as the delete-confirmation message. */
+export function formatDeleteMessage(info: NodeDeleteInfo): string {
+  const descendantPhrase =
+    info.descendantCount > 0
+      ? ` and its ${info.descendantCount} item${info.descendantCount === 1 ? "" : "s"}`
+      : "";
+  return `Delete ${info.typeLabel} "${info.name}"${descendantPhrase}? This cannot be undone.`;
+}
+
 /** Returns true if `candidateId` is the same as `ancestorId` or inside one of its descendant subtrees. */
 export function isDescendant(
   nodes: ApiCollectionNode[],

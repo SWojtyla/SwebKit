@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { MethodBadge } from "./method-badge";
 
@@ -8,6 +9,19 @@ export interface RequestTab {
   name: string;
   method: string;
   dirty: boolean;
+  /**
+   * A single reusable "preview" tab for single-click tree navigation: opening
+   * another node replaces its content instead of accumulating a permanent tab
+   * per row clicked. Promoted to a permanent tab (this becomes `false`) as
+   * soon as the draft is edited or the tab is double-clicked.
+   */
+  isPreview?: boolean;
+}
+
+interface TabContextMenuState {
+  x: number;
+  y: number;
+  tabId: string;
 }
 
 interface RequestTabStripProps {
@@ -15,9 +29,33 @@ interface RequestTabStripProps {
   activeTabId: string | null;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
+  onCloseOtherTabs?: (tabId: string) => void;
+  onCloseAllTabs?: () => void;
+  onPromoteTab?: (tabId: string) => void;
 }
 
-export function RequestTabStrip({ tabs, activeTabId, onSelectTab, onCloseTab }: RequestTabStripProps) {
+export function RequestTabStrip({
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onCloseTab,
+  onCloseOtherTabs,
+  onCloseAllTabs,
+  onPromoteTab,
+}: RequestTabStripProps) {
+  const [contextMenu, setContextMenu] = useState<TabContextMenuState | null>(null);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener("click", close);
+    document.addEventListener("contextmenu", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("contextmenu", close);
+    };
+  }, [contextMenu]);
+
   if (tabs.length === 0) return null;
 
   return (
@@ -34,10 +72,28 @@ export function RequestTabStrip({ tabs, activeTabId, onSelectTab, onCloseTab }: 
               : "text-muted-foreground hover:bg-accent/50"
           }`}
           onClick={() => onSelectTab(tab.id)}
+          onDoubleClick={() => onPromoteTab?.(tab.id)}
+          // Middle-click closes a tab, matching the convention of every
+          // browser and IDE tab strip. `onMouseDown` also suppresses the
+          // platform's own middle-click autoscroll cursor.
+          onMouseDown={(e) => {
+            if (e.button === 1) e.preventDefault();
+          }}
+          onAuxClick={(e) => {
+            if (e.button === 1) {
+              e.preventDefault();
+              onCloseTab(tab.id);
+            }
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id });
+          }}
           data-testid={`open-tab-${tab.id}`}
         >
           <MethodBadge method={tab.method} variant="text" />
-          <span className="max-w-[120px] truncate">{tab.name}</span>
+          <span className={`max-w-[120px] truncate ${tab.isPreview ? "italic" : ""}`}>{tab.name}</span>
           {tab.dirty && (
             <span style={{ color: "var(--warning)" }} data-testid={`tab-dirty-${tab.id}`}>●</span>
           )}
@@ -50,6 +106,41 @@ export function RequestTabStrip({ tabs, activeTabId, onSelectTab, onCloseTab }: 
           </button>
         </div>
       ))}
+
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-[160px] rounded-md border bg-popover py-1 shadow-lg"
+          style={{
+            left: Math.min(contextMenu.x, window.innerWidth - 180),
+            top: Math.min(contextMenu.y, window.innerHeight - 140),
+          }}
+          data-testid="tab-context-menu"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-accent"
+            onClick={() => { onCloseTab(contextMenu.tabId); setContextMenu(null); }}
+            data-testid="tab-ctx-close"
+          >
+            Close
+          </button>
+          <button
+            className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-40"
+            disabled={tabs.length <= 1}
+            onClick={() => { onCloseOtherTabs?.(contextMenu.tabId); setContextMenu(null); }}
+            data-testid="tab-ctx-close-others"
+          >
+            Close Others
+          </button>
+          <button
+            className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-accent"
+            onClick={() => { onCloseAllTabs?.(); setContextMenu(null); }}
+            data-testid="tab-ctx-close-all"
+          >
+            Close All
+          </button>
+        </div>
+      )}
     </div>
   );
 }

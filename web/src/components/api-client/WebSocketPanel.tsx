@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Plus, Trash2, Play, Square } from "lucide-react";
 import type { HttpRequestEntry, WebSocketSavedMessage } from "@/lib/types";
+import { ConfirmDialog } from "./Dialogs";
 
 interface WebSocketPanelProps {
   request: HttpRequestEntry;
@@ -17,6 +18,7 @@ interface WsMessage {
 export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
   const [connected, setConnected] = useState(false);
   const [messages, setMessages] = useState<WsMessage[]>([]);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [inputText, setInputText] = useState("");
   const [subProtocol, setSubProtocol] = useState(request.wsSubProtocol ?? "");
   const wsRef = useRef<WebSocket | null>(null);
@@ -128,9 +130,19 @@ export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
     ]);
   };
 
-  const clearMessages = () => setMessages([]);
+  /** Nothing to lose, nothing to confirm. */
+  const requestClearMessages = () => {
+    if (messages.length === 0) return;
+    setConfirmClear(true);
+  };
+
+  const clearMessages = () => {
+    setMessages([]);
+    setConfirmClear(false);
+  };
 
   return (
+    <>
     <div className="flex h-full flex-col gap-3" data-testid="websocket-panel">
       {/* Connection controls */}
       <div className="flex items-center gap-2 border-b pb-2">
@@ -235,8 +247,9 @@ export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
               <Plus className="h-3 w-3" /> Add
             </button>
             <button
-              onClick={clearMessages}
-              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={requestClearMessages}
+              disabled={messages.length === 0}
+              className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
               data-testid="ws-clear-messages"
             >
               Clear log
@@ -278,5 +291,14 @@ export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
         ))}
       </div>
     </div>
+    {confirmClear && (
+      <ConfirmDialog
+        message={`Clear ${messages.length} logged message${messages.length === 1 ? "" : "s"}? This cannot be undone.`}
+        confirmText="Clear log"
+        onConfirm={clearMessages}
+        onCancel={() => setConfirmClear(false)}
+      />
+    )}
+    </>
   );
 }

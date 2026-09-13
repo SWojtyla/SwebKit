@@ -502,6 +502,7 @@ export function GitPanel() {
       {confirm && (
         <ConfirmDialog
           message={confirm.message}
+          confirmText="Discard changes"
           onConfirm={confirm.onConfirm}
           onCancel={() => setConfirm(null)}
         />

@@ -409,7 +409,30 @@ pub fn diff_file_impl(path: &str, file: &str, roots: &AllowedRoots) -> Result<Gi
     // A missing HEAD version means the file is new, not that anything failed.
     let original = run_git(&repo, &["show", &format!("HEAD:{file}")]).ok();
 
-    let current_bytes = std::fs::read(repo.join(file)).unwrap_or_default();
+    // A file with staged changes has an index version that can differ from the
+    // working tree — further edits made *after* staging, still unstaged. Always
+    // diffing against the raw working-tree file (as this used to) folds those
+    // extra edits into what looks like "the staged diff", silently showing more
+    // than a commit made right now would actually contain. Prefer the index blob
+    // whenever the file has any staged change; a purely unstaged or untracked
+    // file has nothing staged to differ from, so it still compares HEAD against
+    // the raw working-tree bytes exactly as before.
+    let normalized_file = file.replace('\\', "/");
+    let staged = read_status(&repo)
+        .map(|s| s.files.iter().any(|f| f.path == normalized_file && f.staged))
+        .unwrap_or(false);
+
+    let current_bytes = if staged {
+        // ":<path>" is git's index (stage 0) blob syntax — the staged content,
+        // independent of any further unstaged edit sitting on top of it in the
+        // working tree. Falls back to the raw file if the index read fails for
+        // any reason, so a diff is still shown rather than none at all.
+        run_git(&repo, &["show", &format!(":{file}")])
+            .map(String::into_bytes)
+            .unwrap_or_else(|_| std::fs::read(repo.join(file)).unwrap_or_default())
+    } else {
+        std::fs::read(repo.join(file)).unwrap_or_default()
+    };
     // A NUL byte is the same heuristic git itself uses, and unlike `--numstat` it
     // also works for untracked files.
     let is_binary =
@@ -1131,6 +1154,36 @@ mod repo_tests {
         let diff = diff_file_impl(&repo.path(), "api/brand-new.json", &repo.roots).unwrap();
         assert!(diff.original.is_none());
         assert_eq!(diff.current, "{\"new\":true}\n");
+    }
+
+    /// The regression this guards: `diff_file_impl` used to always read the raw
+    /// working-tree file, so a file with staged changes plus a *further* unstaged
+    /// edit on top showed the unstaged content as if it were staged.
+    #[test]
+    fn diff_file_prefers_staged_content_over_a_further_unstaged_edit() {
+        require_git!();
+        let repo = TestRepo::new("diff-staged");
+        repo.write("api/baseline.json", "{\"a\":2}\n");
+        stage_paths_impl(&repo.path(), &["api/baseline.json".to_string()], &repo.roots).unwrap();
+        // An additional edit on top of what was staged, deliberately left unstaged.
+        repo.write("api/baseline.json", "{\"a\":3}\n");
+
+        let diff = diff_file_impl(&repo.path(), "api/baseline.json", &repo.roots).unwrap();
+        assert_eq!(diff.original.as_deref(), Some("{\"a\":1}\n"));
+        // Must show what a commit right now would actually contain (the staged
+        // content), not the further unstaged edit sitting on top of it.
+        assert_eq!(diff.current, "{\"a\":2}\n");
+    }
+
+    #[test]
+    fn diff_file_still_shows_working_tree_when_nothing_is_staged() {
+        require_git!();
+        let repo = TestRepo::new("diff-unstaged-only");
+        repo.write("api/baseline.json", "{\"a\":2}\n");
+
+        let diff = diff_file_impl(&repo.path(), "api/baseline.json", &repo.roots).unwrap();
+        assert_eq!(diff.original.as_deref(), Some("{\"a\":1}\n"));
+        assert_eq!(diff.current, "{\"a\":2}\n");
     }
 
     #[test]
