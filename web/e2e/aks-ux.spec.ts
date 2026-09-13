@@ -65,6 +65,10 @@ test.describe("AKS workspace UX", () => {
     // Auto-refresh would also fire eventually; pin the assertion to the explicit
     // click by turning it off first.
     await page.getByTestId("aks-auto-refresh-checkbox").uncheck();
+    // The label stamps when AKS fetching settles, so matching it guarantees nothing
+    // is in flight — a refetch issued while one is running gets deduped and the
+    // poll below would time out without a new call ever firing.
+    await expect(page.getByTestId("aks-last-refreshed")).toContainText(/updated \d+s ago/);
     const before = deploymentCalls;
 
     await page.getByTestId("aks-refresh-btn").click();

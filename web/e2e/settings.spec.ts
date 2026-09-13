@@ -278,27 +278,34 @@ test.describe("Settings", () => {
     await expect(page.getByTestId("workspace-map-relationships").locator("tbody tr")).toHaveCount(0);
   });
 
-  test("Map tab: a suggested relationship can be confirmed (adds a real relationship) or dismissed (just hides it)", async ({ page }) => {
+  test("Map tab: a suggested relationship can be confirmed (adds a real relationship) or dismissed (just hides it)", async ({ page }, testInfo) => {
+    // A failed attempt leaves its manually-added nodes in the sidecar appdata (which
+    // resets per run, not per test), so a retry needs distinct labels or every
+    // getByText below becomes a strict-mode violation.
+    const sfx = testInfo.retry > 0 ? ` r${testInfo.retry}` : "";
+    const aksLabel = `api (prod)${sfx}`;
+    const sbLabel = `orders queue (suggestion)${sfx}`;
+
     await page.goto("/settings");
     await page.getByTestId("settings-tab-map").click();
     const nodeList = page.getByTestId("workspace-map-nodes");
 
     await page.getByTestId("workspace-manual-area").selectOption("Aks");
-    await page.getByTestId("workspace-manual-key").fill("prod/api");
-    await page.getByTestId("workspace-manual-label").fill("api (prod)");
+    await page.getByTestId("workspace-manual-key").fill(`prod/api${sfx.replace(" ", "-")}`);
+    await page.getByTestId("workspace-manual-label").fill(aksLabel);
     await page.getByTestId("workspace-manual-add").click();
-    await expect(nodeList.getByText("api (prod)")).toBeVisible();
+    await expect(nodeList.getByText(aksLabel)).toBeVisible();
 
     await page.getByTestId("workspace-manual-area").selectOption("ServiceBus");
     // Use a distinct label so this test does not collide with the "orders queue" node
     // left behind by the previous Map tab test, which only removes the AKS node.
-    await page.getByTestId("workspace-manual-key").fill("orders.servicebus.windows.net");
-    await page.getByTestId("workspace-manual-label").fill("orders queue (suggestion)");
+    await page.getByTestId("workspace-manual-key").fill(`orders.servicebus.windows.net${sfx}`);
+    await page.getByTestId("workspace-manual-label").fill(sbLabel);
     await page.getByTestId("workspace-manual-add").click();
-    await expect(nodeList.getByText("orders queue (suggestion)")).toBeVisible();
+    await expect(nodeList.getByText(sbLabel)).toBeVisible();
 
-    const aksNodeId = await nodeList.locator('[data-testid^="workspace-node-"]', { hasText: "api (prod)" }).getAttribute("data-testid");
-    const sbNodeId = await nodeList.locator('[data-testid^="workspace-node-"]', { hasText: "orders queue (suggestion)" }).getAttribute("data-testid");
+    const aksNodeId = await nodeList.locator('[data-testid^="workspace-node-"]', { hasText: aksLabel }).getAttribute("data-testid");
+    const sbNodeId = await nodeList.locator('[data-testid^="workspace-node-"]', { hasText: sbLabel }).getAttribute("data-testid");
     const fromNodeId = aksNodeId!.replace("workspace-node-", "");
     const toNodeId = sbNodeId!.replace("workspace-node-", "");
 
@@ -320,28 +327,33 @@ test.describe("Settings", () => {
     await page.getByTestId("settings-tab-map").click();
 
     const suggestionRow = page.getByTestId(`workspace-suggestion-${fromNodeId}-${toNodeId}`);
-    await expect(suggestionRow).toContainText("api (prod)");
+    await expect(suggestionRow).toContainText(aksLabel);
     await expect(suggestionRow).toContainText("orders queue");
     await expect(suggestionRow).toContainText("may miss or misidentify real relationships");
 
     // Dismiss just hides it client-side — no relationship gets added.
     await page.getByTestId(`workspace-suggestion-dismiss-${fromNodeId}-${toNodeId}`).click();
     await expect(suggestionRow).toHaveCount(0);
-    await expect(page.getByTestId("workspace-map-relationships").locator("tbody tr")).toHaveCount(0);
+    const relRows = page.getByTestId("workspace-map-relationships").locator("tbody tr");
+    const pairRow = relRows.filter({ hasText: sbLabel });
+    await expect(pairRow).toHaveCount(0);
 
     // Reload brings the (still-mocked) suggestion back, since dismissal isn't persisted.
     await page.reload();
     await page.getByTestId("settings-tab-map").click();
     await expect(page.getByTestId(`workspace-suggestion-${fromNodeId}-${toNodeId}`)).toBeVisible();
 
-    // Confirm adds a real, persisted relationship.
+    // Confirm adds a real, persisted relationship. Assert on the table row itself —
+    // the mocked endpoint keeps returning the suggestion and the From/To options
+    // echo both labels, so container text can't prove the profile PUT settled
+    // before the reload.
     await page.getByTestId(`workspace-suggestion-confirm-${fromNodeId}-${toNodeId}`).click();
-    await expect(page.getByTestId("workspace-map-relationships")).toContainText("api (prod)");
-    await expect(page.getByTestId("workspace-map-relationships")).toContainText("orders queue");
+    await expect(pairRow).toHaveCount(1);
+    await expect(pairRow).toContainText(aksLabel);
 
     await page.reload();
     await page.getByTestId("settings-tab-map").click();
-    await expect(page.getByTestId("workspace-map-relationships").locator("tbody tr")).toHaveCount(1);
+    await expect(pairRow).toHaveCount(1);
   });
 
   test("agent profile no longer exposes temperature/max-tokens, and the History section is gone", async ({ page }) => {
