@@ -449,6 +449,42 @@ test.describe("API Client", () => {
     await expect(page.getByTestId("col-var-value-0")).toHaveValue("test-key-123");
   });
 
+  test("Faker and Template generators are self-explanatory (no guessing a free-text category)", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Generator Clarity Test Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+
+    await page.getByTestId("collection-search").fill("Generator Clarity Test Collection");
+    await page.getByTestId(/collection-root-/).filter({ hasText: "Generator Clarity Test Collection" }).first().click();
+
+    await page.getByTestId("col-vars-button").click();
+    await expect(page.getByTestId("col-var-editor")).toBeVisible();
+
+    await page.getByTestId("col-var-add").click();
+    await page.getByTestId("col-var-key-0").fill("userEmail");
+    await page.getByTestId("col-var-source-0").selectOption("Generated");
+
+    // Every generator kind shows a plain-English explanation, not just a bare input.
+    await expect(page.getByTestId("col-var-0-generator-help")).toBeVisible();
+    await expect(page.getByTestId("col-var-0-generator-help")).toContainText(/random|UUID/i);
+
+    // Faker is a closed dropdown of exactly the categories the sidecar implements — not a
+    // free-text field a user could mistype a plausible-but-unsupported category into.
+    await page.getByTestId("col-var-0-generator-kind").selectOption("Faker");
+    const fakerInput = page.getByTestId("col-var-0-generator-input");
+    await expect(fakerInput).toHaveJSProperty("tagName", "SELECT");
+    const fakerOptionCount = await fakerInput.locator("option").count();
+    expect(fakerOptionCount).toBe(6);
+    await expect(page.getByTestId("col-var-0-generator-help")).toContainText("category you pick below");
+
+    // Template's help text explains the {{variableName}} substitution syntax and what happens
+    // when a referenced variable doesn't exist (silently left as literal text, not an error).
+    await page.getByTestId("col-var-0-generator-kind").selectOption("Template");
+    await expect(page.getByTestId("col-var-0-generator-input")).toHaveAttribute("placeholder", "order-{{orderId}}");
+    await expect(page.getByTestId("col-var-0-generator-help")).toContainText("{{variableName}}");
+    await expect(page.getByTestId("col-var-0-generator-help")).toContainText("left as literal text");
+  });
+
   test("multi-tab: opening requests creates tabs and switching preserves state", async ({ page }) => {
     // Create a collection with two requests
     await page.getByTestId("add-collection-button").click();
