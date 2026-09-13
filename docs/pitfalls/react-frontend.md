@@ -37,8 +37,10 @@ interface declaring `indexState` silently reads `undefined`. Put
 `#[serde(rename_all = "camelCase")]` on any returned struct with a multi-word field, and keep the TS
 interface next to it.
 
-> `PortForwardSessionInfo` in `native.rs` still has this mismatch (`local_port` vs `localPort` in
-> `tauri-bridge.ts`) — unrelated to the API Client, but the same trap.
+> `PortForwardSessionInfo` in `native.rs` had exactly this mismatch (`local_port`/`remote_port` vs
+> `localPort`/`remotePort` in `tauri-bridge.ts`) until the `ux-interaction-consistency` pass added
+> `#[serde(rename_all = "camelCase")]` while extending the struct with a `context` field — a good
+> reminder to check for this any time a returned struct changes.
 
 ### `dragDropEnabled` (on by default) breaks HTML5 drag-and-drop in the window
 

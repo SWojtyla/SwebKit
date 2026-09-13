@@ -8,6 +8,9 @@ export interface ContextMenuItem {
   destructive?: boolean;
   disabled?: boolean;
   separator?: boolean;
+  /** Shown as a native tooltip — required reading for any `disabled` item, so hovering it
+   * explains why rather than leaving the user to guess. */
+  title?: string;
 }
 
 interface ContextMenuProps {
@@ -59,6 +62,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             <button
               key={i}
               disabled={item.disabled}
+              title={item.title}
               onClick={() => {
                 if (!item.disabled) {
                   item.onClick();

@@ -66,6 +66,13 @@ function aggregatePodUsage(metric: PodMetricInfo | undefined) {
   return { cpu, memory };
 }
 
+/** 0 (sorts first) for anything worth a second look, 1 otherwise — used as the default sort so
+ * a large pod list surfaces problems instead of requiring a manual scroll to find them. */
+function podHealthRank(pod: PodInfo): number {
+  const unhealthy = pod.status !== "Running" || pod.restartCount > 0;
+  return unhealthy ? 0 : 1;
+}
+
 function PodStatusBadge({ status }: { status: string }) {
   const color =
     status === "Running" ? "text-success" :
@@ -149,7 +156,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
   );
 
   const columns: Column<PodInfo>[] = useMemo(() => [
-    { header: "Status", cell: (pod) => <PodStatusBadge status={pod.status} /> },
+    { header: "Status", cell: (pod) => <PodStatusBadge status={pod.status} />, sortValue: (pod) => pod.status },
     { header: "Ready", cell: (pod) => (
       <span className={pod.ready ? "text-success" : "text-warning"}>
         {pod.readyDisplay}
@@ -190,7 +197,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
       ) : (
         <span className="text-muted-foreground">0</span>
       )
-    )},
+    ), sortValue: (pod) => pod.restartCount },
     { header: "Node", cell: (pod) => <span className="text-xs text-muted-foreground">{pod.nodeName ?? "—"}</span> },
     { header: "Age", cell: (pod) => <span className="text-xs text-muted-foreground">{formatAge(pod.startTime)}</span> },
     { header: "Actions", className: "py-2 pr-4 w-px whitespace-nowrap", cell: (pod) => (
@@ -230,6 +237,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
         onRowClick={handleRowClick}
         onRowContextMenu={handleRowContextMenu}
         columns={columns}
+        defaultSort={{ sortValue: podHealthRank, direction: "asc" }}
       />
     </div>
   );

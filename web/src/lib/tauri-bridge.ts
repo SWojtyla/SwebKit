@@ -99,6 +99,7 @@ export interface PortForwardSessionInfo {
   namespace: string;
   pod: string;
   remotePort: number;
+  context: string | null;
 }
 
 export async function startPortForward(

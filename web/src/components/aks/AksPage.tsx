@@ -75,6 +75,11 @@ function AksPageContent() {
           onChange={ws.setSelectedNamespaces}
           isLoading={ws.nsLoading}
           error={ws.nsError}
+          disabledReason={
+            ws.activeTab === "gatewayclasses"
+              ? "Not applicable — GatewayClasses are cluster-scoped, not namespaced"
+              : undefined
+          }
         />
 
         {ws.contextLoading && (
@@ -304,6 +309,7 @@ function AksPageContent() {
                   ns={ws.namespaceToken}
                   selectedPod={ws.selectedPod?.name ?? null}
                   context={ws.currentContext}
+                  pods={ws.allPods}
                 />
               )}
               {ws.activeTab === "analysis" && <AnalysisPanel ns={ws.namespaceToken} />}

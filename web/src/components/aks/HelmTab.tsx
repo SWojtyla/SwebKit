@@ -25,20 +25,16 @@ const columns: Column<HelmReleaseInfo>[] = [
 ];
 
 export function HelmTab({ ns, isMulti }: HelmTabProps) {
-  const { data: releases, isLoading } = useAksHelmReleases(ns);
+  const { data: releases, isLoading, error } = useAksHelmReleases(ns);
   const ws = useAksWorkspace();
 
+  // No "Rollback" entry here: it's a real, working action already, in HelmDetailPanel (opened by
+  // History/Values below) — this menu previously duplicated it as a dead, permanently-disabled
+  // stub built around a native `prompt()`.
   const buildMenu = useCallback((rel: HelmReleaseInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(rel.name) },
     { label: "History", icon: "📜", onClick: () => ws.setHelmRelease(rel) },
     { label: "Values", icon: "📋", onClick: () => ws.setHelmRelease(rel) },
-    { label: "Rollback", icon: "↶", onClick: () => {
-      const rev = prompt(`Rollback to which revision?`);
-      if (rev === null) return;
-      const n = parseInt(rev, 10);
-      if (isNaN(n)) return;
-      // Rollback is intentionally disabled until the sidecar endpoint is fully wired.
-    }, disabled: true },
   ], [ws]);
 
   const handleRowClick = useCallback((rel: HelmReleaseInfo) => ws.setHelmRelease(rel), [ws]);
@@ -51,6 +47,7 @@ export function HelmTab({ ns, isMulti }: HelmTabProps) {
     <ResourceTable
       data={releases}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="helm"
       tableBodyTestId="helm-table-body"

@@ -56,8 +56,8 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
       if (pods.length > 0) ws.openContainerDetails(pods[0].name, pods[0].namespace);
     } },
     { label: "Analyze network", icon: "📶", onClick: () => ws.navigateToAnalysis() },
-    { label: "Probe failures", icon: "🚧", onClick: () => {}, disabled: true },
-    { label: "Placement", icon: "📍", onClick: () => {}, disabled: true },
+    { label: "Probe failures", icon: "🚧", onClick: () => {}, disabled: true, title: "Not yet implemented" },
+    { label: "Placement", icon: "📍", onClick: () => {}, disabled: true, title: "Not yet implemented" },
     { label: "", separator: true, onClick: () => {} },
     { label: "Restart Deployment", icon: "↻", onClick: () => restart(dep) },
     { label: "Scale...", icon: "⇳", onClick: () => setScaleTarget(dep) },
@@ -73,8 +73,8 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
       <span className={dep.readyReplicas === dep.replicas ? "text-success" : "text-warning"}>
         {dep.readyReplicas}/{dep.replicas}
       </span>
-    )},
-    { header: "Status", cell: (dep) => <StatusBadge status={dep.status} /> },
+    ), sortValue: (dep) => (dep.readyReplicas === dep.replicas ? 1 : 0) },
+    { header: "Status", cell: (dep) => <StatusBadge status={dep.status} />, sortValue: (dep) => dep.status },
     { header: "Image", cell: (dep) => <span className="text-muted-foreground">{dep.imageTag ?? "—"}</span> },
     {
       header: "Actions",
@@ -112,6 +112,7 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
         emptyMessage="No deployments found"
         onRowClick={(dep) => ws.openYaml("deployment", dep.name, dep.namespace)}
         onRowContextMenu={handleRowContextMenu}
+        defaultSort={{ sortValue: (dep) => (dep.readyReplicas === dep.replicas ? 1 : 0), direction: "asc" }}
         columns={columns}
       />
 

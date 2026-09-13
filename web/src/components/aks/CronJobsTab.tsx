@@ -18,7 +18,7 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
   const buildMenu = useCallback((cj: CronJobInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(cj.name) },
     { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("cronjob", cj.name, cj.namespace) },
-    { label: "Trigger", icon: "▶", onClick: () => {}, disabled: true },
+    { label: "Trigger", icon: "▶", onClick: () => {}, disabled: true, title: "Not yet implemented — trigger a run manually via kubectl for now" },
   ], [ws]);
 
   const toggle = useCallback((cj: CronJobInfo) => {
