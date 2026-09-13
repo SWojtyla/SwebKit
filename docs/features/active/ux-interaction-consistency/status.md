@@ -18,7 +18,7 @@ status: Proposed
 | 0 — Shared infrastructure | 0.1–0.6 | Done — commit `abd5a6e` |
 | 1 — AKS | 1.1–1.8 | Done — commits `0d38176`, `e476925` |
 | 2 — Redis | 2.1–2.4 | Done — merged (commit `ba1a04b`) |
-| 3 — Service Bus | 3.1–3.5 | In progress (background agent) |
+| 3 — Service Bus | 3.1–3.5 | Done — merged (commit `dcc3cd4`) |
 | 4 — API Client | 4.1–4.5 | Done — merged (commit `a1ccb54`) |
 | 5 — Monitoring | 5.1–5.4 | In progress (background agent) |
 | 6 — Storage | 6.1–6.6 | In progress (background agent) |

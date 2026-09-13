@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X, Trash2, FileText } from "lucide-react";
 import { useSbTemplates, useSbDeleteTemplate } from "@/lib/hooks";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import type { SbMessageTemplate } from "@/lib/types";
 
 interface Props {
@@ -12,6 +13,10 @@ export function TemplatePicker({ onSelect, onClose }: Props) {
   const { data: templates, isLoading } = useSbTemplates();
   const deleteMutation = useSbDeleteTemplate();
   const [search, setSearch] = useState("");
+  // Delete used to fire immediately on click — the only destructive action in this feature with
+  // no confirmation at all (batch replay, bulk complete/resubmit, purge, and scheduled-message
+  // cancel all confirm).
+  const [pendingDelete, setPendingDelete] = useState<SbMessageTemplate | null>(null);
 
   const filtered = (templates ?? []).filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase()),
@@ -75,8 +80,8 @@ export function TemplatePicker({ onSelect, onClose }: Props) {
                   </div>
                 </button>
                 <button
-                  onClick={() => deleteMutation.mutate(template.id)}
-                  className="rounded p-1 text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                  onClick={() => setPendingDelete(template)}
+                  className="rounded p-1 text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-within:opacity-100 focus-visible:opacity-100"
                   title="Delete template"
                   data-testid={`template-delete-${template.id}`}
                 >
@@ -86,6 +91,20 @@ export function TemplatePicker({ onSelect, onClose }: Props) {
             ))
           )}
         </div>
+
+        {pendingDelete && (
+          <ConfirmBar
+            message={<>Delete template <strong>{pendingDelete.name}</strong>? This cannot be undone.</>}
+            confirmLabel="Delete"
+            confirmDisabled={deleteMutation.isPending}
+            onConfirm={() => {
+              deleteMutation.mutate(pendingDelete.id);
+              setPendingDelete(null);
+            }}
+            onCancel={() => setPendingDelete(null)}
+            testId="template-delete-confirm"
+          />
+        )}
       </div>
     </div>
   );

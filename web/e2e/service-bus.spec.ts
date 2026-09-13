@@ -214,17 +214,16 @@ test.describe("Service Bus", () => {
     }
   });
 
-  test("purge shows confirmation dialog and can cancel", async ({ page }) => {
+  test("purge all shows confirmation dialog and can cancel", async ({ page }) => {
+    // Purge All lives in the entity-level toolbar (next to Active/DLQ), not the per-message
+    // action row, so it never requires a message to be selected.
     await page.goto("/service-bus");
     await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
     await page.getByTestId("entity-tree-queue-order-created").click();
-
-    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
-    await firstMessage.click();
-    await expect(page.getByTestId("message-detail")).toBeVisible();
+    await expect(page.getByTestId("message-list")).toBeVisible();
 
     // Click purge - should show confirmation, not immediately purge
-    await page.getByTestId("message-purge-button").click();
+    await page.getByTestId("sb-purge-all-button").click();
     await expect(page.getByTestId("purge-confirm")).toBeVisible();
 
     // Cancel
@@ -460,5 +459,149 @@ test.describe("Service Bus", () => {
     // Palette should show actions for selected entity (Tab toggles actions)
     // The entity should be selected in the tree
     await expect(page.getByTestId("entity-command-palette")).toBeVisible();
+  });
+
+  test("entity command palette's Purge action opens the purge confirmation", async ({ page }) => {
+    // Previously fell through every branch in handleEntityAction and did nothing at all —
+    // presented as a working destructive action while silently no-opping.
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+
+    await page.getByTestId("sb-entity-search").click();
+    await page.getByTestId("entity-palette-search").fill("order-created");
+
+    // Click the entity to reveal its actions, then click Purge.
+    await page.locator("[data-testid^='entity-palette-item-']").first().click();
+    await page.getByRole("button", { name: "Purge", exact: true }).click();
+
+    await expect(page.getByTestId("entity-command-palette")).not.toBeVisible();
+    await expect(page.getByTestId("purge-confirm")).toBeVisible();
+
+    await page.getByTestId("purge-confirm-cancel").click();
+    await expect(page.getByTestId("purge-confirm")).not.toBeVisible();
+  });
+
+  test("entity tree Queues section can be collapsed and expanded (default: expanded)", async ({ page }) => {
+    // The reported "isn't collapsed by default when it should be" bug, reproduced for Service
+    // Bus: the Queues section previously had no collapse control at all.
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+
+    await expect(page.getByTestId("entity-tree-queues-toggle")).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByTestId("entity-tree-queue-order-created")).toBeVisible();
+
+    await page.getByTestId("entity-tree-queues-toggle").click();
+    await expect(page.getByTestId("entity-tree-queues-toggle")).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("entity-tree-queue-order-created")).not.toBeVisible();
+
+    await page.getByTestId("entity-tree-queues-toggle").click();
+    await expect(page.getByTestId("entity-tree-queue-order-created")).toBeVisible();
+  });
+
+  test("clear all filters resets text search and advanced rules together", async ({ page }) => {
+    // Previously 3-4 scattered controls each cleared only their own filter, with no single
+    // place to reset everything narrowing the list at once.
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+    await expect(page.getByTestId("message-list")).toBeVisible();
+
+    await expect(page.getByTestId("clear-all-filters")).not.toBeVisible();
+
+    await page.getByTestId("message-text-filter").fill("order");
+    await expect(page.getByTestId("clear-all-filters")).toBeVisible();
+
+    await page.getByTestId("clear-all-filters").click();
+    await expect(page.getByTestId("message-text-filter")).toHaveValue("");
+    await expect(page.getByTestId("clear-all-filters")).not.toBeVisible();
+  });
+
+  test("batch replay requires confirmation before resubmitting", async ({ page }) => {
+    // Replay used to execute immediately on click — the only bulk mutation in this feature
+    // with no confirmation at all.
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-failed").click();
+
+    await page.getByTestId("sb-batch-replay-button").click();
+    await expect(page.getByTestId("batch-replay-panel")).toBeVisible();
+
+    await page.getByTestId("batch-replay-select-all").click();
+    await page.getByTestId("batch-replay-execute").click();
+
+    // Confirmation shown, nothing replayed yet.
+    await expect(page.getByTestId("batch-replay-confirm")).toBeVisible();
+    await expect(page.getByTestId("batch-replay-done")).not.toBeVisible();
+
+    // Confirming actually performs the replay.
+    await page.getByTestId("batch-replay-confirm-yes").click();
+    await expect(page.getByTestId("batch-replay-done")).toBeVisible();
+  });
+
+  test("template delete requires confirmation", async ({ page }) => {
+    // Delete used to fire immediately on click — the only destructive action in this feature
+    // with no confirmation (batch replay, bulk complete/resubmit, and purge all confirm).
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
+    await firstMessage.click();
+    await page.getByTestId("message-save-template").click();
+    await page.getByTestId("template-name-input").fill("Delete Me Template");
+    await page.getByTestId("template-save-confirm").click();
+    await expect(page.getByTestId("save-template-dialog")).not.toBeVisible();
+    await page.waitForTimeout(500);
+
+    await page.getByTestId("sb-compose-button").click();
+    await page.getByTestId("composer-load-template").click();
+    await expect(page.getByTestId("template-picker")).toBeVisible();
+
+    const templateItems = page.locator("[data-testid^='template-select-']");
+    await expect(templateItems.first()).toBeVisible({ timeout: 10000 });
+    const countBefore = await templateItems.count();
+
+    await page.locator("[data-testid^='template-delete-']").first().click();
+    await expect(page.getByTestId("template-delete-confirm")).toBeVisible();
+    // Not deleted yet — still waiting on confirmation.
+    await expect(templateItems).toHaveCount(countBefore);
+
+    await page.getByTestId("template-delete-confirm-yes").click();
+    await expect(page.getByTestId("template-delete-confirm")).not.toBeVisible();
+  });
+
+  test("scheduled message cancel requires confirmation", async ({ page }) => {
+    // Cancel used to fire immediately on click, unlike every other comparable-severity action
+    // in this feature.
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    // Schedule a message so there is something to cancel.
+    const firstMessage = page.getByTestId("message-list").locator("[data-testid^='message-item-']").first();
+    await firstMessage.click();
+    await page.getByTestId("message-schedule").click();
+    await expect(page.getByTestId("message-composer")).toBeVisible();
+    await expect(page.getByTestId("composer-scheduled-time")).toBeVisible();
+    // The Schedule flow doesn't carry the source message's body over (unlike Replay/Edit), so
+    // the composer needs one filled in to pass its own "body cannot be empty" validation.
+    await page.getByTestId("composer-body").fill('{"scheduled": true}');
+    // Set an unambiguously far-future date, sidestepping the datetime-local field's default
+    // value (computed via a UTC ISO string sliced into a local-time-shaped field) which can
+    // land in the past depending on the runner's timezone offset.
+    await page.getByTestId("composer-scheduled-time").fill("2099-01-01T10:00");
+    await page.getByTestId("composer-send").click();
+    await expect(page.getByTestId("message-composer")).not.toBeVisible();
+
+    await page.getByTestId("sb-scheduled-button").click();
+    await expect(page.getByTestId("scheduled-messages-panel")).toBeVisible();
+
+    const cancelButton = page.locator("[data-testid^='scheduled-cancel-']").first();
+    await expect(cancelButton).toBeVisible({ timeout: 10000 });
+    await cancelButton.click();
+
+    await expect(page.getByTestId("scheduled-cancel-confirm")).toBeVisible();
+    await page.getByTestId("scheduled-cancel-confirm-yes").click();
+    await expect(page.getByTestId("scheduled-cancel-confirm")).not.toBeVisible();
   });
 });

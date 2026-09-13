@@ -1,15 +1,16 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Search, Filter, X, Columns, Pin, Plus, RotateCw, Check, AlertCircle, ArrowUpRight, Bookmark, Download, Loader2 } from "lucide-react";
+import { Search, Filter, X, Columns, Pin, Plus, RotateCw, Check, AlertCircle, ArrowUpRight, Bookmark, Download, Loader2, RefreshCw } from "lucide-react";
 import { useSbCompleteMessages, useSbCompleteDlq, useSbResubmitDlq } from "@/lib/hooks";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { messageToDownloadObject, safeFileName, messageKey as sbMessageKey } from "./exportHelpers";
-import { applyFilters } from "./filterLogic";
+import { applyFilters, hasActiveFilters } from "./filterLogic";
 import { AdvancedFilterPanel } from "./AdvancedFilterPanel";
 import type { AdvancedFilterRule } from "./filterTypes";
 import { isRuleConfigured, createFilterRule } from "./filterTypes";
@@ -35,6 +36,13 @@ interface Props {
   viewMode: "active" | "dlq";
   messages: SbMessage[];
   isLoading: boolean;
+  /** Distinct from "no messages" — a fetch failure must never render like a genuinely empty queue. */
+  isError: boolean;
+  error: unknown;
+  /** Drives the manual-refresh spinner and the `LastRefreshed` freshness indicator. */
+  isFetching: boolean;
+  onRefresh: () => void;
+  lastRefreshedAt: number | null;
   isLoadingMore: boolean;
   canLoadMore: boolean;
   totalAvailable: number | null;
@@ -133,6 +141,11 @@ export function MessageList({
   viewMode,
   messages,
   isLoading,
+  isError,
+  error,
+  isFetching,
+  onRefresh,
+  lastRefreshedAt,
   isLoadingMore,
   canLoadMore,
   totalAvailable,
@@ -317,7 +330,13 @@ export function MessageList({
 
   const activeRuleCount = advancedRules.filter((r) => r.enabled && isRuleConfigured(r)).length;
 
-  const canSaveFilter = Boolean(textFilter.trim() || pinnedSessionId || advancedRules.some(isRuleConfigured));
+  const canSaveFilter = hasActiveFilters(textFilter, pinnedSessionId, advancedRules);
+
+  const clearAllFilters = () => {
+    setTextFilter("");
+    setPinnedSessionId(null);
+    setAdvancedRules([]);
+  };
 
   const handleSaveFilter = () => {
     if (!nsId || !entity || !saveFilterName.trim()) return;
@@ -388,6 +407,26 @@ export function MessageList({
 
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground" data-testid="message-list-loading">Loading messages...</div>;
+  }
+
+  // A fetch failure must never render like a genuinely empty queue — that's precisely the class
+  // of bug this initiative exists to fix for a tool whose purpose is telling the truth about
+  // what's really in a queue.
+  if (isError) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center" data-testid="message-list-error">
+        <AlertCircle className="h-6 w-6 shrink-0 text-destructive" />
+        <p className="text-sm font-medium text-destructive">Couldn't load messages</p>
+        <p className="text-xs text-muted-foreground">{error instanceof Error ? error.message : String(error)}</p>
+        <button
+          onClick={onRefresh}
+          className="mt-1 flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+          data-testid="message-list-retry"
+        >
+          <RefreshCw className="h-3 w-3" /> Retry
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -565,13 +604,27 @@ export function MessageList({
           }`}
         >
           <Filter className="h-3.5 w-3.5" />
-          {activeRuleCount > 0 && (
+          {/* Only meaningful once Advanced is actually on — otherwise a rule count from a
+              previous session (or one the user just turned Advanced off to ignore) reads as
+              "these rules are filtering your messages right now" when they aren't. */}
+          {advancedEnabled && activeRuleCount > 0 && (
             <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
               {activeRuleCount}
             </span>
           )}
           <span className="hidden sm:inline">{advancedEnabled ? "Advanced: On" : "Advanced: Off"}</span>
         </button>
+        {hasActiveFilters(textFilter, pinnedSessionId, advancedRules) && (
+          <button
+            data-testid="clear-all-filters"
+            onClick={clearAllFilters}
+            title="Clear all filters — text search, pinned session, and advanced rules"
+            className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent"
+          >
+            <X className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Clear all filters</span>
+          </button>
+        )}
         {advancedEnabled && (
           <button
             data-testid="add-rule"
@@ -930,6 +983,19 @@ export function MessageList({
         >
           {isLoadingMore ? "Loading…" : canLoadMore ? `Load more (+${prefs.peekCount})` : "All loaded"}
         </button>
+        {/* Manual refresh + freshness indicator — previously only visible via the spinning
+            auto-refresh indicator below, which doesn't exist at all when auto-refresh is off
+            (the default), leaving no way to tell a stale view from a fresh one. */}
+        <button
+          onClick={onRefresh}
+          disabled={isFetching}
+          title="Refresh messages"
+          data-testid="message-list-refresh"
+          className="ml-2 flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} />
+        </button>
+        <LastRefreshed at={lastRefreshedAt} isFetching={isFetching} testId="message-list-last-refreshed" />
         {prefs.autoRefreshInterval > 0 && (
           <span className="ml-2 flex items-center gap-1 text-success" data-testid="auto-refresh-indicator">
             <RotateCw className="h-3 w-3 animate-spin" /> {prefs.autoRefreshInterval}s
