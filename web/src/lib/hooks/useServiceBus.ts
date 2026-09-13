@@ -88,7 +88,15 @@ export function useSbEntityStats(nsId: string | null, entityPath: string | null)
   });
 }
 
-function invalidateServiceBusQueries(qc: QueryClient, nsId: string, entityPath: string) {
+/**
+ * Invalidates every query for one entity (peek/DLQ/stats/scheduled) plus the namespace's
+ * queue/topic/subscription lists. Exported so call sites outside this file — the Refresh
+ * command in `ServiceBusPage.tsx` in particular — can reuse the real key set instead of a
+ * hand-rolled `invalidateQueries({ queryKey: ["sb-"] })`, which matches nothing: TanStack Query
+ * compares key *elements*, not string prefixes, and every real key here is `["sb-peek", nsId,
+ * entityPath, count]` and friends (same class of bug as `aks-query-keys.ts`'s note on `"aks-"`).
+ */
+export function invalidateServiceBusQueries(qc: QueryClient, nsId: string, entityPath: string) {
   qc.invalidateQueries({ queryKey: ["sb-peek", nsId, entityPath] });
   qc.invalidateQueries({ queryKey: ["sb-dlq", nsId, entityPath] });
   qc.invalidateQueries({ queryKey: ["sb-entity-stats", nsId, entityPath] });

@@ -127,6 +127,22 @@ function matchesAdvancedRule(message: SbMessage, rule: AdvancedFilterRule): bool
   }
 }
 
+/**
+ * Whether any filter condition is actually narrowing the list right now — the text search, a
+ * pinned session, or a configured advanced rule. Drives both "should the Save filter button be
+ * offered" (pre-existing `canSaveFilter` logic in `MessageList`) and the single "Clear all
+ * filters" action, which previously didn't exist: the text search had its own inline clear, the
+ * session pin had its own, and "Clear all" next to the advanced rules only cleared the rule list,
+ * leaving 3-4 scattered controls with no one place to reset everything at once.
+ */
+export function hasActiveFilters(
+  textFilter: string,
+  pinnedSessionId: string | null,
+  advancedRules: AdvancedFilterRule[],
+): boolean {
+  return Boolean(textFilter.trim() || pinnedSessionId || advancedRules.some(isRuleConfigured));
+}
+
 export function applyFilters(
   messages: SbMessage[],
   textFilter: string,

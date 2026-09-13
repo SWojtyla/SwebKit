@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X, RotateCcw, Check, AlertTriangle } from "lucide-react";
 import { useSbPeekDlq, useSbResubmitDlq } from "@/lib/hooks";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import type { SbEntityInfo } from "@/lib/types";
 
 interface Props {
@@ -19,6 +20,10 @@ export function BatchReplayPanel({ nsId, entity, onClose }: Props) {
   const [done, setDone] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Replay used to execute immediately on click, unlike every other bulk mutation in this
+  // feature (bulk Complete/Resubmit in MessageList, Purge in ServiceBusPage) — this brings it
+  // in line via the shared ConfirmBar.
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const { data: messages } = useSbPeekDlq(nsId, entity.entityPath);
   const resubmitMutation = useSbResubmitDlq();
@@ -40,6 +45,7 @@ export function BatchReplayPanel({ nsId, entity, onClose }: Props) {
 
   const handleReplay = async () => {
     if (selectedSeqs.size === 0) return;
+    setShowConfirm(false);
     setReplaying(true);
     setError(null);
     try {
@@ -131,12 +137,23 @@ export function BatchReplayPanel({ nsId, entity, onClose }: Props) {
               )}
             </div>
 
+            {showConfirm && (
+              <ConfirmBar
+                message={`Resubmit ${selectedSeqs.size} dead-lettered message(s) on ${entity.entityPath}? This cannot be undone.`}
+                confirmLabel="Replay"
+                confirmDisabled={replaying}
+                onConfirm={handleReplay}
+                onCancel={() => setShowConfirm(false)}
+                testId="batch-replay-confirm"
+              />
+            )}
+
             <div className="flex justify-end gap-2 px-4 py-3">
               <button onClick={onClose} className="rounded-md border px-4 py-1.5 text-xs hover:bg-accent">
                 Cancel
               </button>
               <button
-                onClick={handleReplay}
+                onClick={() => setShowConfirm(true)}
                 disabled={selectedSeqs.size === 0 || replaying}
                 className="flex items-center gap-1 rounded-md bg-primary px-4 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
                 data-testid="batch-replay-execute"

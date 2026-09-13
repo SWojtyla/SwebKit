@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ChevronRight, ChevronDown, Mail, MailX, Folder, Search, ArrowUp, ArrowDown } from "lucide-react";
 import { useSbQueues, useSbTopics, useSbSubscriptions } from "@/lib/hooks";
+import { QueryState } from "@/components/shared/QueryState";
 import type { SbEntityInfo } from "@/lib/types";
 
 interface Props {
@@ -14,9 +15,17 @@ type SortCol = "name" | "active" | "dlq" | "sched";
 function EntityStatsBadges({
   entity,
   onSelectEntity,
+  dlqRollup,
 }: {
   entity: SbEntityInfo;
   onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
+  /**
+   * Rolled-up dead-letter count across a topic's subscriptions. Topics have no active/scheduled
+   * count of their own, but a DLQ backlog on a subscription underneath is worth surfacing even
+   * while the topic is collapsed — otherwise it's invisible until every subscription is expanded
+   * by hand. `undefined` while the rollup is still loading, `null` if it failed to load.
+   */
+  dlqRollup?: number | null;
 }) {
   const CountBadge = ({
     count,
@@ -57,7 +66,13 @@ function EntityStatsBadges({
     return (
       <span className="ml-auto flex gap-1 text-xs text-muted-foreground">
         <span className="rounded px-1.5 py-0.5">–</span>
-        <span className="rounded px-1.5 py-0.5">–</span>
+        <span
+          className={`rounded px-1.5 py-0.5 ${dlqRollup ? "bg-destructive/20 text-destructive" : ""}`}
+          title="Dead-letter messages across all subscriptions"
+          data-testid={`entity-tree-topic-dlq-rollup-${entity.name}`}
+        >
+          {dlqRollup === undefined ? "·" : dlqRollup === null ? "?" : dlqRollup > 0 ? dlqRollup : "–"}
+        </span>
         <span className="rounded px-1.5 py-0.5">–</span>
       </span>
     );
@@ -95,10 +110,18 @@ function focusAdjacentTreeItem(container: HTMLElement | null, current: HTMLEleme
   next?.focus();
 }
 
+const EntityIcon = ({ entity }: { entity: SbEntityInfo }) => {
+  if (entity.stats?.deadLetterMessageCount && entity.stats.deadLetterMessageCount > 0) {
+    return <MailX className="h-4 w-4 text-destructive" />;
+  }
+  return <Mail className="h-4 w-4 text-muted-foreground" />;
+};
+
 export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
-  const { data: queues, isLoading: queuesLoading } = useSbQueues(nsId);
-  const { data: topics, isLoading: topicsLoading } = useSbTopics(nsId);
+  const { data: queues, isLoading: queuesLoading, isError: queuesIsError, error: queuesError } = useSbQueues(nsId);
+  const { data: topics, isLoading: topicsLoading, isError: topicsIsError, error: topicsError } = useSbTopics(nsId);
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
+  const [queuesCollapsed, setQueuesCollapsed] = useState(false);
   const [filter, setFilter] = useState("");
   const [sortCol, setSortCol] = useState<SortCol>("name");
   const [sortAsc, setSortAsc] = useState(true);
@@ -141,13 +164,6 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
     );
   }
 
-  // Either query can resolve before the other; showing the loading state
-  // requires waiting for both, otherwise the tree flashes an incomplete list
-  // (or a false "No entities found") while the slower query is still in flight.
-  if (queuesLoading || topicsLoading) {
-    return <div className="p-4 text-sm text-muted-foreground" data-testid="entity-tree-loading">Loading...</div>;
-  }
-
   const toggleTopic = (name: string) => {
     setExpandedTopics((prev) => {
       const next = new Set(prev);
@@ -157,14 +173,8 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
     });
   };
 
-  const EntityIcon = ({ entity }: { entity: SbEntityInfo }) => {
-    if (entity.stats?.deadLetterMessageCount && entity.stats.deadLetterMessageCount > 0) {
-      return <MailX className="h-4 w-4 text-destructive" />;
-    }
-    return <Mail className="h-4 w-4 text-muted-foreground" />;
-  };
-
-
+  const expandAllTopics = () => setExpandedTopics(new Set(sortedTopics.map((t) => t.name)));
+  const collapseAllTopics = () => setExpandedTopics(new Set());
 
   return (
     <div className="flex h-full flex-col text-sm">
@@ -200,140 +210,250 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
       </div>
 
       <div className="flex-1 overflow-auto py-1" role="tree" aria-label="Queues and topics" ref={treeRef}>
-        {/* Queues section */}
-        {sortedQueues.length > 0 && (
-          <div className="mb-2" role="group" aria-label="Queues">
-            <div className="px-3 py-1 text-xs font-semibold uppercase text-muted-foreground">
-              Queues ({sortedQueues.length})
-            </div>
-            {sortedQueues.map((queue) => (
-              <div
-                key={queue.entityPath}
-                role="treeitem"
-                aria-level={1}
-                aria-selected={selectedEntity?.entityPath === queue.entityPath}
-                tabIndex={0}
-                data-testid={`entity-tree-queue-${queue.name}`}
-                onClick={() => onSelectEntity(queue)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSelectEntity(queue);
-                  } else if (e.key === "ArrowDown") {
-                    e.preventDefault();
-                    focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
-                  } else if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    focusAdjacentTreeItem(treeRef.current, e.currentTarget, -1);
-                  }
-                }}
-                className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
-                  selectedEntity?.entityPath === queue.entityPath ? "bg-accent" : ""
-                }`}
-              >
-                <EntityIcon entity={queue} />
-                <span className="truncate flex-1">{queue.name}</span>
-                <EntityStatsBadges entity={queue} onSelectEntity={onSelectEntity} />
-              </div>
-            ))}
+        {/* Queues section — a real section header + collapse toggle, matching the reported
+            "isn't collapsed by default when it should be" complaint for large namespaces. Its
+            loading/error/empty state is independent of Topics below: a slow or broken Topics
+            query must not hold up an already-loaded Queues list (or vice versa). */}
+        <div className="mb-2" role="group" aria-label="Queues">
+          <div className="flex items-center justify-between px-3 py-1">
+            <button
+              type="button"
+              onClick={() => setQueuesCollapsed((v) => !v)}
+              className="flex items-center gap-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground"
+              data-testid="entity-tree-queues-toggle"
+              aria-expanded={!queuesCollapsed}
+            >
+              {queuesCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              Queues{!queuesLoading && !queuesIsError ? ` (${sortedQueues.length})` : ""}
+            </button>
           </div>
-        )}
+          {!queuesCollapsed && (
+            <QueryState
+              data={sortedQueues}
+              isLoading={queuesLoading}
+              error={queuesError}
+              emptyTitle="No queues found"
+              skeletonRows={3}
+            >
+              {(qs) => qs.map((queue) => (
+                <div
+                  key={queue.entityPath}
+                  role="treeitem"
+                  aria-level={1}
+                  aria-selected={selectedEntity?.entityPath === queue.entityPath}
+                  tabIndex={0}
+                  data-testid={`entity-tree-queue-${queue.name}`}
+                  onClick={() => onSelectEntity(queue)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelectEntity(queue);
+                    } else if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
+                    } else if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      focusAdjacentTreeItem(treeRef.current, e.currentTarget, -1);
+                    }
+                  }}
+                  className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
+                    selectedEntity?.entityPath === queue.entityPath ? "bg-accent" : ""
+                  }`}
+                >
+                  <EntityIcon entity={queue} />
+                  <span className="truncate flex-1">{queue.name}</span>
+                  <EntityStatsBadges entity={queue} onSelectEntity={onSelectEntity} />
+                </div>
+              ))}
+            </QueryState>
+          )}
+        </div>
 
         {/* Topics section */}
-        {sortedTopics.length > 0 && (
-          <div role="group" aria-label="Topics">
-            <div className="px-3 py-1 text-xs font-semibold uppercase text-muted-foreground">
-              Topics ({sortedTopics.length})
-            </div>
-            {sortedTopics.map((topic) => {
-              const isExpanded = expandedTopics.has(topic.name);
-              return (
-                <div key={topic.entityPath}>
-                  <div
-                    role="treeitem"
-                    aria-level={1}
-                    aria-expanded={isExpanded}
-                    aria-selected={selectedEntity?.entityPath === topic.entityPath}
-                    tabIndex={0}
-                    data-testid={`entity-tree-topic-${topic.name}`}
-                    onClick={() => toggleTopic(topic.name)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        toggleTopic(topic.name);
-                      } else if (e.key === "ArrowRight") {
-                        e.preventDefault();
-                        if (!isExpanded) toggleTopic(topic.name);
-                        else focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
-                      } else if (e.key === "ArrowLeft") {
-                        if (isExpanded) {
-                          e.preventDefault();
-                          toggleTopic(topic.name);
-                        }
-                      } else if (e.key === "ArrowDown") {
-                        e.preventDefault();
-                        focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
-                      } else if (e.key === "ArrowUp") {
-                        e.preventDefault();
-                        focusAdjacentTreeItem(treeRef.current, e.currentTarget, -1);
-                      }
-                    }}
-                    className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
-                      selectedEntity?.entityPath === topic.entityPath ? "bg-accent" : ""
-                    }`}
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="h-3 w-3" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3" />
-                    )}
-                    <Folder className="h-4 w-4 text-muted-foreground" />
-                    <span className="truncate">{topic.name}</span>
-                    <EntityStatsBadges entity={topic} onSelectEntity={onSelectEntity} />
-                  </div>
-
-                  {isExpanded && (
-                    <TopicSubscriptions
-                      nsId={nsId}
-                      topicName={topic.name}
-                      selectedEntity={selectedEntity}
-                      onSelectEntity={onSelectEntity}
-                      treeRef={treeRef}
-                    />
-                  )}
-                </div>
-              );
-            })}
+        <div role="group" aria-label="Topics">
+          <div className="flex items-center justify-between px-3 py-1">
+            <span className="text-xs font-semibold uppercase text-muted-foreground">
+              Topics{!topicsLoading && !topicsIsError ? ` (${sortedTopics.length})` : ""}
+            </span>
+            {sortedTopics.length > 0 && (
+              <div className="flex items-center gap-2 text-[11px] normal-case text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={expandAllTopics}
+                  className="hover:text-foreground"
+                  data-testid="entity-tree-topics-expand-all"
+                >
+                  Expand all
+                </button>
+                <button
+                  type="button"
+                  onClick={collapseAllTopics}
+                  className="hover:text-foreground"
+                  data-testid="entity-tree-topics-collapse-all"
+                >
+                  Collapse all
+                </button>
+              </div>
+            )}
           </div>
-        )}
-
-        {sortedQueues.length === 0 && sortedTopics.length === 0 && (
-          <div className="p-4 text-sm text-muted-foreground">
-            No entities found
-          </div>
-        )}
+          <QueryState
+            data={sortedTopics}
+            isLoading={topicsLoading}
+            error={topicsError}
+            emptyTitle="No topics found"
+            skeletonRows={3}
+          >
+            {(ts) => ts.map((topic) => (
+              <TopicRow
+                key={topic.entityPath}
+                nsId={nsId}
+                topic={topic}
+                isExpanded={expandedTopics.has(topic.name)}
+                onToggle={toggleTopic}
+                selectedEntity={selectedEntity}
+                onSelectEntity={onSelectEntity}
+                treeRef={treeRef}
+              />
+            ))}
+          </QueryState>
+        </div>
       </div>
     </div>
   );
 }
 
-function TopicSubscriptions({
+function TopicRow({
   nsId,
-  topicName,
+  topic,
+  isExpanded,
+  onToggle,
   selectedEntity,
   onSelectEntity,
   treeRef,
 }: {
   nsId: string;
-  topicName: string;
+  topic: SbEntityInfo;
+  isExpanded: boolean;
+  onToggle: (name: string) => void;
   selectedEntity: SbEntityInfo | null;
   onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
   treeRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  const { data: subs, isLoading } = useSbSubscriptions(nsId, topicName);
+  // Fetched unconditionally — not just while expanded — so the dead-letter rollup badge below
+  // stays accurate even for a collapsed topic. Same query TanStack Query would otherwise fetch
+  // again on expand, so this doesn't add a second request once the user does expand it.
+  const { data: subs, isLoading: subsLoading, isError: subsIsError } = useSbSubscriptions(nsId, topic.name);
 
-  if (isLoading) return <div className="px-6 py-1 text-xs text-muted-foreground">Loading...</div>;
-  if (!subs || subs.length === 0) return null;
+  const dlqRollup = useMemo(() => {
+    if (subsIsError) return null;
+    if (subsLoading || !subs) return undefined;
+    return subs.reduce((sum, s) => sum + (s.stats?.deadLetterMessageCount ?? 0), 0);
+  }, [subs, subsLoading, subsIsError]);
+
+  return (
+    <div>
+      <div
+        role="treeitem"
+        aria-level={1}
+        aria-expanded={isExpanded}
+        aria-selected={selectedEntity?.entityPath === topic.entityPath}
+        tabIndex={0}
+        data-testid={`entity-tree-topic-${topic.name}`}
+        onClick={() => onToggle(topic.name)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle(topic.name);
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            if (!isExpanded) onToggle(topic.name);
+            else focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
+          } else if (e.key === "ArrowLeft") {
+            if (isExpanded) {
+              e.preventDefault();
+              onToggle(topic.name);
+            }
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            focusAdjacentTreeItem(treeRef.current, e.currentTarget, -1);
+          }
+        }}
+        // Deliberately not the same hover treatment as queue/subscription rows: those select an
+        // entity on click, a topic row only ever toggles expansion, so it shouldn't read as the
+        // same kind of clickable target. The chevron button is the one dedicated toggle control.
+        className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-muted/40 ${
+          selectedEntity?.entityPath === topic.entityPath ? "bg-accent" : ""
+        }`}
+      >
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={(e) => { e.stopPropagation(); onToggle(topic.name); }}
+          className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          data-testid={`entity-tree-topic-toggle-${topic.name}`}
+          aria-label={isExpanded ? `Collapse ${topic.name}` : `Expand ${topic.name}`}
+        >
+          {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        </button>
+        <Folder className="h-4 w-4 text-muted-foreground" />
+        <span className="truncate">{topic.name}</span>
+        <EntityStatsBadges entity={topic} onSelectEntity={onSelectEntity} dlqRollup={dlqRollup} />
+      </div>
+
+      {isExpanded && (
+        <SubscriptionRows
+          topicName={topic.name}
+          subs={subs}
+          isLoading={subsLoading}
+          isError={subsIsError}
+          selectedEntity={selectedEntity}
+          onSelectEntity={onSelectEntity}
+          treeRef={treeRef}
+        />
+      )}
+    </div>
+  );
+}
+
+function SubscriptionRows({
+  topicName,
+  subs,
+  isLoading,
+  isError,
+  selectedEntity,
+  onSelectEntity,
+  treeRef,
+}: {
+  topicName: string;
+  subs: SbEntityInfo[] | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  selectedEntity: SbEntityInfo | null;
+  onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
+  treeRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  // A fetch failure here must not look like "this topic has no subscriptions" — same class of
+  // bug as the top-level Queues/Topics sections, just one level deeper in the tree.
+  if (isError) {
+    return (
+      <div className="px-6 py-1 text-xs text-destructive" data-testid={`entity-tree-sub-error-${topicName}`}>
+        Couldn't load subscriptions
+      </div>
+    );
+  }
+  if (isLoading) {
+    return <div className="px-6 py-1 text-xs text-muted-foreground">Loading...</div>;
+  }
+  if (!subs || subs.length === 0) {
+    return (
+      <div className="px-6 py-1 text-xs text-muted-foreground" data-testid={`entity-tree-sub-empty-${topicName}`}>
+        No subscriptions
+      </div>
+    );
+  }
 
   return (
     <div className="ml-4" role="group" aria-label={`Subscriptions of ${topicName}`}>
