@@ -12,13 +12,13 @@ import type {
 
 // ── Service Bus ──────────────────────────────────────────────────────────────
 
-export function useSbTestConnection(nsId: string | null) {
+export function useSbTestConnection(nsId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["sb-test", nsId],
     queryFn: () => apiFetch<{ connected: boolean; error?: string }>(
       `/api/servicebus/${nsId}/test`,
     ),
-    enabled: !!nsId,
+    enabled: !!nsId && (options?.enabled ?? true),
   });
 }
 

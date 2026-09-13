@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useProfile, useDemoMode } from "@/lib/hooks";
+import { useSettingsReadiness, type SettingsReadinessArea } from "@/lib/hooks/useProfile";
 import { ServiceBusSettings } from "./ServiceBusSettings";
 import { AksSettings } from "./AksSettings";
 import { RedisSettings } from "./RedisSettings";
@@ -30,10 +31,16 @@ type TabId = (typeof tabs)[number]["id"];
 // have no effect until demo mode is turned off (Dashboard toggle).
 const DEMO_AFFECTED_TABS: ReadonlySet<TabId> = new Set(["service-bus", "aks", "redis", "storage"]);
 
+// The tabs `useSettingsReadiness` has an opinion about — one entry per area with a real
+// "configured or not" concept. `TabId` and `SettingsReadinessArea` happen to share the same
+// string values for these four, which is what makes the direct index below type-check.
+const READINESS_TABS: ReadonlySet<TabId> = new Set(["service-bus", "aks", "redis", "storage"]);
+
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("general");
   const { data: profile, isLoading } = useProfile();
   const { data: demoMode } = useDemoMode();
+  const readiness = useSettingsReadiness();
 
   if (isLoading) {
     return (
@@ -69,20 +76,37 @@ export function SettingsPage() {
 
       <div className="flex flex-1 overflow-hidden">
         <div className="w-48 border-r p-2" data-testid="settings-tabs">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              data-testid={`settings-tab-${tab.id}`}
-              className={`w-full rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
-                activeTab === tab.id
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {tabs.map((tab) => {
+            // `null` while the profile hasn't loaded yet (shouldn't happen here — this
+            // component already gated on `profile` above — but keep the check honest).
+            const ready = READINESS_TABS.has(tab.id)
+              ? readiness?.[tab.id as SettingsReadinessArea]
+              : undefined;
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                data-testid={`settings-tab-${tab.id}`}
+                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                }`}
+              >
+                <span className="flex-1">{tab.label}</span>
+                {ready !== undefined && (
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      ready ? "bg-success" : "bg-current opacity-40"
+                    }`}
+                    title={ready ? "Configured" : "Not configured"}
+                    data-testid={`settings-tab-readiness-${tab.id}`}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex-1 overflow-auto p-6" data-testid="settings-content">

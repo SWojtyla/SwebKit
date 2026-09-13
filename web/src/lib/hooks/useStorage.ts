@@ -13,6 +13,17 @@ import type {
 
 // ── Storage hooks ─────────────────────────────────────────────────────────────
 
+/** Mirrors `useAksTestConnection`/`useSbTestConnection` — the sidecar endpoint already
+ * existed (`GET /api/storage/{accountId}/test`) but had no frontend hook until Settings
+ * needed a "Test connection" button for it. */
+export function useStorageTestConnection(accountId: string | null, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["storage", accountId, "test"],
+    queryFn: () => apiFetch<{ connected: boolean; error?: string }>(`/api/storage/${accountId}/test`),
+    enabled: !!accountId && (options?.enabled ?? true),
+  });
+}
+
 export function useStorageContainers(accountId: string | null) {
   return useQuery({
     queryKey: ["storage", accountId, "containers"],

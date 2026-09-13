@@ -23,6 +23,17 @@ import type {
 
 // ── Redis hooks ───────────────────────────────────────────────────────────────
 
+/** Mirrors `useAksTestConnection`/`useSbTestConnection` — the sidecar endpoint already
+ * existed (`GET /api/redis/{cacheId}/test`) but had no frontend hook until Settings needed
+ * a "Test connection" button for it. */
+export function useRedisTestConnection(cacheId: string | null, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["redis", cacheId, "test"],
+    queryFn: () => apiFetch<{ connected: boolean; error?: string }>(`/api/redis/${cacheId}/test`),
+    enabled: !!cacheId && (options?.enabled ?? true),
+  });
+}
+
 export function useRedisServerInfo(cacheId: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "info"],

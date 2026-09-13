@@ -103,6 +103,11 @@ export function useUpdateUserSettings() {
   const qc = useQueryClient();
   const { notify } = useNotification();
   return useMutation({
+    // Same serialization `useUpdateProfile` uses, for the same reason: `AgentSettings` (the
+    // heaviest user of this hook) now commits via `DraftInput`, and two commits close together
+    // (e.g. blurring one field while another's save is still settling) must not have the
+    // earlier response land after the later one and overwrite it.
+    scope: { id: "user-settings" },
     mutationFn: (data: UserSettings) =>
       apiSend("/api/config/user-settings", "PUT", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["user-settings"] }),
@@ -199,4 +204,32 @@ export function useObservabilityResources() {
     retry: false,
     staleTime: 60_000,
   });
+}
+
+// ── Settings readiness ───────────────────────────────────────────────────────
+
+/** One entry per settings tab that has a "configured or not" concept worth signaling. */
+export type SettingsReadinessArea = "aks" | "service-bus" | "redis" | "storage";
+
+export type SettingsReadiness = Record<SettingsReadinessArea, boolean>;
+
+/**
+ * The same "is this area configured" booleans `GeneralSettings`' getting-started checklist
+ * computes, lifted out so `SettingsPage`'s tab strip can show the same signal (a small
+ * readiness dot) without recomputing its own, possibly-drifting copy. `null` while the
+ * profile hasn't loaded yet — callers should treat that as "don't render a signal".
+ */
+export function useSettingsReadiness(): SettingsReadiness | null {
+  const { data: profile } = useProfile();
+  const { data: demoMode } = useDemoMode();
+
+  if (!profile) return null;
+
+  const isDemo = demoMode?.isDemoMode ?? false;
+  return {
+    aks: isDemo || !!profile.config.aksConfig,
+    "service-bus": profile.serviceBusNamespaces.length > 0,
+    redis: (profile.config.redisConfig?.caches.length ?? 0) > 0,
+    storage: profile.config.storageAccounts.length > 0,
+  };
 }
