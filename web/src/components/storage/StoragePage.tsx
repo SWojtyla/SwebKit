@@ -94,15 +94,17 @@ function StoragePageContent() {
             >
               Browser
             </button>
-            <button
-              onClick={() => ctx.setStorageViewMode("recovery")}
-              disabled={!ctx.selectedContainer}
-              className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs disabled:opacity-50 ${ctx.storageViewMode === "recovery" ? "bg-primary text-primary-foreground" : "border hover:bg-accent"}`}
-              data-testid="storage-view-recovery"
-            >
-              <RotateCcw className="h-3 w-3" />
-              Recovery
-            </button>
+            <span title={ctx.selectedContainer ? "View deleted blobs in this container" : "Select a container to view its deleted blobs"}>
+              <button
+                onClick={() => ctx.setStorageViewMode("recovery")}
+                disabled={!ctx.selectedContainer}
+                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50 ${ctx.storageViewMode === "recovery" ? "bg-primary text-primary-foreground" : "border hover:bg-accent"}`}
+                data-testid="storage-view-recovery"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Recovery
+              </button>
+            </span>
           </div>
         </div>
       </div>

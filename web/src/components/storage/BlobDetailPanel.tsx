@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Download, Link as LinkIcon, Check, Plus, Trash2, Copy as CopyIcon, Sparkles } from "lucide-react";
+import { Download, Link as LinkIcon, ShieldCheck, Check, Plus, Trash2, Copy as CopyIcon, Sparkles } from "lucide-react";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { useStoragePageContext } from "./StoragePageContext";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
@@ -67,14 +67,14 @@ export function BlobDetailPanel() {
                   <div className="text-lg font-mono font-semibold break-all" data-testid="storage-blob-name">
                     {ctx.blobProps.data.name}
                   </div>
-                  <button onClick={() => ctx.handleCopyUrl(ctx.blobProps.data!.name)} className="text-muted-foreground hover:text-foreground" data-testid="storage-copy-url-btn" title="Copy URL">
+                  <button onClick={() => ctx.handleCopyUrl(ctx.blobProps.data!.name)} className="text-muted-foreground hover:text-foreground" data-testid="storage-copy-url-btn" title="Copy URL (unsigned — may 403/404 on a private container)">
                     {ctx.copiedUrl ? <Check className="h-3.5 w-3.5 text-success" /> : <LinkIcon className="h-3.5 w-3.5" />}
                   </button>
                   <button onClick={() => ctx.handleDownloadBlob(ctx.blobProps.data!.name)} className="text-muted-foreground hover:text-foreground" data-testid="storage-download-btn" title="Download blob">
                     <Download className="h-3.5 w-3.5" />
                   </button>
-                  <button onClick={() => ctx.setShowSasUrl(!ctx.showSasUrl)} className="text-muted-foreground hover:text-foreground" data-testid="storage-sas-url-btn" title="Generate SAS URL">
-                    <LinkIcon className="h-3.5 w-3.5" />
+                  <button onClick={() => ctx.setShowSasUrl(!ctx.showSasUrl)} className="text-muted-foreground hover:text-foreground" data-testid="storage-sas-url-btn" title="Generate SAS URL (signed, expires — works on a private container)">
+                    <ShieldCheck className="h-3.5 w-3.5" />
                   </button>
                   <span title={ctx.allowMutations ? "Copy blob" : "Mutations are disabled for this storage account. Enable allowMutations in Settings."}>
                     <button
