@@ -239,9 +239,21 @@ export function AgentVisualizationPanel({
   const activeIndex = Math.max(0, blocks.findIndex((block) => block.id === activeId));
   const activeBlock = blocks[activeIndex];
 
+  // `blocks` is recomputed from `content` on every render (it changes on every streamed token), so
+  // it can't be a dependency here without reintroducing the bug this replaces: keeping a ref lets
+  // the effect read the current block set without re-running on every token. It only resets the
+  // active tab when the *set* of block ids actually changes (a block finished streaming in, or the
+  // response changed outright) — not on every intermediate token — so a manual tab click survives
+  // the rest of the stream instead of silently snapping back to tab 0 (ux-interaction-consistency
+  // unit 7.5).
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+  const blockIds = blocks.map((block) => block.id).join("|");
+
   useEffect(() => {
-    setActiveId(blocks[0]?.id ?? "");
-  }, [content]);
+    const current = blocksRef.current;
+    setActiveId((prev) => (current.some((block) => block.id === prev) ? prev : (current[0]?.id ?? "")));
+  }, [blockIds]);
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex = index;

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, Upload, Send } from "lucide-react";
 import { useSbBatchSend } from "@/lib/hooks";
 import type { SbEntityInfo, SbMessage, ServiceBusNamespace } from "@/lib/types";
+import { EntityPathInput } from "./EntityPathInput";
 
 interface Props {
   nsId: string | null;
@@ -166,13 +167,11 @@ export function BatchSendPanel({ nsId, namespaces, entity, onClose }: Props) {
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Target Entity</label>
-              <input
-                type="text"
-                data-testid="batch-target-entity"
+              <EntityPathInput
+                nsId={targetNsId || null}
                 value={targetEntityPath}
-                onChange={(e) => setTargetEntityPath(e.target.value)}
-                placeholder="queue or topic name"
-                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                onChange={setTargetEntityPath}
+                testId="batch-target-entity"
               />
             </div>
           </div>
@@ -232,7 +231,9 @@ export function BatchSendPanel({ nsId, namespaces, entity, onClose }: Props) {
             data-testid="batch-send-btn"
           >
             <Send className="h-3 w-3" />
-            Send {preview ? `${preview.length}` : ""}
+            {batchSendMutation.isPending
+              ? "Sending…"
+              : `Send ${preview ? preview.length : ""}`}
           </button>
         </div>
       </div>

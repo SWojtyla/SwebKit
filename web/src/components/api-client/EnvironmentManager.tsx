@@ -9,6 +9,7 @@ import {
 } from "@/lib/variable-utils";
 import type { ApiEnvironment, ApiCollection } from "@/lib/types";
 import { useProfile } from "@/lib/hooks";
+import { ConfirmDialog } from "./Dialogs";
 
 interface EnvironmentManagerProps {
   environments: ApiEnvironment[];
@@ -49,6 +50,9 @@ export function EnvironmentManager({
   const [size, setSize] = useState(() =>
     fitToViewport(loadViewPreference("env-manager-size", DEFAULT_SIZE)),
   );
+  // Every other destructive flow in this feature confirms first (unit 4.3) —
+  // environment delete previously had no confirmation at all.
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef(false);
@@ -130,10 +134,18 @@ export function EnvironmentManager({
     setEditingEnv(env);
   };
 
-  const deleteEnvironment = (id: string) => {
-    setEnvList(envList.filter((e) => e.id !== id));
+  const requestDeleteEnvironment = (id: string) => {
+    const env = envList.find((e) => e.id === id);
+    setDeleteConfirm({ id, name: env?.name ?? "this environment" });
+  };
+
+  const confirmDeleteEnvironment = () => {
+    if (!deleteConfirm) return;
+    const { id } = deleteConfirm;
+    setEnvList((prev) => prev.filter((e) => e.id !== id));
     if (activeId === id) setActiveId(null);
     if (editingEnv?.id === id) setEditingEnv(null);
+    setDeleteConfirm(null);
   };
 
   const updateEnvironment = (updated: ApiEnvironment) => {
@@ -147,6 +159,7 @@ export function EnvironmentManager({
   };
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       data-testid="env-manager-overlay"
@@ -185,7 +198,7 @@ export function EnvironmentManager({
               editingEnv={editingEnv}
               onAdd={addEnvironment}
               onSelect={setEditingEnv}
-              onDelete={deleteEnvironment}
+              onDelete={requestDeleteEnvironment}
             />
             <div className="flex h-full w-full flex-col overflow-auto p-4">
               {editingEnv ? (
@@ -232,6 +245,15 @@ export function EnvironmentManager({
         />
       </div>
     </div>
+    {deleteConfirm && (
+      <ConfirmDialog
+        message={`Delete environment "${deleteConfirm.name}"? This cannot be undone.`}
+        confirmText="Delete"
+        onConfirm={confirmDeleteEnvironment}
+        onCancel={() => setDeleteConfirm(null)}
+      />
+    )}
+    </>
   );
 }
 

@@ -160,6 +160,12 @@ test.describe("Contextual assistant entry points", () => {
     await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
     const ruleName = `Ctx Test Alert ${Date.now()}`;
     await page.getByTestId("alert-rule-name").fill(ruleName);
+    // Default source is AKS · Pod Health, which (unit 5.3) now requires a namespace before Save
+    // is enabled.
+    const aksNamespace = page.getByTestId("alert-rule-aks-namespace");
+    await expect(aksNamespace.locator("option", { hasText: "ecommerce" })).toBeAttached({ timeout: 10000 });
+    await aksNamespace.selectOption("ecommerce");
+    await expect(page.getByTestId("alert-rule-dialog-save")).toBeEnabled();
     await page.getByTestId("alert-rule-dialog-save").click();
 
     const row = page.locator("[data-testid^='monitoring-rule-row-']").filter({ hasText: ruleName });

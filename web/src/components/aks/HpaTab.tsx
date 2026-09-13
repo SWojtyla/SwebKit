@@ -9,7 +9,7 @@ import type { HpaInfo } from "@/lib/types";
 
 export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   const ws = useAksWorkspace();
-  const { data: hpas, isLoading } = useAksHpas(ns);
+  const { data: hpas, isLoading, error } = useAksHpas(ns);
   const scaleMutation = useAksScaleHpa();
   const deleteMutation = useAksDeleteHpa();
   const toggleMutation = useAksSetHpaScalingEnabled();
@@ -17,11 +17,19 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
   const [scaleTarget, setScaleTarget] = useState<HpaInfo | null>(null);
   const [yamlTarget, setYamlTarget] = useState<HpaInfo | null>(null);
 
-  const handleScale = useCallback(async (min: number, max: number) => {
+  const handleScale = useCallback((min: number, max: number) => {
     if (!scaleTarget) return;
-    scaleMutation.mutate({ ns: scaleTarget.namespace, name: scaleTarget.name, minReplicas: min, maxReplicas: max });
+    const hpa = scaleTarget;
     setScaleTarget(null);
-  }, [scaleTarget, scaleMutation.mutate]);
+    // Route through the same confirm step Delete/Toggle-scaling already use on this same tab —
+    // scaling min/max replicas is at least as consequential as either, and Deployments/
+    // StatefulSets' own Scale flows already confirm this way.
+    ws.requestConfirm({
+      message: `Scale HPA "${hpa.name}" to min ${min} / max ${max} replicas?`,
+      resourceName: hpa.name,
+      onConfirm: () => scaleMutation.mutate({ ns: hpa.namespace, name: hpa.name, minReplicas: min, maxReplicas: max }),
+    });
+  }, [ws, scaleTarget, scaleMutation.mutate]);
 
   const handleDelete = useCallback((hpa: HpaInfo) => {
     ws.requestConfirm({
@@ -43,10 +51,10 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
 
   const columns: Column<HpaInfo>[] = useMemo(() => [
           { header: "Target", cell: (hpa) => <span className="text-xs text-muted-foreground">{hpa.targetKind}/{hpa.targetName}</span> },
-          { header: "Min", cell: (hpa) => hpa.minReplicas },
-          { header: "Max", cell: (hpa) => hpa.maxReplicas },
-          { header: "Current", cell: (hpa) => hpa.currentReplicas },
-          { header: "Desired", cell: (hpa) => <span className="text-success">{hpa.desiredReplicas}</span> },
+          { header: "Min", cell: (hpa) => hpa.minReplicas, sortValue: (hpa) => hpa.minReplicas },
+          { header: "Max", cell: (hpa) => hpa.maxReplicas, sortValue: (hpa) => hpa.maxReplicas },
+          { header: "Current", cell: (hpa) => hpa.currentReplicas, sortValue: (hpa) => hpa.currentReplicas },
+          { header: "Desired", cell: (hpa) => <span className="text-success">{hpa.desiredReplicas}</span>, sortValue: (hpa) => hpa.desiredReplicas },
           { header: "CPU%", cell: (hpa) => (
             hpa.currentCpuUtilizationPercent != null ? (
               <span className={
@@ -56,7 +64,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                 {hpa.currentCpuUtilizationPercent}%
               </span>
             ) : "—"
-          )},
+          ), sortValue: (hpa) => hpa.currentCpuUtilizationPercent ?? -1 },
           { header: "Type", cell: (hpa) => (
             <div className="flex flex-wrap gap-1">
               {hpa.isKedaManaged ? (
@@ -109,11 +117,13 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
       <ResourceTable
         data={hpas}
         isLoading={isLoading}
+        error={error}
         isMulti={isMulti}
         testIdPrefix="hpa"
         tableBodyTestId="hpas-table-body"
         emptyMessage="No HPAs found"
         columns={columns}
+        defaultSort={{ sortValue: (hpa) => (hpa.isScalingDisabled ? -1 : hpa.currentReplicas === hpa.desiredReplicas ? 1 : 0), direction: "asc" }}
       />
 
       {scaleTarget && (

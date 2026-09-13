@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash2, Terminal, RefreshCw } from "lucide-react";
 import { listPortForwards, startPortForward, stopPortForward, type PortForwardSessionInfo } from "@/lib/tauri-bridge";
+import type { PodInfo } from "@/lib/types";
 
 interface Props {
   ns: string;
   selectedPod: string | null;
   context?: string | null;
+  /** Already-fetched pod list for the namespace, used to offer a searchable pod picker instead
+   * of requiring the exact name to be typed from memory. */
+  pods?: PodInfo[];
 }
 
-export function PortForwardPanel({ ns, selectedPod, context }: Props) {
+export function PortForwardPanel({ ns, selectedPod, context, pods = [] }: Props) {
   const [sessions, setSessions] = useState<PortForwardSessionInfo[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [pod, setPod] = useState("");
@@ -90,12 +94,18 @@ export function PortForwardPanel({ ns, selectedPod, context }: Props) {
               <label className="text-xs font-medium">Pod</label>
               <input
                 type="text"
+                list="port-forward-pod-options"
                 value={pod}
                 onChange={(e) => setPod(e.target.value)}
                 placeholder="pod-name"
                 className="mt-1 w-full rounded border bg-card px-2 py-1 text-xs"
                 data-testid="port-forward-pod"
               />
+              <datalist id="port-forward-pod-options">
+                {pods.map((p) => (
+                  <option key={p.name} value={p.name} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label className="text-xs font-medium">Remote Port</label>
@@ -142,6 +152,7 @@ export function PortForwardPanel({ ns, selectedPod, context }: Props) {
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
               <tr>
+                <th className="px-3 py-2 text-left">Context</th>
                 <th className="px-3 py-2 text-left">Namespace</th>
                 <th className="px-3 py-2 text-left">Pod</th>
                 <th className="px-3 py-2 text-left">Local</th>
@@ -152,6 +163,7 @@ export function PortForwardPanel({ ns, selectedPod, context }: Props) {
             <tbody>
               {sessions.map((s) => (
                 <tr key={s.localPort} className="border-b last:border-0">
+                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{s.context ?? "—"}</td>
                   <td className="px-3 py-2 font-mono text-xs">{s.namespace}</td>
                   <td className="px-3 py-2 font-mono text-xs">{s.pod}</td>
                   <td className="px-3 py-2 font-mono text-xs text-primary">localhost:{s.localPort}</td>

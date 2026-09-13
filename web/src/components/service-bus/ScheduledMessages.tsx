@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { X, Clock, Trash2, RefreshCw } from "lucide-react";
 import { useSbScheduledMessages, useSbCancelScheduled } from "@/lib/hooks";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import type { ScheduledMessageEntry } from "@/lib/types";
 
 interface Props {
   nsId: string;
@@ -10,6 +13,9 @@ interface Props {
 export function ScheduledMessages({ nsId, entityPath, onClose }: Props) {
   const { data: entries, isLoading, refetch } = useSbScheduledMessages(nsId, entityPath);
   const cancelMutation = useSbCancelScheduled();
+  // Cancel used to fire immediately on click, unlike every other comparable-severity action in
+  // this feature (batch replay, bulk complete/resubmit, purge, template delete all confirm).
+  const [pendingCancel, setPendingCancel] = useState<ScheduledMessageEntry | null>(null);
 
   const sorted = (entries ?? []).slice().sort(
     (a, b) => new Date(a.scheduledEnqueueTime).getTime() - new Date(b.scheduledEnqueueTime).getTime(),
@@ -91,13 +97,7 @@ export function ScheduledMessages({ nsId, entityPath, onClose }: Props) {
                       <td className="px-3 py-2">
                         {!isPast && (
                           <button
-                            onClick={() =>
-                              cancelMutation.mutate({
-                                nsId,
-                                entityPath,
-                                sequenceNumber: entry.sequenceNumber,
-                              })
-                            }
+                            onClick={() => setPendingCancel(entry)}
                             disabled={cancelMutation.isPending}
                             className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                             title="Cancel scheduled message"
@@ -114,6 +114,27 @@ export function ScheduledMessages({ nsId, entityPath, onClose }: Props) {
             </table>
           )}
         </div>
+
+        {pendingCancel && (
+          <ConfirmBar
+            message={
+              <>
+                Cancel the scheduled message{" "}
+                <strong>{pendingCancel.subject ?? `#${pendingCancel.sequenceNumber}`}</strong>?
+                This cannot be undone.
+              </>
+            }
+            confirmLabel="Cancel message"
+            cancelLabel="Keep it"
+            confirmDisabled={cancelMutation.isPending}
+            onConfirm={() => {
+              cancelMutation.mutate({ nsId, entityPath, sequenceNumber: pendingCancel.sequenceNumber });
+              setPendingCancel(null);
+            }}
+            onCancel={() => setPendingCancel(null)}
+            testId="scheduled-cancel-confirm"
+          />
+        )}
 
         {/* Footer */}
         <div className="border-t px-4 py-2 text-xs text-muted-foreground">

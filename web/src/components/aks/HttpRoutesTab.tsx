@@ -10,6 +10,10 @@ interface HttpRoutesTabProps {
   isMulti?: boolean;
 }
 
+function httpRouteStatusRank(route: HttpRouteInfo): number {
+  return route.status === "Accepted" ? 1 : route.status === "Pending" ? 0 : -1;
+}
+
 const columns: Column<HttpRouteInfo>[] = [
   { header: "Hosts", cell: (route) => (
     <span className="text-xs">{route.hostnames.length > 0 ? route.hostnames.join(", ") : "—"}</span>
@@ -28,11 +32,11 @@ const columns: Column<HttpRouteInfo>[] = [
     }>
       {route.status}
     </span>
-  )},
+  ), sortValue: httpRouteStatusRank },
 ];
 
 export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
-  const { data: routes, isLoading } = useAksHttpRoutes(ns);
+  const { data: routes, isLoading, error } = useAksHttpRoutes(ns);
   const ws = useAksWorkspace();
   const deleteHttpRoute = useAksDeleteHttpRoute();
 
@@ -64,12 +68,15 @@ export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
     <ResourceTable
       data={routes}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="httproute"
       tableBodyTestId="httproutes-table-body"
       emptyMessage="No HTTP routes found"
+      onRowClick={(route) => ws.openYaml("httproute", route.name, route.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
+      defaultSort={{ sortValue: httpRouteStatusRank, direction: "asc" }}
     />
   );
 }

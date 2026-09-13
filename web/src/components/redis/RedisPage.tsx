@@ -1,4 +1,5 @@
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { Clock, RefreshCw } from "lucide-react";
 import { RedisPageProvider, useRedisPageContext, mainTabs } from "./RedisPageContext";
 import { KeysTab } from "./tabs/KeysTab";
@@ -28,6 +29,8 @@ function RedisPageContent() {
     refreshInterval,
     setRefreshInterval,
     handleManualRefresh,
+    lastRefreshedAt,
+    isFetching,
     activeTab,
     setActiveTab,
     pendingConfirm,
@@ -92,6 +95,7 @@ function RedisPageContent() {
               <option value={60}>60s</option>
             </select>
           )}
+          <LastRefreshed at={lastRefreshedAt} isFetching={isFetching} testId="redis-last-refreshed" />
           <button
             onClick={handleManualRefresh}
             className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
@@ -128,7 +132,7 @@ function RedisPageContent() {
             setPendingConfirm(null);
           }}
           onCancel={() => setPendingConfirm(null)}
-          confirmLabel="Delete"
+          confirmLabel={pendingConfirm.confirmLabel ?? "Delete"}
           testId="redis-confirm-bar"
           confirmTestId="redis-confirm-yes"
           cancelTestId="redis-confirm-cancel"

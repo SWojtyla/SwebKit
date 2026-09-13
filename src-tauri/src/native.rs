@@ -105,6 +105,7 @@ pub struct PortForwardSession {
     pub namespace: String,
     pub pod: String,
     pub remote_port: u16,
+    pub context: Option<String>,
     // No `local_port` field here — it would just duplicate the HashMap key this session is
     // stored under in `PortForwardState::sessions`; see `list_port_forwards`, which reads the
     // port from the map key, not from a struct field.
@@ -133,6 +134,7 @@ pub fn start_port_forward(
     kubeconfig: Option<String>,
 ) -> Result<u16, String> {
     let lp = local_port.unwrap_or(0);
+    let context_for_session = context.clone();
 
     let mut cmd = hidden_command("kubectl");
     cmd.arg("port-forward")
@@ -196,7 +198,13 @@ pub fn start_port_forward(
 
     state.sessions.lock().unwrap().insert(
         actual_port,
-        PortForwardSession { namespace: namespace.clone(), pod: pod.clone(), remote_port, child },
+        PortForwardSession {
+            namespace: namespace.clone(),
+            pod: pod.clone(),
+            remote_port,
+            context: context_for_session,
+            child,
+        },
     );
 
     eprintln!(
@@ -257,16 +265,24 @@ pub fn list_port_forwards(state: State<PortForwardState>) -> Vec<PortForwardSess
             namespace: s.namespace.clone(),
             pod: s.pod.clone(),
             remote_port: s.remote_port,
+            context: s.context.clone(),
         })
         .collect()
 }
 
+// `rename_all = "camelCase"` matters here: serialized return values are not camelCased on the
+// way out the way command *arguments* are (see docs/pitfalls/react-frontend.md, "Tauri does not
+// camelCase struct fields on the way out") — without it, `local_port`/`remote_port` would arrive
+// in `tauri-bridge.ts` as snake_case while the TS interface expects `localPort`/`remotePort`,
+// silently reading `undefined` for both in `PortForwardPanel.tsx`.
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PortForwardSessionInfo {
     pub local_port: u16,
     pub namespace: String,
     pub pod: String,
     pub remote_port: u16,
+    pub context: Option<String>,
 }
 
 /// Tauri command: open a file picker dialog and return the selected path.

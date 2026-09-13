@@ -4,7 +4,6 @@ import {
   useSbCompleteMessages,
   useSbCompleteDlq,
   useSbResubmitDlq,
-  useSbPurgeMessages,
   useSbSaveTemplate,
 } from "@/lib/hooks";
 import { downloadText, downloadBlob } from "@/lib/download";
@@ -37,10 +36,8 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
   const completeMutation = useSbCompleteMessages();
   const completeDlqMutation = useSbCompleteDlq();
   const resubmitMutation = useSbResubmitDlq();
-  const purgeMutation = useSbPurgeMessages();
   const [activeTab, setActiveTab] = useState<DetailTab>("body");
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
-  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [propFilter, setPropFilter] = useState("");
@@ -152,41 +149,31 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
     notify("success", "Message downloaded as ZIP");
   };
 
+  // Complete/Resubmit already get an error toast from the mutation hook itself (Batch 0.2). What
+  // was still missing was success feedback — without it, the panel just sat there after a
+  // completed action with no confirmation anything happened.
   const onComplete = () => {
     if (!nsId || !entity || !message.sequenceNumber) return;
-    completeMutation.mutate({
-      nsId,
-      entityPath: entity.entityPath,
-      sequenceNumbers: [message.sequenceNumber],
-    });
+    completeMutation.mutate(
+      { nsId, entityPath: entity.entityPath, sequenceNumbers: [message.sequenceNumber] },
+      { onSuccess: () => notify("success", "Message completed") },
+    );
   };
 
   const onCompleteDlq = () => {
     if (!nsId || !entity || !message.sequenceNumber) return;
-    completeDlqMutation.mutate({
-      nsId,
-      entityPath: entity.entityPath,
-      sequenceNumbers: [String(message.sequenceNumber)],
-    });
+    completeDlqMutation.mutate(
+      { nsId, entityPath: entity.entityPath, sequenceNumbers: [String(message.sequenceNumber)] },
+      { onSuccess: () => notify("success", "Message completed") },
+    );
   };
 
   const onResubmit = () => {
     if (!nsId || !entity || !message.sequenceNumber) return;
-    resubmitMutation.mutate({
-      nsId,
-      entityPath: entity.entityPath,
-      sequenceNumbers: [String(message.sequenceNumber)],
-    });
-  };
-
-  const onPurge = () => {
-    if (!nsId || !entity) return;
-    purgeMutation.mutate({
-      nsId,
-      entityPath: entity.entityPath,
-      deadLetter: viewMode === "dlq",
-    });
-    setShowPurgeConfirm(false);
+    resubmitMutation.mutate(
+      { nsId, entityPath: entity.entityPath, sequenceNumbers: [String(message.sequenceNumber)] },
+      { onSuccess: () => notify("success", "Message resubmitted") },
+    );
   };
 
   const onSaveAsTemplate = () => {
@@ -271,14 +258,6 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
                 </button>
               </>
             )}
-            <button
-              data-testid="message-purge-button"
-              onClick={() => setShowPurgeConfirm(true)}
-              disabled={purgeMutation.isPending}
-              className="rounded-md border border-destructive px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
-            >
-              Purge All
-            </button>
           </div>
         </div>
 
@@ -392,32 +371,6 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
           <button
             data-testid="template-save-cancel"
             onClick={() => { setShowSaveTemplate(false); setTemplateName(""); }}
-            className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {/* Purge confirmation dialog */}
-      {showPurgeConfirm && (
-        <div className="flex items-center gap-3 border-b bg-destructive/10 px-4 py-3" data-testid="purge-confirm">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
-          <span className="flex-1 text-sm">
-            Purge all {viewMode === "dlq" ? "dead-lettered" : "active"} messages from <strong>{entity?.entityPath}</strong>?
-            This cannot be undone.
-          </span>
-          <button
-            data-testid="purge-confirm-yes"
-            onClick={onPurge}
-            disabled={purgeMutation.isPending}
-            className="rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            Purge
-          </button>
-          <button
-            data-testid="purge-confirm-cancel"
-            onClick={() => setShowPurgeConfirm(false)}
             className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
           >
             Cancel
@@ -551,7 +504,7 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
                       <span className="min-w-0 break-all">{String(value)}</span>
                       <button
                         onClick={() => copyProp(key, value)}
-                        className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                        className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-within:opacity-100"
                         data-testid={`prop-copy-${key}`}
                         title="Copy value"
                       >

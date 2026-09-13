@@ -61,6 +61,21 @@ Observability page/menu, but the agent now has direct tool access to Application
 (`get_metrics`/`query_logs`, exempt from the per-feature-area tool filter), with a minimal
 resource-id/name Settings widget — a genuine middle ground the user chose, not a full reversal.
 
+**UX consistency (2026-09-12/13):** `docs/features/active/ux-interaction-consistency/` is in
+Review — a full audit and implementation pass across all nine feature areas (AKS, Redis, Service
+Bus, API Client, Monitoring, Storage, Agent, Settings, Dashboard), triggered by two reports (AKS
+rows need a right-click to do anything; Redis isn't collapsed by default) and scoped much wider per
+the request to go in depth on every feature, AKS weighted highest as the most-used one. All 58 work
+units across 10 batches are implemented and merged to the (unpushed, local-only) branch
+`ux-interaction-consistency`: missing click affordances, inconsistent destructive-action
+confirmation, silent mutation failures, misleading loading/empty states, and several outright
+correctness bugs fixed along the way (Storage's Download was silently corrupting binary blobs; a
+breadcrumb rendered blank/mislabeled segments; AKS could leave a pod shell connected to the wrong
+cluster after a context switch; a Tauri struct's return values weren't actually camelCased, so two
+port-forward session fields silently read `undefined`). Full automated verification (`tsc`, `dotnet
+test`, `cargo test`, lint, unit tests, and the full Playwright e2e suite) passes; the Aikido scan
+and a short list of manual/live-infra checks are still the user's own, per `status.md`.
+
 ## Folder Contract
 
 Each feature folder contains:

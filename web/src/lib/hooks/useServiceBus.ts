@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend } from "../api";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
   SbEntityInfo,
   SbEntityStats,
@@ -11,13 +12,13 @@ import type {
 
 // ── Service Bus ──────────────────────────────────────────────────────────────
 
-export function useSbTestConnection(nsId: string | null) {
+export function useSbTestConnection(nsId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["sb-test", nsId],
     queryFn: () => apiFetch<{ connected: boolean; error?: string }>(
       `/api/servicebus/${nsId}/test`,
     ),
-    enabled: !!nsId,
+    enabled: !!nsId && (options?.enabled ?? true),
   });
 }
 
@@ -87,7 +88,15 @@ export function useSbEntityStats(nsId: string | null, entityPath: string | null)
   });
 }
 
-function invalidateServiceBusQueries(qc: QueryClient, nsId: string, entityPath: string) {
+/**
+ * Invalidates every query for one entity (peek/DLQ/stats/scheduled) plus the namespace's
+ * queue/topic/subscription lists. Exported so call sites outside this file — the Refresh
+ * command in `ServiceBusPage.tsx` in particular — can reuse the real key set instead of a
+ * hand-rolled `invalidateQueries({ queryKey: ["sb-"] })`, which matches nothing: TanStack Query
+ * compares key *elements*, not string prefixes, and every real key here is `["sb-peek", nsId,
+ * entityPath, count]` and friends (same class of bug as `aks-query-keys.ts`'s note on `"aks-"`).
+ */
+export function invalidateServiceBusQueries(qc: QueryClient, nsId: string, entityPath: string) {
   qc.invalidateQueries({ queryKey: ["sb-peek", nsId, entityPath] });
   qc.invalidateQueries({ queryKey: ["sb-dlq", nsId, entityPath] });
   qc.invalidateQueries({ queryKey: ["sb-entity-stats", nsId, entityPath] });
@@ -99,17 +108,20 @@ function invalidateServiceBusQueries(qc: QueryClient, nsId: string, entityPath: 
 
 export function useSbSendMessage() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { nsId: string; entityPath: string; message: SbMessage }) =>
       apiSend(`/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/send`, "POST", vars.message),
     onSuccess: (_data, vars) => {
       invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
+    onError: (error) => notify("error", "Couldn't send message", String(error)),
   });
 }
 
 export function useSbScheduleMessage() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { nsId: string; entityPath: string; message: SbMessage; scheduledEnqueueTime: string }) =>
       apiSend<{ sequenceNumber: number }>(
@@ -120,11 +132,13 @@ export function useSbScheduleMessage() {
     onSuccess: (_data, vars) => {
       invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
+    onError: (error) => notify("error", "Couldn't schedule message", String(error)),
   });
 }
 
 export function useSbBatchSend() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { nsId: string; entityPath: string; messages: SbMessage[] }) =>
       apiSend<{ sent: number }>(
@@ -135,6 +149,7 @@ export function useSbBatchSend() {
     onSuccess: (_data, vars) => {
       invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
+    onError: (error) => notify("error", "Couldn't send batch", String(error)),
   });
 }
 
@@ -151,6 +166,7 @@ export function useSbScheduledMessages(nsId: string | null, entityPath: string |
 
 export function useSbCancelScheduled() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { nsId: string; entityPath: string; sequenceNumber: number }) =>
       apiSend(
@@ -160,6 +176,7 @@ export function useSbCancelScheduled() {
     onSuccess: (_data, vars) => {
       invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
+    onError: (error) => notify("error", "Couldn't cancel scheduled message", String(error)),
   });
 }
 
@@ -172,60 +189,71 @@ export function useSbTemplates() {
 
 export function useSbSaveTemplate() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (template: SbMessageTemplate) =>
       apiSend<SbMessageTemplate>("/api/servicebus/templates", "POST", template),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sb-templates"] });
     },
+    onError: (error) => notify("error", "Couldn't save template", String(error)),
   });
 }
 
 export function useSbDeleteTemplate() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (id: string) => apiSend(`/api/servicebus/templates/${id}`, "DELETE"),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sb-templates"] });
     },
+    onError: (error) => notify("error", "Couldn't delete template", String(error)),
   });
 }
 
 export function useSbCompleteMessages() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { nsId: string; entityPath: string; sequenceNumbers: number[] }) =>
       apiSend(`/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/complete`, "POST", vars.sequenceNumbers),
     onSuccess: (_data, vars) => {
       invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
+    onError: (error) => notify("error", "Couldn't complete messages", String(error)),
   });
 }
 
 export function useSbPurgeMessages() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { nsId: string; entityPath: string; deadLetter: boolean }) =>
       apiSend(`/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/purge`, "POST", { deadLetter: vars.deadLetter }),
     onSuccess: (_data, vars) => {
       invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
+    onError: (error) => notify("error", "Couldn't purge messages", String(error)),
   });
 }
 
 export function useSbCompleteDlq() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { nsId: string; entityPath: string; sequenceNumbers: string[] }) =>
       apiSend(`/api/servicebus/${vars.nsId}/entities/${vars.entityPath}/dlq/complete`, "POST", vars.sequenceNumbers),
     onSuccess: (_data, vars) => {
       invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
+    onError: (error) => notify("error", "Couldn't complete dead-letter messages", String(error)),
   });
 }
 
 export function useSbResubmitDlq() {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: {
       nsId: string;
@@ -241,5 +269,6 @@ export function useSbResubmitDlq() {
     onSuccess: (_data, vars) => {
       invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
     },
+    onError: (error) => notify("error", "Couldn't resubmit messages", String(error)),
   });
 }

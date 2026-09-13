@@ -11,7 +11,7 @@ interface ServicesTabProps {
 }
 
 const columns: Column<ServiceInfo>[] = [
-  { header: "Type", cell: (svc) => svc.type },
+  { header: "Type", cell: (svc) => svc.type, sortValue: (svc) => svc.type },
   { header: "Cluster IP", cell: (svc) => <span className="text-muted-foreground">{svc.clusterIp}</span> },
   { header: "External", cell: (svc) => (
     <span className="text-muted-foreground">
@@ -26,7 +26,7 @@ const columns: Column<ServiceInfo>[] = [
 ];
 
 export function ServicesTab({ ns, isMulti }: ServicesTabProps) {
-  const { data: services, isLoading } = useAksServices(ns);
+  const { data: services, isLoading, error } = useAksServices(ns);
   const ws = useAksWorkspace();
 
   const buildMenu = useCallback((svc: ServiceInfo): ContextMenuItem[] => [
@@ -43,10 +43,12 @@ export function ServicesTab({ ns, isMulti }: ServicesTabProps) {
     <ResourceTable
       data={services}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="service"
       tableBodyTestId="services-table-body"
       emptyMessage="No services found"
+      onRowClick={(svc) => ws.openYaml("service", svc.name, svc.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
     />

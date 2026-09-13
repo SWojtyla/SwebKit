@@ -12,6 +12,9 @@ interface NamespaceSelectorProps {
    */
   error?: string | null;
   onChange: (selected: string[]) => void;
+  /** Set on cluster-scoped tabs (e.g. GatewayClasses) where a namespace choice has no effect,
+   * so the control doesn't sit there fully live and interactive while silently doing nothing. */
+  disabledReason?: string;
 }
 
 export function NamespaceSelector({
@@ -20,6 +23,7 @@ export function NamespaceSelector({
   isLoading,
   error,
   onChange,
+  disabledReason,
 }: NamespaceSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -65,6 +69,16 @@ export function NamespaceSelector({
     setPending((prev) => (prev.includes(ns) ? prev.filter((n) => n !== ns) : [...prev, ns]));
   };
 
+  // A single namespace row applies immediately, like the adjacent context selector —
+  // no reason to make the common single-choice case wait on a separate Apply click. The
+  // checkbox itself (stopPropagation'd below) is the escape hatch for building a multi-select,
+  // which still needs the explicit Apply below since "add these 3" isn't a single atomic choice.
+  const selectSingle = (ns: string) => {
+    onChange([ns]);
+    setOpen(false);
+    setSearch("");
+  };
+
   const hasChanges = pending.length !== selected.length || pending.some((ns) => !selected.includes(ns));
   const apply = () => {
     const result = all.length > 0 && pending.length === all.length ? all : pending;
@@ -105,11 +119,11 @@ export function NamespaceSelector({
 
       <button
         type="button"
-        onClick={() => !isLoading && setOpen((v) => !v)}
-        disabled={isLoading}
+        onClick={() => !isLoading && !disabledReason && setOpen((v) => !v)}
+        disabled={isLoading || !!disabledReason}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title={display}
+        title={disabledReason ?? display}
         className="flex min-w-[14rem] max-w-[24rem] items-center justify-between rounded-md border bg-card px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
         data-testid="aks-namespace-dropdown"
       >
@@ -179,11 +193,14 @@ export function NamespaceSelector({
               return (
                 <label
                   key={ns}
+                  onClick={() => selectSingle(ns)}
                   className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent ${isSelected ? "bg-accent/40" : ""}`}
+                  title="Click to select just this namespace, or use the checkbox to build a multi-namespace selection"
                 >
                   <input
                     type="checkbox"
                     checked={isSelected}
+                    onClick={(e) => e.stopPropagation()}
                     onChange={() => toggleNs(ns)}
                     className="h-4 w-4"
                   />

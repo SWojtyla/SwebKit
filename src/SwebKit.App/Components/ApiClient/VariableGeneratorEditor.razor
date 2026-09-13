@@ -9,7 +9,6 @@
         <option value="@VariableGeneratorKind.DateTime">Timestamp</option>
         <option value="@VariableGeneratorKind.List">List pick</option>
         <option value="@VariableGeneratorKind.Faker">Fake data</option>
-        <option value="@VariableGeneratorKind.Template">Template</option>
     </AppSelect>
 
     @if (Definition.Kind == VariableGeneratorKind.Integer)
@@ -49,11 +48,6 @@
     {
         <input class="var-gen-editor__text" placeholder="one, two, three" value="@ListText"
                @oninput="e => ListText = e.Value?.ToString() ?? string.Empty" />
-    }
-    else if (Definition.Kind == VariableGeneratorKind.Template)
-    {
-        <input class="var-gen-editor__text" placeholder="@("{{firstName}}.{{lastName}}@example.com")" value="@Definition.Template"
-               @oninput="e => Definition.Template = e.Value?.ToString()" />
     }
     else
     {

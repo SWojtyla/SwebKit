@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   AksWorkspaceProvider,
   useAksWorkspace,
@@ -29,10 +28,14 @@ import { HelmDetailPanel } from "./HelmDetailPanel";
 import { PortForwardPanel } from "./PortForwardPanel";
 import { AnalysisPanel } from "./AnalysisPanel";
 import { SecretDetailPanel } from "./SecretDetailPanel";
+import { ConfigMapDetailPanel } from "./ConfigMapDetailPanel";
 import { MultiPodLogView } from "./MultiPodLogView";
 import { ContextMenu } from "./ContextMenu";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
-import { AksConfirmBar } from "./AksConfirmBar";
+import { PodShellPanel } from "./PodShellPanel";
+import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { NamespaceSelector } from "./NamespaceSelector";
 import { ContextSelector } from "./ContextSelector";
@@ -72,6 +75,11 @@ function AksPageContent() {
           onChange={ws.setSelectedNamespaces}
           isLoading={ws.nsLoading}
           error={ws.nsError}
+          disabledReason={
+            ws.activeTab === "gatewayclasses"
+              ? "Not applicable — GatewayClasses are cluster-scoped, not namespaced"
+              : undefined
+          }
         />
 
         {ws.contextLoading && (
@@ -114,7 +122,13 @@ function AksPageContent() {
               </option>
             ))}
           </select>
-          <LastRefreshed at={ws.lastRefreshedAt} isFetching={ws.isAksFetching} paused={ws.autoRefreshPaused} />
+          <LastRefreshed
+            at={ws.lastRefreshedAt}
+            isFetching={ws.isAksFetching}
+            paused={ws.autoRefreshPaused}
+            pausedReason="Auto-refresh is held while a detail panel is open"
+            testId="aks-last-refreshed"
+          />
           <button
             onClick={ws.handleManualRefresh}
             disabled={!ws.namespaceToken}
@@ -152,11 +166,15 @@ function AksPageContent() {
       </div>
 
       {ws.pendingConfirm && (
-        <AksConfirmBar
+        <ConfirmBar
           message={ws.pendingConfirm.message}
           requireTypedName={ws.pendingConfirm.requireTypedName}
           onConfirm={ws.pendingConfirm.onConfirm}
           onCancel={() => ws.setPendingConfirm(null)}
+          testId="aks-confirm-bar"
+          confirmTestId="aks-confirm-yes"
+          cancelTestId="aks-confirm-cancel"
+          typedNameTestId="aks-confirm-typed-name"
         />
       )}
 
@@ -291,6 +309,7 @@ function AksPageContent() {
                   ns={ws.namespaceToken}
                   selectedPod={ws.selectedPod?.name ?? null}
                   context={ws.currentContext}
+                  pods={ws.allPods}
                 />
               )}
               {ws.activeTab === "analysis" && <AnalysisPanel ns={ws.namespaceToken} />}
@@ -312,8 +331,28 @@ function AksPageContent() {
               ns={ws.selectedPod.namespace}
               onClose={() => ws.setPodKey(null)}
               onViewYaml={() => ws.openYaml("pod", ws.selectedPod!.name, ws.selectedPod!.namespace)}
+              onOpenShell={() => ws.setShellPod(ws.selectedPod)}
+              onPortForward={() => ws.openPortForward(ws.selectedPod!)}
+              onAskAi={() => ws.setAskAiPod(ws.selectedPod)}
             />
           </ResizablePanel>
+        )}
+        {ws.shellPod && (
+          <PodShellPanel
+            namespace={ws.shellPod.namespace}
+            pod={ws.shellPod.name}
+            container={ws.shellPod.containers[0] ?? null}
+            context={ws.currentContext}
+            onClose={() => ws.setShellPod(null)}
+          />
+        )}
+        {ws.askAiPod && (
+          <ContextualAssistant
+            featureArea="Aks"
+            title={`pod ${ws.askAiPod.name}`}
+            selection={{ namespace: ws.askAiPod.namespace, pod: ws.askAiPod.name }}
+            onClose={() => ws.setAskAiPod(null)}
+          />
         )}
         {ws.yamlResource && (
           <ResizablePanel
@@ -358,6 +397,17 @@ function AksPageContent() {
             <SecretDetailPanel secret={ws.selectedSecret} onClose={() => ws.setSelectedSecret(null)} />
           </ResizablePanel>
         )}
+        {ws.selectedConfigMap && (
+          <ResizablePanel
+            storageKey="aks-configmap-detail"
+            defaultWidth={620}
+            minWidth={320}
+            maxWidth={1200}
+            showHeader={false}
+          >
+            <ConfigMapDetailPanel configMap={ws.selectedConfigMap} onClose={() => ws.setSelectedConfigMap(null)} />
+          </ResizablePanel>
+        )}
         {ws.showMultiPodLogs && ws.multiPodNamespace && (
           <ResizablePanel
             storageKey="aks-multi-pod-logs"
@@ -400,51 +450,5 @@ function AksPageContent() {
         />
       )}
     </div>
-  );
-}
-
-/**
- * "Updated 12s ago" next to the refresh controls. Without it, auto-refresh is
- * invisible — the tables are usually identical between ticks, so there was no way
- * to tell a working refresh from a broken one (and for a while it *was* broken:
- * see `lib/aks-query-keys.ts`).
- *
- * Fixed-width and `tabular-nums` so the counter ticking does not nudge the
- * toolbar buttons.
- */
-function LastRefreshed({
-  at,
-  isFetching,
-  paused,
-}: {
-  at: number | null;
-  isFetching: boolean;
-  paused: boolean;
-}) {
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    if (at === null) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, [at]);
-
-  const label = (() => {
-    if (isFetching) return "refreshing…";
-    if (paused) return "auto paused";
-    if (at === null) return "";
-    const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
-    if (seconds < 60) return `updated ${seconds}s ago`;
-    return `updated ${Math.floor(seconds / 60)}m ago`;
-  })();
-
-  return (
-    <span
-      className="w-[7.5rem] shrink-0 truncate text-right text-xs tabular-nums text-muted-foreground"
-      title={paused ? "Auto-refresh is held while a detail panel is open" : label || undefined}
-      data-testid="aks-last-refreshed"
-    >
-      {label}
-    </span>
   );
 }

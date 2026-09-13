@@ -37,10 +37,11 @@ import type {
 
 // ── AKS / Kubernetes ─────────────────────────────────────────────────────────
 
-export function useAksTestConnection() {
+export function useAksTestConnection(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["aks-test"],
     queryFn: () => apiFetch<{ connected: boolean; error?: string }>("/api/aks/test"),
+    enabled: options?.enabled ?? true,
   });
 }
 

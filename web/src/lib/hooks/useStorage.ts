@@ -1,5 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { apiFetch, apiSend, apiUpload } from "../api";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
   StorageContainerItem,
   StorageBlobPage,
@@ -11,6 +12,17 @@ import type {
 } from "../types";
 
 // ── Storage hooks ─────────────────────────────────────────────────────────────
+
+/** Mirrors `useAksTestConnection`/`useSbTestConnection` — the sidecar endpoint already
+ * existed (`GET /api/storage/{accountId}/test`) but had no frontend hook until Settings
+ * needed a "Test connection" button for it. */
+export function useStorageTestConnection(accountId: string | null, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["storage", accountId, "test"],
+    queryFn: () => apiFetch<{ connected: boolean; error?: string }>(`/api/storage/${accountId}/test`),
+    enabled: !!accountId && (options?.enabled ?? true),
+  });
+}
 
 export function useStorageContainers(accountId: string | null) {
   return useQuery({
@@ -29,6 +41,12 @@ export function useStorageBlobs(accountId: string | null, container: string | nu
       return apiFetch<StorageBlobPage>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs?${params}`);
     },
     enabled: !!accountId && !!container,
+    // 6.5 fix: each "Load more" click changes `continuationToken`, which is part of the
+    // query key — without this, that's a brand-new query with no data yet, so `isLoading`
+    // flips true and flashes a "Loading blobs..." banner over the already-populated list
+    // for the duration of the fetch. Keeping the previous page's data as placeholder data
+    // means the list stays visible (and `isLoading` stays false) while the next page loads.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -99,6 +117,7 @@ export function useBlobVersionComparison(
 
 export function useUploadBlob(accountId: string | null, container: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: ({ blobName, file, onProgress }: { blobName: string; file: File; onProgress?: (percent: number) => void }) =>
       apiUpload(
@@ -109,22 +128,26 @@ export function useUploadBlob(accountId: string | null, container: string | null
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs"] });
     },
+    onError: (error) => notify("error", "Couldn't upload blob", String(error)),
   });
 }
 
 export function useCopyBlob(accountId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: ({ sourceContainer, sourceBlob, destContainer, destBlob, overwrite }: { sourceContainer: string; sourceBlob: string; destContainer: string; destBlob: string; overwrite: boolean }) =>
       apiSend(`/api/storage/${accountId}/copy`, "POST", { sourceContainer, sourceBlob, destContainer, destBlob, overwrite }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["storage", accountId] });
     },
+    onError: (error) => notify("error", "Couldn't copy blob", String(error)),
   });
 }
 
 export function useRestoreBlobVersion(accountId: string | null, container: string | null, blobName: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (versionId: string) =>
       apiSend<BlobRecoveryResult>(
@@ -135,6 +158,7 @@ export function useRestoreBlobVersion(accountId: string | null, container: strin
       qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs", blobName] });
       qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs"] });
     },
+    onError: (error) => notify("error", "Couldn't restore blob version", String(error)),
   });
 }
 
@@ -148,17 +172,20 @@ export function useDeletedBlobs(accountId: string | null, container: string | nu
 
 export function useSetBlobMetadata(accountId: string | null, container: string | null, blobName: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (metadata: Record<string, string>) =>
       apiSend<BlobMutationResult>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/metadata?${new URLSearchParams({ blobName: blobName! })}`, "POST", metadata),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "properties"] });
     },
+    onError: (error) => notify("error", "Couldn't save blob metadata", String(error)),
   });
 }
 
 export function useUndeleteBlob(accountId: string | null, container: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (blobName: string) =>
       apiSend<BlobRecoveryResult>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/undelete?${new URLSearchParams({ blobName })}`, "POST"),
@@ -166,5 +193,6 @@ export function useUndeleteBlob(accountId: string | null, container: string | nu
       qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "deleted-blobs"] });
       qc.invalidateQueries({ queryKey: ["storage", accountId, "containers", container, "blobs"] });
     },
+    onError: (error) => notify("error", "Couldn't restore deleted blob", String(error)),
   });
 }

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   useProfile,
   useUpdateProfile,
   useWorkspaceTopologyCandidates,
   useWorkspaceTopologySuggestions,
 } from "@/lib/hooks";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import type { WorkspaceResourceArea, WorkspaceResourceNode, WorkspaceTopology } from "@/lib/types";
 
 const AREA_LABELS: Record<WorkspaceResourceArea, string> = {
@@ -34,6 +35,11 @@ export function WorkspaceMapSettings() {
   // "accepted"/"dismissed" bookkeeping was scoped for this module, unlike Module 4's proactive
   // insights, which do need durable de-dup). A reload brings dismissed suggestions back.
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
+  // Every other Settings section confirms before removing a configured item (Batch 8.7); a
+  // map node/relationship is always "configured" the moment it exists (there's no blank
+  // placeholder state like a freshly-added namespace), so both removals always confirm here.
+  const [pendingRemoveNodeId, setPendingRemoveNodeId] = useState<string | null>(null);
+  const [pendingRemoveRelId, setPendingRemoveRelId] = useState<string | null>(null);
 
   if (!profile) return null;
 
@@ -78,6 +84,9 @@ export function WorkspaceMapSettings() {
   const removeRelationship = (id: string) => {
     save({ relationships: topology.relationships.filter((r) => r.id !== id) });
   };
+
+  const relationshipCountFor = (nodeId: string) =>
+    topology.relationships.filter((r) => r.fromNodeId === nodeId || r.toNodeId === nodeId).length;
 
   const isAdded = (area: WorkspaceResourceArea, resourceKey: string) =>
     topology.nodes.some((n) => n.area === area && n.resourceKey === resourceKey);
@@ -127,13 +136,34 @@ export function WorkspaceMapSettings() {
                 <div className="mb-2 text-xs font-semibold uppercase text-muted-foreground">{AREA_LABELS[area]}</div>
                 <ul className="space-y-1">
                   {areaNodes.map((node) => (
-                    <li key={node.id} className="flex items-center justify-between text-sm" data-testid={`workspace-node-${node.id}`}>
-                      <span>
-                        {node.displayLabel} <span className="text-muted-foreground">({node.resourceKey})</span>
-                      </span>
-                      <button onClick={() => removeNode(node.id)} className="text-xs text-destructive hover:opacity-80">
-                        Remove
-                      </button>
+                    <li key={node.id} className="space-y-1" data-testid={`workspace-node-${node.id}`}>
+                      <div className="flex items-center justify-between text-sm">
+                        <span>
+                          {node.displayLabel} <span className="text-muted-foreground">({node.resourceKey})</span>
+                        </span>
+                        <button
+                          onClick={() => setPendingRemoveNodeId(node.id)}
+                          className="text-xs text-destructive hover:opacity-80"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      {pendingRemoveNodeId === node.id && (
+                        <ConfirmBar
+                          message={
+                            relationshipCountFor(node.id) > 0
+                              ? `Remove "${node.displayLabel}"? This also removes ${relationshipCountFor(node.id)} relationship(s) that reference it.`
+                              : `Remove "${node.displayLabel}" from the workspace map?`
+                          }
+                          confirmLabel="Remove"
+                          onConfirm={() => {
+                            removeNode(node.id);
+                            setPendingRemoveNodeId(null);
+                          }}
+                          onCancel={() => setPendingRemoveNodeId(null)}
+                          testId={`workspace-node-remove-confirm-${node.id}`}
+                        />
+                      )}
                     </li>
                   ))}
                   {areaCandidates.map((candidate) => (
@@ -257,16 +287,37 @@ export function WorkspaceMapSettings() {
             </thead>
             <tbody>
               {topology.relationships.map((rel) => (
-                <tr key={rel.id} data-testid={`workspace-relationship-${rel.id}`}>
-                  <td className="py-1">{nodeLabel(rel.fromNodeId)}</td>
-                  <td className="py-1 text-muted-foreground">{rel.label ?? "—"}</td>
-                  <td className="py-1">{nodeLabel(rel.toNodeId)}</td>
-                  <td className="py-1 text-right">
-                    <button onClick={() => removeRelationship(rel.id)} className="text-xs text-destructive hover:opacity-80">
-                      Remove
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={rel.id}>
+                  <tr data-testid={`workspace-relationship-${rel.id}`}>
+                    <td className="py-1">{nodeLabel(rel.fromNodeId)}</td>
+                    <td className="py-1 text-muted-foreground">{rel.label ?? "—"}</td>
+                    <td className="py-1">{nodeLabel(rel.toNodeId)}</td>
+                    <td className="py-1 text-right">
+                      <button
+                        onClick={() => setPendingRemoveRelId(rel.id)}
+                        className="text-xs text-destructive hover:opacity-80"
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                  {pendingRemoveRelId === rel.id && (
+                    <tr>
+                      <td colSpan={4} className="p-0">
+                        <ConfirmBar
+                          message={`Remove the "${nodeLabel(rel.fromNodeId)} → ${nodeLabel(rel.toNodeId)}" relationship?`}
+                          confirmLabel="Remove"
+                          onConfirm={() => {
+                            removeRelationship(rel.id);
+                            setPendingRemoveRelId(null);
+                          }}
+                          onCancel={() => setPendingRemoveRelId(null)}
+                          testId={`workspace-relationship-remove-confirm-${rel.id}`}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

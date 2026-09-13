@@ -12,7 +12,7 @@ interface DeploymentsTabProps {
 }
 
 export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
-  const { data: deployments, isLoading } = useAksDeployments(ns);
+  const { data: deployments, isLoading, error } = useAksDeployments(ns);
   const ws = useAksWorkspace();
   const restartMutation = useAksRestartDeployment();
   const scaleMutation = useAksScaleDeployment();
@@ -56,8 +56,6 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
       if (pods.length > 0) ws.openContainerDetails(pods[0].name, pods[0].namespace);
     } },
     { label: "Analyze network", icon: "📶", onClick: () => ws.navigateToAnalysis() },
-    { label: "Probe failures", icon: "🚧", onClick: () => {}, disabled: true },
-    { label: "Placement", icon: "📍", onClick: () => {}, disabled: true },
     { label: "", separator: true, onClick: () => {} },
     { label: "Restart Deployment", icon: "↻", onClick: () => restart(dep) },
     { label: "Scale...", icon: "⇳", onClick: () => setScaleTarget(dep) },
@@ -73,8 +71,8 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
       <span className={dep.readyReplicas === dep.replicas ? "text-success" : "text-warning"}>
         {dep.readyReplicas}/{dep.replicas}
       </span>
-    )},
-    { header: "Status", cell: (dep) => <StatusBadge status={dep.status} /> },
+    ), sortValue: (dep) => (dep.readyReplicas === dep.replicas ? 1 : 0) },
+    { header: "Status", cell: (dep) => <StatusBadge status={dep.status} />, sortValue: (dep) => dep.status },
     { header: "Image", cell: (dep) => <span className="text-muted-foreground">{dep.imageTag ?? "—"}</span> },
     {
       header: "Actions",
@@ -105,11 +103,14 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
       <ResourceTable
         data={deployments}
         isLoading={isLoading}
+        error={error}
         isMulti={isMulti}
         testIdPrefix="deployment"
         tableBodyTestId="deployments-table-body"
         emptyMessage="No deployments found"
+        onRowClick={(dep) => ws.openYaml("deployment", dep.name, dep.namespace)}
         onRowContextMenu={handleRowContextMenu}
+        defaultSort={{ sortValue: (dep) => (dep.readyReplicas === dep.replicas ? 1 : 0), direction: "asc" }}
         columns={columns}
       />
 

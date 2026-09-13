@@ -40,13 +40,37 @@ public sealed class VariableGeneratorServiceTests
         Assert.Contains("min", result.Warning);
     }
 
-    [Fact]
-    public void Generate_FakerFirstName_ReturnsValue()
+    [Theory]
+    [InlineData("person.firstName")]
+    [InlineData("person.lastName")]
+    [InlineData("person.fullName")]
+    [InlineData("person.jobTitle")]
+    [InlineData("internet.email")]
+    [InlineData("internet.username")]
+    [InlineData("internet.url")]
+    [InlineData("internet.ip")]
+    [InlineData("phone.number")]
+    [InlineData("company.name")]
+    [InlineData("company.catchPhrase")]
+    [InlineData("address.city")]
+    [InlineData("address.streetAddress")]
+    [InlineData("address.zipCode")]
+    [InlineData("address.country")]
+    [InlineData("address.fullAddress")]
+    [InlineData("lorem.word")]
+    [InlineData("lorem.sentence")]
+    [InlineData("lorem.paragraph")]
+    [InlineData("commerce.productName")]
+    [InlineData("commerce.price")]
+    [InlineData("date.past")]
+    [InlineData("date.future")]
+    [InlineData("date.recent")]
+    public void Generate_FakerCategory_ReturnsValue(string category)
     {
         var result = new VariableGeneratorService().Generate(new VariableGeneratorDefinition
         {
             Kind = VariableGeneratorKind.Faker,
-            FakerCategory = "person.firstName",
+            FakerCategory = category,
         }, new Dictionary<string, string?>());
 
         Assert.True(result.IsSuccess, result.Warning);
@@ -54,20 +78,16 @@ public sealed class VariableGeneratorServiceTests
     }
 
     [Fact]
-    public void Generate_Template_ComposesScopeValues()
+    public void Generate_UnknownFakerCategory_ReturnsWarning()
     {
         var result = new VariableGeneratorService().Generate(new VariableGeneratorDefinition
         {
-            Kind = VariableGeneratorKind.Template,
-            Template = "{{first}}.{{last}}@example.com",
-        }, new Dictionary<string, string?>
-        {
-            ["first"] = "nora",
-            ["last"] = "swift",
-        });
+            Kind = VariableGeneratorKind.Faker,
+            FakerCategory = "address.city.does-not-exist",
+        }, new Dictionary<string, string?>());
 
-        Assert.True(result.IsSuccess, result.Warning);
-        Assert.Equal("nora.swift@example.com", result.Value);
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Unsupported faker category", result.Warning);
     }
 
     [Fact]

@@ -18,11 +18,11 @@ const columns: Column<IngressInfo>[] = [
   { header: "Addresses", cell: (ing) => (
     <span className="text-xs text-muted-foreground">{ing.addresses.length > 0 ? ing.addresses.join(", ") : "—"}</span>
   )},
-  { header: "Rules", cell: (ing) => <span className="text-xs text-muted-foreground">{ing.rules.length} rule(s)</span> },
+  { header: "Rules", cell: (ing) => <span className="text-xs text-muted-foreground">{ing.rules.length} rule(s)</span>, sortValue: (ing) => ing.rules.length },
 ];
 
 export function IngressesTab({ ns, isMulti }: IngressesTabProps) {
-  const { data: ingresses, isLoading } = useAksIngresses(ns);
+  const { data: ingresses, isLoading, error } = useAksIngresses(ns);
   const ws = useAksWorkspace();
   const deleteIngress = useAksDeleteIngress();
 
@@ -55,10 +55,12 @@ export function IngressesTab({ ns, isMulti }: IngressesTabProps) {
     <ResourceTable
       data={ingresses}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="ingress"
       tableBodyTestId="ingresses-table-body"
       emptyMessage="No ingresses found"
+      onRowClick={(ing) => ws.openYaml("ingress", ing.name, ing.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
     />

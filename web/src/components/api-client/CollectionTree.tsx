@@ -9,6 +9,9 @@ import type { ApiCollection, ApiCollectionNode } from "@/lib/types";
 import {
   DEMO_COLLECTION_ID,
   resolveDropTarget,
+  filterNodes,
+  flattenTree,
+  collectExpandedFolderIds,
   type FlatRow,
   type MoveNodeTarget,
   type MoveCollectionTarget,
@@ -32,27 +35,6 @@ interface CollectionTreeProps {
   onExportCollection: (collectionId: string) => void;
 }
 
-function matchesSearch(node: ApiCollectionNode, query: string): boolean {
-  if (!query) return true;
-  const q = query.toLowerCase();
-  if (node.name.toLowerCase().includes(q)) return true;
-  if (node.type === "Request" && node.request) {
-    if (node.request.url.toLowerCase().includes(q)) return true;
-    if (node.request.method.toLowerCase().includes(q)) return true;
-  }
-  if (node.type === "Folder") {
-    return node.children.some((c) => matchesSearch(c, q));
-  }
-  return false;
-}
-
-function filterNodes(nodes: ApiCollectionNode[], query: string): ApiCollectionNode[] {
-  if (!query) return nodes;
-  return nodes
-    .filter((n) => matchesSearch(n, query))
-    .map((n) => (n.type === "Folder" ? { ...n, children: filterNodes(n.children, query) } : n));
-}
-
 interface ContextMenuState {
   x: number;
   y: number;
@@ -60,50 +42,6 @@ interface ContextMenuState {
   collectionId: string;
   isCollection: boolean;
   nodeType: "Folder" | "Request";
-}
-
-function collectionRootNode(collection: ApiCollection): ApiCollectionNode {
-  return {
-    id: collection.id,
-    type: "Folder",
-    name: collection.name,
-    isExpanded: true,
-    children: collection.nodes,
-    defaultAuth: collection.defaultAuth,
-    request: null,
-  };
-}
-
-function flattenTree(filteredCollections: ApiCollection[], expandedIds: Set<string>): FlatRow[] {
-  const rows: FlatRow[] = [];
-
-  function walk(nodes: ApiCollectionNode[], collectionId: string, depth: number) {
-    for (const n of nodes) {
-      rows.push({ id: n.id, node: n, collectionId, depth, isCollection: false });
-      if (n.type === "Folder" && expandedIds.has(n.id)) {
-        walk(n.children, collectionId, depth + 1);
-      }
-    }
-  }
-
-  for (const c of filteredCollections) {
-    const root = collectionRootNode(c);
-    rows.push({ id: c.id, node: root, collectionId: c.id, depth: 0, isCollection: true });
-    if (expandedIds.has(c.id)) {
-      walk(c.nodes, c.id, 1);
-    }
-  }
-
-  return rows;
-}
-
-function collectExpandedFolderIds(nodes: ApiCollectionNode[], into: Set<string>) {
-  for (const n of nodes) {
-    if (n.type === "Folder") {
-      if (n.isExpanded) into.add(n.id);
-      collectExpandedFolderIds(n.children, into);
-    }
-  }
 }
 
 export function CollectionTree({
@@ -181,8 +119,12 @@ export function CollectionTree({
     setExpandedIds(all);
   };
 
+  /** Actually empties the expanded set — collapsing every collection root and
+   *  folder alike. The previous body force-*expanded* every collection root
+   *  (seeding the new set from `collections`) while only clearing nested
+   *  folders, the opposite of what "Collapse all" says it does. */
   const collapseAll = () => {
-    setExpandedIds(new Set(collections.map((c) => c.id)));
+    setExpandedIds(new Set());
   };
 
   const startRename = (nodeId: string, currentName: string, collectionId: string) => {
@@ -317,9 +259,13 @@ export function CollectionTree({
     [collections, search],
   );
 
+  // While searching, every folder that survived `filterNodes` is guaranteed to
+  // contain a match — render all of them expanded regardless of the user's
+  // persisted collapse state, so a match inside a collapsed folder is never
+  // silently hidden.
   const flatRows = useMemo(
-    () => flattenTree(filteredCollections, expandedIds),
-    [filteredCollections, expandedIds],
+    () => flattenTree(filteredCollections, expandedIds, Boolean(search)),
+    [filteredCollections, expandedIds, search],
   );
 
   const virtualizer = useVirtualizer({
@@ -395,7 +341,10 @@ export function CollectionTree({
 
   const renderRow = (row: FlatRow, rowIndex: number) => {
     const { node, collectionId, depth, isCollection } = row;
-    const isExpanded = expandedIds.has(node.id);
+    // Matches `flattenTree`'s own forced-expand-during-search rule so the
+    // chevron never shows "collapsed" for a folder whose matching children
+    // are actually rendered open below it.
+    const isExpanded = Boolean(search) || expandedIds.has(node.id);
     const isSelected = selectedNodeId === node.id;
     const isRenaming = renamingId === node.id;
     const method = node.type === "Request" && node.request ? node.request.method : null;
@@ -505,7 +454,7 @@ export function CollectionTree({
         {!isRenaming && (
           <button
             data-testid={`node-menu-${node.id}`}
-            className="p-0.5 opacity-0 hover:bg-accent-foreground/10 group-hover:opacity-100"
+            className="p-0.5 opacity-0 hover:bg-accent-foreground/10 group-hover:opacity-100 focus-visible:opacity-100"
             onClick={(e) => {
               e.stopPropagation();
               handleContextMenu(e, node.id, collectionId, isCollection, node.type);

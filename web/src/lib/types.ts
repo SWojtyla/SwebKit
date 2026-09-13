@@ -73,8 +73,15 @@ export interface ServiceBusNamespace {
    * this as an enum, and an unknown value fails the whole profile save. This said
    * `"Entra"`, which is not a member, so selecting Entra ID in Settings was rejected and
    * silently reverted. Entra ID auth is `DefaultAzureCredential`.
+   *
+   * The C# enum also has a `ServicePrincipal` member, but no code path (UI or sidecar
+   * connection factory) actually implements it — the active connection factory only
+   * branches on `ConnectionString` vs. everything else falling through to
+   * `DefaultAzureCredential`, so selecting it would silently behave like Entra ID with no
+   * indication why. Deliberately omitted here until it's really wired up end to end; add it
+   * back only alongside real client id/secret (or cert) fields and sidecar support.
    */
-  authMode: "DefaultAzureCredential" | "ConnectionString" | "ServicePrincipal";
+  authMode: "DefaultAzureCredential" | "ConnectionString";
   credentialKey: string;
   transportType: "Amqp" | "AmqpWebSockets";
   createdAt: string;
@@ -426,8 +433,7 @@ export type VariableGeneratorKind =
   | "Guid"
   | "DateTime"
   | "List"
-  | "Faker"
-  | "Template";
+  | "Faker";
 
 export interface VariableGeneratorDefinition {
   kind: VariableGeneratorKind;
@@ -438,7 +444,6 @@ export interface VariableGeneratorDefinition {
   decimalPlaces?: number;
   trueWeightPercent?: number | null;
   fakerCategory?: string | null;
-  template?: string | null;
   values?: string[];
 }
 
@@ -1009,6 +1014,9 @@ export interface AgentChatStep {
   toolName?: string;
   summary?: string;
   elapsed?: string;
+  /** True for a "tool_result" step whose tool call failed (ux-interaction-consistency unit 7.4) —
+   * always false/absent for "tool_call" steps. */
+  isFailure?: boolean;
 }
 
 export interface AgentReply {
@@ -1100,6 +1108,11 @@ export interface ChatMessage {
   steps?: AgentChatStep[];
   /** True if this reply's turn triggered rolling summarization of older history (Module 5). */
   summarized?: boolean;
+  /** True when the user clicked "Stop" mid-stream (ux-interaction-consistency unit 7.3) —
+   * rendered as a neutral "Stopped" notice rather than the red error state `error` produces, since
+   * this was a deliberate user action, not a failure. Whatever partial `content` had already
+   * streamed in is preserved, not overwritten. */
+  stopped?: boolean;
 }
 
 export interface ContainerDetail {

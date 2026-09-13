@@ -20,6 +20,17 @@ public sealed class AgentChatStep
 
     /// <summary>Elapsed time for this step.</summary>
     public TimeSpan Elapsed { get; init; }
+
+    /// <summary>
+    /// True for a "tool_result" step whose underlying tool call failed — every tool in
+    /// <c>SwebKit.Agents.Tools</c> already reports failure the same way (a top-level JSON
+    /// <c>"error"</c> property in its string result, e.g. <c>{"error":"..."}</c>), so this doesn't
+    /// add a new failure-reporting mechanism, only surfaces that existing convention to the UI
+    /// (ux-interaction-consistency unit 7.4) instead of leaving a failed data source indistinguishable
+    /// from a successful one behind the "Show reasoning" disclosure. Always <see langword="false"/>
+    /// for "tool_call" steps.
+    /// </summary>
+    public bool IsFailure { get; init; }
 }
 
 /// <summary>

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
+import { usePendingActionsFeed } from "@/lib/hooks/useAgent";
 import { AgentMarkdown } from "./AgentMarkdown";
-import { AgentVisualizationPanel } from "./AgentVisualizationPanel";
+import { AgentVisualizationPanel, parseVisualBlocks } from "./AgentVisualizationPanel";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
-import { PendingActionCard } from "./PendingActionCard";
+import { PendingActionCard, PendingActionExpiredNotice } from "./PendingActionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
@@ -38,8 +39,9 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
   const [showVisuals, setShowVisuals] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { messages, send, isStreaming, clear, isClearPending, status, pendingApprovals } =
+  const { messages, send, isStreaming, cancel, toolStatus, clear, isClearPending, status } =
     useGlobalAgentConversation();
+  const { feed: pendingActionFeed, dismissExpired } = usePendingActionsFeed();
 
   const lastAssistantContent = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -47,6 +49,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
     }
     return "";
   }, [messages]);
+  const visualCount = useMemo(() => parseVisualBlocks(lastAssistantContent).length, [lastAssistantContent]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -83,7 +86,16 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
       <div className="flex h-full flex-col overflow-hidden">
         <div className="flex items-center justify-between border-b px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold" data-testid="global-agent-panel-title">AI Agent</h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-sm font-semibold" data-testid="global-agent-panel-title">AI Agent</h2>
+            <span
+              className="cursor-not-allowed rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
+              data-testid="global-agent-panel-mode-indicator"
+              title="This conversation can only answer questions. Open a contextual &quot;Ask AI&quot; panel from a feature page to propose actions like scale, delete, or resubmit."
+            >
+              Ask only
+            </span>
+          </div>
           <p className="text-xs text-muted-foreground" data-testid="global-agent-panel-history-count">
             {status.data?.historyCount ?? 0} messages in history
             {status.data && status.data.estimatedTokens > 0 && (
@@ -118,9 +130,16 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
             <>
               <button
                 onClick={() => setShowVisuals((v) => !v)}
-                disabled={!lastAssistantContent}
+                disabled={visualCount === 0}
                 className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50 ${showVisuals ? "bg-accent" : ""}`}
                 data-testid="global-agent-panel-toggle-visuals"
+                title={
+                  visualCount === 0
+                    ? "No visuals in the latest response"
+                    : showVisuals
+                      ? "Close visualization workspace"
+                      : "Open visualization workspace"
+                }
               >
                 <BarChart3 className="h-3 w-3" /> Visualize
               </button>
@@ -144,11 +163,19 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
         </div>
       </div>
 
-      {pendingApprovals.data && pendingApprovals.data.length > 0 && (
+      {pendingActionFeed.length > 0 && (
         <div className="space-y-2 border-b px-4 py-3" data-testid="global-agent-panel-pending-actions">
-          {pendingApprovals.data.map((action) => (
-            <PendingActionCard key={action.id} action={action} />
-          ))}
+          {pendingActionFeed.map((item) =>
+            item.expired ? (
+              <PendingActionExpiredNotice
+                key={item.action.id}
+                action={item.action}
+                onDismiss={() => dismissExpired(item.action.id)}
+              />
+            ) : (
+              <PendingActionCard key={item.action.id} action={item.action} />
+            ),
+          )}
         </div>
       )}
 
@@ -179,12 +206,19 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
               )}
               {msg.role === "assistant" && msg.steps && <AgentReasoningTrace steps={msg.steps} />}
               {msg.role === "assistant" && msg.summarized && <AgentSummarizedNotice />}
+              {msg.role === "assistant" && msg.stopped && (
+                <div className="mt-1 text-xs italic text-muted-foreground" data-testid="global-agent-panel-stopped-notice">
+                  Stopped by user.
+                </div>
+              )}
             </div>
           </div>
         ))}
         {isStreaming && messages[messages.length - 1]?.content === "" && (
           <div className="flex justify-start" data-testid="global-agent-panel-loading">
-            <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">Thinking…</div>
+            <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+              {toolStatus ? `Thinking… (${toolStatus})` : "Thinking…"}
+            </div>
           </div>
         )}
       </div>
@@ -210,14 +244,24 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
             disabled={isStreaming}
             data-testid="global-agent-panel-input"
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || isStreaming}
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            data-testid="global-agent-panel-send"
-          >
-            Send
-          </button>
+          {isStreaming ? (
+            <button
+              onClick={cancel}
+              className="rounded-md border border-destructive/40 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10"
+              data-testid="global-agent-panel-stop"
+            >
+              Stop
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              data-testid="global-agent-panel-send"
+            >
+              Send
+            </button>
+          )}
         </div>
       </div>
       </div>

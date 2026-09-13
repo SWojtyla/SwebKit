@@ -2,9 +2,18 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, Sparkles } from "lucide-react";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
-import { useProfile, useSbPeekMessages, useSbPeekDlq, useSbEntityStats } from "@/lib/hooks";
+import {
+  useProfile,
+  useSbPeekMessages,
+  useSbPeekDlq,
+  useSbEntityStats,
+  useSbPurgeMessages,
+  invalidateServiceBusQueries,
+} from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { useNotification } from "@/components/layout/NotificationSystem";
+import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { EntityTree } from "./EntityTree";
 import { MessageList } from "./MessageList";
 import { MessageDetail } from "./MessageDetail";
@@ -40,7 +49,10 @@ export function ServiceBusPage() {
   const [showEntityPalette, setShowEntityPalette] = useState(false);
   const [showBatchReplay, setShowBatchReplay] = useState(false);
   const [showEntityTree, setShowEntityTree] = useState(true);
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const queryClient = useQueryClient();
+  const { notify } = useNotification();
+  const purgeMutation = useSbPurgeMessages();
 
   const namespaces = profile?.serviceBusNamespaces ?? [];
 
@@ -144,12 +156,14 @@ export function ServiceBusPage() {
   const [lastSeq, setLastSeq] = useState<number | null>(null);
   const [lastBatchLength, setLastBatchLength] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
 
   useEffect(() => {
     if (peekData) {
       setMessageWindow(peekData);
       setLastSeq(maxSequenceNumber(peekData));
       setLastBatchLength(peekData.length);
+      setLastRefreshedAt(Date.now());
     }
   }, [peekData]);
 
@@ -213,8 +227,26 @@ export function ServiceBusPage() {
     if (action === "peek-active") setViewMode("active");
     if (action === "peek-dlq") setViewMode("dlq");
     if (action === "send") setComposerMode("compose");
-    if (action === "refresh") queryClient.invalidateQueries({ queryKey: ["sb-"] });
-  }, [queryClient, setSelectedEntity, setViewMode]);
+    // `invalidateQueries({ queryKey: ["sb-"] })` matched nothing — TanStack Query compares key
+    // elements, not string prefixes, and every real key here is ["sb-peek", nsId, entityPath, …]
+    // and friends. Reuse the real key set instead of re-deriving it.
+    if (action === "refresh" && selectedNsId) {
+      invalidateServiceBusQueries(queryClient, selectedNsId, entity.entityPath);
+    }
+    // Previously fell through every branch — presented as a working destructive action while
+    // doing nothing. Routes through the same entity-level confirm as the toolbar's Purge All.
+    if (action === "purge") setShowPurgeConfirm(true);
+  }, [queryClient, selectedNsId, setSelectedEntity, setViewMode]);
+
+  const onPurgeAll = useCallback(() => {
+    if (!selectedNsId || !selectedEntity) return;
+    const scope = viewMode === "dlq" ? "dead-lettered" : "active";
+    purgeMutation.mutate(
+      { nsId: selectedNsId, entityPath: selectedEntity.entityPath, deadLetter: viewMode === "dlq" },
+      { onSuccess: () => notify("success", `Purged all ${scope} messages`) },
+    );
+    setShowPurgeConfirm(false);
+  }, [selectedNsId, selectedEntity, viewMode, purgeMutation, notify]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -377,7 +409,7 @@ export function ServiceBusPage() {
             />
           )}
           {selectedEntity && (
-            <div className="flex border-b">
+            <div className="flex items-center border-b">
               <button
                 data-testid="sb-view-active"
                 onClick={() => setViewMode("active")}
@@ -400,7 +432,37 @@ export function ServiceBusPage() {
               >
                 DLQ {selectedEntity.stats && `(${selectedEntity.stats.deadLetterMessageCount})`}
               </button>
+              {/* Entity-level scope — purges every message in the current view, not one message.
+                  Lives in this toolbar rather than in the per-message action row (MessageDetail)
+                  so its all-messages blast radius isn't visually confused with the per-message
+                  Complete/Resubmit buttons next to it there. */}
+              <button
+                data-testid="sb-purge-all-button"
+                onClick={() => setShowPurgeConfirm(true)}
+                disabled={purgeMutation.isPending}
+                className="shrink-0 border-l px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                title={`Purge all ${viewMode === "dlq" ? "dead-lettered" : "active"} messages in this entity — cannot be undone`}
+              >
+                Purge All
+              </button>
             </div>
+          )}
+          {showPurgeConfirm && selectedEntity && (
+            <ConfirmBar
+              message={
+                <>
+                  Purge all {viewMode === "dlq" ? "dead-lettered" : "active"} messages from{" "}
+                  <strong>{selectedEntity.entityPath}</strong>? This cannot be undone.
+                </>
+              }
+              confirmLabel="Purge"
+              confirmDisabled={purgeMutation.isPending}
+              onConfirm={onPurgeAll}
+              onCancel={() => setShowPurgeConfirm(false)}
+              testId="purge-confirm"
+              confirmTestId="purge-confirm-yes"
+              cancelTestId="purge-confirm-cancel"
+            />
           )}
           <MessageList
             nsId={selectedNsId}
@@ -408,6 +470,11 @@ export function ServiceBusPage() {
             viewMode={viewMode}
             messages={messageWindow}
             isLoading={viewMode === "active" ? activeMessagesQuery.isLoading : dlqMessagesQuery.isLoading}
+            isError={viewMode === "active" ? activeMessagesQuery.isError : dlqMessagesQuery.isError}
+            error={viewMode === "active" ? activeMessagesQuery.error : dlqMessagesQuery.error}
+            isFetching={viewMode === "active" ? activeMessagesQuery.isFetching : dlqMessagesQuery.isFetching}
+            onRefresh={() => (viewMode === "active" ? activeMessagesQuery.refetch() : dlqMessagesQuery.refetch())}
+            lastRefreshedAt={lastRefreshedAt}
             isLoadingMore={isLoadingMore}
             canLoadMore={canLoadMore}
             totalAvailable={totalAvailable}

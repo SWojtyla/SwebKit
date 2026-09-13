@@ -11,14 +11,14 @@ interface CronJobsTabProps {
 }
 
 export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
-  const { data: cronjobs, isLoading } = useAksCronJobs(ns);
+  const { data: cronjobs, isLoading, error } = useAksCronJobs(ns);
   const ws = useAksWorkspace();
   const suspendMutation = useAksSuspendCronJob();
 
   const buildMenu = useCallback((cj: CronJobInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(cj.name) },
     { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("cronjob", cj.name, cj.namespace) },
-    { label: "Trigger", icon: "▶", onClick: () => {}, disabled: true },
+    { label: "Trigger", icon: "▶", onClick: () => {}, disabled: true, title: "Not yet implemented — trigger a run manually via kubectl for now" },
   ], [ws]);
 
   const toggle = useCallback((cj: CronJobInfo) => {
@@ -40,8 +40,8 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
     { header: "Schedule", cell: (cj) => <span className="font-mono text-xs">{cj.schedule ?? "—"}</span> },
     { header: "Suspend", cell: (cj) => (
       cj.suspend ? <span className="text-warning">Yes</span> : <span className="text-success">No</span>
-    )},
-    { header: "Active", cell: (cj) => cj.activeCount },
+    ), sortValue: (cj) => (cj.suspend ? 0 : 1) },
+    { header: "Active", cell: (cj) => cj.activeCount, sortValue: (cj) => cj.activeCount },
     { header: "Last Schedule", cell: (cj) => (
       <span className="text-xs text-muted-foreground">{cj.lastScheduleTime ? new Date(cj.lastScheduleTime).toLocaleString() : "—"}</span>
     )},
@@ -50,7 +50,10 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
     )},
     { header: "Actions", cell: (cj) => (
       <button
-        onClick={() => toggle(cj)}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggle(cj);
+        }}
         disabled={suspendMutation.isPending}
         className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
       >
@@ -63,10 +66,12 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
     <ResourceTable
       data={cronjobs}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="cronjob"
       tableBodyTestId="cronjobs-table-body"
       emptyMessage="No cron jobs found"
+      onRowClick={(cj) => ws.openYaml("cronjob", cj.name, cj.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
     />

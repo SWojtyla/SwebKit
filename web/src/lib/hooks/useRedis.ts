@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import {
   apiFetch,
   apiSend,
@@ -7,6 +7,7 @@ import {
   analyzeRedisKeyspace,
   getRedisPrefixMemory,
 } from "../api";
+import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
   RedisKeyScanResult,
   RedisKeyInfo,
@@ -21,6 +22,17 @@ import type {
 } from "../types";
 
 // ── Redis hooks ───────────────────────────────────────────────────────────────
+
+/** Mirrors `useAksTestConnection`/`useSbTestConnection` — the sidecar endpoint already
+ * existed (`GET /api/redis/{cacheId}/test`) but had no frontend hook until Settings needed
+ * a "Test connection" button for it. */
+export function useRedisTestConnection(cacheId: string | null, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["redis", cacheId, "test"],
+    queryFn: () => apiFetch<{ connected: boolean; error?: string }>(`/api/redis/${cacheId}/test`),
+    enabled: !!cacheId && (options?.enabled ?? true),
+  });
+}
 
 export function useRedisServerInfo(cacheId: string | null) {
   return useQuery({
@@ -62,6 +74,25 @@ export function useRedisKeyInfo(cacheId: string | null, key: string | null) {
     queryKey: ["redis", cacheId, "keys", key, "info"],
     queryFn: () => apiFetch<RedisKeyInfo>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/info`),
     enabled: !!cacheId && !!key,
+  });
+}
+
+/**
+ * Bulk variant of `useRedisKeyInfo`, for the small set of key rows currently rendered in the
+ * browser tree — feeds the type-color dot and TTL badge shown on each row as it scrolls into
+ * view. There's no bulk key-info endpoint, so this issues one request per key; it shares its
+ * cache with `useRedisKeyInfo` (identical query key) so a row's hint and its detail panel are
+ * never a second fetch for the same key, and callers should pass only the currently-visible keys
+ * (e.g. a virtualizer's rendered window) to keep the request count bounded.
+ */
+export function useRedisKeyInfoBatch(cacheId: string | null, keys: string[]) {
+  return useQueries({
+    queries: keys.map((key) => ({
+      queryKey: ["redis", cacheId, "keys", key, "info"],
+      queryFn: () => apiFetch<RedisKeyInfo>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/info`),
+      enabled: !!cacheId,
+      staleTime: 60_000,
+    })),
   });
 }
 
@@ -123,16 +154,19 @@ export function useRedisPubSub(cacheId: string | null, pattern: string | null = 
 
 export function useRedisDeleteKey(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (key: string) => apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/delete`, "POST"),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't delete key", String(error)),
   });
 }
 
 export function useRedisSetTtl(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; ttlSeconds?: number; removeTtl?: boolean }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/ttl`, "POST", {
@@ -142,22 +176,26 @@ export function useRedisSetTtl(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't update TTL", String(error)),
   });
 }
 
 export function useRedisRenameKey(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; newKey: string }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/rename`, "POST", { newKey: vars.newKey }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't rename key", String(error)),
   });
 }
 
 export function useRedisSetValue(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; value: string; ttlSeconds?: number }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/value`, "POST", {
@@ -167,11 +205,13 @@ export function useRedisSetValue(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't save value", String(error)),
   });
 }
 
 export function useRedisSetHashField(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; field: string; value: string }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/hash/field`, "POST", {
@@ -182,11 +222,13 @@ export function useRedisSetHashField(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "hash"] });
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't save hash field", String(error)),
   });
 }
 
 export function useRedisDeleteHashField(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; field: string }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/hash/field/delete`, "POST", {
@@ -196,11 +238,13 @@ export function useRedisDeleteHashField(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "hash"] });
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't delete hash field", String(error)),
   });
 }
 
 export function useRedisUpdateSortedSetScore(cacheId: string | null) {
   const qc = useQueryClient();
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (vars: { key: string; member: string; score: number }) =>
       apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(vars.key)}/zset/score`, "POST", {
@@ -211,12 +255,15 @@ export function useRedisUpdateSortedSetScore(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "zset"] });
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
+    onError: (error) => notify("error", "Couldn't update sorted-set score", String(error)),
   });
 }
 
 export function useRedisExportKeys(cacheId: string | null) {
+  const { notify } = useNotification();
   return useMutation({
     mutationFn: (keys: string[]) => exportRedisKeys(cacheId!, keys),
+    onError: (error) => notify("error", "Couldn't export keys", String(error)),
   });
 }
 

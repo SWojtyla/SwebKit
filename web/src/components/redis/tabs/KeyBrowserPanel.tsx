@@ -1,6 +1,11 @@
-import { ChevronRight, ChevronsDownUp, Folder } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder } from "lucide-react";
 import { useRedisPageContext, redisRowKey, type FlatRedisRow } from "../RedisPageContext";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useRedisKeyInfoBatch } from "@/lib/hooks";
+import { typeColors } from "./KeyDetailPanel";
+import { formatTtl } from "@/lib/redis-format";
+import type { RedisKeyInfo } from "@/lib/types";
 
 // Vertical guide rules connecting a row to its ancestors, VSCode-file-tree style — the thing
 // that was missing before and made the whole tree read as a flat, undifferentiated wall of text.
@@ -29,6 +34,32 @@ export function KeyBrowserPanel() {
     getItemKey: (index) => redisRowKey(ctx.flatRedisRows[index]),
     measureElement: (el) => el?.getBoundingClientRect().height ?? 28,
   });
+
+  const virtualItems = redisVirtualizer.getVirtualItems();
+
+  // Committed on blur/Enter, not per keystroke — typing used to recompute the whole namespace
+  // tree (`namespaceTree` depends on `separator`) on every character, which also kept re-tripping
+  // the expansion seed's dependency. See docs/pitfalls/react-frontend.md's DraftInput note.
+  const [separatorDraft, setSeparatorDraft] = useState(ctx.separator);
+  useEffect(() => setSeparatorDraft(ctx.separator), [ctx.separator]);
+  const commitSeparator = () => {
+    const next = separatorDraft.trim() || ":";
+    setSeparatorDraft(next);
+    if (next !== ctx.separator) ctx.setSeparator(next);
+  };
+
+  // Type/TTL hint for key rows: there's no bulk key-info endpoint, so this is scoped to exactly
+  // the rows the virtualizer currently renders (a bounded handful, not the whole loaded key set)
+  // and shares its cache with the detail panel, so opening a key you've already seen a hint for
+  // is instant. See `useRedisKeyInfoBatch`.
+  const visibleKeys = virtualItems
+    .map((item) => ctx.flatRedisRows[item.index])
+    .filter((row): row is Extract<FlatRedisRow, { kind: "key" }> => row?.kind === "key")
+    .map((row) => row.key);
+  const visibleKeyInfoResults = useRedisKeyInfoBatch(ctx.resolvedCacheId, visibleKeys);
+  const keyInfoByKey = new Map<string, RedisKeyInfo | undefined>(
+    visibleKeys.map((key, i) => [key, visibleKeyInfoResults[i]?.data]),
+  );
 
   const renderFlatRedisRow = (row: FlatRedisRow) => {
     if (row.kind === "namespace") {
@@ -64,6 +95,8 @@ export function KeyBrowserPanel() {
 
     const { key, node, depth } = row;
     const isSelected = ctx.batchMode ? ctx.selectedKeys.has(key) : ctx.selectedKey === key;
+    const info = keyInfoByKey.get(key);
+    const dotColorClass = (typeColors[info?.type ?? ""] ?? "text-muted-foreground").replace("text-", "bg-");
     return (
       <div className="flex items-stretch">
         <IndentGuides depth={depth + 1} />
@@ -93,9 +126,24 @@ export function KeyBrowserPanel() {
               data-testid={`redis-key-checkbox-${key}`}
             />
           )}
+          {info && (
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotColorClass}`}
+              title={info.type}
+              data-testid={`redis-key-type-dot-${key}`}
+            />
+          )}
           <span className="truncate">
             {node.name === "(no prefix)" ? key : key.slice(node.path.length + ctx.separator.length) || key}
           </span>
+          {info?.ttl && (
+            <span
+              className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] tabular-nums text-muted-foreground"
+              data-testid={`redis-key-ttl-badge-${key}`}
+            >
+              {formatTtl(info.ttl)}
+            </span>
+          )}
         </div>
       </div>
     );
@@ -127,8 +175,15 @@ export function KeyBrowserPanel() {
             Separator
             <input
               type="text"
-              value={ctx.separator}
-              onChange={(e) => ctx.setSeparator(e.target.value || ":")}
+              value={separatorDraft}
+              onChange={(e) => setSeparatorDraft(e.target.value)}
+              onBlur={commitSeparator}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  commitSeparator();
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
               className="w-16 rounded border bg-card px-1.5 py-0.5 font-mono text-xs"
               data-testid="redis-separator-input"
             />
@@ -145,6 +200,15 @@ export function KeyBrowserPanel() {
           >
             <ChevronsDownUp className="h-3.5 w-3.5" />
             Collapse all
+          </button>
+          <button
+            onClick={ctx.expandAllNamespaces}
+            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
+            data-testid="redis-expand-all"
+            title="Expand all namespaces"
+          >
+            <ChevronsUpDown className="h-3.5 w-3.5" />
+            Expand all
           </button>
           <button
             onClick={() => { ctx.setBatchMode(!ctx.batchMode); ctx.setSelectedKeys(new Set()); }}
@@ -181,7 +245,7 @@ export function KeyBrowserPanel() {
             style={{ height: `${redisVirtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
             data-testid="redis-key-tree-virtualizer"
           >
-            {redisVirtualizer.getVirtualItems().map((item) => {
+            {virtualItems.map((item) => {
               const row = ctx.flatRedisRows[item.index];
               return (
                 <div

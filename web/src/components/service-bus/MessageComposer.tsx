@@ -3,6 +3,7 @@ import { X, Send, Calendar, RotateCcw, FileText } from "lucide-react";
 import { useSbSendMessage, useSbScheduleMessage } from "@/lib/hooks";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate, ServiceBusNamespace } from "@/lib/types";
 import { TemplatePicker } from "./TemplatePicker";
+import { EntityPathInput } from "./EntityPathInput";
 
 export type ComposerMode = "compose" | "replay" | "edit" | "schedule";
 
@@ -212,13 +213,11 @@ export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage,
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Target Entity</label>
-              <input
-                type="text"
-                data-testid="composer-target-entity"
+              <EntityPathInput
+                nsId={targetNsId || null}
                 value={targetEntityPath}
-                onChange={(e) => setTargetEntityPath(e.target.value)}
-                placeholder="queue or topic name"
-                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                onChange={setTargetEntityPath}
+                testId="composer-target-entity"
               />
             </div>
           </div>

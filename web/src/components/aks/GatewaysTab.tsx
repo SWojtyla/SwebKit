@@ -10,6 +10,10 @@ interface GatewaysTabProps {
   isMulti?: boolean;
 }
 
+function gatewayStatusRank(gw: GatewayInfo): number {
+  return gw.status === "Ready" ? 1 : gw.status === "Pending" ? 0 : -1;
+}
+
 const columns: Column<GatewayInfo>[] = [
   { header: "Class", cell: (gw) => <span className="text-xs text-muted-foreground">{gw.gatewayClass ?? "—"}</span> },
   { header: "Status", cell: (gw) => (
@@ -20,15 +24,15 @@ const columns: Column<GatewayInfo>[] = [
     }>
       {gw.status}
     </span>
-  )},
+  ), sortValue: gatewayStatusRank },
   { header: "Addresses", cell: (gw) => (
     <span className="text-xs text-muted-foreground">{gw.addresses.length > 0 ? gw.addresses.join(", ") : "—"}</span>
   )},
-  { header: "Attached Routes", cell: (gw) => gw.attachedRoutes },
+  { header: "Attached Routes", cell: (gw) => gw.attachedRoutes, sortValue: (gw) => gw.attachedRoutes },
 ];
 
 export function GatewaysTab({ ns, isMulti }: GatewaysTabProps) {
-  const { data: gateways, isLoading } = useAksGateways(ns);
+  const { data: gateways, isLoading, error } = useAksGateways(ns);
   const ws = useAksWorkspace();
 
   const buildMenu = useCallback((gw: GatewayInfo): ContextMenuItem[] => [
@@ -46,12 +50,15 @@ export function GatewaysTab({ ns, isMulti }: GatewaysTabProps) {
     <ResourceTable
       data={gateways}
       isLoading={isLoading}
+      error={error}
       isMulti={isMulti}
       testIdPrefix="gateway"
       tableBodyTestId="gateways-table-body"
       emptyMessage="No gateways found"
+      onRowClick={(gw) => ws.openYaml("gateway", gw.name, gw.namespace)}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
+      defaultSort={{ sortValue: gatewayStatusRank, direction: "asc" }}
     />
   );
 }

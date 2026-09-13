@@ -27,9 +27,13 @@ import { useNotification } from "@/components/layout/NotificationSystem";
 import {
   moveNode,
   moveCollection,
+  findRequestNode,
+  describeNodeForDelete,
+  formatDeleteMessage,
   type MoveNodeTarget,
   type MoveCollectionTarget,
 } from "@/lib/collection-tree-utils";
+import { pickNeighborTabId } from "@/lib/request-tab-utils";
 import type {
   ApiCollection,
   ApiCollectionNode,
@@ -52,17 +56,6 @@ function now() {
 
 function deepClone<T>(obj: T): T {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
-}
-
-function findRequestNode(nodes: ApiCollectionNode[], nodeId: string): ApiCollectionNode | null {
-  for (const node of nodes) {
-    if (node.id === nodeId) return node;
-    if (node.children) {
-      const found = findRequestNode(node.children, nodeId);
-      if (found) return found;
-    }
-  }
-  return null;
 }
 
 function emptyRequest(): HttpRequestEntry {
@@ -252,6 +245,12 @@ export interface NameDialogState {
 export interface ConfirmDialogState {
   message: string;
   onConfirm: () => void;
+  /**
+   * The confirm button's label. Reserve "Delete" (the `ConfirmDialog` default)
+   * for actual deletion — a tab close or a git revert is a different action
+   * with a different consequence and should say so.
+   */
+  confirmText?: string;
 }
 
 export interface ApiClientPageContextValue {
@@ -284,6 +283,9 @@ export interface ApiClientPageContextValue {
   setActiveTabId: (tabId: string | null) => void;
   tabStates: Record<string, TabState>;
   closeTab: (tabId: string) => void;
+  closeOtherTabs: (tabId: string) => void;
+  closeAllTabs: () => void;
+  promoteTab: (tabId: string) => void;
   updateTabDraft: (tabId: string, draft: HttpRequestEntry) => void;
 
   activeTab: RequestTab | null;
@@ -397,13 +399,46 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
 
-  const openTab = useCallback((node: ApiCollectionNode, collectionId: string) => {
+  /**
+   * `preview: true` (single-click tree navigation) reuses the one preview tab
+   * instead of opening a new permanent one — browsing a collection should not
+   * accumulate a tab per row clicked. `preview: false`/omitted (Add Request,
+   * deep link, double-click) always opens or promotes to a permanent tab.
+   */
+  const openTab = useCallback((node: ApiCollectionNode, collectionId: string, opts?: { preview?: boolean }) => {
     if (node.type !== "Request" || !node.request) return;
+    const preview = opts?.preview ?? false;
+
     const existingTab = tabs.find((t) => t.nodeId === node.id);
     if (existingTab) {
+      // Deliberately reopening an already-open tab (not from a preview click)
+      // is a revisit, not a throwaway peek — promote it if it was a preview.
+      if (!preview && existingTab.isPreview) {
+        setTabs((prev) => prev.map((t) => (t.id === existingTab.id ? { ...t, isPreview: false } : t)));
+      }
       setActiveTabId(existingTab.id);
       return;
     }
+
+    const existingPreviewTab = preview
+      ? tabs.find((t) => t.isPreview && !tabStates[t.id]?.dirty)
+      : undefined;
+    if (existingPreviewTab) {
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === existingPreviewTab.id
+            ? { ...t, nodeId: node.id, collectionId, name: node.name, method: node.request!.method, dirty: false, isPreview: true }
+            : t,
+        ),
+      );
+      setTabStates((prev) => ({
+        ...prev,
+        [existingPreviewTab.id]: emptyTabState(deepClone(node.request!)),
+      }));
+      setActiveTabId(existingPreviewTab.id);
+      return;
+    }
+
     const tabId = newId();
     const tab: RequestTab = {
       id: tabId,
@@ -412,6 +447,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
       name: node.name,
       method: node.request.method,
       dirty: false,
+      isPreview: preview,
     };
     setTabs((prev) => [...prev, tab]);
     setTabStates((prev) => ({
@@ -419,7 +455,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
       [tabId]: emptyTabState(deepClone(node.request!)),
     }));
     setActiveTabId(tabId);
-  }, [tabs]);
+  }, [tabs, tabStates]);
 
   useEffect(() => {
     const state = location.state as { collectionId?: string; nodeId?: string } | null;
@@ -434,38 +470,98 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     navigate(location.pathname, { replace: true, state: null });
   }, [location, collections, navigate, openTab]);
 
+  /** Closing the active tab activates a neighbor instead of falling back to
+   *  blank — only closing the last remaining tab actually clears the editor. */
   const closeTab = useCallback((tabId: string) => {
+    const performClose = () => {
+      setTabs((prev) => prev.filter((t) => t.id !== tabId));
+      setTabStates((prev) => { const next = { ...prev }; delete next[tabId]; return next; });
+      if (activeTabId === tabId) setActiveTabId(pickNeighborTabId(tabs, tabId));
+    };
+
     const tabState = tabStates[tabId];
     if (tabState?.dirty) {
       setConfirmDialog({
         message: `Close "${tabs.find((t) => t.id === tabId)?.name}" with unsaved changes?`,
+        confirmText: "Close",
         onConfirm: () => {
-          setTabs((prev) => prev.filter((t) => t.id !== tabId));
-          setTabStates((prev) => { const next = { ...prev }; delete next[tabId]; return next; });
-          if (activeTabId === tabId) setActiveTabId(null);
+          performClose();
           setConfirmDialog(null);
         },
       });
       return;
     }
-    setTabs((prev) => prev.filter((t) => t.id !== tabId));
-    setTabStates((prev) => { const next = { ...prev }; delete next[tabId]; return next; });
-    if (activeTabId === tabId) setActiveTabId(null);
+    performClose();
   }, [tabStates, tabs, activeTabId]);
+
+  /** Closes every tab except `keepTabId`, confirming first only when it would
+   *  discard unsaved changes elsewhere. */
+  const closeOtherTabs = useCallback((keepTabId: string) => {
+    const performClose = () => {
+      setTabs((prev) => prev.filter((t) => t.id === keepTabId));
+      setTabStates((prev) => (prev[keepTabId] ? { [keepTabId]: prev[keepTabId] } : {}));
+      setActiveTabId(keepTabId);
+    };
+
+    const others = tabs.filter((t) => t.id !== keepTabId);
+    const hasDirtyOther = others.some((t) => tabStates[t.id]?.dirty);
+    if (hasDirtyOther) {
+      setConfirmDialog({
+        message: `Close ${others.length} other tab${others.length === 1 ? "" : "s"}? Unsaved changes will be lost.`,
+        confirmText: "Close",
+        onConfirm: () => {
+          performClose();
+          setConfirmDialog(null);
+        },
+      });
+      return;
+    }
+    performClose();
+  }, [tabs, tabStates]);
+
+  /** Closes every open tab, confirming first only when any holds unsaved changes. */
+  const closeAllTabs = useCallback(() => {
+    const performClose = () => {
+      setTabs([]);
+      setTabStates({});
+      setActiveTabId(null);
+    };
+
+    const hasDirty = tabs.some((t) => tabStates[t.id]?.dirty);
+    if (hasDirty) {
+      setConfirmDialog({
+        message: `Close all ${tabs.length} tabs? Unsaved changes will be lost.`,
+        confirmText: "Close",
+        onConfirm: () => {
+          performClose();
+          setConfirmDialog(null);
+        },
+      });
+      return;
+    }
+    performClose();
+  }, [tabs, tabStates]);
+
+  /** Promotes a preview tab to permanent (e.g. double-clicking it in the strip). */
+  const promoteTab = useCallback((tabId: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isPreview: false } : t)));
+  }, []);
 
   const updateTabDraft = useCallback((tabId: string, draft: HttpRequestEntry) => {
     setTabStates((prev) => ({
       ...prev,
       [tabId]: { ...prev[tabId], draft, dirty: true },
     }));
-    setTabs((prev) => prev.map((t) => t.id === tabId ? { ...t, name: draft.name, method: draft.method, dirty: true } : t));
+    // Editing a preview tab is a deliberate change, not a throwaway peek —
+    // promote it so the next single-click preview does not replace it.
+    setTabs((prev) => prev.map((t) => t.id === tabId ? { ...t, name: draft.name, method: draft.method, dirty: true, isPreview: false } : t));
   }, []);
 
   const handleSelectNode = (node: ApiCollectionNode, collectionId: string) => {
     setSelectedNodeId(node.id);
     setSelectedCollectionId(collectionId);
     if (node.type === "Request" && node.request) {
-      openTab(node, collectionId);
+      openTab(node, collectionId, { preview: true });
     }
   };
 
@@ -547,7 +643,9 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           id: newId(),
           type: "Folder",
           name,
-          isExpanded: true,
+          // Collapsed by default (unit 4.2) — an ever-expanding tree of
+          // "expanded forever" folders was the reported clutter bug.
+          isExpanded: false,
           children: [],
           defaultAuth: null,
           request: null,
@@ -559,19 +657,22 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   };
 
   const handleDeleteNode = (nodeId: string, collectionId: string) => {
+    const info = describeNodeForDelete(collections, nodeId, collectionId);
     setConfirmDialog({
-      message: "Delete this item? This cannot be undone.",
+      message: formatDeleteMessage(info),
+      confirmText: "Delete",
       onConfirm: () => {
         updateCollections.mutate((prev) => removeNode(prev, nodeId), {
           onSuccess: () => {
             if (selectedNodeId === nodeId) {
               setSelectedNodeId(null);
-              // Close tab for deleted node
+              // Close tab for deleted node — same neighbor-activation rule as
+              // a manual tab close (unit 4.1).
               const tabToClose = tabs.find((t) => t.nodeId === nodeId);
               if (tabToClose) {
                 setTabs((prev) => prev.filter((t) => t.id !== tabToClose.id));
                 setTabStates((prev) => { const next = { ...prev }; delete next[tabToClose.id]; return next; });
-                if (activeTabId === tabToClose.id) setActiveTabId(null);
+                if (activeTabId === tabToClose.id) setActiveTabId(pickNeighborTabId(tabs, tabToClose.id));
               }
               setSelectedCollectionId(collectionId === nodeId ? null : collectionId);
             }
@@ -958,6 +1059,9 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     setActiveTabId,
     tabStates,
     closeTab,
+    closeOtherTabs,
+    closeAllTabs,
+    promoteTab,
     updateTabDraft,
 
     activeTab,

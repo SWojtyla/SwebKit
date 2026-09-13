@@ -3,8 +3,6 @@ import { useAksPods, useAksDeletePod, useAksPodMetrics } from "@/lib/hooks";
 import { showNotification } from "@/lib/tauri-bridge";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
-import { PodShellPanel } from "./PodShellPanel";
-import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { PodInfo, PodMetricInfo } from "@/lib/types";
 
@@ -68,6 +66,13 @@ function aggregatePodUsage(metric: PodMetricInfo | undefined) {
   return { cpu, memory };
 }
 
+/** 0 (sorts first) for anything worth a second look, 1 otherwise — used as the default sort so
+ * a large pod list surfaces problems instead of requiring a manual scroll to find them. */
+function podHealthRank(pod: PodInfo): number {
+  const unhealthy = pod.status !== "Running" || pod.restartCount > 0;
+  return unhealthy ? 0 : 1;
+}
+
 function PodStatusBadge({ status }: { status: string }) {
   const color =
     status === "Running" ? "text-success" :
@@ -78,15 +83,13 @@ function PodStatusBadge({ status }: { status: string }) {
 }
 
 export function PodsTab({ ns, isMulti }: PodsTabProps) {
-  const { data: pods, isLoading } = useAksPods(ns);
+  const { data: pods, isLoading, error } = useAksPods(ns);
   const { data: metrics } = useAksPodMetrics(ns);
   const [hideCompleted, setHideCompleted] = useState(true);
   const deleteMutation = useAksDeletePod();
   const ws = useAksWorkspace();
   const prevStatusesRef = useRef<Map<string, string>>(new Map());
   const prevNsRef = useRef(ns);
-  const [shellPod, setShellPod] = useState<PodInfo | null>(null);
-  const [askAiPod, setAskAiPod] = useState<PodInfo | null>(null);
 
   // Fires a native notification the moment a pod actually transitions into
   // Failed (not on initial load, which would spam notifications for
@@ -139,9 +142,9 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     { label: "Container Details", icon: "⚙", onClick: () => ws.openContainerDetails(pod.name, pod.namespace) },
     { label: "Analyze network", icon: "📶", onClick: () => ws.navigateToAnalysis() },
     { label: "", separator: true, onClick: () => {} },
-    { label: "Open shell in pod", icon: ">", onClick: () => setShellPod(pod) },
+    { label: "Open shell in pod", icon: ">", onClick: () => ws.setShellPod(pod) },
     { label: "Port-forward…", icon: "→", onClick: () => ws.openPortForward(pod) },
-    { label: "Ask AI about this pod", icon: "✨", onClick: () => setAskAiPod(pod) },
+    { label: "Ask AI about this pod", icon: "✨", onClick: () => ws.setAskAiPod(pod) },
     { label: "", separator: true, onClick: () => {} },
     { label: "Delete Pod", icon: "✕", onClick: () => handleDelete(pod), destructive: true },
   ], [ws, handleDelete]);
@@ -153,7 +156,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
   );
 
   const columns: Column<PodInfo>[] = useMemo(() => [
-    { header: "Status", cell: (pod) => <PodStatusBadge status={pod.status} /> },
+    { header: "Status", cell: (pod) => <PodStatusBadge status={pod.status} />, sortValue: (pod) => pod.status },
     { header: "Ready", cell: (pod) => (
       <span className={pod.ready ? "text-success" : "text-warning"}>
         {pod.readyDisplay}
@@ -194,7 +197,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
       ) : (
         <span className="text-muted-foreground">0</span>
       )
-    )},
+    ), sortValue: (pod) => pod.restartCount },
     { header: "Node", cell: (pod) => <span className="text-xs text-muted-foreground">{pod.nodeName ?? "—"}</span> },
     { header: "Age", cell: (pod) => <span className="text-xs text-muted-foreground">{formatAge(pod.startTime)}</span> },
     { header: "Actions", className: "py-2 pr-4 w-px whitespace-nowrap", cell: (pod) => (
@@ -226,6 +229,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
       <ResourceTable
         data={visiblePods}
         isLoading={isLoading}
+        error={error}
         isMulti={isMulti}
         testIdPrefix="pod"
         tableBodyTestId="pods-table-body"
@@ -233,24 +237,8 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
         onRowClick={handleRowClick}
         onRowContextMenu={handleRowContextMenu}
         columns={columns}
+        defaultSort={{ sortValue: podHealthRank, direction: "asc" }}
       />
-      {shellPod && (
-        <PodShellPanel
-          namespace={shellPod.namespace}
-          pod={shellPod.name}
-          container={shellPod.containers[0] ?? null}
-          context={ws.currentContext}
-          onClose={() => setShellPod(null)}
-        />
-      )}
-      {askAiPod && (
-        <ContextualAssistant
-          featureArea="Aks"
-          title={`pod ${askAiPod.name}`}
-          selection={{ namespace: askAiPod.namespace, pod: askAiPod.name }}
-          onClose={() => setAskAiPod(null)}
-        />
-      )}
     </div>
   );
 }

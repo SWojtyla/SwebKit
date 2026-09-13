@@ -5,6 +5,10 @@ import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { GatewayClassInfo } from "@/lib/types";
 
+function gatewayClassStatusRank(gc: GatewayClassInfo): number {
+  return gc.status === "Accepted" ? 1 : gc.status === "Pending" ? 0 : -1;
+}
+
 const columns: Column<GatewayClassInfo>[] = [
   { header: "Controller", cell: (gc) => <span className="text-xs text-muted-foreground">{gc.controllerName ?? "—"}</span> },
   { header: "Status", cell: (gc) => (
@@ -15,11 +19,11 @@ const columns: Column<GatewayClassInfo>[] = [
     }>
       {gc.status}
     </span>
-  )},
+  ), sortValue: gatewayClassStatusRank },
 ];
 
 export function GatewayClassesTab() {
-  const { data: classes, isLoading } = useAksGatewayClasses();
+  const { data: classes, isLoading, error } = useAksGatewayClasses();
   const ws = useAksWorkspace();
 
   const buildMenu = useCallback((gc: GatewayClassInfo): ContextMenuItem[] => [
@@ -36,12 +40,15 @@ export function GatewayClassesTab() {
     <ResourceTable
       data={classes}
       isLoading={isLoading}
+      error={error}
       isMulti={false}
       testIdPrefix="gatewayclass"
       tableBodyTestId="gatewayclasses-table-body"
       emptyMessage="No gateway classes found"
+      onRowClick={(gc) => ws.openYaml("gatewayclass", gc.name, "default")}
       onRowContextMenu={handleRowContextMenu}
       columns={columns}
+      defaultSort={{ sortValue: gatewayClassStatusRank, direction: "asc" }}
     />
   );
 }
