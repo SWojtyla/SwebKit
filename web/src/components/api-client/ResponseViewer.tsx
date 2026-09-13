@@ -118,7 +118,11 @@ export function ResponseViewer({
     [prettyPrinted, rawBody, bodyContentType],
   );
 
-  if (sending) {
+  // Only the *first* send (no previous response to compare against) replaces
+  // the whole panel — once a response exists, sending again dims it in place
+  // instead of unmounting it, so the "tweak and resend to compare" workflow
+  // keeps its comparison point visible while the new request is in flight.
+  if (sending && !response) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground" data-testid="response-viewer">
         Sending request...
@@ -184,7 +188,25 @@ export function ResponseViewer({
   };
 
   return (
-    <div className="flex h-full min-w-0 flex-col bg-card" data-testid="response-viewer">
+    <div
+      className={`flex h-full min-w-0 flex-col bg-card ${sending ? "opacity-60" : ""}`}
+      data-testid="response-viewer"
+    >
+      {/* Resend-in-flight banner: the response below is the *previous* one,
+          kept visible on purpose so a "tweak and resend to compare" workflow
+          does not lose its comparison point mid-request. */}
+      {sending && (
+        <div
+          className="flex items-center gap-2 border-b bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground"
+          data-testid="response-resending-indicator"
+        >
+          <span
+            className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent"
+            aria-hidden="true"
+          />
+          Sending new request… showing the previous response below.
+        </div>
+      )}
       {/* Status bar */}
       <div className="flex items-center gap-3 border-b p-3">
         <span

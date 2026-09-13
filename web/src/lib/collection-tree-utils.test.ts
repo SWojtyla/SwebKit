@@ -6,25 +6,35 @@ import {
   moveNode,
   isDescendant,
   resolveDropTarget,
+  filterNodes,
+  flattenTree,
+  countDescendants,
+  describeNodeForDelete,
+  formatDeleteMessage,
   type FlatRow,
 } from "./collection-tree-utils";
 
-function node(id: string, type: "Folder" | "Request" = "Request", children: ApiCollectionNode[] = []): ApiCollectionNode {
+function node(
+  id: string,
+  type: "Folder" | "Request" = "Request",
+  children: ApiCollectionNode[] = [],
+  name: string = id,
+): ApiCollectionNode {
   return {
     id,
     type,
-    name: id,
+    name,
     isExpanded: true,
     children,
     defaultAuth: null,
-    request: type === "Request" ? { id, name: id, method: "Get", url: "" } as any : null,
+    request: type === "Request" ? { id, name, method: "Get", url: "" } as any : null,
   };
 }
 
-function collection(id: string, nodes: ApiCollectionNode[] = []): ApiCollection {
+function collection(id: string, nodes: ApiCollectionNode[] = [], name: string = id): ApiCollection {
   return {
     id,
-    name: id,
+    name,
     nodes,
     variables: [],
     defaultAuth: null,
@@ -414,5 +424,116 @@ describe("resolveDropTarget", () => {
       kind: "node",
       target: { targetCollectionId: "c1", targetNodeId: "a", placement: "after" },
     });
+  });
+});
+
+describe("filterNodes", () => {
+  it("keeps a folder that contains a matching descendant, dropping its non-matching siblings", () => {
+    const nodes = [
+      node("auth-folder", "Folder", [node("get-health"), node("post-widgets")]),
+      node("delete-users"),
+    ];
+    const filtered = filterNodes(nodes, "health");
+    expect(filtered.map((n) => n.id)).toEqual(["auth-folder"]);
+    expect(filtered[0].children.map((c) => c.id)).toEqual(["get-health"]);
+  });
+
+  it("returns every node unchanged for an empty query", () => {
+    const nodes = [node("a"), node("b", "Folder", [node("c")])];
+    expect(filterNodes(nodes, "")).toBe(nodes);
+  });
+
+  it("drops a folder whose whole subtree has no match", () => {
+    const nodes = [node("auth-folder", "Folder", [node("get-health")]), node("delete-users")];
+    expect(filterNodes(nodes, "nothing-matches")).toEqual([]);
+  });
+});
+
+describe("flattenTree", () => {
+  const nested: ApiCollection[] = [
+    collection("col-1", [node("folder-1", "Folder", [node("req-1")])]),
+  ];
+
+  it("does not descend into a folder absent from expandedIds when not searching", () => {
+    const rows = flattenTree(nested, new Set(["col-1"]), false);
+    // Collection root + the folder row itself, but not its (collapsed) child.
+    expect(rows.map((r) => r.id)).toEqual(["col-1", "folder-1"]);
+  });
+
+  it("descends into every folder when forceExpandAll is set, regardless of expandedIds", () => {
+    // This is the reported bug: a search match inside a folder the user had
+    // collapsed before searching must still be reachable in the flattened rows.
+    const rows = flattenTree(nested, new Set(), true);
+    expect(rows.map((r) => r.id)).toEqual(["col-1", "folder-1", "req-1"]);
+  });
+
+  it("still respects an empty expandedIds set when not forced", () => {
+    const rows = flattenTree(nested, new Set(), false);
+    // Nothing expanded at all: only the collection root row shows.
+    expect(rows.map((r) => r.id)).toEqual(["col-1"]);
+  });
+});
+
+describe("countDescendants", () => {
+  it("is zero for an empty list", () => {
+    expect(countDescendants([])).toBe(0);
+  });
+
+  it("counts nested folders and requests alike", () => {
+    const nodes = [
+      node("r1"),
+      node("f1", "Folder", [node("r2"), node("f2", "Folder", [node("r3")])]),
+    ];
+    // r1, f1, r2, f2, r3
+    expect(countDescendants(nodes)).toBe(5);
+  });
+});
+
+describe("describeNodeForDelete", () => {
+  it("describes a whole collection, including its descendant count", () => {
+    const collections = [collection("col-1", [node("r1"), node("r2")], "My Collection")];
+    const info = describeNodeForDelete(collections, "col-1", "col-1");
+    expect(info).toEqual({ name: "My Collection", typeLabel: "collection", descendantCount: 2 });
+  });
+
+  it("describes a folder with its nested descendant count", () => {
+    const collections = [
+      collection("col-1", [node("f1", "Folder", [node("r1"), node("r2")], "Auth")]),
+    ];
+    const info = describeNodeForDelete(collections, "f1", "col-1");
+    expect(info).toEqual({ name: "Auth", typeLabel: "folder", descendantCount: 2 });
+  });
+
+  it("describes a request with a zero descendant count", () => {
+    const collections = [collection("col-1", [node("r1", "Request", [], "Get Health")])];
+    const info = describeNodeForDelete(collections, "r1", "col-1");
+    expect(info).toEqual({ name: "Get Health", typeLabel: "request", descendantCount: 0 });
+  });
+
+  it("falls back to a generic description when the node cannot be found", () => {
+    const collections = [collection("col-1")];
+    const info = describeNodeForDelete(collections, "missing", "col-1");
+    expect(info.typeLabel).toBe("request");
+    expect(info.descendantCount).toBe(0);
+  });
+});
+
+describe("formatDeleteMessage", () => {
+  it("omits the descendant phrase for a leaf request", () => {
+    expect(formatDeleteMessage({ name: "Get Health", typeLabel: "request", descendantCount: 0 })).toBe(
+      'Delete request "Get Health"? This cannot be undone.',
+    );
+  });
+
+  it("pluralizes the descendant count for a folder", () => {
+    expect(formatDeleteMessage({ name: "Auth", typeLabel: "folder", descendantCount: 3 })).toBe(
+      'Delete folder "Auth" and its 3 items? This cannot be undone.',
+    );
+  });
+
+  it("uses the singular form for exactly one descendant", () => {
+    expect(formatDeleteMessage({ name: "Auth", typeLabel: "folder", descendantCount: 1 })).toBe(
+      'Delete folder "Auth" and its 1 item? This cannot be undone.',
+    );
   });
 });

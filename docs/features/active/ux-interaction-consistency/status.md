@@ -18,7 +18,7 @@ status: Proposed
 | 1 — AKS | 1.1–1.8 | Not started |
 | 2 — Redis | 2.1–2.4 | Not started |
 | 3 — Service Bus | 3.1–3.5 | Not started |
-| 4 — API Client | 4.1–4.5 | Not started |
+| 4 — API Client | 4.1–4.5 | Review — implemented on `worktree-agent-a94c90988a7ef36a0`, all verification passed, not yet merged/PR'd |
 | 5 — Monitoring | 5.1–5.4 | Not started |
 | 6 — Storage | 6.1–6.6 | Not started |
 | 7 — Agent | 7.1–7.7 | Not started |

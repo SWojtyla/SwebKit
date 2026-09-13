@@ -209,6 +209,9 @@ function ApiClientPageContent() {
               activeTabId={ctx.activeTabId}
               onSelectTab={ctx.setActiveTabId}
               onCloseTab={ctx.closeTab}
+              onCloseOtherTabs={ctx.closeOtherTabs}
+              onCloseAllTabs={ctx.closeAllTabs}
+              onPromoteTab={ctx.promoteTab}
             />
             {ctx.activeTabId && ctx.tabStates[ctx.activeTabId] ? (
               <RequestEditor
@@ -257,6 +260,7 @@ function ApiClientPageContent() {
       {ctx.confirmDialog && (
         <ConfirmDialog
           message={ctx.confirmDialog.message}
+          confirmText={ctx.confirmDialog.confirmText}
           onConfirm={ctx.confirmDialog.onConfirm}
           onCancel={() => ctx.setConfirmDialog(null)}
         />

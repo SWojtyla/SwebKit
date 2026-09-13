@@ -348,6 +348,33 @@ test.describe("API Client", () => {
     await expect(envSelector).toContainText("Test Environment");
   });
 
+  test("deleting an environment requires confirmation (unit 4.3)", async ({ page }) => {
+    // Regression: environment delete previously removed the environment immediately with
+    // zero confirmation, unlike every other destructive flow in this feature.
+    await page.getByTestId("env-manager-button").click();
+    await page.getByTestId("env-add-button").click();
+    await page.getByTestId("env-name-input").fill("Delete Confirm Env");
+    await page.getByTestId("env-save-all").click();
+
+    await page.getByTestId("env-manager-button").click();
+    const envItem = page.locator('[data-testid^="env-item-"]').filter({ hasText: "Delete Confirm Env" });
+    await envItem.hover();
+    const deleteButton = envItem.locator('[data-testid^="env-delete-"]');
+
+    // Cancel leaves the environment in place.
+    await deleteButton.click();
+    await expect(page.getByTestId("confirm-dialog")).toBeVisible();
+    await page.getByTestId("confirm-dialog-cancel").click();
+    await expect(page.getByTestId("confirm-dialog")).not.toBeVisible();
+    await expect(envItem).toBeVisible();
+
+    // Confirm actually removes it.
+    await envItem.hover();
+    await deleteButton.click();
+    await page.getByTestId("confirm-dialog-confirm").click();
+    await expect(page.locator('[data-testid^="env-item-"]').filter({ hasText: "Delete Confirm Env" })).toHaveCount(0);
+  });
+
   test("environment selector dropdown shows environments", async ({ page }) => {
     // Open env manager and create an environment
     await page.getByTestId("env-manager-button").click();
