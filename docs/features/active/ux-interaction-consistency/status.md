@@ -19,7 +19,7 @@ status: Proposed
 | 2 — Redis | 2.1–2.4 | Not started |
 | 3 — Service Bus | 3.1–3.5 | Not started |
 | 4 — API Client | 4.1–4.5 | Not started |
-| 5 — Monitoring | 5.1–5.4 | Not started |
+| 5 — Monitoring | 5.1–5.4 | Review |
 | 6 — Storage | 6.1–6.6 | Not started |
 | 7 — Agent | 7.1–7.7 | Not started |
 | 8 — Settings | 8.1–8.9 | Not started |

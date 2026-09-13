@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Plus } from "lucide-react";
+import { Plus, AlertCircle } from "lucide-react";
+import { SkeletonRows } from "@/components/shared/Skeleton";
 import type { AlertSignalStatus, MonitoringAlertRule, AlertFiredEvent, ProactiveInsightReadyEvent } from "../../lib/api";
 import {
   useMonitoringRules,
@@ -24,9 +25,13 @@ function nextProactiveMsgId() {
   return `proactive-msg-${++proactiveMsgIdCounter}`;
 }
 
+// Keeps a burst of proactive insights from pushing the tab strip below the fold — a "+N more"
+// toggle (scrollable once expanded) surfaces the rest without an unbounded list.
+const VISIBLE_INSIGHT_CAP = 3;
+
 export function MonitoringPage() {
-  const { data: rules = [], isLoading } = useMonitoringRules();
-  const { data: history = [] } = useMonitoringHistory();
+  const { data: rules = [], isLoading, isError: rulesIsError, error: rulesError } = useMonitoringRules();
+  const { data: history = [], isLoading: historyIsLoading, isError: historyIsError, error: historyError } = useMonitoringHistory();
   const createRule = useCreateMonitoringRule();
   const updateRule = useUpdateMonitoringRule();
   const deleteRule = useDeleteMonitoringRule();
@@ -41,6 +46,12 @@ export function MonitoringPage() {
   const [statuses, setStatuses] = useState<Record<string, AlertSignalStatus>>({});
   const [liveEvents, setLiveEvents] = useState<AlertFiredEvent[]>([]);
   const { insights, addInsight, dismiss } = useProactiveInsightsFeed();
+  // Owned here (not inside AlertRuleGroups) so a group's collapsed/expanded state survives
+  // switching to the History tab and back — AlertRuleGroups only mounts while Rules is active.
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const toggleGroupCollapse = (group: string) =>
+    setCollapsedGroups((c) => ({ ...c, [group]: !c[group] }));
+  const [showAllInsights, setShowAllInsights] = useState(false);
 
   // Subscribe to the SSE stream: push fired events into history + raise notifications, and surface
   // any background proactive investigation that completes (workspace-intelligence Module 4).
@@ -76,7 +87,24 @@ export function MonitoringPage() {
   );
 
   const toggleRule = (rule: MonitoringAlertRule) => {
-    updateRule.mutate({ ...rule, enabled: !rule.enabled });
+    const nextEnabled = !rule.enabled;
+    updateRule.mutate(
+      { ...rule, enabled: nextEnabled },
+      // Disabling a rule is easy to click by accident right next to Delete in a dense row — give it
+      // the same brief, reversible feedback a destructive-adjacent toggle deserves, rather than
+      // silently taking effect with no recovery path. Re-enabling needs no such toast: it's already
+      // the recovery action for a rule the user meant to keep off.
+      nextEnabled
+        ? undefined
+        : {
+            onSuccess: () => {
+              notify("info", "Rule disabled", `"${rule.name}" won't fire until re-enabled.`, {
+                label: "Undo",
+                onClick: () => updateRule.mutate({ ...rule, enabled: true }),
+              });
+            },
+          },
+    );
   };
 
   const handleSave = (rule: MonitoringAlertRule) => {
@@ -97,15 +125,43 @@ export function MonitoringPage() {
         <p className="mt-1 text-sm text-muted-foreground">Alert rules and live alert history</p>
 
         {insights.length > 0 && (
-          <div className="mt-3 space-y-2" data-testid="proactive-insights-feed">
-            {insights.map((insight) => (
-              <ProactiveInsightCard
-                key={`${insight.ruleId}|${insight.firedAt}`}
-                insight={insight}
-                onInvestigate={investigateInsight}
-                onDismiss={dismiss}
-              />
-            ))}
+          <div className="mt-3" data-testid="proactive-insights-feed">
+            <div
+              className={
+                showAllInsights && insights.length > VISIBLE_INSIGHT_CAP
+                  ? "max-h-64 space-y-2 overflow-y-auto pr-1"
+                  : "space-y-2"
+              }
+            >
+              {(showAllInsights ? insights : insights.slice(0, VISIBLE_INSIGHT_CAP)).map((insight) => (
+                <ProactiveInsightCard
+                  key={`${insight.ruleId}|${insight.firedAt}`}
+                  insight={insight}
+                  onInvestigate={investigateInsight}
+                  onDismiss={dismiss}
+                />
+              ))}
+            </div>
+            <div className="mt-2 flex items-center gap-3">
+              {insights.length > VISIBLE_INSIGHT_CAP && (
+                <button
+                  onClick={() => setShowAllInsights((v) => !v)}
+                  className="text-xs font-medium text-primary hover:underline"
+                  data-testid="proactive-insights-toggle"
+                >
+                  {showAllInsights ? "Show less" : `+${insights.length - VISIBLE_INSIGHT_CAP} more`}
+                </button>
+              )}
+              {insights.length > 1 && (
+                <button
+                  onClick={() => insights.forEach(dismiss)}
+                  className="text-xs text-muted-foreground hover:underline"
+                  data-testid="proactive-insights-dismiss-all"
+                >
+                  Dismiss all
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -141,12 +197,22 @@ export function MonitoringPage() {
               </button>
             </div>
 
-            {isLoading ? (
-              <div className="text-sm text-muted-foreground" data-testid="monitoring-loading">Loading…</div>
+            {rulesIsError ? (
+              <div
+                className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm text-destructive"
+                data-testid="monitoring-rules-error"
+              >
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{rulesError instanceof Error ? rulesError.message : String(rulesError)}</span>
+              </div>
+            ) : isLoading ? (
+              <SkeletonRows count={4} />
             ) : (
               <AlertRuleGroups
                 rules={rules}
                 statuses={statuses}
+                collapsed={collapsedGroups}
+                onToggleCollapse={toggleGroupCollapse}
                 onToggle={toggleRule}
                 onEdit={(r) => { setEditingRule(r); setShowEditor(true); }}
                 onDelete={handleDelete}
@@ -156,7 +222,19 @@ export function MonitoringPage() {
         )}
 
         {activeTab === "history" && (
-          <AlertHistoryPanel events={mergedHistory} />
+          historyIsError ? (
+            <div
+              className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm text-destructive"
+              data-testid="monitoring-history-error"
+            >
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{historyError instanceof Error ? historyError.message : String(historyError)}</span>
+            </div>
+          ) : historyIsLoading ? (
+            <SkeletonRows count={4} />
+          ) : (
+            <AlertHistoryPanel events={mergedHistory} />
+          )
         )}
       </div>
 

@@ -12,6 +12,7 @@ import type {
 } from "../../lib/api";
 import { getServiceBusNamespaces, getRedisCaches } from "../../lib/api";
 import { useAksNamespaces } from "../../lib/hooks";
+import { isAlertRuleComplete } from "./alertRuleValidation";
 
 const sources: { value: AlertRuleSource; label: string }[] = [
   { value: "AksPodHealth", label: "AKS · Pod Health" },
@@ -64,7 +65,10 @@ export function AlertRuleDialog({
 
   const set = (patch: Partial<MonitoringAlertRule>) => setDraft((d) => ({ ...d, ...patch }));
 
+  const isComplete = isAlertRuleComplete(draft);
+
   const save = () => {
+    if (!isComplete) return;
     const cleaned: MonitoringAlertRule = { ...draft };
     // Only keep the params block relevant to the selected source.
     if (!draft.source.startsWith("Aks")) cleaned.aksPodParams = null;
@@ -275,7 +279,12 @@ export function AlertRuleDialog({
           )}
         </div>
 
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="mt-6 flex items-center justify-end gap-2">
+          {!isComplete && (
+            <span className="mr-auto text-xs text-muted-foreground" data-testid="alert-rule-dialog-incomplete-hint">
+              Fill in the required fields for this source before saving.
+            </span>
+          )}
           <button
             onClick={onCancel}
             className="rounded-md border px-4 py-2 text-sm hover:bg-accent"
@@ -285,7 +294,7 @@ export function AlertRuleDialog({
           </button>
           <button
             onClick={save}
-            disabled={!draft.name}
+            disabled={!isComplete}
             className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
             data-testid="alert-rule-dialog-save"
           >
