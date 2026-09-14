@@ -200,6 +200,33 @@ describe("buildCurl auth", () => {
     expect(curl).toContain(`"https://example.test/?a=1&api_key=${MASK}"`);
   });
 
+  it("substitutes a Basic username written as a variable", () => {
+    const curl = buildCurl(
+      request({ auth: auth({ type: "Basic", basicUsername: "{{AUTH_SP}}" }) }),
+      "https://example.test/",
+      scope,
+    );
+    expect(curl).toContain(`-u "brio:${MASK}"`);
+  });
+
+  it("substitutes an API key header name written as a variable", () => {
+    const curl = buildCurl(
+      request({ auth: auth({ type: "ApiKey", apiKeyParamName: "{{AUTH_SP}}", apiKeyLocation: "Header" }) }),
+      "https://example.test/",
+      scope,
+    );
+    expect(curl).toContain(`-H "brio: ${MASK}"`);
+  });
+
+  it("substitutes an API key query-param name written as a variable", () => {
+    const curl = buildCurl(
+      request({ auth: auth({ type: "ApiKey", apiKeyParamName: "{{AUTH_SP}}", apiKeyLocation: "QueryParam" }) }),
+      "https://example.test/",
+      scope,
+    );
+    expect(curl).toContain(`"https://example.test/?brio=${MASK}"`);
+  });
+
   it("adds nothing for an API key with no param name configured yet", () => {
     const curl = buildCurl(
       request({ auth: auth({ type: "ApiKey", apiKeyParamName: null }) }),

@@ -6,6 +6,7 @@ import { RequestActionsPanel } from "./RequestActionsPanel";
 import type { HttpRequestEntry, ApiRequestMethod, AuthType, AuthConfig, CaptureRule, ApiEnvironment } from "@/lib/types";
 import { substituteVariables, previewVariables, isLikelySecret } from "@/lib/variable-utils";
 import { unresolvedVariableNames } from "@/lib/variableHighlight";
+import { authSubstitutedText } from "@/lib/auth-variables";
 import { saveSecret, getSecret, deleteSecret } from "@/lib/tauri-bridge";
 import { METHOD_META, methodMeta, toneTextStyle, CountBadge } from "./method-badge";
 import { GraphQlPanel } from "./GraphQlPanel";
@@ -45,17 +46,6 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   const savedSnapshotRef = useRef<HttpRequestEntry>(request);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
-
-  // Every place a `{{token}}` is substituted before sending, so the preview and the
-  // warning cover the whole request rather than just the URL. The body was the gap
-  // that mattered: `HttpRequestExecutor` substitutes it, but nothing showed it.
-  const substitutedText = [
-    request.url,
-    request.body.rawContent ?? "",
-    ...request.headers.filter((h) => h.isEnabled).map((h) => h.value ?? ""),
-  ].join("\n");
-  const previewedVariables = previewVariables(substitutedText, variableScope);
-  const unresolvedNames = unresolvedVariableNames(substitutedText, variableScope);
 
   const handleSave = useCallback(async () => {
     if (secretSaveTimer.current) {
@@ -200,6 +190,21 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
     }
     void persistSecret();
   };
+
+  // Every place a `{{token}}` is substituted before sending, so the preview and the
+  // warning cover the whole request rather than just the URL. The body was the gap
+  // that mattered: `HttpRequestExecutor` substitutes it, but nothing showed it. Auth was
+  // the next one — and the worst, because a bad token there fails with a 401/400 from the
+  // server rather than anything the app could point at. Only names are collected, never
+  // values, so listing the secret's tokens reveals nothing the environment doesn't.
+  const substitutedText = [
+    request.url,
+    request.body.rawContent ?? "",
+    ...request.headers.filter((h) => h.isEnabled).map((h) => h.value ?? ""),
+    ...authSubstitutedText(auth, authSecretInput),
+  ].join("\n");
+  const previewedVariables = previewVariables(substitutedText, variableScope);
+  const unresolvedNames = unresolvedVariableNames(substitutedText, variableScope);
 
   return (
     <div className="relative flex h-full min-w-0 flex-col border-r bg-card" data-testid="request-editor">
@@ -380,6 +385,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
           <AuthPanel
             auth={auth}
             secretInput={authSecretInput}
+            variableScope={variableScope}
             onAuthTypeChange={setAuthType}
             onAuthPatch={updateAuth}
             onSecretChange={handleSecretChange}

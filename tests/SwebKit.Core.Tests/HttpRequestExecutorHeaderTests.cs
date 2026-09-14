@@ -166,6 +166,7 @@ public sealed class HttpRequestExecutorHeaderTests
         public Task ApplyAsync(
             HttpRequestMessage message,
             AuthConfig? auth,
+            IReadOnlyDictionary<string, string?>? scope = null,
             CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }

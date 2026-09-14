@@ -66,8 +66,14 @@ interface AuthParts {
  * actually sends on the real request — masked, never the real secret, since this panel's whole
  * purpose is copy-to-clipboard.
  */
-function buildAuthParts(auth: AuthConfig | null): AuthParts {
+function buildAuthParts(auth: AuthConfig | null, scope: Record<string, string | null>): AuthParts {
   if (!auth || auth.type === "None") return { parts: [], urlQuerySuffix: "" };
+
+  // The non-secret auth fields are substituted at send time like any other part of the
+  // request, so a header name or username written as `{{KEY_HEADER}}` must not be shown
+  // here as its token — that is the same half-resolved command this module exists to avoid.
+  const basicUsername = substituteVariables(auth.basicUsername ?? "", scope);
+  const apiKeyParamName = substituteVariables(auth.apiKeyParamName ?? "", scope);
 
   switch (auth.type) {
     case "Inherited":
@@ -87,16 +93,16 @@ function buildAuthParts(auth: AuthConfig | null): AuthParts {
       return { parts: [`-H "Authorization: Bearer ${MASK}"`], urlQuerySuffix: "" };
 
     case "Basic":
-      return { parts: [`-u "${auth.basicUsername ?? ""}:${MASK}"`], urlQuerySuffix: "" };
+      return { parts: [`-u "${basicUsername}:${MASK}"`], urlQuerySuffix: "" };
 
     case "ApiKey": {
-      if (!auth.apiKeyParamName) return { parts: [], urlQuerySuffix: "" };
+      if (!apiKeyParamName) return { parts: [], urlQuerySuffix: "" };
       if (auth.apiKeyLocation === "Header") {
-        return { parts: [`-H "${auth.apiKeyParamName}: ${MASK}"`], urlQuerySuffix: "" };
+        return { parts: [`-H "${apiKeyParamName}: ${MASK}"`], urlQuerySuffix: "" };
       }
       return {
         parts: [],
-        urlQuerySuffix: `${encodeURIComponent(auth.apiKeyParamName)}=${MASK}`,
+        urlQuerySuffix: `${encodeURIComponent(apiKeyParamName)}=${MASK}`,
       };
     }
 
@@ -152,7 +158,7 @@ export function buildCurl(
     }
   }
 
-  const { parts: authParts, urlQuerySuffix, leadingComment } = buildAuthParts(request.auth);
+  const { parts: authParts, urlQuerySuffix, leadingComment } = buildAuthParts(request.auth, scope);
   parts.push(...authParts);
 
   const url = urlQuerySuffix

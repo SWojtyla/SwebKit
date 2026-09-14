@@ -32,6 +32,13 @@ the collection-scoped one so shared values are defined once. It builds on
 `api-client-ux-improvements/` (Review, shipped as PR #82) and deliberately does not re-plan the
 Environment Manager resizing that shipped there.
 
+**API client auth (2026-09-14):** `docs/features/active/api-client-auth-variables/` is in Review —
+auth was the one part of a request the variable scope never reached, so a bearer token entered as
+`{{AUTH_PI2_KEY}}` was sent as those sixteen characters and came back a 400, and an auth secret was
+write-only once set, which is why nobody could see that a variable was involved. Every auth field
+now substitutes at send time, and secrets have a reveal toggle that shows the variable-aware input.
+Direct follow-on from `api-client-variable-scoping/`, which closed the same blind spot for the body.
+
 **AKS logs (2026-09-09):** `docs/features/active/aks-log-parity/` is in Review — the multi-pod log
 view now streams every pod on open and shares one toolbar, buffer and windowing model with the
 single-pod view, instead of having almost none of its controls. Log lines carry the container's own

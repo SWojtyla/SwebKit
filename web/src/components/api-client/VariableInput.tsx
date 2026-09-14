@@ -16,6 +16,7 @@ interface VariableInputProps {
   testId?: string;
   ariaLabel?: string;
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
+  onBlur?: () => void;
 }
 
 /**
@@ -45,6 +46,7 @@ export function VariableInput({
   testId,
   ariaLabel,
   onKeyDown,
+  onBlur,
 }: VariableInputProps): JSX.Element {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -96,6 +98,7 @@ export function VariableInput({
         onChange={(e) => onChange(e.target.value)}
         onScroll={syncScroll}
         onKeyDown={onKeyDown}
+        onBlur={onBlur}
         placeholder={placeholder}
         aria-label={ariaLabel}
         title={summary.length > 0 ? summary.join("\n") : undefined}

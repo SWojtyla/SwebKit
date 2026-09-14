@@ -199,6 +199,35 @@ test.describe("API Client", () => {
     await expect(page.getByTestId("auth-tab")).toBeVisible();
   });
 
+  test("an auth secret can be revealed and hidden again", async ({ page }) => {
+    await page.getByTestId("add-collection-button").click();
+    await page.getByTestId("name-dialog-input").fill("Auth Reveal Collection");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-root-/).first().click();
+
+    await page.getByTestId("add-request-button").click();
+    await page.getByTestId("name-dialog-input").fill("Auth Reveal Request");
+    await page.getByTestId("name-dialog-confirm").click();
+    await page.getByTestId(/collection-node-Request-/).first().click();
+
+    await page.getByTestId("request-tab-auth").click();
+    await page.getByTestId("auth-type-select").selectOption("BearerToken");
+
+    const token = page.getByTestId("auth-bearer-input");
+    await token.fill("{{AUTH_PI2_KEY}}");
+    // Masked by default — the value is there, the browser just will not show it.
+    await expect(token).toHaveAttribute("type", "password");
+    await expect(token).toHaveValue("{{AUTH_PI2_KEY}}");
+
+    // Revealed, the field becomes the variable-aware input, which is a plain text box.
+    await page.getByTestId("auth-bearer-input-reveal").click();
+    await expect(page.getByTestId("auth-bearer-input")).toHaveAttribute("type", "text");
+    await expect(page.getByTestId("auth-bearer-input")).toHaveValue("{{AUTH_PI2_KEY}}");
+
+    await page.getByTestId("auth-bearer-input-reveal").click();
+    await expect(page.getByTestId("auth-bearer-input")).toHaveAttribute("type", "password");
+  });
+
   test("body pretty-print and minify work for JSON", async ({ page }) => {
     await page.getByTestId("add-collection-button").click();
     await page.getByTestId("name-dialog-input").fill("Body Format Collection");
