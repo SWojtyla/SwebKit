@@ -17,8 +17,9 @@ namespace SwebKit.Sidecar.Services;
 /// This replaces per-request client construction across all sixteen handlers, none of which disposed what
 /// they built. Opening a namespace fires <c>2 + topicCount</c> requests, so the old behaviour meant that many
 /// simultaneous credential-chain resolutions and that many leaked AMQP connections.
-/// <para>Demo clients are tagged <see cref="ConnectionOwnership.Borrowed"/> — <c>DemoModeService</c> hands out
-/// long-lived singletons it disposes itself, so the cache must never dispose them.</para>
+/// <para>Demo-mode requests bypass the cache entirely: <c>DemoModeService</c> hands out long-lived
+/// singletons it disposes itself, and letting them share cache keys with real namespaces let a
+/// factory-built client poison demo mode (see <c>GetOrCreate</c>).</para>
 /// </remarks>
 public sealed class SidecarServiceBusConnectionPool(IServiceBusClientFactory factory, DemoModeService demo)
     : IServiceBusConnectionPool, IAsyncDisposable
@@ -29,9 +30,13 @@ public sealed class SidecarServiceBusConnectionPool(IServiceBusClientFactory fac
     {
         ArgumentNullException.ThrowIfNull(ns);
 
-        return _cache.GetOrAdd(ns.Id.ToString(), () => demo.IsDemoMode
-            ? (demo.GetSbClient(ns), ConnectionOwnership.Borrowed)
-            : (Create(ns), ConnectionOwnership.Factory))!;
+        // Demo clients are borrowed singletons owned by DemoModeService — return them without
+        // touching the cache, so a factory-built client cached under a demo namespace's id can
+        // never be served to demo-mode requests.
+        if (demo.IsDemoMode)
+            return demo.GetSbClient(ns);
+
+        return _cache.GetOrAdd(ns.Id.ToString(), () => (Create(ns), ConnectionOwnership.Factory))!;
     }
 
     public void Evict(string namespaceId) => _cache.Evict(namespaceId);

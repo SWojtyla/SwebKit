@@ -498,6 +498,11 @@ public static class RedisEndpoints
         if (demo.IsDemoMode)
             return demo.GetDemoRedisCache(cacheId);
 
+        // "demo-cache" is a reserved id — a save made while demo mode was on can persist the
+        // overlay into the profile, and that copy must never resolve to a real client.
+        if (cacheId == DemoModeService.DemoRedisCacheId)
+            return null;
+
         var config = profile.GetProfileData().Config.RedisConfig;
         config?.EnsureMigrated();
         return config?.Caches.FirstOrDefault(c => c.Id == cacheId);

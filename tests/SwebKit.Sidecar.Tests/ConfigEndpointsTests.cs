@@ -183,6 +183,53 @@ public class ConfigEndpointsTests
     }
 
     [Fact]
+    public async Task SaveProfileAsync_StripsDemoOverlayEntities()
+    {
+        // The profile GET overlays demo namespaces/cache/storage while demo mode is on, and saves
+        // round-trip the whole profile — persisting them would make e.g. "demo-cache" resolve to a
+        // real (dead localhost:6379) client once demo mode is off.
+        using var sandbox = new AppDataSandbox();
+        var profile = new ProfileRepository();
+        var data = profile.GetProfileData();
+        data.ServiceBusNamespaces =
+        [
+            new ServiceBusNamespace { Id = DemoModeService.DemoNamespaceId1, Alias = "orders-dev", CredentialKey = string.Empty },
+            new ServiceBusNamespace { Id = DemoModeService.DemoNamespaceId2, Alias = "payments-dev", CredentialKey = string.Empty },
+            new ServiceBusNamespace { Id = Guid.NewGuid(), Alias = "real-ns", CredentialKey = string.Empty },
+        ];
+        data.Config.RedisConfig = new RedisConfig
+        {
+            Caches =
+            [
+                new RedisCacheEntry { Id = DemoModeService.DemoRedisCacheId, ConnectionString = "localhost:6379" },
+                new RedisCacheEntry { Id = "real-cache", ConnectionString = "real:6379" },
+            ],
+            ActiveCacheId = DemoModeService.DemoRedisCacheId,
+        };
+        data.Config.StorageAccounts =
+        [
+            new StorageConfig { Id = DemoModeService.DemoStorageId, DisplayName = "Demo Storage", AccountName = "devstore" },
+            new StorageConfig { Id = "real-storage", DisplayName = "Real", AccountName = "real" },
+        ];
+
+        await ConfigEndpoints.SaveProfileAsync(
+            profile,
+            data,
+            new NoopStorageConnectionPool(),
+            new TrackingRedisConnectionPool(),
+            new TrackingServiceBusConnectionPool());
+
+        var stored = profile.GetProfileData();
+        Assert.Single(stored.ServiceBusNamespaces);
+        Assert.Equal("real-ns", stored.ServiceBusNamespaces[0].Alias);
+        Assert.Single(stored.Config.RedisConfig!.Caches);
+        Assert.Equal("real-cache", stored.Config.RedisConfig.Caches[0].Id);
+        Assert.Equal("real-cache", stored.Config.RedisConfig.ActiveCacheId);
+        Assert.Single(stored.Config.StorageAccounts);
+        Assert.Equal("real-storage", stored.Config.StorageAccounts[0].Id);
+    }
+
+    [Fact]
     public async Task SaveProfileAsync_InvalidatesEveryConnectionPool()
     {
         // A save may have edited a storage account's, Redis cache's or Service Bus namespace's

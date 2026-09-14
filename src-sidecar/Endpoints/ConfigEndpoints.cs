@@ -81,6 +81,20 @@ public static class ConfigEndpoints
         IRedisConnectionPool redisPool,
         IServiceBusConnectionPool serviceBusPool)
     {
+        // The profile GET overlays demo entities while demo mode is on and saves round-trip the
+        // whole profile — strip the demo ids so a save can't persist them as real configuration.
+        // A persisted "demo-cache" resolves to a real client when demo mode is off, and its
+        // localhost:6379 connection then poisons the pool entry demo-mode requests look up.
+        data.ServiceBusNamespaces?.RemoveAll(n =>
+            n.Id == DemoModeService.DemoNamespaceId1 || n.Id == DemoModeService.DemoNamespaceId2);
+        if (data.Config?.RedisConfig is { } redis)
+        {
+            redis.Caches.RemoveAll(c => c.Id == DemoModeService.DemoRedisCacheId);
+            if (redis.ActiveCacheId == DemoModeService.DemoRedisCacheId)
+                redis.ActiveCacheId = redis.Caches.FirstOrDefault()?.Id;
+        }
+        data.Config?.StorageAccounts?.RemoveAll(a => a.Id == DemoModeService.DemoStorageId);
+
         repo.ReplaceProfileData(data);
         await repo.SaveAsync();
         // A save may have edited a connection string, credential key or auth mode; drop every

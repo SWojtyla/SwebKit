@@ -393,6 +393,13 @@ public static class ServiceBusEndpoints
         if (!Guid.TryParse(nsId, out var id))
             return null;
 
+        // Demo namespace ids are reserved — a save made while demo mode was on can persist the
+        // overlay into the profile, and that copy must never resolve to a real client.
+        if (id == DemoModeService.DemoNamespaceId1 || id == DemoModeService.DemoNamespaceId2)
+            return demo.IsDemoMode
+                ? demo.GetDemoNamespaces().FirstOrDefault(n => n.Id == id)
+                : null;
+
         var ns = profile.FindServiceBusNamespace(id);
         if (ns is not null)
             return ns;

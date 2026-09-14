@@ -158,8 +158,8 @@ public class SidecarRedisConnectionPoolTests
     [Fact]
     public async Task DemoMode_NeverCallsTheFactory_AndNeverDisposesTheBorrowedClient()
     {
-        // DemoModeService hands out a long-lived singleton it disposes itself. Caching it is fine;
-        // disposing it here would tear down a client other requests still hold.
+        // DemoModeService hands out a long-lived singleton it disposes itself. The pool returns it
+        // without caching, so invalidation can never dispose a client other requests still hold.
         var factory = new TrackingRedisClientFactory();
         var pool = Build(factory, demoMode: true);
 
@@ -169,5 +169,46 @@ public class SidecarRedisConnectionPoolTests
         Assert.Empty(factory.Calls);
         var afterInvalidate = await pool.GetOrCreateAsync(Cache("cache-1"));
         Assert.Same(client, afterInvalidate);
+    }
+
+    [Fact]
+    public async Task DemoModeRequest_NeverGetsAClientCachedUnderTheSameId()
+    {
+        // A save made while demo mode was on persists the demo cache's id into the real profile, so
+        // a demo-off request caches a real (here: dead localhost:6379) client under it. Demo-mode
+        // requests must still get the demo singleton, not that cached entry.
+        var factory = new TrackingRedisClientFactory();
+        var demo = new DemoModeService();
+        var pool = new SidecarRedisConnectionPool(factory, demo);
+        var cache = Cache(DemoModeService.DemoRedisCacheId);
+
+        var realClient = await pool.GetOrCreateAsync(cache);
+        Assert.IsType<TrackingRedisClient>(realClient);
+
+        demo.IsDemoMode = true;
+        var demoClient = await pool.GetOrCreateAsync(cache);
+
+        Assert.NotSame(realClient, demoClient);
+        Assert.Single(factory.Calls);
+    }
+
+    [Fact]
+    public async Task DemoModeClient_IsNotCachedForLaterNonDemoRequests()
+    {
+        // The mirror hazard: if the demo singleton were cached under the cache id, a later non-demo
+        // request for that id would silently read demo data.
+        var factory = new TrackingRedisClientFactory();
+        var demo = new DemoModeService { IsDemoMode = true };
+        var pool = new SidecarRedisConnectionPool(factory, demo);
+        var cache = Cache("cache-1");
+
+        var demoClient = await pool.GetOrCreateAsync(cache);
+
+        demo.IsDemoMode = false;
+        var realClient = await pool.GetOrCreateAsync(cache);
+
+        Assert.NotSame(demoClient, realClient);
+        Assert.IsType<TrackingRedisClient>(realClient);
+        Assert.Single(factory.Calls);
     }
 }

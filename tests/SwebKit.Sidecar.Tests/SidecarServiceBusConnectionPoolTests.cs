@@ -202,8 +202,8 @@ public class SidecarServiceBusConnectionPoolTests
     [Fact]
     public void DemoMode_NeverCallsTheFactory_AndNeverDisposesTheBorrowedClient()
     {
-        // DemoModeService hands out long-lived singletons it disposes itself. Caching them is fine;
-        // disposing them here would tear down a client other requests still hold.
+        // DemoModeService hands out long-lived singletons it disposes itself. The pool returns them
+        // without caching, so invalidation can never dispose a client other requests still hold.
         var factory = new TrackingServiceBusClientFactory();
         var demo = new DemoModeService { IsDemoMode = true };
         var pool = new SidecarServiceBusConnectionPool(factory, demo);
@@ -214,5 +214,53 @@ public class SidecarServiceBusConnectionPoolTests
 
         Assert.Equal(0, factory.TotalCalls);
         Assert.Same(client, pool.GetOrCreate(ns));
+    }
+
+    [Fact]
+    public void DemoModeRequest_NeverGetsAClientCachedUnderTheSameId()
+    {
+        // A save made while demo mode was on persists the demo namespace's id into the real profile,
+        // so a demo-off request caches a real client under it. Demo-mode requests must still get the
+        // demo singleton, not that cached entry.
+        var factory = new TrackingServiceBusClientFactory();
+        var demo = new DemoModeService();
+        var pool = new SidecarServiceBusConnectionPool(factory, demo);
+        var persistedDemoNs = new ServiceBusNamespace
+        {
+            Id = DemoModeService.DemoNamespaceId1,
+            Alias = "orders-dev",
+            FullyQualifiedNamespace = "orders-dev.servicebus.windows.net",
+            CredentialKey = "Endpoint=sb://orders-dev/;SharedAccessKeyName=k;SharedAccessKey=v",
+        };
+
+        var realClient = pool.GetOrCreate(persistedDemoNs);
+        Assert.IsType<TrackingServiceBusClient>(realClient);
+
+        demo.IsDemoMode = true;
+        var demoClient = pool.GetOrCreate(demo.GetDemoNamespaces().First(n => n.Id == DemoModeService.DemoNamespaceId1));
+
+        Assert.NotSame(realClient, demoClient);
+        Assert.Equal(1, factory.TotalCalls);
+    }
+
+    [Fact]
+    public void DemoModeClient_IsNotCachedForLaterNonDemoRequests()
+    {
+        // The mirror hazard: if the demo singleton were cached under the namespace id, a later
+        // non-demo request for that id would silently get the demo client.
+        var factory = new TrackingServiceBusClientFactory();
+        var demo = new DemoModeService { IsDemoMode = true };
+        var pool = new SidecarServiceBusConnectionPool(factory, demo);
+        var ns = demo.GetDemoNamespaces().First();
+
+        var demoClient = pool.GetOrCreate(ns);
+
+        demo.IsDemoMode = false;
+        ns.CredentialKey = "Endpoint=sb://x/;SharedAccessKeyName=k;SharedAccessKey=v";
+        var realClient = pool.GetOrCreate(ns);
+
+        Assert.NotSame(demoClient, realClient);
+        Assert.IsType<TrackingServiceBusClient>(realClient);
+        Assert.Equal(1, factory.TotalCalls);
     }
 }
