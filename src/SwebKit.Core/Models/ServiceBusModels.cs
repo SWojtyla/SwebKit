@@ -64,6 +64,19 @@ public class SbEntityInfo
     public bool IsTopic { get; set; }
     public bool IsSubscription { get; set; }
     public string? TopicName { get; set; }
+
+    /// <summary>
+    /// For a topic: the total dead-lettered messages across all its subscriptions. <c>null</c> elsewhere,
+    /// or when the rollup could not be read.
+    /// </summary>
+    /// <remarks>
+    /// Topics have no message counts of their own, but a DLQ backlog on a subscription underneath is worth
+    /// surfacing while the topic is still collapsed. The UI used to get this by fetching every topic's
+    /// subscriptions on render — one HTTP request per topic, each building its own client and doing its own
+    /// per-subscription fan-out — purely to show a number on a collapsed row. Computing it here makes the
+    /// topic list self-sufficient so those queries can wait until a topic is actually expanded.
+    /// </remarks>
+    public long? SubscriptionDeadLetterCount { get; set; }
 }
 
 public class SbEntityStats

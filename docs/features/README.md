@@ -32,6 +32,20 @@ the collection-scoped one so shared values are defined once. It builds on
 `api-client-ux-improvements/` (Review, shipped as PR #82) and deliberately does not re-plan the
 Environment Manager resizing that shipped there.
 
+**Data-fetch performance (2026-09-14):** `docs/features/active/data-fetch-performance/` is in
+Review — AKS, Service Bus and Redis all felt slow to fetch, and Redis filtering in particular
+"sometimes takes a lot of time and I don't know if it crashed." The root cause was a connection
+leak, not a slow query: Redis and Service Bus built an SDK client per request and disposed none of
+them, so a browsing session leaked connections until commands started blocking for the full timeout
+instead of failing. Both now pool through the existing `ClientCache`, as Storage already did
+(`cc700f33`). On top of that: Redis stopped firing two 500-key metadata sweeps while merely
+browsing keys and now scans server-side under a budget; AKS stopped shipping Helm release manifests
+and ConfigMap values it never renders, and stopped blocking first paint on the namespace list;
+Service Bus reads message counts in pages of 100 instead of one call per entity. Two correctness
+bugs fell out of the tracing — subscription entity paths were unencoded and 404'd every peek/purge,
+and Redis "Load all" stopped after one page. Cluster-scoped AKS list calls are the largest
+remaining win and are recorded as a follow-up.
+
 **API client auth (2026-09-14):** `docs/features/active/api-client-auth-variables/` is in Review —
 auth was the one part of a request the variable scope never reached, so a bearer token entered as
 `{{AUTH_PI2_KEY}}` was sent as those sixteen characters and came back a 400, and an auth secret was

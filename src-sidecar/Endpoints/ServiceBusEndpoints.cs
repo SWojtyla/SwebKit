@@ -19,7 +19,7 @@ public static class ServiceBusEndpoints
         app.MapGet("/api/servicebus/{nsId}/test", async (
             string nsId,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             ILogger<Program> logger,
             CancellationToken ct) =>
@@ -29,7 +29,7 @@ public static class ServiceBusEndpoints
 
             try
             {
-                var client = CreateClient(ns, factory, demo);
+                var client = pool.GetOrCreate(ns);
                 var ok = await client.TestConnectionAsync(ct);
                 return Results.Ok(new { connected = ok });
             }
@@ -45,14 +45,14 @@ public static class ServiceBusEndpoints
         app.MapGet("/api/servicebus/{nsId}/info", async (
             string nsId,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory, demo);
+            var client = pool.GetOrCreate(ns);
             var info = await client.GetNamespaceInfoAsync(ct);
             return Results.Ok(info);
         });
@@ -60,14 +60,14 @@ public static class ServiceBusEndpoints
         app.MapGet("/api/servicebus/{nsId}/queues", async (
             string nsId,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory, demo);
+            var client = pool.GetOrCreate(ns);
             var queues = await client.ListQueuesAsync(ct);
             return Results.Ok(queues);
         });
@@ -75,14 +75,14 @@ public static class ServiceBusEndpoints
         app.MapGet("/api/servicebus/{nsId}/topics", async (
             string nsId,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory, demo);
+            var client = pool.GetOrCreate(ns);
             var topics = await client.ListTopicsAsync(ct);
             return Results.Ok(topics);
         });
@@ -91,14 +91,14 @@ public static class ServiceBusEndpoints
             string nsId,
             string topic,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory, demo);
+            var client = pool.GetOrCreate(ns);
             var subs = await client.ListSubscriptionsAsync(topic, ct);
             return Results.Ok(subs);
         });
@@ -107,7 +107,7 @@ public static class ServiceBusEndpoints
             string nsId,
             string entityPath,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
@@ -115,7 +115,7 @@ public static class ServiceBusEndpoints
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory, demo);
+            var client = pool.GetOrCreate(ns);
             var stats = await client.GetEntityStatsAsync(entityPath, ct);
             return Results.Ok(stats);
         });
@@ -129,7 +129,7 @@ public static class ServiceBusEndpoints
             string entityPath,
             SbMessage message,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
@@ -137,7 +137,7 @@ public static class ServiceBusEndpoints
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory, demo);
+            var client = pool.GetOrCreate(ns);
             await client.SendMessageAsync(entityPath, message, ct);
             return Results.Ok();
         });
@@ -147,7 +147,7 @@ public static class ServiceBusEndpoints
             string entityPath,
             List<SbMessage> messages,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
@@ -155,7 +155,7 @@ public static class ServiceBusEndpoints
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory, demo);
+            var client = pool.GetOrCreate(ns);
             await client.SendBatchAsync(entityPath, messages, ct);
             return Results.Ok(new { sent = messages.Count });
         });
@@ -165,7 +165,7 @@ public static class ServiceBusEndpoints
             string entityPath,
             ScheduleRequest req,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             ScheduledMessageRepository schedRepo,
             CancellationToken ct) =>
@@ -174,7 +174,7 @@ public static class ServiceBusEndpoints
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory, demo);
+            var client = pool.GetOrCreate(ns);
             var seq = await client.ScheduleMessageAsync(entityPath, req.Message, req.ScheduledEnqueueTime, ct);
 
             var entry = new ScheduledMessageEntry
@@ -210,7 +210,7 @@ public static class ServiceBusEndpoints
             string entityPath,
             long sequenceNumber,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             ScheduledMessageRepository schedRepo,
             CancellationToken ct) =>
@@ -219,7 +219,7 @@ public static class ServiceBusEndpoints
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory, demo);
+            var client = pool.GetOrCreate(ns);
             await client.CancelScheduledMessageAsync(entityPath, sequenceNumber, ct);
 
             var entries = schedRepo.GetByEntity(ns.Id, entityPath);
@@ -239,7 +239,7 @@ public static class ServiceBusEndpoints
             string entityPath,
             string[] sequenceNumbers,
             ProfileRepository profile,
-            IServiceBusClientFactory factory,
+            IServiceBusConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
         {
@@ -247,7 +247,7 @@ public static class ServiceBusEndpoints
             var ns = ResolveNamespace(nsId, profile, demo);
             if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-            var client = CreateClient(ns, factory, demo);
+            var client = pool.GetOrCreate(ns);
             await client.CompleteDeadLetterAsync(entityPath, sequenceNumbers, ct);
             return Results.Ok();
         });
@@ -283,7 +283,7 @@ public static class ServiceBusEndpoints
         int count,
         long? fromSeq,
         ProfileRepository profile,
-        IServiceBusClientFactory factory,
+        IServiceBusConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -291,7 +291,7 @@ public static class ServiceBusEndpoints
         var ns = ResolveNamespace(nsId, profile, demo);
         if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-        var client = CreateClient(ns, factory, demo);
+        var client = pool.GetOrCreate(ns);
         var messages = await client.PeekMessagesAsync(entityPath, count, ct, fromSequenceNumber: fromSeq);
         return Results.Ok(messages);
     }
@@ -303,7 +303,7 @@ public static class ServiceBusEndpoints
         int count,
         long? fromSeq,
         ProfileRepository profile,
-        IServiceBusClientFactory factory,
+        IServiceBusConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -311,7 +311,7 @@ public static class ServiceBusEndpoints
         var ns = ResolveNamespace(nsId, profile, demo);
         if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-        var client = CreateClient(ns, factory, demo);
+        var client = pool.GetOrCreate(ns);
         var messages = await client.PeekDeadLetterAsync(entityPath, count, ct, fromSequenceNumber: fromSeq);
         return Results.Ok(messages);
     }
@@ -328,7 +328,7 @@ public static class ServiceBusEndpoints
         string entityPath,
         long[] sequenceNumbers,
         ProfileRepository profile,
-        IServiceBusClientFactory factory,
+        IServiceBusConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -336,7 +336,7 @@ public static class ServiceBusEndpoints
         var ns = ResolveNamespace(nsId, profile, demo);
         if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-        var client = CreateClient(ns, factory, demo);
+        var client = pool.GetOrCreate(ns);
         var count = await client.CompleteMessagesAsync(entityPath, sequenceNumbers, ct);
         return Results.Ok(new { completed = count });
     }
@@ -347,7 +347,7 @@ public static class ServiceBusEndpoints
         string entityPath,
         bool deadLetter,
         ProfileRepository profile,
-        IServiceBusClientFactory factory,
+        IServiceBusConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -355,7 +355,7 @@ public static class ServiceBusEndpoints
         var ns = ResolveNamespace(nsId, profile, demo);
         if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-        var client = CreateClient(ns, factory, demo);
+        var client = pool.GetOrCreate(ns);
         var count = await client.PurgeMessagesAsync(entityPath, deadLetter, ct);
         return Results.Ok(new { purged = count });
     }
@@ -370,7 +370,7 @@ public static class ServiceBusEndpoints
         string entityPath,
         ResubmitRequest req,
         ProfileRepository profile,
-        IServiceBusClientFactory factory,
+        IServiceBusConnectionPool pool,
         DemoModeService demo,
         CancellationToken ct)
     {
@@ -378,7 +378,7 @@ public static class ServiceBusEndpoints
         var ns = ResolveNamespace(nsId, profile, demo);
         if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
-        var client = CreateClient(ns, factory, demo);
+        var client = pool.GetOrCreate(ns);
         await client.ResubmitDeadLetterAsync(entityPath, req.SequenceNumbers, req.TargetEntityPath, req.RemapRules, ct);
         return Results.Ok();
     }
@@ -400,19 +400,6 @@ public static class ServiceBusEndpoints
         return demo.IsDemoMode
             ? demo.GetDemoNamespaces().FirstOrDefault(n => n.Id == id)
             : null;
-    }
-
-    private static IServiceBusClient CreateClient(
-        ServiceBusNamespace ns,
-        IServiceBusClientFactory factory,
-        DemoModeService demo)
-    {
-        if (demo.IsDemoMode)
-            return demo.GetSbClient(ns);
-
-        return ns.AuthMode == SbAuthMode.ConnectionString
-            ? factory.Create(ns.CredentialKey, ns.TransportType)
-            : factory.CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType);
     }
 
     public sealed class ResubmitRequest

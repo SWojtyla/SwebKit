@@ -263,7 +263,31 @@ public class ConfigMapInfo
 {
     public required string Name { get; set; }
     public required string Namespace { get; set; }
+
+    /// <summary>
+    /// The data key names, always populated.
+    /// </summary>
+    /// <remarks>
+    /// Kubernetes has no way to list ConfigMaps without their values — metadata-only responses drop
+    /// <c>data</c> entirely, keys included — so the sidecar must fetch them. It does not have to forward
+    /// them: the list view renders only key names, so the sidecar sends these and leaves
+    /// <see cref="Data"/> empty, and the detail panel fetches values on demand. A ConfigMap can hold up
+    /// to 1 MB, and the list used to ship every value in the namespace on every auto-refresh tick.
+    /// </remarks>
+    public List<string> Keys { get; set; } = [];
+
+    /// <summary>
+    /// Total size of all values, in characters. Sent in place of the values themselves so the analysis
+    /// view can still report how large a ConfigMap is without the list carrying its contents.
+    /// </summary>
+    public int DataSizeChars { get; set; }
+
+    /// <summary>
+    /// The data values. Populated by <c>IAksClient</c> itself, but deliberately **empty** in the
+    /// sidecar's list response — see <see cref="Keys"/>.
+    /// </summary>
     public Dictionary<string, string> Data { get; set; } = [];
+
     public Dictionary<string, string> Labels { get; set; } = [];
 }
 

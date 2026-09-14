@@ -339,16 +339,23 @@ function TopicRow({
   onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
   treeRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  // Fetched unconditionally — not just while expanded — so the dead-letter rollup badge below
-  // stays accurate even for a collapsed topic. Same query TanStack Query would otherwise fetch
-  // again on expand, so this doesn't add a second request once the user does expand it.
-  const { data: subs, isLoading: subsLoading, isError: subsIsError } = useSbSubscriptions(nsId, topic.name);
+  // Only while expanded. This used to fetch unconditionally so the collapsed rollup badge stayed
+  // accurate, which meant one request per topic the moment the tree painted — each one building its
+  // own client and running its own per-subscription fan-out, just to render three digits. The topic
+  // list now carries the rollup, so the collapsed badge costs nothing and this fetches only what an
+  // expanded topic actually renders.
+  const { data: subs, isLoading: subsLoading, isError: subsIsError } = useSbSubscriptions(nsId, topic.name, {
+    enabled: isExpanded,
+  });
 
   const dlqRollup = useMemo(() => {
+    // Prefer the subscriptions once loaded — same number, but re-read on expand rather than as of
+    // whenever the topic list was fetched.
+    if (subs) return subs.reduce((sum, s) => sum + (s.stats?.deadLetterMessageCount ?? 0), 0);
+    if (topic.subscriptionDeadLetterCount != null) return topic.subscriptionDeadLetterCount;
     if (subsIsError) return null;
-    if (subsLoading || !subs) return undefined;
-    return subs.reduce((sum, s) => sum + (s.stats?.deadLetterMessageCount ?? 0), 0);
-  }, [subs, subsLoading, subsIsError]);
+    return subsLoading ? undefined : null;
+  }, [subs, subsLoading, subsIsError, topic.subscriptionDeadLetterCount]);
 
   return (
     <div>

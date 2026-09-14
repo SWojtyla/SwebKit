@@ -101,17 +101,31 @@ public partial class KubernetesAksClient
             {
                 Name = cm.Metadata.Name,
                 Namespace = cm.Metadata.NamespaceProperty ?? ns,
+                Keys = cm.Data?.Keys.ToList() ?? [],
+                DataSizeChars = cm.Data?.Values.Sum(v => v.Length) ?? 0,
                 Data = cm.Data is not null ? new Dictionary<string, string>(cm.Data) : [],
                 Labels = cm.Metadata.Labels is not null ? new Dictionary<string, string>(cm.Metadata.Labels) : []
             }).ToList();
         }).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Lists a namespace's Secrets, excluding Helm release Secrets at the API server rather than after
+    /// transferring them.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MapSecrets"/> discards <c>owner=helm</c> Secrets anyway, and those are by far the
+    /// largest objects in a typical namespace — each holds a gzipped release manifest, and Helm keeps
+    /// several revisions per release. Without this selector the Secrets tab downloaded all of them on
+    /// every load and every auto-refresh tick, only to filter them out client-side.
+    /// </remarks>
     public async Task<IReadOnlyList<SecretInfo>> GetSecretsAsync(string ns, CancellationToken ct = default)
     {
         return await WithAuthRetryAsync(async () =>
         {
-            var result = await _client.CoreV1.ListNamespacedSecretAsync(ns, cancellationToken: ct).ConfigureAwait(false);
+            var result = await _client.CoreV1
+                .ListNamespacedSecretAsync(ns, labelSelector: "owner!=helm", cancellationToken: ct)
+                .ConfigureAwait(false);
             return MapSecrets(result.Items, ns);
         }).ConfigureAwait(false);
     }
@@ -147,6 +161,19 @@ public partial class KubernetesAksClient
                 Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : []
             }).ToList();
 
+    /// <summary>
+    /// Reads one ConfigMap's values, so the list endpoint can omit them. Mirrors
+    /// <see cref="GetSecretValuesAsync"/>.
+    /// </summary>
+    public async Task<Dictionary<string, string>> GetConfigMapValuesAsync(string ns, string name, CancellationToken ct = default)
+    {
+        return await WithAuthRetryAsync(async () =>
+        {
+            var configMap = await _client.CoreV1.ReadNamespacedConfigMapAsync(name, ns, cancellationToken: ct).ConfigureAwait(false);
+            return configMap.Data is null ? [] : new Dictionary<string, string>(configMap.Data);
+        }).ConfigureAwait(false);
+    }
+
     public async Task<Dictionary<string, string>> GetSecretValuesAsync(string ns, string name, CancellationToken ct = default)
     {
         return await WithAuthRetryAsync(async () =>
@@ -169,7 +196,9 @@ public partial class KubernetesAksClient
             var pod = await _client.CoreV1.ReadNamespacedPodAsync(podName, ns, cancellationToken: ct).ConfigureAwait(false);
             var containers = pod.Spec?.Containers ?? [];
 
-            // Batch ConfigMap fetches — one API call per unique ConfigMap name
+            // Resolve the referenced ConfigMaps concurrently. The comment here used to say "batch" while
+            // the loop awaited each read in turn, so a pod referencing eight ConfigMaps paid eight
+            // serial round trips before the panel could render.
             var configMapNames = containers
                 .SelectMany(c => c.Env ?? [])
                 .Where(e => e.ValueFrom?.ConfigMapKeyRef is not null)
@@ -177,16 +206,27 @@ public partial class KubernetesAksClient
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
 
-            var configMapCache = new Dictionary<string, V1ConfigMap>(StringComparer.Ordinal);
-            foreach (var cmName in configMapNames)
+            var reads = await Task.WhenAll(configMapNames.Select(async cmName =>
             {
                 try
                 {
                     var cm = await _client.CoreV1.ReadNamespacedConfigMapAsync(cmName, ns, cancellationToken: ct).ConfigureAwait(false);
-                    configMapCache[cmName] = cm;
+                    return (Name: cmName, ConfigMap: (V1ConfigMap?)cm);
                 }
-                catch { /* ConfigMap might not exist — skip resolution */ }
-            }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // ConfigMap might not exist — skip resolution.
+                    return (Name: cmName, ConfigMap: (V1ConfigMap?)null);
+                }
+            })).ConfigureAwait(false);
+
+            var configMapCache = reads
+                .Where(r => r.ConfigMap is not null)
+                .ToDictionary(r => r.Name, r => r.ConfigMap!, StringComparer.Ordinal);
 
             return containers.Select(c =>
             {

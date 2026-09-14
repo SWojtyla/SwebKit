@@ -231,7 +231,9 @@ export function ServiceBusPage() {
     // elements, not string prefixes, and every real key here is ["sb-peek", nsId, entityPath, …]
     // and friends. Reuse the real key set instead of re-deriving it.
     if (action === "refresh" && selectedNsId) {
-      invalidateServiceBusQueries(queryClient, selectedNsId, entity.entityPath);
+      // Refresh is the one path that should re-read topology too — a deployment may have added or
+      // removed entities since the tree loaded. Mutations deliberately leave the tree alone.
+      invalidateServiceBusQueries(queryClient, selectedNsId, entity.entityPath, { includeTopology: true });
     }
     // Previously fell through every branch — presented as a working destructive action while
     // doing nothing. Routes through the same entity-level confirm as the toolbar's Purge All.

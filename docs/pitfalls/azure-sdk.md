@@ -91,4 +91,62 @@ All Entra ID authenticated clients in this repo (Storage, Service Bus, Key Vault
 
 ---
 
-_See also: [blazor-maui.md](blazor-maui.md) · [dotnet-csharp.md](dotnet-csharp.md)_
+## AZ-6 — A per-request SDK client is a connection leak that presents as slowness, then as a hang
+
+**Symptom:** A feature area feels sluggish, gets worse the longer the app stays open, and
+eventually commands take seconds and may never visibly fail. The user's words: *"I don't know if
+it crashed or just takes ages."* Restarting the app fixes it for a while.
+
+**Cause:** An endpoint builds its SDK client per request and never disposes it. Each one holds a
+live connection — a `ConnectionMultiplexer` for Redis, an AMQP connection for Service Bus, an
+HTTP pipeline for the admin client — and for AAD-backed clients a fresh credential with an empty
+token cache (which on a developer machine normally resolves via `AzureCliCredential` and shells
+out to `az account get-access-token`, once per request).
+
+The failure mode is the nasty part. Azure Cache for Redis caps connections per tier, and
+`AbortOnConnectFail = false` — which this repo sets deliberately, so startup survives a
+temporarily unreachable cache — means a connect **past** the cap still *succeeds*. Every command
+on that dead multiplexer then blocks for the full async timeout before throwing, so the app hangs
+rather than reporting a connection problem.
+
+This has now happened three times: Storage (fixed in `cc700f33`), then Redis and Service Bus,
+both fixed under `docs/features/active/data-fetch-performance/`.
+
+**Fix:** Pool the client per account/namespace/cache with the existing generic
+`ClientCache<TClient>` (`src/SwebKit.Core/Services/ClientCache.cs`) and route every handler
+through it. `SidecarStorageConnectionPool` is the 27-line template;
+`SidecarRedisConnectionPool` shows the async-factory variant.
+
+Two rules that are easy to miss:
+
+- **Invalidate on profile save.** A cached client outlives an edited connection string or a
+  flipped auth mode, so `ConfigEndpoints.SaveProfileAsync` drops every pool. A pool without this
+  turns a credential fix into "it still doesn't work".
+- **Tag demo clients `ConnectionOwnership.Borrowed`.** `DemoModeService` hands out long-lived
+  singletons it disposes itself; caching them as `Factory` makes the pool dispose something it
+  does not own.
+
+**Rule:** any SDK client that owns a connection gets pooled and disposed. If you are writing
+`factory.Create(...)` inside a request handler, that is the smell.
+
+---
+
+## AZ-7 — `Parallel.ForEachAsync` over entities is an N+1 the SDK already has a bulk call for
+
+**Symptom:** Opening a Service Bus namespace takes seconds and scales with entity count.
+
+**Cause:** Fetching each entity's runtime properties individually — 300 queues at
+`MaxDegreeOfParallelism = 5` is 300 round trips in 60 sequential waves. Concurrency caps make it
+look bounded while it is still linear.
+
+**Fix:** `GetQueuesRuntimePropertiesAsync` / `GetSubscriptionsRuntimePropertiesAsync` return
+`AsyncPageable`s of 100, and are independent of the entity list, so run both concurrently and
+join by name. Keep failures non-fatal: counts are decoration, and a principal that can list
+entities but not read runtime properties should still get a tree.
+
+Note AZ-2 still applies — the entity-scoped connection-string fallback cannot list and must keep
+reading its single entity's stats directly.
+
+---
+
+_See also: [blazor-maui.md](blazor-maui.md) · [dotnet-csharp.md](dotnet-csharp.md) · [api-client.md](api-client.md)_

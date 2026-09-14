@@ -69,6 +69,26 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
     public async Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default)
     {
+        // The entity list and the runtime properties are independent management-plane reads, so they
+        // overlap instead of running back to back.
+        var listTask = ReadQueueListAsync(ct);
+        var statsTask = ReadQueueStatsAsync(ct);
+        await Task.WhenAll(listTask, statsTask).ConfigureAwait(false);
+
+        var result = await listTask.ConfigureAwait(false);
+        if (result.Count == 0)
+        {
+            // Scoped connection strings cannot list; that path reads its single entity's stats itself.
+            await TryAddScopedQueueAsync(result, ct).ConfigureAwait(false);
+            return result;
+        }
+
+        ApplyStats(result, await statsTask.ConfigureAwait(false));
+        return result;
+    }
+
+    private async Task<List<SbEntityInfo>> ReadQueueListAsync(CancellationToken ct)
+    {
         var result = new List<SbEntityInfo>();
         await foreach (var q in _adminClient.GetQueuesAsync(ct).ConfigureAwait(false))
         {
@@ -80,13 +100,55 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             });
         }
 
-        if (result.Count == 0)
+        return result;
+    }
+
+    /// <summary>
+    /// Reads every queue's message counts in pages of 100 rather than one request per queue.
+    /// </summary>
+    /// <remarks>
+    /// This replaces a <c>Parallel.ForEachAsync</c> fan-out capped at 5 concurrent
+    /// <c>GetQueueRuntimePropertiesAsync</c> calls — on a 300-queue namespace, 300 round trips in 60
+    /// sequential waves, which was the dominant cost of opening a namespace.
+    /// <para>Returns an empty map rather than throwing: counts are decoration on the entity tree, and a
+    /// principal allowed to list entities but not read their runtime properties should still get a tree.</para>
+    /// </remarks>
+    private async Task<Dictionary<string, SbEntityStats>> ReadQueueStatsAsync(CancellationToken ct)
+    {
+        var stats = new Dictionary<string, SbEntityStats>(StringComparer.OrdinalIgnoreCase);
+        try
         {
-            await TryAddScopedQueueAsync(result, ct).ConfigureAwait(false);
+            await foreach (var props in _adminClient.GetQueuesRuntimePropertiesAsync(ct).ConfigureAwait(false))
+            {
+                stats[props.Name] = new SbEntityStats
+                {
+                    ActiveMessageCount = props.ActiveMessageCount,
+                    DeadLetterMessageCount = props.DeadLetterMessageCount,
+                    ScheduledMessageCount = props.ScheduledMessageCount,
+                    TransferCount = props.TransferMessageCount,
+                    UpdatedAt = props.UpdatedAt,
+                };
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // Leave counts unset if runtime properties cannot be read.
         }
 
-        await PopulateStatsAsync(result, ct).ConfigureAwait(false);
-        return result;
+        return stats;
+    }
+
+    private static void ApplyStats(IReadOnlyList<SbEntityInfo> entities, Dictionary<string, SbEntityStats> stats)
+    {
+        foreach (var entity in entities)
+        {
+            if (stats.TryGetValue(entity.Name, out var entityStats))
+                entity.Stats = entityStats;
+        }
     }
 
     public async Task<IReadOnlyList<SbEntityInfo>> ListTopicsAsync(CancellationToken ct = default)
@@ -106,9 +168,36 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         if (result.Count == 0)
         {
             await TryAddScopedTopicAsync(result, ct).ConfigureAwait(false);
+            return result;
         }
 
+        await PopulateSubscriptionRollupsAsync(result, ct).ConfigureAwait(false);
         return result;
+    }
+
+    /// <summary>Concurrency for the per-topic rollup reads.</summary>
+    /// <remarks>
+    /// These are management-plane reads against one namespace, so this trades a burst against the wall-clock
+    /// cost of a namespace with many topics. Higher than the 5 the old per-entity stats fan-out used, because
+    /// this is now one call per *topic* rather than one per queue/subscription.
+    /// </remarks>
+    private const int RollupConcurrency = 12;
+
+    /// <summary>
+    /// Fills each topic's <see cref="SbEntityInfo.SubscriptionDeadLetterCount"/> so the tree can show a
+    /// collapsed topic's dead-letter backlog without the UI fetching every topic's subscriptions itself.
+    /// </summary>
+    private async Task PopulateSubscriptionRollupsAsync(IReadOnlyList<SbEntityInfo> topics, CancellationToken ct)
+    {
+        await Parallel.ForEachAsync(
+            topics,
+            new ParallelOptions { MaxDegreeOfParallelism = RollupConcurrency, CancellationToken = ct },
+            async (topic, token) =>
+            {
+                var stats = await ReadSubscriptionStatsAsync(topic.Name, token).ConfigureAwait(false);
+                if (stats.Count > 0)
+                    topic.SubscriptionDeadLetterCount = stats.Values.Sum(s => s.DeadLetterMessageCount);
+            }).ConfigureAwait(false);
     }
 
     private async Task TryAddScopedQueueAsync(List<SbEntityInfo> result, CancellationToken ct)
@@ -162,28 +251,18 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         }
     }
 
-    private async Task PopulateStatsAsync(IReadOnlyList<SbEntityInfo> entities, CancellationToken ct)
+    public async Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default)
     {
-        await Parallel.ForEachAsync(entities,
-            new ParallelOptions { MaxDegreeOfParallelism = 5, CancellationToken = ct },
-            async (entity, token) =>
-            {
-                try
-                {
-                    entity.Stats = await GetEntityStatsAsync(entity.EntityPath, token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (token.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch
-                {
-                    // Leave Stats null if the runtime properties cannot be read.
-                }
-            }).ConfigureAwait(false);
+        var listTask = ReadSubscriptionListAsync(topicName, ct);
+        var statsTask = ReadSubscriptionStatsAsync(topicName, ct);
+        await Task.WhenAll(listTask, statsTask).ConfigureAwait(false);
+
+        var result = await listTask.ConfigureAwait(false);
+        ApplyStats(result, await statsTask.ConfigureAwait(false));
+        return result;
     }
 
-    public async Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default)
+    private async Task<List<SbEntityInfo>> ReadSubscriptionListAsync(string topicName, CancellationToken ct)
     {
         var result = new List<SbEntityInfo>();
         await foreach (var s in _adminClient.GetSubscriptionsAsync(topicName, ct).ConfigureAwait(false))
@@ -198,8 +277,35 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             });
         }
 
-        await PopulateStatsAsync(result, ct).ConfigureAwait(false);
         return result;
+    }
+
+    /// <summary>Subscription counterpart of <see cref="ReadQueueStatsAsync"/>; see its remarks.</summary>
+    private async Task<Dictionary<string, SbEntityStats>> ReadSubscriptionStatsAsync(string topicName, CancellationToken ct)
+    {
+        var stats = new Dictionary<string, SbEntityStats>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            await foreach (var props in _adminClient.GetSubscriptionsRuntimePropertiesAsync(topicName, ct).ConfigureAwait(false))
+            {
+                stats[props.SubscriptionName] = new SbEntityStats
+                {
+                    ActiveMessageCount = props.ActiveMessageCount,
+                    DeadLetterMessageCount = props.DeadLetterMessageCount,
+                    UpdatedAt = props.UpdatedAt,
+                };
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // Leave counts unset if runtime properties cannot be read.
+        }
+
+        return stats;
     }
 
     public async Task SetQueueEnabledAsync(string queueName, bool enabled, CancellationToken ct = default)
@@ -570,54 +676,6 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         }
 
         return parsed;
-    }
-
-    private async Task<SbEntityStats?> TryGetQueueStatsAsync(string queueName, CancellationToken ct)
-    {
-        try
-        {
-            var runtime = await _adminClient.GetQueueRuntimePropertiesAsync(queueName, ct).ConfigureAwait(false);
-            return new SbEntityStats
-            {
-                ActiveMessageCount = runtime.Value.ActiveMessageCount,
-                DeadLetterMessageCount = runtime.Value.DeadLetterMessageCount,
-                ScheduledMessageCount = runtime.Value.ScheduledMessageCount,
-                TransferCount = runtime.Value.TransferMessageCount,
-                UpdatedAt = runtime.Value.UpdatedAt
-            };
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Unable to load queue runtime properties for {QueueName}", queueName);
-            return null;
-        }
-    }
-
-    private async Task<SbEntityStats?> TryGetSubscriptionStatsAsync(string topicName, string subscriptionName, CancellationToken ct)
-    {
-        try
-        {
-            var runtime = await _adminClient.GetSubscriptionRuntimePropertiesAsync(topicName, subscriptionName, ct).ConfigureAwait(false);
-            return new SbEntityStats
-            {
-                ActiveMessageCount = runtime.Value.ActiveMessageCount,
-                DeadLetterMessageCount = runtime.Value.DeadLetterMessageCount,
-                UpdatedAt = runtime.Value.UpdatedAt
-            };
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Unable to load subscription runtime properties for {TopicName}/{SubscriptionName}", topicName, subscriptionName);
-            return null;
-        }
     }
 
     private static SbMessage MapMessage(ServiceBusReceivedMessage m) => new()

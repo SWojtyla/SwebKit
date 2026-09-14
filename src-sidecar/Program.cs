@@ -61,6 +61,14 @@ builder.Services.AddSingleton<SwebKit.Core.Abstractions.IStorageConnectionPool>(
     sp => sp.GetRequiredService<SwebKit.Sidecar.Services.SidecarStorageConnectionPool>());
 builder.Services.AddSingleton<IAksClientFactory, AksClientFactory>();
 builder.Services.AddSingleton<DemoModeService>();
+// Redis and Service Bus get the same per-request-client treatment storage already had: without these
+// every endpoint hit opened (and leaked) a ConnectionMultiplexer / ServiceBusClient of its own.
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.SidecarRedisConnectionPool>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IRedisConnectionPool>(
+    sp => sp.GetRequiredService<SwebKit.Sidecar.Services.SidecarRedisConnectionPool>());
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.SidecarServiceBusConnectionPool>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IServiceBusConnectionPool>(
+    sp => sp.GetRequiredService<SwebKit.Sidecar.Services.SidecarServiceBusConnectionPool>());
 builder.Services.AddSingleton<RedisKeyspaceHealthAnalyzer>();
 builder.Services.AddSingleton<ScheduledMessageRepository>();
 

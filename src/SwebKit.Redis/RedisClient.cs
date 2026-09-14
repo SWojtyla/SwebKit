@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,6 +18,12 @@ public sealed class RedisClient : IRedisClient
     private readonly IDatabase _db;
     private readonly IServer _server;
     private readonly ILogger<RedisClient> _logger;
+
+    // OBJECT FREQ needs an LFU maxmemory-policy; OBJECT IDLETIME needs anything but. Exactly one of
+    // the two is always refused, so the first refusal is remembered here and that command is dropped
+    // from every later key-info batch on this connection rather than throwing once per key.
+    private volatile bool _objectFreqSupported = true;
+    private volatile bool _objectIdleTimeSupported = true;
 
     private RedisClient(RedisCacheEntry cacheEntry, ConnectionMultiplexer mux, ILogger<RedisClient> logger)
     {
@@ -95,20 +102,44 @@ public sealed class RedisClient : IRedisClient
         return true;
     }
 
-    public async Task<KeyScanResult> ScanKeysAsync(string pattern = "*", long cursor = 0, int pageSize = 100, CancellationToken ct = default)
+    /// <summary>How long a single scan request may keep pulling cursor pages before returning what it has.</summary>
+    /// <remarks>
+    /// Bounded by time rather than page count because the cost of a page depends on the keyspace, not on a
+    /// number we can pick here. Short enough to stay responsive, long enough that a selective pattern
+    /// usually returns real matches on the first request instead of an empty page.
+    /// </remarks>
+    private static readonly TimeSpan ScanBudget = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Returns up to <paramref name="pageSize"/> matching keys, continuing across <c>SCAN</c> cursor pages
+    /// until the page is full, the keyspace is exhausted, or <see cref="ScanBudget"/> elapses.
+    /// </summary>
+    /// <remarks>
+    /// A single <c>SCAN</c> call walks roughly <c>COUNT</c> slots and filters by <c>MATCH</c> afterwards, so
+    /// on a large keyspace with a selective pattern it almost always returns *zero* keys and a non-zero
+    /// cursor. Surfacing that directly meant a blank tree and repeated manual "Load more" for what the user
+    /// experiences as one search. Looping here turns those into one request, and the returned cursor still
+    /// lets the caller continue from exactly where this left off.
+    /// </remarks>
+    public Task<KeyScanResult> ScanKeysAsync(string pattern = "*", long cursor = 0, int pageSize = 100, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 
-        pageSize = Math.Max(1, pageSize);
-        var result = await _db.ExecuteAsync("SCAN", cursor, "MATCH", pattern, "COUNT", pageSize).ConfigureAwait(false);
-        var scanPage = RedisScanResponseParser.Parse(result);
+        var count = Math.Max(1, pageSize);
+        var startedAt = Stopwatch.StartNew();
 
-        return new KeyScanResult
-        {
-            Cursor = scanPage.Cursor,
-            Keys = scanPage.Values,
-            IsComplete = scanPage.IsComplete
-        };
+        return RedisScanLoop.RunAsync(
+            async (from, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var result = await _db.ExecuteAsync("SCAN", from, "MATCH", pattern, "COUNT", count).ConfigureAwait(false);
+                return RedisScanResponseParser.Parse(result);
+            },
+            cursor,
+            count,
+            ScanBudget,
+            () => startedAt.Elapsed,
+            ct);
     }
 
     public async Task<string> GetKeyTypeAsync(string key, CancellationToken ct = default)
@@ -118,26 +149,44 @@ public sealed class RedisClient : IRedisClient
         return ToTypeString(keyType);
     }
 
+    /// <summary>
+    /// Reads every displayed attribute of a key in a single pipelined round trip.
+    /// </summary>
+    /// <remarks>
+    /// This used to be six sequential awaits preceded by a redundant <c>EXISTS</c> — <c>TYPE</c> already
+    /// answers "does this key exist" by returning <c>none</c>. Multiplied by the 500-key sweeps the
+    /// keyspace-health and prefix-memory panels run, that was thousands of serialized commands.
+    /// <para><c>OBJECT FREQ</c> and <c>OBJECT IDLETIME</c> are mutually exclusive: the former requires an
+    /// LFU <c>maxmemory-policy</c>, the latter requires anything but. So on any given server exactly one
+    /// always fails, and it used to fail once per key — 500 exceptions and 500 log lines per sweep. The
+    /// verdict is now remembered per connection and the unsupported command is simply not sent again.</para>
+    /// </remarks>
     public async Task<RedisKeyInfo> GetKeyInfoAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 
-        var exists = await _db.KeyExistsAsync(key).ConfigureAwait(false);
-        if (!exists)
+        var batch = _db.CreateBatch();
+        var typeTask = batch.KeyTypeAsync(key);
+        var ttlTask = batch.KeyTimeToLiveAsync(key);
+        var memoryTask = batch.ExecuteAsync("MEMORY", "USAGE", key);
+        var encodingTask = batch.ExecuteAsync("OBJECT", "ENCODING", key);
+        var freqTask = _objectFreqSupported ? batch.ExecuteAsync("OBJECT", "FREQ", key) : null;
+        var idleTask = _objectIdleTimeSupported ? batch.ExecuteAsync("OBJECT", "IDLETIME", key) : null;
+        batch.Execute();
+
+        var keyType = await AwaitOrDefaultAsync(typeTask, RedisType.None, nameof(GetKeyTypeAsync), key).ConfigureAwait(false);
+        if (keyType == RedisType.None)
         {
-            return new RedisKeyInfo
-            {
-                Key = key,
-                Type = "none"
-            };
+            // Drain the rest so a batch command that faulted on a missing key never surfaces as an
+            // unobserved task exception.
+            await ObserveAsync(ttlTask, memoryTask, encodingTask, freqTask, idleTask).ConfigureAwait(false);
+            return new RedisKeyInfo { Key = key, Type = "none" };
         }
 
-        var keyType = await _db.KeyTypeAsync(key).ConfigureAwait(false);
-        var ttl = await _db.KeyTimeToLiveAsync(key).ConfigureAwait(false);
-        var memoryBytes = await TryGetMemoryUsageAsync(key).ConfigureAwait(false);
-        var encoding = await TryGetEncodingAsync(key).ConfigureAwait(false);
-        var frequency = await TryGetFrequencyAsync(key).ConfigureAwait(false);
-        var idleSeconds = await TryGetIdleSecondsAsync(key).ConfigureAwait(false);
+        var ttl = await AwaitOrDefaultAsync(ttlTask, (TimeSpan?)null, nameof(GetTtlAsync), key).ConfigureAwait(false);
+        var memoryBytes = ParseNullableLong(
+            (await AwaitOrDefaultAsync(memoryTask, RedisResult.Create(RedisValue.Null), "MEMORY USAGE", key).ConfigureAwait(false)).ToString());
+        var encodingRaw = (await AwaitOrDefaultAsync(encodingTask, RedisResult.Create(RedisValue.Null), "OBJECT ENCODING", key).ConfigureAwait(false)).ToString();
 
         return new RedisKeyInfo
         {
@@ -145,10 +194,58 @@ public sealed class RedisClient : IRedisClient
             Type = ToTypeString(keyType),
             Ttl = ttl,
             MemoryBytes = memoryBytes,
-            Encoding = encoding,
-            Frequency = frequency,
-            IdleSeconds = idleSeconds
+            Encoding = string.IsNullOrWhiteSpace(encodingRaw) ? null : encodingRaw,
+            Frequency = await ReadObjectCounterAsync(freqTask, "OBJECT FREQ", key, supported => _objectFreqSupported = supported).ConfigureAwait(false),
+            IdleSeconds = await ReadObjectCounterAsync(idleTask, "OBJECT IDLETIME", key, supported => _objectIdleTimeSupported = supported).ConfigureAwait(false),
         };
+    }
+
+    /// <summary>
+    /// Awaits one command of a batch, returning <paramref name="fallback"/> instead of throwing — a single
+    /// unsupported command must not lose the other five results.
+    /// </summary>
+    private async Task<T> AwaitOrDefaultAsync<T>(Task<T> task, T fallback, string operationName, string key)
+    {
+        try
+        {
+            return await task.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Redis {Operation} failed for key {Key}", operationName, key);
+            return fallback;
+        }
+    }
+
+    /// <summary>
+    /// Reads an <c>OBJECT</c> counter, recording via <paramref name="setSupported"/> when the server refuses
+    /// the command so it is never sent again on this connection.
+    /// </summary>
+    private async Task<long?> ReadObjectCounterAsync(Task<RedisResult>? task, string operationName, string key, Action<bool> setSupported)
+    {
+        if (task is null)
+            return null;
+
+        try
+        {
+            return ParseNullableLong((await task.ConfigureAwait(false)).ToString());
+        }
+        catch (Exception ex)
+        {
+            setSupported(false);
+            _logger.LogDebug(ex, "Redis {Operation} is unsupported on this server; not requesting it again.", operationName);
+            return null;
+        }
+    }
+
+    /// <summary>Observes faulted batch tasks whose results are being discarded.</summary>
+    private static async Task ObserveAsync(params Task?[] tasks)
+    {
+        foreach (var task in tasks)
+        {
+            if (task is null) continue;
+            try { await task.ConfigureAwait(false); } catch { /* result discarded; only observation matters */ }
+        }
     }
 
     public async Task<string?> GetKeyValueAsync(string key, CancellationToken ct = default)
@@ -487,63 +584,6 @@ public sealed class RedisClient : IRedisClient
         {
             _logger.LogWarning(ex, "Redis PUBSUB introspection failed; reporting the pub/sub snapshot as unavailable.");
             return new RedisPubSubSnapshot([], 0, false, maxChannels, RedisInsightCapability.Failed);
-        }
-    }
-
-    private Task<long?> TryGetMemoryUsageAsync(string key) =>
-        TryValueAsync(async () =>
-        {
-            var result = await _db.ExecuteAsync("MEMORY", "USAGE", key).ConfigureAwait(false);
-            return ParseLong(result.ToString());
-        }, nameof(TryGetMemoryUsageAsync), key);
-
-    private Task<string?> TryGetEncodingAsync(string key) =>
-        TryAsync(async () =>
-        {
-            var result = await _db.ExecuteAsync("OBJECT", "ENCODING", key).ConfigureAwait(false);
-            var value = result.ToString();
-            return string.IsNullOrWhiteSpace(value) ? null : value;
-        }, nameof(TryGetEncodingAsync), key);
-
-    private Task<long?> TryGetFrequencyAsync(string key) =>
-        TryValueAsync(async () =>
-        {
-            var result = await _db.ExecuteAsync("OBJECT", "FREQ", key).ConfigureAwait(false);
-            var parsed = ParseNullableLong(result.ToString());
-            if (!parsed.HasValue)
-                throw new InvalidOperationException("Redis OBJECT FREQ did not return a numeric result.");
-
-            return parsed.Value;
-        }, nameof(TryGetFrequencyAsync), key);
-
-    private Task<long?> TryGetIdleSecondsAsync(string key) =>
-        TryValueAsync(async () =>
-        {
-            var result = await _db.ExecuteAsync("OBJECT", "IDLETIME", key).ConfigureAwait(false);
-            var parsed = ParseNullableLong(result.ToString());
-            if (!parsed.HasValue)
-                throw new InvalidOperationException("Redis OBJECT IDLETIME did not return a numeric result.");
-
-            return parsed.Value;
-        }, nameof(TryGetIdleSecondsAsync), key);
-
-    private async Task<T?> TryAsync<T>(Func<Task<T?>> operation, string operationName, string key) where T : class
-    {
-        try { return await operation().ConfigureAwait(false); }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Redis {Operation} failed for key {Key}", operationName, key);
-            return null;
-        }
-    }
-
-    private async Task<T?> TryValueAsync<T>(Func<Task<T>> operation, string operationName, string key) where T : struct
-    {
-        try { return await operation().ConfigureAwait(false); }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Redis {Operation} failed for key {Key}", operationName, key);
-            return (T?)null;
         }
     }
 

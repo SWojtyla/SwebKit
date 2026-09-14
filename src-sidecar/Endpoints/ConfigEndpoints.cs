@@ -74,14 +74,22 @@ public static class ConfigEndpoints
         return Results.Ok(result);
     }
 
-    internal static async Task<IResult> SaveProfileAsync(ProfileRepository repo, ProfileData data, IStorageConnectionPool storagePool)
+    internal static async Task<IResult> SaveProfileAsync(
+        ProfileRepository repo,
+        ProfileData data,
+        IStorageConnectionPool storagePool,
+        IRedisConnectionPool redisPool,
+        IServiceBusConnectionPool serviceBusPool)
     {
         repo.ReplaceProfileData(data);
         await repo.SaveAsync();
-        // A save may have edited a storage account's connection string, credential key or auth
-        // mode; drop any cached client so the very next request picks up the new config instead
-        // of reusing a client built from stale credentials.
+        // A save may have edited a connection string, credential key or auth mode; drop every
+        // cached client so the very next request picks up the new config instead of reusing a
+        // client built from stale credentials. Redis and Service Bus cache clients for the same
+        // reason storage does, so they go stale the same way.
         storagePool.InvalidateAll();
+        redisPool.InvalidateAll();
+        serviceBusPool.InvalidateAll();
         return Results.Ok();
     }
 

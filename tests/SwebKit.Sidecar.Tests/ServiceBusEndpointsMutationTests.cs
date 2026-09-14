@@ -76,9 +76,23 @@ internal sealed class CountingServiceBusClient : IServiceBusClient
     public Task<bool> TestConnectionAsync(CancellationToken ct = default) => _inner.TestConnectionAsync(ct);
 }
 
-/// <summary>Records the connection-string/namespace passed to each creation call and returns a configurable client.</summary>
-internal sealed class FakeServiceBusClientFactory : IServiceBusClientFactory
+/// <summary>
+/// Records the connection-string/namespace passed to each creation call and returns a configurable client.
+/// Doubles as an <see cref="IServiceBusConnectionPool"/> — the endpoints now take the pool rather than the
+/// factory, and these tests care about which client a handler used, not about caching (that is
+/// <see cref="SidecarServiceBusConnectionPoolTests"/>'s job).
+/// </summary>
+internal sealed class FakeServiceBusClientFactory : IServiceBusClientFactory, IServiceBusConnectionPool
 {
+    public IServiceBusClient GetOrCreate(ServiceBusNamespace ns) =>
+        ns.AuthMode == SbAuthMode.ConnectionString
+            ? Create(ns.CredentialKey, ns.TransportType)
+            : CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType);
+
+    public void Evict(string namespaceId) { }
+
+    public void InvalidateAll() { }
+
     public IServiceBusClient Client { get; set; } = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
     public List<string> CreateCalls { get; } = [];
     public List<string> CreateWithEntraCalls { get; } = [];
