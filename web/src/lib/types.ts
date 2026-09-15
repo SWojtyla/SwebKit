@@ -233,7 +233,7 @@ export type AgentCapability = "Unknown" | "ChatOnly" | "ToolCalling";
 
 export interface AgentProfile {
   id: string;
-  provider: "LmStudio" | "OpenAiCompatible" | "Mistral";
+  provider: "LmStudio" | "OpenAiCompatible" | "Mistral" | "Acp";
   displayName: string;
   baseUrl: string;
   model: string;
@@ -246,6 +246,23 @@ export interface AgentProfile {
    * summarization (workspace-intelligence Module 5). Null = unknown; the sidecar falls back to a
    * conservative default rather than treating null as unlimited. */
   contextWindowTokens: number | null;
+  // ── ACP (external agent subprocess) — only meaningful when provider === "Acp" ──
+  /** Executable to spawn (e.g. "npx", "gemini"). */
+  command: string;
+  /** Command-line args as one string, e.g. "-y @agentclientprotocol/claude-agent-acp". */
+  arguments: string;
+  /** Working directory for the agent process and the ACP session cwd. */
+  workingDirectory: string;
+  /** Extra non-secret env vars for the agent process. */
+  environmentVariables: Record<string, string>;
+  /** Env var the resolved credentialKey secret is injected as (e.g. ANTHROPIC_API_KEY). */
+  credentialEnvVar: string;
+  /** When true, ACP session/request_permission calls surface as approval cards instead of being auto-approved. */
+  requireToolApproval: boolean;
+  /** Reserved: ACP fs/* client capability — designed in, handlers not implemented. */
+  enableFileSystem: boolean;
+  /** Reserved: ACP terminal client capability — see enableFileSystem. */
+  enableTerminal: boolean;
 }
 
 export interface AgentCapabilityTestResult {
@@ -1052,7 +1069,16 @@ export interface AgentReply {
  * IAgentModelClient.ChatStreamAsync (SwebKit.Agents) for the producing side. "done" always carries
  * `result` and is always the last event on success; "error" always carries `errorMessage` and is
  * always the last event on failure — nothing follows either. */
-export type AgentStreamEventKind = "token" | "toolCallStarted" | "toolCallResult" | "done" | "error";
+export type AgentStreamEventKind =
+  | "token"
+  | "toolCallStarted"
+  | "toolCallResult"
+  | "done"
+  | "error"
+  /** ACP agent_thought_chunk — the agent's reasoning, not reply text. */
+  | "thought"
+  /** An ACP permission request is parked waiting for the user (RequireToolApproval on). */
+  | "permissionRequired";
 
 export interface AgentStreamEvent {
   kind: AgentStreamEventKind;
@@ -1060,6 +1086,22 @@ export interface AgentStreamEvent {
   toolName?: string;
   result?: AgentReply;
   errorMessage?: string;
+}
+
+/** A parked ACP session/request_permission call awaiting a user decision — only populated when
+ * the active ACP profile has requireToolApproval on (otherwise they're auto-approved and never
+ * reach this list). Mirrors PendingAction's poll-and-respond shape. */
+export interface AcpPermissionOption {
+  optionId: string;
+  name: string;
+  kind: string | null;
+}
+
+export interface AcpPermission {
+  id: string;
+  toolCallTitle: string;
+  options: AcpPermissionOption[];
+  expiresAt: string;
 }
 
 export interface AgentStatus {

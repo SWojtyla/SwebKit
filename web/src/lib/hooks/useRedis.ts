@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import {
   apiFetch,
   apiSend,
@@ -84,8 +84,11 @@ export function useRedisScanKeys(cacheId: string | null, pattern: string, cursor
       ),
     enabled: !!cacheId,
     // Without this the tree empties every time the cursor advances or the pattern changes, which on
-    // a slow scan looks exactly like "it returned nothing" rather than "it is still working".
-    placeholderData: keepPreviousData,
+    // a slow scan looks exactly like "it returned nothing" rather than "it is still working". The
+    // cacheId guard keeps that warmth within one cache: on a cache switch the previous cache's keys
+    // must not render under the new cache's name while its first scan is still in flight.
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[1] === cacheId ? previousData : undefined,
   });
 }
 
@@ -124,7 +127,11 @@ export function useRedisKeyInfoBatch(cacheId: string | null, keys: string[]): Ma
     enabled: !!cacheId && keys.length > 0,
     staleTime: 60_000,
     gcTime: 60_000,
-    placeholderData: keepPreviousData,
+    // Same-cache placeholder only: on a cache switch, the previous window's hints would briefly
+    // describe the wrong server — and the effect below would even write them into the new cache's
+    // per-key query entries.
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[1] === cacheId ? previousData : undefined,
   });
 
   useEffect(() => {

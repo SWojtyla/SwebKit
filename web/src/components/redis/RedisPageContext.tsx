@@ -13,6 +13,7 @@ import { useLocation, useNavigate } from "react-router";
 import { useQueryClient, useIsFetching } from "@tanstack/react-query";
 import {
   useProfile,
+  useUpdateProfile,
   useRedisServerInfo,
   useRedisScanKeys,
   useRedisKeyInfo,
@@ -120,10 +121,7 @@ export function redisRowKey(row: FlatRedisRow): string {
 
 /**
  * Every namespace path in the tree, recursively. Used by "Expand all" — the deliberate,
- * user-triggered counterpart to "Collapse all" — and, previously, by the reactive effect that
- * used to re-expand everything on any `namespaceTree` identity change (the reported "not
- * collapsed by default" bug: search, pagination, cache switch and every key mutation all produce
- * a new tree, so that effect fired constantly and silently undid "Collapse all").
+ * user-triggered counterpart to "Collapse all".
  */
 export function collectAllNamespacePaths(nodes: NamespaceNode[]): Set<string> {
   const paths = new Set<string>();
@@ -138,15 +136,14 @@ export function collectAllNamespacePaths(nodes: NamespaceNode[]): Set<string> {
 }
 
 /**
- * The default expansion for a freshly loaded tree: only the root-level namespaces, not every
- * descendant. A multi-level keyspace (`user:profile:*`, `cache:search:results:*`, ...) opens
- * showing its top-level groups instead of every nested folder at once — this is what "collapsed
- * by default" means in practice for a hierarchical keyspace. Applied once per genuine
- * search/cache change (see the ref-guarded seed effect in `RedisPageProvider`), never as a
- * reaction to incidental data changes like pagination or a mutation's refetch.
+ * Every key in a namespace's subtree — its own keys plus all descendants'. Used by the
+ * namespace-row selection checkbox, which selects or clears the whole subtree in one click
+ * (same behavior as the MAUI browser's namespace checkboxes).
  */
-export function defaultExpandedNamespacePaths(nodes: NamespaceNode[]): Set<string> {
-  return new Set(nodes.map((node) => node.path));
+export function collectSubtreeKeys(node: NamespaceNode): string[] {
+  const keys = [...node.keys];
+  for (const child of node.children.values()) keys.push(...collectSubtreeKeys(child));
+  return keys;
 }
 
 interface PendingConfirm {
@@ -213,10 +210,18 @@ export interface RedisPageContextValue {
   requestRemoveTtl: (key: string) => void;
 
   selectedKeys: Set<string>;
-  batchMode: boolean;
-  setBatchMode: (v: boolean) => void;
   setSelectedKeys: (v: Set<string>) => void;
   toggleKeySelection: (key: string) => void;
+  /** True when every currently loaded key is selected — drives the header checkbox. */
+  allLoadedSelected: boolean;
+  /** True when some but not all loaded keys are selected — drives the indeterminate state. */
+  someLoadedSelected: boolean;
+  /** "Select all loaded" toggle: selects every loaded key, or clears the selection when all are. */
+  toggleSelectAllLoaded: () => void;
+  /** Keys per namespace path, precomputed once per tree so rows don't each re-walk their subtree. */
+  subtreeKeysByPath: Map<string, string[]>;
+  /** Namespace-row checkbox toggle: selects or clears the node's whole subtree. */
+  toggleSubtreeSelection: (node: NamespaceNode) => void;
   handleBatchDelete: () => void;
   handleExportSelected: () => Promise<void>;
 
@@ -294,12 +299,21 @@ export function useRedisPageContext(): RedisPageContextValue {
 
 export function RedisPageProvider({ children }: { children: ReactNode }): JSX.Element {
   const { data: profile } = useProfile();
+  const updateProfile = useUpdateProfile();
   const location = useLocation();
   const navigate = useNavigate();
   const redisConfig = profile?.config?.redisConfig;
   const caches = useMemo(() => redisConfig?.caches ?? [], [redisConfig]);
   const [activeCacheId, setActiveCacheId] = useState<string | null>(null);
-  const resolvedCacheId = activeCacheId ?? caches[0]?.id ?? null;
+  // Fallback order: this session's explicit selection → the persisted "last used" cache (written
+  // on every switch — it doubles as the agent tools' default, see RedisToolContext) → first
+  // configured cache.
+  const configuredActive = redisConfig?.activeCacheId;
+  const resolvedCacheId =
+    activeCacheId ??
+    (configuredActive && caches.some((c) => c.id === configuredActive) ? configuredActive : null) ??
+    caches[0]?.id ??
+    null;
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -324,17 +338,14 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const [showTtlEditor, setShowTtlEditor] = useState(false);
   const [ttlSeconds, setTtlSeconds] = useState(0);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const [batchMode, setBatchMode] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(10);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [loadAllActive, setLoadAllActive] = useState(false);
+  // Every namespace starts collapsed (matching the MAUI browser); the user expands explicitly
+  // or via "Expand all". Nothing ever re-expands on its own — search, pagination and cache
+  // switches all reset to this same empty set.
   const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(new Set());
-  // Guards the one-time expansion seed below: true once this search/cache's tree has been
-  // seeded, so later namespaceTree changes (pagination, load-more, a key mutation's refetch)
-  // never re-trigger it. Reset to false only at a genuine search or cache change, which is what
-  // makes "Collapse all" durable instead of silently undone by the next unrelated refresh.
-  const hasSeededExpansionRef = useRef(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const [hashAdding, setHashAdding] = useState(false);
   const [newHashField, setNewHashField] = useState("");
@@ -419,8 +430,8 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     setCursor(0);
     setAllKeys([]);
     lastAdvancedCursorRef.current = null;
-    hasSeededExpansionRef.current = false;
     setExpandedNamespaces(new Set());
+    setSelectedKeys(new Set());
   }, []);
 
   const handleSearch = () => applySearchPattern(searchInput);
@@ -498,19 +509,6 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     () => flattenNamespaceTree(namespaceTree, expandedNamespaces),
     [namespaceTree, expandedNamespaces],
   );
-
-  // One-time seed per genuine search/cache change, guarded by `hasSeededExpansionRef` (reset to
-  // false only in `applySearchPattern`/`handleCacheChange`) — NOT a reactive effect on every
-  // `namespaceTree` identity change. That was the reported bug: pagination, "load more", and any
-  // key mutation's refetch all produce a new tree, so a plain `[namespaceTree]` effect fired
-  // constantly and silently re-expanded everything, undoing "Collapse all" moments after it was
-  // clicked. Firing once per genuine change instead makes "Collapse all" durable.
-  useEffect(() => {
-    if (hasSeededExpansionRef.current) return;
-    if (namespaceTree.length === 0) return;
-    hasSeededExpansionRef.current = true;
-    setExpandedNamespaces(defaultExpandedNamespacePaths(namespaceTree));
-  }, [namespaceTree]);
 
   const toggleNamespace = (path: string) => {
     setExpandedNamespaces((prev) => {
@@ -637,7 +635,6 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
       onConfirm: () => {
         selectedKeys.forEach((key) => deleteKey.mutate(key));
         setSelectedKeys(new Set());
-        setBatchMode(false);
         setCursor(0);
         setAllKeys([]);
       },
@@ -664,14 +661,59 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     });
   };
 
+  // MAUI toolbar parity: the header checkbox tri-states over the *loaded* key set — checked when
+  // all loaded keys are selected, indeterminate for a subset — and toggling it either selects the
+  // whole loaded set or clears the selection.
+  const allLoadedSelected = displayKeys.length > 0 && displayKeys.every((k) => selectedKeys.has(k));
+  const someLoadedSelected =
+    !allLoadedSelected && displayKeys.some((k) => selectedKeys.has(k));
+  const toggleSelectAllLoaded = () =>
+    setSelectedKeys(allLoadedSelected ? new Set() : new Set(displayKeys));
+
+  // Keys per namespace path, computed once per tree — a row computing its own subtree would
+  // re-walk it on every virtualizer re-render (i.e. every scroll frame).
+  const subtreeKeysByPath = useMemo(() => {
+    const map = new Map<string, string[]>();
+    const walk = (node: NamespaceNode) => {
+      map.set(node.path, collectSubtreeKeys(node));
+      node.children.forEach(walk);
+    };
+    namespaceTree.forEach(walk);
+    return map;
+  }, [namespaceTree]);
+
+  const toggleSubtreeSelection = (node: NamespaceNode) => {
+    const keys = subtreeKeysByPath.get(node.path) ?? collectSubtreeKeys(node);
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (keys.every((k) => prev.has(k))) keys.forEach((k) => next.delete(k));
+      else keys.forEach((k) => next.add(k));
+      return next;
+    });
+  };
+
   const handleCacheChange = (cacheId: string) => {
     setActiveCacheId(cacheId);
     setCursor(0);
     setAllKeys([]);
     setSelectedKey(null);
+    setSelectedKeys(new Set());
     lastAdvancedCursorRef.current = null;
-    hasSeededExpansionRef.current = false;
     setExpandedNamespaces(new Set());
+    // The browser's selected cache IS the "active" cache: persisted so the page restores it next
+    // visit, and because the agent's Redis tools fall back to it (RedisToolContext). The profile
+    // PUT evicts only connection-changed caches, so healthy pooled connections survive the save.
+    updateProfile.mutate((prev) =>
+      prev.config.redisConfig
+        ? {
+            ...prev,
+            config: {
+              ...prev.config,
+              redisConfig: { ...prev.config.redisConfig, activeCacheId: cacheId },
+            },
+          }
+        : prev,
+    );
   };
 
   const value: RedisPageContextValue = {
@@ -728,10 +770,13 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     requestRemoveTtl,
 
     selectedKeys,
-    batchMode,
-    setBatchMode,
     setSelectedKeys,
     toggleKeySelection,
+    allLoadedSelected,
+    someLoadedSelected,
+    toggleSelectAllLoaded,
+    subtreeKeysByPath,
+    toggleSubtreeSelection,
     handleBatchDelete,
     handleExportSelected,
 

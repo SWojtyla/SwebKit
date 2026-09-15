@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
     <ProjectReference Include="..\src\SwebKit.Core\SwebKit.Core.csproj" />
     <ProjectReference Include="..\src\SwebKit.Azure\SwebKit.Azure.csproj" />
     <ProjectReference Include="..\src\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />

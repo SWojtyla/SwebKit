@@ -17,6 +17,7 @@ using SwebKit.Observability;
 using SwebKit.Redis;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
+using ModelContextProtocol.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -123,8 +124,24 @@ builder.Services.AddSingleton<SwebKit.Sidecar.Services.WorkspaceRelationshipSugg
 // at startup below (a plain AddSingleton alone only registers it, it doesn't instantiate it).
 builder.Services.AddSingleton<SwebKit.Sidecar.Services.ProactiveInsightService>();
 
-// Agent: OpenAI-compatible LLM client + sidecar chat service
-builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
+// Agent: OpenAI-compatible LLM client + ACP external-agent host, dispatched per active profile
+// by AgentModelClientRouter (per-call resolution — switching profiles needs no restart).
+builder.Services.AddHttpClient<OpenAiCompatibleAgentClient>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.AcpPermissionStore>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.AcpAgentHost>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.AcpAgentModelClient>();
+builder.Services.AddSingleton<IAgentModelClient, AgentModelClientRouter>();
+
+// MCP bridge: exposes IAgentToolRegistry to external ACP agents over streamable HTTP
+// (session/new → mcpServers). Stateless mode — the per-session tool allowlist travels in the
+// ?tools= query param baked into the URL, so no MCP session state is needed.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.SwebKitToolsMcpBridge>();
+builder.Services.AddMcpServer()
+    .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless);
+builder.Services.AddOptions<ModelContextProtocol.Server.McpServerOptions>()
+    .Configure<SwebKit.Sidecar.Services.Acp.SwebKitToolsMcpBridge>(SwebKit.Sidecar.Services.Acp.SwebKitToolsMcpBridge.Configure);
+
 // Capability tester: probes a profile's endpoint for reachability/tool-calling support, backing
 // POST /api/agent/profiles/{id}/test. Separate HttpClient from the model client above since a
 // capability test may run against a profile that isn't the active one.
@@ -250,6 +267,12 @@ app.UseExceptionHandler(ex =>
     ex.Run(async context =>
     {
         var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+
+        // The client aborted (e.g. switched Redis cache or closed the page mid-request) — there is
+        // nobody to answer, and logging it as an unhandled error is pure noise.
+        if (exception is OperationCanceledException && context.RequestAborted.IsCancellationRequested)
+            return;
+
         var statusCode = exception switch
         {
             InvalidOperationException => 400,
@@ -264,6 +287,18 @@ app.UseExceptionHandler(ex =>
             // Mapped centrally rather than per-endpoint so every Azure-backed route answers the same
             // way — and so it is logged, which the old endpoint-local `catch` never did.
             Azure.Identity.AuthenticationFailedException => 401,
+            // The same failure wrapped inside an SDK exception — e.g. a ServiceBusException whose
+            // inner is the token acquisition failing.
+            _ when ServiceBusExceptionClassifier.IsAuthenticationFailure(exception!) => 401,
+            // Upstream-connection failures — an unreachable or misbehaving Redis/Service Bus server
+            // is an expected operational condition (e.g. switching to a dead cache or a throttled
+            // namespace), not a bug, so a 502 tells the UI "the backend couldn't reach it" instead
+            // of a generic 500.
+            StackExchange.Redis.RedisException or System.Net.Sockets.SocketException or TimeoutException => 502,
+            global::Azure.Messaging.ServiceBus.ServiceBusException => 502,
+            // An OCE that isn't a client abort (handled above) is a downstream call timing out —
+            // HttpClient or an SDK retry ceiling — which is exactly a "couldn't reach it" answer.
+            OperationCanceledException => 502,
             _ => 500,
         };
         context.Response.StatusCode = statusCode;
@@ -299,6 +334,14 @@ app.UseExceptionHandler(ex =>
             message = exception switch
             {
                 Azure.Identity.AuthenticationFailedException => "Azure authentication failed. Sign in again (for example `az login`) and retry.",
+                // SDK messages can embed endpoints or connection config — the same sanitized
+                // classification the connection-test endpoints return.
+                _ when statusCode == 502 => ConnectionTestError.Describe(exception!),
+                // A 401 reached via the classifier means the real credential failure is wrapped
+                // inside an SDK exception — use the fixed message, not that exception's Message.
+                // Direct UnauthorizedAccessException keeps its deliberate user-facing message.
+                _ when statusCode == 401 && exception is not UnauthorizedAccessException =>
+                    "Azure authentication failed. Sign in again (for example `az login`) and retry.",
                 not null => exception.Message,
                 null => "Internal server error",
             };
@@ -357,6 +400,10 @@ app.MapStorageEndpoints();
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
 app.MapAgentEndpoints();
+
+// MCP endpoint for external ACP agents (SwebKitToolsMcpBridge handlers; tool set is filtered
+// per request via the ?tools= allowlist the ACP session URL carries).
+app.MapMcp(SwebKit.Sidecar.Services.Acp.SwebKitToolsMcpBridge.EndpointPath);
 
 // ── Monitoring ───────────────────────────────────────────────────────────────
 

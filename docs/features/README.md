@@ -62,6 +62,15 @@ the existing SSE stream, and hands the agent SwebKit's own tools through an MCP 
 flow. fs/terminal client capabilities stay off; agent permission requests auto-approve behind a
 per-profile toggle.
 
+**Agent correlation (2026-09-15):** `docs/features/active/agent-correlation/` is Planned —
+makes the cross-service correlation machinery actually reachable: ACP profiles get the
+workspace-scope escape hatch the UI currently locks behind a stale capability gate, the agent
+learns (via prompt + MCP error hints) that fenced areas exist and how the user unlocks them, a
+rejected out-of-scope call surfaces a one-click "retry with workspace scope", agent reasoning
+(`thought` events) gets rendered, `investigate_workspace_issue` gains a real Storage health
+tool instead of skipping it, and relationship suggestions learn to read pod logs, not just env
+vars and ConfigMaps.
+
 **AKS logs (2026-09-09):** `docs/features/active/aks-log-parity/` is in Review — the multi-pod log
 view now streams every pod on open and shares one toolbar, buffer and windowing model with the
 single-pod view, instead of having almost none of its controls. Log lines carry the container's own

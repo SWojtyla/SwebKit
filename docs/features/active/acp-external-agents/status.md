@@ -2,8 +2,9 @@
 
 ## State
 
-`Planned` — design complete, no code written. Committed as a plan only; implementation is
-expected on a dedicated branch.
+`In Progress` — implemented on `sw/feature/acp-external-agents`. Transport, host, model client,
+MCP bridge, permission path, and settings UI are all in place and building; unit coverage lands
+in `tests/SwebKit.Sidecar.Tests` (40 ACP tests) and `web` (env-var editor helpers).
 
 ## What was decided
 
@@ -20,13 +21,36 @@ Planning session 2026-09-15 (user-confirmed choices):
    self-gating through `propose_*` → pending actions), per-profile toggle to require approval.
 6. **Agents:** generic `command`/`args` config + presets.
 
-## Handoff
+## What landed
 
-Start from `technical-plan.md` — it is written to be implementable without further context.
-Phase order matters: Phase 1 (transport + chat) before Phase 2 (MCP bridge), because the bridge
-needs a working `session/new` to attach to.
+- `src-sidecar/Services/Acp/`: `AcpJsonRpcPeer` (newline-delimited JSON-RPC over stdio),
+  `AcpProcessLauncher` (Windows `.cmd`/PATHEXT resolution, quoting-aware arg split, stderr pump),
+  `AcpAgentHost` (process + session lifecycle, `session/update` routing, `session/cancel`,
+  permission dispatch), `AcpAgentModelClient` (`session/update` → existing `AgentStreamEvent`s,
+  system-prompt stuffing per session), `AcpPermissionStore`, `SwebKitToolsMcpBridge`.
+- `AgentModelClientRouter` dispatches `IAgentModelClient` calls per active profile.
+- `ProviderKind.Acp`, `AgentProfile` ACP fields, `AgentProfilePresets.ClaudeAcp`/`GeminiCli`.
+- MCP bridge at `POST /mcp/swebkit-tools` (stateless streamable HTTP, `ModelContextProtocol.AspNetCore`
+  2.2.0); the per-session `?tools=` allowlist carries the mode/area/scope gates.
+- Settings UI: "External agent (ACP)" provider with preset picker, command/args/cwd/env fields,
+  credential-key → env-var injection, and the approval toggle.
+- Permission cards (`AcpPermissionCard`) in all three chat surfaces; `permissionRequired` SSE
+  event invalidates the permission poll immediately.
+- `session/clear` also drops the ACP session so "Clear" really resets the conversation.
 
-Watch items called out in the plan: Windows `.cmd` spawn quirks (`npx` is `npx.cmd`), no
-system-prompt channel in ACP (context is prompt-stuffed per session), protocol v2 is still a
-draft (negotiate v1 via `initialize`), and `claude-agent-acp` requires `npx` plus an existing
-`claude` login on the machine.
+## Remaining
+
+- Manual end-to-end verification against a real agent (`npx -y @agentclientprotocol/claude-agent-acp`
+  requires Node + a `claude` login).
+- Thought/plan update kinds are parsed (`agent_thought_chunk` → `thought` event) but not yet
+  rendered in the chat UI; `usage_update` feeds `contextUsagePercent` already.
+- `session/set_mode` is not wired (ACP modes don't map cleanly onto ask/ask_and_do).
+- fs/terminal capability handlers remain designed-in but unimplemented.
+
+## Notes for reviewers
+
+- The plan doc referenced `@zed-industries/claude-agent-acp`; the published package is
+  `@agentclientprotocol/claude-agent-acp` — presets use the latter.
+- Aikido flags `Process.Start` in `AcpProcessLauncher` (command injection class): assessed as
+  by-design — the command is the user's own local config, spawned with `UseShellExecute=false`
+  and `ArgumentList` so nothing is shell-interpreted. See the comment at the `Process.Start` call.

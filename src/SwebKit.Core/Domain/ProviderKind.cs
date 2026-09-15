@@ -13,4 +13,10 @@ public enum ProviderKind
 
     /// <summary>Mistral AI cloud API (https://api.mistral.ai/v1).</summary>
     Mistral,
+
+    /// <summary>External agent subprocess speaking the Agent Client Protocol (JSON-RPC over
+    /// stdio) — e.g. Claude via <c>claude-agent-acp</c>, Gemini CLI (<c>gemini --acp</c>). The
+    /// profile's <c>Command</c>/<c>Arguments</c> fields, not <c>BaseUrl</c>/<c>Model</c>,
+    /// configure this provider.</summary>
+    Acp,
 }

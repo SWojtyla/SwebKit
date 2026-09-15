@@ -33,7 +33,8 @@ internal sealed class FakeMutateTool(string name, FeatureArea area) : IAgentTool
 
 public class SidecarAgentChatServiceFilteringTests
 {
-    private static (SidecarAgentChatService Service, FakeAgentModelClient ModelClient) CreateService(AgentCapability capability)
+    private static (SidecarAgentChatService Service, FakeAgentModelClient ModelClient) CreateService(
+        AgentCapability capability, ProviderKind provider = ProviderKind.LmStudio)
     {
         var registry = new AgentToolRegistry([
             new FakeReadTool("read_aks", FeatureArea.Aks),
@@ -42,7 +43,7 @@ public class SidecarAgentChatServiceFilteringTests
         ]);
         var profiles = new ProfileRepository();
         var settings = new UserSettingsRepository();
-        settings.Settings.Agent.Profiles.Add(new AgentProfile { Id = "p1", DisplayName = "Test", Capability = capability });
+        settings.Settings.Agent.Profiles.Add(new AgentProfile { Id = "p1", DisplayName = "Test", Capability = capability, Provider = provider });
         settings.Settings.Agent.ActiveProfileId = "p1";
         var demo = new DemoModeService();
         var modelClient = new FakeAgentModelClient();
@@ -61,6 +62,30 @@ public class SidecarAgentChatServiceFilteringTests
         await service.SendAsync(null, "hi", context: new AgentChatContext { FeatureArea = "Aks" }, mode: "ask_and_do");
 
         Assert.Empty(model.LastRequest!.Tools);
+    }
+
+    [Fact]
+    public async Task AcpProfile_WithUnknownCapability_StillResolvesTools()
+    {
+        // Regression: an ACP profile saved before ever running "Test connection" keeps
+        // Capability.Unknown — gating tools on that stored value silently stripped every tool
+        // (the MCP bridge was never attached), while chat itself kept working. ACP tool delivery
+        // is governed by the live mcpCapabilities from initialize, not the probe result.
+        var (service, model) = CreateService(AgentCapability.Unknown, ProviderKind.Acp);
+
+        await service.SendAsync(null, "hi", context: null, mode: "ask");
+
+        Assert.Equal(["read_aks", "read_redis"], ToolNames(model));
+    }
+
+    [Fact]
+    public async Task AcpProfile_ModeGateStillApplies_MutateToolsExcludedInAskMode()
+    {
+        var (service, model) = CreateService(AgentCapability.Unknown, ProviderKind.Acp);
+
+        await service.SendAsync(null, "hi", context: new AgentChatContext { FeatureArea = "Aks" }, mode: "ask");
+
+        Assert.Equal(["read_aks"], ToolNames(model));
     }
 
     [Fact]

@@ -36,6 +36,12 @@ public static class AgentEndpoints
         app.MapGet("/api/agent/pending-approvals", GetPendingApprovals);
         app.MapPost("/api/agent/pending-approvals/{id}/confirm", ConfirmActionAsync);
         app.MapPost("/api/agent/pending-approvals/{id}/reject", RejectAction);
+
+        // ── ACP permission requests (only populated when the active ACP profile has
+        //    RequireToolApproval on — otherwise they're auto-approved and never parked) ──
+
+        app.MapGet("/api/agent/acp/permissions", GetAcpPermissions);
+        app.MapPost("/api/agent/acp/permissions/{id}/respond", RespondAcpPermission);
     }
 
     internal static async Task<IResult> ChatAsync(
@@ -106,6 +112,8 @@ public static class AgentEndpoints
             AgentStreamEventKind.ToolCallResult => "toolCallResult",
             AgentStreamEventKind.Done => "done",
             AgentStreamEventKind.Error => "error",
+            AgentStreamEventKind.Thought => "thought",
+            AgentStreamEventKind.PermissionRequired => "permissionRequired",
             _ => "error"
         },
         Token = evt.Token,
@@ -135,9 +143,9 @@ public static class AgentEndpoints
         public string? ErrorMessage { get; init; }
     }
 
-    internal static Ok<object> ClearHistory(SidecarAgentChatService agent, string? sessionId = null)
+    internal static async Task<Ok<object>> ClearHistory(SidecarAgentChatService agent, string? sessionId = null)
     {
-        agent.ClearHistory(sessionId);
+        await agent.ClearHistoryAsync(sessionId);
         return TypedResults.Ok<object>(new { cleared = true });
     }
 
@@ -172,11 +180,17 @@ public static class AgentEndpoints
         SwebKit.Core.Domain.AgentProfile? profile,
         AgentCapabilityTester tester,
         SwebKit.Core.Configuration.UserSettingsRepository settings,
+        SwebKit.Sidecar.Services.Acp.AcpAgentHost acpHost,
         CancellationToken ct)
     {
         var target = profile ?? settings.Settings.Agent.Profiles.FirstOrDefault(p => p.Id == id);
         if (target is null)
             return Results.NotFound();
+
+        // ACP profiles have no HTTP endpoint to probe — the test is a spawn + initialize
+        // handshake on a throwaway process instead.
+        if (target.Provider == SwebKit.Core.Domain.ProviderKind.Acp)
+            return Results.Ok(await acpHost.ProbeAsync(target, ct));
 
         var result = await tester.TestAsync(target, ct);
         return Results.Ok(result);
@@ -222,6 +236,62 @@ public static class AgentEndpoints
         coordinator.RejectAction(id);
         return TypedResults.Ok<object>(new { rejected = true });
     }
+
+    /// <summary>Lists parked ACP permission requests — same summary-only shape as
+    /// <see cref="GetPendingApprovals"/> (the chosen option is the only input the respond
+    /// endpoint needs back).</summary>
+    internal static Ok<IReadOnlyList<AcpPermissionSummary>> GetAcpPermissions(
+        SwebKit.Sidecar.Services.Acp.AcpPermissionStore store)
+    {
+        var summaries = store.GetPending()
+            .Select(p => new AcpPermissionSummary
+            {
+                Id = p.Id,
+                ToolCallTitle = p.ToolCallTitle,
+                Options = p.Options.Select(o => new AcpPermissionOptionSummary
+                {
+                    OptionId = o.OptionId,
+                    Name = o.Name,
+                    Kind = o.Kind,
+                }).ToList(),
+                ExpiresAt = p.ExpiresAt,
+            })
+            .ToList();
+        return TypedResults.Ok<IReadOnlyList<AcpPermissionSummary>>(summaries);
+    }
+
+    internal static IResult RespondAcpPermission(
+        string id,
+        AcpPermissionResponse req,
+        SwebKit.Sidecar.Services.Acp.AcpPermissionStore store)
+    {
+        if (string.IsNullOrWhiteSpace(req.OptionId))
+            return Results.BadRequest("optionId is required");
+
+        return store.Respond(id, req.OptionId)
+            ? TypedResults.Ok<object>(new { resolved = true })
+            : Results.NotFound();
+    }
+}
+
+public sealed class AcpPermissionSummary
+{
+    public required string Id { get; init; }
+    public required string ToolCallTitle { get; init; }
+    public required IReadOnlyList<AcpPermissionOptionSummary> Options { get; init; }
+    public required DateTimeOffset ExpiresAt { get; init; }
+}
+
+public sealed class AcpPermissionOptionSummary
+{
+    public required string OptionId { get; init; }
+    public required string Name { get; init; }
+    public string? Kind { get; init; }
+}
+
+public sealed class AcpPermissionResponse
+{
+    public string? OptionId { get; set; }
 }
 
 public sealed class PendingActionSummary

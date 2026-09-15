@@ -303,6 +303,16 @@ default. Guard with a ref set by the user-facing setter (`namespacePickedRef` in
 
 ## Inputs
 
+### A commit-normalizing field must re-sync on every render, not only when the prop changes
+
+`DraftInput` reconciles its local draft against the stored value when the save echoes back —
+guarded on "value ≠ last committed text" so our own echo doesn't fight the cursor. Guarding
+the *effect* on `[value]` breaks the case where the parent normalizes the commit back to the
+value already stored: type `-5`, the clamp writes `5`, `5` was already saved, the prop is
+byte-identical, the effect never fires, and the raw `-5` sits in the box permanently while a
+different value is on disk. Run the reconciliation unconditionally (no dep array) — the
+`committedRef` guard alone is what protects in-progress typing.
+
 ### A native input cannot colour its own content
 
 To highlight inside a single-line field (`{{variable}}` tokens, say), render an `aria-hidden` overlay
@@ -350,6 +360,19 @@ their real `%APPDATA%\SwebKit`. A test that needs a request must create it.
 response is still on screen. Meanwhile the Send button is disabled mid-flight, so the next click is
 swallowed and the test silently exercises fewer sends than it looks like. Wait on something that
 advances — a history count, a new row — not on a value that is already there.
+
+### A `.last()` locator resolves at action time, not at assertion time
+
+`page.locator('[data-testid^="redis-database-"]').last()` binds to whichever row is last
+*when the next action runs*. Click "Add Cache", then `fill` immediately: while the add's
+`PUT` is still in flight the new row isn't mounted, so `.last()` is the *previous* last row
+and the fill lands on the wrong input — after the PUT lands the same locator silently points
+at the new row instead. Wait for the add's `PUT /api/config/profiles` response (the
+`saveProfile` pattern used elsewhere in `settings.spec.ts`) before resolving the locator.
+
+The virtualized Redis tree has the sibling trap: a namespace row starts collapsed, so a
+key under it has no DOM row at all — scrolling can never reach it. Always go through
+`scrollToRedisKey` in `helpers.ts`, which expands all namespaces first.
 
 ### `webServer.command` runs through cmd.exe on Windows
 

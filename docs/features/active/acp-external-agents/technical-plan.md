@@ -58,9 +58,9 @@ React UI ──SSE──▶ AgentEndpoints ──▶ SidecarAgentChatService ─
 
 ## Session mapping
 
-- One agent *process* per ACP profile: lazy-spawned on first use, kept alive, killed on profile
+- One agent _process_ per ACP profile: lazy-spawned on first use, kept alive, killed on profile
   switch, idle timeout, or sidecar shutdown. Crash → fail pending requests, respawn on next turn.
-- One ACP *session* per SwebKit `sessionId` (global page, each contextual panel, proactive-insight
+- One ACP _session_ per SwebKit `sessionId` (global page, each contextual panel, proactive-insight
   seeds), created lazily on the first turn — `mcpServers` are fixed at `session/new`, so the
   mode/area/scope gates are baked into the MCP URL query
   (`/mcp?mode=ask&area=Aks&scope=feature`). If the gates change for an existing session, the ACP
@@ -81,21 +81,21 @@ React UI ──SSE──▶ AgentEndpoints ──▶ SidecarAgentChatService ─
 
 ## Streaming map (`session/update` → `AgentStreamEvent`)
 
-| ACP update | Stream event |
-| --- | --- |
-| `agent_message_chunk` | `token` |
-| `agent_thought_chunk` | new `thought` kind (optional; may be dropped in phase 1) |
-| `tool_call` | `toolCallStarted` (`toolName` = ACP title) |
-| `tool_call_update` (completed/failed) | `toolCallResult`; also `tool_call`/`tool_result` step pairs so `AgentReasoningTrace` works unchanged |
-| `plan` | optional `plan` event (or folded into a step) |
-| `usage_update` | carried on `done` → `ContextUsagePercent` |
+| ACP update                             | Stream event                                                                                         |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `agent_message_chunk`                  | `token`                                                                                              |
+| `agent_thought_chunk`                  | new `thought` kind (optional; may be dropped in phase 1)                                             |
+| `tool_call`                            | `toolCallStarted` (`toolName` = ACP title)                                                           |
+| `tool_call_update` (completed/failed)  | `toolCallResult`; also `tool_call`/`tool_result` step pairs so `AgentReasoningTrace` works unchanged |
+| `plan`                                 | optional `plan` event (or folded into a step)                                                        |
+| `usage_update`                         | carried on `done` → `ContextUsagePercent`                                                            |
 | `session/prompt` response `stopReason` | `done` (`end_turn`/`max_tokens`/`max_turn_requests`), `error` (`refusal`), `done`+note (`cancelled`) |
 
 AbortController / CancellationToken → `session/cancel` notification.
 
 ## Permissions
 
-`session/request_permission` arrives as an agent→client request *while* `session/prompt` is in
+`session/request_permission` arrives as an agent→client request _while_ `session/prompt` is in
 flight. Default (`RequireToolApproval=false`): respond immediately with the request's
 `allow_once` option (fall back to first `allow_*`). Toggle on: park the request in
 `AcpPermissionStore` (id → TaskCompletionSource), emit a `permissionRequired` SSE event, resolve
@@ -136,7 +136,7 @@ stderr lines → sidecar `ILogger`.
    `ANTHROPIC_API_KEY`), `RequireToolApproval` (default false), `EnableFileSystem`/`EnableTerminal`
    (default false, UI-hidden). `RequiresApiKey` → false for Acp.
 3. `src/SwebKit.Core/Domain/AgentProfilePresets.cs`: `ClaudeAcp()` (command `npx`, args
-   `-y @zed-industries/claude-agent-acp`) and one native-ACP preset (Gemini CLI or Mistral Vibe —
+   `-y @agentclientprotocol/claude-agent-acp`) and one native-ACP preset (Gemini CLI or Mistral Vibe —
    verify the current flag/package name at implementation time).
 4. `src-sidecar/Services/Acp/AcpJsonRpcPeer.cs`: NDJSON JSON-RPC peer — line-reader task,
    id→TaskCompletionSource correlation, `SendRequestAsync`/`SendNotificationAsync`, inbound

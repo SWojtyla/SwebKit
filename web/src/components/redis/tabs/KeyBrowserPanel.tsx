@@ -60,10 +60,24 @@ export function KeyBrowserPanel() {
     if (row.kind === "namespace") {
       const { node, depth } = row;
       const isExpanded = ctx.expandedNamespaces.has(node.path);
+      const subtree = ctx.subtreeKeysByPath.get(node.path) ?? [];
+      const selectedInSubtree = subtree.reduce((n, k) => n + (ctx.selectedKeys.has(k) ? 1 : 0), 0);
+      const subtreeAllSelected = subtree.length > 0 && selectedInSubtree === subtree.length;
       return (
         <div className="flex items-stretch">
           <IndentGuides depth={depth} />
           <div className="flex min-w-0 flex-1 items-center gap-1 py-[3px] pr-2">
+            <input
+              type="checkbox"
+              checked={subtreeAllSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = !subtreeAllSelected && selectedInSubtree > 0;
+              }}
+              onChange={() => ctx.toggleSubtreeSelection(node)}
+              className="h-3.5 w-3.5 shrink-0"
+              title="Select all keys in this namespace"
+              data-testid={`redis-namespace-checkbox-${node.path}`}
+            />
             <button
               onClick={() => ctx.toggleNamespace(node.path)}
               className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -89,7 +103,7 @@ export function KeyBrowserPanel() {
     }
 
     const { key, node, depth } = row;
-    const isSelected = ctx.batchMode ? ctx.selectedKeys.has(key) : ctx.selectedKey === key;
+    const isSelected = ctx.selectedKey === key;
     const info = keyInfoByKey.get(key);
     const dotColorClass = (typeColors[info?.type ?? ""] ?? "text-muted-foreground").replace("text-", "bg-");
     return (
@@ -99,28 +113,25 @@ export function KeyBrowserPanel() {
           role="button"
           tabIndex={0}
           data-testid={`redis-key-${key}`}
-          onClick={() => (ctx.batchMode ? ctx.toggleKeySelection(key) : ctx.setSelectedKey(key))}
+          onClick={() => ctx.setSelectedKey(key)}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
-              if (ctx.batchMode) ctx.toggleKeySelection(key);
-              else ctx.setSelectedKey(key);
+              ctx.setSelectedKey(key);
             }
           }}
           className={`flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-left text-[13px] font-mono transition-colors ${
             isSelected ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
           }`}
         >
-          {ctx.batchMode && (
-            <input
-              type="checkbox"
-              checked={ctx.selectedKeys.has(key)}
-              onChange={() => ctx.toggleKeySelection(key)}
-              onClick={(e) => e.stopPropagation()}
-              className="h-3.5 w-3.5 shrink-0"
-              data-testid={`redis-key-checkbox-${key}`}
-            />
-          )}
+          <input
+            type="checkbox"
+            checked={ctx.selectedKeys.has(key)}
+            onChange={() => ctx.toggleKeySelection(key)}
+            onClick={(e) => e.stopPropagation()}
+            className="h-3.5 w-3.5 shrink-0"
+            data-testid={`redis-key-checkbox-${key}`}
+          />
           {info && (
             <span
               className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotColorClass}`}
@@ -205,21 +216,53 @@ export function KeyBrowserPanel() {
             <ChevronsUpDown className="h-3.5 w-3.5" />
             Expand all
           </button>
-          <button
-            onClick={() => { ctx.setBatchMode(!ctx.batchMode); ctx.setSelectedKeys(new Set()); }}
-            className={`rounded border px-2 py-1 text-xs ${ctx.batchMode ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-            data-testid="redis-batch-toggle"
+        </div>
+        <div className="mt-2 flex items-center gap-2 border-t pt-2 text-xs">
+          <label
+            className="flex items-center gap-1.5"
+            title="Select or clear every currently loaded matching key"
           >
-            {ctx.batchMode ? "Exit Batch" : "Batch Select"}
-          </button>
-          {ctx.batchMode && ctx.selectedKeys.size > 0 && (
-            <>
-              <span className="text-xs text-muted-foreground" data-testid="redis-batch-count">{ctx.selectedKeys.size} selected</span>
-              <button onClick={ctx.handleExportSelected} className="rounded border px-2 py-1 text-xs hover:bg-accent" data-testid="redis-batch-export">Export JSON</button>
-              <button onClick={ctx.handleBatchDelete} className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10" data-testid="redis-batch-delete">Delete</button>
-              <button onClick={() => ctx.setSelectedKeys(new Set())} className="text-xs text-muted-foreground" data-testid="redis-batch-clear">Clear</button>
-            </>
-          )}
+            <input
+              type="checkbox"
+              checked={ctx.allLoadedSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = ctx.someLoadedSelected;
+              }}
+              onChange={ctx.toggleSelectAllLoaded}
+              disabled={ctx.displayKeys.length === 0}
+              data-testid="redis-select-all-loaded"
+            />
+            Select all loaded
+          </label>
+          <span className="text-muted-foreground" data-testid="redis-batch-count">
+            {ctx.selectedKeys.size} selected of {ctx.displayKeys.length} loaded
+          </span>
+          <span className="ml-auto flex items-center gap-1">
+            <button
+              onClick={() => ctx.setSelectedKeys(new Set())}
+              disabled={ctx.selectedKeys.size === 0}
+              className="rounded border px-2 py-1 hover:bg-accent disabled:opacity-50"
+              data-testid="redis-batch-clear"
+            >
+              Clear
+            </button>
+            <button
+              onClick={ctx.handleExportSelected}
+              disabled={ctx.selectedKeys.size === 0}
+              className="rounded border px-2 py-1 hover:bg-accent disabled:opacity-50"
+              data-testid="redis-batch-export"
+            >
+              Export JSON
+            </button>
+            <button
+              onClick={ctx.handleBatchDelete}
+              disabled={ctx.selectedKeys.size === 0}
+              className="rounded border border-destructive px-2 py-1 text-destructive hover:bg-destructive/10 disabled:opacity-50"
+              data-testid="redis-batch-delete"
+            >
+              Delete
+            </button>
+          </span>
         </div>
       </div>
 

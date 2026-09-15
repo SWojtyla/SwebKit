@@ -29,6 +29,7 @@ public sealed class SidecarAgentChatService
     private readonly AgentSystemPromptBuilder _promptBuilder;
     private readonly AgentToolCallOrchestrator _toolOrchestrator;
     private readonly AgentContextBudgetPlanner _budgetPlanner;
+    private readonly Acp.AcpAgentHost? _acpHost;
 
     /// <summary>History count for the global <c>/agent</c> page's session. Kept for existing call
     /// sites (<see cref="AgentEndpoints.GetStatus"/>); prefer <see cref="GetHistoryCount"/> for new
@@ -41,7 +42,8 @@ public sealed class SidecarAgentChatService
         AgentSessionStore sessions,
         AgentSystemPromptBuilder promptBuilder,
         AgentToolCallOrchestrator toolOrchestrator,
-        AgentContextBudgetPlanner budgetPlanner)
+        AgentContextBudgetPlanner budgetPlanner,
+        Acp.AcpAgentHost? acpHost = null)
     {
         _modelClient = modelClient;
         _settings = settings;
@@ -49,6 +51,7 @@ public sealed class SidecarAgentChatService
         _promptBuilder = promptBuilder;
         _toolOrchestrator = toolOrchestrator;
         _budgetPlanner = budgetPlanner;
+        _acpHost = acpHost;
     }
 
     /// <summary>Composition-root convenience overload that builds the default collaborators from the
@@ -138,7 +141,15 @@ public sealed class SidecarAgentChatService
         return AgentContextBudgetPlanner.ResolveContextWindow(profile);
     }
 
-    public void ClearHistory(string? sessionId = null) => _sessions.ClearHistory(sessionId);
+    /// <summary>Clears the SwebKit-side history mirror and drops the session's ACP session (for
+    /// ACP profiles — the agent owns its own transcript, so forgetting ours alone would leave the
+    /// agent still holding the conversation). A no-op against the host for non-ACP profiles.</summary>
+    public async Task ClearHistoryAsync(string? sessionId = null)
+    {
+        _sessions.ClearHistory(sessionId);
+        if (_acpHost is not null)
+            await _acpHost.DropSessionAsync(AgentSessionStore.Key(sessionId));
+    }
 
     /// <summary>Overload preserving the pre-Module-5 call shape: no session, no context, and the
     /// safe "ask" mode (not "ask_and_do" — see <see cref="AgentToolCallOrchestrator"/>'s doc comment
@@ -161,6 +172,11 @@ public sealed class SidecarAgentChatService
         {
             var result = await _modelClient.ChatAsync(request, toolExecutor, ct);
             _sessions.Append(session, new AgentMessage { Role = "assistant", Content = result.Text });
+
+            // Providers that run their own tool loop (ACP) report steps on the result instead of
+            // through the step-tracking executor — merge them so the reasoning trace stays whole.
+            if (result.Steps is { Count: > 0 })
+                steps.AddRange(result.Steps);
 
             sw.Stop();
             return new SidecarAgentReply
@@ -254,6 +270,8 @@ public sealed class SidecarAgentChatService
                 if (current!.Kind == AgentStreamEventKind.Done && current.Result is not null)
                 {
                     _sessions.Append(session, new AgentMessage { Role = "assistant", Content = current.Result.Text });
+                    if (current.Result.Steps is { Count: > 0 })
+                        steps.AddRange(current.Result.Steps);
                     yield return new AgentStreamEvent
                     {
                         Kind = AgentStreamEventKind.Done,
@@ -312,7 +330,12 @@ public sealed class SidecarAgentChatService
         // idle-session sweep and covers the turn itself (prompt build, summarization, model call).
         var sw = Stopwatch.StartNew();
         var profile = _settings.Settings.Agent.GetActiveProfile();
-        var hasToolCalling = (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
+        // ACP profiles aren't gated on the probed Capability: tool delivery happens through the
+        // session's MCP bridge, gated by the agent's live mcpCapabilities from initialize — the
+        // stored value only reflects the last "Test connection" click and stays Unknown if the
+        // user never ran (or re-ran) it, which would silently strip every SwebKit tool.
+        var hasToolCalling = profile?.Provider == ProviderKind.Acp
+            || (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
         var systemPrompt = _promptBuilder.Build(context, normalizedMode, hasToolCalling);
         var tools = _toolOrchestrator.ResolveTools(hasToolCalling, normalizedMode, context, normalizedScope);
 
@@ -328,6 +351,7 @@ public sealed class SidecarAgentChatService
             UserMessage = userMessage,
             Tools = tools,
             History = historyList,
+            SessionKey = AgentSessionStore.Key(sessionId),
         };
 
         var steps = new List<AgentChatStep>();

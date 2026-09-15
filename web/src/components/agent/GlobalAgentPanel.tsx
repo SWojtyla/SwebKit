@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
-import { usePendingActionsFeed } from "@/lib/hooks/useAgent";
+import { useAcpPermissions, usePendingActionsFeed } from "@/lib/hooks/useAgent";
 import { AgentMarkdown } from "./AgentMarkdown";
 import { AgentVisualizationPanel, parseVisualBlocks } from "./AgentVisualizationPanel";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { PendingActionCard, PendingActionExpiredNotice } from "./PendingActionCard";
+import { AcpPermissionCard } from "./AcpPermissionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
@@ -42,6 +43,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
   const { messages, send, isStreaming, cancel, toolStatus, clear, isClearPending, status } =
     useGlobalAgentConversation();
   const { feed: pendingActionFeed, dismissExpired } = usePendingActionsFeed();
+  const acpPermissions = useAcpPermissions();
 
   const lastAssistantContent = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -176,6 +178,14 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
               <PendingActionCard key={item.action.id} action={item.action} />
             ),
           )}
+        </div>
+      )}
+
+      {acpPermissions.data && acpPermissions.data.length > 0 && (
+        <div className="space-y-2 border-b px-4 py-3" data-testid="global-agent-panel-acp-permissions">
+          {acpPermissions.data.map((p) => (
+            <AcpPermissionCard key={p.id} permission={p} />
+          ))}
         </div>
       )}
 

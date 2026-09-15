@@ -68,6 +68,12 @@ public sealed class AgentModelRequest
     public IReadOnlyList<ToolDefinition> Tools { get; init; } = [];
     public IReadOnlyList<AgentMessage> History { get; init; } = [];
     public int MaxToolRounds { get; init; } = 5;
+
+    /// <summary>Normalized SwebKit chat-session key (<see cref="AgentSessionStore.Key"/> output),
+    /// set by <c>SidecarAgentChatService</c>. Only consumed by session-owning model clients —
+    /// <c>AcpAgentModelClient</c> maps it to an ACP <c>sessionId</c>; request/response providers
+    /// (OpenAI-compatible) ignore it because their history rides in <see cref="History"/>.</summary>
+    public string? SessionKey { get; init; }
 }
 
 // ── Response DTOs ──
@@ -111,6 +117,13 @@ public sealed class AgentChatResult
     public IReadOnlyList<string> ToolsUsed { get; init; } = [];
     public TimeSpan Elapsed { get; init; }
     public bool HitMaxRounds { get; init; }
+
+    /// <summary>Per-tool-call trace produced by the model client itself, when the tool loop runs
+    /// inside the provider rather than through <c>SidecarAgentChatService</c>'s step-tracking
+    /// executor — ACP agents report their own <c>tool_call</c>/<c>tool_call_update</c> lifecycle,
+    /// so there is no local executor to record steps. Null for providers that go through the
+    /// local executor (their steps are recorded there instead).</summary>
+    public IReadOnlyList<AgentChatStep>? Steps { get; init; }
 }
 
 /// <summary>
@@ -170,6 +183,17 @@ public enum AgentStreamEventKind
     /// <summary>The loop failed before producing a result; <see cref="AgentStreamEvent.ErrorMessage"/>
     /// carries the reason. Always the last event when it occurs.</summary>
     Error,
+
+    /// <summary>An incremental chunk of agent reasoning/thinking text (<see cref="AgentStreamEvent.Token"/>).
+    /// Only emitted by providers that expose a thinking channel (ACP's
+    /// <c>agent_thought_chunk</c>); OpenAI-compatible providers never produce it.</summary>
+    Thought,
+
+    /// <summary>An ACP <c>session/request_permission</c> is parked awaiting the user's decision —
+    /// the frontend should refresh its permission list. Only emitted when the profile's
+    /// <c>RequireToolApproval</c> toggle is on; otherwise permission requests are auto-approved
+    /// and invisible.</summary>
+    PermissionRequired,
 }
 
 /// <summary>One incremental event from a streamed agent chat turn.</summary>

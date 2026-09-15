@@ -29,15 +29,21 @@ export function DraftInput({ value, onCommit, onKeyDown, ...rest }: DraftInputPr
   const onCommitRef = useRef(onCommit);
   onCommitRef.current = onCommit;
 
-  // Re-sync when the stored value changes underneath us — another save landing, or a
-  // different record being rendered into the same input. Guarded on the last value we
-  // committed so a save echoing back our own text does not fight the cursor.
+  // Re-sync when the stored value diverges from what we last committed — another save
+  // landing, a different record being rendered into the same input, or a commit that the
+  // parent normalized (e.g. clamped) back to the value already stored. Guarded on the last
+  // value we committed so a save echoing back our own text does not fight the cursor.
+  // Runs on every render, not [value]: a commit normalized back to the stored value leaves
+  // the prop byte-identical, so a change-guarded effect never fires and the raw typed text
+  // would stick while a different value was saved. The committedRef guard prevents both a
+  // setDraft loop and clobbering in-progress typing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (value !== committedRef.current) {
       committedRef.current = value;
       setDraft(value);
     }
-  }, [value]);
+  });
 
   // Committing only on blur would lose an edit when the field goes away without one —
   // switching settings tabs or navigating unmounts the input, and React fires no blur.

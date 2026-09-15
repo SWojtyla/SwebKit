@@ -69,7 +69,12 @@ public sealed class AgentContextBudgetPlanner
         var estimated = EstimateFullRequestTokens(systemPrompt, tools, historyForModel, userMessage);
         var summarized = false;
 
-        if (estimated > contextWindow * threshold && historyForModel.Count > KeepVerbatimMessageCount)
+        // ACP profiles keep their transcript inside the agent process — SwebKit-side history is a
+        // display mirror the model never sees, so rolling summarization would burn a one-shot
+        // completion for zero benefit (context usage comes from the agent's usage_update instead).
+        var summarizationApplies = profile?.Provider != ProviderKind.Acp;
+
+        if (summarizationApplies && estimated > contextWindow * threshold && historyForModel.Count > KeepVerbatimMessageCount)
         {
             summarized = await TrySummarizeOlderHistoryAsync(session, ct);
             if (summarized)

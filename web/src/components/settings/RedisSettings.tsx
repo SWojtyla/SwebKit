@@ -119,10 +119,8 @@ export function RedisSettings() {
         <CacheRow
           key={cache.id}
           cache={cache}
-          isActive={redis.activeCacheId === cache.id}
           onUpdate={(patch) => updateCache(cache.id, patch)}
           onCommitDatabase={(raw) => commitDatabase(cache, raw)}
-          onSetActive={() => update({ activeCacheId: cache.id })}
           onRequestRemove={() => requestRemove(cache)}
           pendingRemove={pendingRemoveId === cache.id}
           onConfirmRemove={() => {
@@ -138,10 +136,8 @@ export function RedisSettings() {
 
 interface CacheRowProps {
   cache: RedisCacheEntry;
-  isActive: boolean;
   onUpdate: (patch: Partial<RedisCacheEntry>) => void;
   onCommitDatabase: (raw: string) => void;
-  onSetActive: () => void;
   onRequestRemove: () => void;
   pendingRemove: boolean;
   onConfirmRemove: () => void;
@@ -150,10 +146,8 @@ interface CacheRowProps {
 
 function CacheRow({
   cache,
-  isActive,
   onUpdate,
   onCommitDatabase,
-  onSetActive,
   onRequestRemove,
   pendingRemove,
   onConfirmRemove,
@@ -245,14 +239,11 @@ function CacheRow({
           className="w-20 rounded-md border bg-card px-3 py-1.5 text-sm"
           data-testid={`redis-database-${cache.id}`}
         />
-        <label className="ml-4 flex items-center gap-2 text-sm">
-          <input type="radio" name="redis-active-cache" checked={isActive} onChange={onSetActive} />
-          Active
-        </label>
       </div>
       <p className="text-xs text-muted-foreground">
         Database: Redis logical database index (0–15). Leave 0 unless this cache uses multiple
-        databases. Active: the cache used when you open the Redis browser page.
+        databases. The cache you select on the Redis page is remembered — it is also the one the
+        assistant's Redis tools use by default.
       </p>
 
       <div className="flex items-center gap-2 pt-1">

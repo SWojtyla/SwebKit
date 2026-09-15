@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend, streamAgentChat } from "../api";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
+  AcpPermission,
   AgentActionApplyResult,
   AgentCapabilityTestResult,
   AgentChatContext,
@@ -29,6 +30,34 @@ export function usePendingApprovals() {
     queryKey: ["pending-approvals"],
     queryFn: () => apiFetch<PendingAction[]>("/api/agent/pending-approvals"),
     refetchInterval: 30_000,
+  });
+}
+
+/**
+ * Parked ACP permission requests (see `AcpPermission` in types). Polled faster than pending
+ * approvals because a live agent turn is blocked waiting on the answer — the `permissionRequired`
+ * stream event also invalidates this query immediately rather than waiting for the next tick.
+ * Returns an empty list on non-ACP profiles and whenever requireToolApproval is off.
+ */
+export function useAcpPermissions() {
+  return useQuery({
+    queryKey: ["acp-permissions"],
+    queryFn: () => apiFetch<AcpPermission[]>("/api/agent/acp/permissions"),
+    refetchInterval: 5_000,
+  });
+}
+
+export function useRespondAcpPermission() {
+  const qc = useQueryClient();
+  const { notify } = useNotification();
+  return useMutation({
+    mutationFn: ({ id, optionId }: { id: string; optionId: string }) =>
+      apiSend(`/api/agent/acp/permissions/${id}/respond`, "POST", {
+        optionId,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["acp-permissions"] }),
+    onError: (error) =>
+      notify("error", "Couldn't respond to the agent's permission request", String(error)),
   });
 }
 
@@ -244,6 +273,12 @@ export function useAgentChatStream(sessionId?: string) {
               case "toolCallStarted":
               case "toolCallResult":
                 options?.onToolEvent?.(event);
+                break;
+              case "permissionRequired":
+                // An ACP agent parked a permission request — refresh the list
+                // now instead of waiting out the 5s poll while its turn sits
+                // blocked on the user's answer.
+                qc.invalidateQueries({ queryKey: ["acp-permissions"] });
                 break;
               case "done":
                 if (event.result) {

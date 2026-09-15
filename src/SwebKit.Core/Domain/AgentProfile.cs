@@ -66,6 +66,46 @@ public sealed class AgentProfile
     /// </summary>
     public int? ContextWindowTokens { get; set; }
 
-    /// <summary>Whether this profile requires an API key to function.</summary>
-    public bool RequiresApiKey => Provider != ProviderKind.LmStudio;
+    // ── ACP (external agent subprocess) fields — only meaningful when Provider == Acp ──
+
+    /// <summary>Executable to spawn for an ACP agent (e.g. <c>npx</c>, <c>gemini</c>). On Windows,
+    /// <c>.cmd</c>/<c>.bat</c> shims are resolved through PATHEXT by the launcher.</summary>
+    public string Command { get; set; } = string.Empty;
+
+    /// <summary>Command-line arguments for <see cref="Command"/> as a single string, split with
+    /// shell-style quoting rules by the launcher (e.g. <c>-y @agentclientprotocol/claude-agent-acp</c>).</summary>
+    public string Arguments { get; set; } = string.Empty;
+
+    /// <summary>Working directory for the agent process and the ACP session's <c>cwd</c>. Empty
+    /// means the sidecar's own working directory.</summary>
+    public string WorkingDirectory { get; set; } = string.Empty;
+
+    /// <summary>Extra environment variables passed to the agent process (non-secret config only —
+    /// secrets go through <see cref="CredentialKey"/> + <see cref="CredentialEnvVar"/>).</summary>
+    public Dictionary<string, string> EnvironmentVariables { get; set; } = [];
+
+    /// <summary>Name of the environment variable the resolved <see cref="CredentialKey"/> secret is
+    /// injected as when spawning the agent (e.g. <c>ANTHROPIC_API_KEY</c>). Ignored when
+    /// <see cref="CredentialKey"/> is empty.</summary>
+    public string CredentialEnvVar { get; set; } = string.Empty;
+
+    /// <summary>When true, ACP <c>session/request_permission</c> calls are surfaced to the user as
+    /// approval cards instead of being auto-approved. Default false: SwebKit's own tools are
+    /// already self-gating (mutations only create pending-action proposals), so per-tool-call
+    /// agent permission prompts would be a redundant second click.</summary>
+    public bool RequireToolApproval { get; set; }
+
+    /// <summary>Reserved: advertise ACP <c>fs/*</c> client capabilities so the agent can read and
+    /// write files on this machine. Ships disabled — the capability is designed in but the
+    /// server-side handlers are not implemented.</summary>
+    public bool EnableFileSystem { get; set; }
+
+    /// <summary>Reserved: advertise the ACP <c>terminal</c> client capability so the agent can run
+    /// shell commands on this machine. Ships disabled — see <see cref="EnableFileSystem"/>.</summary>
+    public bool EnableTerminal { get; set; }
+
+    /// <summary>Whether this profile requires an API key to function. ACP agents own their auth
+    /// (e.g. an existing <c>claude</c> login) — <see cref="CredentialKey"/> is optional there and
+    /// only injects an env var when set.</summary>
+    public bool RequiresApiKey => Provider is not ProviderKind.LmStudio and not ProviderKind.Acp;
 }

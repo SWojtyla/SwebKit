@@ -73,4 +73,14 @@ services.AddHttpClient("MyClient")
 
 ---
 
+## CS-7 — OS-gated early returns must preserve the method's contract on every OS
+
+**Symptom:** Sidecar tests pass on a Windows dev machine but fail on the Linux CI runner with `Assert.Throws() Failure: No exception was thrown`.
+
+**Cause:** `AcpProcessLauncher.ResolveExecutable` returned the raw command on non-Windows (`if (!OperatingSystem.IsWindows()) return command;`), so the `FileNotFoundException` contract — and the user-facing "install Node.js"-style message — only existed on Windows. On Linux a missing agent surfaced later as a raw `Win32Exception` (ENOENT) from `Process.Start`.
+
+**Fix:** Gate only the truly platform-specific part (PATHEXT expansion is Windows-only); keep shared semantics — existence check, `Path.PathSeparator`-split PATH search, and the thrown exception — on every OS. When a test asserts behavior behind an OS gate, ask whether the gate should exist in the implementation at all before marking the test Windows-only. And remember `PATH` splits on `:` on Unix, not `;` — use `Path.PathSeparator`.
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md)_

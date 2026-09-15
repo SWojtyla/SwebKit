@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode, scrollVirtualListIntoView } from "./helpers";
+import { setDemoMode, scrollToRedisKey } from "./helpers";
 
 /**
  * Captures every /api/agent/chat (or /chat/stream) request body sent while this route is
@@ -99,7 +99,7 @@ test.describe("Contextual assistant entry points", () => {
 
     await page.goto("/redis");
     await expect(page.getByTestId("redis-key-browser")).toBeVisible();
-    await scrollVirtualListIntoView(page, "redis-key-tree-scroll", "redis-key-user:1001");
+    await scrollToRedisKey(page, "user:1001");
     await page.getByTestId("redis-key-user:1001").click();
     await page.getByTestId("redis-ask-ai-btn").click();
 
