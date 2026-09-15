@@ -35,6 +35,21 @@ export async function scrollVirtualListIntoView(
 }
 
 /**
+ * Scrolls the Redis key tree until `redis-key-${key}` is mounted. The tree is virtualized
+ * AND starts fully collapsed (matching the MAUI browser) — a namespaced key like
+ * `user:1001` has no row at all until its `user` group is expanded, so expansion has to
+ * happen before scrolling can ever reach it.
+ */
+export async function expandAllRedisNamespaces(page: Page) {
+  await page.getByTestId("redis-expand-all").click();
+}
+
+export async function scrollToRedisKey(page: Page, key: string) {
+  await expandAllRedisNamespaces(page);
+  return scrollVirtualListIntoView(page, "redis-key-tree-scroll", `redis-key-${key}`);
+}
+
+/**
  * Mocks POST /api/agent/chat/stream with a single "done" SSE event carrying `reply` — the
  * simplest valid stream a test can fake (no token events first), since AgentPage/ContextualAssistant
  * both treat a "done" event's `result` as the source of truth regardless of what streamed before it.

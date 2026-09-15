@@ -479,18 +479,31 @@ test.describe("Settings", () => {
     await page.getByTestId("aks-test-connection").click();
     await expect(page.getByTestId("aks-test-result")).toHaveText("Connected");
 
+    // Each "Add" button saves the profile; .last() only points at the new row once that
+    // PUT lands, so wait for it instead of clicking a leftover row from an earlier test.
+    const addSave = () =>
+      page.waitForResponse(
+        (r) => r.request().method() === "PUT" && r.url().includes("/api/config/profiles"),
+      );
+
     await page.getByTestId("settings-tab-service-bus").click();
+    const sbAdded = addSave();
     await page.getByRole("button", { name: "Add Namespace" }).click();
+    await sbAdded;
     await page.locator('[data-testid^="sb-test-connection-"]').last().click();
     await expect(page.locator('[data-testid^="sb-test-result-"]').last()).toHaveText("Connected");
 
     await page.getByTestId("settings-tab-redis").click();
+    const redisAdded = addSave();
     await page.getByRole("button", { name: "Add Cache" }).click();
+    await redisAdded;
     await page.locator('[data-testid^="redis-test-connection-"]').last().click();
     await expect(page.locator('[data-testid^="redis-test-result-"]').last()).toHaveText("Failed: timeout");
 
     await page.getByTestId("settings-tab-storage").click();
+    const storageAdded = addSave();
     await page.getByRole("button", { name: "Add Account" }).click();
+    await storageAdded;
     await page.locator('[data-testid^="storage-test-connection-"]').last().click();
     await expect(page.locator('[data-testid^="storage-test-result-"]').last()).toHaveText("Connected");
   });
@@ -500,18 +513,34 @@ test.describe("Settings", () => {
     // unchanged and only surfaced later as an opaque connection failure.
     await page.goto("/settings");
 
+    const saveProfile = page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.url().includes("/api/config/profiles"),
+    );
     await page.getByTestId("settings-tab-aks").click();
     const interval = page.getByTestId("aks-auto-refresh-interval");
     await interval.fill("-5");
     await interval.blur();
+    // The clamped value becomes visible via the save round trip, not the blur itself.
+    await saveProfile;
     await expect(interval).toHaveValue("5");
     await expect(page.getByTestId("notification-toasts")).toContainText("out of range");
 
     await page.getByTestId("settings-tab-redis").click();
+    // Wait for "Add Cache"'s own save before resolving .last() — while that PUT is in
+    // flight the new row isn't mounted, so .last() points at an older cache and the fill
+    // lands on the wrong input.
+    const addCacheSave = page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.url().includes("/api/config/profiles"),
+    );
     await page.getByRole("button", { name: "Add Cache" }).click();
+    await addCacheSave;
     const database = page.locator('[data-testid^="redis-database-"]').last();
+    const databaseSave = page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.url().includes("/api/config/profiles"),
+    );
     await database.fill("99");
     await database.blur();
+    await databaseSave;
     await expect(database).toHaveValue("15");
   });
 

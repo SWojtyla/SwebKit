@@ -1,18 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { setDemoMode, scrollVirtualListIntoView } from "./helpers";
+import { setDemoMode, scrollToRedisKey, expandAllRedisNamespaces } from "./helpers";
 
 // The key browser tree is virtualized (@tanstack/react-virtual): rows outside the visible
 // window aren't in the DOM at all, so keys alphabetically past what fits on screen (session:*,
 // user:*) need the list scrolled toward them before Playwright can find/click their row.
 // The tree starts fully collapsed (matching the MAUI browser) — expand before a row can exist.
-const expandAll = (page: import("@playwright/test").Page) =>
-  page.getByTestId("redis-expand-all").click();
+const scrollToKey = (page: import("@playwright/test").Page, key: string) =>
+  scrollToRedisKey(page, key);
 
-const scrollToKey = async (page: import("@playwright/test").Page, key: string) => {
-  await expandAll(page);
-  return scrollVirtualListIntoView(page, "redis-key-tree-scroll", `redis-key-${key}`);
-};
+const expandAll = (page: import("@playwright/test").Page) => expandAllRedisNamespaces(page);
 
 test.describe("Redis", () => {
   test.beforeEach(async ({ page }) => {
