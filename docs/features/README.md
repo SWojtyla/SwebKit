@@ -53,6 +53,15 @@ write-only once set, which is why nobody could see that a variable was involved.
 now substitutes at send time, and secrets have a reveal toggle that shows the variable-aware input.
 Direct follow-on from `api-client-variable-scoping/`, which closed the same blind spot for the body.
 
+**ACP external agents (2026-09-15):** `docs/features/active/acp-external-agents/` is Planned —
+a design-only commit so far. Adds the Agent Client Protocol as a fourth agent provider kind so
+external agents (Claude via `claude-agent-acp`, Gemini CLI, Codex, Mistral Vibe, …) can drive the
+existing assistant: the sidecar spawns the agent over stdio JSON-RPC, maps `session/update` onto
+the existing SSE stream, and hands the agent SwebKit's own tools through an MCP bridge in
+`session/new` — preserving demo mode, per-area tool scoping, and the propose→confirm mutation
+flow. fs/terminal client capabilities stay off; agent permission requests auto-approve behind a
+per-profile toggle.
+
 **AKS logs (2026-09-09):** `docs/features/active/aks-log-parity/` is in Review — the multi-pod log
 view now streams every pod on open and shares one toolbar, buffer and windowing model with the
 single-pod view, instead of having almost none of its controls. Log lines carry the container's own
