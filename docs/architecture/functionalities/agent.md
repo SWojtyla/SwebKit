@@ -73,7 +73,7 @@ public interface IMistralClient
 {
     Task<string> ChatAsync(
         string systemPrompt,
-        string userMessage, 
+        string userMessage,
         IReadOnlyList<ToolDefinition> tools,
         List<object>? history,
         Func<string, JsonElement, CancellationToken, Task<string>>? toolExecutor,
@@ -138,6 +138,7 @@ public interface IAgentTool
 ### Available Tools
 
 **Kubernetes Tools (5):**
+
 - `GetPodStatusTool` - Pod health and status information
 - `GetPodLogsTool` - Fetch and analyze pod logs
 - `ListPodsTool` - List pods with filtering
@@ -145,10 +146,12 @@ public interface IAgentTool
 - `ListNamespacesTool` - List all namespaces
 
 **Service Bus Tools (2):**
+
 - `GetQueueStatsTool` - Queue statistics and metrics
 - `GetQueueMessagesTool` - Retrieve messages from queues
 
 **Observability Tools (2):**
+
 - `QueryLogsTool` - Execute KQL queries against Application Insights
 - `GetMetricsTool` - Retrieve metric data
 
@@ -157,7 +160,7 @@ public interface IAgentTool
 All tools support demo mode when `AppState.UseDemoData` is true:
 
 - **Kubernetes Tools**: Use `DemoAksClient` (injected as singleton)
-- **Service Bus Tools**: Use `DemoServiceBusClient.OrdersDev()` 
+- **Service Bus Tools**: Use `DemoServiceBusClient.OrdersDev()`
 - **Observability Tools**: Use `DemoObservabilityProvider` (via `ObservabilityProviderFactory.Create()` with `useDemoData=true`)
 
 This allows the agent to work without real API connections while maintaining realistic context and data structures.
@@ -178,6 +181,7 @@ public interface IAgentContextBuilder
 ### Context Information
 
 The context includes:
+
 - Active Kubernetes namespaces and clusters
 - Configured Service Bus namespaces
 - Selected observability resources
@@ -280,6 +284,38 @@ Guidelines:
 - **ToolExecutionStatus**: Visual indicators for tool execution progress
 - **AgentContextDisplay**: Shows current context information to users
 - **Demo Clients**: Synthetic data providers for demo mode operation
+
+## Current pipeline (Tauri + sidecar) and ACP external agents
+
+> The sections above describe the original MAUI/Blazor implementation. In the current
+> architecture the chat surfaces are React, the orchestrator is `SidecarAgentChatService` in
+> `src-sidecar`, and the model seam is `IAgentModelClient` — with `AgentModelClientRouter`
+> dispatching per active `AgentProfile`: `OpenAiCompatibleAgentClient` for
+> LM Studio / OpenAI-compatible / Mistral endpoints, `AcpAgentModelClient` for
+> `ProviderKind.Acp`.
+
+For `ProviderKind.Acp` the sidecar acts as an [Agent Client Protocol](https://agentclientprotocol.com)
+client: `AcpAgentHost` spawns the configured agent command (e.g.
+`npx -y @agentclientprotocol/claude-agent-acp`, `gemini --acp`) and speaks newline-delimited
+JSON-RPC over stdio via `AcpJsonRpcPeer` (`initialize` → `session/new` → `session/prompt`,
+with `session/update` notifications mapped onto the existing SSE `AgentStreamEvent`s and
+`session/cancel` wired to the cancel button). The agent's own transcript and tool loop stay
+inside the agent process; SwebKit never sees its raw tool calls.
+
+SwebKit's domain tools reach the agent through `SwebKitToolsMcpBridge`, a stateless
+streamable-HTTP MCP endpoint (`ModelContextProtocol.AspNetCore`) whose URL is handed to the
+agent in `session/new` → `mcpServers`. The `?tools=` query parameter carries the per-request
+allowlist already resolved by `AgentToolCallOrchestrator`, so mode (`ask`/`ask_and_do`),
+feature-area, and scope gates are preserved — an empty allowlist exposes zero tools.
+`propose_*` mutations still flow through the existing pending-approvals pipeline.
+
+`session/request_permission` is auto-approved by default (the first `allow*` option wins);
+a per-profile `RequireToolApproval` toggle instead parks the request in `AcpPermissionStore`
+(5-minute expiry) and surfaces it through `GET /api/agent/acp/permissions` +
+`POST /api/agent/acp/permissions/{id}/respond`, rendered as `AcpPermissionCard` in the chat
+surfaces. `fs/*` and `terminal/*` client capabilities are not advertised, so agent calls to
+them receive JSON-RPC `-32601`. `session/clear` drops the ACP session alongside the local
+conversation. See `docs/features/active/acp-external-agents/` for the full plan.
 
 ## Future Enhancements
 

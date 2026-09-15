@@ -17,6 +17,7 @@ using SwebKit.Observability;
 using SwebKit.Redis;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
+using ModelContextProtocol.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -123,8 +124,24 @@ builder.Services.AddSingleton<SwebKit.Sidecar.Services.WorkspaceRelationshipSugg
 // at startup below (a plain AddSingleton alone only registers it, it doesn't instantiate it).
 builder.Services.AddSingleton<SwebKit.Sidecar.Services.ProactiveInsightService>();
 
-// Agent: OpenAI-compatible LLM client + sidecar chat service
-builder.Services.AddHttpClient<IAgentModelClient, OpenAiCompatibleAgentClient>();
+// Agent: OpenAI-compatible LLM client + ACP external-agent host, dispatched per active profile
+// by AgentModelClientRouter (per-call resolution — switching profiles needs no restart).
+builder.Services.AddHttpClient<OpenAiCompatibleAgentClient>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.AcpPermissionStore>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.AcpAgentHost>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.AcpAgentModelClient>();
+builder.Services.AddSingleton<IAgentModelClient, AgentModelClientRouter>();
+
+// MCP bridge: exposes IAgentToolRegistry to external ACP agents over streamable HTTP
+// (session/new → mcpServers). Stateless mode — the per-session tool allowlist travels in the
+// ?tools= query param baked into the URL, so no MCP session state is needed.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.SwebKitToolsMcpBridge>();
+builder.Services.AddMcpServer()
+    .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless);
+builder.Services.AddOptions<ModelContextProtocol.Server.McpServerOptions>()
+    .Configure<SwebKit.Sidecar.Services.Acp.SwebKitToolsMcpBridge>(SwebKit.Sidecar.Services.Acp.SwebKitToolsMcpBridge.Configure);
+
 // Capability tester: probes a profile's endpoint for reachability/tool-calling support, backing
 // POST /api/agent/profiles/{id}/test. Separate HttpClient from the model client above since a
 // capability test may run against a profile that isn't the active one.
@@ -357,6 +374,10 @@ app.MapStorageEndpoints();
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
 app.MapAgentEndpoints();
+
+// MCP endpoint for external ACP agents (SwebKitToolsMcpBridge handlers; tool set is filtered
+// per request via the ?tools= allowlist the ACP session URL carries).
+app.MapMcp(SwebKit.Sidecar.Services.Acp.SwebKitToolsMcpBridge.EndpointPath);
 
 // ── Monitoring ───────────────────────────────────────────────────────────────
 

@@ -15,8 +15,34 @@ const capabilityLabel: Record<AgentProfile["capability"], string> = {
 /** A profile is worth confirming removal of once it has real configured data — an untouched
  * "New Profile" placeholder can go without the extra click. */
 function isConfigured(p: AgentProfile): boolean {
-  return p.baseUrl.trim() !== "" || p.model.trim() !== "" || p.credentialKey.trim() !== "";
+  return (
+    p.baseUrl.trim() !== "" ||
+    p.model.trim() !== "" ||
+    p.credentialKey.trim() !== "" ||
+    p.command.trim() !== ""
+  );
 }
+
+/** Spawn defaults for known ACP agents — applied onto the current profile via "Load preset",
+ * not selected as a provider of their own (the command is what actually makes each work). */
+const ACP_PRESETS: { label: string; patch: Partial<AgentProfile> }[] = [
+  {
+    label: "Claude (claude-agent-acp via npx)",
+    patch: {
+      command: "npx",
+      arguments: "-y @agentclientprotocol/claude-agent-acp",
+      credentialEnvVar: "ANTHROPIC_API_KEY",
+    },
+  },
+  {
+    label: "Gemini CLI (gemini --acp)",
+    patch: {
+      command: "gemini",
+      arguments: "--acp",
+      credentialEnvVar: "GEMINI_API_KEY",
+    },
+  },
+];
 
 export function AgentSettings() {
   const { data: settings, isLoading } = useUserSettings();
@@ -136,42 +162,55 @@ export function AgentSettings() {
               <option value="LmStudio">LM Studio (local)</option>
               <option value="OpenAiCompatible">OpenAI-compatible</option>
               <option value="Mistral">Mistral AI</option>
+              <option value="Acp">External agent (ACP)</option>
             </select>
-            <DraftInput
-              type="text"
-              value={p.baseUrl}
-              onCommit={(v) => updateProfile(i, { baseUrl: v })}
-              className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-              placeholder="Base URL (e.g. http://localhost:1234/v1)"
-              data-testid={`agent-profile-base-url-${i}`}
-            />
-            <DraftInput
-              type="text"
-              value={p.model}
-              onCommit={(v) => updateProfile(i, { model: v })}
-              className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-              placeholder="Model name"
-            />
-            {p.provider !== "LmStudio" && (
-              <div>
-                <DraftInput
-                  type="text"
-                  value={p.credentialKey}
-                  onCommit={(v) => updateProfile(i, { credentialKey: v })}
-                  className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-                  placeholder="Credential key (resolved via the OS credential store)"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Looked up in your OS credential store — save the provider's actual API key
-                  there under this key (not typed here).
-                </p>
-              </div>
+            {p.provider === "Acp" ? (
+              <AcpProfileFields
+                profile={p}
+                index={i}
+                onUpdate={(patch) => updateProfile(i, patch)}
+              />
+            ) : (
+              <>
+              <DraftInput
+                type="text"
+                value={p.baseUrl}
+                onCommit={(v) => updateProfile(i, { baseUrl: v })}
+                className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                placeholder="Base URL (e.g. http://localhost:1234/v1)"
+                data-testid={`agent-profile-base-url-${i}`}
+              />
+              <DraftInput
+                type="text"
+                value={p.model}
+                onCommit={(v) => updateProfile(i, { model: v })}
+                className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                placeholder="Model name"
+              />
+              {p.provider !== "LmStudio" && (
+                <div>
+                  <DraftInput
+                    type="text"
+                    value={p.credentialKey}
+                    onCommit={(v) => updateProfile(i, { credentialKey: v })}
+                    className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                    placeholder="Credential key (resolved via the OS credential store)"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Looked up in your OS credential store — save the provider's actual API key
+                    there under this key (not typed here).
+                  </p>
+                </div>
+              )}
+              </>
             )}
             {/* Temperature and max output tokens are deliberately not exposed here — those are
                 generation parameters the provider (LM Studio, etc.) already controls, and
                 duplicating them here would just create two different, silently-conflicting
                 settings. Timeout stays: it's this app's own HTTP client patience, not something
-                the provider has a say in. */}
+                the provider has a say in. For ACP profiles neither applies — the agent owns its
+                own context window and a fixed HTTP timeout would cut long agent turns short. */}
+            {p.provider !== "Acp" && (
             <div className="flex gap-3">
               <div className="w-32">
                 <label className="mb-1 block text-xs text-muted-foreground">Timeout (s)</label>
@@ -202,6 +241,7 @@ export function AgentSettings() {
                 />
               </div>
             </div>
+            )}
             <div className="flex items-center justify-between gap-2 pt-1">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -223,9 +263,10 @@ export function AgentSettings() {
             <div className="text-xs text-muted-foreground" data-testid={`agent-profile-capability-${i}`}>
               {capabilityLabel[p.capability]}
               {p.lastTestDiagnostic && ` — ${p.lastTestDiagnostic}`}
-              {p.contextWindowTokens
-                ? ` · ${p.contextWindowTokens.toLocaleString()}-token window`
-                : " · unknown context window (using a 4,096-token conservative default)"}
+              {p.provider !== "Acp" &&
+                (p.contextWindowTokens
+                  ? ` · ${p.contextWindowTokens.toLocaleString()}-token window`
+                  : " · unknown context window (using a 4,096-token conservative default)")}
             </div>
             {pendingRemoveId === p.id && (
               <ConfirmBar
@@ -255,6 +296,14 @@ export function AgentSettings() {
               lastTestDiagnostic: null,
               requiresApiKey: false,
               contextWindowTokens: null,
+              command: "",
+              arguments: "",
+              workingDirectory: "",
+              environmentVariables: {},
+              credentialEnvVar: "",
+              requireToolApproval: false,
+              enableFileSystem: false,
+              enableTerminal: false,
             };
             update({
               profiles: [...agent.profiles, newProfile],
@@ -407,4 +456,147 @@ function ObservabilitySettings({ profile, resources, onUpdate }: ObservabilitySe
       </div>
     </section>
   );
+}
+
+/** Fields shown for an ACP (external agent subprocess) profile — the provider spawns a child
+ * process speaking JSON-RPC over stdio instead of calling an HTTP endpoint, so this swaps the
+ * base-url/model fields for spawn configuration. */
+function AcpProfileFields({
+  profile,
+  index,
+  onUpdate,
+}: {
+  profile: AgentProfile;
+  index: number;
+  onUpdate: (patch: Partial<AgentProfile>) => void;
+}) {
+  return (
+    <>
+      <select
+        value=""
+        onChange={(e) => {
+          const preset = ACP_PRESETS[parseInt(e.target.value)];
+          if (preset) onUpdate(preset.patch);
+        }}
+        className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
+        data-testid={`agent-profile-acp-preset-${index}`}
+      >
+        <option value="">Load a preset…</option>
+        {ACP_PRESETS.map((preset, pi) => (
+          <option key={preset.label} value={pi}>
+            {preset.label}
+          </option>
+        ))}
+      </select>
+      <DraftInput
+        type="text"
+        value={profile.command}
+        onCommit={(v) => onUpdate({ command: v })}
+        className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+        placeholder="Command (e.g. npx, gemini, claude-agent-acp)"
+        data-testid={`agent-profile-acp-command-${index}`}
+      />
+      <DraftInput
+        type="text"
+        value={profile.arguments}
+        onCommit={(v) => onUpdate({ arguments: v })}
+        className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+        placeholder="Arguments (e.g. -y @agentclientprotocol/claude-agent-acp)"
+        data-testid={`agent-profile-acp-arguments-${index}`}
+      />
+      <DraftInput
+        type="text"
+        value={profile.workingDirectory}
+        onCommit={(v) => onUpdate({ workingDirectory: v })}
+        className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+        placeholder="Working directory (optional — defaults to the app's)"
+      />
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <DraftInput
+            type="text"
+            value={profile.credentialKey}
+            onCommit={(v) => onUpdate({ credentialKey: v })}
+            className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+            placeholder="Credential key (optional)"
+          />
+        </div>
+        <div className="flex-1">
+          <DraftInput
+            type="text"
+            value={profile.credentialEnvVar}
+            onCommit={(v) => onUpdate({ credentialEnvVar: v })}
+            className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+            placeholder="Injected as env var (e.g. ANTHROPIC_API_KEY)"
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Most agents authenticate through their own CLI login — the credential pair above is only
+        needed to inject an API key the agent doesn't already have.
+      </p>
+      <EnvVarsEditor
+        value={profile.environmentVariables}
+        onCommit={(env) => onUpdate({ environmentVariables: env })}
+        testId={`agent-profile-acp-env-${index}`}
+      />
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={profile.requireToolApproval}
+          onChange={(e) => onUpdate({ requireToolApproval: e.target.checked })}
+          data-testid={`agent-profile-acp-approval-${index}`}
+        />
+        Ask before the agent runs a tool call
+      </label>
+      <p className="text-xs text-muted-foreground">
+        Off by default — the agent's permission prompts are auto-approved. SwebKit's own mutating
+        tools still only create proposals you confirm separately. Filesystem and terminal access
+        stay disabled either way.
+      </p>
+    </>
+  );
+}
+
+/** Edits a Record<string,string> as KEY=VALUE lines — one per line, `#` lines ignored. */
+function EnvVarsEditor({
+  value,
+  onCommit,
+  testId,
+}: {
+  value: Record<string, string>;
+  onCommit: (env: Record<string, string>) => void;
+  testId: string;
+}) {
+  const [draft, setDraft] = useState(() => serializeEnvVars(value));
+
+  return (
+    <textarea
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => onCommit(parseEnvVars(draft))}
+      rows={2}
+      placeholder={"Extra env vars, one per line:\nKEY=VALUE"}
+      className="w-full rounded-md border bg-card px-3 py-1.5 font-mono text-xs"
+      data-testid={testId}
+    />
+  );
+}
+
+export function serializeEnvVars(env: Record<string, string>): string {
+  return Object.entries(env)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("\n");
+}
+
+export function parseEnvVars(text: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    env[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1);
+  }
+  return env;
 }

@@ -7,6 +7,7 @@ using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
+using SwebKit.Sidecar.Services.Acp;
 
 namespace SwebKit.Sidecar.Tests;
 
@@ -28,6 +29,12 @@ public class AgentEndpointsTests
 
         return new SidecarAgentChatService(modelClient ?? new FakeAgentModelClient(), registry, profiles, settings, demo);
     }
+
+    /// <summary>An unstarted host — sufficient for non-ACP profiles, which never touch it
+    /// (the ACP branch of <c>TestProfileAsync</c> is the only consumer).</summary>
+    private static AcpAgentHost AcpHost(UserSettingsRepository settings) =>
+        new(settings, new FakeCredentialStore(), new AcpPermissionStore(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AcpAgentHost>.Instance);
 
     // ── Chat ─────────────────────────────────────────────────────────────────
 
@@ -168,7 +175,7 @@ public class AgentEndpointsTests
         Assert.Equal(2, service.GetHistoryCount("session-a")); // user + assistant
         Assert.Equal(2, service.GetHistoryCount("session-b"));
 
-        service.ClearHistory("session-a");
+        await service.ClearHistoryAsync("session-a");
 
         Assert.Equal(0, service.GetHistoryCount("session-a"));
         Assert.Equal(2, service.GetHistoryCount("session-b"));
@@ -197,7 +204,7 @@ public class AgentEndpointsTests
         await service.SendAsync("hello");
         Assert.True(service.HistoryCount > 0);
 
-        var result = AgentEndpoints.ClearHistory(service);
+        var result = await AgentEndpoints.ClearHistory(service);
 
         Assert.Equal(0, service.HistoryCount);
         var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
@@ -285,7 +292,7 @@ public class AgentEndpointsTests
         var handler = new FakeHttpMessageHandler();
         var tester = new AgentCapabilityTester(new HttpClient(handler), new FakeCredentialStore());
 
-        var result = await AgentEndpoints.TestProfileAsync("does-not-exist", null, tester, settings, CancellationToken.None);
+        var result = await AgentEndpoints.TestProfileAsync("does-not-exist", null, tester, settings, AcpHost(settings), CancellationToken.None);
 
         Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.NotFound>(result);
     }
@@ -309,7 +316,7 @@ public class AgentEndpointsTests
         handler.EnqueueJson("""{"choices":[{"finish_reason":"tool_calls","message":{"tool_calls":[{"function":{"name":"echo_test"}}]}}]}""");
         var tester = new AgentCapabilityTester(new HttpClient(handler), new FakeCredentialStore());
 
-        var result = await AgentEndpoints.TestProfileAsync("p1", null, tester, settings, CancellationToken.None);
+        var result = await AgentEndpoints.TestProfileAsync("p1", null, tester, settings, AcpHost(settings), CancellationToken.None);
 
         var ok = Assert.IsType<Ok<CapabilityTestResult>>(result);
         Assert.Equal(AgentCapability.ToolCalling, ok.Value!.Capability);
@@ -338,7 +345,7 @@ public class AgentEndpointsTests
             Model = "test-model",
         };
 
-        var result = await AgentEndpoints.TestProfileAsync("unsaved", unsavedProfile, tester, settings, CancellationToken.None);
+        var result = await AgentEndpoints.TestProfileAsync("unsaved", unsavedProfile, tester, settings, AcpHost(settings), CancellationToken.None);
 
         var ok = Assert.IsType<Ok<CapabilityTestResult>>(result);
         Assert.Equal(AgentCapability.ToolCalling, ok.Value!.Capability);
@@ -376,7 +383,7 @@ public class AgentEndpointsTests
             Model = "test-model",
         };
 
-        var result = await AgentEndpoints.TestProfileAsync("p1", justTypedProfile, tester, settings, CancellationToken.None);
+        var result = await AgentEndpoints.TestProfileAsync("p1", justTypedProfile, tester, settings, AcpHost(settings), CancellationToken.None);
 
         Assert.All(handler.Requests, r => Assert.StartsWith("http://localhost:1234/v1/", r.RequestUri!.ToString()));
         Assert.DoesNotContain(handler.Requests, r => r.RequestUri!.ToString().Contains("stale-not-yet-overwritten"));

@@ -1,0 +1,118 @@
+using System.Text.Json;
+using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
+using SwebKit.Agents;
+using SwebKit.Agents.Tools;
+
+namespace SwebKit.Sidecar.Services.Acp;
+
+/// <summary>
+/// Exposes SwebKit's domain tools (<see cref="IAgentToolRegistry"/>) to external ACP agents over
+/// MCP (streamable HTTP, stateless). The sidecar passes this endpoint to the agent via ACP
+/// <c>session/new → mcpServers</c>, so Claude/Codex/etc. see the same domain tools a local model
+/// would — filtered by mode/area/scope through the <c>?tools=</c> allowlist baked into the URL.
+///
+/// Safety: mutating tools keep their propose/pending-approval semantics because they dispatch to
+/// the same registry; nothing here grants fs/terminal access (those are ACP client capabilities,
+/// which are negotiated off in AcpAgentHost).
+/// </summary>
+public sealed class SwebKitToolsMcpBridge
+{
+    public const string EndpointPath = "/mcp/swebkit-tools";
+
+    private readonly IAgentToolRegistry _toolRegistry;
+    private readonly IHttpContextAccessor _http;
+
+    public SwebKitToolsMcpBridge(IAgentToolRegistry toolRegistry, IHttpContextAccessor http)
+    {
+        _toolRegistry = toolRegistry;
+        _http = http;
+    }
+
+    /// <summary>Builds the per-session MCP URL handed to the ACP agent, with the mode/area/scope
+    /// allowlist baked in as a query param (stateless transport → every call carries it).</summary>
+    public static string BuildUrl(string baseUrl, IEnumerable<string>? allowedTools)
+    {
+        var list = allowedTools is null ? null : string.Join(',', allowedTools);
+        return string.IsNullOrEmpty(list)
+            ? $"{baseUrl.TrimEnd('/')}{EndpointPath}"
+            : $"{baseUrl.TrimEnd('/')}{EndpointPath}?tools={Uri.EscapeDataString(list)}";
+    }
+
+    private HashSet<string>? AllowedSet() =>
+        ParseAllowedSet(_http.HttpContext?.Request.Query["tools"].FirstOrDefault());
+
+    public ValueTask<ListToolsResult> ListToolsAsync(RequestContext<ListToolsRequestParams> request, CancellationToken ct)
+        => ValueTask.FromResult(new ListToolsResult { Tools = ListTools(AllowedSet()) });
+
+    /// <summary>Tools visible under this request's allowlist, mapped to MCP <see cref="Tool"/>s.</summary>
+    internal List<Tool> ListTools(HashSet<string>? allowed) =>
+        _toolRegistry.GetDefinitions()
+            .Where(t => allowed is null || allowed.Contains(t.Name))
+            .Select(t => new Tool
+            {
+                Name = t.Name,
+                Description = BuildDescription(t),
+                InputSchema = t.ParametersSchema.Clone(),
+            })
+            .ToList();
+
+    public ValueTask<CallToolResult> CallToolAsync(RequestContext<CallToolRequestParams> request, CancellationToken ct)
+    {
+        var name = request.Params?.Name ?? string.Empty;
+        JsonElement args = request.Params?.Arguments is { } a
+            ? JsonSerializer.SerializeToElement(a)
+            : JsonDocument.Parse("{}").RootElement.Clone();
+        return CallToolAsync(name, args, AllowedSet(), ct);
+    }
+
+    /// <summary>Dispatch core, split from the MCP request shape for testability.</summary>
+    internal async ValueTask<CallToolResult> CallToolAsync(string name, JsonElement args, HashSet<string>? allowed, CancellationToken ct)
+    {
+        var known = _toolRegistry.GetDefinitions().Any(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        if (!known || (allowed is not null && !allowed.Contains(name)))
+            return Error($"Tool '{name}' is not available in this context.");
+
+        var result = await _toolRegistry.ExecuteAsync(name, args, ct);
+        return new CallToolResult
+        {
+            Content = [new TextContentBlock { Text = result }],
+            IsError = IsErrorResult(result),
+        };
+    }
+
+    /// <summary>Parses the <c>?tools=a,b,c</c> allowlist — null when absent (unfiltered).</summary>
+    internal static HashSet<string>? ParseAllowedSet(string? raw) =>
+        string.IsNullOrWhiteSpace(raw)
+            ? null
+            : new HashSet<string>(raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                StringComparer.OrdinalIgnoreCase);
+
+    private static CallToolResult Error(string message) => new()
+    {
+        Content = [new TextContentBlock { Text = JsonSerializer.Serialize(new { error = message }) }],
+        IsError = true,
+    };
+
+    private static bool IsErrorResult(string result)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(result);
+            return doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("error", out _);
+        }
+        catch (JsonException) { return false; }
+    }
+
+    private static string BuildDescription(ToolDefinition tool)
+        => $"{tool.Description} [area: {tool.FeatureArea}; access: {(tool.Kind == ToolKind.Mutate ? "propose/confirm" : "read")}]";
+
+    /// <summary>Wires the bridge into MCP server options (kept out of Program.cs for testability).</summary>
+    public static void Configure(McpServerOptions options, SwebKitToolsMcpBridge bridge)
+    {
+        options.Handlers ??= new McpServerHandlers();
+        options.Handlers.ListToolsHandler = bridge.ListToolsAsync;
+        options.Handlers.CallToolHandler = bridge.CallToolAsync;
+    }
+}

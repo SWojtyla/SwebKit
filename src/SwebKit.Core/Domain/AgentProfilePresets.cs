@@ -52,6 +52,31 @@ public static class AgentProfilePresets
         ContextWindowTokens = MistralDefaultContextWindowTokens,
     };
 
+    /// <summary>Creates a Claude (Claude Agent SDK) profile via Zed's ACP adapter — requires
+    /// Node.js/<c>npx</c> on PATH and an existing Claude Code login or
+    /// <c>ANTHROPIC_API_KEY</c>.</summary>
+    public static AgentProfile ClaudeAcp() => new()
+    {
+        DisplayName = "Claude (ACP)",
+        Provider = ProviderKind.Acp,
+        Command = "npx",
+        Arguments = "-y @agentclientprotocol/claude-agent-acp",
+        CredentialKey = null,
+        CredentialEnvVar = "ANTHROPIC_API_KEY",
+        TimeoutSeconds = 120,
+    };
+
+    /// <summary>Creates a Gemini CLI profile (native ACP support — <c>gemini --acp</c>).</summary>
+    public static AgentProfile GeminiCli() => new()
+    {
+        DisplayName = "Gemini CLI (ACP)",
+        Provider = ProviderKind.Acp,
+        Command = "gemini",
+        Arguments = "--acp",
+        CredentialKey = null,
+        TimeoutSeconds = 120,
+    };
+
     /// <summary>Creates a generic OpenAI-compatible profile template.</summary>
     public static AgentProfile OpenAiCompatible(string baseUrl, string model, string? credentialKey = null) => new()
     {

@@ -143,7 +143,7 @@ public class SidecarAgentChatServiceStreamingTests
         Assert.Equal(2, service.GetHistoryCount("session-a"));
         Assert.Equal(2, service.GetHistoryCount("session-b"));
 
-        service.ClearHistory("session-a");
+        await service.ClearHistoryAsync("session-a");
 
         Assert.Equal(0, service.GetHistoryCount("session-a"));
         Assert.Equal(2, service.GetHistoryCount("session-b"));

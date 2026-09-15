@@ -1,10 +1,11 @@
 import { useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
-import { usePendingActionsFeed } from "@/lib/hooks/useAgent";
+import { useAcpPermissions, usePendingActionsFeed } from "@/lib/hooks/useAgent";
 import { AgentMarkdown } from "./AgentMarkdown";
 import { AgentVisualizationPanel, parseVisualBlocks } from "./AgentVisualizationPanel";
 import { PendingActionCard, PendingActionExpiredNotice } from "./PendingActionCard";
+import { AcpPermissionCard } from "./AcpPermissionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
@@ -25,6 +26,7 @@ export function AgentPage() {
   const { messages, send, isStreaming, cancel, toolStatus, clear, isClearPending, status } =
     useGlobalAgentConversation();
   const { feed: pendingActionFeed, dismissExpired } = usePendingActionsFeed();
+  const acpPermissions = useAcpPermissions();
 
   const lastAssistantMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -302,6 +304,16 @@ export function AgentPage() {
               <PendingActionCard key={item.action.id} action={item.action} />
             ),
           )}
+        </div>
+      )}
+
+      {/* ACP permission requests (external agent asking to run a tool call — only when the
+        profile's approval toggle is on; otherwise auto-approved and never listed) */}
+      {acpPermissions.data && acpPermissions.data.length > 0 && (
+        <div className="space-y-2 border-b px-6 py-3" data-testid="acp-permissions-list">
+          {acpPermissions.data.map((p) => (
+            <AcpPermissionCard key={p.id} permission={p} />
+          ))}
         </div>
       )}
 
