@@ -16,6 +16,23 @@ internal static class ConnectionTestError
         UnauthorizedAccessException => "Authentication failed",
         TimeoutException or OperationCanceledException => "Connection timed out",
         System.Net.Sockets.SocketException => "Could not reach the server",
+        // ServiceBusException.Message embeds the entity path and AMQP detail — return the
+        // classified reason instead, phrased so the user knows what to do next. (global:: because
+        // SwebKit.Azure shadows the Azure root namespace.)
+        global::Azure.Messaging.ServiceBus.ServiceBusException sb => sb.Reason switch
+        {
+            global::Azure.Messaging.ServiceBus.ServiceBusFailureReason.ServiceTimeout
+                or global::Azure.Messaging.ServiceBus.ServiceBusFailureReason.ServiceBusy
+                or global::Azure.Messaging.ServiceBus.ServiceBusFailureReason.ServiceCommunicationProblem =>
+                "Service Bus is busy or timed out — try again in a moment",
+            global::Azure.Messaging.ServiceBus.ServiceBusFailureReason.MessagingEntityNotFound =>
+                "Queue or subscription not found — it may have been renamed or deleted",
+            global::Azure.Messaging.ServiceBus.ServiceBusFailureReason.MessagingEntityDisabled =>
+                "The queue or subscription is disabled",
+            global::Azure.Messaging.ServiceBus.ServiceBusFailureReason.QuotaExceeded =>
+                "Service Bus quota exceeded",
+            _ => "Service Bus request failed",
+        },
         _ => "Connection failed",
     };
 }

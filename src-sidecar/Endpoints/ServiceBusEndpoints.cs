@@ -276,6 +276,13 @@ public static class ServiceBusEndpoints
 
     // ── Extracted handlers (unit-testable without a WebApplicationFactory) ────────────
 
+    // The UI offers at most 200 per page; a bigger (or non-positive) count would make the SDK
+    // enumerate far more than the list can render — the request that used to hang and 500 on
+    // queues with tens of thousands of messages.
+    private const int MaxPeekCount = 250;
+
+    internal static int ClampCount(int count) => Math.Clamp(count, 1, MaxPeekCount);
+
     /// <summary>Handler body for the active-message peek endpoint.</summary>
     internal static async Task<IResult> PeekMessagesAsync(
         string nsId,
@@ -292,7 +299,7 @@ public static class ServiceBusEndpoints
         if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
         var client = pool.GetOrCreate(ns);
-        var messages = await client.PeekMessagesAsync(entityPath, count, ct, fromSequenceNumber: fromSeq);
+        var messages = await client.PeekMessagesAsync(entityPath, ClampCount(count), ct, fromSequenceNumber: fromSeq);
         return Results.Ok(messages);
     }
 
@@ -312,7 +319,7 @@ public static class ServiceBusEndpoints
         if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
         var client = pool.GetOrCreate(ns);
-        var messages = await client.PeekDeadLetterAsync(entityPath, count, ct, fromSequenceNumber: fromSeq);
+        var messages = await client.PeekDeadLetterAsync(entityPath, ClampCount(count), ct, fromSequenceNumber: fromSeq);
         return Results.Ok(messages);
     }
 

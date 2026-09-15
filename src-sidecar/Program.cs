@@ -287,10 +287,18 @@ app.UseExceptionHandler(ex =>
             // Mapped centrally rather than per-endpoint so every Azure-backed route answers the same
             // way — and so it is logged, which the old endpoint-local `catch` never did.
             Azure.Identity.AuthenticationFailedException => 401,
-            // Upstream-connection failures — an unreachable or misbehaving Redis/storage server is
-            // an expected operational condition (e.g. switching to a dead cache), not a bug, so a
-            // 502 tells the UI "the backend couldn't reach it" instead of a generic 500.
+            // The same failure wrapped inside an SDK exception — e.g. a ServiceBusException whose
+            // inner is the token acquisition failing.
+            _ when ServiceBusExceptionClassifier.IsAuthenticationFailure(exception!) => 401,
+            // Upstream-connection failures — an unreachable or misbehaving Redis/Service Bus server
+            // is an expected operational condition (e.g. switching to a dead cache or a throttled
+            // namespace), not a bug, so a 502 tells the UI "the backend couldn't reach it" instead
+            // of a generic 500.
             StackExchange.Redis.RedisException or System.Net.Sockets.SocketException or TimeoutException => 502,
+            global::Azure.Messaging.ServiceBus.ServiceBusException => 502,
+            // An OCE that isn't a client abort (handled above) is a downstream call timing out —
+            // HttpClient or an SDK retry ceiling — which is exactly a "couldn't reach it" answer.
+            OperationCanceledException => 502,
             _ => 500,
         };
         context.Response.StatusCode = statusCode;
@@ -329,6 +337,11 @@ app.UseExceptionHandler(ex =>
                 // SDK messages can embed endpoints or connection config — the same sanitized
                 // classification the connection-test endpoints return.
                 _ when statusCode == 502 => ConnectionTestError.Describe(exception!),
+                // A 401 reached via the classifier means the real credential failure is wrapped
+                // inside an SDK exception — use the fixed message, not that exception's Message.
+                // Direct UnauthorizedAccessException keeps its deliberate user-facing message.
+                _ when statusCode == 401 && exception is not UnauthorizedAccessException =>
+                    "Azure authentication failed. Sign in again (for example `az login`) and retry.",
                 not null => exception.Message,
                 null => "Internal server error",
             };

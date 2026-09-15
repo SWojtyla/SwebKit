@@ -95,6 +95,10 @@ export function useSbPeekMessages(nsId: string | null, entityPath: string | null
         { signal },
       ),
     enabled: !!nsId && !!entityPath,
+    // A failing peek (dead namespace, throttled request) can take the SDK's full TryTimeout per
+    // attempt — the default 3 retries kept "Loading messages..." up for minutes before the error
+    // card ever appeared. One retry still rides out a transient blip without the long stall.
+    retry: 1,
   });
 }
 
@@ -107,6 +111,7 @@ export function useSbPeekDlq(nsId: string | null, entityPath: string | null, cou
         { signal },
       ),
     enabled: !!nsId && !!entityPath,
+    retry: 1, // same reasoning as useSbPeekMessages
   });
 }
 
