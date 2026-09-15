@@ -54,4 +54,43 @@ public class AcpProcessLauncherTests
             () => AcpProcessLauncher.ResolveExecutable($"swebkit-no-such-agent-{Guid.NewGuid():N}"));
         Assert.Contains("PATH", ex.Message);
     }
+
+    [Fact]
+    public void ResolveExecutable_prefers_pathext_candidate_over_extensionless_file()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        // Node's bin dir ships a POSIX `npx` script next to `npx.cmd`; the extensionless file
+        // exists but cannot be launched by CreateProcess, so the .cmd must win.
+        var dir = CreateTempDir();
+        var bare = Path.Combine(dir, "agent");
+        var cmd = Path.Combine(dir, "agent.cmd");
+        File.WriteAllText(bare, "#!/bin/sh\necho not-windows\n");
+        File.WriteAllText(cmd, "@echo off\r\n");
+
+        // PATHEXT on Windows is typically uppercase (.CMD), so the resolved path keeps that
+        // casing even though the file on disk is agent.cmd — compare case-insensitively.
+        Assert.Equal(cmd, AcpProcessLauncher.ResolveExecutable(bare), ignoreCase: true);
+    }
+
+    [Fact]
+    public void ResolveExecutable_falls_back_to_bare_extensionless_file()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var dir = CreateTempDir();
+        var bare = Path.Combine(dir, "agent");
+        File.WriteAllText(bare, "pretend-pe-image");
+
+        Assert.Equal(bare, AcpProcessLauncher.ResolveExecutable(bare));
+    }
+
+    private static string CreateTempDir()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"acp-launcher-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
 }

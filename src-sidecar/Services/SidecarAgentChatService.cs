@@ -330,7 +330,12 @@ public sealed class SidecarAgentChatService
         // idle-session sweep and covers the turn itself (prompt build, summarization, model call).
         var sw = Stopwatch.StartNew();
         var profile = _settings.Settings.Agent.GetActiveProfile();
-        var hasToolCalling = (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
+        // ACP profiles aren't gated on the probed Capability: tool delivery happens through the
+        // session's MCP bridge, gated by the agent's live mcpCapabilities from initialize — the
+        // stored value only reflects the last "Test connection" click and stays Unknown if the
+        // user never ran (or re-ran) it, which would silently strip every SwebKit tool.
+        var hasToolCalling = profile?.Provider == ProviderKind.Acp
+            || (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
         var systemPrompt = _promptBuilder.Build(context, normalizedMode, hasToolCalling);
         var tools = _toolOrchestrator.ResolveTools(hasToolCalling, normalizedMode, context, normalizedScope);
 

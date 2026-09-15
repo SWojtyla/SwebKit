@@ -66,8 +66,9 @@ public static class AcpProcessLauncher
 
     /// <summary>Resolves a command to an executable path. Rooted or directory-qualified commands
     /// are used as-is (PATHEXT applied if extensionless); bare names are searched across PATH ×
-    /// PATHEXT so <c>npx</c> finds <c>npx.cmd</c> on Windows. Non-Windows simply returns the name —
-    /// the OS's own PATH lookup handles it.</summary>
+    /// PATHEXT — extension candidates first, then the literal name — so <c>npx</c> finds
+    /// <c>npx.cmd</c> on Windows rather than the unlaunchable extensionless POSIX script sitting
+    /// next to it. Non-Windows simply returns the name — the OS's own PATH lookup handles it.</summary>
     internal static string ResolveExecutable(string command)
     {
         if (string.IsNullOrWhiteSpace(command))
@@ -91,9 +92,13 @@ public static class AcpProcessLauncher
             }
             else
             {
-                yield return command;
+                // PATHEXT before the bare name: Node's bin dir ships an extensionless POSIX `npx`
+                // script next to `npx.cmd` — it exists but is not a launchable Windows image, so
+                // it must not win over the .cmd shim. A bare extensionless match is still returned
+                // last so a real extensionless exe keeps working.
                 foreach (var ext in extensions)
                     yield return command + ext;
+                yield return command;
             }
         }
 

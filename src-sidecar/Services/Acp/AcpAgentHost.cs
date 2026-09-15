@@ -160,8 +160,11 @@ public sealed class AcpAgentHost : IAsyncDisposable
             ? profile.WorkingDirectory
             : Directory.GetCurrentDirectory();
 
+        // headers must be present even when empty: the ACP schema marks it required for http/sse
+        // servers, and adapters (verified against claude-agent-acp) silently drop entries missing
+        // it — the session then comes up with no SwebKit tools at all.
         object[] mcpServers = caps.McpHttp && mcpUrl is not null
-            ? [new { type = "http", name = "swebkit", url = mcpUrl }]
+            ? [new { type = "http", name = "swebkit", url = mcpUrl, headers = Array.Empty<object>() }]
             : [];
         if (mcpUrl is not null && !caps.McpHttp)
             _logger.LogWarning(
