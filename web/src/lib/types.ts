@@ -546,6 +546,11 @@ export interface SbEntityInfo {
   isTopic: boolean;
   isSubscription: boolean;
   topicName: string | null;
+  /**
+   * For a topic: dead-lettered messages summed across its subscriptions, so a collapsed topic can show
+   * its backlog without the tree fetching every topic's subscriptions. `null` elsewhere or when unreadable.
+   */
+  subscriptionDeadLetterCount: number | null;
 }
 
 export interface SbEntityStats {
@@ -698,7 +703,14 @@ export interface SecretInfo {
 export interface ConfigMapInfo {
   name: string;
   namespace: string;
-  data: Record<string, string>;
+  /**
+   * Data key names. The list endpoint sends these and omits the values — a namespace's ConfigMap
+   * values can run to megabytes, and the list only ever renders names. `useAksConfigMapValues`
+   * fetches one ConfigMap's values for the detail panel, the same way Secrets already work.
+   */
+  keys: string[];
+  /** Total size of all values in characters — sent instead of the values themselves. */
+  dataSizeChars: number;
   labels: Record<string, string>;
 }
 
@@ -809,6 +821,8 @@ export interface RedisKeyScanResult {
   cursor: number;
   keys: string[];
   isComplete: boolean;
+  /** How many `SCAN` round trips the sidecar made to assemble `keys`. See `KeyScanResult.PagesScanned`. */
+  pagesScanned: number;
 }
 
 export interface RedisKeyInfo {

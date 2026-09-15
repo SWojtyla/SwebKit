@@ -356,8 +356,10 @@ public static class StorageEndpoints
         if (demo.IsDemoMode)
             return demo.GetDemoStorageConfig();
 
+        // "demo-storage" is a reserved id — a save made while demo mode was on can persist the
+        // overlay into the profile, and that copy must never resolve to a real account.
         return profile.GetProfileData().Config.StorageAccounts
-            .FirstOrDefault(s => s.Id == accountId);
+            .FirstOrDefault(s => s.Id == accountId && s.Id != DemoModeService.DemoStorageId);
     }
 
     private static IStorageClient CreateClient(

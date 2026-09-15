@@ -12,7 +12,8 @@ namespace SwebKit.Core.Services;
 /// Default implementation of <see cref="IHttpRequestExecutor"/>.
 /// Uses a named <see cref="HttpClient"/> ("ApiClient") resolved from <see cref="IHttpClientFactory"/>.
 /// Variable substitution is applied to the URL, query string, headers, and body before sending.
-/// Auth headers are applied via <see cref="IAuthHeaderBuilder"/> after auth inheritance resolution.
+/// Auth headers are applied via <see cref="IAuthHeaderBuilder"/> after auth inheritance resolution,
+/// against the same variable scope as the rest of the request.
 /// Post-request capture rules are applied after a successful response.
 /// </summary>
 public sealed class HttpRequestExecutor(
@@ -48,7 +49,7 @@ public sealed class HttpRequestExecutor(
 
             // Apply resolved auth (request → folder → collection chain)
             var (resolvedAuth, _) = authResolver.Resolve(request, collection);
-            await authHeaderBuilder.ApplyAsync(httpRequest, resolvedAuth, cancellationToken).ConfigureAwait(false);
+            await authHeaderBuilder.ApplyAsync(httpRequest, resolvedAuth, scope, cancellationToken).ConfigureAwait(false);
 
             // Snapshot here and nowhere earlier: this is the last point before the request is
             // handed to the socket, so it is the only place that sees auth headers and the body's

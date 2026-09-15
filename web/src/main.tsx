@@ -15,6 +15,12 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 30_000,
       retry: 1,
+      // This is a desktop app that people alt-tab out of constantly. The default (`true`) re-fires
+      // every active query on every window focus, which for AKS or Service Bus means replaying a
+      // whole fan-out — a full namespace list, or one request per topic — just because the window
+      // regained focus. Every page has an explicit Refresh, and the volatile queries carry their
+      // own short `staleTime`, so nothing here depends on focus to stay current.
+      refetchOnWindowFocus: false,
     },
   },
 });

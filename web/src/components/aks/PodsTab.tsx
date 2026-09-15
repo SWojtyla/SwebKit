@@ -55,10 +55,6 @@ function MetricBar({ value, className }: { value: number; className: string }) {
   );
 }
 
-function getPodMetrics(metrics: PodMetricInfo[] | undefined, pod: PodInfo) {
-  return metrics?.find((m) => m.podName === pod.name && m.namespace === pod.namespace);
-}
-
 function aggregatePodUsage(metric: PodMetricInfo | undefined) {
   if (!metric || metric.containers.length === 0) return null;
   const cpu = metric.containers.reduce((sum, c) => sum + (c.cpuCores ?? 0), 0);
@@ -120,9 +116,14 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
   const usageFor = useMemo(() => {
     const map = new Map<string, ReturnType<typeof aggregatePodUsage>>();
     if (!metrics) return map;
+
+    // Index the metrics once instead of scanning the whole array per pod. The linear `find` made this
+    // O(pods × metrics) — about 2.25M comparisons on a 1500-pod cluster — recomputed every time either
+    // query settled, which with auto-refresh is every 10 seconds.
+    const byPod = new Map(metrics.map((m) => [`${m.namespace}/${m.podName}`, m]));
     for (const pod of visiblePods ?? []) {
-      const metric = getPodMetrics(metrics, pod);
-      map.set(`${pod.namespace}/${pod.name}`, aggregatePodUsage(metric));
+      const podKey = `${pod.namespace}/${pod.name}`;
+      map.set(podKey, aggregatePodUsage(byPod.get(podKey)));
     }
     return map;
   }, [metrics, visiblePods]);

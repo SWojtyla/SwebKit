@@ -5,7 +5,6 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRedisKeyInfoBatch } from "@/lib/hooks";
 import { typeColors } from "./KeyDetailPanel";
 import { formatTtl } from "@/lib/redis-format";
-import type { RedisKeyInfo } from "@/lib/types";
 
 // Vertical guide rules connecting a row to its ancestors, VSCode-file-tree style — the thing
 // that was missing before and made the whole tree read as a flat, undifferentiated wall of text.
@@ -48,18 +47,14 @@ export function KeyBrowserPanel() {
     if (next !== ctx.separator) ctx.setSeparator(next);
   };
 
-  // Type/TTL hint for key rows: there's no bulk key-info endpoint, so this is scoped to exactly
-  // the rows the virtualizer currently renders (a bounded handful, not the whole loaded key set)
-  // and shares its cache with the detail panel, so opening a key you've already seen a hint for
-  // is instant. See `useRedisKeyInfoBatch`.
+  // Type/TTL hint for key rows: one request for exactly the rows the virtualizer currently renders
+  // (a bounded handful, not the whole loaded key set), sharing its cache with the detail panel so
+  // opening a key you've already seen a hint for is instant. See `useRedisKeyInfoBatch`.
   const visibleKeys = virtualItems
     .map((item) => ctx.flatRedisRows[item.index])
     .filter((row): row is Extract<FlatRedisRow, { kind: "key" }> => row?.kind === "key")
     .map((row) => row.key);
-  const visibleKeyInfoResults = useRedisKeyInfoBatch(ctx.resolvedCacheId, visibleKeys);
-  const keyInfoByKey = new Map<string, RedisKeyInfo | undefined>(
-    visibleKeys.map((key, i) => [key, visibleKeyInfoResults[i]?.data]),
-  );
+  const keyInfoByKey = useRedisKeyInfoBatch(ctx.resolvedCacheId, visibleKeys);
 
   const renderFlatRedisRow = (row: FlatRedisRow) => {
     if (row.kind === "namespace") {

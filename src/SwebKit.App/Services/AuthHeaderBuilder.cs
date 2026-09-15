@@ -3,38 +3,45 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
 
 namespace SwebKit.App.Services;
 
 /// <summary>
 /// Applies auth headers/params to an outgoing HTTP request using the credential store
 /// for bearer/basic/api-key tokens and <see cref="IOAuth2TokenManager"/> for OAuth2 flows.
+/// Auth fields are resolved against the request's variable scope first, so a value entered as
+/// <c>{{TOKEN}}</c> is sent as that variable's value rather than as the literal token text.
 /// </summary>
 public sealed class AuthHeaderBuilder(
     ICredentialStore credentialStore,
     IOAuth2TokenManager oauth2,
+    IVariableSubstitutionService substitution,
     ILogger<AuthHeaderBuilder> logger) : IAuthHeaderBuilder
 {
     public async Task ApplyAsync(
         HttpRequestMessage message,
         AuthConfig? auth,
+        IReadOnlyDictionary<string, string?>? scope = null,
         CancellationToken cancellationToken = default)
     {
         if (auth is null || auth.Type is AuthType.None or AuthType.Inherited)
             return;
 
+        auth = AuthConfigSubstitution.Substitute(auth, substitution, scope);
+
         switch (auth.Type)
         {
             case AuthType.BearerToken:
-                ApplyBearer(message, auth);
+                ApplyBearer(message, auth, scope);
                 break;
 
             case AuthType.ApiKey:
-                ApplyApiKey(message, auth);
+                ApplyApiKey(message, auth, scope);
                 break;
 
             case AuthType.Basic:
-                ApplyBasic(message, auth);
+                ApplyBasic(message, auth, scope);
                 break;
 
             case AuthType.OAuth2:
@@ -45,10 +52,10 @@ public sealed class AuthHeaderBuilder(
 
     // ── Auth type handlers ────────────────────────────────────────────────────
 
-    private void ApplyBearer(HttpRequestMessage message, AuthConfig auth)
+    private void ApplyBearer(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope)
     {
         if (string.IsNullOrEmpty(auth.CredentialKey)) return;
-        var token = credentialStore.Get(auth.CredentialKey);
+        var token = ResolveSecret(auth.CredentialKey, scope);
         if (string.IsNullOrEmpty(token))
         {
             logger.LogWarning("Bearer token not found in credential store for key {Key}", auth.CredentialKey);
@@ -57,10 +64,10 @@ public sealed class AuthHeaderBuilder(
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
-    private void ApplyApiKey(HttpRequestMessage message, AuthConfig auth)
+    private void ApplyApiKey(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope)
     {
         if (string.IsNullOrEmpty(auth.CredentialKey) || string.IsNullOrEmpty(auth.ApiKeyParamName)) return;
-        var apiKey = credentialStore.Get(auth.CredentialKey);
+        var apiKey = ResolveSecret(auth.CredentialKey, scope);
         if (string.IsNullOrEmpty(apiKey))
         {
             logger.LogWarning("API key not found in credential store for key {Key}", auth.CredentialKey);
@@ -84,10 +91,10 @@ public sealed class AuthHeaderBuilder(
         }
     }
 
-    private void ApplyBasic(HttpRequestMessage message, AuthConfig auth)
+    private void ApplyBasic(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope)
     {
         if (string.IsNullOrEmpty(auth.CredentialKey)) return;
-        var password = credentialStore.Get(auth.CredentialKey) ?? string.Empty;
+        var password = ResolveSecret(auth.CredentialKey, scope) ?? string.Empty;
         var username = auth.BasicUsername ?? string.Empty;
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
         message.Headers.Authorization = new AuthenticationHeaderValue("Basic", encoded);
@@ -104,4 +111,11 @@ public sealed class AuthHeaderBuilder(
         }
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
+
+    /// <summary>
+    /// Reads the secret from the credential store and resolves any <c>{{variable}}</c> it contains
+    /// against the request scope.
+    /// </summary>
+    private string? ResolveSecret(string credentialKey, IReadOnlyDictionary<string, string?>? scope) =>
+        AuthConfigSubstitution.SubstituteSecret(credentialStore.Get(credentialKey), substitution, scope);
 }

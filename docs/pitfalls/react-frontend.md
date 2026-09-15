@@ -239,6 +239,38 @@ save is indistinguishable from the user never having typed anything.
 Corollary for tests: once saves are serialized, an assertion fired immediately after the action can
 read the pre-save state. Use `expect.poll`, not a single `allTextContents()`.
 
+### A `queryFn` that ignores `signal` keeps the server working for an answer nobody wants
+
+TanStack hands every `queryFn` an `AbortSignal`. Every hook here ignored it, because `apiFetch`
+took a `RequestInit` nobody ever passed. So retyping a Redis filter, clicking through entities, or
+navigating away left the previous request running to completion **server-side** — holding its
+pooled connection and its backend round trips. With the global `retry: 1`, a request that timed
+out was then silently run a second time, so the user waited roughly twice as long for a result
+that had already been superseded.
+
+Write `queryFn: ({ signal }) => apiFetch(url, { signal })`. The server half already worked: ASP.NET
+binds a handler's `CancellationToken` to `HttpContext.RequestAborted`, so aborting really does stop
+the work — it just has to be triggered.
+
+### `refetchOnWindowFocus` defaults to `true`, which is wrong for a desktop app
+
+People alt-tab constantly. The default re-fires every active query on every focus, and in this app
+one query is often a fan-out — a cluster-wide namespace list, or one request per Service Bus topic.
+It is off globally in `main.tsx`; every page has an explicit Refresh, and the volatile queries carry
+their own short `staleTime`.
+
+Related: give *structural* queries (entity trees, namespace lists — things deployments change, not
+users) a `staleTime` in minutes, and keep the seconds-scale one for counts and status.
+
+### `keepPreviousData` makes `data` briefly belong to the *previous* query key
+
+`placeholderData: keepPreviousData` is the right fix for a list that blanks between pages — but any
+effect that advances pagination off `data` must now also check `isFetching`, or it will re-run
+against the previous page and re-append it. Redis's "Load all" needed both that and a guard against
+re-advancing on the same cursor. The symptom before `keepPreviousData` was the mirror image: the
+effect keyed off `data` identity, which went `undefined` when the key changed, so the loop switched
+itself off after exactly one page.
+
 ### Don't guard a mutation with a no-op check against a stale snapshot
 
 `if (moveNode(collections, id, target) === collections) return;` looks like a harmless optimization.

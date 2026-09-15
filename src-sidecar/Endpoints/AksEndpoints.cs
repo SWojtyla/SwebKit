@@ -257,14 +257,36 @@ public static class AksEndpoints
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
             var configMaps = await client.GetConfigMapsAsync(namespaces, ct);
-            return Results.Ok(configMaps);
+            // Values stripped: the list renders key names only, and a namespace's ConfigMap values can
+            // run to megabytes that were previously serialized to the browser on every auto-refresh
+            // tick. `/configmaps/{name}/values` serves the detail panel, mirroring Secrets.
+            return Results.Ok(configMaps.Select(cm => new ConfigMapInfo
+            {
+                Name = cm.Name,
+                Namespace = cm.Namespace,
+                // Falls back to the value dictionary's keys so a client that only fills `Data` (the demo
+                // client, and the interface's own default) still produces a usable list.
+                Keys = cm.Keys.Count > 0 ? cm.Keys : [.. cm.Data.Keys],
+                DataSizeChars = cm.DataSizeChars > 0 ? cm.DataSizeChars : cm.Data.Values.Sum(v => v.Length),
+                Labels = cm.Labels,
+            }));
+        });
+
+        app.MapGet("/api/aks/{ns}/configmaps/{name}/values", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        {
+            var client = GetClient(pool);
+            var values = await client.GetConfigMapValuesAsync(ns, name, ct);
+            return Results.Ok(values);
         });
 
         app.MapGet("/api/aks/{ns}/secrets", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
-            var (secrets, _) = await client.GetSecretsAndHelmReleasesAsync(namespaces, ct);
+            // Deliberately not the combined Secrets+Helm call: this endpoint discarded the Helm half
+            // while still paying to transfer every Helm release Secret's gzipped manifest. The
+            // dedicated call excludes them at the API server. `/helm-releases` has its own endpoint.
+            var secrets = await client.GetSecretsAsync(namespaces, ct);
             return Results.Ok(secrets);
         });
 

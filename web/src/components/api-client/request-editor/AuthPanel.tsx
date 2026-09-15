@@ -1,4 +1,7 @@
+import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import type { AuthType, AuthConfig } from "@/lib/types";
+import { VariableInput } from "../VariableInput";
 
 const authTypes: { value: AuthType; label: string }[] = [
   { value: "None", label: "None" },
@@ -9,6 +12,78 @@ const authTypes: { value: AuthType; label: string }[] = [
   { value: "OAuth2", label: "OAuth 2.0" },
 ];
 
+interface SecretFieldProps {
+  value: string;
+  revealed: boolean;
+  onToggleReveal: () => void;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  scope: Record<string, string | null>;
+  placeholder: string;
+  testId: string;
+  className?: string;
+}
+
+/**
+ * A secret input with a reveal toggle. Masked by default, but never write-only: a token set up
+ * weeks ago could not be checked, corrected or even compared against the environment without
+ * retyping it blind, which is also how a `{{VARIABLE}}` in an auth field stayed invisible.
+ *
+ * Revealed, it becomes a {@link VariableInput} rather than a plain text box, so a token written as
+ * `{{AUTH_API_KEY}}` is coloured by whether it will actually resolve — the same three-state
+ * treatment the URL bar and the body editor give their variables.
+ */
+function SecretField({
+  value,
+  revealed,
+  onToggleReveal,
+  onChange,
+  onBlur,
+  scope,
+  placeholder,
+  testId,
+  className = "flex-1",
+}: SecretFieldProps) {
+  return (
+    <div className={`flex min-w-0 items-center gap-1 ${className}`}>
+      {revealed ? (
+        <VariableInput
+          testId={testId}
+          ariaLabel={placeholder}
+          value={value}
+          onChange={onChange}
+          onBlur={onBlur}
+          scope={scope}
+          placeholder={placeholder}
+          metricsClassName="px-2 py-1 text-sm"
+        />
+      ) : (
+        <input
+          data-testid={testId}
+          type="password"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-sm"
+        />
+      )}
+      <button
+        type="button"
+        data-testid={`${testId}-reveal`}
+        onClick={onToggleReveal}
+        aria-pressed={revealed}
+        aria-label={revealed ? "Hide value" : "Show value"}
+        title={revealed ? "Hide value" : "Show value"}
+        className="shrink-0 rounded border p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        {revealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+      </button>
+    </div>
+  );
+}
+
 interface AuthPanelProps {
   auth: AuthConfig;
   /**
@@ -16,6 +91,8 @@ interface AuthPanelProps {
    * store on save and blur, not only when this panel is mounted.
    */
   secretInput: string;
+  /** Merged collection + environment variables, for highlighting a revealed `{{token}}`. */
+  variableScope?: Record<string, string | null>;
   onAuthTypeChange: (type: AuthType) => void;
   onAuthPatch: (patch: Partial<AuthConfig>) => void;
   onSecretChange: (value: string) => void;
@@ -25,11 +102,17 @@ interface AuthPanelProps {
 export function AuthPanel({
   auth,
   secretInput,
+  variableScope = {},
   onAuthTypeChange,
   onAuthPatch,
   onSecretChange,
   onSecretBlur,
 }: AuthPanelProps) {
+  // Deliberately local and unpersisted: a revealed secret should not survive switching request,
+  // and only one secret field is visible at a time, so a single flag covers every auth type.
+  const [revealed, setRevealed] = useState(false);
+  const toggleReveal = () => setRevealed((r) => !r);
+
   return (
     <div data-testid="auth-tab">
       <select
@@ -44,14 +127,16 @@ export function AuthPanel({
       </select>
 
       {auth.type === "BearerToken" && (
-        <input
-          data-testid="auth-bearer-input"
-          type="password"
+        <SecretField
+          testId="auth-bearer-input"
           value={secretInput}
-          onChange={(e) => onSecretChange(e.target.value)}
+          revealed={revealed}
+          onToggleReveal={toggleReveal}
+          onChange={onSecretChange}
           onBlur={onSecretBlur}
+          scope={variableScope}
           placeholder="Bearer token"
-          className="w-full rounded border bg-background px-2 py-1 text-sm"
+          className="w-full"
         />
       )}
 
@@ -65,14 +150,15 @@ export function AuthPanel({
             placeholder="Username"
             className="flex-1 rounded border bg-background px-2 py-1 text-sm"
           />
-          <input
-            data-testid="auth-basic-password"
-            type="password"
+          <SecretField
+            testId="auth-basic-password"
             value={secretInput}
-            onChange={(e) => onSecretChange(e.target.value)}
+            revealed={revealed}
+            onToggleReveal={toggleReveal}
+            onChange={onSecretChange}
             onBlur={onSecretBlur}
+            scope={variableScope}
             placeholder="Password"
-            className="flex-1 rounded border bg-background px-2 py-1 text-sm"
           />
         </div>
       )}
@@ -96,14 +182,15 @@ export function AuthPanel({
             <option value="Header">Header</option>
             <option value="QueryParam">Query</option>
           </select>
-          <input
-            data-testid="auth-apikey-value"
-            type="password"
+          <SecretField
+            testId="auth-apikey-value"
             value={secretInput}
-            onChange={(e) => onSecretChange(e.target.value)}
+            revealed={revealed}
+            onToggleReveal={toggleReveal}
+            onChange={onSecretChange}
             onBlur={onSecretBlur}
+            scope={variableScope}
             placeholder="API key value"
-            className="flex-1 rounded border bg-background px-2 py-1 text-sm"
           />
         </div>
       )}
@@ -156,14 +243,16 @@ export function AuthPanel({
             placeholder="Scopes (space-separated)"
             className="w-full rounded border bg-background px-2 py-1 text-sm"
           />
-          <input
-            data-testid="auth-oauth2-secret"
-            type="password"
+          <SecretField
+            testId="auth-oauth2-secret"
             value={secretInput}
-            onChange={(e) => onSecretChange(e.target.value)}
+            revealed={revealed}
+            onToggleReveal={toggleReveal}
+            onChange={onSecretChange}
             onBlur={onSecretBlur}
+            scope={variableScope}
             placeholder="Client Secret"
-            className="w-full rounded border bg-background px-2 py-1 text-sm"
+            className="w-full"
           />
         </div>
       )}

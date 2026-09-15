@@ -17,8 +17,10 @@ export function HelmDetailPanel({ ns, release, onClose, onRequestConfirm, onErro
   const [tab, setTab] = useState<HelmTab>("history");
   const { data: history, isLoading: historyLoading } = useAksHelmHistory(ns, release);
   const { data: values, isLoading: valuesLoading } = useAksHelmValues(ns, release);
-  const { data: notes, isLoading: notesLoading } = useAksHelmNotes(ns, release);
-  const { data: manifest, isLoading: manifestLoading } = useAksHelmManifest(ns, release);
+  // Gated on their tabs: each of these spawns a `helm` process server-side (~0.5–2s of Helm startup
+  // apiece), and the panel opens on History, so most releases never need either.
+  const { data: notes, isLoading: notesLoading } = useAksHelmNotes(ns, release, { enabled: tab === "notes" });
+  const { data: manifest, isLoading: manifestLoading } = useAksHelmManifest(ns, release, { enabled: tab === "manifest" });
   const [valuesTab, setValuesTab] = useState<"user" | "computed">("user");
   const rollback = useAksHelmRollback();
 

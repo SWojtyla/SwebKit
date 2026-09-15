@@ -32,6 +32,36 @@ the collection-scoped one so shared values are defined once. It builds on
 `api-client-ux-improvements/` (Review, shipped as PR #82) and deliberately does not re-plan the
 Environment Manager resizing that shipped there.
 
+**Data-fetch performance (2026-09-14):** `docs/features/active/data-fetch-performance/` is in
+Review — AKS, Service Bus and Redis all felt slow to fetch, and Redis filtering in particular
+"sometimes takes a lot of time and I don't know if it crashed." The root cause was a connection
+leak, not a slow query: Redis and Service Bus built an SDK client per request and disposed none of
+them, so a browsing session leaked connections until commands started blocking for the full timeout
+instead of failing. Both now pool through the existing `ClientCache`, as Storage already did
+(`cc700f33`). On top of that: Redis stopped firing two 500-key metadata sweeps while merely
+browsing keys and now scans server-side under a budget; AKS stopped shipping Helm release manifests
+and ConfigMap values it never renders, and stopped blocking first paint on the namespace list;
+Service Bus reads message counts in pages of 100 instead of one call per entity. Two correctness
+bugs fell out of the tracing — subscription entity paths were unencoded and 404'd every peek/purge,
+and Redis "Load all" stopped after one page. Cluster-scoped AKS list calls are the largest
+remaining win and are recorded as a follow-up.
+
+**API client auth (2026-09-14):** `docs/features/active/api-client-auth-variables/` is in Review —
+auth was the one part of a request the variable scope never reached, so a bearer token entered as
+`{{AUTH_PI2_KEY}}` was sent as those sixteen characters and came back a 400, and an auth secret was
+write-only once set, which is why nobody could see that a variable was involved. Every auth field
+now substitutes at send time, and secrets have a reveal toggle that shows the variable-aware input.
+Direct follow-on from `api-client-variable-scoping/`, which closed the same blind spot for the body.
+
+**ACP external agents (2026-09-15):** `docs/features/active/acp-external-agents/` is Planned —
+a design-only commit so far. Adds the Agent Client Protocol as a fourth agent provider kind so
+external agents (Claude via `claude-agent-acp`, Gemini CLI, Codex, Mistral Vibe, …) can drive the
+existing assistant: the sidecar spawns the agent over stdio JSON-RPC, maps `session/update` onto
+the existing SSE stream, and hands the agent SwebKit's own tools through an MCP bridge in
+`session/new` — preserving demo mode, per-area tool scoping, and the propose→confirm mutation
+flow. fs/terminal client capabilities stay off; agent permission requests auto-approve behind a
+per-profile toggle.
+
 **AKS logs (2026-09-09):** `docs/features/active/aks-log-parity/` is in Review — the multi-pod log
 view now streams every pod on open and shares one toolbar, buffer and windowing model with the
 single-pod view, instead of having almost none of its controls. Log lines carry the container's own

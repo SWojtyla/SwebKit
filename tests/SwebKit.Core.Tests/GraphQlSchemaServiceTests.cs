@@ -428,7 +428,11 @@ public sealed class HttpRequestExecutorGraphQlTests
 
     private sealed class NoopAuthHeaderBuilder : IAuthHeaderBuilder
     {
-        public Task ApplyAsync(HttpRequestMessage message, AuthConfig? auth, CancellationToken ct = default)
+        public Task ApplyAsync(
+            HttpRequestMessage message,
+            AuthConfig? auth,
+            IReadOnlyDictionary<string, string?>? scope = null,
+            CancellationToken ct = default)
             => Task.CompletedTask;
     }
 }

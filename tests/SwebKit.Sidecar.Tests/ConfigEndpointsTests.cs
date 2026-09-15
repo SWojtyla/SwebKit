@@ -32,6 +32,27 @@ internal sealed class TrackingStorageConnectionPool : IStorageConnectionPool
     public void InvalidateAll() => InvalidateAllCallCount++;
 }
 
+/// <summary>Redis counterpart of <see cref="TrackingStorageConnectionPool"/>.</summary>
+internal sealed class TrackingRedisConnectionPool : IRedisConnectionPool
+{
+    public int InvalidateAllCallCount { get; private set; }
+
+    public ValueTask<IRedisClient> GetOrCreateAsync(RedisCacheEntry cache, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+    public void Evict(string cacheId) { }
+    public void InvalidateAll() => InvalidateAllCallCount++;
+}
+
+/// <summary>Service Bus counterpart of <see cref="TrackingStorageConnectionPool"/>.</summary>
+internal sealed class TrackingServiceBusConnectionPool : IServiceBusConnectionPool
+{
+    public int InvalidateAllCallCount { get; private set; }
+
+    public IServiceBusClient GetOrCreate(ServiceBusNamespace ns) => throw new NotSupportedException();
+    public void Evict(string namespaceId) { }
+    public void InvalidateAll() => InvalidateAllCallCount++;
+}
+
 public class ConfigEndpointsTests
 {
     private static ConfigurationBundleService BuildService(out CollectionRepository collections, out ProfileRepository profiles)
@@ -149,7 +170,12 @@ public class ConfigEndpointsTests
         var data = profile.GetProfileData();
         data.Config.Name = "saved-via-endpoint";
 
-        await ConfigEndpoints.SaveProfileAsync(profile, data, new NoopStorageConnectionPool());
+        await ConfigEndpoints.SaveProfileAsync(
+            profile,
+            data,
+            new NoopStorageConnectionPool(),
+            new TrackingRedisConnectionPool(),
+            new TrackingServiceBusConnectionPool());
 
         var reloaded = new ProfileRepository();
         await reloaded.LoadAsync();
@@ -157,18 +183,72 @@ public class ConfigEndpointsTests
     }
 
     [Fact]
-    public async Task SaveProfileAsync_InvalidatesTheStorageConnectionPool()
+    public async Task SaveProfileAsync_StripsDemoOverlayEntities()
     {
-        // A save may have edited a storage account's connection string, credential key or auth
-        // mode — any cached client must be dropped so the next request picks up the new config.
+        // The profile GET overlays demo namespaces/cache/storage while demo mode is on, and saves
+        // round-trip the whole profile — persisting them would make e.g. "demo-cache" resolve to a
+        // real (dead localhost:6379) client once demo mode is off.
+        using var sandbox = new AppDataSandbox();
+        var profile = new ProfileRepository();
+        var data = profile.GetProfileData();
+        data.ServiceBusNamespaces =
+        [
+            new ServiceBusNamespace { Id = DemoModeService.DemoNamespaceId1, Alias = "orders-dev", CredentialKey = string.Empty },
+            new ServiceBusNamespace { Id = DemoModeService.DemoNamespaceId2, Alias = "payments-dev", CredentialKey = string.Empty },
+            new ServiceBusNamespace { Id = Guid.NewGuid(), Alias = "real-ns", CredentialKey = string.Empty },
+        ];
+        data.Config.RedisConfig = new RedisConfig
+        {
+            Caches =
+            [
+                new RedisCacheEntry { Id = DemoModeService.DemoRedisCacheId, ConnectionString = "localhost:6379" },
+                new RedisCacheEntry { Id = "real-cache", ConnectionString = "real:6379" },
+            ],
+            ActiveCacheId = DemoModeService.DemoRedisCacheId,
+        };
+        data.Config.StorageAccounts =
+        [
+            new StorageConfig { Id = DemoModeService.DemoStorageId, DisplayName = "Demo Storage", AccountName = "devstore" },
+            new StorageConfig { Id = "real-storage", DisplayName = "Real", AccountName = "real" },
+        ];
+
+        await ConfigEndpoints.SaveProfileAsync(
+            profile,
+            data,
+            new NoopStorageConnectionPool(),
+            new TrackingRedisConnectionPool(),
+            new TrackingServiceBusConnectionPool());
+
+        var stored = profile.GetProfileData();
+        Assert.Single(stored.ServiceBusNamespaces);
+        Assert.Equal("real-ns", stored.ServiceBusNamespaces[0].Alias);
+        Assert.Single(stored.Config.RedisConfig!.Caches);
+        Assert.Equal("real-cache", stored.Config.RedisConfig.Caches[0].Id);
+        Assert.Equal("real-cache", stored.Config.RedisConfig.ActiveCacheId);
+        Assert.Single(stored.Config.StorageAccounts);
+        Assert.Equal("real-storage", stored.Config.StorageAccounts[0].Id);
+    }
+
+    [Fact]
+    public async Task SaveProfileAsync_InvalidatesEveryConnectionPool()
+    {
+        // A save may have edited a storage account's, Redis cache's or Service Bus namespace's
+        // connection string, credential key or auth mode — every cached client must be dropped so
+        // the next request picks up the new config. Redis and Service Bus cache clients for the
+        // same reason storage does, so leaving either out would serve requests from a client built
+        // with credentials the user just changed.
         using var sandbox = new AppDataSandbox();
         var profile = new ProfileRepository();
         var data = profile.GetProfileData();
         var storagePool = new TrackingStorageConnectionPool();
+        var redisPool = new TrackingRedisConnectionPool();
+        var serviceBusPool = new TrackingServiceBusConnectionPool();
 
-        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool);
+        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool, redisPool, serviceBusPool);
 
         Assert.Equal(1, storagePool.InvalidateAllCallCount);
+        Assert.Equal(1, redisPool.InvalidateAllCallCount);
+        Assert.Equal(1, serviceBusPool.InvalidateAllCallCount);
     }
 
     // ── Environments ─────────────────────────────────────────────────────────

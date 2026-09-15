@@ -418,6 +418,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     setPattern(newPattern);
     setCursor(0);
     setAllKeys([]);
+    lastAdvancedCursorRef.current = null;
     hasSeededExpansionRef.current = false;
     setExpandedNamespaces(new Set());
   }, []);
@@ -447,22 +448,46 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     }
   };
 
+  // "Load all" walks the cursor one page at a time. It used to key off `scanResult.data` identity,
+  // which went `undefined` the moment `handleLoadMore` changed the cursor (and therefore the query
+  // key) — so the effect immediately re-ran, hit the `!scanResult.data` branch and switched itself
+  // off after exactly one extra page, while the button had already flipped back from "Loading all…".
+  //
+  // Now that `useRedisScanKeys` keeps the previous page's data during a fetch, `data` stays defined
+  // but is briefly the *previous* page, so advancing on data identity alone would re-append the same
+  // keys. Both conditions below are load-bearing: wait for the fetch to settle, then advance at most
+  // once per distinct cursor.
+  const lastAdvancedCursorRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!loadAllActive || !scanResult.data || scanResult.data.isComplete) {
+    if (!loadAllActive) return;
+    if (scanResult.isFetching || !scanResult.data) return;
+
+    if (scanResult.data.isComplete) {
       setLoadAllActive(false);
       return;
     }
+
+    if (lastAdvancedCursorRef.current === scanResult.data.cursor) return;
+    lastAdvancedCursorRef.current = scanResult.data.cursor;
     handleLoadMore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadAllActive, scanResult.data]);
+  }, [loadAllActive, scanResult.isFetching, scanResult.data]);
 
   const scanKeys = useMemo(() => scanResult.data?.keys ?? [], [scanResult.data?.keys]);
   const displayKeys = useMemo(
     () => (cursor === 0 ? scanKeys : allKeys.length > 0 ? [...allKeys, ...scanKeys] : scanKeys),
     [cursor, scanKeys, allKeys],
   );
-  const health = useRedisKeyspaceHealth(resolvedCacheId, displayKeys, separator);
-  const prefixMemory = useRedisPrefixMemory(resolvedCacheId, displayKeys, separator);
+  // Gated on their own tabs. Each POSTs up to 500 keys and the sidecar reads full metadata for every
+  // one of them, so leaving these enabled on `displayKeys.length > 0` meant that simply browsing the
+  // Keys tab fired both sweeps on every scan page and every "Load more" — thousands of Redis commands
+  // for two panels nobody was looking at.
+  const health = useRedisKeyspaceHealth(resolvedCacheId, displayKeys, separator, {
+    enabled: activeTab === "keyspace",
+  });
+  const prefixMemory = useRedisPrefixMemory(resolvedCacheId, displayKeys, separator, {
+    enabled: activeTab === "prefix",
+  });
 
   const namespaceTree = useMemo(
     () => buildNamespaceTree(displayKeys, separator),
@@ -644,6 +669,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     setCursor(0);
     setAllKeys([]);
     setSelectedKey(null);
+    lastAdvancedCursorRef.current = null;
     hasSeededExpansionRef.current = false;
     setExpandedNamespaces(new Set());
   };

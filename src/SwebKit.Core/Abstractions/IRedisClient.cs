@@ -43,3 +43,28 @@ public interface IRedisClientFactory
 {
     Task<IRedisClient> CreateAsync(RedisCacheEntry cacheEntry, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Caches <see cref="IRedisClient"/> instances per cache (keyed by <see cref="RedisCacheEntry.Id"/>) so a
+/// burst of requests against the same cache — a scan page, then key info for every row it rendered —
+/// reuses one <c>ConnectionMultiplexer</c> instead of opening a new one per request.
+///
+/// <para>Without this each request opened a multiplexer that nothing ever disposed. Azure Cache for Redis
+/// caps connections per tier, and because <c>AbortOnConnectFail</c> is false a connect past that cap still
+/// <em>succeeds</em> — every subsequent command then blocks for the full async timeout before throwing, so
+/// the app appears to hang rather than fail. See docs/pitfalls/azure-sdk.md.</para>
+///
+/// <para>Call <see cref="InvalidateAll"/> whenever cache config may have changed (e.g. after a profile save)
+/// so a rotated connection string or a flipped Entra/connection-string auth mode takes effect next request.</para>
+/// </summary>
+public interface IRedisConnectionPool
+{
+    /// <summary>Returns the cached client for the cache entry, creating and caching one if absent.</summary>
+    ValueTask<IRedisClient> GetOrCreateAsync(RedisCacheEntry cache, CancellationToken ct = default);
+
+    /// <summary>Evicts and disposes the cached client for a single cache, if any.</summary>
+    void Evict(string cacheId);
+
+    /// <summary>Evicts and disposes every cached client. Safe to call liberally — clients are recreated lazily.</summary>
+    void InvalidateAll();
+}

@@ -1,4 +1,5 @@
-import { useQuery, useQueries, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   apiFetch,
   apiSend,
@@ -42,58 +43,98 @@ export function useRedisServerInfo(cacheId: string | null) {
   });
 }
 
-export function useRedisKeyspaceHealth(cacheId: string | null, keys: string[], separator: string) {
+/**
+ * Both of these sweep metadata for up to 500 keys — seven Redis commands each — so they must only
+ * run when their own tab is showing. They used to be enabled purely on `keys.length > 0`, which
+ * meant simply browsing the Keys tab silently fired both on every scan page.
+ */
+export function useRedisKeyspaceHealth(
+  cacheId: string | null,
+  keys: string[],
+  separator: string,
+  options?: { enabled?: boolean },
+) {
   return useQuery<RedisKeyspaceHealthReport>({
     queryKey: ["redis", cacheId, "health", keys, separator],
     queryFn: () => analyzeRedisKeyspace(cacheId!, keys, separator),
-    enabled: !!cacheId && keys.length > 0,
+    enabled: !!cacheId && keys.length > 0 && (options?.enabled ?? true),
   });
 }
 
-export function useRedisPrefixMemory(cacheId: string | null, keys: string[], separator: string) {
+export function useRedisPrefixMemory(
+  cacheId: string | null,
+  keys: string[],
+  separator: string,
+  options?: { enabled?: boolean },
+) {
   return useQuery<RedisPrefixMemoryBucket[]>({
     queryKey: ["redis", cacheId, "prefix-memory", keys, separator],
     queryFn: () => getRedisPrefixMemory(cacheId!, keys, separator),
-    enabled: !!cacheId && keys.length > 0,
+    enabled: !!cacheId && keys.length > 0 && (options?.enabled ?? true),
   });
 }
 
 export function useRedisScanKeys(cacheId: string | null, pattern: string, cursor: number, pageSize: number) {
   return useQuery({
     queryKey: ["redis", cacheId, "keys", pattern, cursor, pageSize],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiFetch<RedisKeyScanResult>(
         `/api/redis/${cacheId}/keys?pattern=${encodeURIComponent(pattern)}&cursor=${cursor}&pageSize=${pageSize}`,
+        { signal },
       ),
     enabled: !!cacheId,
+    // Without this the tree empties every time the cursor advances or the pattern changes, which on
+    // a slow scan looks exactly like "it returned nothing" rather than "it is still working".
+    placeholderData: keepPreviousData,
   });
 }
 
 export function useRedisKeyInfo(cacheId: string | null, key: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "keys", key, "info"],
-    queryFn: () => apiFetch<RedisKeyInfo>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/info`),
+    queryFn: ({ signal }) =>
+      apiFetch<RedisKeyInfo>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/info`, { signal }),
     enabled: !!cacheId && !!key,
   });
 }
 
 /**
- * Bulk variant of `useRedisKeyInfo`, for the small set of key rows currently rendered in the
- * browser tree — feeds the type-color dot and TTL badge shown on each row as it scrolls into
- * view. There's no bulk key-info endpoint, so this issues one request per key; it shares its
- * cache with `useRedisKeyInfo` (identical query key) so a row's hint and its detail panel are
- * never a second fetch for the same key, and callers should pass only the currently-visible keys
- * (e.g. a virtualizer's rendered window) to keep the request count bounded.
+ * Type/TTL hints for the key rows currently rendered in the browser tree, as **one** request.
+ *
+ * This used to be `useQueries` over the window — one HTTP request per visible row, so roughly thirty
+ * per scroll stop, each of which (before the sidecar pooled its connections) also opened a
+ * `ConnectionMultiplexer` of its own and ran seven Redis commands.
+ *
+ * Results are written into the same per-key cache entries `useRedisKeyInfo` reads, preserving the
+ * property that opening a row you already have a hint for is not a second fetch. Callers should still
+ * pass only the visible window — the request is bounded, but the server caps and pipelines per call.
+ *
+ * @returns the hint per key; a key absent from the map either has no info yet or no longer exists.
  */
-export function useRedisKeyInfoBatch(cacheId: string | null, keys: string[]) {
-  return useQueries({
-    queries: keys.map((key) => ({
-      queryKey: ["redis", cacheId, "keys", key, "info"],
-      queryFn: () => apiFetch<RedisKeyInfo>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/info`),
-      enabled: !!cacheId,
-      staleTime: 60_000,
-    })),
+export function useRedisKeyInfoBatch(cacheId: string | null, keys: string[]): Map<string, RedisKeyInfo> {
+  const qc = useQueryClient();
+  // The window changes on every scroll, so this identifies a window rather than accumulating one
+  // cache entry per key set — `gcTime` keeps superseded windows from piling up.
+  const windowId = keys.join("\n");
+
+  const { data } = useQuery({
+    queryKey: ["redis", cacheId, "keys-info-batch", windowId],
+    queryFn: ({ signal }) =>
+      apiSend<RedisKeyInfo[]>(`/api/redis/${cacheId}/keys/info`, "POST", { keys }, signal),
+    enabled: !!cacheId && keys.length > 0,
+    staleTime: 60_000,
+    gcTime: 60_000,
+    placeholderData: keepPreviousData,
   });
+
+  useEffect(() => {
+    if (!data) return;
+    for (const info of data) {
+      qc.setQueryData(["redis", cacheId, "keys", info.key, "info"], info);
+    }
+  }, [data, cacheId, qc]);
+
+  return useMemo(() => new Map((data ?? []).map((info) => [info.key, info])), [data]);
 }
 
 export function useRedisKeyValue(cacheId: string | null, key: string | null, keyType: string | null) {

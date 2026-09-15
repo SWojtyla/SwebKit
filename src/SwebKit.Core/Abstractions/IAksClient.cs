@@ -83,6 +83,20 @@ public interface IAksClient
     Task<Dictionary<string, string>> GetSecretValuesAsync(string ns, string name, CancellationToken ct = default);
 
     /// <summary>
+    /// Reads one ConfigMap's values on demand, so list responses can carry key names only.
+    /// </summary>
+    /// <remarks>
+    /// Defaulted rather than required: every implementation already returns values on the list path, so
+    /// this falls back to finding the ConfigMap there. A real client should override it with a single
+    /// read — the fallback lists the whole namespace to serve one ConfigMap.
+    /// </remarks>
+    async Task<Dictionary<string, string>> GetConfigMapValuesAsync(string ns, string name, CancellationToken ct = default)
+    {
+        var configMaps = await GetConfigMapsAsync(ns, ct).ConfigureAwait(false);
+        return configMaps.FirstOrDefault(cm => cm.Name == name)?.Data ?? [];
+    }
+
+    /// <summary>
     /// Fetches Secrets and Helm release info together. Helm releases are themselves stored as
     /// Secrets (<c>owner=helm</c>) on real clusters, so implementations backed by a single
     /// underlying list call (the real Kubernetes client) should override this to share one fetch
@@ -183,6 +197,14 @@ public interface IAksClient
 
     async Task<IReadOnlyList<ConfigMapInfo>> GetConfigMapsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
         => await FanOutNamespacesAsync(namespaces, GetConfigMapsAsync, ct).ConfigureAwait(false);
+
+    /// <remarks>
+    /// Prefer this over <see cref="GetSecretsAndHelmReleasesAsync(IReadOnlyList{string}, CancellationToken)"/>
+    /// when only Secrets are wanted: the combined call cannot exclude Helm release Secrets (it returns them),
+    /// so it transfers every gzipped release manifest in the namespace.
+    /// </remarks>
+    async Task<IReadOnlyList<SecretInfo>> GetSecretsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+        => await FanOutNamespacesAsync(namespaces, GetSecretsAsync, ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
         => await FanOutNamespacesAsync(namespaces, GetHelmReleasesAsync, ct).ConfigureAwait(false);

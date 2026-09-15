@@ -109,7 +109,9 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     private readonly Lock _namespaceCacheLock = new();
     private IReadOnlyList<string>? _namespaceCache;
     private DateTime _namespaceCacheExpires = DateTime.MinValue;
-    private static readonly TimeSpan NamespaceCacheTtl = TimeSpan.FromSeconds(30);
+    // Namespaces are created by deployments, not by using the app, and listing them cluster-wide is one
+    // of the slowest calls this client makes. 30s meant nearly every page mount paid for it again.
+    private static readonly TimeSpan NamespaceCacheTtl = TimeSpan.FromMinutes(5);
 
     public KubernetesAksClient(
         string? kubeconfigContext = null,
@@ -1045,7 +1047,12 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {
-        try { await _client.CoreV1.ListNamespaceAsync(cancellationToken: ct).ConfigureAwait(false); return true; }
+        // `limit: 1` rather than a full list: this runs on every AKS page mount (and from the global
+        // status bar and dashboard), in parallel with the real namespace query and bypassing its cache,
+        // so an unbounded list meant paying for the cluster's entire namespace list twice per mount.
+        // Still `ListNamespaceAsync` and not `/version`, so a pass continues to prove the caller can
+        // actually list namespaces — which is what every page then does.
+        try { await _client.CoreV1.ListNamespaceAsync(limit: 1, cancellationToken: ct).ConfigureAwait(false); return true; }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ct.IsCancellationRequested)
         {

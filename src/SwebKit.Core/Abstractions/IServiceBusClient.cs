@@ -38,6 +38,33 @@ public interface IServiceBusClient
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
 }
 
+/// <summary>
+/// Caches <see cref="IServiceBusClient"/> instances per namespace (keyed by <see cref="ServiceBusNamespace.Id"/>)
+/// so a burst of requests against the same namespace — listing queues, then topics, then peeking an entity —
+/// reuses one client, one AMQP connection and, for Entra-backed namespaces, one already-acquired credential.
+///
+/// <para>Without this every one of the endpoint handlers built a fresh <c>ServiceBusClient</c>,
+/// <c>ServiceBusAdministrationClient</c> and <c>DefaultAzureCredential</c> — and none of them were ever
+/// disposed. A fresh credential means an empty token cache, which on a developer machine normally resolves
+/// through <c>AzureCliCredential</c> and shells out to <c>az account get-access-token</c> per request.
+/// See docs/pitfalls/azure-sdk.md (AZ-4 still holds: clients must be built via <c>AzureCredentialFactory</c>;
+/// caching the client is what caches the credential).</para>
+///
+/// <para>Call <see cref="InvalidateAll"/> whenever namespace config may have changed (e.g. after a profile
+/// save) so a rotated connection string or a flipped auth mode takes effect on the next request.</para>
+/// </summary>
+public interface IServiceBusConnectionPool
+{
+    /// <summary>Returns the cached client for the namespace, creating and caching one if absent.</summary>
+    IServiceBusClient GetOrCreate(ServiceBusNamespace ns);
+
+    /// <summary>Evicts and disposes the cached client for a single namespace, if any.</summary>
+    void Evict(string namespaceId);
+
+    /// <summary>Evicts and disposes every cached client. Safe to call liberally — clients are recreated lazily.</summary>
+    void InvalidateAll();
+}
+
 public interface IServiceBusClientFactory
 {
     /// <summary>Creates a new <see cref="IServiceBusClient"/> from a raw connection string.</summary>

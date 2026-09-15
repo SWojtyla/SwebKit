@@ -4,55 +4,64 @@ using System.Text;
 using System.Text.Json.Serialization;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
 
 namespace SwebKit.Sidecar.Services;
 
 /// <summary>
 /// Applies auth headers to outgoing API client requests. Supports None, Bearer, API key, Basic and
 /// OAuth2 client credentials (minimal sidecar implementation).
+/// Every field is resolved against the request's variable scope first, so a bearer token, API key
+/// or client secret entered as <c>{{TOKEN}}</c> is sent as that variable's value.
 /// </summary>
-public sealed class SidecarAuthHeaderBuilder(ICredentialStore credentialStore, IHttpClientFactory httpClientFactory) : IAuthHeaderBuilder
+public sealed class SidecarAuthHeaderBuilder(
+    ICredentialStore credentialStore,
+    IHttpClientFactory httpClientFactory,
+    IVariableSubstitutionService substitution) : IAuthHeaderBuilder
 {
     public async Task ApplyAsync(
         HttpRequestMessage message,
         AuthConfig? auth,
+        IReadOnlyDictionary<string, string?>? scope = null,
         CancellationToken cancellationToken = default)
     {
         if (auth is null || auth.Type is AuthType.None or AuthType.Inherited)
             return;
 
+        auth = AuthConfigSubstitution.Substitute(auth, substitution, scope);
+
         switch (auth.Type)
         {
             case AuthType.BearerToken:
-                ApplyBearer(message, auth);
+                ApplyBearer(message, auth, scope);
                 break;
 
             case AuthType.ApiKey:
-                ApplyApiKey(message, auth);
+                ApplyApiKey(message, auth, scope);
                 break;
 
             case AuthType.Basic:
-                ApplyBasic(message, auth);
+                ApplyBasic(message, auth, scope);
                 break;
 
             case AuthType.OAuth2:
-                await ApplyOAuth2Async(message, auth, cancellationToken).ConfigureAwait(false);
+                await ApplyOAuth2Async(message, auth, scope, cancellationToken).ConfigureAwait(false);
                 break;
         }
     }
 
-    private void ApplyBearer(HttpRequestMessage message, AuthConfig auth)
+    private void ApplyBearer(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope)
     {
-        var token = ResolveSecret(auth);
+        var token = ResolveSecret(auth, scope);
         if (string.IsNullOrWhiteSpace(token)) return;
 
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
-    private void ApplyApiKey(HttpRequestMessage message, AuthConfig auth)
+    private void ApplyApiKey(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope)
     {
         if (string.IsNullOrWhiteSpace(auth.ApiKeyParamName)) return;
-        var apiKey = ResolveSecret(auth);
+        var apiKey = ResolveSecret(auth, scope);
         if (string.IsNullOrWhiteSpace(apiKey)) return;
 
         if (auth.ApiKeyLocation == ApiKeyLocation.Header)
@@ -72,30 +81,38 @@ public sealed class SidecarAuthHeaderBuilder(ICredentialStore credentialStore, I
         }
     }
 
-    private void ApplyBasic(HttpRequestMessage message, AuthConfig auth)
+    private void ApplyBasic(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope)
     {
-        var password = ResolveSecret(auth);
+        var password = ResolveSecret(auth, scope);
         if (string.IsNullOrWhiteSpace(password)) return;
         var username = auth.BasicUsername ?? string.Empty;
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
         message.Headers.Authorization = new AuthenticationHeaderValue("Basic", encoded);
     }
 
-    private async Task ApplyOAuth2Async(HttpRequestMessage message, AuthConfig auth, CancellationToken cancellationToken)
+    private async Task ApplyOAuth2Async(
+        HttpRequestMessage message,
+        AuthConfig auth,
+        IReadOnlyDictionary<string, string?>? scope,
+        CancellationToken cancellationToken)
     {
         if (auth.OAuth2GrantType == OAuth2GrantType.ClientCredentials)
         {
-            await ApplyOAuth2ClientCredentialsAsync(message, auth, cancellationToken).ConfigureAwait(false);
+            await ApplyOAuth2ClientCredentialsAsync(message, auth, scope, cancellationToken).ConfigureAwait(false);
         }
         // Authorization code / PKCE is not implemented for the sidecar MVP.
     }
 
-    private async Task ApplyOAuth2ClientCredentialsAsync(HttpRequestMessage message, AuthConfig auth, CancellationToken cancellationToken)
+    private async Task ApplyOAuth2ClientCredentialsAsync(
+        HttpRequestMessage message,
+        AuthConfig auth,
+        IReadOnlyDictionary<string, string?>? scope,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(auth.OAuth2TokenUrl) || string.IsNullOrWhiteSpace(auth.OAuth2ClientId))
             return;
 
-        var clientSecret = ResolveSecret(auth);
+        var clientSecret = ResolveSecret(auth, scope);
         if (string.IsNullOrWhiteSpace(clientSecret)) return;
 
         var form = new Dictionary<string, string>
@@ -132,7 +149,15 @@ public sealed class SidecarAuthHeaderBuilder(ICredentialStore credentialStore, I
     /// <see cref="AuthConfig.CredentialKey"/> only when the key is not an opaque generated key and was
     /// not found in the store.
     /// </summary>
-    private string? ResolveSecret(AuthConfig auth)
+    /// <remarks>
+    /// Substitution runs on the resolved value rather than on each source, because whichever source
+    /// wins, a user who typed <c>{{AUTH_API_KEY}}</c> into the auth field meant the variable and not
+    /// those sixteen characters.
+    /// </remarks>
+    private string? ResolveSecret(AuthConfig auth, IReadOnlyDictionary<string, string?>? scope) =>
+        AuthConfigSubstitution.SubstituteSecret(ResolveRawSecret(auth), substitution, scope);
+
+    private string? ResolveRawSecret(AuthConfig auth)
     {
         if (!string.IsNullOrWhiteSpace(auth.CredentialSecret))
             return auth.CredentialSecret;

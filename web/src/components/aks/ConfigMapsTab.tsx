@@ -13,7 +13,7 @@ interface ConfigMapsTabProps {
 const columns: Column<ConfigMapInfo>[] = [
   { header: "Keys", cell: (cm) => (
     <span className="text-xs text-muted-foreground">
-      {Object.keys(cm.data).length > 0 ? Object.keys(cm.data).join(", ") : "—"}
+      {cm.keys.length > 0 ? cm.keys.join(", ") : "—"}
     </span>
   )},
 ];

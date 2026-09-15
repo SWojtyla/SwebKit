@@ -332,9 +332,15 @@ export function AksWorkspaceProvider({ children }: { children: ReactNode }): JSX
     [updateParams, currentContextName],
   );
 
+  // Resolving this used to require the cluster's full namespace list, which the code's own comments
+  // put at ~18s cold — so `AksPage` rendered "Select a namespace", mounted no tab and started no
+  // resource query until that returned, even when the URL already named the namespace to show.
+  // An explicit selection is enough to start fetching; the list is only needed to recognise "the
+  // user picked every namespace" as the cluster-wide `*`, which is refined once it arrives.
   const namespaceToken = useMemo(() => {
-    if (selectedNamespaces.length === 0 || !namespaces || namespaces.length === 0) return null;
-    if (selectedNamespaces.includes("*") || selectedNamespaces.length === namespaces.length) return "*";
+    if (selectedNamespaces.length === 0) return null;
+    if (selectedNamespaces.includes("*")) return "*";
+    if (namespaces && namespaces.length > 0 && selectedNamespaces.length === namespaces.length) return "*";
     return selectedNamespaces.join(",");
   }, [selectedNamespaces, namespaces]);
 

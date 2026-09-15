@@ -54,6 +54,15 @@ function extractErrorMessage(status: number, statusText: string, body: string): 
   return body || statusText || `Request failed with status ${status}`;
 }
 
+/**
+ * Pass TanStack Query's `signal` through as `apiFetch(url, { signal })` from every `queryFn`.
+ *
+ * Without it a superseded request — a retyped Redis filter, a different entity clicked, a page
+ * navigated away from — keeps running to completion in the sidecar, holding its pooled client and
+ * its backend round trips while nobody waits for the answer. ASP.NET binds the handlers'
+ * `CancellationToken` to `HttpContext.RequestAborted`, and the Redis/Service Bus/Kubernetes clients
+ * already thread it, so aborting here really does stop the work server-side.
+ */
 export async function apiFetch<T>(
   path: string,
   options?: RequestInit,
@@ -78,11 +87,13 @@ export async function apiSend<T>(
   path: string,
   method: "POST" | "PUT" | "PATCH" | "DELETE",
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const res = await fetch(`${SIDECAR_BASE_URL}${path}`, {
     method,
     headers: { "Content-Type": "application/json" },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   if (!res.ok) {

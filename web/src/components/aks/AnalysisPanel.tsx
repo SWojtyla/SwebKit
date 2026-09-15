@@ -64,17 +64,14 @@ export function AnalysisPanel({ ns }: Props) {
               </tr>
             </thead>
             <tbody>
-              {configMaps.data?.map((cm) => {
-                const keyCount = Object.keys(cm.data ?? {}).length;
-                const dataSize = Object.values(cm.data ?? {}).join("").length;
-                return (
-                  <tr key={cm.name} className="border-b last:border-0">
-                    <td className="px-3 py-2 font-mono text-xs">{cm.name}</td>
-                    <td className="px-3 py-2 text-xs">{keyCount}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{dataSize} chars</td>
-                  </tr>
-                );
-              })}
+              {/* Key names and a size, both computed server-side — the list no longer carries values. */}
+              {configMaps.data?.map((cm) => (
+                <tr key={cm.name} className="border-b last:border-0">
+                  <td className="px-3 py-2 font-mono text-xs">{cm.name}</td>
+                  <td className="px-3 py-2 text-xs">{cm.keys.length}</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">{cm.dataSizeChars} chars</td>
+                </tr>
+              ))}
               {(!configMaps.data || configMaps.data.length === 0) && (
                 <tr><td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">No configmaps found</td></tr>
               )}

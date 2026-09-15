@@ -70,7 +70,13 @@ internal sealed class FaultInjectingRedisClient : IRedisClient
 }
 
 /// <summary>Records which cache entries were requested and returns a configurable client.</summary>
-internal sealed class FakeRedisClientFactory : IRedisClientFactory
+/// <summary>
+/// Returns a configurable client and records which cache each call asked for. Doubles as an
+/// <see cref="IRedisConnectionPool"/> — the endpoints now take the pool rather than the factory, and these
+/// tests care about which client a handler used, not about caching (that is
+/// <see cref="SidecarRedisConnectionPoolTests"/>'s job).
+/// </summary>
+internal sealed class FakeRedisClientFactory : IRedisClientFactory, IRedisConnectionPool
 {
     public IRedisClient Client { get; set; } = new DemoRedisClient();
     public List<RedisCacheEntry> Calls { get; } = [];
@@ -80,6 +86,13 @@ internal sealed class FakeRedisClientFactory : IRedisClientFactory
         Calls.Add(cacheEntry);
         return Task.FromResult(Client);
     }
+
+    public async ValueTask<IRedisClient> GetOrCreateAsync(RedisCacheEntry cache, CancellationToken ct = default) =>
+        await CreateAsync(cache, ct);
+
+    public void Evict(string cacheId) { }
+
+    public void InvalidateAll() { }
 }
 
 public class RedisEndpointsMutationTests

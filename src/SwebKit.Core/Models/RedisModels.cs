@@ -5,6 +5,17 @@ public class KeyScanResult
     public long Cursor { get; set; }
     public IReadOnlyList<string> Keys { get; set; } = [];
     public bool IsComplete { get; set; }
+
+    /// <summary>
+    /// How many <c>SCAN</c> round trips this result took.
+    /// </summary>
+    /// <remarks>
+    /// Round trips rather than keys examined: <c>SCAN ... MATCH</c> filters server-side and returns only
+    /// matches, so how many slots Redis actually walked is not reported and cannot be inferred here.
+    /// A high count with few keys is the signature of a selective pattern over a large keyspace — which
+    /// distinguishes "there is nothing to find" from "still looking".
+    /// </remarks>
+    public int PagesScanned { get; set; }
 }
 
 public class RedisKeyInfo

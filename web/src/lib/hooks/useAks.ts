@@ -267,8 +267,22 @@ export function useAksDeleteHttpRoute() {
 export function useAksConfigMaps(ns: string | null) {
   return useQuery({
     queryKey: ["aks-configmaps", ns],
-    queryFn: () => apiFetch<ConfigMapInfo[]>(`/api/aks/${ns}/configmaps`),
+    queryFn: ({ signal }) => apiFetch<ConfigMapInfo[]>(`/api/aks/${ns}/configmaps`, { signal }),
     enabled: !!ns,
+  });
+}
+
+/**
+ * One ConfigMap's values, for the detail panel. The list endpoint sends key names only — values are
+ * up to 1 MB each and the list renders none of them — so this fetches them when a panel opens,
+ * mirroring how Secret values already work.
+ */
+export function useAksConfigMapValues(ns: string | null, name: string | null) {
+  return useQuery({
+    queryKey: ["aks-configmap-values", ns, name],
+    queryFn: ({ signal }) =>
+      apiFetch<Record<string, string>>(`/api/aks/${ns}/configmaps/${encodeURIComponent(name!)}/values`, { signal }),
+    enabled: !!ns && !!name,
   });
 }
 
@@ -311,19 +325,26 @@ export function useAksHelmValues(ns: string | null, release: string | null) {
   });
 }
 
-export function useAksHelmNotes(ns: string | null, release: string | null) {
+/**
+ * Notes and manifest each spawn a `helm` process server-side, and Helm pays its own startup cost
+ * (kubeconfig parse, exec-credential plugin, cluster discovery) before doing anything — so these take
+ * an `enabled` gate and must not fire until their tab is selected. The panel used to request all four
+ * on open while defaulting to the History tab, so opening any release spawned two processes nobody
+ * had asked for.
+ */
+export function useAksHelmNotes(ns: string | null, release: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["aks-helm-notes", ns, release],
     queryFn: () => getHelmReleaseNotes(ns!, release!),
-    enabled: !!ns && !!release,
+    enabled: !!ns && !!release && (options?.enabled ?? true),
   });
 }
 
-export function useAksHelmManifest(ns: string | null, release: string | null) {
+export function useAksHelmManifest(ns: string | null, release: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["aks-helm-manifest", ns, release],
     queryFn: () => getHelmReleaseManifest(ns!, release!),
-    enabled: !!ns && !!release,
+    enabled: !!ns && !!release && (options?.enabled ?? true),
   });
 }
 

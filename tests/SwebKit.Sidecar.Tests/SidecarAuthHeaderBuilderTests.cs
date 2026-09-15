@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Http;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
 using SwebKit.Sidecar.Services;
 
 namespace SwebKit.Sidecar.Tests;
@@ -59,7 +60,8 @@ public class SidecarAuthHeaderBuilderTests
         var store = new FakeCredentialStore();
         var handler = new FakeHttpMessageHandler();
         var factory = new FakeHttpClientFactory(handler);
-        return (new SidecarAuthHeaderBuilder(store, factory), store, handler);
+        var substitution = new VariableSubstitutionService(store, new NoopKeyVaultSecretResolver());
+        return (new SidecarAuthHeaderBuilder(store, factory, substitution), store, handler);
     }
 
     private static HttpRequestMessage NewRequest(string url = "https://api.example.com/orders") =>
@@ -336,5 +338,150 @@ public class SidecarAuthHeaderBuilderTests
 
         Assert.Empty(handler.Requests);
         Assert.Null(request.Headers.Authorization);
+    }
+
+    // ── Variable substitution ────────────────────────────────────────────────
+
+    private static IReadOnlyDictionary<string, string?> Scope(params (string Key, string? Value)[] entries) =>
+        entries.ToDictionary(e => e.Key, e => e.Value, StringComparer.Ordinal);
+
+    [Fact]
+    public async Task ApplyAsync_Bearer_TokenIsAVariable_SendsTheResolvedValue()
+    {
+        // The defect this covers: a bearer token entered as {{AUTH_PI2_KEY}} went out verbatim,
+        // the API answered 400, and the cURL panel showed the raw token as proof.
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig { Type = AuthType.BearerToken, CredentialSecret = "{{AUTH_PI2_KEY}}" };
+        var request = NewRequest();
+
+        await builder.ApplyAsync(request, auth, Scope(("AUTH_PI2_KEY", "resolved-token")));
+
+        Assert.Equal("resolved-token", request.Headers.Authorization!.Parameter);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_Bearer_TokenFromCredentialStoreIsAVariable_SendsTheResolvedValue()
+    {
+        var (builder, store, _) = Build();
+        store.Set("token-key", "{{AUTH_PI2_KEY}}");
+        var auth = new AuthConfig { Type = AuthType.BearerToken, CredentialKey = "token-key" };
+        var request = NewRequest();
+
+        await builder.ApplyAsync(request, auth, Scope(("AUTH_PI2_KEY", "resolved-token")));
+
+        Assert.Equal("resolved-token", request.Headers.Authorization!.Parameter);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_Bearer_UndefinedVariable_LeavesTokenLiteral()
+    {
+        // Matches VariableSubstitutionService everywhere else: an unknown token stays as written
+        // rather than collapsing to an empty header, so the failure is visible in the cURL panel.
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig { Type = AuthType.BearerToken, CredentialSecret = "{{MISSING}}" };
+        var request = NewRequest();
+
+        await builder.ApplyAsync(request, auth, Scope(("OTHER", "x")));
+
+        Assert.Equal("{{MISSING}}", request.Headers.Authorization!.Parameter);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_Bearer_NoScope_LeavesTokenVerbatim()
+    {
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig { Type = AuthType.BearerToken, CredentialSecret = "{{AUTH_PI2_KEY}}" };
+        var request = NewRequest();
+
+        await builder.ApplyAsync(request, auth);
+
+        Assert.Equal("{{AUTH_PI2_KEY}}", request.Headers.Authorization!.Parameter);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_ApiKeyHeader_NameAndValueAreVariables_BothResolve()
+    {
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig
+        {
+            Type = AuthType.ApiKey,
+            ApiKeyParamName = "{{KEY_HEADER}}",
+            ApiKeyLocation = ApiKeyLocation.Header,
+            CredentialSecret = "{{KEY_VALUE}}",
+        };
+        var request = NewRequest();
+
+        await builder.ApplyAsync(request, auth, Scope(("KEY_HEADER", "api-key"), ("KEY_VALUE", "secret-123")));
+
+        Assert.Equal("secret-123", request.Headers.GetValues("api-key").Single());
+    }
+
+    [Fact]
+    public async Task ApplyAsync_ApiKeyQueryParam_ValueIsAVariable_ResolvedBeforeEncoding()
+    {
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig
+        {
+            Type = AuthType.ApiKey,
+            ApiKeyParamName = "code",
+            ApiKeyLocation = ApiKeyLocation.QueryParam,
+            CredentialSecret = "{{KEY_VALUE}}",
+        };
+        var request = NewRequest();
+
+        await builder.ApplyAsync(request, auth, Scope(("KEY_VALUE", "secret 123")));
+
+        Assert.Contains("code=secret%20123", request.RequestUri!.Query);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_Basic_UsernameAndPasswordAreVariables_BothResolve()
+    {
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig
+        {
+            Type = AuthType.Basic,
+            BasicUsername = "{{USER}}",
+            CredentialSecret = "{{PASS}}",
+        };
+        var request = NewRequest();
+
+        await builder.ApplyAsync(request, auth, Scope(("USER", "alice"), ("PASS", "pa55")));
+
+        var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(request.Headers.Authorization!.Parameter!));
+        Assert.Equal("alice:pa55", decoded);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_OAuth2ClientCredentials_TokenUrlClientIdSecretAndScopesAreVariables_AllResolve()
+    {
+        var (builder, _, handler) = Build();
+        handler.EnqueueJson("""{"access_token":"issued-token-123"}""");
+        var auth = new AuthConfig
+        {
+            Type = AuthType.OAuth2,
+            OAuth2GrantType = OAuth2GrantType.ClientCredentials,
+            OAuth2TokenUrl = "{{TOKEN_URL}}",
+            OAuth2ClientId = "{{CLIENT_ID}}",
+            CredentialSecret = "{{CLIENT_SECRET}}",
+            OAuth2Scopes = "{{SCOPES}}",
+        };
+        var request = NewRequest();
+
+        await builder.ApplyAsync(
+            request,
+            auth,
+            Scope(
+                ("TOKEN_URL", "https://auth.example.com/token"),
+                ("CLIENT_ID", "client-1"),
+                ("CLIENT_SECRET", "client-secret-value"),
+                ("SCOPES", "read write")));
+
+        Assert.Equal("issued-token-123", request.Headers.Authorization!.Parameter);
+        Assert.Equal("https://auth.example.com/token", handler.Requests[0].RequestUri!.ToString());
+        var body = handler.RequestBodies[0];
+        Assert.Contains("client_id=client-1", body);
+        Assert.Contains("client_secret=client-secret-value", body);
+        Assert.Contains("scope=read+write", body);
     }
 }
