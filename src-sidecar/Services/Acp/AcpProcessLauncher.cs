@@ -68,21 +68,22 @@ public static class AcpProcessLauncher
     /// are used as-is (PATHEXT applied if extensionless); bare names are searched across PATH ×
     /// PATHEXT — extension candidates first, then the literal name — so <c>npx</c> finds
     /// <c>npx.cmd</c> on Windows rather than the unlaunchable extensionless POSIX script sitting
-    /// next to it. Non-Windows simply returns the name — the OS's own PATH lookup handles it.</summary>
+    /// next to it. PATHEXT is Windows-only; elsewhere the candidate list is the literal name and
+    /// PATH is still searched, so a missing agent fails here with a user-facing message rather
+    /// than surfacing later as a raw <c>Win32Exception</c> (ENOENT) from <see cref="Process.Start"/>.</summary>
     internal static string ResolveExecutable(string command)
     {
         if (string.IsNullOrWhiteSpace(command))
             throw new FileNotFoundException("ACP profile has no command configured.");
 
-        if (!OperatingSystem.IsWindows())
-            return command;
-
         var hasDirectory = command.Contains(Path.DirectorySeparatorChar) ||
                            command.Contains(Path.AltDirectorySeparatorChar) ||
                            Path.IsPathRooted(command);
 
-        var extensions = (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD")
-            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var extensions = OperatingSystem.IsWindows()
+            ? (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD")
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : [];
 
         IEnumerable<string> Candidates()
         {
@@ -111,7 +112,7 @@ public static class AcpProcessLauncher
         }
 
         var pathDirs = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         foreach (var dir in pathDirs)
         {
