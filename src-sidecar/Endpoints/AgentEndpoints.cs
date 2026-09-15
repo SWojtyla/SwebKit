@@ -131,6 +131,7 @@ public static class AgentEndpoints
                 Error = false,
                 Summarized = evt.Summarized,
                 ContextUsagePercent = evt.ContextUsagePercent ?? 0,
+                SuggestedScope = evt.Result.SuggestedScope,
             }
     };
 

@@ -259,6 +259,73 @@ test.describe("Contextual assistant entry points", () => {
     await expect(page.getByTestId("contextual-assistant-scope-reason")).toContainText("Test Connection first");
   });
 
+  test("suggestedScope reply shows a retry chip that re-sends the question with scope: workspace (agent-correlation Module 3)", async ({ page }) => {
+    const bodies: Record<string, unknown>[] = [];
+    await page.route("**/api/agent/chat/stream", async (route) => {
+      bodies.push(route.request().postDataJSON());
+      const done = {
+        kind: "done",
+        result: {
+          text: "I can't inspect the Service Bus namespace from here.",
+          elapsedMs: 1,
+          status: "done",
+          error: false,
+          suggestedScope: "workspace",
+        },
+      };
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `data: ${JSON.stringify(done)}\n\n`,
+      });
+    });
+
+    await page.goto("/aks");
+    await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
+    await page.getByTestId("aks-tab-pods").click();
+    const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
+    await firstRow.click({ button: "right" });
+    await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
+
+    await page.getByTestId("contextual-assistant-input").fill("is the orders queue backing up?");
+    await page.getByTestId("contextual-assistant-send").click();
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0]).toMatchObject({ scope: "feature" });
+
+    const retry = page.getByTestId("contextual-assistant-scope-retry");
+    await expect(retry).toBeVisible();
+    await retry.click();
+
+    await expect.poll(() => bodies.length).toBe(2);
+    expect(bodies[1]).toMatchObject({ message: "is the orders queue backing up?", scope: "workspace" });
+    // The escalation is reflected in the checkbox, not a hidden one-off.
+    await expect(page.getByTestId("contextual-assistant-scope-workspace")).toBeChecked();
+  });
+
+  test("thought chunks stream into a collapsed reasoning block (agent-correlation Module 4)", async ({ page }) => {
+    await page.route("**/api/agent/chat/stream", async (route) => {
+      const thought = `data: ${JSON.stringify({ kind: "thought", token: "Logs show a ServiceBus auth failure — checking queue health." })}\n\n`;
+      const done = `data: ${JSON.stringify({ kind: "done", result: { text: "The queue is unreachable.", elapsedMs: 1, status: "done", error: false } })}\n\n`;
+      await route.fulfill({ status: 200, contentType: "text/event-stream", body: thought + done });
+    });
+
+    await page.goto("/aks");
+    await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
+    await page.getByTestId("aks-tab-pods").click();
+    const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
+    await firstRow.click({ button: "right" });
+    await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
+
+    await page.getByTestId("contextual-assistant-input").fill("why is this pod restarting?");
+    await page.getByTestId("contextual-assistant-send").click();
+
+    await expect(page.getByTestId("agent-thought-block")).toBeVisible();
+    // Collapsed by default — reasoning is a debugging aid, not the primary reading experience.
+    await expect(page.getByTestId("agent-thought-text")).not.toBeAttached();
+    await page.getByTestId("agent-thought-toggle").click();
+    await expect(page.getByTestId("agent-thought-text")).toContainText("checking queue health");
+  });
+
   test("closing the panel removes it from the DOM", async ({ page }) => {
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });

@@ -41,8 +41,8 @@ public class SwebKitToolsMcpBridgeTests
             FeatureArea = area,
         };
 
-    private static SwebKitToolsMcpBridge Bridge(FakeToolRegistry registry) =>
-        new(registry, new HttpContextAccessor());
+    private static SwebKitToolsMcpBridge Bridge(FakeToolRegistry registry, OutOfScopeCallTracker? tracker = null) =>
+        new(registry, new HttpContextAccessor(), tracker ?? new OutOfScopeCallTracker());
 
     [Fact]
     public void BuildUrl_appends_the_allowlist_as_a_query_param()
@@ -108,7 +108,7 @@ public class SwebKitToolsMcpBridgeTests
         var bridge = Bridge(registry);
         var args = JsonDocument.Parse("{\"namespace\":\"default\"}").RootElement;
 
-        var result = await bridge.CallToolAsync("list_pods", args, null, CancellationToken.None);
+        var result = await bridge.CallToolAsync("list_pods", args, null, null, CancellationToken.None);
 
         Assert.Equal("list_pods", registry.LastCalledName);
         Assert.Equal("default", registry.LastCalledArgs.GetProperty("namespace").GetString());
@@ -122,7 +122,7 @@ public class SwebKitToolsMcpBridgeTests
         var registry = new FakeToolRegistry(Def("list_pods")) { Result = "{\"error\":\"boom\"}" };
         var bridge = Bridge(registry);
 
-        var result = await bridge.CallToolAsync("list_pods", default, null, CancellationToken.None);
+        var result = await bridge.CallToolAsync("list_pods", default, null, null, CancellationToken.None);
 
         Assert.True(result.IsError);
     }
@@ -134,22 +134,47 @@ public class SwebKitToolsMcpBridgeTests
         var bridge = Bridge(registry);
         var allowed = SwebKitToolsMcpBridge.ParseAllowedSet("list_pods");
 
-        var result = await bridge.CallToolAsync("propose_delete", default, allowed, CancellationToken.None);
+        var result = await bridge.CallToolAsync("propose_delete", default, allowed, "list_pods", CancellationToken.None);
 
         Assert.True(result.IsError);
         Assert.Null(registry.LastCalledName);
-        Assert.Contains("not available", Assert.IsType<TextContentBlock>(result.Content[0]).Text);
+        var payload = JsonDocument.Parse(Assert.IsType<TextContentBlock>(result.Content[0]).Text).RootElement;
+        Assert.Equal("tool_out_of_scope", payload.GetProperty("error").GetString());
+        Assert.Equal("propose_delete", payload.GetProperty("tool").GetString());
+        Assert.Contains("Search across my whole workspace", payload.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task CallTool_out_of_scope_call_increments_the_tracker_under_the_allowlist_key()
+    {
+        var tracker = new OutOfScopeCallTracker();
+        var registry = new FakeToolRegistry(Def("list_pods"), Def("analyze_queue_health", FeatureArea.ServiceBus));
+        var bridge = Bridge(registry, tracker);
+        var allowed = SwebKitToolsMcpBridge.ParseAllowedSet("list_pods");
+
+        await bridge.CallToolAsync("analyze_queue_health", default, allowed, "list_pods", CancellationToken.None);
+        await bridge.CallToolAsync("analyze_queue_health", default, allowed, "list_pods", CancellationToken.None);
+        // A different allowlist (a different turn's scope) counts separately.
+        await bridge.CallToolAsync("analyze_queue_health", default, allowed, "list_pods,get_pod_logs", CancellationToken.None);
+
+        Assert.Equal(2, tracker.CountFor("list_pods"));
+        Assert.Equal(1, tracker.CountFor("list_pods,get_pod_logs"));
+        Assert.Equal(0, tracker.CountFor("something-else"));
     }
 
     [Fact]
     public async Task CallTool_refuses_unknown_tools()
     {
+        var tracker = new OutOfScopeCallTracker();
         var registry = new FakeToolRegistry(Def("list_pods"));
-        var bridge = Bridge(registry);
+        var bridge = Bridge(registry, tracker);
 
-        var result = await bridge.CallToolAsync("nope", default, null, CancellationToken.None);
+        var result = await bridge.CallToolAsync("nope", default, null, "list_pods", CancellationToken.None);
 
         Assert.True(result.IsError);
         Assert.Null(registry.LastCalledName);
+        // Unknown tools are not scope-fence hits — they keep the generic message and don't tick the tracker.
+        Assert.Contains("not available", Assert.IsType<TextContentBlock>(result.Content[0]).Text);
+        Assert.Equal(0, tracker.CountFor("list_pods"));
     }
 }

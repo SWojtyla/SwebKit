@@ -1,5 +1,7 @@
+using SwebKit.Agents.Tools;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
 using SwebKit.Sidecar.Endpoints;
 
 namespace SwebKit.Sidecar.Services;
@@ -22,7 +24,7 @@ public sealed class AgentSystemPromptBuilder
         _demo = demo;
     }
 
-    public string Build(AgentChatContext? context, string normalizedMode, bool hasToolCalling)
+    public string Build(AgentChatContext? context, string normalizedMode, string normalizedScope, bool hasToolCalling)
     {
         var data = _profiles.GetProfileData();
         var config = data.Config;
@@ -64,6 +66,8 @@ public sealed class AgentSystemPromptBuilder
 
         var currentFocus = BuildCurrentFocusSection(context);
 
+        var fencedAreas = BuildFencedAreasSection(data, config, context, normalizedScope, hasToolCalling);
+
         var toolPolicy = BuildToolPolicySection(hasToolCalling, normalizedMode);
 
         return $"""
@@ -74,7 +78,7 @@ public sealed class AgentSystemPromptBuilder
             {currentFocus}
             ## Current workspace context
             {workspaceContext}
-
+            {fencedAreas}
             ## Response format
             - Be concise and technical. Prefer bullet points and tables over prose.
             - If you are unsure, say so rather than guessing.
@@ -103,6 +107,46 @@ public sealed class AgentSystemPromptBuilder
 
             ## Current focus
             {string.Join("\n", lines)}
+
+            """;
+    }
+
+    /// <summary>agent-correlation Module 2 — when a contextual turn's "feature" scope fences off
+    /// configured areas, names them so the agent can point the user at the workspace-scope control
+    /// instead of calling a tool it was never offered (which surfaces as an opaque "not available
+    /// in this context" bridge error). Empty whenever no fence actually applies: no tool calling,
+    /// no context area (the global page sees every area), workspace scope, or nothing else
+    /// configured. Observability is deliberately not listed — its tools are exempt from the
+    /// per-area filter (see <c>AgentToolCallOrchestrator.ResolveTools</c>), so it's never fenced.</summary>
+    private static string BuildFencedAreasSection(
+        ProfileData data, AppConfig config, AgentChatContext? context, string normalizedScope, bool hasToolCalling)
+    {
+        if (!hasToolCalling || normalizedScope != "feature")
+            return "";
+
+        if (context?.FeatureArea is not { Length: > 0 } areaName
+            || !Enum.TryParse<FeatureArea>(areaName, ignoreCase: true, out var visibleArea))
+            return "";
+
+        var configured = new List<(FeatureArea Area, string Label)>();
+        if (config.AksConfig is not null)
+            configured.Add((FeatureArea.Aks, "Kubernetes"));
+        if (data.ServiceBusNamespaces.Count > 0)
+            configured.Add((FeatureArea.ServiceBus,
+                $"Service Bus ({string.Join(", ", data.ServiceBusNamespaces.Select(n => n.Alias))})"));
+        if (config.RedisConfig is { Caches.Count: > 0 } redis)
+            configured.Add((FeatureArea.Redis, $"Redis ({redis.Caches.Count} cache(s))"));
+        if (config.StorageAccounts.Count > 0)
+            configured.Add((FeatureArea.Storage, $"Storage ({config.StorageAccounts.Count} account(s))"));
+
+        var fenced = configured.Where(c => c.Area != visibleArea).Select(c => c.Label).ToList();
+        if (fenced.Count == 0)
+            return "";
+
+        return $"""
+
+            ## Other configured areas
+            {string.Join(", ", fenced)} are configured in this workspace, but their tools are outside this turn's scope. If evidence points to one of them, tell the user to enable "Search across my whole workspace" and ask again — do not guess about resources you cannot inspect.
 
             """;
     }

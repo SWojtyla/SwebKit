@@ -234,6 +234,9 @@ interface StreamSendOptions {
   scope?: AgentChatScope;
   /** Called for every incremental text chunk, in order — append, don't replace. */
   onToken?: (token: string) => void;
+  /** Called for every incremental reasoning chunk (ACP agent_thought_chunk), in order —
+   * append, don't replace. Render muted/collapsed — it's raw model reasoning. */
+  onThought?: (token: string) => void;
   /** Called when a tool call starts or finishes (Ask & do turns only). */
   onToolEvent?: (event: AgentStreamEvent) => void;
 }
@@ -269,6 +272,9 @@ export function useAgentChatStream(sessionId?: string) {
             switch (event.kind) {
               case "token":
                 if (event.token) options?.onToken?.(event.token);
+                break;
+              case "thought":
+                if (event.token) options?.onThought?.(event.token);
                 break;
               case "toolCallStarted":
               case "toolCallResult":

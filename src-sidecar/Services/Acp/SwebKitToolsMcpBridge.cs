@@ -22,11 +22,13 @@ public sealed class SwebKitToolsMcpBridge
 
     private readonly IAgentToolRegistry _toolRegistry;
     private readonly IHttpContextAccessor _http;
+    private readonly OutOfScopeCallTracker _outOfScopeCalls;
 
-    public SwebKitToolsMcpBridge(IAgentToolRegistry toolRegistry, IHttpContextAccessor http)
+    public SwebKitToolsMcpBridge(IAgentToolRegistry toolRegistry, IHttpContextAccessor http, OutOfScopeCallTracker outOfScopeCalls)
     {
         _toolRegistry = toolRegistry;
         _http = http;
+        _outOfScopeCalls = outOfScopeCalls;
     }
 
     /// <summary>Builds the per-session MCP URL handed to the ACP agent, with the mode/area/scope
@@ -39,8 +41,9 @@ public sealed class SwebKitToolsMcpBridge
             : $"{baseUrl.TrimEnd('/')}{EndpointPath}?tools={Uri.EscapeDataString(list)}";
     }
 
-    private HashSet<string>? AllowedSet() =>
-        ParseAllowedSet(_http.HttpContext?.Request.Query["tools"].FirstOrDefault());
+    private string? AllowlistKey() => _http.HttpContext?.Request.Query["tools"].FirstOrDefault();
+
+    private HashSet<string>? AllowedSet() => ParseAllowedSet(AllowlistKey());
 
     public ValueTask<ListToolsResult> ListToolsAsync(RequestContext<ListToolsRequestParams> request, CancellationToken ct)
         => ValueTask.FromResult(new ListToolsResult { Tools = ListTools(AllowedSet()) });
@@ -63,16 +66,41 @@ public sealed class SwebKitToolsMcpBridge
         JsonElement args = request.Params?.Arguments is { } a
             ? JsonSerializer.SerializeToElement(a)
             : JsonDocument.Parse("{}").RootElement.Clone();
-        return CallToolAsync(name, args, AllowedSet(), ct);
+        return CallToolAsync(name, args, AllowedSet(), AllowlistKey(), ct);
     }
 
     /// <summary>Dispatch core, split from the MCP request shape for testability.</summary>
-    internal async ValueTask<CallToolResult> CallToolAsync(string name, JsonElement args, HashSet<string>? allowed, CancellationToken ct)
+    internal async ValueTask<CallToolResult> CallToolAsync(string name, JsonElement args, HashSet<string>? allowed, string? allowlistKey, CancellationToken ct)
     {
-        var known = _toolRegistry.GetDefinitions().Any(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+        var tool = _toolRegistry.GetDefinitions()
+            .FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
 
-        if (!known || (allowed is not null && !allowed.Contains(name)))
+        if (tool is null)
             return Error($"Tool '{name}' is not available in this context.");
+
+        if (allowed is not null && !allowed.Contains(name))
+        {
+            // agent-correlation Modules 2/3: a tool that exists but was filtered out of this
+            // turn's allowlist gets a distinguishable error — the agent can relay the scope hint
+            // instead of guessing, and the tracker tick lets the turn result offer a
+            // scope-widened retry.
+            _outOfScopeCalls.RecordOutOfScopeCall(allowlistKey);
+            return new CallToolResult
+            {
+                Content = [new TextContentBlock
+                {
+                    Text = JsonSerializer.Serialize(new
+                    {
+                        error = "tool_out_of_scope",
+                        tool = name,
+                        area = tool.FeatureArea.ToString(),
+                        message = $"Tool '{name}' belongs to a different area than this turn's scope. " +
+                            "Tell the user to enable \"Search across my whole workspace\" to reach it.",
+                    }),
+                }],
+                IsError = true,
+            };
+        }
 
         var result = await _toolRegistry.ExecuteAsync(name, args, ct);
         return new CallToolResult
