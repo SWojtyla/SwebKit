@@ -267,6 +267,12 @@ app.UseExceptionHandler(ex =>
     ex.Run(async context =>
     {
         var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+
+        // The client aborted (e.g. switched Redis cache or closed the page mid-request) — there is
+        // nobody to answer, and logging it as an unhandled error is pure noise.
+        if (exception is OperationCanceledException && context.RequestAborted.IsCancellationRequested)
+            return;
+
         var statusCode = exception switch
         {
             InvalidOperationException => 400,
@@ -281,6 +287,10 @@ app.UseExceptionHandler(ex =>
             // Mapped centrally rather than per-endpoint so every Azure-backed route answers the same
             // way — and so it is logged, which the old endpoint-local `catch` never did.
             Azure.Identity.AuthenticationFailedException => 401,
+            // Upstream-connection failures — an unreachable or misbehaving Redis/storage server is
+            // an expected operational condition (e.g. switching to a dead cache), not a bug, so a
+            // 502 tells the UI "the backend couldn't reach it" instead of a generic 500.
+            StackExchange.Redis.RedisException or System.Net.Sockets.SocketException or TimeoutException => 502,
             _ => 500,
         };
         context.Response.StatusCode = statusCode;
@@ -316,6 +326,9 @@ app.UseExceptionHandler(ex =>
             message = exception switch
             {
                 Azure.Identity.AuthenticationFailedException => "Azure authentication failed. Sign in again (for example `az login`) and retry.",
+                // SDK messages can embed endpoints or connection config — the same sanitized
+                // classification the connection-test endpoints return.
+                _ when statusCode == 502 => ConnectionTestError.Describe(exception!),
                 not null => exception.Message,
                 null => "Internal server error",
             };

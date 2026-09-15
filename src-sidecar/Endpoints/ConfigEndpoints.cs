@@ -95,6 +95,10 @@ public static class ConfigEndpoints
         }
         data.Config?.StorageAccounts?.RemoveAll(a => a.Id == DemoModeService.DemoStorageId);
 
+        // Snapshot the old cache list before the replace — StaleRedisCacheIds diffs it against
+        // the incoming one per cache id.
+        var previousRedisCaches = repo.GetProfileData().Config?.RedisConfig?.Caches;
+
         repo.ReplaceProfileData(data);
         await repo.SaveAsync();
         // A save may have edited a connection string, credential key or auth mode; drop every
@@ -102,10 +106,36 @@ public static class ConfigEndpoints
         // client built from stale credentials. Redis and Service Bus cache clients for the same
         // reason storage does, so they go stale the same way.
         storagePool.InvalidateAll();
-        redisPool.InvalidateAll();
         serviceBusPool.InvalidateAll();
+        // Redis gets targeted eviction instead of InvalidateAll: the Redis page persists its
+        // selected cache on every switch (that PUT lands here), and tearing down every pooled
+        // connection for an ActiveCacheId-only change would force a reconnect — and could dispose
+        // a client an in-flight request is still using — on each switch.
+        foreach (var staleId in StaleRedisCacheIds(previousRedisCaches, data.Config?.RedisConfig?.Caches))
+            redisPool.Evict(staleId);
         return Results.Ok();
     }
+
+    /// <summary>
+    /// Ids of Redis caches whose pooled client a profile save must drop: the cache was removed, or
+    /// a connection-affecting field changed. <c>DisplayName</c>/<c>ActiveCacheId</c>/
+    /// <c>NamespaceSeparator</c> edits don't affect connections, so those pooled clients stay warm.
+    /// </summary>
+    internal static IEnumerable<string> StaleRedisCacheIds(
+        IReadOnlyList<RedisCacheEntry>? before,
+        IReadOnlyList<RedisCacheEntry>? after)
+    {
+        var afterById = (after ?? []).ToDictionary(c => c.Id);
+        foreach (var old in before ?? [])
+            if (!afterById.TryGetValue(old.Id, out var updated) || !SameConnection(old, updated))
+                yield return old.Id;
+    }
+
+    private static bool SameConnection(RedisCacheEntry a, RedisCacheEntry b) =>
+        a.ConnectionString == b.ConnectionString &&
+        a.Database == b.Database &&
+        a.UseAad == b.UseAad &&
+        a.CacheName == b.CacheName;
 
     internal static IResult GetEnvironments(EnvironmentRepository repo) =>
         Results.Ok(new { repo.Environments, repo.UiState });

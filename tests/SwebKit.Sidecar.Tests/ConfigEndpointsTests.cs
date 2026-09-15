@@ -32,14 +32,15 @@ internal sealed class TrackingStorageConnectionPool : IStorageConnectionPool
     public void InvalidateAll() => InvalidateAllCallCount++;
 }
 
-/// <summary>Redis counterpart of <see cref="TrackingStorageConnectionPool"/>.</summary>
+/// <summary>Redis counterpart of <see cref="TrackingStorageConnectionPool"/>, also recording targeted evictions.</summary>
 internal sealed class TrackingRedisConnectionPool : IRedisConnectionPool
 {
     public int InvalidateAllCallCount { get; private set; }
+    public List<string> EvictedIds { get; } = [];
 
     public ValueTask<IRedisClient> GetOrCreateAsync(RedisCacheEntry cache, CancellationToken ct = default) =>
         throw new NotSupportedException();
-    public void Evict(string cacheId) { }
+    public void Evict(string cacheId) => EvictedIds.Add(cacheId);
     public void InvalidateAll() => InvalidateAllCallCount++;
 }
 
@@ -230,16 +231,41 @@ public class ConfigEndpointsTests
     }
 
     [Fact]
-    public async Task SaveProfileAsync_InvalidatesEveryConnectionPool()
+    public async Task SaveProfileAsync_InvalidatesStorageAndServiceBus_EvictsOnlyStaleRedisCaches()
     {
-        // A save may have edited a storage account's, Redis cache's or Service Bus namespace's
-        // connection string, credential key or auth mode — every cached client must be dropped so
-        // the next request picks up the new config. Redis and Service Bus cache clients for the
-        // same reason storage does, so leaving either out would serve requests from a client built
-        // with credentials the user just changed.
+        // A save may have edited a storage account's or Service Bus namespace's connection string,
+        // credential key or auth mode — every cached client must be dropped so the next request
+        // picks up the new config.
+        //
+        // Redis is the exception: it gets targeted eviction, because the Redis page persists its
+        // selected cache on every switch and that PUT lands here — wholesale invalidation would
+        // tear down every pooled Redis connection (and could dispose one an in-flight request is
+        // using) each time the user just changes which cache they're looking at.
         using var sandbox = new AppDataSandbox();
         var profile = new ProfileRepository();
-        var data = profile.GetProfileData();
+        profile.GetProfileData().Config.RedisConfig = new RedisConfig
+        {
+            Caches =
+            [
+                new RedisCacheEntry { Id = "unchanged", ConnectionString = "a:6379" },
+                new RedisCacheEntry { Id = "edited", ConnectionString = "old:6379" },
+                new RedisCacheEntry { Id = "removed", ConnectionString = "gone:6379" },
+            ],
+            ActiveCacheId = "unchanged",
+        };
+        // The PUT body arrives as a fresh object graph, so build one the same way — handing the
+        // handler the live repository object would diff the cache list against itself.
+        var data = new ProfileData();
+        data.Config.RedisConfig = new RedisConfig
+        {
+            Caches =
+            [
+                new RedisCacheEntry { Id = "unchanged", ConnectionString = "a:6379" },
+                new RedisCacheEntry { Id = "edited", ConnectionString = "new:6379" },
+            ],
+            // Selection-only change — must NOT evict anything.
+            ActiveCacheId = "edited",
+        };
         var storagePool = new TrackingStorageConnectionPool();
         var redisPool = new TrackingRedisConnectionPool();
         var serviceBusPool = new TrackingServiceBusConnectionPool();
@@ -247,8 +273,36 @@ public class ConfigEndpointsTests
         await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool, redisPool, serviceBusPool);
 
         Assert.Equal(1, storagePool.InvalidateAllCallCount);
-        Assert.Equal(1, redisPool.InvalidateAllCallCount);
         Assert.Equal(1, serviceBusPool.InvalidateAllCallCount);
+        Assert.Equal(0, redisPool.InvalidateAllCallCount);
+        Assert.Equal(["edited", "removed"], redisPool.EvictedIds);
+    }
+
+    [Fact]
+    public void StaleRedisCacheIds_OnlyFlagsRemovedOrConnectionChangedCaches()
+    {
+        var before = new List<RedisCacheEntry>
+        {
+            new() { Id = "same", ConnectionString = "a:6379" },
+            new() { Id = "renamed", ConnectionString = "b:6379", DisplayName = "Old name" },
+            new() { Id = "connstring-changed", ConnectionString = "old:6379" },
+            new() { Id = "aad-changed", UseAad = true, CacheName = "old-cache" },
+            new() { Id = "removed", ConnectionString = "x:6379" },
+        };
+        var after = new List<RedisCacheEntry>
+        {
+            new() { Id = "same", ConnectionString = "a:6379" },
+            // DisplayName doesn't affect the connection — not stale.
+            new() { Id = "renamed", ConnectionString = "b:6379", DisplayName = "New name" },
+            new() { Id = "connstring-changed", ConnectionString = "new:6379" },
+            new() { Id = "aad-changed", UseAad = true, CacheName = "new-cache" },
+            // Newly added — nothing pooled for it yet, so nothing to evict.
+            new() { Id = "added", ConnectionString = "new:6380" },
+        };
+
+        Assert.Equal(
+            ["connstring-changed", "aad-changed", "removed"],
+            ConfigEndpoints.StaleRedisCacheIds(before, after).ToList());
     }
 
     // ── Environments ─────────────────────────────────────────────────────────

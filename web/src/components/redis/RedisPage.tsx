@@ -65,6 +65,18 @@ function RedisPageContent() {
             ))}
           </select>
         )}
+        {serverInfo.isLoading && (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="redis-connection-status">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground" />
+            Connecting…
+          </span>
+        )}
+        {serverInfo.isError && (
+          <span className="flex items-center gap-1.5 text-xs text-destructive" data-testid="redis-connection-status">
+            <span className="h-2 w-2 rounded-full bg-destructive" />
+            Connection failed
+          </span>
+        )}
         {serverInfo.data && (
           <span className="flex items-center gap-1.5 text-xs text-success" data-testid="redis-connection-status">
             <span className="h-2 w-2 rounded-full bg-success" />

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildNamespaceTree, collectAllNamespacePaths, defaultExpandedNamespacePaths } from "./RedisPageContext";
+import { buildNamespaceTree, collectAllNamespacePaths, collectSubtreeKeys } from "./RedisPageContext";
 
 // Fixture: a two-level keyspace (`user:*`, `cache:products:*`) plus one root-level bare key
 // (`session`) that has no separator at all, so it falls into the synthetic "(no prefix)" bucket.
@@ -25,20 +25,26 @@ describe("collectAllNamespacePaths", () => {
   });
 });
 
-describe("defaultExpandedNamespacePaths", () => {
-  it("expands only root-level namespaces, not nested descendants", () => {
+describe("collectSubtreeKeys", () => {
+  it("returns the node's own keys plus every descendant's", () => {
     const tree = buildNamespaceTree(keys, ":");
-    const paths = defaultExpandedNamespacePaths(tree);
-
-    // Root-level namespaces only — "cache:products" (a child of "cache") must NOT be included,
-    // which is exactly the "collapsed by default" behavior this initiative's Redis unit (2.1)
-    // fixes: a multi-level keyspace should open showing its top-level groups, not every nested
-    // folder at once.
-    expect(paths).toEqual(new Set(["user", "cache", "(no prefix)"]));
-    expect(paths.has("cache:products")).toBe(false);
+    const cache = tree.find((n) => n.path === "cache")!;
+    expect(collectSubtreeKeys(cache).sort()).toEqual([
+      "cache:categories",
+      "cache:products:1",
+      "cache:products:2",
+    ]);
   });
 
-  it("returns an empty set for an empty tree", () => {
-    expect(defaultExpandedNamespacePaths([])).toEqual(new Set());
+  it("returns only the leaf's own keys for a leaf namespace", () => {
+    const tree = buildNamespaceTree(keys, ":");
+    const products = tree.find((n) => n.path === "cache")!.children.get("products")!;
+    expect(collectSubtreeKeys(products).sort()).toEqual(["cache:products:1", "cache:products:2"]);
+  });
+
+  it("covers loose keys under the (no prefix) bucket", () => {
+    const tree = buildNamespaceTree(keys, ":");
+    const fallback = tree.find((n) => n.path === "(no prefix)")!;
+    expect(collectSubtreeKeys(fallback)).toEqual(["session"]);
   });
 });
