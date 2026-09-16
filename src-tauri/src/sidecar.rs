@@ -29,9 +29,13 @@ pub struct SidecarState {
 
 /// How long we wait for the sidecar to report it's actually listening before
 /// giving up. Generous because a first-run .NET self-contained publish can be
-/// slower to JIT/start than a warm one.
+/// slower to JIT/start than a warm one — and on an overloaded machine (single-file
+/// extraction + AV scan + JIT all competing for CPU/IO) even a warm start can
+/// blow well past a short timeout. Exceeding this is no longer fatal: `manage`
+/// opens the app in its degraded "Disconnected" state and keeps retrying in the
+/// background instead of letting the error kill the whole app during setup.
 #[cfg(not(debug_assertions))]
-const READY_TIMEOUT: Duration = Duration::from_secs(15);
+const READY_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Spawns the .NET sidecar process and returns the port it's listening on.
 /// In dev mode, the sidecar is expected to already be running (dotnet run).
@@ -186,29 +190,40 @@ fn watch_for_crash(app: AppHandle, watched_pid: u32) {
         eprintln!("[swebkit] Sidecar (pid {watched_pid}) exited unexpectedly — attempting automatic recovery");
         let _ = app.emit("sidecar-crashed", ());
 
-        for attempt in 1..=3u32 {
-            std::thread::sleep(Duration::from_secs(attempt as u64));
-            match spawn_sidecar(&app) {
-                Ok((port, Some(new_child))) => {
-                    let new_pid = new_child.id();
-                    let Some(state) = app.try_state::<SidecarState>() else {
-                        return; // app shut down mid-recovery
-                    };
-                    *state.child.lock().unwrap() = Some(new_child);
-                    *state.port.lock().unwrap() = port;
-                    eprintln!("[swebkit] Sidecar auto-recovered on attempt {attempt}, now listening on {port}");
-                    let _ = app.emit("sidecar-restarted", port);
-                    watch_for_crash(app, new_pid); // hand off supervision to a fresh watch cycle
-                    return;
-                }
-                Ok((_, None)) => return, // dev mode — nothing to supervise
-                Err(e) => eprintln!("[swebkit] Sidecar auto-respawn attempt {attempt} failed: {e}"),
-            }
-        }
-
-        eprintln!("[swebkit] Sidecar auto-recovery gave up after 3 attempts — manual restart required");
-        let _ = app.emit("sidecar-recovery-failed", ());
+        respawn_with_retries(app);
     });
+}
+
+/// Retries `spawn_sidecar` with backoff; on success stores the new child/port in
+/// `SidecarState`, emits `sidecar-restarted`, and hands the process off to
+/// `watch_for_crash` for supervision. Shared by the post-crash recovery in
+/// `watch_for_crash` and the startup retry path in `manage`, which uses it when
+/// the very first spawn fails (e.g. an overloaded machine where .NET needs
+/// longer than READY_TIMEOUT just to boot).
+#[cfg(not(debug_assertions))]
+fn respawn_with_retries(app: AppHandle) {
+    for attempt in 1..=3u32 {
+        std::thread::sleep(Duration::from_secs(attempt as u64));
+        match spawn_sidecar(&app) {
+            Ok((port, Some(new_child))) => {
+                let new_pid = new_child.id();
+                let Some(state) = app.try_state::<SidecarState>() else {
+                    return; // app shut down mid-recovery
+                };
+                *state.child.lock().unwrap() = Some(new_child);
+                *state.port.lock().unwrap() = port;
+                eprintln!("[swebkit] Sidecar (re)spawned on attempt {attempt}, now listening on {port}");
+                let _ = app.emit("sidecar-restarted", port);
+                watch_for_crash(app, new_pid); // hand off supervision to a fresh watch cycle
+                return;
+            }
+            Ok((_, None)) => return, // dev mode — nothing to supervise
+            Err(e) => eprintln!("[swebkit] Sidecar (re)spawn attempt {attempt} failed: {e}"),
+        }
+    }
+
+    eprintln!("[swebkit] Sidecar auto-recovery gave up after 3 attempts — manual restart required");
+    let _ = app.emit("sidecar-recovery-failed", ());
 }
 
 /// Tauri command: get the sidecar port for the frontend to use.
@@ -239,16 +254,43 @@ pub fn restart_sidecar(app: AppHandle, state: State<SidecarState>) -> Result<u16
     Ok(port)
 }
 
-/// Builds initial sidecar state at app startup. Propagates spawn failure to the
-/// caller instead of silently falling back to a fixed port that may not
-/// actually have anything listening on it.
+/// Builds initial sidecar state at app startup. A spawn failure is NOT fatal:
+/// on an overloaded machine the sidecar can exceed READY_TIMEOUT merely because
+/// .NET is slow to boot, and propagating the error would kill the whole app
+/// inside `setup()` — which, in a `windows_subsystem = "windows"` build with no
+/// console to print the panic, surfaces to the user as a silent startup crash.
+/// Instead the app opens with `port = 0` (the frontend falls back to its default,
+/// fails health checks, and shows its existing "Disconnected" state with a
+/// Reconnect button) while a background thread keeps retrying the spawn and
+/// emits the usual sidecar-* lifecycle events the UI already handles.
 pub fn manage(app: &AppHandle) -> Result<SidecarState, String> {
-    let (port, child) = spawn_sidecar(app)?;
-    start_supervision(app, &child);
-    Ok(SidecarState {
-        child: Mutex::new(child),
-        port: Mutex::new(port),
-    })
+    match spawn_sidecar(app) {
+        Ok((port, child)) => {
+            start_supervision(app, &child);
+            Ok(SidecarState {
+                child: Mutex::new(child),
+                port: Mutex::new(port),
+            })
+        }
+        Err(e) => {
+            eprintln!(
+                "[swebkit] Sidecar failed to start ({e}) — continuing without a backend; \
+                 spawn retries continue in the background and Reconnect remains available"
+            );
+            #[cfg(not(debug_assertions))]
+            {
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    let _ = app.emit("sidecar-crashed", ());
+                    respawn_with_retries(app);
+                });
+            }
+            Ok(SidecarState {
+                child: Mutex::new(None),
+                port: Mutex::new(0),
+            })
+        }
+    }
 }
 
 /// Kills the sidecar child process, if any. Called on app exit so the sidecar

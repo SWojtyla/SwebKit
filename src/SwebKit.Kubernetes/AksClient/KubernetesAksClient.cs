@@ -21,6 +21,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
+using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 
@@ -926,7 +927,12 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     /// field can't unmarshal a JSON string) while unquoted numeric-looking annotation values
     /// (e.g. a revision "251") also can't round-trip safely. Editing the node tree directly and
     /// only removing specific mapping entries leaves every other node's original style/type
-    /// completely untouched.
+    /// completely untouched, with one deliberate exception: plain scalars in positions the
+    /// Kubernetes API declares as strings (<c>env[].value</c>, labels, annotations, ConfigMap
+    /// data, …) are force-quoted — see <see cref="SanitizeYamlForApply"/>. Without that, a value
+    /// like <c>9010_31</c> (a legal plain string under YamlDotNet's YAML 1.2 rules) is re-read
+    /// by kubectl's YAML 1.1 parser as the integer 901031 and the API server rejects the apply
+    /// with "cannot convert int64 to string".
     /// </remarks>
     internal static string CleanEditableYaml(string rawYaml)
     {
@@ -950,9 +956,203 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
             }
         }
 
+        QuoteStringTypedScalars(root);
+
         using var writer = new StringWriter();
         yamlStream.Save(writer, assignAnchors: false);
         return writer.ToString();
+    }
+
+    /// <summary>
+    /// Re-emits a user-edited manifest with explicit double-quoting on every plain scalar that
+    /// sits in a position the Kubernetes API declares as string-typed but that kubectl's
+    /// YAML 1.1 parser (go-yaml) would silently reinterpret as a number, bool, or timestamp —
+    /// YamlDotNet serializes under YAML 1.2 rules where <c>value: 9010_31</c> is a legal plain
+    /// string, but go-yaml reads it as the integer 901031 and the API server rejects the apply
+    /// with "cannot convert int64 to string". The same applies to numeric-looking values a user
+    /// types unquoted while editing (e.g. changing <c>value: "5"</c> to <c>value: 1</c>).
+    /// </summary>
+    /// <remarks>
+    /// When no scalar needs re-quoting the original text is returned verbatim — re-saving
+    /// through YamlDotNet would needlessly drop comments and reflow the user's formatting.
+    /// Malformed YAML is also returned untouched so kubectl reports its own syntax error.
+    /// </remarks>
+    internal static string SanitizeYamlForApply(string yaml)
+    {
+        var yamlStream = new YamlStream();
+        try
+        {
+            using var reader = new StringReader(yaml);
+            yamlStream.Load(reader);
+        }
+        catch (YamlException)
+        {
+            return yaml;
+        }
+
+        var changed = false;
+        foreach (var document in yamlStream.Documents)
+        {
+            if (document.RootNode is YamlMappingNode root)
+                changed |= QuoteStringTypedScalars(root);
+        }
+
+        if (!changed)
+            return yaml;
+
+        using var writer = new StringWriter();
+        yamlStream.Save(writer, assignAnchors: false);
+        return writer.ToString();
+    }
+
+    /// <summary>
+    /// Plain scalars matching this pattern resolve to a non-string type under YAML 1.1 rules
+    /// (what kubectl's go-yaml uses): null, booleans (<c>y/n/yes/no/true/false/on/off</c>),
+    /// ints and floats in any base (including underscore separators like <c>9010_31</c>, hex,
+    /// octal, binary, and sexagesimal like <c>1:30</c>), <c>.inf</c>/<c>.nan</c>, and
+    /// date/timestamp literals. In string-typed manifest positions such scalars must be quoted
+    /// or the API server receives the wrong JSON type; anything else can stay plain.
+    /// </summary>
+    private static readonly Regex Yaml11NonStringScalarRegex = new(
+        @"^(~|[Nn][Uu][Ll][Ll]|NULL|[Yy]|[Nn]|[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Nn]|[Oo][Ff][Ff]" +
+        @"|[-+]?(\.[0-9]+([eE][-+]?[0-9]+)?|[0-9][0-9_]*(\.[0-9_]*)?([eE][-+]?[0-9]+)?|0[xX][0-9a-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+" +
+        @"|[0-9][0-9_]*(:[0-5]?[0-9])+(\.[0-9]*)?|\.(inf|Inf|INF|nan|NaN|NAN))" +
+        @"|[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}([Tt ].*)?)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Force-quotes plain scalars in positions the Kubernetes API defines as strings when they
+    /// would resolve to a non-string under YAML 1.1:
+    /// <c>env[].value</c> and <c>tolerations[].value</c> entries in any container list (covers
+    /// Pod specs and workload pod templates at any depth), string-map values under
+    /// <c>labels</c>/<c>annotations</c>/<c>matchLabels</c>/<c>nodeSelector</c>, items of the
+    /// <c>command</c>/<c>args</c>/<c>finalizers</c> string lists, and the
+    /// <c>data</c>/<c>stringData</c>/<c>binaryData</c> maps of top-level ConfigMaps and Secrets.
+    /// Returns whether any scalar was restyled.
+    /// </summary>
+    private static bool QuoteStringTypedScalars(YamlMappingNode root)
+    {
+        var changed = QuoteAmbiguousStringScalars(root);
+
+        var dataKeys = GetChildScalarValue(root, "kind") switch
+        {
+            "ConfigMap" => new[] { "data", "binaryData" },
+            "Secret" => new[] { "data", "stringData", "binaryData" },
+            _ => []
+        };
+        foreach (var dataKey in dataKeys)
+        {
+            if (root.Children.TryGetValue(new YamlScalarNode(dataKey), out var dataNode) &&
+                dataNode is YamlMappingNode dataMap)
+            {
+                foreach (var value in dataMap.Children.Values)
+                    changed |= QuoteIfAmbiguousPlainScalar(value);
+            }
+        }
+
+        return changed;
+    }
+
+    private static bool QuoteAmbiguousStringScalars(YamlNode node)
+    {
+        var changed = false;
+        switch (node)
+        {
+            case YamlMappingNode mapping:
+                foreach (var (key, value) in mapping.Children)
+                {
+                    switch (key is YamlScalarNode keyScalar ? keyScalar.Value : null)
+                    {
+                        case "env" or "tolerations" when value is YamlSequenceNode entries:
+                            foreach (var entry in entries.Children.OfType<YamlMappingNode>())
+                                changed |= QuoteChildScalar(entry, "value");
+                            break;
+                        case "labels" or "annotations" or "matchLabels" or "nodeSelector"
+                            when value is YamlMappingNode stringMap:
+                            foreach (var mapValue in stringMap.Children.Values)
+                                changed |= QuoteIfAmbiguousPlainScalar(mapValue);
+                            break;
+                        case "command" or "args" or "finalizers" when value is YamlSequenceNode items:
+                            foreach (var item in items.Children)
+                                changed |= QuoteIfAmbiguousPlainScalar(item);
+                            break;
+                        default:
+                            changed |= QuoteAmbiguousStringScalars(value);
+                            break;
+                    }
+                }
+                break;
+            case YamlSequenceNode sequence:
+                foreach (var item in sequence.Children)
+                    changed |= QuoteAmbiguousStringScalars(item);
+                break;
+        }
+        return changed;
+    }
+
+    private static string? GetChildScalarValue(YamlMappingNode mapping, string key)
+        => mapping.Children.TryGetValue(new YamlScalarNode(key), out var node) &&
+            node is YamlScalarNode scalar
+            ? scalar.Value
+            : null;
+
+    private static bool QuoteChildScalar(YamlMappingNode mapping, string key)
+        => mapping.Children.TryGetValue(new YamlScalarNode(key), out var node) &&
+            QuoteIfAmbiguousPlainScalar(node);
+
+    private static bool QuoteIfAmbiguousPlainScalar(YamlNode node)
+    {
+        if (node is not YamlScalarNode { Style: ScalarStyle.Plain } scalar ||
+            scalar.Value is not { Length: > 0 } value ||
+            !Yaml11NonStringScalarRegex.IsMatch(value))
+        {
+            return false;
+        }
+        scalar.Style = ScalarStyle.DoubleQuoted;
+        return true;
+    }
+
+    /// <summary>
+    /// Total match length (including the <c>Invalid value: "</c> framing) above which an
+    /// embedded object dump is collapsed. Short values like <c>Invalid value: "abc"</c> stay
+    /// readable; the multi-KB <c>map[…]</c> payloads kubectl embeds in apply errors do not.
+    /// </summary>
+    private const int MaxPreservedInvalidValueLength = 140;
+
+    /// <summary>
+    /// Matches <c>Invalid value: "…"</c> fragments in kubectl/APIServer errors, including
+    /// payloads containing escaped quotes (<c>\"</c>), which is how Go formats the nested
+    /// JSON inside a <c>last-applied-configuration</c> annotation dump.
+    /// </summary>
+    private static readonly Regex KubectlInvalidValueDumpRegex = new(
+        @"Invalid value: ""(?:\\.|[^""\\])+""",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Reduces raw kubectl stderr to the actionable error: drops <c>Warning:</c> prologues
+    /// (like the missing last-applied-configuration notice), collapses embedded object dumps —
+    /// <c>Invalid value: "map[…]"</c> can run to tens of KB while the useful part is the reason
+    /// that follows it — and caps the result so it fits an error notification instead of
+    /// flooding the panel with the full apply payload. The full stderr is still written to the
+    /// log by callers before this runs, so no diagnostic detail is lost.
+    /// </summary>
+    internal static string CondenseKubectlError(string stderr)
+    {
+        var lines = stderr
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static l => !l.StartsWith("Warning:", StringComparison.Ordinal))
+            .ToList();
+
+        var message = lines.Count == 0 ? stderr.Trim() : string.Join(' ', lines);
+
+        message = KubectlInvalidValueDumpRegex.Replace(
+            message,
+            static m => m.Length > MaxPreservedInvalidValueLength ? "Invalid value: \"…\"" : m.Value);
+
+        const int maxLength = 400;
+        return message.Length <= maxLength
+            ? message
+            : string.Concat(message.AsSpan(0, 160), " … ", message.AsSpan(message.Length - 200));
     }
 
     private async Task<string> GetHelmManifestAsync(string ns, string releaseName, CancellationToken ct)
@@ -1354,7 +1554,14 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     public async Task ApplyResourceYamlAsync(string ns, string kind, string name, string yaml, CancellationToken ct = default)
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"swebkit-apply-{Guid.NewGuid():N}.yaml");
-        await File.WriteAllTextAsync(tempFile, yaml, ct).ConfigureAwait(false);
+        var sanitized = SanitizeYamlForApply(yaml);
+        if (!string.Equals(sanitized, yaml, StringComparison.Ordinal))
+        {
+            _logger.LogInformation(
+                "Re-quoted string-typed scalars in the manifest for {Kind}/{Name} in {Namespace} before apply (YAML 1.1 numeric-looking strings would otherwise reach the API server as non-strings)",
+                kind, name, ns);
+        }
+        await File.WriteAllTextAsync(tempFile, sanitized, ct).ConfigureAwait(false);
         try
         {
             var (exitCode, stderr) = await RunKubectlApplyAsync(tempFile, ns, ct).ConfigureAwait(false);
@@ -1372,7 +1579,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                             _logger.LogWarning(
                                 "kubectl apply failed for {Kind}/{Name} in {Namespace} after credential refresh (exit {ExitCode}): {Output}",
                                 kind, name, ns, retryExit, retryStderr);
-                            throw new InvalidOperationException($"kubectl apply failed after credential refresh (exit {retryExit}): {retryStderr}");
+                            throw new InvalidOperationException($"kubectl apply failed after credential refresh (exit {retryExit}): {CondenseKubectlError(retryStderr)}");
                         }
                     }
                     else
@@ -1380,7 +1587,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                         _logger.LogWarning(
                             "kubectl apply failed for {Kind}/{Name} in {Namespace} with a Forbidden error and no fresh Azure credential was available (exit {ExitCode}): {Output}",
                             kind, name, ns, exitCode, stderr);
-                        throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {stderr}");
+                        throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {CondenseKubectlError(stderr)}");
                     }
                 }
                 else
@@ -1388,7 +1595,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                     _logger.LogWarning(
                         "kubectl apply failed for {Kind}/{Name} in {Namespace} (exit {ExitCode}): {Output}",
                         kind, name, ns, exitCode, stderr);
-                    throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {stderr}");
+                    throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {CondenseKubectlError(stderr)}");
                 }
             }
 
@@ -1403,7 +1610,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     public async Task<string?> ValidateResourceYamlAsync(string ns, string yaml, CancellationToken ct = default)
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"swebkit-validate-{Guid.NewGuid():N}.yaml");
-        await File.WriteAllTextAsync(tempFile, yaml, ct).ConfigureAwait(false);
+        await File.WriteAllTextAsync(tempFile, SanitizeYamlForApply(yaml), ct).ConfigureAwait(false);
         try
         {
             var (exitCode, stderr) = await RunKubectlDryRunAsync(tempFile, ns, ct).ConfigureAwait(false);
@@ -1412,7 +1619,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 _logger.LogWarning(
                     "Server-side dry-run validation failed for a resource in {Namespace} (exit {ExitCode}): {Output}",
                     ns, exitCode, stderr);
-                return stderr.Trim();
+                return CondenseKubectlError(stderr);
             }
             return null;
         }

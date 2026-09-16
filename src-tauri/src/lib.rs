@@ -26,6 +26,22 @@ use git::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // `windows_subsystem = "windows"` gives this process no console, so any panic —
+    // including one inside `.setup()` or the `.expect` on `build()` below — would
+    // otherwise be a completely silent crash with no trace anywhere. Leave a crumb
+    // file in the app-data dir so the next "the app just vanished on launch" report
+    // has something concrete to point at.
+    std::panic::set_hook(Box::new(|info| {
+        let message = format!("swebkit panicked: {info}\n");
+        eprintln!("{message}");
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let dir = std::path::Path::new(&appdata).join("com.companyname.swebkit");
+            if std::fs::create_dir_all(&dir).is_ok() {
+                let _ = std::fs::write(dir.join("last-panic.log"), message);
+            }
+        }
+    }));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -35,8 +51,9 @@ pub fn run() {
         .manage(AllowedRoots::new())
         .setup(|app| {
             let handle = app.handle();
-            // Propagates a spawn failure as a fatal setup error instead of
-            // silently pretending port 5199 is ready when nothing is listening.
+            // Spawn failure is not fatal — manage() degrades to port 0 and retries
+            // in the background rather than panicking during setup (a panic here is
+            // a silent crash in a windows_subsystem="windows" build with no console).
             let state = sidecar::manage(handle)?;
             app.manage(state);
             Ok(())
