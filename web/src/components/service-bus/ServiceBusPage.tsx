@@ -54,7 +54,7 @@ export function ServiceBusPage() {
   const { notify } = useNotification();
   const purgeMutation = useSbPurgeMessages();
 
-  const namespaces = profile?.serviceBusNamespaces ?? [];
+  const namespaces = useMemo(() => profile?.serviceBusNamespaces ?? [], [profile?.serviceBusNamespaces]);
 
   const updateParams = useCallback(
     (updates: Record<string, string | null | undefined>, options?: { replace?: boolean }) => {

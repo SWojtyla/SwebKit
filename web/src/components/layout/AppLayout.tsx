@@ -137,7 +137,7 @@ export function AppLayout() {
       versionClicksRef.current = 0;
       if (userSettings && !userSettings.fathomDeveloperOverride) {
         updateUserSettings.mutate(
-          { ...userSettings, fathomDeveloperOverride: true },
+          (prev) => ({ ...prev, fathomDeveloperOverride: true }),
           { onSuccess: () => notify("success", "Developer override armed", "Fathom is unlocked for this profile only.") },
         );
       }
@@ -311,7 +311,7 @@ export function AppLayout() {
               onClick={() => {
                 toggleTheme();
                 if (userSettings) {
-                  updateUserSettings.mutate({ ...userSettings, theme: useSettingsStore.getState().theme });
+                  updateUserSettings.mutate((prev) => ({ ...prev, theme: useSettingsStore.getState().theme }));
                 }
               }}
               className="rounded-lg border p-2 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"

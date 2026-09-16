@@ -57,7 +57,7 @@ export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
         });
       }, destructive: true },
     ];
-  }, [ws, deleteHttpRoute.mutate]);
+  }, [ws, deleteHttpRoute]);
 
   const handleRowContextMenu = useCallback(
     (e: MouseEvent<HTMLTableRowElement>, route: HttpRouteInfo) => ws.showContextMenu(e, buildMenu(route)),

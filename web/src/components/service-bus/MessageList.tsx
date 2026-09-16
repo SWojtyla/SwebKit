@@ -185,29 +185,31 @@ export function MessageList({
     };
   });
 
+  const entityPath = entity?.entityPath;
+
   // Reload prefs when entity changes
   useEffect(() => {
-    if (nsId && entity) {
-      setPrefs(loadSbPreferences(nsId, entity.entityPath));
+    if (nsId && entityPath) {
+      setPrefs(loadSbPreferences(nsId, entityPath));
     }
-  }, [nsId, entity?.entityPath]);
+  }, [nsId, entityPath]);
 
   // Save prefs on change
   useEffect(() => {
-    if (nsId && entity) {
-      saveSbPreferences(nsId, entity.entityPath, prefs);
+    if (nsId && entityPath) {
+      saveSbPreferences(nsId, entityPath, prefs);
     }
-  }, [prefs, nsId, entity?.entityPath]);
+  }, [prefs, nsId, entityPath]);
 
   const visibleColumns = new Set(prefs.visibleColumns);
   const nsbMode = prefs.nsbMode ?? false;
 
   // Load saved filters when entity changes
   useEffect(() => {
-    if (nsId && entity) {
-      setSavedFilters(loadSavedFilters(nsId, entity.entityPath));
+    if (nsId && entityPath) {
+      setSavedFilters(loadSavedFilters(nsId, entityPath));
     }
-  }, [nsId, entity?.entityPath]);
+  }, [nsId, entityPath]);
 
   // Auto-refresh
   useEffect(() => {

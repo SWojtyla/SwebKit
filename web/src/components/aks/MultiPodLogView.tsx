@@ -152,9 +152,10 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
   // Full teardown on unmount: an SSE stream left open after the panel closes keeps
   // delivering into a dead component.
   useEffect(() => {
+    const sources = sourcesRef.current;
     return () => {
-      for (const es of sourcesRef.current.values()) es.close();
-      sourcesRef.current.clear();
+      for (const es of sources.values()) es.close();
+      sources.clear();
     };
   }, []);
 

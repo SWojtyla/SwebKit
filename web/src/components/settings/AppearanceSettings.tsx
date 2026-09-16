@@ -25,7 +25,7 @@ export function AppearanceSettings() {
 
   const selectTheme = (id: Theme) => {
     setTheme(id);
-    updateSettings.mutate({ ...settings, theme: id });
+    updateSettings.mutate((prev) => ({ ...prev, theme: id }));
   };
 
   return (
@@ -118,12 +118,10 @@ export function AppearanceSettings() {
           className="mt-2 rounded-lg border bg-card px-3 py-2 text-sm"
           data-testid="appearance-font-size"
           value={settings.fontSize ?? "medium"}
-          onChange={(e) =>
-            updateSettings.mutate({
-              ...settings,
-              fontSize: e.target.value as UserSettings["fontSize"],
-            })
-          }
+          onChange={(e) => {
+            const fontSize = e.target.value as UserSettings["fontSize"];
+            updateSettings.mutate((prev) => ({ ...prev, fontSize }));
+          }}
         >
           <option value="small">Small</option>
           <option value="medium">Medium</option>
@@ -138,12 +136,10 @@ export function AppearanceSettings() {
           className="mt-2 rounded-lg border bg-card px-3 py-2 text-sm"
           data-testid="appearance-density"
           value={settings.density ?? "comfortable"}
-          onChange={(e) =>
-            updateSettings.mutate({
-              ...settings,
-              density: e.target.value as UserSettings["density"],
-            })
-          }
+          onChange={(e) => {
+            const density = e.target.value as UserSettings["density"];
+            updateSettings.mutate((prev) => ({ ...prev, density }));
+          }}
         >
           <option value="comfortable">Comfortable</option>
           <option value="compact">Compact</option>

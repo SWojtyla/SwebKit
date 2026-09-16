@@ -44,7 +44,7 @@ export function IngressesTab({ ns, isMulti }: IngressesTabProps) {
         });
       }, destructive: true },
     ];
-  }, [ws, deleteIngress.mutate]);
+  }, [ws, deleteIngress]);
 
   const handleRowContextMenu = useCallback(
     (e: MouseEvent<HTMLTableRowElement>, ing: IngressInfo) => ws.showContextMenu(e, buildMenu(ing)),

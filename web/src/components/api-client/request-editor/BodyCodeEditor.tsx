@@ -70,6 +70,9 @@ export function BodyCodeEditor({ value, mode, onChange, scope }: BodyCodeEditorP
       view.destroy();
       viewRef.current = null;
     };
+    // Mount-once: mode/scope are pushed in via compartment reconfiguration below so
+    // the view keeps cursor, scroll and undo history.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

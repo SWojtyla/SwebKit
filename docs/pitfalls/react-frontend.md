@@ -239,6 +239,26 @@ save is indistinguishable from the user never having typed anything.
 Corollary for tests: once saves are serialized, an assertion fired immediately after the action can
 read the pre-save state. Use `expect.poll`, not a single `allTextContents()`.
 
+### An updater function must not read `e.target` — it runs after React restored the DOM
+
+Updater functions (`mutate((prev) => …)`) are evaluated inside `mutationFn`, which the mutation
+`scope` defers until the previous save settles — *after* the event handler returns and after React
+has already restored the controlled input's DOM value back to the prop. So
+`mutate((prev) => ({ ...prev, x: e.target.value }))` reads the *reverted* value, not the one the
+user picked: `selectOption("large")` in Playwright produced a PUT body with `"medium"`. Capture DOM
+reads eagerly before the mutate call:
+
+```ts
+onChange={(e) => {
+  const fontSize = e.target.value as UserSettings["fontSize"];
+  updateSettings.mutate((prev) => ({ ...prev, fontSize }));
+}}
+```
+
+`useUpdateUserSettings` takes `UserSettings | ((prev) => UserSettings)` — same convention as
+`useUpdateProfile`; spread `prev`, never the render-time `settings`, or a fast second edit reverts
+the first (the appearance font-size/density regression was exactly that, layered under this one).
+
 ### A `queryFn` that ignores `signal` keeps the server working for an answer nobody wants
 
 TanStack hands every `queryFn` an `AbortSignal`. Every hook here ignored it, because `apiFetch`
