@@ -9,6 +9,11 @@
          GetHealth() in SystemEndpoints.cs reads this at runtime rather than hardcoding a string,
          so the status bar version can't silently drift from the app version again. -->
     <Version>0.2.0</Version>
+    <!-- English-only tool: keep non-English satellite resource assemblies out of the publish.
+         ScriptDom ships zh-Hant/zh-Hans/etc. resources, and WiX light.exe derives the MSI
+         File.Language column from their version info — zh-Hant is not a valid MSI language id,
+         so the MSI link dies on ICE03 "Invalid Language Id". -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
