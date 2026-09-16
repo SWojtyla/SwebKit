@@ -1,6 +1,7 @@
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Models;
 
 namespace SwebKit.Sidecar.Services;
 
@@ -68,7 +69,7 @@ public sealed class WorkspaceRelationshipSuggestionService
 
             var (ns, deployment) = (parts[0], parts[1]);
 
-            List<string> haystack;
+            Haystack haystack;
             try
             {
                 haystack = await CollectHaystackAsync(client, ns, deployment, ct);
@@ -93,15 +94,22 @@ public sealed class WorkspaceRelationshipSuggestionService
                 if (matchFragment is null)
                     continue;
 
-                var isMatch = haystack.Any(value => value.Contains(matchFragment, StringComparison.OrdinalIgnoreCase));
-                if (isMatch)
+                var configMatch = haystack.ConfigValues.Any(value => value.Contains(matchFragment, StringComparison.OrdinalIgnoreCase));
+                // Config wins over logs for the same pair — a config hit is stronger evidence, and
+                // one suggestion per pair regardless of how many sources matched.
+                var logMatch = !configMatch &&
+                    haystack.LogLines.Any(line => line.Contains(matchFragment, StringComparison.OrdinalIgnoreCase));
+                if (configMatch || logMatch)
                 {
                     suggestions.Add(new WorkspaceRelationshipSuggestion
                     {
                         FromNodeId = aksNode.Id,
                         ToNodeId = otherNode.Id,
-                        Reason = $"Pod config in {ns}/{deployment} contains a value matching \"{otherNode.DisplayLabel}\" "
-                            + "— based on matching names in pod configuration; may miss or misidentify real relationships.",
+                        Reason = configMatch
+                            ? $"Pod config in {ns}/{deployment} contains a value matching \"{otherNode.DisplayLabel}\" "
+                                + "— based on matching names in pod configuration; may miss or misidentify real relationships."
+                            : $"Recent pod logs in {ns}/{deployment} mention \"{otherNode.DisplayLabel}\" "
+                                + "— weaker evidence than configuration (names can appear in error text); confirm before accepting.",
                     });
                 }
             }
@@ -110,25 +118,51 @@ public sealed class WorkspaceRelationshipSuggestionService
         return suggestions;
     }
 
-    private static async Task<List<string>> CollectHaystackAsync(IAksClient client, string ns, string deployment, CancellationToken ct)
+    /// <summary>Config values (env vars + ConfigMaps) and recent pod-log lines as separate
+    /// haystacks — a log hit produces a differently-worded, lower-confidence Reason than a config
+    /// hit, so the two sources can't be merged into one list.</summary>
+    private sealed record Haystack(List<string> ConfigValues, List<string> LogLines);
+
+    /// <summary>Cap on log lines collected per pod — recent lines are what matter (a crashlooping
+    /// pod surfaces the resource it was trying to reach in its last lines), and the suggestion
+    /// scan shouldn't read an unbounded log stream.</summary>
+    private const int MaxLogLines = 100;
+
+    private static async Task<Haystack> CollectHaystackAsync(IAksClient client, string ns, string deployment, CancellationToken ct)
     {
-        var haystack = new List<string>();
+        var configValues = new List<string>();
+        var logLines = new List<string>();
 
         var pods = await client.GetPodsAsync(ns, ct: ct);
         var matchingPod = pods.FirstOrDefault(p => p.Name.StartsWith(deployment + "-", StringComparison.OrdinalIgnoreCase));
         if (matchingPod is not null)
         {
             var containers = await client.GetContainerDetailsAsync(ns, matchingPod.Name, ct);
-            haystack.AddRange(containers
+            configValues.AddRange(containers
                 .SelectMany(c => c.EnvVars)
                 .Select(e => e.Value)
                 .Where(v => !string.IsNullOrEmpty(v))!);
+
+            // agent-correlation Module 6: recent logs are a second haystack — a pod whose config
+            // only names a Secret reference (which the scan can't read) still names the resource
+            // it was trying to reach in its log lines.
+            try
+            {
+                var opts = new LogStreamOptions { TailLines = MaxLogLines, Follow = false };
+                await foreach (var line in client.StreamPodLogsAsync(ns, matchingPod.Name, container: string.Empty, opts, ct))
+                    logLines.Add(line);
+            }
+            catch (Exception)
+            {
+                // Best-effort: an unreadable log stream (pod mid-restart, container not yet
+                // started) just contributes no log haystack — it must not sink the config scan.
+            }
         }
 
         var configMaps = await client.GetConfigMapsAsync(ns, ct);
-        haystack.AddRange(configMaps.SelectMany(cm => cm.Data.Values));
+        configValues.AddRange(configMaps.SelectMany(cm => cm.Data.Values));
 
-        return haystack;
+        return new Haystack(configValues, logLines);
     }
 
     /// <summary>The substring worth searching for — a Service Bus/Storage resource key sometimes has

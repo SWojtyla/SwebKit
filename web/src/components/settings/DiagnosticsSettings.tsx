@@ -12,10 +12,10 @@ export function DiagnosticsSettings() {
   }
 
   const updateLogging = (patch: Partial<UserSettings["logging"]>) => {
-    updateSettings.mutate({
-      ...settings,
-      logging: { ...settings.logging, ...patch },
-    });
+    updateSettings.mutate((prev) => ({
+      ...prev,
+      logging: { ...prev.logging, ...patch },
+    }));
   };
 
   return (

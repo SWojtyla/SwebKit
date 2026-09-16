@@ -124,6 +124,13 @@ public sealed class AgentChatResult
     /// so there is no local executor to record steps. Null for providers that go through the
     /// local executor (their steps are recorded there instead).</summary>
     public IReadOnlyList<AgentChatStep>? Steps { get; init; }
+
+    /// <summary>agent-correlation Module 3 — set to "workspace" by <c>AcpAgentModelClient</c> when
+    /// the turn's agent reached for at least one tool that exists but was filtered out of this
+    /// turn's MCP allowlist (scope fence hit). The UI turns it into a "retry with workspace scope"
+    /// affordance. Null for request/response providers: their tool loop only ever sees the resolved
+    /// allowlist, so there is no fence to hit.</summary>
+    public string? SuggestedScope { get; init; }
 }
 
 /// <summary>

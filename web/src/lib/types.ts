@@ -1063,6 +1063,9 @@ export interface AgentReply {
   summarized?: boolean;
   /** Percentage of the effective context window this turn's request used. */
   contextUsagePercent?: number;
+  /** agent-correlation Module 3 — "workspace" when the agent reached for a tool this turn's
+   * scope fence hid (ACP only). Render as a "retry with workspace scope" affordance. */
+  suggestedScope?: string;
 }
 
 /** One incremental event from POST /api/agent/chat/stream — see streamAgentChat in lib/api.ts and
@@ -1169,6 +1172,9 @@ export interface ChatMessage {
    * this was a deliberate user action, not a failure. Whatever partial `content` had already
    * streamed in is preserved, not overwritten. */
   stopped?: boolean;
+  /** Accumulated ACP agent_thought_chunk reasoning for this reply (agent-correlation Module 4) —
+   * rendered collapsed + muted: it's raw model reasoning, not authoritative output. */
+  thoughts?: string;
 }
 
 export interface ContainerDetail {

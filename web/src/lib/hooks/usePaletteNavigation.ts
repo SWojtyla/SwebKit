@@ -14,7 +14,6 @@ export function usePaletteNavigation(itemCount: number, resetKey: unknown) {
     setSelectedIndex(0);
     // itemCount intentionally excluded: this should reset on the *cause* of a list
     // change (e.g. query text), not merely because the count happens to differ.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
   useEffect(() => {

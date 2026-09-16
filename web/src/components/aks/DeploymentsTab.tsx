@@ -29,7 +29,7 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
       resourceName: dep.name,
       onConfirm: () => scaleMutation.mutate({ ns: dep.namespace, name: dep.name, replicas }),
     });
-  }, [ws, scaleMutation.mutate]);
+  }, [ws, scaleMutation]);
 
   const restart = useCallback((dep: DeploymentInfo) => {
     ws.requestConfirm({
@@ -37,7 +37,7 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
       resourceName: dep.name,
       onConfirm: () => restartMutation.mutate({ ns: dep.namespace, name: dep.name }),
     });
-  }, [ws, restartMutation.mutate]);
+  }, [ws, restartMutation]);
 
   const buildMenu = useCallback((dep: DeploymentInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(dep.name) },

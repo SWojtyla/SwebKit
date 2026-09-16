@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ChevronRight, ChevronDown, Mail, MailX, Folder, Search, ArrowUp, ArrowDown } from "lucide-react";
 import { useSbQueues, useSbTopics, useSbSubscriptions } from "@/lib/hooks";
 import { QueryState } from "@/components/shared/QueryState";
@@ -132,12 +132,12 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
     else { setSortCol(col); setSortAsc(col !== "dlq" && col !== "active"); }
   };
 
-  const sortItems = (items: SbEntityInfo[]) => {
+  const sortItems = useCallback((items: SbEntityInfo[]) => {
     const filtered = filter.trim()
       ? items.filter((e) => e.name.toLowerCase().includes(filter.toLowerCase()))
       : [...items];
     return filtered.sort((a, b) => {
-      let cmp = 0;
+      let cmp: number;
       switch (sortCol) {
         case "active": cmp = (a.stats?.activeMessageCount ?? 0) - (b.stats?.activeMessageCount ?? 0); break;
         case "dlq": cmp = (a.stats?.deadLetterMessageCount ?? 0) - (b.stats?.deadLetterMessageCount ?? 0); break;
@@ -146,10 +146,10 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
       }
       return sortAsc ? cmp : -cmp;
     });
-  };
+  }, [filter, sortCol, sortAsc]);
 
-  const sortedQueues = useMemo(() => queues ? sortItems(queues) : [], [queues, filter, sortCol, sortAsc]);
-  const sortedTopics = useMemo(() => topics ? sortItems(topics) : [], [topics, filter, sortCol, sortAsc]);
+  const sortedQueues = useMemo(() => queues ? sortItems(queues) : [], [queues, sortItems]);
+  const sortedTopics = useMemo(() => topics ? sortItems(topics) : [], [topics, sortItems]);
 
   const SortArrow = ({ col }: { col: SortCol }) => {
     if (sortCol !== col) return null;

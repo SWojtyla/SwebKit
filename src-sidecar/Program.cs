@@ -129,6 +129,7 @@ builder.Services.AddSingleton<SwebKit.Sidecar.Services.ProactiveInsightService>(
 builder.Services.AddHttpClient<OpenAiCompatibleAgentClient>();
 builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.AcpPermissionStore>();
 builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.AcpAgentHost>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.OutOfScopeCallTracker>();
 builder.Services.AddSingleton<SwebKit.Sidecar.Services.Acp.AcpAgentModelClient>();
 builder.Services.AddSingleton<IAgentModelClient, AgentModelClientRouter>();
 
@@ -177,6 +178,7 @@ builder.Services.AddSingleton<IAgentTool, ProposeDeleteRedisKeyTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeSetRedisKeyTtlTool>();
 builder.Services.AddSingleton<IAgentTool, ListStorageBlobsTool>();
 builder.Services.AddSingleton<IAgentTool, GetStorageBlobPropertiesTool>();
+builder.Services.AddSingleton<IAgentTool, AnalyzeStorageHealthTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeCopyBlobTool>();
 builder.Services.AddSingleton<IAgentTool, SearchApiRequestsTool>();
 builder.Services.AddSingleton<IAgentTool, GetApiRequestTool>();

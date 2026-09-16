@@ -99,19 +99,32 @@ export function useUserSettings() {
   });
 }
 
+/** Whole settings, or a function producing them from what is currently cached. */
+export type UserSettingsUpdate = UserSettings | ((prev: UserSettings) => UserSettings);
+
 export function useUpdateUserSettings() {
   const qc = useQueryClient();
   const { notify } = useNotification();
-  return useMutation({
+  return useMutation<UserSettings, Error, UserSettingsUpdate>({
     // Same serialization `useUpdateProfile` uses, for the same reason: `AgentSettings` (the
     // heaviest user of this hook) now commits via `DraftInput`, and two commits close together
     // (e.g. blurring one field while another's save is still settling) must not have the
     // earlier response land after the later one and overwrite it.
     scope: { id: "user-settings" },
-    mutationFn: (data: UserSettings) =>
-      apiSend("/api/config/user-settings", "PUT", data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["user-settings"] }),
-    onError: (error) => notify("error", "Couldn't save setting", String(error)),
+    mutationFn: async (update) => {
+      // Same pattern as `useUpdateProfile`: resolve updaters inside `mutationFn`, which the
+      // scope defers until the previous save has settled — a second change fired while the
+      // first is still in flight otherwise spreads a stale snapshot and silently reverts it.
+      const current = qc.getQueryData<UserSettings>(["user-settings"]);
+      const data = typeof update === "function" ? update(current as UserSettings) : update;
+      await apiSend("/api/config/user-settings", "PUT", data);
+      return data;
+    },
+    onSuccess: (data) => qc.setQueryData(["user-settings"], data),
+    onError: (error) => {
+      qc.invalidateQueries({ queryKey: ["user-settings"] });
+      notify("error", "Couldn't save setting", String(error));
+    },
   });
 }
 

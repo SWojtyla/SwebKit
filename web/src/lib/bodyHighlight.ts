@@ -157,11 +157,10 @@ export function tokenizeXml(src: string): BodyToken[] {
 
 function tokenizeXmlTag(tag: string): BodyToken[] {
   const tokens: BodyToken[] = [];
-  let i = 0;
+  let i = 1;
 
   // Opening punctuation: "<", "</", "<?", "<!".
   let open = "<";
-  i = 1;
   if (tag[i] === "/" || tag[i] === "?" || tag[i] === "!") {
     open += tag[i];
     i++;

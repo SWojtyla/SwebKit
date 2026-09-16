@@ -28,6 +28,7 @@ public sealed class AcpAgentModelClient : IAgentModelClient
     private readonly UserSettingsRepository _settings;
     private readonly AcpAgentHost _host;
     private readonly IServer _server;
+    private readonly OutOfScopeCallTracker _outOfScopeCalls;
 
     /// <summary>Last system prompt actually sent per ACP session id — the agent owns its
     /// transcript, so context is injected by prompt-stuffing: on a new session, and again
@@ -37,11 +38,13 @@ public sealed class AcpAgentModelClient : IAgentModelClient
     public AcpAgentModelClient(
         UserSettingsRepository settings,
         AcpAgentHost host,
-        IServer server)
+        IServer server,
+        OutOfScopeCallTracker outOfScopeCalls)
     {
         _settings = settings;
         _host = host;
         _server = server;
+        _outOfScopeCalls = outOfScopeCalls;
     }
 
     public async Task<AgentChatResult> ChatAsync(
@@ -105,7 +108,14 @@ public sealed class AcpAgentModelClient : IAgentModelClient
         // No resolved tools → no MCP server at all. An empty ?tools= allowlist would mean
         // "unfiltered" to the bridge (all tools), which would bypass the capability/mode gates
         // that decided this turn gets zero tools.
-        var mcpUrl = caps.McpHttp && request.Tools.Count > 0 ? BuildMcpUrl(request.Tools) : null;
+        var allowlist = request.Tools.Select(t => t.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        var mcpUrl = caps.McpHttp && allowlist.Count > 0
+            ? SwebKitToolsMcpBridge.BuildUrl($"http://127.0.0.1:{BoundPort()}", allowlist)
+            : null;
+        // The decoded ?tools= value — the same string the bridge reads back off the request query,
+        // so its OutOfScopeCallTracker key matches ours.
+        var allowlistKey = mcpUrl is null ? null : string.Join(',', allowlist);
+        var outOfScopeBefore = _outOfScopeCalls.CountFor(allowlistKey);
         string? acpSessionId = null;
         string? sessionError = null;
         try
@@ -171,6 +181,11 @@ public sealed class AcpAgentModelClient : IAgentModelClient
                         Elapsed = sw.Elapsed,
                         HitMaxRounds = false,
                         Steps = steps,
+                        // agent-correlation Module 3: the agent reached for a tool this turn's scope
+                        // fence hid — the UI turns this into a "retry with workspace scope" chip.
+                        SuggestedScope = _outOfScopeCalls.CountFor(allowlistKey) > outOfScopeBefore
+                            ? "workspace"
+                            : null,
                     },
                     ContextUsagePercent = usagePercent,
                 };
@@ -244,16 +259,6 @@ public sealed class AcpAgentModelClient : IAgentModelClient
                     // nothing in the current UI consumes them — ignored deliberately.
             }
         }
-    }
-
-    /// <summary>Builds the MCP endpoint URL the session's tool set is exposed on. The resolved
-    /// tool list is encoded as an explicit allowlist query param — it already carries the
-    /// capability/mode/area/scope gates applied upstream in
-    /// <c>AgentToolCallOrchestrator.ResolveTools</c>, so no gate logic is duplicated here.</summary>
-    private string BuildMcpUrl(IReadOnlyList<ToolDefinition> tools)
-    {
-        var allowlist = tools.Select(t => t.Name).OrderBy(n => n, StringComparer.Ordinal);
-        return SwebKitToolsMcpBridge.BuildUrl($"http://127.0.0.1:{BoundPort()}", allowlist);
     }
 
     private int BoundPort()

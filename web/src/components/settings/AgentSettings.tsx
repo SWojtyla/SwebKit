@@ -61,10 +61,10 @@ export function AgentSettings() {
   const agent = settings.agent;
 
   const update = (patch: Partial<typeof agent>) => {
-    updateSettings.mutate({
-      ...settings,
-      agent: { ...agent, ...patch },
-    });
+    updateSettings.mutate((prev) => ({
+      ...prev,
+      agent: { ...prev.agent, ...patch },
+    }));
   };
 
   const updateProfile = (index: number, patch: Partial<AgentProfile>) => {

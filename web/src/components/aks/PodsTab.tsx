@@ -134,7 +134,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
       resourceName: pod.name,
       onConfirm: () => deleteMutation.mutate({ ns: pod.namespace, name: pod.name }),
     });
-  }, [ws, deleteMutation.mutate]);
+  }, [ws, deleteMutation]);
 
   const buildMenu = useCallback((pod: PodInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(pod.name) },

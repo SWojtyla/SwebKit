@@ -119,7 +119,6 @@ export function usePendingActionsFeed() {
 
   useEffect(() => {
     setFeed((prev) => reconcilePendingActionsFeed(prev, query.data, Date.now()));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `query.data` alone is intentional: a
     // new Date.now() every render would defeat the reconciliation instead of only running it once
     // per actual poll result.
   }, [query.data]);
@@ -234,6 +233,9 @@ interface StreamSendOptions {
   scope?: AgentChatScope;
   /** Called for every incremental text chunk, in order — append, don't replace. */
   onToken?: (token: string) => void;
+  /** Called for every incremental reasoning chunk (ACP agent_thought_chunk), in order —
+   * append, don't replace. Render muted/collapsed — it's raw model reasoning. */
+  onThought?: (token: string) => void;
   /** Called when a tool call starts or finishes (Ask & do turns only). */
   onToolEvent?: (event: AgentStreamEvent) => void;
 }
@@ -269,6 +271,9 @@ export function useAgentChatStream(sessionId?: string) {
             switch (event.kind) {
               case "token":
                 if (event.token) options?.onToken?.(event.token);
+                break;
+              case "thought":
+                if (event.token) options?.onThought?.(event.token);
                 break;
               case "toolCallStarted":
               case "toolCallResult":

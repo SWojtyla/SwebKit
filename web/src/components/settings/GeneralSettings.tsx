@@ -65,12 +65,10 @@ export function GeneralSettings() {
           <input
             type="checkbox"
             checked={settings.verifyApiClientSsl}
-            onChange={(e) =>
-              updateSettings.mutate({
-                ...settings,
-                verifyApiClientSsl: e.target.checked,
-              })
-            }
+            onChange={(e) => {
+              const verifyApiClientSsl = e.target.checked;
+              updateSettings.mutate((prev) => ({ ...prev, verifyApiClientSsl }));
+            }}
           />
           Verify SSL certificates
         </label>
@@ -82,12 +80,10 @@ export function GeneralSettings() {
           <input
             type="checkbox"
             checked={settings.apiClientRequestTabs}
-            onChange={(e) =>
-              updateSettings.mutate({
-                ...settings,
-                apiClientRequestTabs: e.target.checked,
-              })
-            }
+            onChange={(e) => {
+              const apiClientRequestTabs = e.target.checked;
+              updateSettings.mutate((prev) => ({ ...prev, apiClientRequestTabs }));
+            }}
           />
           Enable request tabs
         </label>
@@ -99,12 +95,10 @@ export function GeneralSettings() {
           <input
             type="checkbox"
             checked={settings.autoSaveRequests}
-            onChange={(e) =>
-              updateSettings.mutate({
-                ...settings,
-                autoSaveRequests: e.target.checked,
-              })
-            }
+            onChange={(e) => {
+              const autoSaveRequests = e.target.checked;
+              updateSettings.mutate((prev) => ({ ...prev, autoSaveRequests }));
+            }}
           />
           Auto-save request changes
         </label>
@@ -171,12 +165,10 @@ export function GeneralSettings() {
           <input
             type="checkbox"
             checked={settings.warmupConnectionsOnStartup}
-            onChange={(e) =>
-              updateSettings.mutate({
-                ...settings,
-                warmupConnectionsOnStartup: e.target.checked,
-              })
-            }
+            onChange={(e) => {
+              const warmupConnectionsOnStartup = e.target.checked;
+              updateSettings.mutate((prev) => ({ ...prev, warmupConnectionsOnStartup }));
+            }}
           />
           Warm up connections on startup
         </label>

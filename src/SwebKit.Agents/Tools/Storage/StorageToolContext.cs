@@ -31,8 +31,14 @@ internal static class StorageToolContext
         if (accounts.Count == 0)
             return new Resolution(null, null, "Storage is not configured. Add an account in settings.");
 
+        // agent-correlation Module 5 widened the match beyond Id: workspace-topology nodes key on
+        // the account *name* (e.g. "mystorageacct"), and the model is more likely to pass either
+        // the name or the display label it saw in the system prompt than the opaque id.
         var account = requestedAccountId is not null
-            ? accounts.FirstOrDefault(a => a.Id == requestedAccountId)
+            ? accounts.FirstOrDefault(a =>
+                a.Id == requestedAccountId ||
+                string.Equals(a.AccountName, requestedAccountId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(a.DisplayName, requestedAccountId, StringComparison.OrdinalIgnoreCase))
             : accounts[0];
 
         if (account is null)
