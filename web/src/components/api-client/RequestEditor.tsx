@@ -46,13 +46,15 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   const savedSnapshotRef = useRef<HttpRequestEntry>(request);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+  const persistSecretRef = useRef(persistSecret);
+  persistSecretRef.current = persistSecret;
 
   const handleSave = useCallback(async () => {
     if (secretSaveTimer.current) {
       clearTimeout(secretSaveTimer.current);
       secretSaveTimer.current = null;
     }
-    await persistSecret();
+    await persistSecretRef.current();
     await onSaveRef.current();
     savedSnapshotRef.current = request;
     setDirty(false);
@@ -156,9 +158,12 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
     return () => {
       active = false;
     };
+    // credentialSecret is read as a fallback while loading; depending on it would
+    // re-run (and overwrite the input) on every keystroke that autosaves the secret.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.credentialKey]);
 
-  const persistSecret = async () => {
+  async function persistSecret() {
     const key = auth.credentialKey;
     if (!key || !isGeneratedCredentialKey(key)) return;
     const value = authSecretRef.current;
@@ -169,7 +174,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
     } else {
       await saveSecret(key, value);
     }
-  };
+  }
 
   const handleSecretChange = (value: string) => {
     setAuthSecretInput(value);

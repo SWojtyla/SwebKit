@@ -19,7 +19,7 @@ public class AgentModelClientRouterTests
         var host = new AcpAgentHost(settings, credentials, new AcpPermissionStore(), NullLogger<AcpAgentHost>.Instance);
         // IServer is only touched when an actual ACP turn runs (to find the bound port for the
         // MCP URL) — never by Resolve, so a null suffices for this dispatch test.
-        var acp = new AcpAgentModelClient(settings, host, null!);
+        var acp = new AcpAgentModelClient(settings, host, null!, new OutOfScopeCallTracker());
         return (new AgentModelClientRouter(settings, openAi, acp), openAi, acp);
     }
 

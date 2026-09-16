@@ -93,7 +93,6 @@ export function PodShellPanel({ namespace, pod, container, context, kubeconfig, 
       }
       term.dispose();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [namespace, pod, container, context, kubeconfig]);
 
   return (

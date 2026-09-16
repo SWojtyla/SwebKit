@@ -117,6 +117,84 @@ public class StorageToolsTests
         Assert.Contains("Missing required parameter", JsonDocument.Parse(result).RootElement.GetProperty("error").GetString());
     }
 
+    // ── AnalyzeStorageHealthTool (agent-correlation Module 5) ────────────────
+
+    [Fact]
+    public async Task AnalyzeStorageHealth_NoAccountConfigured_ReturnsError()
+    {
+        var (appState, profiles) = CreateContext();
+        var tool = new AnalyzeStorageHealthTool(appState, profiles, Mock.Of<IStorageClientFactory>());
+
+        var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
+
+        Assert.Contains("not configured", JsonDocument.Parse(result).RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task AnalyzeStorageHealth_ReturnsContainersCapabilitiesAndHealthySummary()
+    {
+        var client = new Mock<IStorageClient>();
+        client.Setup(c => c.ListContainersAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<StorageContainerItem>
+            {
+                new("reports", DateTimeOffset.UtcNow, null, null),
+                new("backups", null, null, null),
+            });
+        client.Setup(c => c.GetStorageCapabilitiesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StorageCapabilities(
+                VersioningEnabled: true, SoftDeleteEnabled: true,
+                CanUpload: true, CanCopy: true, CanSetMetadata: true, CanRestore: true));
+        var (appState, profiles) = CreateContext([Account()]);
+        var tool = new AnalyzeStorageHealthTool(appState, profiles, MakeFactory(client.Object).Object);
+
+        var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
+
+        var root = JsonDocument.Parse(result).RootElement;
+        Assert.Equal("Prod Storage", root.GetProperty("account").GetString());
+        Assert.Equal("prodstore", root.GetProperty("account_name").GetString());
+        Assert.True(root.GetProperty("reachable").GetBoolean());
+        Assert.Equal(2, root.GetProperty("container_count").GetInt32());
+        Assert.True(root.GetProperty("capabilities").GetProperty("versioning_enabled").GetBoolean());
+        Assert.Equal("Healthy", root.GetProperty("health_summary").GetString());
+    }
+
+    [Fact]
+    public async Task AnalyzeStorageHealth_ResolvesByAccountName_NotJustId()
+    {
+        var client = new Mock<IStorageClient>();
+        client.Setup(c => c.ListContainersAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<StorageContainerItem>());
+        client.Setup(c => c.GetStorageCapabilitiesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StorageCapabilities(false, false, false, false, false, false));
+        var (appState, profiles) = CreateContext([Account()]);
+        var tool = new AnalyzeStorageHealthTool(appState, profiles, MakeFactory(client.Object).Object);
+
+        // Workspace-topology nodes key on the account *name*, not the config id.
+        var result = await tool.ExecuteAsync(Args("""{"account":"prodstore"}"""), CancellationToken.None);
+
+        var root = JsonDocument.Parse(result).RootElement;
+        Assert.Equal("prodstore", root.GetProperty("account_name").GetString());
+        Assert.Equal("Healthy", root.GetProperty("health_summary").GetString());
+    }
+
+    [Fact]
+    public async Task AnalyzeStorageHealth_ClientThrows_ReturnsCriticalWithError()
+    {
+        var client = new Mock<IStorageClient>();
+        client.Setup(c => c.ListContainersAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("account unreachable"));
+        client.Setup(c => c.GetStorageCapabilitiesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StorageCapabilities(false, false, false, false, false, false));
+        var (appState, profiles) = CreateContext([Account()]);
+        var tool = new AnalyzeStorageHealthTool(appState, profiles, MakeFactory(client.Object).Object);
+
+        var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
+
+        var root = JsonDocument.Parse(result).RootElement;
+        Assert.Equal("Critical", root.GetProperty("health_summary").GetString());
+        Assert.Contains("account unreachable", root.GetProperty("error").GetString());
+    }
+
     // ── ProposeCopyBlobTool ──────────────────────────────────────────────────
 
     [Fact]

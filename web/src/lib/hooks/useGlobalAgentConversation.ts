@@ -26,6 +26,7 @@ export function useGlobalAgentConversation() {
   const addMessage = useAgentConversationStore((s) => s.addMessage);
   const updateMessage = useAgentConversationStore((s) => s.updateMessage);
   const appendToken = useAgentConversationStore((s) => s.appendToken);
+  const appendThought = useAgentConversationStore((s) => s.appendThought);
   const clearMessages = useAgentConversationStore((s) => s.clearMessages);
 
   const chat = useAgentChatStream();
@@ -47,6 +48,7 @@ export function useGlobalAgentConversation() {
       chat
         .send(trimmed, {
           onToken: (token) => appendToken(assistantId, token),
+          onThought: (token) => appendThought(assistantId, token),
           onToolEvent: (event) => setToolStatus(describeAgentToolEvent(event)),
         })
         .then((reply) => {
@@ -68,7 +70,7 @@ export function useGlobalAgentConversation() {
           }
         });
     },
-    [chat, addMessage, updateMessage, appendToken],
+    [chat, addMessage, updateMessage, appendToken, appendThought],
   );
 
   const clearConversation = useCallback(

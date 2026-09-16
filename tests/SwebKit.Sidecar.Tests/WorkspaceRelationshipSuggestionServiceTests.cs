@@ -15,17 +15,20 @@ internal sealed class FakeAksClientForSuggestions : IAksClient
     private readonly IReadOnlyList<PodInfo> _pods;
     private readonly IReadOnlyList<ContainerDetail> _containers;
     private readonly IReadOnlyList<ConfigMapInfo> _configMaps;
+    private readonly IReadOnlyList<string> _logs;
     private readonly Exception? _throwOnGetPods;
 
     public FakeAksClientForSuggestions(
         IReadOnlyList<PodInfo>? pods = null,
         IReadOnlyList<ContainerDetail>? containers = null,
         IReadOnlyList<ConfigMapInfo>? configMaps = null,
+        IReadOnlyList<string>? logs = null,
         Exception? throwOnGetPods = null)
     {
         _pods = pods ?? [];
         _containers = containers ?? [];
         _configMaps = configMaps ?? [];
+        _logs = logs ?? [];
         _throwOnGetPods = throwOnGetPods;
     }
 
@@ -44,7 +47,8 @@ internal sealed class FakeAksClientForSuggestions : IAksClient
     // ── Unused members ────────────────────────────────────────────────────────
     public Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<DeploymentInfo>>([]);
     public Task<IReadOnlyList<KubernetesEvent>> GetEventsAsync(string ns, string? involvedObjectName = null, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<KubernetesEvent>>([]);
-    public IAsyncEnumerable<string> StreamPodLogsAsync(string ns, string podName, string container, LogStreamOptions opts, CancellationToken ct = default) => AsyncEnumerable.Empty<string>();
+    public IAsyncEnumerable<string> StreamPodLogsAsync(string ns, string podName, string container, LogStreamOptions opts, CancellationToken ct = default) =>
+        _logs.ToAsyncEnumerable();
     public Task<PortForwardSession> StartPortForwardAsync(string ns, string resourceName, int localPort, int remotePort, CancellationToken ct = default) => Task.FromException<PortForwardSession>(new NotSupportedException());
     public Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default) => Task.CompletedTask;
     public Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default) => Task.CompletedTask;
@@ -194,6 +198,49 @@ public class WorkspaceRelationshipSuggestionServiceTests
 
         var suggestion = Assert.Single(result);
         Assert.Equal(storageNode.Id, suggestion.ToNodeId);
+    }
+
+    [Fact]
+    public async Task GetSuggestionsAsync_PodLogMentionsServiceBusHostname_SuggestsWithLogWording()
+    {
+        // agent-correlation Module 6: a pod whose config only names a Secret still names the
+        // resource it was trying to reach in its log lines — suggested with lower-confidence
+        // wording than a config match.
+        var aksClient = new FakeAksClientForSuggestions(
+            pods: [new PodInfo { Name = "api-7c9f", Namespace = "prod", Phase = "Running" }],
+            containers: [new ContainerDetail { Name = "api", Image = "api:latest", EnvVars = [new EnvVarDetail { Name = "SB_CONN", Value = "" }] }],
+            logs: ["System.TimeoutException connecting to orders.servicebus.windows.net"]);
+        var (service, profiles) = Build(aksClient);
+        var aksNode = AksNode("prod/api", "api (prod)");
+        var sbNode = SbNode("orders.servicebus.windows.net", "orders");
+        profiles.Config.Topology.Nodes.Add(aksNode);
+        profiles.Config.Topology.Nodes.Add(sbNode);
+
+        var result = await service.GetSuggestionsAsync(CancellationToken.None);
+
+        var suggestion = Assert.Single(result);
+        Assert.Equal(aksNode.Id, suggestion.FromNodeId);
+        Assert.Equal(sbNode.Id, suggestion.ToNodeId);
+        Assert.Contains("pod logs", suggestion.Reason);
+        Assert.Contains("weaker evidence", suggestion.Reason);
+    }
+
+    [Fact]
+    public async Task GetSuggestionsAsync_ConfigAndLogBothMatch_ConfigWordingWins()
+    {
+        var aksClient = new FakeAksClientForSuggestions(
+            pods: [new PodInfo { Name = "api-7c9f", Namespace = "prod", Phase = "Running" }],
+            containers: [new ContainerDetail { Name = "api", Image = "api:latest", EnvVars = [new EnvVarDetail { Name = "SB_HOST", Value = "orders.servicebus.windows.net" }] }],
+            logs: ["connecting to orders.servicebus.windows.net"]);
+        var (service, profiles) = Build(aksClient);
+        profiles.Config.Topology.Nodes.Add(AksNode("prod/api"));
+        profiles.Config.Topology.Nodes.Add(SbNode("orders.servicebus.windows.net", "orders"));
+
+        var result = await service.GetSuggestionsAsync(CancellationToken.None);
+
+        var suggestion = Assert.Single(result);
+        Assert.Contains("Pod config", suggestion.Reason);
+        Assert.DoesNotContain("weaker evidence", suggestion.Reason);
     }
 
     [Fact]

@@ -72,7 +72,7 @@ export function parseVisualBlocks(content: string): VisualBlock[] {
     if (seen.has(id)) continue;
     seen.add(id);
 
-    let kind: VisualBlock["kind"] = "json";
+    let kind: VisualBlock["kind"];
     let payload: VisualPayload | undefined;
     if (lang === "mermaid") {
       kind = "mermaid";
@@ -256,7 +256,7 @@ export function AgentVisualizationPanel({
   }, [blockIds]);
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    let nextIndex = index;
+    let nextIndex: number;
     if (event.key === "ArrowRight") nextIndex = (index + 1) % blocks.length;
     else if (event.key === "ArrowLeft") nextIndex = (index - 1 + blocks.length) % blocks.length;
     else if (event.key === "Home") nextIndex = 0;

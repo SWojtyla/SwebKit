@@ -176,19 +176,24 @@ public class InvestigateWorkspaceIssueToolTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_StorageRelatedNode_SkipsWithAnHonestNote_CallsNoTool()
+    public async Task ExecuteAsync_StorageRelatedNode_CallsAnalyzeStorageHealth_WithTheAccountName()
     {
         var (tool, profiles, registry) = Build();
+        registry.CannedResults["analyze_storage_health"] = """{"health_summary":"Healthy"}""";
         var aksNode = new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" };
-        var storageNode = new WorkspaceResourceNode { Area = WorkspaceResourceArea.Storage, ResourceKey = "mystorage", DisplayLabel = "My Storage" };
+        var storageNode = new WorkspaceResourceNode { Area = WorkspaceResourceArea.Storage, ResourceKey = "mystorage/reports", DisplayLabel = "My Storage" };
         profiles.Config.Topology.Nodes.Add(aksNode);
         profiles.Config.Topology.Nodes.Add(storageNode);
         profiles.Config.Topology.Relationships.Add(new WorkspaceResourceRelationship { FromNodeId = aksNode.Id, ToNodeId = storageNode.Id });
 
         var result = await tool.ExecuteAsync(Args(new { area = "Aks", resource_hint = "api" }), CancellationToken.None);
 
-        Assert.Empty(registry.Calls);
-        Assert.Contains("No composite investigation tool exists for Storage", result);
+        var call = Assert.Single(registry.Calls);
+        Assert.Equal("analyze_storage_health", call.ToolName);
+        // The "account/container" tail is stripped — the health tool takes the account part only.
+        Assert.Equal("mystorage", call.Arguments.GetProperty("account").GetString());
+        using var doc = JsonDocument.Parse(result);
+        Assert.Equal(1, doc.RootElement.GetProperty("related_resources_investigated").GetInt32());
     }
 
     [Fact]

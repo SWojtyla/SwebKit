@@ -30,7 +30,12 @@ export function useContextualAgent(featureArea: string, selection?: Record<strin
   const sendMessage = (
     message: string,
     options?: {
+      /** Per-send scope override — the "retry with workspace scope" affordance (agent-correlation
+       * Module 3) needs to re-send with "workspace" without waiting for setScope's async state
+       * update. Omit to use the checkbox's current value. */
+      scope?: AgentChatScope;
       onToken?: (token: string) => void;
+      onThought?: (token: string) => void;
       onToolEvent?: (event: AgentStreamEvent) => void;
       onSuccess?: (reply: AgentReply) => void;
       onError?: (err: Error) => void;
@@ -40,8 +45,9 @@ export function useContextualAgent(featureArea: string, selection?: Record<strin
       .send(message, {
         context: { featureArea, selection },
         mode,
-        scope,
+        scope: options?.scope ?? scope,
         onToken: options?.onToken,
+        onThought: options?.onThought,
         onToolEvent: options?.onToolEvent,
       })
       .then((reply) => options?.onSuccess?.(reply))

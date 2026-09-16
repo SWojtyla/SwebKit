@@ -29,7 +29,7 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
       resourceName: cj.name,
       onConfirm: () => suspendMutation.mutate({ ns: cj.namespace, name: cj.name, suspend: next }),
     });
-  }, [ws, suspendMutation.mutate]);
+  }, [ws, suspendMutation]);
 
   const handleRowContextMenu = useCallback(
     (e: MouseEvent<HTMLTableRowElement>, cj: CronJobInfo) => ws.showContextMenu(e, buildMenu(cj)),

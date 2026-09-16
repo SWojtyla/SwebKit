@@ -10,7 +10,9 @@ import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
-import type { ChatMessage } from "@/lib/types";
+import { AgentThoughtBlock } from "./AgentThoughtBlock";
+import { profileSupportsTools } from "@/lib/agent-capability";
+import type { AgentChatScope, ChatMessage } from "@/lib/types";
 import { BarChart3 } from "lucide-react";
 
 let msgIdCounter = 0;
@@ -37,6 +39,10 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
   const [input, setInput] = useState("");
   const [showVisuals, setShowVisuals] = useState(false);
   const [toolStatus, setToolStatus] = useState<string | null>(null);
+  // agent-correlation Module 3: when a reply reports the agent hit out-of-scope tools, offer a
+  // one-click re-send of the last question with workspace scope.
+  const [scopeRetry, setScopeRetry] = useState(false);
+  const [lastUserText, setLastUserText] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { mode, setMode, scope, setScope, chat, status, sendMessage } = useContextualAgent(featureArea, selection);
 
@@ -56,12 +62,13 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
   );
   const capability = activeProfile?.capability ?? "Unknown";
 
-  const workspaceScopeDisabled = capability === "ChatOnly" || capability === "Unknown";
+  const workspaceScopeDisabled = !profileSupportsTools(activeProfile);
   let workspaceScopeReason = "";
-  if (capability === "ChatOnly") {
-    workspaceScopeReason = "This model doesn't support tool calling — workspace search is unavailable.";
-  } else if (capability === "Unknown") {
-    workspaceScopeReason = "Run Test Connection first to check whether this profile supports workspace search.";
+  if (workspaceScopeDisabled) {
+    workspaceScopeReason =
+      capability === "ChatOnly"
+        ? "This model doesn't support tool calling — workspace search is unavailable."
+        : "Run Test Connection first to check whether this profile supports workspace search.";
   }
 
   useEffect(() => {
@@ -72,8 +79,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, chat.isStreaming]);
 
-  const handleSend = () => {
-    const text = input.trim();
+  const sendText = (text: string, scopeOverride?: AgentChatScope) => {
     if (!text || chat.isStreaming) return;
 
     const assistantId = nextMsgId();
@@ -82,18 +88,31 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
       { id: nextMsgId(), role: "user", content: text },
       { id: assistantId, role: "assistant", content: "" },
     ]);
+    setLastUserText(text);
+    setScopeRetry(false);
     setInput("");
     setToolStatus(null);
 
     sendMessage(text, {
+      scope: scopeOverride,
       onToken: (token) => {
         setMessages((prev) =>
           prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + token } : m)),
         );
       },
+      onThought: (token) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, thoughts: (m.thoughts ?? "") + token } : m,
+          ),
+        );
+      },
       onToolEvent: (event) => setToolStatus(describeAgentToolEvent(event)),
       onSuccess: (reply) => {
         setToolStatus(null);
+        if (reply.suggestedScope === "workspace" && (scopeOverride ?? scope) !== "workspace") {
+          setScopeRetry(true);
+        }
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -122,6 +141,15 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
         );
       },
     });
+  };
+
+  const handleSend = () => sendText(input.trim());
+
+  const handleScopeRetry = () => {
+    if (!lastUserText) return;
+    // Reflect the escalation in the checkbox too, so the retry isn't a hidden one-off.
+    setScope("workspace");
+    sendText(lastUserText, "workspace");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -283,6 +311,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
                 ) : (
                   <div className="whitespace-pre-wrap">{msg.content}</div>
                 )}
+                {msg.role === "assistant" && msg.thoughts && <AgentThoughtBlock thoughts={msg.thoughts} />}
                 {msg.role === "assistant" && msg.steps && <AgentReasoningTrace steps={msg.steps} />}
                 {msg.role === "assistant" && msg.summarized && <AgentSummarizedNotice />}
                 {msg.role === "assistant" && msg.stopped && (
@@ -293,6 +322,17 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
               </div>
             </div>
           ))}
+          {scopeRetry && lastUserText && !chat.isStreaming && (
+            <div className="flex justify-start">
+              <button
+                onClick={handleScopeRetry}
+                className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
+                data-testid="contextual-assistant-scope-retry"
+              >
+                The agent reached for tools outside this scope — retry with workspace scope
+              </button>
+            </div>
+          )}
           {chat.isStreaming && messages[messages.length - 1]?.content === "" && (
             <div className="flex justify-start" data-testid="contextual-assistant-loading">
               <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">

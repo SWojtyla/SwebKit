@@ -161,9 +161,17 @@ public sealed class InvestigateWorkspaceIssueTool : IAgentTool
                     return new { area = node.Area.ToString(), node.DisplayLabel, result = JsonDocument.Parse(raw).RootElement };
                 }
 
+                case WorkspaceResourceArea.Storage:
+                {
+                    // Nodes key on the account name, optionally with a container appended after
+                    // '/' (see WorkspaceResourceNode.ResourceKey) — analyze_storage_health takes
+                    // just the account part.
+                    var accountKey = node.ResourceKey.Split('/')[0];
+                    var raw = await registry.ExecuteAsync("analyze_storage_health", BuildArgs(new { account = accountKey }), ct);
+                    return new { area = node.Area.ToString(), node.DisplayLabel, result = JsonDocument.Parse(raw).RootElement };
+                }
+
                 default:
-                    // Storage has no composite investigation/health tool yet (ai-augmented-app Module
-                    // 4 only added Propose*/Get*/List* tools for it) — an honest gap, not a crash.
                     return new { area = node.Area.ToString(), node.DisplayLabel, skipped = $"No composite investigation tool exists for {node.Area} yet." };
             }
         }

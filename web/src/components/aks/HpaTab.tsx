@@ -29,7 +29,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
       resourceName: hpa.name,
       onConfirm: () => scaleMutation.mutate({ ns: hpa.namespace, name: hpa.name, minReplicas: min, maxReplicas: max }),
     });
-  }, [ws, scaleTarget, scaleMutation.mutate]);
+  }, [ws, scaleTarget, scaleMutation]);
 
   const handleDelete = useCallback((hpa: HpaInfo) => {
     ws.requestConfirm({
@@ -37,7 +37,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
       resourceName: hpa.name,
       onConfirm: () => deleteMutation.mutate({ ns: hpa.namespace, name: hpa.name }),
     });
-  }, [ws, deleteMutation.mutate]);
+  }, [ws, deleteMutation]);
 
   const handleToggleScaling = useCallback((hpa: HpaInfo) => {
     const next = !hpa.isScalingDisabled;
@@ -47,7 +47,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
       resourceName: hpa.name,
       onConfirm: () => toggleMutation.mutate({ ns: hpa.namespace, name: hpa.name, enabled: !next }),
     });
-  }, [ws, toggleMutation.mutate]);
+  }, [ws, toggleMutation]);
 
   const columns: Column<HpaInfo>[] = useMemo(() => [
           { header: "Target", cell: (hpa) => <span className="text-xs text-muted-foreground">{hpa.targetKind}/{hpa.targetName}</span> },

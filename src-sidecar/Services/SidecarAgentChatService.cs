@@ -189,6 +189,7 @@ public sealed class SidecarAgentChatService
                 Error = false,
                 Summarized = summarized,
                 ContextUsagePercent = GetContextUsagePercent(sessionId),
+                SuggestedScope = result.SuggestedScope,
             };
         }
         catch (Exception ex)
@@ -336,7 +337,7 @@ public sealed class SidecarAgentChatService
         // user never ran (or re-ran) it, which would silently strip every SwebKit tool.
         var hasToolCalling = profile?.Provider == ProviderKind.Acp
             || (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
-        var systemPrompt = _promptBuilder.Build(context, normalizedMode, hasToolCalling);
+        var systemPrompt = _promptBuilder.Build(context, normalizedMode, normalizedScope, hasToolCalling);
         var tools = _toolOrchestrator.ResolveTools(hasToolCalling, normalizedMode, context, normalizedScope);
 
         // Record user message
@@ -404,4 +405,11 @@ public sealed class SidecarAgentReply
     /// <summary>Percentage of the effective context window this turn's request used (see
     /// <see cref="SidecarAgentChatService.GetContextUsagePercent"/>).</summary>
     public double ContextUsagePercent { get; init; }
+
+    /// <summary>agent-correlation Module 3 — "workspace" when the turn's agent reached for at
+    /// least one known-but-out-of-scope tool on the MCP bridge; the contextual panel turns this
+    /// into a "retry with workspace scope" affordance. Null when nothing out of scope was hit
+    /// (and always null for request/response providers — their tool loop only ever sees the
+    /// resolved allowlist, so there is no fence for them to hit).</summary>
+    public string? SuggestedScope { get; init; }
 }

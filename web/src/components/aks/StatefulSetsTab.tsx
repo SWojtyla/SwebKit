@@ -36,7 +36,7 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
       resourceName: sts.name,
       onConfirm: () => scaleSts.mutate({ ns: sts.namespace, name: sts.name, replicas }),
     });
-  }, [ws, scaleSts.mutate]);
+  }, [ws, scaleSts]);
 
   const allColumns: Column<StatefulSetInfo>[] = useMemo(() => [
     ...columns,
@@ -81,7 +81,7 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
     // Was a native `prompt()`, which in the Tauri webview is an unstyled OS-level
     // modal with no validation and no idea which namespace it is acting on.
     { label: "Scale...", icon: "⇳", onClick: () => setScaleTarget(sts) },
-  ], [ws, restartSts.mutate]);
+  ], [ws, restartSts]);
 
   const handleRowContextMenu = useCallback(
     (e: MouseEvent<HTMLTableRowElement>, sts: StatefulSetInfo) => ws.showContextMenu(e, buildMenu(sts)),

@@ -17,6 +17,7 @@ interface AgentConversationState {
   addMessage: (message: ChatMessage) => void;
   updateMessage: (id: string, patch: Partial<ChatMessage>) => void;
   appendToken: (id: string, token: string) => void;
+  appendThought: (id: string, token: string) => void;
   clearMessages: () => void;
 }
 
@@ -30,6 +31,12 @@ export const useAgentConversationStore = create<AgentConversationState>((set) =>
   appendToken: (id, token) =>
     set((state) => ({
       messages: state.messages.map((m) => (m.id === id ? { ...m, content: m.content + token } : m)),
+    })),
+  appendThought: (id, token) =>
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === id ? { ...m, thoughts: (m.thoughts ?? "") + token } : m,
+      ),
     })),
   clearMessages: () => set({ messages: [] }),
 }));

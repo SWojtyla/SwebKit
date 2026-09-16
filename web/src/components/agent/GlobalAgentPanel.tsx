@@ -7,6 +7,7 @@ import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { PendingActionCard, PendingActionExpiredNotice } from "./PendingActionCard";
 import { AcpPermissionCard } from "./AcpPermissionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
+import { AgentThoughtBlock } from "./AgentThoughtBlock";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { BarChart3 } from "lucide-react";
@@ -214,6 +215,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
               ) : (
                 <div className="whitespace-pre-wrap">{msg.content}</div>
               )}
+              {msg.role === "assistant" && msg.thoughts && <AgentThoughtBlock thoughts={msg.thoughts} />}
               {msg.role === "assistant" && msg.steps && <AgentReasoningTrace steps={msg.steps} />}
               {msg.role === "assistant" && msg.summarized && <AgentSummarizedNotice />}
               {msg.role === "assistant" && msg.stopped && (
