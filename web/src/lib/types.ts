@@ -4,128 +4,290 @@
 // ── Profile / Config ─────────────────────────────────────────────────────────
 
 export interface ProfileData {
-  config: AppConfig;
-  serviceBusNamespaces: ServiceBusNamespace[];
-  messageTemplates: SbMessageTemplate[];
-  schemaVersion: number;
+    config: AppConfig;
+    serviceBusNamespaces: ServiceBusNamespace[];
+    messageTemplates: SbMessageTemplate[];
+    schemaVersion: number;
 }
 
 export interface AppConfig {
-  name: string;
-  isProduction: boolean;
-  aksConfig: AksConfig | null;
-  redisConfig: RedisConfig | null;
-  storageAccounts: StorageConfig[];
-  devOpsConfig: DevOpsConfig | null;
-  observabilityConfig: ObservabilityConfig | null;
-  favoriteEntities: FavoriteEntity[];
-  favoriteResources: FavoriteResource[];
-  keyVaults: KeyVaultEntry[];
-  topology: WorkspaceTopology;
+    name: string;
+    isProduction: boolean;
+    aksConfig: AksConfig | null;
+    redisConfig: RedisConfig | null;
+    sqlConfig: SqlConfig | null;
+    storageAccounts: StorageConfig[];
+    devOpsConfig: DevOpsConfig | null;
+    observabilityConfig: ObservabilityConfig | null;
+    favoriteEntities: FavoriteEntity[];
+    favoriteResources: FavoriteResource[];
+    keyVaults: KeyVaultEntry[];
+    topology: WorkspaceTopology;
 }
 
 // ── Workspace topology (workspace-intelligence Module 1) ────────────────────
 
-export type WorkspaceResourceArea = "Aks" | "ServiceBus" | "Redis" | "Storage";
+export type WorkspaceResourceArea =
+    | "Aks"
+    | "ServiceBus"
+    | "Redis"
+    | "Storage"
+    | "Sql";
 
 export interface WorkspaceResourceNode {
-  id: string;
-  area: WorkspaceResourceArea;
-  resourceKey: string;
-  displayLabel: string;
+    id: string;
+    area: WorkspaceResourceArea;
+    resourceKey: string;
+    displayLabel: string;
 }
 
 export interface WorkspaceResourceRelationship {
-  id: string;
-  fromNodeId: string;
-  toNodeId: string;
-  label: string | null;
+    id: string;
+    fromNodeId: string;
+    toNodeId: string;
+    label: string | null;
 }
 
 export interface WorkspaceTopology {
-  nodes: WorkspaceResourceNode[];
-  relationships: WorkspaceResourceRelationship[];
+    nodes: WorkspaceResourceNode[];
+    relationships: WorkspaceResourceRelationship[];
 }
 
 /** Not-yet-added node the user can pick from — computed by the sidecar from existing config, never
  * persisted itself. See `GET /api/workspace/topology/candidates`. */
 export interface WorkspaceResourceCandidate {
-  area: WorkspaceResourceArea;
-  resourceKey: string;
-  displayLabel: string;
+    area: WorkspaceResourceArea;
+    resourceKey: string;
+    displayLabel: string;
 }
 
 /** A candidate relationship the heuristic scan found but nobody has confirmed yet
  * (workspace-intelligence Module 2) — never persisted; recomputed each time the Map view asks for
  * it. See `GET /api/workspace/topology/suggestions`. */
 export interface WorkspaceRelationshipSuggestion {
-  fromNodeId: string;
-  toNodeId: string;
-  reason: string;
+    fromNodeId: string;
+    toNodeId: string;
+    reason: string;
 }
 
 export interface ServiceBusNamespace {
-  id: string;
-  alias: string;
-  fullyQualifiedNamespace: string;
-  /**
-   * Must match the C# `SbAuthMode` enum member names exactly — the sidecar deserializes
-   * this as an enum, and an unknown value fails the whole profile save. This said
-   * `"Entra"`, which is not a member, so selecting Entra ID in Settings was rejected and
-   * silently reverted. Entra ID auth is `DefaultAzureCredential`.
-   *
-   * The C# enum also has a `ServicePrincipal` member, but no code path (UI or sidecar
-   * connection factory) actually implements it — the active connection factory only
-   * branches on `ConnectionString` vs. everything else falling through to
-   * `DefaultAzureCredential`, so selecting it would silently behave like Entra ID with no
-   * indication why. Deliberately omitted here until it's really wired up end to end; add it
-   * back only alongside real client id/secret (or cert) fields and sidecar support.
-   */
-  authMode: "DefaultAzureCredential" | "ConnectionString";
-  credentialKey: string;
-  transportType: "Amqp" | "AmqpWebSockets";
-  createdAt: string;
+    id: string;
+    alias: string;
+    fullyQualifiedNamespace: string;
+    /**
+     * Must match the C# `SbAuthMode` enum member names exactly — the sidecar deserializes
+     * this as an enum, and an unknown value fails the whole profile save. This said
+     * `"Entra"`, which is not a member, so selecting Entra ID in Settings was rejected and
+     * silently reverted. Entra ID auth is `DefaultAzureCredential`.
+     *
+     * The C# enum also has a `ServicePrincipal` member, but no code path (UI or sidecar
+     * connection factory) actually implements it — the active connection factory only
+     * branches on `ConnectionString` vs. everything else falling through to
+     * `DefaultAzureCredential`, so selecting it would silently behave like Entra ID with no
+     * indication why. Deliberately omitted here until it's really wired up end to end; add it
+     * back only alongside real client id/secret (or cert) fields and sidecar support.
+     */
+    authMode: "DefaultAzureCredential" | "ConnectionString";
+    credentialKey: string;
+    transportType: "Amqp" | "AmqpWebSockets";
+    createdAt: string;
 }
 
 export interface AksConfig {
-  kubeconfigPath: string | null;
-  kubeconfigContext: string | null;
-  defaultNamespace: string;
-  watchedDeployments: string[];
-  logBufferSize: number;
-  autoRefreshIntervalSeconds: number;
-  monitoringEnabled: boolean;
-  monitoredNamespaces: string[];
+    kubeconfigPath: string | null;
+    kubeconfigContext: string | null;
+    defaultNamespace: string;
+    watchedDeployments: string[];
+    logBufferSize: number;
+    autoRefreshIntervalSeconds: number;
+    monitoringEnabled: boolean;
+    monitoredNamespaces: string[];
 }
 
 export interface RedisConfig {
-  caches: RedisCacheEntry[];
-  activeCacheId: string | null;
-  namespaceSeparator: string;
+    caches: RedisCacheEntry[];
+    activeCacheId: string | null;
+    namespaceSeparator: string;
 }
 
 export interface RedisCacheEntry {
-  id: string;
-  displayName: string;
-  connectionString: string;
-  database: number;
-  useAad: boolean;
-  cacheName: string;
+    id: string;
+    displayName: string;
+    connectionString: string;
+    database: number;
+    useAad: boolean;
+    cacheName: string;
+}
+
+// ── SQL (sql-database-explorer) ──────────────────────────────────────────────
+
+/** Mirrors `SwebKit.Core.Domain.SqlConfig`. Entra-only by design — no credential
+ * fields; the sidecar acquires tokens through the shared credential factory. */
+export interface SqlConfig {
+    connections: SqlConnectionEntry[];
+    activeConnectionId: string | null;
+}
+
+/** Mirrors `SwebKit.Core.Domain.SqlConnectionEntry`. `allowWrites` gates mutating
+ * statements everywhere (editor and agent) — default false = read-only. */
+export interface SqlConnectionEntry {
+    id: string;
+    displayName: string;
+    server: string;
+    database: string;
+    allowWrites: boolean;
+    active: boolean;
+}
+
+export interface SqlDatabaseInfo {
+    name: string;
+    state: string;
+}
+
+export interface SqlColumnInfo {
+    name: string;
+    dataType: string;
+    isNullable: boolean;
+    isPrimaryKey: boolean;
+}
+
+export interface SqlIndexInfo {
+    name: string;
+    isUnique: boolean;
+    isPrimaryKey: boolean;
+    columns: string[];
+}
+
+export interface SqlForeignKeyInfo {
+    name: string;
+    referencedObject: string;
+}
+
+export interface SqlObjectInfo {
+    name: string;
+    kind: string;
+    columns: SqlColumnInfo[];
+    indexes: SqlIndexInfo[];
+    foreignKeys: SqlForeignKeyInfo[];
+}
+
+export interface SqlSchemaGroup {
+    name: string;
+    objects: SqlObjectInfo[];
+}
+
+export interface SqlSchemaModel {
+    database: string | null;
+    schemas: SqlSchemaGroup[];
+}
+
+export interface SqlResultColumn {
+    name: string;
+    typeName: string;
+}
+
+export interface SqlQueryResult {
+    columns: SqlResultColumn[];
+    rows: Record<string, unknown>[];
+    truncated: boolean;
+    elapsedMs: number;
+    rowsAffected: number;
+}
+
+export interface SavedSqlQuery {
+    id: string;
+    name: string;
+    folder: string | null;
+    sql: string;
+    connectionId: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface SqlHistoryEntry {
+    id: string;
+    sql: string;
+    connectionId: string | null;
+    database: string | null;
+    executedAt: string;
+    elapsedMs: number;
+    rowCount: number;
+    succeeded: boolean;
+    error: string | null;
+}
+
+export interface SqlDiscoveredServer {
+    serverFqdn: string;
+    name: string;
+    resourceGroup: string;
+    subscriptionId: string;
+    subscriptionName: string;
+    location: string;
+    databases: string[];
+}
+
+/** What `POST /api/sql/{id}/completion-context` returns — the ScriptDom parse of
+ * the editor text around the cursor. `kind` is "any" | "table" | "column". */
+export interface SqlCompletionContext {
+    tables: { schema: string | null; name: string; alias: string | null }[];
+    columnScope: string | null;
+    kind: string;
+}
+
+export interface SqlColumnDiff {
+    column: string;
+    sourceValue: unknown;
+    targetValue: unknown;
+}
+
+export interface SqlChangedRow {
+    key: Record<string, unknown>;
+    diffs: SqlColumnDiff[];
+}
+
+export interface SqlDataCompareResult {
+    onlyInSource: Record<string, unknown>[];
+    onlyInTarget: Record<string, unknown>[];
+    changed: SqlChangedRow[];
+    totalOnlyInSource: number;
+    totalOnlyInTarget: number;
+    totalChanged: number;
+    truncated: boolean;
+    schemaWarnings: string[];
+}
+
+export interface SqlPropertyDiff {
+    property: string;
+    sourceValue: string | null;
+    targetValue: string | null;
+}
+
+export interface SqlObjectDiff {
+    schema: string;
+    name: string;
+    kind: string;
+    diffs: SqlPropertyDiff[];
+}
+
+export interface SqlSchemaCompareResult {
+    onlyInSource: SqlObjectDiff[];
+    onlyInTarget: SqlObjectDiff[];
+    differing: SqlObjectDiff[];
 }
 
 export interface StorageConfig {
-  id: string;
-  displayName: string;
-  accountName: string;
-  connectionStringRef: string | null;
-  useAad: boolean;
-  allowMutations: boolean;
+    id: string;
+    displayName: string;
+    accountName: string;
+    connectionStringRef: string | null;
+    useAad: boolean;
+    allowMutations: boolean;
 }
 
 export interface DevOpsConfig {
-  organizationUrl: string;
-  project: string;
-  credentialKey: string;
+    organizationUrl: string;
+    project: string;
+    credentialKey: string;
 }
 
 /**
@@ -138,901 +300,927 @@ export interface DevOpsConfig {
  * Bus/DevOps do.
  */
 export interface ObservabilityConfig {
-  selectedResourceId: string | null;
-  selectedResourceName: string | null;
+    selectedResourceId: string | null;
+    selectedResourceName: string | null;
 }
 
 export interface ObservabilityResource {
-  resourceId: string;
-  name: string;
-  subscriptionId: string;
-  subscriptionName: string;
-  resourceGroup: string;
-  location: string;
-  workspaceType?: string | null;
+    resourceId: string;
+    name: string;
+    subscriptionId: string;
+    subscriptionName: string;
+    resourceGroup: string;
+    location: string;
+    workspaceType?: string | null;
 }
 
 export interface KeyVaultEntry {
-  id: string;
-  name: string;
-  url: string;
+    id: string;
+    name: string;
+    url: string;
 }
 
 export interface FavoriteEntity {
-  namespaceId: string;
-  entityPath: string;
-  label: string;
+    namespaceId: string;
+    entityPath: string;
+    label: string;
 }
 
 export interface FavoriteResource {
-  name: string;
-  pinnedAt: string;
-  snapshot: WorkspaceSnapshot;
+    name: string;
+    pinnedAt: string;
+    snapshot: WorkspaceSnapshot;
 }
 
 export interface WorkspaceSnapshot {
-  resource: OperatorResourceReference;
-  restoreState: Record<string, string>;
-  capturedAt: string;
+    resource: OperatorResourceReference;
+    restoreState: Record<string, string>;
+    capturedAt: string;
 }
 
 export interface OperatorResourceReference {
-  key: string;
-  area: string;
-  kind: string;
-  displayName: string;
-  displayPath?: string | null;
-  summary?: string | null;
-  icon?: string | null;
-  metadata: Record<string, string>;
+    key: string;
+    area: string;
+    kind: string;
+    displayName: string;
+    displayPath?: string | null;
+    summary?: string | null;
+    icon?: string | null;
+    metadata: Record<string, string>;
 }
 
 export interface SbMessageTemplate {
-  id: string;
-  name: string;
-  body: string;
-  contentType: string | null;
-  subject: string | null;
-  correlationId: string | null;
-  properties: Record<string, string>;
-  createdAt: string;
+    id: string;
+    name: string;
+    body: string;
+    contentType: string | null;
+    subject: string | null;
+    correlationId: string | null;
+    properties: Record<string, string>;
+    createdAt: string;
 }
 
 // ── User Settings ────────────────────────────────────────────────────────────
 
 export interface UserSettings {
-  theme: string;
-  fontSize: "small" | "medium" | "large";
-  density: "comfortable" | "compact";
-  warmupConnectionsOnStartup: boolean;
-  verifyApiClientSsl: boolean;
-  apiClientRequestTabs: boolean;
-  autoSaveRequests: boolean;
-  agent: AgentConfig;
-  logging: LoggingSettings;
-  /** Incremented once per app launch by the sidecar; drives the Fathom theme's unlock progress. */
-  sessionCount: number;
-  /** Sticky once true — the Fathom theme, once earned, stays available even if sessionCount is later reset. */
-  fathomUnlocked: boolean;
-  /** Set only via the hidden six-click gesture on the status bar version number — no other UI surfaces it. */
-  fathomDeveloperOverride: boolean;
-  /** Port-forward pins set elsewhere in the app; surfaced here so saves from this page don't erase them. */
-  pinnedPortForwards: Record<string, { label: string; namespace?: string; podLabelSelector?: string; remotePort: number; localPort: number; pinnedAt: string }[]>;
+    theme: string;
+    fontSize: "small" | "medium" | "large";
+    density: "comfortable" | "compact";
+    warmupConnectionsOnStartup: boolean;
+    verifyApiClientSsl: boolean;
+    apiClientRequestTabs: boolean;
+    autoSaveRequests: boolean;
+    agent: AgentConfig;
+    logging: LoggingSettings;
+    /** Incremented once per app launch by the sidecar; drives the Fathom theme's unlock progress. */
+    sessionCount: number;
+    /** Sticky once true — the Fathom theme, once earned, stays available even if sessionCount is later reset. */
+    fathomUnlocked: boolean;
+    /** Set only via the hidden six-click gesture on the status bar version number — no other UI surfaces it. */
+    fathomDeveloperOverride: boolean;
+    /** Port-forward pins set elsewhere in the app; surfaced here so saves from this page don't erase them. */
+    pinnedPortForwards: Record<
+        string,
+        {
+            label: string;
+            namespace?: string;
+            podLabelSelector?: string;
+            remotePort: number;
+            localPort: number;
+            pinnedAt: string;
+        }[]
+    >;
 }
 
 /** Sessions needed before Fathom unlocks. Mirrors UserSettings.FathomUnlockThreshold (server-enforced; this constant only drives the progress bar). */
 export const FATHOM_UNLOCK_THRESHOLD = 100;
 
 export interface AgentConfig {
-  isEnabled: boolean;
-  profiles: AgentProfile[];
-  activeProfileId: string;
+    isEnabled: boolean;
+    profiles: AgentProfile[];
+    activeProfileId: string;
 }
 
 export type AgentCapability = "Unknown" | "ChatOnly" | "ToolCalling";
 
 export interface AgentProfile {
-  id: string;
-  provider: "LmStudio" | "OpenAiCompatible" | "Mistral" | "Acp";
-  displayName: string;
-  baseUrl: string;
-  model: string;
-  credentialKey: string;
-  timeoutSeconds: number;
-  capability: AgentCapability;
-  lastTestDiagnostic: string | null;
-  requiresApiKey: boolean;
-  /** Model's context window in tokens, used to scale when a growing conversation gets rolling
-   * summarization (workspace-intelligence Module 5). Null = unknown; the sidecar falls back to a
-   * conservative default rather than treating null as unlimited. */
-  contextWindowTokens: number | null;
-  // ── ACP (external agent subprocess) — only meaningful when provider === "Acp" ──
-  /** Executable to spawn (e.g. "npx", "gemini"). */
-  command: string;
-  /** Command-line args as one string, e.g. "-y @agentclientprotocol/claude-agent-acp". */
-  arguments: string;
-  /** Working directory for the agent process and the ACP session cwd. */
-  workingDirectory: string;
-  /** Extra non-secret env vars for the agent process. */
-  environmentVariables: Record<string, string>;
-  /** Env var the resolved credentialKey secret is injected as (e.g. ANTHROPIC_API_KEY). */
-  credentialEnvVar: string;
-  /** When true, ACP session/request_permission calls surface as approval cards instead of being auto-approved. */
-  requireToolApproval: boolean;
-  /** Reserved: ACP fs/* client capability — designed in, handlers not implemented. */
-  enableFileSystem: boolean;
-  /** Reserved: ACP terminal client capability — see enableFileSystem. */
-  enableTerminal: boolean;
+    id: string;
+    provider: "LmStudio" | "OpenAiCompatible" | "Mistral" | "Acp";
+    displayName: string;
+    baseUrl: string;
+    model: string;
+    credentialKey: string;
+    timeoutSeconds: number;
+    capability: AgentCapability;
+    lastTestDiagnostic: string | null;
+    requiresApiKey: boolean;
+    /** Model's context window in tokens, used to scale when a growing conversation gets rolling
+     * summarization (workspace-intelligence Module 5). Null = unknown; the sidecar falls back to a
+     * conservative default rather than treating null as unlimited. */
+    contextWindowTokens: number | null;
+    // ── ACP (external agent subprocess) — only meaningful when provider === "Acp" ──
+    /** Executable to spawn (e.g. "npx", "gemini"). */
+    command: string;
+    /** Command-line args as one string, e.g. "-y @agentclientprotocol/claude-agent-acp". */
+    arguments: string;
+    /** Working directory for the agent process and the ACP session cwd. */
+    workingDirectory: string;
+    /** Extra non-secret env vars for the agent process. */
+    environmentVariables: Record<string, string>;
+    /** Env var the resolved credentialKey secret is injected as (e.g. ANTHROPIC_API_KEY). */
+    credentialEnvVar: string;
+    /** When true, ACP session/request_permission calls surface as approval cards instead of being auto-approved. */
+    requireToolApproval: boolean;
+    /** Reserved: ACP fs/* client capability — designed in, handlers not implemented. */
+    enableFileSystem: boolean;
+    /** Reserved: ACP terminal client capability — see enableFileSystem. */
+    enableTerminal: boolean;
 }
 
 export interface AgentCapabilityTestResult {
-  serverReachable: boolean;
-  modelAvailable: boolean;
-  chatValid: boolean;
-  toolCallingValid: boolean;
-  capability: AgentCapability;
-  diagnostic: string | null;
-  availableModels: string[] | null;
-  /** Best-effort context window read from a non-standard /v1/models field (LM Studio in
-   * particular) — null when the provider doesn't advertise one. */
-  detectedContextWindowTokens: number | null;
+    serverReachable: boolean;
+    modelAvailable: boolean;
+    chatValid: boolean;
+    toolCallingValid: boolean;
+    capability: AgentCapability;
+    diagnostic: string | null;
+    availableModels: string[] | null;
+    /** Best-effort context window read from a non-standard /v1/models field (LM Studio in
+     * particular) — null when the provider doesn't advertise one. */
+    detectedContextWindowTokens: number | null;
 }
 
 export interface LoggingSettings {
-  enabled: boolean;
-  minimumLevel: string;
+    enabled: boolean;
+    minimumLevel: string;
 }
 
 // ── API response helpers ─────────────────────────────────────────────────────
 
 export interface EnvironmentsResponse {
-  environments: ApiEnvironment[];
-  uiState: ApiClientUiState;
+    environments: ApiEnvironment[];
+    uiState: ApiClientUiState;
 }
 
 export interface ApiEnvironment {
-  id: string;
-  name: string;
-  collectionId: string | null;
-  variables: EnvironmentVariable[];
-  createdAt: string;
-  updatedAt: string;
+    id: string;
+    name: string;
+    collectionId: string | null;
+    variables: EnvironmentVariable[];
+    createdAt: string;
+    updatedAt: string;
 }
 
 export interface EnvironmentVariable {
-  key: string;
-  value: string | null;
-  secretSource: "Plain" | "WindowsCredentialStore" | "AzureKeyVault" | "Generated";
-  credentialKey: string | null;
-  keyVaultName: string | null;
-  generator?: VariableGeneratorDefinition | null;
-  isEnabled: boolean;
+    key: string;
+    value: string | null;
+    secretSource:
+        | "Plain"
+        | "WindowsCredentialStore"
+        | "AzureKeyVault"
+        | "Generated";
+    credentialKey: string | null;
+    keyVaultName: string | null;
+    generator?: VariableGeneratorDefinition | null;
+    isEnabled: boolean;
 }
 
 export interface ApiClientUiState {
-  activeEnvironmentId: string | null;
-  activeEnvironmentIdByCollection: Record<string, string>;
-  lastSelectedRequestIdByCollection: Record<string, string>;
+    activeEnvironmentId: string | null;
+    activeEnvironmentIdByCollection: Record<string, string>;
+    lastSelectedRequestIdByCollection: Record<string, string>;
 }
 
 // ── API Client ───────────────────────────────────────────────────────────────
 
 export type ApiRequestMethod =
-  | "Get"
-  | "Post"
-  | "Put"
-  | "Patch"
-  | "Delete"
-  | "Head"
-  | "Options"
-  | "GraphQl"
-  | "WebSocket";
+    | "Get"
+    | "Post"
+    | "Put"
+    | "Patch"
+    | "Delete"
+    | "Head"
+    | "Options"
+    | "GraphQl"
+    | "WebSocket";
 
 export type RequestBodyMode =
-  | "None"
-  | "Json"
-  | "Xml"
-  | "Text"
-  | "FormData"
-  | "Binary";
+    | "None"
+    | "Json"
+    | "Xml"
+    | "Text"
+    | "FormData"
+    | "Binary";
 
 export type ApiCollectionNodeType = "Folder" | "Request";
 
 export type AuthType =
-  | "None"
-  | "Inherited"
-  | "BearerToken"
-  | "ApiKey"
-  | "Basic"
-  | "OAuth2";
+    | "None"
+    | "Inherited"
+    | "BearerToken"
+    | "ApiKey"
+    | "Basic"
+    | "OAuth2";
 
 export type ApiKeyLocation = "Header" | "QueryParam";
 
 export interface ApiCollection {
-  id: string;
-  name: string;
-  nodes: ApiCollectionNode[];
-  variables: CollectionVariable[];
-  defaultAuth: AuthConfig | null;
-  createdAt: string;
-  updatedAt: string;
+    id: string;
+    name: string;
+    nodes: ApiCollectionNode[];
+    variables: CollectionVariable[];
+    defaultAuth: AuthConfig | null;
+    createdAt: string;
+    updatedAt: string;
 }
 
 export interface ApiCollectionNode {
-  id: string;
-  type: ApiCollectionNodeType;
-  name: string;
-  isExpanded: boolean;
-  children: ApiCollectionNode[];
-  defaultAuth: AuthConfig | null;
-  request: HttpRequestEntry | null;
+    id: string;
+    type: ApiCollectionNodeType;
+    name: string;
+    isExpanded: boolean;
+    children: ApiCollectionNode[];
+    defaultAuth: AuthConfig | null;
+    request: HttpRequestEntry | null;
 }
 
 export interface CollectionsStoreResponse {
-  schemaVersion: number;
-  collections: ApiCollection[];
-  concurrencyToken: string | null;
+    schemaVersion: number;
+    collections: ApiCollection[];
+    concurrencyToken: string | null;
 }
 
 export interface CollectionImportResult {
-  collections: ApiCollection[];
-  environments: ApiEnvironment[];
-  requestCount: number;
-  captureRuleCount: number;
-  authConfigsRequiringReEntry: number;
-  variablesExtractedAsEnvironment: number;
-  warnings: string[];
+    collections: ApiCollection[];
+    environments: ApiEnvironment[];
+    requestCount: number;
+    captureRuleCount: number;
+    authConfigsRequiringReEntry: number;
+    variablesExtractedAsEnvironment: number;
+    warnings: string[];
 }
 
 export interface HttpRequestEntry {
-  id: string;
-  name: string;
-  method: ApiRequestMethod;
-  url: string;
-  headers: KeyValuePair<string>[];
-  queryParams: KeyValuePair<string>[];
-  body: RequestBody;
-  auth: AuthConfig | null;
-  captureRules: CaptureRule[];
-  graphQlQuery: string | null;
-  graphQlVariables: string | null;
-  graphQlSelectedOperation: string | null;
-  savedMessages: WebSocketSavedMessage[];
-  wsSubProtocol: string | null;
-  responseExamples: ResponseExample[];
-  createdAt: string;
-  updatedAt: string;
-  preRequestActions: RequestAction[];
-  postRequestActions: RequestAction[];
+    id: string;
+    name: string;
+    method: ApiRequestMethod;
+    url: string;
+    headers: KeyValuePair<string>[];
+    queryParams: KeyValuePair<string>[];
+    body: RequestBody;
+    auth: AuthConfig | null;
+    captureRules: CaptureRule[];
+    graphQlQuery: string | null;
+    graphQlVariables: string | null;
+    graphQlSelectedOperation: string | null;
+    savedMessages: WebSocketSavedMessage[];
+    wsSubProtocol: string | null;
+    responseExamples: ResponseExample[];
+    createdAt: string;
+    updatedAt: string;
+    preRequestActions: RequestAction[];
+    postRequestActions: RequestAction[];
 }
 
 export interface RequestBody {
-  mode: RequestBodyMode;
-  rawContent: string | null;
-  contentType: string | null;
-  formData: KeyValuePair<string>[];
-  filePath: string | null;
+    mode: RequestBodyMode;
+    rawContent: string | null;
+    contentType: string | null;
+    formData: KeyValuePair<string>[];
+    filePath: string | null;
 }
 
 export interface KeyValuePair<T> {
-  key: string;
-  value: T | null;
-  isEnabled: boolean;
+    key: string;
+    value: T | null;
+    isEnabled: boolean;
 }
 
 export interface AuthConfig {
-  type: AuthType;
-  /** Reference key into the persisted secret store. Never contains the actual secret. */
-  credentialKey: string | null;
-  /** Transient secret material for the current session; never persisted to collections.json. */
-  credentialSecret?: string | null;
-  apiKeyParamName: string | null;
-  apiKeyLocation: ApiKeyLocation;
-  basicUsername: string | null;
-  oAuth2ClientId: string | null;
-  oAuth2GrantType: "ClientCredentials" | "AuthorizationCode";
-  oAuth2TokenUrl: string | null;
-  oAuth2AuthUrl: string | null;
-  oAuth2Scopes: string | null;
+    type: AuthType;
+    /** Reference key into the persisted secret store. Never contains the actual secret. */
+    credentialKey: string | null;
+    /** Transient secret material for the current session; never persisted to collections.json. */
+    credentialSecret?: string | null;
+    apiKeyParamName: string | null;
+    apiKeyLocation: ApiKeyLocation;
+    basicUsername: string | null;
+    oAuth2ClientId: string | null;
+    oAuth2GrantType: "ClientCredentials" | "AuthorizationCode";
+    oAuth2TokenUrl: string | null;
+    oAuth2AuthUrl: string | null;
+    oAuth2Scopes: string | null;
 }
 
 export interface CollectionVariable {
-  key: string;
-  value: string | null;
-  generator?: VariableGeneratorDefinition | null;
-  isEnabled: boolean;
+    key: string;
+    value: string | null;
+    generator?: VariableGeneratorDefinition | null;
+    isEnabled: boolean;
 }
 
 export type VariableGeneratorKind =
-  | "Integer"
-  | "Decimal"
-  | "Boolean"
-  | "Guid"
-  | "DateTime"
-  | "List"
-  | "Faker";
+    | "Integer"
+    | "Decimal"
+    | "Boolean"
+    | "Guid"
+    | "DateTime"
+    | "List"
+    | "Faker";
 
 export interface VariableGeneratorDefinition {
-  kind: VariableGeneratorKind;
-  minInt?: number | null;
-  maxInt?: number | null;
-  minDecimal?: number | null;
-  maxDecimal?: number | null;
-  decimalPlaces?: number;
-  trueWeightPercent?: number | null;
-  fakerCategory?: string | null;
-  values?: string[];
+    kind: VariableGeneratorKind;
+    minInt?: number | null;
+    maxInt?: number | null;
+    minDecimal?: number | null;
+    maxDecimal?: number | null;
+    decimalPlaces?: number;
+    trueWeightPercent?: number | null;
+    fakerCategory?: string | null;
+    values?: string[];
 }
 
 export interface CaptureRule {
-  id: string;
-  targetVariable: string;
-  targetScope: string;
-  source: "BodyJsonPath" | "ResponseHeader" | "StatusCode";
-  jsonPath: string | null;
-  headerName: string | null;
-  isEnabled: boolean;
+    id: string;
+    targetVariable: string;
+    targetScope: string;
+    source: "BodyJsonPath" | "ResponseHeader" | "StatusCode";
+    jsonPath: string | null;
+    headerName: string | null;
+    isEnabled: boolean;
 }
 
 export type RequestActionKind = "CopyToClipboard" | "Delay";
 
 export type RequestActionSource =
-  | "RequestUrl"
-  | "RequestMethod"
-  | "RequestBody"
-  | "ResponseStatusCode"
-  | "ResponseStatusText"
-  | "ResponseBody"
-  | "ResponseHeader";
+    | "RequestUrl"
+    | "RequestMethod"
+    | "RequestBody"
+    | "ResponseStatusCode"
+    | "ResponseStatusText"
+    | "ResponseBody"
+    | "ResponseHeader";
 
 export interface RequestAction {
-  id: string;
-  kind: RequestActionKind;
-  name: string;
-  isEnabled: boolean;
-  source: RequestActionSource;
-  selector: string | null;
-  delayMs: number;
+    id: string;
+    kind: RequestActionKind;
+    name: string;
+    isEnabled: boolean;
+    source: RequestActionSource;
+    selector: string | null;
+    delayMs: number;
 }
 
 export interface ResponseExample {
-  id: string;
-  name: string;
-  statusCode: number;
-  statusText: string;
-  contentType: string | null;
-  body: string | null;
-  headers: KeyValuePair<string>[];
-  capturedAt: string;
-  environmentName: string | null;
+    id: string;
+    name: string;
+    statusCode: number;
+    statusText: string;
+    contentType: string | null;
+    body: string | null;
+    headers: KeyValuePair<string>[];
+    capturedAt: string;
+    environmentName: string | null;
 }
 
 export interface WebSocketSavedMessage {
-  id: string;
-  name: string;
-  content: string;
-  frameType: "Text" | "Binary";
+    id: string;
+    name: string;
+    content: string;
+    frameType: "Text" | "Binary";
 }
 
 export interface ApiClientExecutionResponse {
-  resolvedUrl: string;
-  method: string;
-  statusCode: number;
-  statusText: string;
-  errorMessage: string | null;
-  elapsedMs: number;
-  contentLength: number;
-  contentType: string | null;
-  responseBody: string | null;
-  responseBodyTruncated: boolean;
-  headers: ResponseHeaderDto[];
-  captureWarnings: string[];
-  graphQlErrors: GraphQlError[] | null;
-  /** Headers exactly as sent, echoed by the sidecar so the cURL panel can be truthful. */
-  sentHeaders?: ResponseHeaderDto[] | null;
+    resolvedUrl: string;
+    method: string;
+    statusCode: number;
+    statusText: string;
+    errorMessage: string | null;
+    elapsedMs: number;
+    contentLength: number;
+    contentType: string | null;
+    responseBody: string | null;
+    responseBodyTruncated: boolean;
+    headers: ResponseHeaderDto[];
+    captureWarnings: string[];
+    graphQlErrors: GraphQlError[] | null;
+    /** Headers exactly as sent, echoed by the sidecar so the cURL panel can be truthful. */
+    sentHeaders?: ResponseHeaderDto[] | null;
 }
 
 export interface ResponseHeaderDto {
-  name: string;
-  value: string;
+    name: string;
+    value: string;
 }
 
 export interface GraphQlError {
-  message: string;
-  locations: GraphQlErrorLocation[] | null;
-  path: string[] | null;
+    message: string;
+    locations: GraphQlErrorLocation[] | null;
+    path: string[] | null;
 }
 
 export interface GraphQlErrorLocation {
-  line: number;
-  column: number;
+    line: number;
+    column: number;
 }
 
 // ── Service Bus ──────────────────────────────────────────────────────────────
 
 export interface SbNamespaceInfo {
-  name: string;
-  endpoint: string;
+    name: string;
+    endpoint: string;
 }
 
 export interface SbEntityInfo {
-  name: string;
-  entityPath: string;
-  stats: SbEntityStats | null;
-  isDisabled: boolean;
-  isTopic: boolean;
-  isSubscription: boolean;
-  topicName: string | null;
-  /**
-   * For a topic: dead-lettered messages summed across its subscriptions, so a collapsed topic can show
-   * its backlog without the tree fetching every topic's subscriptions. `null` elsewhere or when unreadable.
-   */
-  subscriptionDeadLetterCount: number | null;
+    name: string;
+    entityPath: string;
+    stats: SbEntityStats | null;
+    isDisabled: boolean;
+    isTopic: boolean;
+    isSubscription: boolean;
+    topicName: string | null;
+    /**
+     * For a topic: dead-lettered messages summed across its subscriptions, so a collapsed topic can show
+     * its backlog without the tree fetching every topic's subscriptions. `null` elsewhere or when unreadable.
+     */
+    subscriptionDeadLetterCount: number | null;
 }
 
 export interface SbEntityStats {
-  activeMessageCount: number;
-  deadLetterMessageCount: number;
-  scheduledMessageCount: number;
-  transferCount: number;
-  updatedAt: string | null;
+    activeMessageCount: number;
+    deadLetterMessageCount: number;
+    scheduledMessageCount: number;
+    transferCount: number;
+    updatedAt: string | null;
 }
 
 export interface SbMessage {
-  messageId: string;
-  correlationId: string | null;
-  subject: string | null;
-  contentType: string | null;
-  body: string;
-  applicationProperties: Record<string, unknown>;
-  systemProperties: SbSystemProperties | null;
-  deadLetterReason: string | null;
-  deadLetterErrorDescription: string | null;
-  enqueuedAt: string;
-  deliveryCount: number;
-  lockToken: string | null;
-  sequenceNumber: number | null;
-  sessionId: string | null;
+    messageId: string;
+    correlationId: string | null;
+    subject: string | null;
+    contentType: string | null;
+    body: string;
+    applicationProperties: Record<string, unknown>;
+    systemProperties: SbSystemProperties | null;
+    deadLetterReason: string | null;
+    deadLetterErrorDescription: string | null;
+    enqueuedAt: string;
+    deliveryCount: number;
+    lockToken: string | null;
+    sequenceNumber: number | null;
+    sessionId: string | null;
 }
 
 export interface SbSystemProperties {
-  expiresAt: string | null;
-  lockedUntil: string | null;
-  enqueuedSequenceNumber: string | null;
-  partitionKey: string | null;
+    expiresAt: string | null;
+    lockedUntil: string | null;
+    enqueuedSequenceNumber: string | null;
+    partitionKey: string | null;
 }
 
 export interface ScheduledMessageEntry {
-  id: string;
-  namespaceId: string;
-  entityPath: string;
-  sequenceNumber: number;
-  scheduledEnqueueTime: string;
-  messageId: string | null;
-  subject: string | null;
-  correlationId: string | null;
-  createdAt: string;
+    id: string;
+    namespaceId: string;
+    entityPath: string;
+    sequenceNumber: number;
+    scheduledEnqueueTime: string;
+    messageId: string | null;
+    subject: string | null;
+    correlationId: string | null;
+    createdAt: string;
 }
 
 export interface ResubmitRequest {
-  sequenceNumbers: string[];
-  targetEntityPath: string | null;
-  remapRules: RemapRules | null;
+    sequenceNumbers: string[];
+    targetEntityPath: string | null;
+    remapRules: RemapRules | null;
 }
 
 export interface RemapRules {
-  overrideSubject: string | null;
-  overrideCorrelationId: string | null;
-  propertyRenames: Record<string, string>;
-  propertyRemoves: string[];
+    overrideSubject: string | null;
+    overrideCorrelationId: string | null;
+    propertyRenames: Record<string, string>;
+    propertyRemoves: string[];
 }
 
 // ── AKS / Kubernetes ─────────────────────────────────────────────────────────
 
 export interface KubeContextInfo {
-  name: string;
-  cluster: string | null;
-  user: string | null;
-  namespace: string | null;
-  isCurrent: boolean;
+    name: string;
+    cluster: string | null;
+    user: string | null;
+    namespace: string | null;
+    isCurrent: boolean;
 }
 
 export interface DeploymentInfo {
-  name: string;
-  namespace: string;
-  replicas: number;
-  readyReplicas: number;
-  status: string;
-  imageTag: string | null;
-  labels: Record<string, string>;
-  selectorLabels: Record<string, string>;
+    name: string;
+    namespace: string;
+    replicas: number;
+    readyReplicas: number;
+    status: string;
+    imageTag: string | null;
+    labels: Record<string, string>;
+    selectorLabels: Record<string, string>;
 }
 
 export interface PodInfo {
-  name: string;
-  namespace: string;
-  phase: string;
-  status: string;
-  ready: boolean;
-  readyContainers: number;
-  totalContainers: number;
-  restartCount: number;
-  lastRestartTime: string | null;
-  lastRestartReason: string | null;
-  podIP: string | null;
-  nodeName: string | null;
-  startTime: string | null;
-  containers: string[];
-  labels: Record<string, string>;
-  readyDisplay: string;
+    name: string;
+    namespace: string;
+    phase: string;
+    status: string;
+    ready: boolean;
+    readyContainers: number;
+    totalContainers: number;
+    restartCount: number;
+    lastRestartTime: string | null;
+    lastRestartReason: string | null;
+    podIP: string | null;
+    nodeName: string | null;
+    startTime: string | null;
+    containers: string[];
+    labels: Record<string, string>;
+    readyDisplay: string;
 }
 
 export interface KubernetesEvent {
-  name: string;
-  namespace: string;
-  type: string;
-  reason: string | null;
-  message: string | null;
-  involvedObjectName: string | null;
-  involvedObjectKind: string | null;
-  lastTimestamp: string | null;
-  count: number;
+    name: string;
+    namespace: string;
+    type: string;
+    reason: string | null;
+    message: string | null;
+    involvedObjectName: string | null;
+    involvedObjectKind: string | null;
+    lastTimestamp: string | null;
+    count: number;
 }
 
 export interface ServiceInfo {
-  name: string;
-  namespace: string;
-  type: string;
-  clusterIp: string;
-  externalAddresses: string[];
-  ports: ServicePortInfo[];
-  selectorLabels: Record<string, string>;
-  labels: Record<string, string>;
+    name: string;
+    namespace: string;
+    type: string;
+    clusterIp: string;
+    externalAddresses: string[];
+    ports: ServicePortInfo[];
+    selectorLabels: Record<string, string>;
+    labels: Record<string, string>;
 }
 
 export interface ServicePortInfo {
-  name: string | null;
-  protocol: string;
-  port: number;
-  targetPort: string | null;
-  nodePort: number | null;
+    name: string | null;
+    protocol: string;
+    port: number;
+    targetPort: string | null;
+    nodePort: number | null;
 }
 
 export interface HelmReleaseInfo {
-  name: string;
-  namespace: string;
-  chart: string | null;
-  appVersion: string | null;
-  chartVersion: string | null;
-  status: string;
-  revision: number;
-  updated: string | null;
+    name: string;
+    namespace: string;
+    chart: string | null;
+    appVersion: string | null;
+    chartVersion: string | null;
+    status: string;
+    revision: number;
+    updated: string | null;
 }
 
 export interface SecretInfo {
-  name: string;
-  namespace: string;
-  type: string;
-  keys: string[];
-  labels: Record<string, string>;
+    name: string;
+    namespace: string;
+    type: string;
+    keys: string[];
+    labels: Record<string, string>;
 }
 
 export interface ConfigMapInfo {
-  name: string;
-  namespace: string;
-  /**
-   * Data key names. The list endpoint sends these and omits the values — a namespace's ConfigMap
-   * values can run to megabytes, and the list only ever renders names. `useAksConfigMapValues`
-   * fetches one ConfigMap's values for the detail panel, the same way Secrets already work.
-   */
-  keys: string[];
-  /** Total size of all values in characters — sent instead of the values themselves. */
-  dataSizeChars: number;
-  labels: Record<string, string>;
+    name: string;
+    namespace: string;
+    /**
+     * Data key names. The list endpoint sends these and omits the values — a namespace's ConfigMap
+     * values can run to megabytes, and the list only ever renders names. `useAksConfigMapValues`
+     * fetches one ConfigMap's values for the detail panel, the same way Secrets already work.
+     */
+    keys: string[];
+    /** Total size of all values in characters — sent instead of the values themselves. */
+    dataSizeChars: number;
+    labels: Record<string, string>;
 }
 
 export interface StatefulSetInfo {
-  name: string;
-  namespace: string;
-  replicas: number;
-  readyReplicas: number;
-  currentRevision: string | null;
-  updateRevision: string | null;
-  labels: Record<string, string>;
-  selectorLabels: Record<string, string>;
+    name: string;
+    namespace: string;
+    replicas: number;
+    readyReplicas: number;
+    currentRevision: string | null;
+    updateRevision: string | null;
+    labels: Record<string, string>;
+    selectorLabels: Record<string, string>;
 }
 
 export interface HpaInfo {
-  name: string;
-  namespace: string;
-  targetKind: string;
-  targetName: string;
-  minReplicas: number;
-  maxReplicas: number;
-  currentReplicas: number;
-  desiredReplicas: number;
-  currentCpuUtilizationPercent: number | null;
-  targetCpuUtilizationPercent: number | null;
-  isKedaManaged: boolean;
-  isScalingDisabled: boolean;
+    name: string;
+    namespace: string;
+    targetKind: string;
+    targetName: string;
+    minReplicas: number;
+    maxReplicas: number;
+    currentReplicas: number;
+    desiredReplicas: number;
+    currentCpuUtilizationPercent: number | null;
+    targetCpuUtilizationPercent: number | null;
+    isKedaManaged: boolean;
+    isScalingDisabled: boolean;
 }
 
 export interface CronJobInfo {
-  name: string;
-  namespace: string;
-  schedule: string | null;
-  suspend: boolean;
-  activeCount: number;
-  lastScheduleTime: string | null;
-  lastSuccessfulTime: string | null;
+    name: string;
+    namespace: string;
+    schedule: string | null;
+    suspend: boolean;
+    activeCount: number;
+    lastScheduleTime: string | null;
+    lastSuccessfulTime: string | null;
 }
 
 export interface IngressInfo {
-  name: string;
-  namespace: string;
-  ingressClass: string | null;
-  rules: { host: string | null; paths: { path: string; pathType: string | null; serviceName: string | null; servicePort: number | null }[] }[];
-  addresses: string[];
-  labels: Record<string, string>;
+    name: string;
+    namespace: string;
+    ingressClass: string | null;
+    rules: {
+        host: string | null;
+        paths: {
+            path: string;
+            pathType: string | null;
+            serviceName: string | null;
+            servicePort: number | null;
+        }[];
+    }[];
+    addresses: string[];
+    labels: Record<string, string>;
 }
 
 export interface HttpRouteInfo {
-  name: string;
-  namespace: string;
-  status: string;
-  hostnames: string[];
-  parentRefs: string[];
-  backendRefs: string[];
-  labels: Record<string, string>;
+    name: string;
+    namespace: string;
+    status: string;
+    hostnames: string[];
+    parentRefs: string[];
+    backendRefs: string[];
+    labels: Record<string, string>;
 }
 
 export interface GatewayInfo {
-  name: string;
-  namespace: string;
-  gatewayClass: string;
-  status: string;
-  addresses: string[];
-  attachedRoutes: number;
-  labels: Record<string, string>;
+    name: string;
+    namespace: string;
+    gatewayClass: string;
+    status: string;
+    addresses: string[];
+    attachedRoutes: number;
+    labels: Record<string, string>;
 }
 
 export interface GatewayClassInfo {
-  name: string;
-  controllerName: string;
-  status: string;
-  labels: Record<string, string>;
+    name: string;
+    controllerName: string;
+    status: string;
+    labels: Record<string, string>;
 }
 
 export interface HelmHistoryEntry {
-  revision: number;
-  status: string;
-  chart: string;
-  appVersion: string;
-  description: string;
-  updated: string | null;
+    revision: number;
+    status: string;
+    chart: string;
+    appVersion: string;
+    description: string;
+    updated: string | null;
 }
 
 export interface HelmValuesResponse {
-  userValues: string;
-  computedValues: string;
+    userValues: string;
+    computedValues: string;
 }
 
 export interface JobInfo {
-  name: string;
-  namespace: string;
-  status: string;
-  active: number;
-  succeeded: number;
-  failed: number;
-  desiredCompletions: number | null;
-  parallelism: number;
-  startTime: string | null;
-  completionTime: string | null;
-  sourceKind: string | null;
-  sourceName: string | null;
+    name: string;
+    namespace: string;
+    status: string;
+    active: number;
+    succeeded: number;
+    failed: number;
+    desiredCompletions: number | null;
+    parallelism: number;
+    startTime: string | null;
+    completionTime: string | null;
+    sourceKind: string | null;
+    sourceName: string | null;
 }
 
 // ── Redis ─────────────────────────────────────────────────────────────────────
 
 export interface RedisKeyScanResult {
-  cursor: number;
-  keys: string[];
-  isComplete: boolean;
-  /** How many `SCAN` round trips the sidecar made to assemble `keys`. See `KeyScanResult.PagesScanned`. */
-  pagesScanned: number;
+    cursor: number;
+    keys: string[];
+    isComplete: boolean;
+    /** How many `SCAN` round trips the sidecar made to assemble `keys`. See `KeyScanResult.PagesScanned`. */
+    pagesScanned: number;
 }
 
 export interface RedisKeyInfo {
-  key: string;
-  type: string;
-  ttl: string | null;
-  memoryBytes: number | null;
-  encoding: string | null;
-  frequency: number | null;
-  idleSeconds: number | null;
+    key: string;
+    type: string;
+    ttl: string | null;
+    memoryBytes: number | null;
+    encoding: string | null;
+    frequency: number | null;
+    idleSeconds: number | null;
 }
 
 export interface RedisHashField {
-  field: string;
-  value: string;
+    field: string;
+    value: string;
 }
 
 export interface RedisSortedSetEntry {
-  member: string;
-  score: number;
+    member: string;
+    score: number;
 }
 
 export interface RedisSetMembersPage {
-  members: string[];
-  cursor: number;
-  isComplete: boolean;
+    members: string[];
+    cursor: number;
+    isComplete: boolean;
 }
 
 export interface RedisServerInfo {
-  redisVersion: string;
-  uptimeSeconds: number;
-  connectedClients: number;
-  usedMemoryBytes: number;
-  maxMemoryBytes: number;
-  usedMemoryHuman: string;
-  totalCommandsProcessed: number;
-  keyspaceHitRatio: number;
-  databases: RedisDatabaseInfo[];
+    redisVersion: string;
+    uptimeSeconds: number;
+    connectedClients: number;
+    usedMemoryBytes: number;
+    maxMemoryBytes: number;
+    usedMemoryHuman: string;
+    totalCommandsProcessed: number;
+    keyspaceHitRatio: number;
+    databases: RedisDatabaseInfo[];
 }
 
 export interface RedisDatabaseInfo {
-  index: number;
-  keys: number;
-  expires: number;
-  avgTtl: number;
+    index: number;
+    keys: number;
+    expires: number;
+    avgTtl: number;
 }
 
 export interface RedisSlowLogEntry {
-  id: number;
-  executedAt: string;
-  duration: string;
-  command: string;
-  arguments: string;
-  clientName: string | null;
+    id: number;
+    executedAt: string;
+    duration: string;
+    command: string;
+    arguments: string;
+    clientName: string | null;
 }
 
 export interface RedisSlowLogSummary {
-  entries: RedisSlowLogEntry[];
-  truncated: boolean;
-  maxReturned: number;
-  capability: string;
+    entries: RedisSlowLogEntry[];
+    truncated: boolean;
+    maxReturned: number;
+    capability: string;
 }
 
 export interface RedisPrefixMemoryBucket {
-  prefix: string;
-  keyCount: number;
-  totalBytes: number;
-  percentage: number;
+    prefix: string;
+    keyCount: number;
+    totalBytes: number;
+    percentage: number;
 }
 
 export type RedisHealthSeverity = "Info" | "Warning" | "Critical";
 
 export interface RedisHealthFinding {
-  entityType: string;
-  riskType: string;
-  severity: RedisHealthSeverity;
-  target: string;
-  reason: string;
-  memoryBytes: number | null;
-  keyCount: number | null;
-  sharePercent: number | null;
-  drillKey: string | null;
+    entityType: string;
+    riskType: string;
+    severity: RedisHealthSeverity;
+    target: string;
+    reason: string;
+    memoryBytes: number | null;
+    keyCount: number | null;
+    sharePercent: number | null;
+    drillKey: string | null;
 }
 
 export interface RedisKeyspaceHealthReport {
-  generatedAtUtc: string;
-  loadedKeyCount: number;
-  estimatedKeyCount: number | null;
-  coveragePercent: number;
-  isPartialCoverage: boolean;
-  confidenceLabel: string;
-  hotKeySignalsAvailable: boolean;
-  keysWithHotKeySignal: number;
-  keysWithoutHotKeySignal: number;
-  criticalCount: number;
-  warningCount: number;
-  infoCount: number;
-  keyFindingCount: number;
-  prefixFindingCount: number;
-  findings: RedisHealthFinding[];
+    generatedAtUtc: string;
+    loadedKeyCount: number;
+    estimatedKeyCount: number | null;
+    coveragePercent: number;
+    isPartialCoverage: boolean;
+    confidenceLabel: string;
+    hotKeySignalsAvailable: boolean;
+    keysWithHotKeySignal: number;
+    keysWithoutHotKeySignal: number;
+    criticalCount: number;
+    warningCount: number;
+    infoCount: number;
+    keyFindingCount: number;
+    prefixFindingCount: number;
+    findings: RedisHealthFinding[];
 }
 
 export interface RedisPubSubChannelInfo {
-  channel: string;
-  subscriberCount: number;
+    channel: string;
+    subscriberCount: number;
 }
 
 export interface RedisPubSubSnapshot {
-  channels: RedisPubSubChannelInfo[];
-  patternSubscriptionCount: number;
-  truncated: boolean;
-  maxChannels: number;
-  capability: string;
+    channels: RedisPubSubChannelInfo[];
+    patternSubscriptionCount: number;
+    truncated: boolean;
+    maxChannels: number;
+    capability: string;
 }
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 export interface StorageContainerItem {
-  name: string;
-  lastModified: string | null;
-  publicAccess: string | null;
-  leaseStatus: string | null;
+    name: string;
+    lastModified: string | null;
+    publicAccess: string | null;
+    leaseStatus: string | null;
 }
 
 export interface StorageBlobItem {
-  name: string;
-  isPrefix: boolean;
-  sizeBytes: number | null;
-  contentType: string | null;
-  lastModified: string | null;
-  etag: string | null;
+    name: string;
+    isPrefix: boolean;
+    sizeBytes: number | null;
+    contentType: string | null;
+    lastModified: string | null;
+    etag: string | null;
 }
 
 export interface StorageBlobPage {
-  items: StorageBlobItem[];
-  continuationToken: string | null;
+    items: StorageBlobItem[];
+    continuationToken: string | null;
 }
 
 export interface BlobProperties {
-  name: string;
-  sizeBytes: number;
-  contentType: string;
-  lastModified: string;
-  etag: string;
-  leaseStatus: string | null;
-  leaseState: string | null;
-  accessTier: string | null;
-  accessTierInferred: boolean | null;
-  contentEncoding: string | null;
-  contentLanguage: string | null;
-  cacheControl: string | null;
-  metadata: Record<string, string>;
-  tags: Record<string, string>;
+    name: string;
+    sizeBytes: number;
+    contentType: string;
+    lastModified: string;
+    etag: string;
+    leaseStatus: string | null;
+    leaseState: string | null;
+    accessTier: string | null;
+    accessTierInferred: boolean | null;
+    contentEncoding: string | null;
+    contentLanguage: string | null;
+    cacheControl: string | null;
+    metadata: Record<string, string>;
+    tags: Record<string, string>;
 }
 
 export interface StorageBlobContent {
-  containerName: string;
-  blobName: string;
-  content: string;
-  contentType: string | null;
-  totalSizeBytes: number;
-  wasTruncated: boolean;
-  isBinary: boolean;
+    containerName: string;
+    blobName: string;
+    content: string;
+    contentType: string | null;
+    totalSizeBytes: number;
+    wasTruncated: boolean;
+    isBinary: boolean;
 }
 
 export interface BlobVersionComparison {
-  baseVersionId: string;
-  compareVersionId: string | null;
-  metadataDiff: {
-    before: Record<string, string | null>;
-    after: Record<string, string | null>;
-    addedKeys: string[];
-    removedKeys: string[];
-    changedKeys: string[];
-  };
-  contentComparePossible: boolean;
-  baseSizeBytes: number | null;
-  compareSizeBytes: number | null;
-  textDiff: string | null;
+    baseVersionId: string;
+    compareVersionId: string | null;
+    metadataDiff: {
+        before: Record<string, string | null>;
+        after: Record<string, string | null>;
+        addedKeys: string[];
+        removedKeys: string[];
+        changedKeys: string[];
+    };
+    contentComparePossible: boolean;
+    baseSizeBytes: number | null;
+    compareSizeBytes: number | null;
+    textDiff: string | null;
 }
 
 export interface BlobMutationResult {
-  success: boolean;
-  errorMessage?: string | null;
-  resultBlobPath?: string | null;
+    success: boolean;
+    errorMessage?: string | null;
+    resultBlobPath?: string | null;
 }
 
-export type BlobRecoveryState = "Restored" | "Undeleted" | "Unsupported" | "Failed";
+export type BlobRecoveryState =
+    | "Restored"
+    | "Undeleted"
+    | "Unsupported"
+    | "Failed";
 
 export interface BlobRecoveryResult {
-  state: BlobRecoveryState;
-  resultBlobPath?: string | null;
-  errorMessage?: string | null;
+    state: BlobRecoveryState;
+    resultBlobPath?: string | null;
+    errorMessage?: string | null;
 }
 
 // ── Agent ─────────────────────────────────────────────────────────────────────
@@ -1041,31 +1229,31 @@ export interface BlobRecoveryResult {
  * "tool_call" (about to run) or "tool_result" (finished); `summary` is a short, non-sensitive
  * preview, never the full result. */
 export interface AgentChatStep {
-  type: string;
-  toolName?: string;
-  summary?: string;
-  elapsed?: string;
-  /** True for a "tool_result" step whose tool call failed (ux-interaction-consistency unit 7.4) —
-   * always false/absent for "tool_call" steps. */
-  isFailure?: boolean;
+    type: string;
+    toolName?: string;
+    summary?: string;
+    elapsed?: string;
+    /** True for a "tool_result" step whose tool call failed (ux-interaction-consistency unit 7.4) —
+     * always false/absent for "tool_call" steps. */
+    isFailure?: boolean;
 }
 
 export interface AgentReply {
-  text: string;
-  elapsedMs: number;
-  status: string;
-  error: boolean;
-  /** Per-tool-call trace for this turn (workspace-intelligence Module 6) — empty when no tools were
-   * used. Rendered as a collapsed-by-default "Show reasoning" disclosure. */
-  steps?: AgentChatStep[];
-  /** True when this turn's history was rolling-summarized before being sent (Module 5) — render as
-   * an inline "earlier parts of this conversation were summarized" notice. */
-  summarized?: boolean;
-  /** Percentage of the effective context window this turn's request used. */
-  contextUsagePercent?: number;
-  /** agent-correlation Module 3 — "workspace" when the agent reached for a tool this turn's
-   * scope fence hid (ACP only). Render as a "retry with workspace scope" affordance. */
-  suggestedScope?: string;
+    text: string;
+    elapsedMs: number;
+    status: string;
+    error: boolean;
+    /** Per-tool-call trace for this turn (workspace-intelligence Module 6) — empty when no tools were
+     * used. Rendered as a collapsed-by-default "Show reasoning" disclosure. */
+    steps?: AgentChatStep[];
+    /** True when this turn's history was rolling-summarized before being sent (Module 5) — render as
+     * an inline "earlier parts of this conversation were summarized" notice. */
+    summarized?: boolean;
+    /** Percentage of the effective context window this turn's request used. */
+    contextUsagePercent?: number;
+    /** agent-correlation Module 3 — "workspace" when the agent reached for a tool this turn's
+     * scope fence hid (ACP only). Render as a "retry with workspace scope" affordance. */
+    suggestedScope?: string;
 }
 
 /** One incremental event from POST /api/agent/chat/stream — see streamAgentChat in lib/api.ts and
@@ -1073,53 +1261,53 @@ export interface AgentReply {
  * `result` and is always the last event on success; "error" always carries `errorMessage` and is
  * always the last event on failure — nothing follows either. */
 export type AgentStreamEventKind =
-  | "token"
-  | "toolCallStarted"
-  | "toolCallResult"
-  | "done"
-  | "error"
-  /** ACP agent_thought_chunk — the agent's reasoning, not reply text. */
-  | "thought"
-  /** An ACP permission request is parked waiting for the user (RequireToolApproval on). */
-  | "permissionRequired";
+    | "token"
+    | "toolCallStarted"
+    | "toolCallResult"
+    | "done"
+    | "error"
+    /** ACP agent_thought_chunk — the agent's reasoning, not reply text. */
+    | "thought"
+    /** An ACP permission request is parked waiting for the user (RequireToolApproval on). */
+    | "permissionRequired";
 
 export interface AgentStreamEvent {
-  kind: AgentStreamEventKind;
-  token?: string;
-  toolName?: string;
-  result?: AgentReply;
-  errorMessage?: string;
+    kind: AgentStreamEventKind;
+    token?: string;
+    toolName?: string;
+    result?: AgentReply;
+    errorMessage?: string;
 }
 
 /** A parked ACP session/request_permission call awaiting a user decision — only populated when
  * the active ACP profile has requireToolApproval on (otherwise they're auto-approved and never
  * reach this list). Mirrors PendingAction's poll-and-respond shape. */
 export interface AcpPermissionOption {
-  optionId: string;
-  name: string;
-  kind: string | null;
+    optionId: string;
+    name: string;
+    kind: string | null;
 }
 
 export interface AcpPermission {
-  id: string;
-  toolCallTitle: string;
-  options: AcpPermissionOption[];
-  expiresAt: string;
+    id: string;
+    toolCallTitle: string;
+    options: AcpPermissionOption[];
+    expiresAt: string;
 }
 
 export interface AgentStatus {
-  historyCount: number;
-  /** Rough ~4-chars-per-token estimate over this session's history — not real tokenization, just
-   * enough to let the user watch the conversation grow (see SidecarAgentChatService.GetEstimatedTokens). */
-  estimatedTokens: number;
-  /** Percentage of the active profile's effective context window the most recent turn's
-   * fully-constructed request used (workspace-intelligence Module 5/6) — 0 if no turn has been
-   * sent yet in this session. */
-  contextUsagePercent: number;
-  /** The percentage at which the context-usage indicator should switch to a warning color — the
-   * same scaled threshold the backend uses to trigger rolling summarization
-   * (workspace-intelligence Module 7). */
-  contextUsageWarningPercent: number;
+    historyCount: number;
+    /** Rough ~4-chars-per-token estimate over this session's history — not real tokenization, just
+     * enough to let the user watch the conversation grow (see SidecarAgentChatService.GetEstimatedTokens). */
+    estimatedTokens: number;
+    /** Percentage of the active profile's effective context window the most recent turn's
+     * fully-constructed request used (workspace-intelligence Module 5/6) — 0 if no turn has been
+     * sent yet in this session. */
+    contextUsagePercent: number;
+    /** The percentage at which the context-usage indicator should switch to a warning color — the
+     * same scaled threshold the backend uses to trigger rolling summarization
+     * (workspace-intelligence Module 7). */
+    contextUsageWarningPercent: number;
 }
 
 /** "ask" = read-only tools only. "ask_and_do" = mutating propose/prepare tools are also
@@ -1137,80 +1325,84 @@ export type AgentChatScope = "feature" | "workspace";
  * must match a backend FeatureArea enum member name (e.g. "Aks", "Redis") — see
  * SidecarAgentChatService.cs for the parsing side. */
 export interface AgentChatContext {
-  featureArea: string;
-  selection?: Record<string, string>;
+    featureArea: string;
+    selection?: Record<string, string>;
 }
 
 export interface PendingAction {
-  id: string;
-  type: string;
-  summary: string;
-  target: string;
-  risk: "None" | "Low" | "High";
-  preview: string;
-  expiresAt: string;
+    id: string;
+    type: string;
+    summary: string;
+    target: string;
+    risk: "None" | "Low" | "High";
+    preview: string;
+    expiresAt: string;
 }
 
 export interface AgentActionApplyResult {
-  isSuccess: boolean;
-  errorMessage: string | null;
-  resultSummary: string | null;
+    isSuccess: boolean;
+    errorMessage: string | null;
+    resultSummary: string | null;
 }
 
 export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  elapsedMs?: number;
-  error?: boolean;
-  /** Tool-call trace for this reply, if any (workspace-intelligence Module 6). */
-  steps?: AgentChatStep[];
-  /** True if this reply's turn triggered rolling summarization of older history (Module 5). */
-  summarized?: boolean;
-  /** True when the user clicked "Stop" mid-stream (ux-interaction-consistency unit 7.3) —
-   * rendered as a neutral "Stopped" notice rather than the red error state `error` produces, since
-   * this was a deliberate user action, not a failure. Whatever partial `content` had already
-   * streamed in is preserved, not overwritten. */
-  stopped?: boolean;
-  /** Accumulated ACP agent_thought_chunk reasoning for this reply (agent-correlation Module 4) —
-   * rendered collapsed + muted: it's raw model reasoning, not authoritative output. */
-  thoughts?: string;
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    elapsedMs?: number;
+    error?: boolean;
+    /** Tool-call trace for this reply, if any (workspace-intelligence Module 6). */
+    steps?: AgentChatStep[];
+    /** True if this reply's turn triggered rolling summarization of older history (Module 5). */
+    summarized?: boolean;
+    /** True when the user clicked "Stop" mid-stream (ux-interaction-consistency unit 7.3) —
+     * rendered as a neutral "Stopped" notice rather than the red error state `error` produces, since
+     * this was a deliberate user action, not a failure. Whatever partial `content` had already
+     * streamed in is preserved, not overwritten. */
+    stopped?: boolean;
+    /** Accumulated ACP agent_thought_chunk reasoning for this reply (agent-correlation Module 4) —
+     * rendered collapsed + muted: it's raw model reasoning, not authoritative output. */
+    thoughts?: string;
 }
 
 export interface ContainerDetail {
-  name: string;
-  image: string;
-  imageTag: string | null;
-  resources: ResourceRequirements;
-  envVars: EnvVarDetail[];
+    name: string;
+    image: string;
+    imageTag: string | null;
+    resources: ResourceRequirements;
+    envVars: EnvVarDetail[];
 }
 
 export interface ResourceRequirements {
-  cpuRequest: string | null;
-  memoryRequest: string | null;
-  cpuLimit: string | null;
-  memoryLimit: string | null;
+    cpuRequest: string | null;
+    memoryRequest: string | null;
+    cpuLimit: string | null;
+    memoryLimit: string | null;
 }
 
-export type EnvVarSourceKind = "Plain" | "ConfigMapRef" | "SecretRef" | "FieldRef";
+export type EnvVarSourceKind =
+    | "Plain"
+    | "ConfigMapRef"
+    | "SecretRef"
+    | "FieldRef";
 
 export interface EnvVarDetail {
-  name: string;
-  value: string | null;
-  source: EnvVarSourceKind;
-  sourceName: string | null;
-  sourceKey: string | null;
-  isResolved: boolean;
+    name: string;
+    value: string | null;
+    source: EnvVarSourceKind;
+    sourceName: string | null;
+    sourceKey: string | null;
+    isResolved: boolean;
 }
 
 export interface PodMetricInfo {
-  podName: string;
-  namespace: string;
-  containers: PodMetricContainer[];
+    podName: string;
+    namespace: string;
+    containers: PodMetricContainer[];
 }
 
 export interface PodMetricContainer {
-  name: string;
-  cpuCores: number;
-  memoryBytes: number;
+    name: string;
+    cpuCores: number;
+    memoryBytes: number;
 }

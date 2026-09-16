@@ -19,6 +19,7 @@
     <ProjectReference Include="..\src\SwebKit.Redis\SwebKit.Redis.csproj" />
     <ProjectReference Include="..\src\SwebKit.Agents\SwebKit.Agents.csproj" />
     <ProjectReference Include="..\src\SwebKit.Observability\SwebKit.Observability.csproj" />
+    <ProjectReference Include="..\src\SwebKit.Sql\SwebKit.Sql.csproj" />
     <PackageReference Include="keyring-dotnet" />
   </ItemGroup>
   <!--

@@ -15,12 +15,31 @@ public sealed class DemoModeService : IDisposable
 
     public static readonly string DemoRedisCacheId = "demo-cache";
     public static readonly string DemoStorageId = "demo-storage";
+    public const string DemoSqlConnectionId = "demo-sql";
+    public const string DemoSqlConnectionId2 = "demo-sql-2";
 
     private readonly DemoServiceBusClient _ordersClient = DemoServiceBusClient.OrdersDev();
     private readonly DemoServiceBusClient _paymentsClient = DemoServiceBusClient.PaymentsDev();
     private readonly DemoAksClient _aksClient = new();
     private readonly DemoRedisClient _redisClient = new(0);
     private readonly DemoStorageClient _storageClient = new();
+
+    // Two demo connections with slightly different catalogs/data so the data & schema compare
+    // panels show a real diff in demo mode (see DemoSqlClient's variant docs).
+    private readonly DemoSqlClient _sqlClient = new(new SqlConnectionEntry
+    {
+        Id = DemoSqlConnectionId,
+        DisplayName = "orders-dev-sql",
+        Server = "orders-dev-sql.database.windows.net",
+        Database = "orders",
+    }, variant: 0);
+    private readonly DemoSqlClient _sqlClient2 = new(new SqlConnectionEntry
+    {
+        Id = DemoSqlConnectionId2,
+        DisplayName = "orders-prod-sql",
+        Server = "orders-prod-sql.database.windows.net",
+        Database = "orders",
+    }, variant: 1);
 
     public bool IsDemoMode { get; set; }
 
@@ -78,6 +97,23 @@ public sealed class DemoModeService : IDisposable
         };
 
     public IStorageClient GetStorageClient() => _storageClient;
+
+    public SqlConnectionEntry? GetDemoSqlConnection(string connectionId) => connectionId switch
+    {
+        DemoSqlConnectionId => _sqlClient.Connection,
+        DemoSqlConnectionId2 => _sqlClient2.Connection,
+        _ => null,
+    };
+
+    public IReadOnlyList<SqlConnectionEntry> GetDemoSqlConnections() =>
+        [_sqlClient.Connection, _sqlClient2.Connection];
+
+    public ISqlClient GetSqlClient(SqlConnectionEntry connection) => connection.Id switch
+    {
+        DemoSqlConnectionId => _sqlClient,
+        DemoSqlConnectionId2 => _sqlClient2,
+        _ => _sqlClient,
+    };
 
     public void Dispose() => _redisClient.Dispose();
 }

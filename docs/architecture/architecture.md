@@ -28,13 +28,13 @@ SwebKit is a .NET MAUI Blazor Hybrid desktop operations tool for Azure-focused d
 - Shared domain and persistence contracts: `src/SwebKit.Core`
 - Local persisted state: `%APPDATA%/SwebKit` (`profiles.json`, `ui-state.json`, `user-settings.json`, `releases.json`, `scheduled-messages.json`, API Client `collections.json`, `environments.json`, `api-linked-roots.json`, plus sibling `.bak` recovery copies where repository-backed) and a `logs/` subfolder holding per-feature-per-day structured log files (`<feature>-yyyy-MM-dd.log`)
 - External runtime integrations:
-  - Azure Service Bus and Azure Blob Storage
-  - AKS Kubernetes API
-  - Redis
-  - Azure DevOps REST API
-  - Azure Monitor Logs API and Azure Resource Manager (Application Insights discovery)
-  - Git CLI for user-configured API Client linked repositories
-  - Mistral AI API for agent capabilities
+    - Azure Service Bus and Azure Blob Storage
+    - AKS Kubernetes API
+    - Redis
+    - Azure DevOps REST API
+    - Azure Monitor Logs API and Azure Resource Manager (Application Insights discovery)
+    - Git CLI for user-configured API Client linked repositories
+    - Mistral AI API for agent capabilities
 
 ## High-Level Flow
 
@@ -131,6 +131,21 @@ Key files:
 - `src/SwebKit.Redis/RedisClient.cs`
 - `src/SwebKit.Redis/RedisValueHelpers.cs`
 
+### SwebKit.Sql (`src/SwebKit.Sql`)
+
+Responsibility: SQL Server / Azure SQL operations (Entra-only) for the primary Tauri + sidecar
+stack — schema browsing, read-guarded query execution, ARM discovery, and completion context.
+Not referenced by `SwebKit.App`; consumed via `src-sidecar` (`SqlEndpoints`,
+`SidecarSqlConnectionPool`) and `SwebKit.Agents` (`Tools/Sql/`).
+
+Key files:
+
+- `src/SwebKit.Sql/SqlDatabaseClient.cs`
+- `src/SwebKit.Sql/SqlStatementGuard.cs`
+- `src/SwebKit.Sql/SqlServerDiscoveryService.cs`
+- `src/SwebKit.Sql/SqlCompletionResolver.cs`
+- `src/SwebKit.Core/Abstractions/ISqlClient.cs`
+
 ### SwebKit.DevOps (`src/SwebKit.DevOps`)
 
 Responsibility: Azure DevOps REST integration for pipelines, runs, approvals, repositories, and tags.
@@ -160,6 +175,7 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 - `docs/architecture/functionalities/dashboard.md`
 - `docs/architecture/functionalities/aks.md`
 - `docs/architecture/functionalities/redis.md`
+- `docs/architecture/functionalities/sql.md`
 - `docs/architecture/functionalities/storage.md`
 - `docs/architecture/functionalities/releases.md`
 - `docs/architecture/functionalities/observability.md`
@@ -195,6 +211,7 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 | Implement a new Service Bus operation                                       | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                                                                                          |
 | Add AKS diagnostics behavior                                                | `src/SwebKit.Core/Abstractions/IAksClient.cs` and `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                                                                                               |
 | Extend Observability querying or discovery                                  | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` and `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                                                                     |
+| Implement a new SQL Server/Azure SQL operation                              | `src/SwebKit.Core/Abstractions/ISqlClient.cs`, `src/SwebKit.Sql/SqlDatabaseClient.cs`, and `src-sidecar/Endpoints/SqlEndpoints.cs` (primary stack)                                                                        |
 | Add or modify agent tools                                                   | `src/SwebKit.Agents/IAgentTool.cs` and `src/SwebKit.Agents/Tools/`                                                                                                                                                        |
 | Extend agent capabilities or Mistral integration                            | `src/SwebKit.Agents/IMistralClient.cs`, `src/SwebKit.Agents/MistralHttpClient.cs`, and `src/SwebKit.Agents/AgentChatService.cs`                                                                                           |
 | Extend the incident timeline workbench UI                                   | `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor`, `src/SwebKit.App/Components/IncidentTimeline/`, and `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs`                                            |

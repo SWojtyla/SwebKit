@@ -8,6 +8,7 @@ public class AppConfig
     public List<SbEntityLink> ServiceBusEntityLinks { get; set; } = [];
     public AksConfig? AksConfig { get; set; }
     public RedisConfig? RedisConfig { get; set; }
+    public SqlConfig? SqlConfig { get; set; }
     public List<StorageConfig> StorageAccounts { get; set; } = [];
     public DevOpsConfig? DevOpsConfig { get; set; }
     public ObservabilityConfig? ObservabilityConfig { get; set; }

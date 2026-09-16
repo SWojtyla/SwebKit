@@ -90,7 +90,7 @@ public sealed class WorkspaceRelationshipSuggestionService
                 if (existingPairs.Contains((aksNode.Id, otherNode.Id)))
                     continue;
 
-                var matchFragment = ResourceKeyMatchFragment(otherNode.ResourceKey);
+                var matchFragment = ResourceKeyMatchFragment(otherNode);
                 if (matchFragment is null)
                     continue;
 
@@ -169,9 +169,18 @@ public sealed class WorkspaceRelationshipSuggestionService
     /// a queue/container name appended after a '/' (see <c>WorkspaceResourceNode.ResourceKey</c>'s
     /// doc comment); only the part before it (the actual hostname/account name) is realistically
     /// going to show up verbatim in an env var or ConfigMap value.</summary>
-    private static string? ResourceKeyMatchFragment(string resourceKey)
+    private static string? ResourceKeyMatchFragment(WorkspaceResourceNode node)
     {
-        var fragment = resourceKey.Split('/')[0].Trim();
+        var fragment = node.ResourceKey.Split('/')[0].Trim();
+        // SQL servers surface in pod config as either the FQDN (connection strings) or just the
+        // short server name — the first DNS label is a substring of the FQDN, so it catches both.
+        if (node.Area == WorkspaceResourceArea.Sql)
+        {
+            fragment = fragment.Split('.')[0];
+            // A very short server name would false-positive on unrelated values — skip it.
+            if (fragment.Length < 4)
+                return null;
+        }
         return fragment.Length == 0 ? null : fragment;
     }
 }
