@@ -71,6 +71,17 @@ rejected out-of-scope call surfaces a one-click "retry with workspace scope", ag
 tool instead of skipping it, and relationship suggestions learn to read pod logs, not just env
 vars and ConfigMaps.
 
+**SQL Database Explorer (2026-09-16):** `docs/features/active/sql-database-explorer/` is Planned —
+a design-only commit so far. A Jam SQL Studio–style database area scoped to SQL Server/Azure SQL
+with Entra-only auth (`AccessTokenCallback` on the shared `AzureCredentialFactory`, not
+`Authentication=Active Directory Default`, per AZ-4). Three phases: core area (connection profiles,
+ARM discovery, schema tree, CodeMirror editor + windowed grid, saved queries/history, ScriptDom
+write-guard behind a per-connection `AllowWrites` toggle, six agent tools incl. propose→confirm
+writes, demo mode) → productivity (schema-aware + ScriptDom context-aware autocomplete, data
+compare, schema compare report, export) → correlation (`WorkspaceResourceArea.Sql`, connection-string
+relationship detection, `check_sql_health` in `investigate_workspace_issue`, `/sql` deep links).
+Non-goals: execution plans, sync scripts, notebooks, DBA dashboards, non–SQL Server engines.
+
 **AKS logs (2026-09-09):** `docs/features/active/aks-log-parity/` is in Review — the multi-pod log
 view now streams every pod on open and shares one toolbar, buffer and windowing model with the
 single-pod view, instead of having almost none of its controls. Log lines carry the container's own
