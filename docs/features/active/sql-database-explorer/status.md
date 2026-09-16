@@ -1,11 +1,12 @@
 ---
-status: Review
+status: In Progress
 ---
 
 # SQL Database Explorer — Status
 
-- **Current phase:** Review — Phases 1–3 implemented, all automated tests green; awaiting
-  manual live-Entra verification and PR.
+- **Current phase:** In Progress — Phases 1–3 implemented and green; Phase 4
+  (dogfooding fixes, user-reported 2026-09-16) planned but not implemented.
+  Back from Review because new unimplemented scope was added.
 - **Requested by:** Sebastien — Jam SQL Studio–style inspection inside SwebKit, scoped to SQL
   Server/Azure SQL + Entra, so the agent and workspace correlation can reach the database.
 - **Implementation PR:** not raised — commit/push pending explicit approval.
@@ -47,6 +48,23 @@ status: Review
 - [x] `check_sql_health` tool + `investigate_workspace_issue` `area:"Sql"` integration.
 - [x] `/sql?connection=&table=` deep links from workspace map + command palette.
 
+### Phase 4 — Dogfooding fixes (added 2026-09-16)
+
+- [ ] Per-database profiles: discover → per-DB add; "browse databases" on a typed
+      server (`POST /api/sql/databases`); SQL page picker groups by server
+      (`<optgroup>`), shows DBs.
+- [ ] Settings layout scales: connections grouped under collapsible server headers +
+      filter box for long lists.
+- [ ] Test connection fixed — root cause found: `ConfigEndpoints` save invalidates
+      storage/SB/redis pools but never `ISqlConnectionPool` (Id-keyed) → stale client
+      after edits. Fix = SQL-aware eviction on save + `POST /api/sql/test` ad-hoc
+      endpoint that tests the current form values.
+- [ ] Save affordance on the Query tab (was only under Saved & History).
+- [ ] Compare tab clarity: explainer line, per-side database pickers, explicit
+      target required, results echo `server / database.schema.table`.
+- [ ] Query builder (`QueryBuilderPanel`, SELECT-only generation) + completion
+      snippets + cheat-sheet popover.
+
 ### All phases
 
 - [ ] Manual verification (live Entra connect/discover/query, agent flow, >1h token refresh) —
@@ -75,4 +93,3 @@ status: Review
 - "Query this entity" drill-through from Service Bus message bodies (heuristic — needs a reliable
   id→table mapping story first).
 - Query-plan viewer, sync-script generation, notebooks, DBA dashboards: non-goals unless rescoped.
-

@@ -71,8 +71,20 @@ rejected out-of-scope call surfaces a one-click "retry with workspace scope", ag
 tool instead of skipping it, and relationship suggestions learn to read pod logs, not just env
 vars and ConfigMaps.
 
-**SQL Database Explorer (2026-09-16):** `docs/features/active/sql-database-explorer/` is Planned —
-a design-only commit so far. A Jam SQL Studio–style database area scoped to SQL Server/Azure SQL
+**AI cockpit usability (2026-09-16):** `docs/features/active/ai-cockpit-usability/` is Planned —
+a batch of user-reported friction: Service Bus agent tools bypass `IServiceBusConnectionPool`
+(so Entra namespaces always fail with "connection string not available") and hard-code
+`namespaces[0]` (ignoring the page's selected namespace); page selection never reaches tool
+execution at all; AKS has no propose/confirm mutation tools (`get_resource_yaml` +
+`propose_apply_aks_yaml` planned); both log views get a context-lines search mode on top of
+the shared filter; the global agent panel gets the Ask & do toggle, a wider resize ceiling,
+and overflow fixes; a global activity indicator makes in-flight work visible app-wide; and the
+AKS YAML viewer loses the YamlDotNet blank lines and hides generated annotations by default
+(view-only — Edit/Apply/Copy keep the full manifest).
+
+**SQL Database Explorer (2026-09-16):** `docs/features/active/sql-database-explorer/` is In Progress —
+Phases 1–3 implemented and green (Review-level), Phase 4 dogfooding fixes added after first real
+use. A Jam SQL Studio–style database area scoped to SQL Server/Azure SQL
 with Entra-only auth (`AccessTokenCallback` on the shared `AzureCredentialFactory`, not
 `Authentication=Active Directory Default`, per AZ-4). Three phases: core area (connection profiles,
 ARM discovery, schema tree, CodeMirror editor + windowed grid, saved queries/history, ScriptDom

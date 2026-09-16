@@ -29,6 +29,13 @@ The feature is delivered in three phases, each independently shippable:
   vars/ConfigMaps/pod logs, a `check_sql_health` tool wired into `investigate_workspace_issue`,
   and drill-through deep links (`/sql?connection=…&table=…`) from the workspace map and command
   palette.
+- **Phase 4 — Dogfooding fixes.** Added 2026-09-16 after the first real use surfaced friction:
+  per-database connection profiles (pick a server, see its databases, add each DB as an entry —
+  the SQL page then shows databases, not servers), a settings layout that scales to many servers,
+  a broken "Test connection" (profile save never evicts the pooled client — it keeps testing the
+  pre-edit server), a Save affordance on the Query tab (today it only exists under
+  Saved & History), a clearer Compare tab (explicit databases, labelled live source/target, no
+  silent target default), and a guided query builder plus richer syntax help.
 
 ## Decisions
 

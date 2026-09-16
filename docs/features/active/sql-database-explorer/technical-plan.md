@@ -347,3 +347,92 @@ action where a Service Bus message body clearly carries a table row id is a docu
 - **Identifier safety**: table browse builds `WHERE`/`ORDER BY` from validated column names and
   whitelisted operators only; never raw-concatenate untrusted identifiers (schema/table names
   validated against the catalog first).
+
+## Phase 4 — Dogfooding fixes (user-reported, 2026-09-16)
+
+First real use surfaced five issues plus one rework request. Each is independently
+shippable; 4.2 is a correctness bug and lands first.
+
+### Module 4.1 — Per-database profiles + settings that scale
+
+**Files:** `SqlSettings.tsx`, `SqlPage.tsx`, `web/src/lib/types.ts` (no schema change —
+`SqlConnectionEntry.Database` already exists).
+
+User flow: select a server, see which databases are in it *before* committing, then add
+each database as its own entry. The SQL page then shows databases — not servers.
+
+- **Discovery panel**: replace the single per-server "Add" (which today silently takes
+  `databases[0]`) with per-database add — each discovered DB gets its own Add that
+  creates `{ displayName: db, server, database: db }`. Whole-server add stays possible.
+- **Browse-before-add for typed servers**: a "Browse databases" action that lists a
+  server's DBs without a saved profile. New `POST /api/sql/databases { server, database? }`
+  builds an unpooled throwaway client via `ISqlClientFactory` (ad-hoc enumeration can't
+  go through the Id-keyed pool). Same endpoint backs Module 4.2's test fix.
+- **Settings layout**: group `ConnectionRow`s under collapsible server headers
+  (server FQDN + entry count + "add database" action); a filter box over
+  displayName/server/database once the list exceeds ~5 entries.
+- **SQL page**: picker groups options by server (`<optgroup>`). Entries with a
+  `Database` show as that DB; legacy db-less entries keep today's per-session database
+  select — no migration, no broken profiles.
+
+### Module 4.2 — Fix "Test connection"
+
+**Files:** `ConfigEndpoints.cs`, `SqlEndpoints.cs`, `SqlSettings.tsx`, `useSql.ts`.
+
+Root cause verified in code: the profile-save handler calls `InvalidateAll()` on the
+storage and service-bus pools and targeted `Evict` on redis — **but never touches
+`ISqlConnectionPool`**, which caches clients keyed by `connection.Id` alone. Editing
+`Server`/`Database` on an existing entry leaves a pooled `ISqlClient` aimed at the old
+server, so Test (and every other SQL endpoint) silently exercises the stale connection.
+
+Two-part fix:
+
+1. `ConfigEndpoints` evicts stale SQL connections on save — mirror
+   `StaleRedisCacheIds`/`SameConnection` with a SQL variant comparing the
+   connection-affecting fields (`Server`, `Database`; `DisplayName`/`Active`/
+   `AllowWrites` don't affect the pooled client).
+2. New `POST /api/sql/test { server, database }` — an ad-hoc, unpooled client via
+   `ISqlClientFactory` so the settings row tests **the current form values**, not the
+   last-saved state. Also removes the `DraftInput` commit race (Test clicked before
+   blur/save) and enables test-before-first-save. Keep `GET /api/sql/{id}/test` for
+   the saved-config path.
+
+### Module 4.3 — Save from the Query tab
+
+**Files:** `SqlPage.tsx` (+ a small `SaveQueryPopover`); no backend change.
+
+"Unable to save queries on the query tab" — literally true: the only save form lives in
+`SavedQueriesPanel`. Add a Save button beside Run → popover (name + optional folder) →
+`useSaveSqlQuery` → `notify` + invalidate the saved-queries key. Follows the existing
+saved-query contract (`SaveSqlQueryRequest`).
+
+### Module 4.4 — Compare tab clarity
+
+**Files:** `ComparePanel.tsx`, `SqlEndpoints.cs` compare request records.
+
+"From where comes the data?" — compare runs **live reads against the two selected
+connections**; the UI never says so, silently defaults the target to the first other
+connection, and always uses each connection's default database (the source schema list
+is `useSqlSchema(sourceId, null)`).
+
+- Explainer line: "Compares live data between the two connections — nothing is copied
+  or stored."
+- Explicit database picker per side (from `GET /api/sql/{id}/databases`), threaded
+  through `SqlDataCompareRequest`/`SqlSchemaCompareRequest`
+  (`SourceDatabase`/`TargetDatabase`); schema/object pickers load for the chosen
+  source database.
+- Require an explicit target pick — drop the silent `first other connection` default.
+- Results header echoes `server / database.schema.table` for both sides.
+
+### Module 4.5 — Query builder + syntax help
+
+**Files:** new `QueryBuilderPanel.tsx` on the Query tab; `SqlCompletionResolver`
+snippet suggestions + a static cheat-sheet popover in `SqlEditor`'s toolbar.
+
+"SQL for dummies": a guided builder that writes the SELECT — table picker (from the
+loaded schema) → column multi-select (default all) → filter rows (column / whitelisted
+operator / value) → ORDER BY + TOP N → "Insert into editor". Output is SELECT-only text
+generated by a pure helper (`sqlLiteral` for safe value quoting); the write guard still
+applies downstream, and the user edits freely before running. Syntax help = keyword
+snippets in the existing completion path plus a "?" popover of common patterns — static
+web content, no new backend surface.
