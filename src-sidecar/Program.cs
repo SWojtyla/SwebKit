@@ -7,6 +7,7 @@ using SwebKit.Agents;
 using SwebKit.Agents.Tools;
 using SwebKit.Agents.Tools.ApiClient;
 using SwebKit.Agents.Tools.Redis;
+using SwebKit.Agents.Tools.Sql;
 using SwebKit.Agents.Tools.Storage;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
@@ -15,6 +16,7 @@ using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
 using SwebKit.Observability;
 using SwebKit.Redis;
+using SwebKit.Sql;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
 using ModelContextProtocol.AspNetCore;
@@ -70,6 +72,13 @@ builder.Services.AddSingleton<SwebKit.Core.Abstractions.IRedisConnectionPool>(
 builder.Services.AddSingleton<SwebKit.Sidecar.Services.SidecarServiceBusConnectionPool>();
 builder.Services.AddSingleton<SwebKit.Core.Abstractions.IServiceBusConnectionPool>(
     sp => sp.GetRequiredService<SwebKit.Sidecar.Services.SidecarServiceBusConnectionPool>());
+// SQL: same pooled-client pattern — the client holds the Entra credential; ADO.NET does the
+// underlying connection pooling.
+builder.Services.AddSingleton<ISqlClientFactory, SqlClientFactory>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.SidecarSqlConnectionPool>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.ISqlConnectionPool>(
+    sp => sp.GetRequiredService<SwebKit.Sidecar.Services.SidecarSqlConnectionPool>());
+builder.Services.AddSingleton<SqlQueryRepository>();
 builder.Services.AddSingleton<RedisKeyspaceHealthAnalyzer>();
 builder.Services.AddSingleton<ScheduledMessageRepository>();
 
@@ -156,6 +165,9 @@ builder.Services.AddHttpClient<AgentCapabilityTester>();
 builder.Services.AddSingleton<IObservabilityProviderFactory, ObservabilityProviderFactory>();
 builder.Services.AddSingleton<AppInsightsDiscoveryService>();
 builder.Services.AddSingleton<IObservabilityResourceDiscovery, SwebKit.Sidecar.Services.ObservabilityResourceDiscoverySelector>();
+// SQL server discovery via ARM — demo-aware selector, same pattern as observability.
+builder.Services.AddSingleton<SqlServerDiscoveryService>();
+builder.Services.AddSingleton<ISqlResourceDiscovery, SwebKit.Sidecar.Services.SqlResourceDiscoverySelector>();
 builder.Services.AddSingleton<IAgentTool, GetMetricsTool>();
 builder.Services.AddSingleton<IAgentTool, QueryLogsTool>();
 
@@ -185,6 +197,13 @@ builder.Services.AddSingleton<IAgentTool, GetApiRequestTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApiRequestChangeTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApiRequestDeleteTool>();
 builder.Services.AddSingleton<IAgentTool, PrepareApiRequestExecutionTool>();
+builder.Services.AddSingleton<IAgentTool, ListSqlConnectionsTool>();
+builder.Services.AddSingleton<IAgentTool, ListSqlDatabasesTool>();
+builder.Services.AddSingleton<IAgentTool, ListSqlTablesTool>();
+builder.Services.AddSingleton<IAgentTool, DescribeSqlTableTool>();
+builder.Services.AddSingleton<IAgentTool, QuerySqlTool>();
+builder.Services.AddSingleton<IAgentTool, CheckSqlHealthTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeExecuteSqlTool>();
 
 // Cross-area correlation (workspace-intelligence Module 3) — resolves IAgentToolRegistry lazily via
 // IServiceProvider to avoid a circular dependency (the registry is itself built from every
@@ -210,6 +229,7 @@ builder.Services.AddSingleton<IAgentActionCoordinator, AgentActionCoordinator>()
 builder.Services.AddSingleton<IAgentActionExecutor, ApiClientActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, RedisActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, StorageActionExecutor>();
+builder.Services.AddSingleton<IAgentActionExecutor, SqlActionExecutor>();
 builder.Services.AddSingleton<AgentActionApplier>();
 
 // HTTP client used by the API client request executor
@@ -390,6 +410,10 @@ app.MapAksEndpoints();
 // ── API Client ───────────────────────────────────────────────────────────────
 
 app.MapApiClientEndpoints();
+
+// ── SQL ───────────────────────────────────────────────────────────────────────
+
+app.MapSqlEndpoints();
 
 // ── Redis ─────────────────────────────────────────────────────────────────────
 

@@ -97,7 +97,8 @@ public class InvestigateWorkspaceIssueToolTests
         var registry = new FakeToolRegistryForWorkspaceInvestigation();
         var services = new SingleServiceProvider(registry);
         var pool = new FakeConnectionPoolForWorkspaceInvestigation(aksClient);
-        return (new InvestigateWorkspaceIssueTool(profiles, services, pool), profiles, registry);
+        var appState = TestSupport.CreateAppState();
+        return (new InvestigateWorkspaceIssueTool(profiles, services, pool, appState), profiles, registry);
     }
 
     private static JsonElement Args(object obj) => JsonSerializer.SerializeToDocument(obj).RootElement;
@@ -194,6 +195,47 @@ public class InvestigateWorkspaceIssueToolTests
         Assert.Equal("mystorage", call.Arguments.GetProperty("account").GetString());
         using var doc = JsonDocument.Parse(result);
         Assert.Equal(1, doc.RootElement.GetProperty("related_resources_investigated").GetInt32());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SqlRelatedNode_CallsCheckSqlHealth_WithResolvedConnectionId()
+    {
+        var (tool, profiles, registry) = Build();
+        registry.CannedResults["check_sql_health"] = """{"connected":true}""";
+        profiles.Config.SqlConfig = new SqlConfig
+        {
+            Connections = [new SqlConnectionEntry { Id = "conn-9", Server = "orders-dev-sql.database.windows.net", Database = "orders" }],
+        };
+        var aksNode = new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" };
+        var sqlNode = new WorkspaceResourceNode { Area = WorkspaceResourceArea.Sql, ResourceKey = "orders-dev-sql.database.windows.net/orders", DisplayLabel = "orders db" };
+        profiles.Config.Topology.Nodes.Add(aksNode);
+        profiles.Config.Topology.Nodes.Add(sqlNode);
+        profiles.Config.Topology.Relationships.Add(new WorkspaceResourceRelationship { FromNodeId = aksNode.Id, ToNodeId = sqlNode.Id });
+
+        var result = await tool.ExecuteAsync(Args(new { area = "Aks", resource_hint = "api" }), CancellationToken.None);
+
+        var call = Assert.Single(registry.Calls);
+        Assert.Equal("check_sql_health", call.ToolName);
+        Assert.Equal("conn-9", call.Arguments.GetProperty("connection_id").GetString());
+        Assert.Equal("orders", call.Arguments.GetProperty("database").GetString());
+        using var doc = JsonDocument.Parse(result);
+        Assert.Equal(1, doc.RootElement.GetProperty("related_resources_investigated").GetInt32());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SqlRelatedNode_NoMatchingConnection_SkipsWithAnHonestNote()
+    {
+        var (tool, profiles, registry) = Build();
+        var aksNode = new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" };
+        var sqlNode = new WorkspaceResourceNode { Area = WorkspaceResourceArea.Sql, ResourceKey = "unconfigured.database.windows.net/db", DisplayLabel = "db" };
+        profiles.Config.Topology.Nodes.Add(aksNode);
+        profiles.Config.Topology.Nodes.Add(sqlNode);
+        profiles.Config.Topology.Relationships.Add(new WorkspaceResourceRelationship { FromNodeId = aksNode.Id, ToNodeId = sqlNode.Id });
+
+        var result = await tool.ExecuteAsync(Args(new { area = "Aks", resource_hint = "api" }), CancellationToken.None);
+
+        Assert.Empty(registry.Calls);
+        Assert.Contains("No configured SQL connection matches", result);
     }
 
     [Fact]

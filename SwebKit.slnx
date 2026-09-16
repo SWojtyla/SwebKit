@@ -11,6 +11,7 @@
     <Project Path="src/SwebKit.Redis/SwebKit.Redis.csproj" />
     <Project Path="src/SwebKit.DevOps/SwebKit.DevOps.csproj" />
     <Project Path="src/SwebKit.Observability/SwebKit.Observability.csproj" />
+    <Project Path="src/SwebKit.Sql/SwebKit.Sql.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj" />
@@ -19,5 +20,6 @@
     <Project Path="tests/SwebKit.DevOps.Tests/SwebKit.DevOps.Tests.csproj" />
     <Project Path="tests/SwebKit.E2E.Tests/SwebKit.E2E.Tests.csproj" />
     <Project Path="tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj" />
+    <Project Path="tests/SwebKit.Sql.Tests/SwebKit.Sql.Tests.csproj" />
   </Folder>
 </Solution>

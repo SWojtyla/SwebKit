@@ -9,7 +9,7 @@ Recurring traps in `web/` (React 19, Tailwind 4, CodeMirror 6, Playwright) and a
 
 `@codemirror/language`'s `defaultHighlightStyle` ships colours tuned for a white background — `#219`
 blue, `#a11` red, `#164` green. Against SwebKit's dark theme background (`oklch(0.16 0.018 260)`)
-those are effectively black on black, so syntax highlighting looks *absent* rather than wrong. This
+those are effectively black on black, so syntax highlighting looks _absent_ rather than wrong. This
 went unnoticed in the API Client request body editor for the whole React migration.
 
 **Use `swebkitHighlighting()` from `web/src/lib/codemirror-theme.ts`** in every editor instead.
@@ -31,8 +31,8 @@ content that is genuinely there. Keep a hidden, `aria-hidden` mirror element hol
 
 ### Tauri does not camelCase struct fields on the way out
 
-Command *arguments* are converted from JS camelCase to Rust snake_case automatically, but serialized
-*return values* are not. A Rust field `index_state` arrives in TypeScript as `index_state`, so a TS
+Command _arguments_ are converted from JS camelCase to Rust snake_case automatically, but serialized
+_return values_ are not. A Rust field `index_state` arrives in TypeScript as `index_state`, so a TS
 interface declaring `indexState` silently reads `undefined`. Put
 `#[serde(rename_all = "camelCase")]` on any returned struct with a multi-word field, and keep the TS
 interface next to it.
@@ -46,8 +46,8 @@ interface next to it.
 
 Tauri installs an OS-level drag/drop handler on the webview unless you turn it off, and on Windows
 that handler swallows HTML5 `dragstart`/`dragover`/`drop` inside WebView2 — you can pick an item up
-and then find nowhere to put it. Tauri's own config doc says as much: *"Disabling it is required to
-use HTML5 drag and drop on the frontend on Windows."*
+and then find nowhere to put it. Tauri's own config doc says as much: _"Disabling it is required to
+use HTML5 drag and drop on the frontend on Windows."_
 
 Set `"dragDropEnabled": false` on the window in `src-tauri/tauri.conf.json` (safe as long as nothing
 listens for `onDragDropEvent` / file drops). **Playwright cannot catch this** — the e2e suite runs in
@@ -60,17 +60,32 @@ Chromium suppresses the default mousedown-focus on `draggable` elements, so maki
 row a drag source silently breaks every keyboard interaction that assumed clicking it focuses it
 (here: `Alt`+`Arrow` reordering). Call `e.currentTarget.focus()` in the row's `onClick`.
 
+### A panicking `.setup()` is a silent crash — no console exists to show it
+
+`main.rs` builds with `windows_subsystem = "windows"`, so nothing the process prints — including a
+panic message — is ever visible to the user. `sidecar::manage()` used to propagate spawn failure out
+of `.setup()` with `?`, which failed `build()` and hit `.expect("error while building tauri
+application")`: on an overloaded machine, where the self-contained .NET sidecar can exceed a 15s
+READY_TIMEOUT just getting extracted and JIT-compiled, the app simply vanished on launch with no
+error anywhere.
+
+Treat every error inside `.setup()` as fatal-by-invisible-panic: degrade instead. `manage()` now
+returns a `SidecarState` with `port = 0`, the frontend falls into its existing "Disconnected" state
+(Reconnect button + health poll), and a background thread keeps retrying the spawn and emits the
+usual `sidecar-*` lifecycle events. Also make READY_TIMEOUTs generous — the failure cost is an app
+that _looks_ dead, not a slow start.
+
 ### `AllowedRoots` is in-memory, so a persisted path is not an authorized path
 
-`AllowedRoots` is populated *only* by the native `pick_file`/`pick_directory` dialogs — that is what
+`AllowedRoots` is populated _only_ by the native `pick_file`/`pick_directory` dialogs — that is what
 stops the webview granting itself filesystem access. Persisting a path in `localStorage` and passing
 it back after a restart bypasses that entirely: any script in the webview can write to
-`localStorage`. Persist the *grant list* on the Rust side and re-admit from it (see
+`localStorage`. Persist the _grant list_ on the Rust side and re-admit from it (see
 `restore_allowed_root`); the frontend may only persist which granted root is selected.
 
 ### `validate_within_roots` is for files, not directories
 
-It canonicalizes the *parent* directory because a file may not exist yet on write. A directory
+It canonicalizes the _parent_ directory because a file may not exist yet on write. A directory
 argument needs `validate_dir_within_roots`, which canonicalizes the directory itself.
 
 ### A shared-blob Tauri command needs its own lock — Tauri's IPC dispatch does not serialize for you
@@ -79,7 +94,7 @@ argument needs `validate_dir_within_roots`, which canonicalizes the directory it
 `HashMap<key, secret>`) under a single OS keychain entry, and `save_secret`/`delete_secret` each did
 an unsynchronized read-modify-write: load the whole vault, mutate one key, write the whole vault
 back. Tauri dispatches plain (non-`async`) commands onto a thread pool, so two `save_secret` calls
-for *different* requests' secrets — realistic whenever a user sets auth on two requests within the
+for _different_ requests' secrets — realistic whenever a user sets auth on two requests within the
 same couple of seconds their own save debounces already create — can interleave: both read the same
 starting snapshot, both write back, and whichever finishes last silently drops the other's key. The
 symptom on the frontend looked nothing like a race: a token was visible right after typing it
@@ -151,7 +166,7 @@ There is no way to send a body, which is why the log-stream endpoint takes `cont
 `MultiPodLogView.tsx` never sent `previousContainer` in its `EventSource` URL; only `PodLogView.tsx`
 did. The sidecar's `/logs/stream` route bound it as `bool previousContainer` — no `?`, no default —
 which ASP.NET's minimal-API model binding treats as **required**: omitting it from the query string
-fails the request with a 400 *before the handler body runs at all*, real client or demo alike. On the
+fails the request with a 400 _before the handler body runs at all_, real client or demo alike. On the
 wire, and to `EventSource.onerror`, that is indistinguishable from a stream that opened fine and just
 never delivered anything — which is exactly what every multi-pod correlation looked like: an
 indefinite "Connecting...".
@@ -169,7 +184,7 @@ string) for any stream-shaped view.
 
 `EventSource` reserves the event type `"error"` for its own native connection-failure signal, fired to
 both `.onerror` and any `addEventListener("error", ...)` listener as a plain `Event` (no `.data`). If
-the server also frames a named event as `event: error`, it dispatches to the *same* listener as a
+the server also frames a named event as `event: error`, it dispatches to the _same_ listener as a
 `MessageEvent` (with `.data`) — the two are register-compatible but shape-incompatible, and nothing
 stops a handler written for one from receiving the other. Name an application-level error frame
 something else entirely (`stream-error`, here) so it can never collide with the browser's own error
@@ -213,7 +228,7 @@ Without it, dragging a divider selects the text underneath it.
 Query keys are compared **element by element**, not as string prefixes. `["aks-"]` matches only a
 query keyed exactly `["aks-"]`, and every AKS query is keyed `["aks-pods", ns]`,
 `["aks-deployments", ns]`, and so on — so the AKS Refresh button, the auto-refresh timer, the `r`
-shortcut and the post-apply-YAML refresh were all silent no-ops. It fails *quietly*: the UI shows no
+shortcut and the post-apply-YAML refresh were all silent no-ops. It fails _quietly_: the UI shows no
 error, and between ticks the tables usually look identical anyway.
 
 Group-invalidate through a `predicate` instead — see `web/src/lib/aks-query-keys.ts`, which also
@@ -226,7 +241,7 @@ a broken one look the same.
 ### A whole-store `PUT` derived from a render snapshot loses concurrent writes
 
 `useUpdateCollections` replaces the entire collections file. Computing the new array from a
-component's `collections` variable means computing it from a *render snapshot*, so two saves close
+component's `collections` variable means computing it from a _render snapshot_, so two saves close
 together each send a full store built before the other landed and the loser's changes disappear —
 creating two requests quickly left only the second, a collection variable saved and then reopened
 empty, and one of two quick drag-reorders was dropped.
@@ -242,9 +257,9 @@ read the pre-save state. Use `expect.poll`, not a single `allTextContents()`.
 ### An updater function must not read `e.target` — it runs after React restored the DOM
 
 Updater functions (`mutate((prev) => …)`) are evaluated inside `mutationFn`, which the mutation
-`scope` defers until the previous save settles — *after* the event handler returns and after React
+`scope` defers until the previous save settles — _after_ the event handler returns and after React
 has already restored the controlled input's DOM value back to the prop. So
-`mutate((prev) => ({ ...prev, x: e.target.value }))` reads the *reverted* value, not the one the
+`mutate((prev) => ({ ...prev, x: e.target.value }))` reads the _reverted_ value, not the one the
 user picked: `selectOption("large")` in Playwright produced a PUT body with `"medium"`. Capture DOM
 reads eagerly before the mutate call:
 
@@ -279,10 +294,10 @@ one query is often a fan-out — a cluster-wide namespace list, or one request p
 It is off globally in `main.tsx`; every page has an explicit Refresh, and the volatile queries carry
 their own short `staleTime`.
 
-Related: give *structural* queries (entity trees, namespace lists — things deployments change, not
+Related: give _structural_ queries (entity trees, namespace lists — things deployments change, not
 users) a `staleTime` in minutes, and keep the seconds-scale one for counts and status.
 
-### `keepPreviousData` makes `data` briefly belong to the *previous* query key
+### `keepPreviousData` makes `data` briefly belong to the _previous_ query key
 
 `placeholderData: keepPreviousData` is the right fix for a list that blanks between pages — but any
 effect that advances pagination off `data` must now also check `isFetching`, or it will re-run
@@ -327,7 +342,7 @@ default. Guard with a ref set by the user-facing setter (`namespacePickedRef` in
 
 `DraftInput` reconciles its local draft against the stored value when the save echoes back —
 guarded on "value ≠ last committed text" so our own echo doesn't fight the cursor. Guarding
-the *effect* on `[value]` breaks the case where the parent normalizes the commit back to the
+the _effect_ on `[value]` breaks the case where the parent normalizes the commit back to the
 value already stored: type `-5`, the clamp writes `5`, `5` was already saved, the prop is
 byte-identical, the effect never fires, and the raw `-5` sits in the box permanently while a
 different value is on disk. Run the reconciliation unconditionally (no dep array) — the
@@ -339,7 +354,7 @@ To highlight inside a single-line field (`{{variable}}` tokens, say), render an 
 holding the same string with per-token spans and make the input's own text transparent
 (`text-transparent caret-foreground`) — see `components/api-client/VariableInput.tsx`, the same
 technique as the AKS YAML editor's overlay. Two rules keep it from drifting: the two layers must
-share *exact* text metrics (pass one class string to both; put border/background on a wrapper, never
+share _exact_ text metrics (pass one class string to both; put border/background on a wrapper, never
 on the input, where it would paint over the overlay), and the overlay's `scrollLeft` must be mirrored
 from the input in a layout effect — `onScroll` alone misses caret-driven scrolling.
 
@@ -349,7 +364,7 @@ from the input in a layout effect — `onScroll` alone misses caret-driven scrol
 
 Swapping a row's `Scale` button for an input plus two more buttons widens the Actions column, so
 every row shifts the moment you click — you lose your place in the list you were acting on. Use a
-modal (`components/aks/ScaleDialog.tsx`), which also has room to say *which* resource and namespace
+modal (`components/aks/ScaleDialog.tsx`), which also has room to say _which_ resource and namespace
 is about to change.
 
 With a `table-auto` layout, refreshing data jitters columns too, as an age ticks `9m` → `10m` or a
@@ -366,7 +381,7 @@ Clear storage with `page.evaluate` after the first navigation, then `reload` onc
 
 ### The e2e sidecar uses a throwaway appdata shared by every test in a file
 
-`SWEBKIT_APPDATA_ROOT` points at `web/e2e/.e2e-appdata`, which is reset per *run*, not per test.
+`SWEBKIT_APPDATA_ROOT` points at `web/e2e/.e2e-appdata`, which is reset per _run_, not per test.
 Collections, templates and rules accumulate across tests in a file, so `.first()` will eventually
 select another test's data. Always filter by name:
 `getByTestId(/collection-node-Request-/).filter({ hasText: name })`.
@@ -384,8 +399,8 @@ advances — a history count, a new row — not on a value that is already there
 ### A `.last()` locator resolves at action time, not at assertion time
 
 `page.locator('[data-testid^="redis-database-"]').last()` binds to whichever row is last
-*when the next action runs*. Click "Add Cache", then `fill` immediately: while the add's
-`PUT` is still in flight the new row isn't mounted, so `.last()` is the *previous* last row
+_when the next action runs_. Click "Add Cache", then `fill` immediately: while the add's
+`PUT` is still in flight the new row isn't mounted, so `.last()` is the _previous_ last row
 and the fill lands on the wrong input — after the PUT lands the same locator silently points
 at the new row instead. Wait for the add's `PUT /api/config/profiles` response (the
 `saveProfile` pattern used elsewhere in `settings.spec.ts`) before resolving the locator.

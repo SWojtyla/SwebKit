@@ -19,6 +19,7 @@ public enum AgentActionType
     DeleteRedisKey,
     SetRedisKeyTtl,
     CopyBlob,
+    ExecuteSql,
 }
 
 /// <summary>

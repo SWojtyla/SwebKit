@@ -70,6 +70,15 @@ public static class ConfigEndpoints
             {
                 result.Config.StorageAccounts = [demoStorage];
             }
+            var demoSqlConnections = demo.GetDemoSqlConnections();
+            if (demoSqlConnections.Count > 0)
+            {
+                result.Config.SqlConfig = new SqlConfig
+                {
+                    Connections = [.. demoSqlConnections],
+                    ActiveConnectionId = demoSqlConnections[0].Id,
+                };
+            }
         }
         return Results.Ok(result);
     }
@@ -94,6 +103,13 @@ public static class ConfigEndpoints
                 redis.ActiveCacheId = redis.Caches.FirstOrDefault()?.Id;
         }
         data.Config?.StorageAccounts?.RemoveAll(a => a.Id == DemoModeService.DemoStorageId);
+        if (data.Config?.SqlConfig is { } sql)
+        {
+            sql.Connections.RemoveAll(c =>
+                c.Id == DemoModeService.DemoSqlConnectionId || c.Id == DemoModeService.DemoSqlConnectionId2);
+            if (sql.ActiveConnectionId is DemoModeService.DemoSqlConnectionId or DemoModeService.DemoSqlConnectionId2)
+                sql.ActiveConnectionId = sql.Connections.FirstOrDefault()?.Id;
+        }
 
         // Snapshot the old cache list before the replace — StaleRedisCacheIds diffs it against
         // the incoming one per cache id.

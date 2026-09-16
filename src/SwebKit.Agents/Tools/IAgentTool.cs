@@ -36,6 +36,7 @@ public enum FeatureArea
     ServiceBus,
     Redis,
     Storage,
+    Sql,
     Observability,
     ApiClient,
 

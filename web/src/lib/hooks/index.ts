@@ -7,6 +7,7 @@ export * from "./useProfile";
 export * from "./useServiceBus";
 export * from "./useAks";
 export * from "./useRedis";
+export * from "./useSql";
 export * from "./useStorage";
 export * from "./useApiClient";
 export * from "./useAgent";

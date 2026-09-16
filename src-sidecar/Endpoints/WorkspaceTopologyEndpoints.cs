@@ -48,6 +48,7 @@ public static class WorkspaceTopologyEndpoints
 
         candidates.AddRange(BuildRedisCandidates(config.RedisConfig, demo));
         candidates.AddRange(BuildStorageCandidates(config.StorageAccounts, demo));
+        candidates.AddRange(BuildSqlCandidates(config.SqlConfig, demo));
 
         return Results.Ok(candidates);
     }
@@ -111,5 +112,18 @@ public static class WorkspaceTopologyEndpoints
             Area = WorkspaceResourceArea.Storage,
             ResourceKey = sa.AccountName,
             DisplayLabel = sa.DisplayName,
+        });
+
+    private static List<SqlConnectionEntry> ResolveSqlConnections(SqlConfig? sql, DemoModeService demo) =>
+        demo.IsDemoMode ? [.. demo.GetDemoSqlConnections()] : sql?.Connections ?? [];
+
+    private static IEnumerable<WorkspaceResourceCandidate> BuildSqlCandidates(SqlConfig? sql, DemoModeService demo) =>
+        ResolveSqlConnections(sql, demo).Select(conn => new WorkspaceResourceCandidate
+        {
+            Area = WorkspaceResourceArea.Sql,
+            ResourceKey = string.IsNullOrWhiteSpace(conn.Database)
+                ? conn.Server
+                : $"{conn.Server}/{conn.Database}",
+            DisplayLabel = conn.DisplayName,
         });
 }

@@ -1,8 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using SwebKit.Agents.Tools.Sql;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools;
 
@@ -27,6 +29,7 @@ public sealed class InvestigateWorkspaceIssueTool : IAgentTool
     private readonly ProfileRepository _profiles;
     private readonly IServiceProvider _services;
     private readonly IMonitoringConnectionPool _connectionPool;
+    private readonly AppStateService _appState;
 
     /// <summary>
     /// Takes <see cref="IServiceProvider"/> rather than <see cref="IAgentToolRegistry"/> directly to
@@ -37,11 +40,12 @@ public sealed class InvestigateWorkspaceIssueTool : IAgentTool
     /// any tool call actually runs, the whole container (registry included) has already finished
     /// building.
     /// </summary>
-    public InvestigateWorkspaceIssueTool(ProfileRepository profiles, IServiceProvider services, IMonitoringConnectionPool connectionPool)
+    public InvestigateWorkspaceIssueTool(ProfileRepository profiles, IServiceProvider services, IMonitoringConnectionPool connectionPool, AppStateService appState)
     {
         _profiles = profiles;
         _services = services;
         _connectionPool = connectionPool;
+        _appState = appState;
     }
 
     public string Name => "investigate_workspace_issue";
@@ -58,7 +62,7 @@ public sealed class InvestigateWorkspaceIssueTool : IAgentTool
         {
           "type": "object",
           "properties": {
-            "area": { "type": "string", "enum": ["Aks", "ServiceBus", "Redis", "Storage"], "description": "Which area the starting resource belongs to." },
+            "area": { "type": "string", "enum": ["Aks", "ServiceBus", "Redis", "Storage", "Sql"], "description": "Which area the starting resource belongs to." },
             "resource_hint": { "type": "string", "description": "A word or phrase identifying the starting resource, e.g. a deployment name, queue name, or cache display name." }
           },
           "required": ["area", "resource_hint"]
@@ -168,6 +172,24 @@ public sealed class InvestigateWorkspaceIssueTool : IAgentTool
                     // just the account part.
                     var accountKey = node.ResourceKey.Split('/')[0];
                     var raw = await registry.ExecuteAsync("analyze_storage_health", BuildArgs(new { account = accountKey }), ct);
+                    return new { area = node.Area.ToString(), node.DisplayLabel, result = JsonDocument.Parse(raw).RootElement };
+                }
+
+                case WorkspaceResourceArea.Sql:
+                {
+                    // Nodes key on "server" or "server/database" (see BuildSqlCandidates) — map the
+                    // server part back to the configured connection so check_sql_health can run.
+                    var keyParts = node.ResourceKey.Split('/', 2);
+                    var connection = SqlToolContext.GetConnections(_appState, _profiles)
+                        .FirstOrDefault(c => c.Server.Equals(keyParts[0], StringComparison.OrdinalIgnoreCase));
+                    if (connection is null)
+                        return new { area = node.Area.ToString(), node.DisplayLabel, skipped = $"No configured SQL connection matches '{keyParts[0]}'." };
+
+                    var raw = await registry.ExecuteAsync("check_sql_health", BuildArgs(new
+                    {
+                        connection_id = connection.Id,
+                        database = keyParts.Length > 1 ? keyParts[1] : null,
+                    }), ct);
                     return new { area = node.Area.ToString(), node.DisplayLabel, result = JsonDocument.Parse(raw).RootElement };
                 }
 

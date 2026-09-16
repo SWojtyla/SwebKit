@@ -30,6 +30,7 @@ public static class AppDataPaths
     public static string CollectionsJson => Path.Combine(Root, "collections.json");
     public static string EnvironmentsJson => Path.Combine(Root, "environments.json");
     public static string ApiLinkedRootsJson => Path.Combine(Root, "api-linked-roots.json");
+    public static string SqlQueriesJson => Path.Combine(Root, "sql-queries.json");
     public static string PerformanceBaselineLog => Path.Combine(Root, "logs", "performance-baseline.log");
     public static string LogsDirectory => Path.Combine(Root, "logs");
 

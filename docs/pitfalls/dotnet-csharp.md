@@ -83,4 +83,24 @@ services.AddHttpClient("MyClient")
 
 ---
 
+## CS-8 — YamlDotNet (YAML 1.2) emits plain scalars that kubectl's go-yaml (YAML 1.1) retypes
+
+**Symptom:** `kubectl apply` of a manifest shown in the YAML editor fails with `The request is invalid: patch: Invalid value: ... cannot convert int64 to string`, even though the user only changed an unrelated field — or nothing at all.
+
+**Cause:** `KubernetesYaml.Serialize` writes YAML under 1.2 rules, where a string like `9010_31` is a legal plain scalar. kubectl parses with go-yaml (YAML 1.1), where `9010_31` is an integer with an underscore separator (901031). The same applies to `yes/no/on/off/y/n`, `0x`/`0o`/`0b` literals, sexagesimal (`1:30`), `.inf`/`.nan`, timestamps, and plain numbers a user types unquoted — any of these in a string-typed field (`env[].value`, labels, annotations, ConfigMap `data`, `command`/`args`) reaches the API server as the wrong JSON type.
+
+**Fix:** Never trust plain-scalar style to survive the YamlDotNet → go-yaml round-trip. `KubernetesAksClient.SanitizeYamlForApply` (also run inside `CleanEditableYaml` so the editor displays honest quoting) re-quotes plain scalars in string-typed positions when they would resolve to a non-string under YAML 1.1. Reuse it rather than inventing another yaml-fixing pass; it only rewrites the file when something actually changed so comments/formatting are preserved.
+
+---
+
+## CS-9 — ScriptDom's API surface differs from common blog/doc examples
+
+**Symptom:** `Microsoft.SqlServer.TransactSql.ScriptDom` code copied from examples fails to compile: the parser constructor has no `bool` parameter named the way you expect, `Parse` doesn't return the script directly, and `is SetStatement` can't pattern-match (it's abstract).
+
+**Cause:** In ScriptDom 180.x: `TSql160Parser`'s constructor takes `initialQuotedIdentifiers` (not a positional bool you can omit); `parser.Parse(reader, out errors)` returns `TSqlFragment` which must be cast to `TSqlScript`; and `SetStatement` is an abstract base — `SET` options materialize as concrete subclasses like `PredicateSetStatement`/`SetOnOffStatement`, which means SET handling can't be whitelisted by matching the base type alone.
+
+**Fix:** For a read-only/write guard, default-deny is the safe default anyway: allow only the concrete read-safe statement types you enumerate and treat everything else — including every `SetStatement` subclass, unknown future types, and parse errors — as a write/deny. See `src/SwebKit.Sql/SqlStatementGuard.cs`. Also remember `SelectStatement` with an `Into` clause is mutating, and identifiers (schema/table/column names) can never be parameters — bracket-quote with `]`→`]]` escaping instead of interpolating raw names.
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md)_

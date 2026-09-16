@@ -263,13 +263,15 @@ static List<ToolDefinition> BuildToolDefinitions(
         {
             Name             = podStatusTool.Name,
             Description      = podStatusTool.Description,
-            ParametersSchema = podStatusSchema
+            ParametersSchema = podStatusSchema,
+            FeatureArea      = FeatureArea.Aks
         },
         new ToolDefinition
         {
             Name             = listNsTool.Name,
             Description      = listNsTool.Description,
-            ParametersSchema = listNsSchema
+            ParametersSchema = listNsSchema,
+            FeatureArea      = FeatureArea.Aks
         }
     ];
 }

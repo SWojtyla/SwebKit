@@ -9,6 +9,7 @@ public enum WorkspaceResourceArea
     ServiceBus,
     Redis,
     Storage,
+    Sql,
 }
 
 /// <summary>A user-curated node in the workspace topology graph — a specific resource (an AKS

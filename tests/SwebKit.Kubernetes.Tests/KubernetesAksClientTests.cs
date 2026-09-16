@@ -212,6 +212,175 @@ users:
         Assert.DoesNotContain("replicas: \"4\"", cleaned, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CleanEditableYaml_QuotesEnvValuesThatYaml11WouldReadAsNonStrings()
+    {
+        // KubernetesYaml.Serialize emits YAML 1.2 where a string like "9010_31" is a legal
+        // plain scalar, but kubectl's go-yaml parses it per YAML 1.1 as the integer 901031 —
+        // the API server then rejects the apply with "cannot convert int64 to string"
+        // because EnvVar.Value is a string field.
+        const string rawYaml = """
+                                apiVersion: apps/v1
+                                kind: Deployment
+                                metadata:
+                                  name: boa-brioengine
+                                spec:
+                                  replicas: 1
+                                  template:
+                                    spec:
+                                      containers:
+                                      - name: boa-brioengine
+                                        env:
+                                        - name: PROFILE_ID
+                                          value: 9010_31
+                                        - name: MAX_CONCURRENCY
+                                          value: "5"
+                                """;
+
+        var cleaned = KubernetesAksClient.CleanEditableYaml(rawYaml);
+
+        Assert.Contains("value: \"9010_31\"", cleaned, StringComparison.Ordinal);
+        Assert.Contains("value: \"5\"", cleaned, StringComparison.Ordinal);
+        Assert.Contains("replicas: 1", cleaned, StringComparison.Ordinal);
+        Assert.DoesNotContain("replicas: \"1\"", cleaned, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SanitizeYamlForApply_QuotesUnquotedEnvAndTolerationValues_AtAnyDepth()
+    {
+        const string yaml = """
+                            apiVersion: apps/v1
+                            kind: Deployment
+                            metadata:
+                              name: boa-brioengine
+                            spec:
+                              replicas: 1
+                              template:
+                                spec:
+                                  initContainers:
+                                  - name: init
+                                    env:
+                                    - name: RETRY
+                                      value: 3
+                                  containers:
+                                  - name: app
+                                    env:
+                                    - name: PROFILE_ID
+                                      value: 9010_31
+                                    - name: MAX_CONCURRENCY
+                                      value: 1
+                                    - name: ALREADY_QUOTED
+                                      value: "5"
+                                    - name: FROM_REF
+                                      valueFrom:
+                                        secretKeyRef:
+                                          name: s
+                                          key: k
+                                  tolerations:
+                                  - key: env
+                                    operator: Equal
+                                    value: 1
+                                    effect: NoSchedule
+                            """;
+
+        var sanitized = KubernetesAksClient.SanitizeYamlForApply(yaml);
+
+        Assert.Contains("value: \"9010_31\"", sanitized, StringComparison.Ordinal);
+        Assert.Contains("value: \"1\"", sanitized, StringComparison.Ordinal);
+        Assert.Contains("value: \"3\"", sanitized, StringComparison.Ordinal);
+        Assert.Contains("value: \"5\"", sanitized, StringComparison.Ordinal);
+        Assert.Contains("valueFrom:", sanitized, StringComparison.Ordinal);
+        Assert.Contains("replicas: 1", sanitized, StringComparison.Ordinal);
+        Assert.DoesNotContain("replicas: \"1\"", sanitized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SanitizeYamlForApply_QuotesStringMapAndStringListScalars()
+    {
+        const string yaml = """
+                            apiVersion: v1
+                            kind: ConfigMap
+                            metadata:
+                              name: cfg
+                              labels:
+                                version: 9010_31
+                              annotations:
+                                note: plain-text
+                            data:
+                              port: 8080
+                              path: /etc/app
+                            """;
+
+        var sanitized = KubernetesAksClient.SanitizeYamlForApply(yaml);
+
+        Assert.Contains("version: \"9010_31\"", sanitized, StringComparison.Ordinal);
+        Assert.Contains("port: \"8080\"", sanitized, StringComparison.Ordinal);
+
+        // Values YAML 1.1 would still read as strings must not gain noise quotes.
+        Assert.Contains("note: plain-text", sanitized, StringComparison.Ordinal);
+        Assert.Contains("path: /etc/app", sanitized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SanitizeYamlForApply_ReturnsOriginalText_WhenNothingNeedsQuoting()
+    {
+        // Re-saving through YamlDotNet would drop comments and reflow formatting, so a
+        // manifest with no ambiguous scalars must round-trip byte-for-byte.
+        const string yaml = "# user comment\nkind: Pod\nmetadata:\n  name: p\n";
+
+        Assert.Equal(yaml, KubernetesAksClient.SanitizeYamlForApply(yaml));
+    }
+
+    [Fact]
+    public void SanitizeYamlForApply_ReturnsOriginalText_WhenYamlIsMalformed()
+    {
+        const string yaml = "not: [valid";
+
+        Assert.Equal(yaml, KubernetesAksClient.SanitizeYamlForApply(yaml));
+    }
+
+    [Fact]
+    public void CondenseKubectlError_DropsWarningsAndCollapsesObjectDump()
+    {
+        // Reproduces the real apply failure shape: a last-applied-configuration warning
+        // prologue, then a single error line whose Invalid value payload is a multi-KB
+        // Go map dump of the whole patch — the actionable part is the trailing reason.
+        var dump = string.Concat(Enumerable.Repeat('x', 5_000));
+        var stderr =
+            "Warning: resource deployments/boa-brioengine is missing the kubectl.kubernetes.io/last-applied-configuration annotation which is required by kubectl apply.\n" +
+            $"The request is invalid: patch: Invalid value: \"map[metadata:map[annotations:map[cfg:{{\\\"a\\\":{dump}}}]]]\": cannot convert int64 to string";
+
+        var condensed = KubernetesAksClient.CondenseKubectlError(stderr);
+
+        Assert.DoesNotContain("Warning:", condensed, StringComparison.Ordinal);
+        Assert.DoesNotContain(dump, condensed, StringComparison.Ordinal);
+        Assert.Contains("cannot convert int64 to string", condensed, StringComparison.Ordinal);
+        Assert.True(condensed.Length < 300);
+    }
+
+    [Fact]
+    public void CondenseKubectlError_KeepsShortInvalidValuesReadable()
+    {
+        const string stderr =
+            "Error from server (Invalid): Deployment.apps \"x\" is invalid: spec.replicas: Invalid value: \"abc\": expected integer";
+
+        var condensed = KubernetesAksClient.CondenseKubectlError(stderr);
+
+        // Short payloads identify the offending value — do not collapse them.
+        Assert.Contains("Invalid value: \"abc\"", condensed, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CondenseKubectlError_CapsLongSingleLineErrors()
+    {
+        var stderr = "Error: " + new string('a', 500) + " failed at the very end";
+
+        var condensed = KubernetesAksClient.CondenseKubectlError(stderr);
+
+        Assert.True(condensed.Length <= 400);
+        Assert.EndsWith("failed at the very end", condensed, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("https://cluster.region.azmk8s.io:443", null, true)]
     [InlineData("https://cluster.region.azmk8s.io:443", "already-token", false)]

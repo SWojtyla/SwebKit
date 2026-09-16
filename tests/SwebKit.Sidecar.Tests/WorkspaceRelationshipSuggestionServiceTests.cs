@@ -201,6 +201,53 @@ public class WorkspaceRelationshipSuggestionServiceTests
     }
 
     [Fact]
+    public async Task GetSuggestionsAsync_PodEnvVarContainsSqlServerName_SuggestsTheRelationship()
+    {
+        // SQL nodes key on "server-fqdn/database"; the first DNS label is the match fragment
+        // because connection strings show either the FQDN or just the short server name.
+        var aksClient = new FakeAksClientForSuggestions(
+            pods: [new PodInfo { Name = "api-7c9f", Namespace = "prod", Phase = "Running" }],
+            containers: [new ContainerDetail
+            {
+                Name = "api",
+                Image = "api:latest",
+                EnvVars = [new EnvVarDetail { Name = "DB_CONN", Value = "Server=orders-dev-sql.database.windows.net;Database=orders" }],
+            }]);
+        var (service, profiles) = Build(aksClient);
+        var aksNode = AksNode("prod/api", "api (prod)");
+        var sqlNode = new WorkspaceResourceNode { Area = WorkspaceResourceArea.Sql, ResourceKey = "orders-dev-sql.database.windows.net/orders", DisplayLabel = "orders db" };
+        profiles.Config.Topology.Nodes.Add(aksNode);
+        profiles.Config.Topology.Nodes.Add(sqlNode);
+
+        var result = await service.GetSuggestionsAsync(CancellationToken.None);
+
+        var suggestion = Assert.Single(result);
+        Assert.Equal(aksNode.Id, suggestion.FromNodeId);
+        Assert.Equal(sqlNode.Id, suggestion.ToNodeId);
+    }
+
+    [Fact]
+    public async Task GetSuggestionsAsync_VeryShortSqlServerName_IsNotMatched()
+    {
+        // A 3-char server name would false-positive on unrelated values — the fragment is skipped.
+        var aksClient = new FakeAksClientForSuggestions(
+            pods: [new PodInfo { Name = "api-7c9f", Namespace = "prod", Phase = "Running" }],
+            containers: [new ContainerDetail
+            {
+                Name = "api",
+                Image = "api:latest",
+                EnvVars = [new EnvVarDetail { Name = "DB_CONN", Value = "Server=db1;Database=x" }],
+            }]);
+        var (service, profiles) = Build(aksClient);
+        profiles.Config.Topology.Nodes.Add(AksNode("prod/api"));
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Sql, ResourceKey = "db1/x", DisplayLabel = "db" });
+
+        var result = await service.GetSuggestionsAsync(CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
     public async Task GetSuggestionsAsync_PodLogMentionsServiceBusHostname_SuggestsWithLogWording()
     {
         // agent-correlation Module 6: a pod whose config only names a Secret still names the
