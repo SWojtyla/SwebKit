@@ -12,18 +12,13 @@ namespace SwebKit.Agents.Tools;
 /// </summary>
 public sealed class AnalyzeQueueHealthTool : IAgentTool
 {
-    private readonly IServiceBusClientFactory _sbFactory;
+    private readonly IServiceBusConnectionPool _pool;
     private readonly AppStateService _appState;
-    private readonly ICredentialStore _credentialStore;
 
-    public AnalyzeQueueHealthTool(
-        IServiceBusClientFactory sbFactory,
-        AppStateService appState,
-        ICredentialStore credentialStore)
+    public AnalyzeQueueHealthTool(IServiceBusConnectionPool pool, AppStateService appState)
     {
-        _sbFactory = sbFactory;
+        _pool = pool;
         _appState = appState;
-        _credentialStore = credentialStore;
     }
 
     public string Name => "analyze_queue_health";
@@ -40,7 +35,7 @@ public sealed class AnalyzeQueueHealthTool : IAgentTool
           "type": "object",
           "properties": {
             "queue_name": { "type": "string", "description": "Service Bus queue name" },
-            "namespace_alias": { "type": "string", "description": "Namespace alias configured in SwebKit (optional)" }
+            "namespace_alias": { "type": "string", "description": "Configured namespace alias, FQDN, or id. Omit to use the namespace selected in the UI." }
           },
           "required": ["queue_name"]
         }
@@ -60,44 +55,14 @@ public sealed class AnalyzeQueueHealthTool : IAgentTool
             return await AnalyzeWithDemoClientAsync(queueName, demoClient, ct);
         }
 
-        // Use the configured Service Bus namespace
-        var namespaces = _appState.ServiceBusNamespaces;
-        if (namespaces.Count == 0)
-        {
-            return JsonSerializer.Serialize(new
-            {
-                error = "Service Bus not configured. Add a namespace in settings.",
-                queue = queueName
-            });
-        }
+        var resolution = ServiceBusToolContext.ResolveNamespace(_appState, namespaceAlias);
+        if (!resolution.IsSuccess)
+            return JsonSerializer.Serialize(new { error = resolution.Error, queue = queueName });
 
-        // Find the namespace to use
-        ServiceBusNamespace? nsToUse = null;
-        if (!string.IsNullOrWhiteSpace(namespaceAlias))
-        {
-            nsToUse = namespaces.FirstOrDefault(n => n.Alias.Equals(namespaceAlias, StringComparison.OrdinalIgnoreCase));
-        }
-        if (nsToUse == null)
-        {
-            nsToUse = namespaces[0];
-        }
-
-        var connectionString = _credentialStore.Get(nsToUse.CredentialKey);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return JsonSerializer.Serialize(new
-            {
-                error = "Service Bus connection string not available for namespace: " + nsToUse.Alias,
-                queue = queueName,
-                namespace_alias = nsToUse.Alias
-            });
-        }
-
-        IServiceBusClient? client = null;
+        var nsToUse = resolution.Namespace!;
         try
         {
-            client = _sbFactory.Create(connectionString);
-            return await AnalyzeWithClientAsync(queueName, client, nsToUse, ct);
+            return await AnalyzeWithClientAsync(queueName, _pool.GetOrCreate(nsToUse), nsToUse, ct);
         }
         catch (Exception ex)
         {
@@ -107,13 +72,6 @@ public sealed class AnalyzeQueueHealthTool : IAgentTool
                 queue = queueName,
                 namespace_alias = nsToUse.Alias
             });
-        }
-        finally
-        {
-            if (client is IAsyncDisposable asyncDisp)
-            {
-                await asyncDisp.DisposeAsync();
-            }
         }
     }
 

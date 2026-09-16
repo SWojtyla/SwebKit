@@ -16,6 +16,8 @@ public static class SqlEndpoints
     public static void MapSqlEndpoints(this WebApplication app)
     {
         app.MapGet("/api/sql/{connectionId}/test", TestConnectionAsync);
+        app.MapPost("/api/sql/test", TestAdHocAsync);
+        app.MapPost("/api/sql/databases", GetDatabasesAdHocAsync);
         app.MapGet("/api/sql/{connectionId}/databases", GetDatabasesAsync);
         app.MapGet("/api/sql/{connectionId}/schema", GetSchemaAsync);
         app.MapPost("/api/sql/{connectionId}/query", ExecuteQueryAsync);
@@ -53,6 +55,75 @@ public static class SqlEndpoints
         catch (Exception ex)
         {
             logger.LogWarning(ex, "SQL connection test failed for connection {ConnectionId}", connectionId);
+            return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
+        }
+    }
+
+    /// <summary>
+    /// Tests the values currently on the settings form — not a saved profile entry. Builds an
+    /// unpooled throwaway client via <see cref="ISqlClientFactory"/>: the Id-keyed pool could hold
+    /// a client for a stale edit, and an unsaved entry has no id at all.
+    /// </summary>
+    internal static async Task<IResult> TestAdHocAsync(
+        SqlAdHocRequest req,
+        ISqlClientFactory factory,
+        DemoModeService demo,
+        ILogger<Program> logger,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Server)) return ApiErrors.BadRequest("server is required");
+        if (demo.IsDemoMode) return Results.Ok(new { connected = true });
+
+        try
+        {
+            await using var client = await factory.CreateAsync(new SqlConnectionEntry
+            {
+                Server = req.Server,
+                Database = req.Database ?? string.Empty,
+                DisplayName = req.Server,
+            }, ct);
+            var ok = await client.TestConnectionAsync(ct);
+            return Results.Ok(new { connected = ok });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Ad-hoc SQL connection test failed for {Server}", req.Server);
+            return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
+        }
+    }
+
+    /// <summary>
+    /// Lists databases on a server the user typed but hasn't saved — browse-before-add in SQL
+    /// settings. Same ad-hoc, unpooled path as <see cref="TestAdHocAsync"/>.
+    /// </summary>
+    internal static async Task<IResult> GetDatabasesAdHocAsync(
+        SqlAdHocRequest req,
+        ISqlClientFactory factory,
+        DemoModeService demo,
+        ILogger<Program> logger,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Server)) return ApiErrors.BadRequest("server is required");
+        if (demo.IsDemoMode)
+        {
+            var databases = await demo.GetSqlClient(new SqlConnectionEntry { Id = DemoModeService.DemoSqlConnectionId })
+                .ListDatabasesAsync(ct);
+            return Results.Ok(databases);
+        }
+
+        try
+        {
+            await using var client = await factory.CreateAsync(new SqlConnectionEntry
+            {
+                Server = req.Server,
+                Database = req.Database ?? string.Empty,
+                DisplayName = req.Server,
+            }, ct);
+            return Results.Ok(await client.ListDatabasesAsync(ct));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Ad-hoc SQL database enumeration failed for {Server}", req.Server);
             return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
         }
     }
@@ -246,7 +317,8 @@ public static class SqlEndpoints
         var sourceClient = await pool.GetOrCreateAsync(source, ct);
         var targetClient = await pool.GetOrCreateAsync(target, ct);
         var result = await sourceClient.CompareDataAsync(
-            targetClient, req.Schema, req.Table, req.KeyColumns, req.Database,
+            targetClient, req.Schema, req.Table, req.KeyColumns,
+            req.SourceDatabase, req.TargetDatabase,
             Math.Clamp(req.MaxDiffRows ?? MaxDiffRows, 1, HardMaxRows), ct);
         return Results.Ok(result);
     }
@@ -264,7 +336,7 @@ public static class SqlEndpoints
 
         var sourceClient = await pool.GetOrCreateAsync(source, ct);
         var targetClient = await pool.GetOrCreateAsync(target, ct);
-        var result = await sourceClient.CompareSchemaAsync(targetClient, req.Database, ct);
+        var result = await sourceClient.CompareSchemaAsync(targetClient, req.SourceDatabase, req.TargetDatabase, ct);
         return Results.Ok(result);
     }
 
@@ -310,12 +382,13 @@ public static class SqlEndpoints
     }
 
     public sealed record SqlQueryRequest(string? Sql, string? Database, int? MaxRows);
+    public sealed record SqlAdHocRequest(string? Server, string? Database);
     public sealed record SaveSqlQueryRequest(string? Name, string? Folder, string? Sql, string? ConnectionId);
     public sealed record SqlCompletionContextRequest(string? Sql, int CursorOffset);
     public sealed record SqlDataCompareRequest(
         string SourceConnectionId, string TargetConnectionId,
         string? Schema, string? Table, List<string>? KeyColumns,
-        string? Database, int? MaxDiffRows);
+        string? SourceDatabase, string? TargetDatabase, int? MaxDiffRows);
     public sealed record SqlSchemaCompareRequest(
-        string SourceConnectionId, string TargetConnectionId, string? Database);
+        string SourceConnectionId, string TargetConnectionId, string? SourceDatabase, string? TargetDatabase);
 }

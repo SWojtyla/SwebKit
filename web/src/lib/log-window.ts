@@ -10,6 +10,8 @@ export type TimestampMode = "off" | "time" | "full";
 export interface LogEntry {
   /** The message, with any timestamp prefix already stripped. */
   text: string;
+  searchKind?: "match" | "context" | "gap";
+  omitted?: number;
   /** The pod that emitted it. Undefined in the single-pod view, where it would be noise. */
   pod?: string;
   /** The raw timestamp prefix, or `null` when the line carried none. */
@@ -84,6 +86,37 @@ export function filterLogEntries(entries: readonly LogEntry[], term: string): Lo
   const needle = term.trim().toLowerCase();
   if (!needle) return entries as LogEntry[];
   return entries.filter((e) => e.text.toLowerCase().includes(needle));
+}
+
+export function searchLogEntries(entries: readonly LogEntry[], term: string, contextLines: number): LogEntry[] {
+  const needle = term.trim().toLowerCase();
+  if (!needle) return entries as LogEntry[];
+  const radius = Math.max(0, Math.trunc(contextLines));
+  const matches = entries
+    .map((entry, index) => entry.text.toLowerCase().includes(needle) ? index : -1)
+    .filter((index) => index >= 0);
+  if (matches.length === 0) return [];
+
+  const matchSet = new Set(matches);
+  const included = new Set<number>();
+  for (const match of matches) {
+    for (let index = Math.max(0, match - radius); index <= Math.min(entries.length - 1, match + radius); index++)
+      included.add(index);
+  }
+
+  const result: LogEntry[] = [];
+  let previous = -1;
+  for (const index of [...included].sort((a, b) => a - b)) {
+    if (previous >= 0 && index > previous + 1) {
+      result.push({ text: "", ts: null, seq: Number.MIN_SAFE_INTEGER + index, searchKind: "gap", omitted: index - previous - 1 });
+    }
+    result.push({
+      ...entries[index],
+      searchKind: matchSet.has(index) ? "match" : "context",
+    });
+    previous = index;
+  }
+  return result;
 }
 
 export interface LogWindow {

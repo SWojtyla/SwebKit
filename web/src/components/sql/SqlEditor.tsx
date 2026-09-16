@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EditorState, Compartment } from "@codemirror/state";
 import {
     defaultKeymap,
@@ -29,6 +29,14 @@ import type { SqlSchemaModel } from "@/lib/types";
 /** Name-level completion candidates built from the already-loaded schema tree —
  * feeds "kind: any" positions (keywords come from the dialect itself via lang-sql's
  * schema completion; these cover object/column names the dialect can't know). */
+const sqlSnippets = [
+    { label: "SELECT TOP", type: "keyword", detail: "Limited result set", apply: "SELECT TOP (100) *\nFROM " },
+    { label: "INNER JOIN", type: "keyword", detail: "Join matching rows", apply: "INNER JOIN table_name AS t ON t.id = source.id" },
+    { label: "LEFT JOIN", type: "keyword", detail: "Keep all source rows", apply: "LEFT JOIN table_name AS t ON t.id = source.id" },
+    { label: "GROUP BY", type: "keyword", detail: "Aggregate rows", apply: "GROUP BY column_name\nORDER BY column_name" },
+    { label: "COUNT", type: "function", detail: "Count rows", apply: "COUNT(*) AS row_count" },
+];
+
 function buildSchemaCompletionOptions(schema: SqlSchemaModel | undefined) {
     const tables: { label: string; type: string; detail?: string }[] = [];
     const columns: { label: string; type: string; detail?: string }[] = [];
@@ -76,6 +84,7 @@ export function SqlEditor({
 }: SqlEditorProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
+    const [helpOpen, setHelpOpen] = useState(false);
     const completionRef = useRef(new Compartment());
     const onChangeRef = useRef(onChange);
     const onRunRef = useRef(onRun);
@@ -167,7 +176,7 @@ export function SqlEditor({
 
             return {
                 from: word.from,
-                options: [...tables, ...columns],
+                options: [...sqlSnippets, ...tables, ...columns],
                 validFor: /^[\w[\]]*$/,
             };
         };
@@ -226,11 +235,59 @@ export function SqlEditor({
         });
     }, [value]);
 
+    useEffect(() => {
+        if (!helpOpen) return;
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setHelpOpen(false);
+        };
+        document.addEventListener("keydown", closeOnEscape);
+        return () => document.removeEventListener("keydown", closeOnEscape);
+    }, [helpOpen]);
+
     return (
         <div
             className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded border bg-background"
             data-testid="sql-editor"
         >
+            <div className="absolute right-2 top-1 z-30">
+                <button
+                    onClick={() => setHelpOpen((open) => !open)}
+                    className="rounded border bg-card px-2 py-0.5 text-xs font-medium hover:bg-accent"
+                    aria-expanded={helpOpen}
+                    aria-label="SQL syntax help"
+                    data-testid="sql-syntax-help-toggle"
+                >
+                    ?
+                </button>
+                {helpOpen && (
+                    <div
+                        className="absolute right-0 top-full mt-1 w-80 space-y-2 rounded-md border bg-popover p-3 text-xs shadow-lg"
+                        data-testid="sql-syntax-help"
+                    >
+                        <div className="flex items-center justify-between">
+                            <strong>Common T-SQL patterns</strong>
+                            <button
+                                onClick={() => setHelpOpen(false)}
+                                className="text-muted-foreground hover:text-foreground"
+                                data-testid="sql-syntax-help-close"
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                            <dt className="font-mono">SELECT TOP (100)</dt><dd>Limit returned rows</dd>
+                            <dt className="font-mono">WHERE x = value</dt><dd>Filter rows</dd>
+                            <dt className="font-mono">LIKE '%text%'</dt><dd>Search text</dd>
+                            <dt className="font-mono">IS NULL</dt><dd>Match missing values</dd>
+                            <dt className="font-mono">INNER JOIN</dt><dd>Rows present on both sides</dd>
+                            <dt className="font-mono">LEFT JOIN</dt><dd>Keep all source rows</dd>
+                            <dt className="font-mono">GROUP BY</dt><dd>Aggregate with COUNT/SUM/AVG</dd>
+                            <dt className="font-mono">ORDER BY x DESC</dt><dd>Sort newest/highest first</dd>
+                        </dl>
+                        <p className="text-muted-foreground">Press Ctrl+Space in the editor for snippets and schema suggestions.</p>
+                    </div>
+                )}
+            </div>
             <div ref={containerRef} className="min-h-0 flex-1" />
             {/* Playwright/a11y mirror — same trick as BodyCodeEditor: a real textarea tests can
           type into and screen readers can find, without CodeMirror's contenteditable. */}

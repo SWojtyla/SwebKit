@@ -5,6 +5,7 @@ using SwebKit.Core.Serialization;
 using SwebKit.Azure.Storage;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
+using SwebKit.Agents.Tools.Aks;
 using SwebKit.Agents.Tools.ApiClient;
 using SwebKit.Agents.Tools.Redis;
 using SwebKit.Agents.Tools.Sql;
@@ -180,6 +181,8 @@ builder.Services.AddSingleton<IAgentTool, ListPodsTool>();
 builder.Services.AddSingleton<IAgentTool, GetPodLogsTool>();
 builder.Services.AddSingleton<IAgentTool, GetPodEventsTool>();
 builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
+builder.Services.AddSingleton<IAgentTool, GetAksResourceYamlTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeApplyAksYamlTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
@@ -230,6 +233,7 @@ builder.Services.AddSingleton<IAgentActionExecutor, ApiClientActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, RedisActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, StorageActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, SqlActionExecutor>();
+builder.Services.AddSingleton<IAgentActionExecutor, AksActionExecutor>();
 builder.Services.AddSingleton<AgentActionApplier>();
 
 // HTTP client used by the API client request executor

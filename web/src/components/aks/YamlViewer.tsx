@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { X, FileText, Pencil, Save, Eye, Loader2, Check, AlertCircle } from "lucide-react";
 import { useAksResourceYaml, useAksApplyYaml, useAksValidateYaml } from "@/lib/hooks";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import { highlightYaml } from "@/lib/yamlHighlight";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { filterGeneratedAnnotations } from "@/lib/yaml-noise";
 
 interface YamlViewerProps {
   ns: string;
@@ -22,6 +23,9 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
   const [editedYaml, setEditedYaml] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+  const [hideGeneratedAnnotations, setHideGeneratedAnnotations] = useState(true);
+  const filteredYaml = useMemo(() => filterGeneratedAnnotations(yaml ?? ""), [yaml]);
+  const displayedYaml = hideGeneratedAnnotations ? filteredYaml.yaml : yaml ?? "";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(yaml ?? "");
@@ -112,6 +116,18 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
         <FileText className="h-4 w-4" />
         <span className="text-sm font-medium">{kind}/{name}</span>
         <span className="text-xs text-muted-foreground">YAML</span>
+        {!editMode && filteredYaml.hidden > 0 && (
+          <button
+            onClick={() => setHideGeneratedAnnotations((hidden) => !hidden)}
+            className="rounded border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-pressed={hideGeneratedAnnotations}
+            data-testid="yaml-generated-annotations-toggle"
+          >
+            {hideGeneratedAnnotations
+              ? `${filteredYaml.hidden} generated annotations hidden · show`
+              : "Hide generated annotations"}
+          </button>
+        )}
         <div className="ml-auto flex items-center gap-2">
           {editMode && (
             <>
@@ -199,7 +215,7 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
           <pre
             className="yml-viewer whitespace-pre-wrap break-all text-xs font-mono text-foreground"
             data-testid="yaml-content"
-            dangerouslySetInnerHTML={{ __html: highlightYaml(yaml ?? "", true) }}
+            dangerouslySetInnerHTML={{ __html: highlightYaml(displayedYaml, true) }}
           />
         )}
       </div>

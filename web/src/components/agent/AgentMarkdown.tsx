@@ -124,7 +124,7 @@ export function AgentMarkdown({
   }, [content, renderVisualBlocks]);
 
   return (
-    <div className={className}>
+    <div className={`min-w-0 max-w-full break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_code]:break-all [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full ${className ?? ""}`}>
       <ReactMarkdown components={components}>{displayedContent}</ReactMarkdown>
     </div>
   );

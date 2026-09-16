@@ -19,6 +19,7 @@ public class SwebKitToolsMcpBridgeTests
 
         public string? LastCalledName { get; private set; }
         public JsonElement LastCalledArgs { get; private set; }
+        public IReadOnlyDictionary<string, string>? CapturedSelection { get; private set; }
         public string Result { get; set; } = "{\"ok\":true}";
 
         public IReadOnlyList<ToolDefinition> GetDefinitions() => _defs;
@@ -27,6 +28,7 @@ public class SwebKitToolsMcpBridgeTests
         {
             LastCalledName = toolName;
             LastCalledArgs = arguments;
+            CapturedSelection = AgentExecutionContext.Selection;
             return Task.FromResult(Result);
         }
     }
@@ -53,6 +55,17 @@ public class SwebKitToolsMcpBridgeTests
     }
 
     [Fact]
+    public void BuildUrl_appends_selection_without_colliding_with_tool_arguments()
+    {
+        var url = SwebKitToolsMcpBridge.BuildUrl(
+            "http://127.0.0.1:5199",
+            ["list_pods"],
+            new Dictionary<string, string> { ["namespace"] = "team a/dev" });
+
+        Assert.Equal("http://127.0.0.1:5199/mcp/swebkit-tools?tools=list_pods&sel=namespace%3Dteam%20a%2Fdev", url);
+    }
+
+    [Fact]
     public void BuildUrl_omits_the_query_param_for_an_empty_or_missing_allowlist()
     {
         Assert.Equal("http://127.0.0.1:5199/mcp/swebkit-tools",
@@ -76,6 +89,15 @@ public class SwebKitToolsMcpBridgeTests
         Assert.NotNull(set);
         Assert.Equal(2, set!.Count);
         Assert.Contains("LIST_PODS", set);
+    }
+
+    [Fact]
+    public void ParseSelection_reconstructs_key_value_pairs()
+    {
+        var selection = SwebKitToolsMcpBridge.ParseSelection(["namespace=team a/dev", "pod=worker-0"]);
+
+        Assert.Equal("team a/dev", selection!["namespace"]);
+        Assert.Equal("worker-0", selection["pod"]);
     }
 
     [Fact]
@@ -114,6 +136,19 @@ public class SwebKitToolsMcpBridgeTests
         Assert.Equal("default", registry.LastCalledArgs.GetProperty("namespace").GetString());
         Assert.False(result.IsError);
         Assert.Equal("{\"ok\":true}", Assert.IsType<TextContentBlock>(result.Content[0]).Text);
+    }
+
+    [Fact]
+    public async Task CallTool_scopes_selection_to_the_registry_call()
+    {
+        var registry = new FakeToolRegistry(Def("list_pods"));
+        var bridge = Bridge(registry);
+        var selection = new Dictionary<string, string> { ["namespace"] = "dev" };
+
+        await bridge.CallToolAsync("list_pods", default, null, null, CancellationToken.None, selection);
+
+        Assert.Equal("dev", registry.CapturedSelection!["namespace"]);
+        Assert.Null(AgentExecutionContext.Selection);
     }
 
     [Fact]

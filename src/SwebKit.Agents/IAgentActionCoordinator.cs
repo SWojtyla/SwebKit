@@ -20,6 +20,7 @@ public enum AgentActionType
     SetRedisKeyTtl,
     CopyBlob,
     ExecuteSql,
+    ApplyAksYaml,
 }
 
 /// <summary>

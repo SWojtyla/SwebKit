@@ -10,24 +10,20 @@ namespace SwebKit.Agents.Tools;
 /// </summary>
 public sealed class GetQueueMessagesTool : IAgentTool
 {
-    private readonly IServiceBusClientFactory _sbFactory;
+    private readonly IServiceBusConnectionPool _pool;
     private readonly AppStateService _appState;
-    private readonly ICredentialStore _credentialStore;
 
-    public GetQueueMessagesTool(
-        IServiceBusClientFactory sbFactory,
-        AppStateService appState,
-        ICredentialStore credentialStore)
+    public GetQueueMessagesTool(IServiceBusConnectionPool pool, AppStateService appState)
     {
-        _sbFactory = sbFactory;
+        _pool = pool;
         _appState = appState;
-        _credentialStore = credentialStore;
     }
 
     public string Name => "get_queue_messages";
 
     public string Description =>
-        "Retrieves messages from a Service Bus queue. Supports filtering by message count and optionally peeking at dead-letter messages.";
+        "Retrieves messages from a Service Bus queue, including dead-letter messages. " +
+        "Omit namespace to use the namespace selected in the UI.";
 
     public FeatureArea FeatureArea => FeatureArea.ServiceBus;
 
@@ -48,6 +44,10 @@ public sealed class GetQueueMessagesTool : IAgentTool
             "peek_dead_letter": {
               "type": "boolean",
               "description": "If true, retrieves messages from the dead-letter queue instead of the main queue (default: false)"
+            },
+            "namespace": {
+              "type": "string",
+              "description": "Configured namespace alias, FQDN, or id. Omit to use the namespace selected in the UI."
             }
           },
           "required": ["queue_name"]
@@ -63,49 +63,25 @@ public sealed class GetQueueMessagesTool : IAgentTool
             return await GetMessagesFromDemoClientAsync(arguments, demoClient, ct);
         }
 
-        // Use the first configured Service Bus namespace
-        var namespaces = _appState.ServiceBusNamespaces;
-        if (namespaces.Count == 0)
-        {
-            return JsonSerializer.Serialize(new { error = "Service Bus not configured. Add a namespace in settings." });
-        }
+        var requested = arguments.TryGetProperty("namespace", out var nsEl) ? nsEl.GetString() : null;
+        var resolution = ServiceBusToolContext.ResolveNamespace(_appState, requested);
+        if (!resolution.IsSuccess)
+            return JsonSerializer.Serialize(new { error = resolution.Error });
 
-        var ns = namespaces[0];
-        var connectionString = _credentialStore.Get(ns.CredentialKey);
-
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return JsonSerializer.Serialize(new
-            {
-                error = "Service Bus connection string not available for namespace: " + ns.Alias
-            });
-        }
-
+        var ns = resolution.Namespace!;
         var queueName = arguments.GetProperty("queue_name").GetString()!;
         var count = arguments.TryGetProperty("count", out var countEl) && countEl.TryGetInt32(out var c)
             ? Math.Clamp(c, 1, 100)
             : 10;
+        var peekDeadLetter = arguments.TryGetProperty("peek_dead_letter", out var dlEl) && dlEl.GetBoolean();
 
-        var peekDeadLetter = arguments.TryGetProperty("peek_dead_letter", out var dlEl)
-            ? dlEl.GetBoolean()
-            : false;
-
-        IServiceBusClient? client = null;
         try
         {
-            client = _sbFactory.Create(connectionString);
+            var client = _pool.GetOrCreate(ns);
             var entityPath = "queues/" + queueName;
-
-            IReadOnlyList<SbMessage> messages;
-            if (peekDeadLetter)
-            {
-                messages = await client.PeekDeadLetterAsync(entityPath, count, ct);
-            }
-            else
-            {
-                messages = await client.PeekMessagesAsync(entityPath, count, ct);
-            }
-
+            var messages = peekDeadLetter
+                ? await client.PeekDeadLetterAsync(entityPath, count, ct)
+                : await client.PeekMessagesAsync(entityPath, count, ct);
             var messageList = messages.Select(ServiceBusToolProjections.Message).ToList();
 
             return JsonSerializer.Serialize(new
@@ -126,14 +102,6 @@ public sealed class GetQueueMessagesTool : IAgentTool
                 queue_name = queueName,
                 peek_dead_letter = peekDeadLetter
             });
-        }
-        finally
-        {
-            // IServiceBusClient implements IAsyncDisposable, not IDisposable
-            if (client is IAsyncDisposable asyncDisp)
-            {
-                await asyncDisp.DisposeAsync();
-            }
         }
     }
 

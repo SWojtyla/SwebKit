@@ -38,10 +38,10 @@ internal sealed class FakeSqlClientForTools : ISqlClient
         string? filterColumn, string? filterText, string? orderByColumn, bool descending, int skip, int take, CancellationToken ct = default) =>
         _inner.GetTableRowsAsync(schemaName, tableName, database, filterColumn, filterText, orderByColumn, descending, skip, take, ct);
     public Task<SqlDataCompareResult> CompareDataAsync(ISqlClient target, string schemaName, string tableName,
-        IReadOnlyList<string> keyColumns, string? database, int maxDiffRows, CancellationToken ct = default) =>
-        _inner.CompareDataAsync(target, schemaName, tableName, keyColumns, database, maxDiffRows, ct);
-    public Task<SqlSchemaCompareResult> CompareSchemaAsync(ISqlClient target, string? database, CancellationToken ct = default) =>
-        _inner.CompareSchemaAsync(target, database, ct);
+        IReadOnlyList<string> keyColumns, string? sourceDatabase, string? targetDatabase, int maxDiffRows, CancellationToken ct = default) =>
+        _inner.CompareDataAsync(target, schemaName, tableName, keyColumns, sourceDatabase, targetDatabase, maxDiffRows, ct);
+    public Task<SqlSchemaCompareResult> CompareSchemaAsync(ISqlClient target, string? sourceDatabase, string? targetDatabase, CancellationToken ct = default) =>
+        _inner.CompareSchemaAsync(target, sourceDatabase, targetDatabase, ct);
     public Task<SqlHealthReport> CheckHealthAsync(string? database, CancellationToken ct = default) => _inner.CheckHealthAsync(database, ct);
 }
 

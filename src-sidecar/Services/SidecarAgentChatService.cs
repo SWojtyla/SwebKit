@@ -353,10 +353,11 @@ public sealed class SidecarAgentChatService
             Tools = tools,
             History = historyList,
             SessionKey = AgentSessionStore.Key(sessionId),
+            Selection = context?.Selection,
         };
 
         var steps = new List<AgentChatStep>();
-        var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps);
+        var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps, context?.Selection);
 
         return new TurnSetup(session, request, steps, toolExecutor, summarized, sw);
     }

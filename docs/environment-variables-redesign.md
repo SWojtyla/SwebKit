@@ -2,11 +2,9 @@
 
 > **Archived (2026-08-01).** This is a MAUI/Blazor-only design doc (`.razor` components,
 > `EnvironmentRepository.cs`) dated 2025-06-28 and never built for MAUI. It has been superseded by
-> the much narrower, already-shipped `docs/features/active/api-client-key-vault/` feature (a
-> `secretSource` picker in the React `EnvironmentManager.tsx`, not this doc's sweeping panel
-> redesign). Do not treat this as a live requirements source for the Tauri+React app — see
-> `docs/features/active/tauri-react-primary-tool/production-readiness-review.md` §2 for context.
-> Kept for historical reference only.
+> the much narrower, already-shipped `secretSource` picker in the React
+> `EnvironmentManager.tsx`, not this doc's sweeping panel redesign. Do not treat this as a live
+> requirements source for the Tauri+React app. Kept for historical reference only.
 
 ## 📋 Overview
 

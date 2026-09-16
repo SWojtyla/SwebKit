@@ -36,6 +36,8 @@ const FEATURE_AREA_BY_ACTION_TYPE: Record<string, string> = {
   DeleteRedisKey: "Redis",
   SetRedisKeyTtl: "Redis",
   CopyBlob: "Storage",
+  ExecuteSql: "SQL",
+  ApplyAksYaml: "AKS",
 };
 
 export function describePendingActionOrigin(action: Pick<PendingAction, "type" | "target">): string {

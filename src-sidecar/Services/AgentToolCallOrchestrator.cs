@@ -80,7 +80,8 @@ public sealed class AgentToolCallOrchestrator
     /// pair shape the legacy MAUI-side <c>AgentChatService.SendAsync</c> already uses, reused rather
     /// than inventing a new trace format (workspace-intelligence Module 6).</summary>
     public Func<string, JsonElement, CancellationToken, Task<string>>? BuildStepTrackingToolExecutor(
-        IReadOnlyList<ToolDefinition> tools, List<AgentChatStep> steps)
+        IReadOnlyList<ToolDefinition> tools, List<AgentChatStep> steps,
+        IReadOnlyDictionary<string, string>? selection = null)
     {
         if (tools.Count == 0)
             return null;
@@ -98,6 +99,7 @@ public sealed class AgentToolCallOrchestrator
                     : $"Calling {toolName}",
             });
 
+            using var executionContext = AgentExecutionContext.Push(selection);
             var result = await _toolRegistry.ExecuteAsync(toolName, args, toolCt);
             toolSw.Stop();
 

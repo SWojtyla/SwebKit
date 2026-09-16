@@ -12,6 +12,12 @@ describe("describePendingActionOrigin", () => {
     expect(describePendingActionOrigin({ type: "CopyBlob", target: "container/blob.txt" })).toBe(
       "Storage · container/blob.txt",
     );
+    expect(describePendingActionOrigin({ type: "ExecuteSql", target: "orders" })).toBe(
+      "SQL · orders",
+    );
+    expect(describePendingActionOrigin({ type: "ApplyAksYaml", target: "dev/Deployment/orders" })).toBe(
+      "AKS · dev/Deployment/orders",
+    );
   });
 
   it("falls back to a generic 'Agent' area for an unrecognized action type", () => {

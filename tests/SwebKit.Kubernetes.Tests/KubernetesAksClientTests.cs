@@ -172,6 +172,28 @@ users:
     }
 
     [Fact]
+    public void CompactYamlBlankLines_RemovesEmitterSpacingBetweenMappings()
+    {
+        const string yaml = "apiVersion: apps/v1\n\nkind: Deployment\n\nmetadata:\n\n  name: orders\n\nspec:\n\n  replicas: 2\n";
+
+        var compact = KubernetesAksClient.CompactYamlBlankLines(yaml);
+
+        Assert.DoesNotContain("\n\n", compact, StringComparison.Ordinal);
+        Assert.Contains("metadata:\n  name: orders\nspec:\n  replicas: 2", compact, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CompactYamlBlankLines_PreservesBlankLinesInsideBlockScalars()
+    {
+        const string yaml = "apiVersion: v1\n\nkind: ConfigMap\n\ndata:\n\n  script: |-\n    first\n\n    third\n\nmetadata:\n\n  name: scripts\n";
+
+        var compact = KubernetesAksClient.CompactYamlBlankLines(yaml);
+
+        Assert.Contains("script: |-\n    first\n\n    third", compact, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n\nmetadata", compact, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CleanEditableYaml_ReturnsOriginal_WhenYamlIsEmpty()
     {
         Assert.Equal(string.Empty, KubernetesAksClient.CleanEditableYaml(string.Empty));

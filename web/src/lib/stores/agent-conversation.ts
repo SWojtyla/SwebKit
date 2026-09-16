@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatMessage } from "@/lib/types";
+import type { AgentChatMode, ChatMessage } from "@/lib/types";
 
 /**
  * Holds the transcript for the global agent session (the one every caller that omits a
@@ -14,6 +14,8 @@ import type { ChatMessage } from "@/lib/types";
  */
 interface AgentConversationState {
   messages: ChatMessage[];
+  mode: AgentChatMode;
+  setMode: (mode: AgentChatMode) => void;
   addMessage: (message: ChatMessage) => void;
   updateMessage: (id: string, patch: Partial<ChatMessage>) => void;
   appendToken: (id: string, token: string) => void;
@@ -23,6 +25,8 @@ interface AgentConversationState {
 
 export const useAgentConversationStore = create<AgentConversationState>((set) => ({
   messages: [],
+  mode: "ask",
+  setMode: (mode) => set({ mode }),
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   updateMessage: (id, patch) =>
     set((state) => ({
@@ -38,5 +42,5 @@ export const useAgentConversationStore = create<AgentConversationState>((set) =>
         m.id === id ? { ...m, thoughts: (m.thoughts ?? "") + token } : m,
       ),
     })),
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () => set({ messages: [], mode: "ask" }),
 }));

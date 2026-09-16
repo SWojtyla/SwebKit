@@ -168,6 +168,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
         defaultWidth={384}
         minWidth={280}
         maxWidth={600}
+        maxWidthVw={60}
         storageKey="contextual-assistant-panel"
         showHeader={false}
         className="h-full shadow-xl"
@@ -286,7 +287,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
           </div>
         )}
 
-        <div ref={scrollRef} className="flex-1 overflow-auto px-4 py-3 space-y-3" data-testid="contextual-assistant-messages">
+        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-4 py-3" data-testid="contextual-assistant-messages">
           {messages.length === 0 && (
             <p className="text-sm text-muted-foreground" data-testid="contextual-assistant-empty">
               Ask a question about {title}.
@@ -295,7 +296,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
           {messages.map((msg) => (
             <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
-                className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
+                className={`min-w-0 max-w-[90%] [overflow-wrap:anywhere] rounded-lg px-3 py-2 text-sm ${
                   msg.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : msg.error

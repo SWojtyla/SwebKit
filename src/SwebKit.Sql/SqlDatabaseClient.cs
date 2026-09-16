@@ -288,10 +288,11 @@ public sealed class SqlDatabaseClient : ISqlClient
     }
 
     public async Task<SqlDataCompareResult> CompareDataAsync(ISqlClient target, string schemaName, string tableName,
-        IReadOnlyList<string> keyColumns, string? database, int maxDiffRows, CancellationToken ct = default)
+        IReadOnlyList<string> keyColumns, string? sourceDatabase, string? targetDatabase,
+        int maxDiffRows, CancellationToken ct = default)
     {
-        var sourceRows = await FetchAllRowsAsync(database, schemaName, tableName, ct).ConfigureAwait(false);
-        var targetRows = await FetchAllRowsAsync(target, database, schemaName, tableName, ct).ConfigureAwait(false);
+        var sourceRows = await FetchAllRowsAsync(sourceDatabase, schemaName, tableName, ct).ConfigureAwait(false);
+        var targetRows = await FetchAllRowsAsync(target, targetDatabase, schemaName, tableName, ct).ConfigureAwait(false);
 
         var result = SqlDataComparer.Compare(sourceRows.Rows, targetRows.Rows, keyColumns, maxDiffRows);
         if (sourceRows.Truncated || targetRows.Truncated)
@@ -303,10 +304,10 @@ public sealed class SqlDatabaseClient : ISqlClient
         return result;
     }
 
-    public async Task<SqlSchemaCompareResult> CompareSchemaAsync(ISqlClient target, string? database, CancellationToken ct = default)
+    public async Task<SqlSchemaCompareResult> CompareSchemaAsync(ISqlClient target, string? sourceDatabase, string? targetDatabase, CancellationToken ct = default)
     {
-        var source = await GetSchemaAsync(database, ct).ConfigureAwait(false);
-        var targetModel = await target.GetSchemaAsync(database, ct).ConfigureAwait(false);
+        var source = await GetSchemaAsync(sourceDatabase, ct).ConfigureAwait(false);
+        var targetModel = await target.GetSchemaAsync(targetDatabase, ct).ConfigureAwait(false);
         return SqlSchemaComparer.Compare(source, targetModel);
     }
 

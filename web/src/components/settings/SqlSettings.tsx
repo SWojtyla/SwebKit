@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, ListFilter, Plus, Search } from "lucide-react";
 import { useProfile, useUpdateProfile } from "@/lib/hooks";
-import { useSqlDiscovery, useSqlTestConnection } from "@/lib/hooks/useSql";
+import { useSqlAdHocTest, useSqlBrowseDatabases, useSqlDiscovery } from "@/lib/hooks/useSql";
 import { useNotification } from "@/components/layout/NotificationSystem";
-import type { SqlConnectionEntry } from "@/lib/types";
+import type { SqlConnectionEntry, SqlDatabaseInfo } from "@/lib/types";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 
@@ -13,17 +13,23 @@ function isConfigured(conn: SqlConnectionEntry): boolean {
   return conn.server.trim() !== "";
 }
 
+/** Grouping key for the collapsible server headers — connections are per-database entries,
+ * so several rows can share one server. Entries still being typed group under "(no server)". */
+function serverGroupKey(conn: SqlConnectionEntry): string {
+  return conn.server.trim().toLowerCase() || "";
+}
+
 export function SqlSettings() {
   const { data: profile } = useProfile();
   const updateProfile = useUpdateProfile();
   const { notify } = useNotification();
   const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
   const [discoverOpen, setDiscoverOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const discovery = useSqlDiscovery({ enabled: discoverOpen });
 
-  if (!profile) return null;
-
-  const sql = profile.config.sqlConfig ?? { connections: [], activeConnectionId: null };
+  const sql = profile?.config.sqlConfig ?? { connections: [], activeConnectionId: null };
 
   const update = (patch: Partial<typeof sql>) => {
     updateProfile.mutate((prev) => ({
@@ -68,6 +74,28 @@ export function SqlSettings() {
     update({ connections: sql.connections.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
   };
 
+  const filtered = useMemo(() => {
+    const term = filter.trim().toLowerCase();
+    if (!term) return sql.connections;
+    return sql.connections.filter(
+      (c) =>
+        c.displayName.toLowerCase().includes(term) ||
+        c.server.toLowerCase().includes(term) ||
+        c.database.toLowerCase().includes(term),
+    );
+  }, [sql.connections, filter]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, SqlConnectionEntry[]>();
+    for (const c of filtered) {
+      const key = serverGroupKey(c);
+      map.set(key, [...(map.get(key) ?? []), c]);
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filtered]);
+
+  if (!profile) return null;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -95,6 +123,7 @@ export function SqlSettings() {
       <p className="text-xs text-muted-foreground">
         Entra ID only — connections authenticate with your signed-in Azure identity
         (the same credential Service Bus and Storage use). No passwords are stored.
+        One entry per database: the SQL page lists databases grouped under their server.
       </p>
 
       {discoverOpen && (
@@ -132,13 +161,31 @@ export function SqlSettings() {
                     className="rounded border px-2 py-0.5 hover:bg-accent"
                     data-testid={`sql-discovered-add-${server.name}`}
                   >
-                    Add
+                    Add server
                   </button>
                 </div>
                 {server.databases.length > 0 && (
-                  <p className="mt-1 text-muted-foreground">
-                    Databases: {server.databases.join(", ")}
-                  </p>
+                  <ul className="mt-1 space-y-0.5" data-testid={`sql-discovered-dbs-${server.name}`}>
+                    {server.databases.map((db) => (
+                      <li key={db} className="flex items-center justify-between pl-2">
+                        <span className="text-muted-foreground">{db}</span>
+                        <button
+                          onClick={() => {
+                            addConnection({
+                              displayName: db,
+                              server: server.serverFqdn,
+                              database: db,
+                            });
+                            notify("success", "Connection added", `${db} on ${server.name} — review and save below.`);
+                          }}
+                          className="rounded border px-2 py-0.5 hover:bg-accent"
+                          data-testid={`sql-discovered-add-${server.name}-${db}`}
+                        >
+                          Add
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </li>
             ))}
@@ -146,20 +193,83 @@ export function SqlSettings() {
         </div>
       )}
 
-      {sql.connections.map((conn) => (
-        <ConnectionRow
-          key={conn.id}
-          connection={conn}
-          onUpdate={(patch) => updateConnection(conn.id, patch)}
-          onRequestRemove={() => requestRemove(conn)}
-          pendingRemove={pendingRemoveId === conn.id}
-          onConfirmRemove={() => {
-            removeConnection(conn.id);
-            setPendingRemoveId(null);
-          }}
-          onCancelRemove={() => setPendingRemoveId(null)}
-        />
-      ))}
+      {sql.connections.length > 5 && (
+        <div className="flex items-center gap-2">
+          <ListFilter className="h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            type="text"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter by name, server or database…"
+            className="w-72 rounded-md border bg-card px-3 py-1.5 text-sm"
+            data-testid="sql-connections-filter"
+          />
+        </div>
+      )}
+
+      {groups.map(([serverKey, conns]) => {
+        const isCollapsed = collapsed[serverKey] ?? false;
+        return (
+          <div key={serverKey || "(none)"} className="space-y-2" data-testid={`sql-server-group-${serverKey || "none"}`}>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCollapsed((prev) => ({ ...prev, [serverKey]: !isCollapsed }))}
+                className="flex items-center gap-1 text-sm font-medium hover:text-primary"
+                aria-expanded={!isCollapsed}
+                data-testid={`sql-server-toggle-${serverKey || "none"}`}
+              >
+                {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                {serverKey || "No server set"}
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({conns.length} {conns.length === 1 ? "entry" : "entries"})
+                </span>
+              </button>
+              {serverKey && (
+                <button
+                  onClick={() =>
+                    addConnection({
+                      displayName: "New Connection",
+                      server: conns[0].server,
+                    })
+                  }
+                  className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent"
+                  data-testid={`sql-server-add-db-${serverKey}`}
+                >
+                  <Plus className="h-3 w-3" /> add database
+                </button>
+              )}
+            </div>
+            {!isCollapsed &&
+              conns.map((conn) => (
+                <ConnectionRow
+                  key={conn.id}
+                  connection={conn}
+                  onUpdate={(patch) => updateConnection(conn.id, patch)}
+                  onRequestRemove={() => requestRemove(conn)}
+                  onAddDatabase={(db) =>
+                    addConnection({
+                      displayName: db,
+                      server: conn.server,
+                      database: db,
+                    })
+                  }
+                  pendingRemove={pendingRemoveId === conn.id}
+                  onConfirmRemove={() => {
+                    removeConnection(conn.id);
+                    setPendingRemoveId(null);
+                  }}
+                  onCancelRemove={() => setPendingRemoveId(null)}
+                />
+              ))}
+          </div>
+        );
+      })}
+
+      {filter.trim() && filtered.length === 0 && (
+        <p className="text-xs text-muted-foreground" data-testid="sql-connections-filter-empty">
+          No connections match "{filter}".
+        </p>
+      )}
     </div>
   );
 }
@@ -168,6 +278,7 @@ interface ConnectionRowProps {
   connection: SqlConnectionEntry;
   onUpdate: (patch: Partial<SqlConnectionEntry>) => void;
   onRequestRemove: () => void;
+  onAddDatabase: (database: string) => void;
   pendingRemove: boolean;
   onConfirmRemove: () => void;
   onCancelRemove: () => void;
@@ -177,11 +288,20 @@ function ConnectionRow({
   connection,
   onUpdate,
   onRequestRemove,
+  onAddDatabase,
   pendingRemove,
   onConfirmRemove,
   onCancelRemove,
 }: ConnectionRowProps) {
-  const test = useSqlTestConnection(connection.id, { enabled: false });
+  // Ad-hoc test/browse hit POST /api/sql/* with the current form values — the pooled client a
+  // saved-entry test would hit can lag an uncommitted edit, and unsaved rows have no id at all.
+  const test = useSqlAdHocTest();
+  const browse = useSqlBrowseDatabases();
+  const [formValues, setFormValues] = useState({ server: connection.server, database: connection.database });
+  const [browseOpen, setBrowseOpen] = useState(false);
+
+  const browsedDatabases: SqlDatabaseInfo[] = Array.isArray(browse.data) ? browse.data : [];
+  const browseError = browse.data && !Array.isArray(browse.data) ? browse.data.error : null;
 
   return (
     <div className="space-y-3 rounded-lg border p-4" data-testid={`sql-connection-${connection.id}`}>
@@ -207,6 +327,7 @@ function ConnectionRow({
           type="text"
           value={connection.server}
           onCommit={(v) => onUpdate({ server: v })}
+          onDraftChange={(server) => setFormValues((current) => ({ ...current, server }))}
           className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
           placeholder="myserver.database.windows.net"
           data-testid={`sql-server-${connection.id}`}
@@ -222,6 +343,7 @@ function ConnectionRow({
           type="text"
           value={connection.database}
           onCommit={(v) => onUpdate({ database: v })}
+          onDraftChange={(database) => setFormValues((current) => ({ ...current, database }))}
           className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
           placeholder="Database (optional — pick per-session on the SQL page)"
           data-testid={`sql-database-${connection.id}`}
@@ -243,12 +365,25 @@ function ConnectionRow({
 
       <div className="flex items-center gap-2 pt-1">
         <button
-          onClick={() => test.refetch()}
-          disabled={test.isFetching}
+          onClick={() =>
+            test.mutate(formValues)
+          }
+          disabled={test.isPending || !formValues.server.trim()}
           className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
           data-testid={`sql-test-connection-${connection.id}`}
         >
-          {test.isFetching ? "Testing…" : "Test connection"}
+          {test.isPending ? "Testing…" : "Test connection"}
+        </button>
+        <button
+          onClick={() => {
+            setBrowseOpen(true);
+            browse.mutate(formValues);
+          }}
+          disabled={browse.isPending || !formValues.server.trim()}
+          className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+          data-testid={`sql-browse-databases-${connection.id}`}
+        >
+          {browse.isPending ? "Browsing…" : "Browse databases"}
         </button>
         {test.data && (
           <span
@@ -260,6 +395,52 @@ function ConnectionRow({
         )}
         {test.isError && <span className="text-xs text-destructive">{String(test.error)}</span>}
       </div>
+
+      {browseOpen && (
+        <div className="rounded border p-2 text-xs" data-testid={`sql-browse-panel-${connection.id}`}>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="font-medium">Databases on {formValues.server}</span>
+            <button
+              onClick={() => setBrowseOpen(false)}
+              className="text-muted-foreground hover:text-foreground"
+              data-testid={`sql-browse-close-${connection.id}`}
+            >
+              Close
+            </button>
+          </div>
+          {browse.isPending && <p className="text-muted-foreground">Listing databases…</p>}
+          {browseError && (
+            <p className="text-destructive" data-testid={`sql-browse-error-${connection.id}`}>
+              {browseError}
+            </p>
+          )}
+          {browse.isError && (
+            <p className="text-destructive" data-testid={`sql-browse-error-${connection.id}`}>
+              {String(browse.error)}
+            </p>
+          )}
+          {browsedDatabases.length === 0 && browse.data && Array.isArray(browse.data) && (
+            <p className="text-muted-foreground">No databases found on this server.</p>
+          )}
+          <ul className="space-y-0.5">
+            {browsedDatabases.map((db) => (
+              <li key={db.name} className="flex items-center justify-between">
+                <span>
+                  {db.name}
+                  <span className="ml-1 text-muted-foreground">({db.state.toLowerCase()})</span>
+                </span>
+                <button
+                  onClick={() => onAddDatabase(db.name)}
+                  className="rounded border px-2 py-0.5 hover:bg-accent"
+                  data-testid={`sql-browse-add-${connection.id}-${db.name}`}
+                >
+                  Add
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {pendingRemove && (
         <ConfirmBar

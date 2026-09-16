@@ -18,13 +18,31 @@ import type {
 // queryKey: ["sql"] })` refreshes every SQL view after a profile/demo-mode change.
 
 /** Mirrors `useRedisTestConnection` — only fires when "Test connection" is clicked
- * (`enabled: false` from the caller), not on render. */
+ * (`enabled: false` from the caller), not on render. Tests the saved profile entry. */
 export function useSqlTestConnection(connectionId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["sql", connectionId, "test"],
     queryFn: () => apiFetch<{ connected: boolean; error?: string }>(`/api/sql/${connectionId}/test`),
     enabled: !!connectionId && (options?.enabled ?? true),
     retry: false,
+  });
+}
+
+/** Tests the values currently on the settings form — `POST /api/sql/test` builds an unpooled
+ * client, so a row tests what it shows, not the last-saved (possibly stale) pooled client. */
+export function useSqlAdHocTest() {
+  return useMutation({
+    mutationFn: (vars: { server: string; database?: string | null }) =>
+      apiSend<{ connected: boolean; error?: string }>("/api/sql/test", "POST", vars),
+  });
+}
+
+/** Lists databases on a server the user typed but hasn't saved — browse-before-add in
+ * settings. Ad-hoc endpoint; errors come back in the payload (`{connected:false,error}`). */
+export function useSqlBrowseDatabases() {
+  return useMutation({
+    mutationFn: (vars: { server: string; database?: string | null }) =>
+      apiSend<SqlDatabaseInfo[] | { connected: false; error?: string }>("/api/sql/databases", "POST", vars),
   });
 }
 
@@ -197,7 +215,8 @@ export function useSqlDataCompare() {
       schema: string;
       table: string;
       keyColumns: string[];
-      database?: string | null;
+      sourceDatabase?: string | null;
+      targetDatabase?: string | null;
       maxDiffRows?: number;
     }) => apiSend<SqlDataCompareResult>("/api/sql/compare/data", "POST", vars),
     onError: (error) => notify("error", "Data compare failed", String(error)),
@@ -207,8 +226,12 @@ export function useSqlDataCompare() {
 export function useSqlSchemaCompare() {
   const { notify } = useNotification();
   return useMutation({
-    mutationFn: (vars: { sourceConnectionId: string; targetConnectionId: string; database?: string | null }) =>
-      apiSend<SqlSchemaCompareResult>("/api/sql/compare/schema", "POST", vars),
+    mutationFn: (vars: {
+      sourceConnectionId: string;
+      targetConnectionId: string;
+      sourceDatabase?: string | null;
+      targetDatabase?: string | null;
+    }) => apiSend<SqlSchemaCompareResult>("/api/sql/compare/schema", "POST", vars),
     onError: (error) => notify("error", "Schema compare failed", String(error)),
   });
 }

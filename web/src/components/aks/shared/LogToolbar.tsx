@@ -10,6 +10,8 @@ import {
   Trash2,
   Search,
   Clock,
+  ArrowUpToLine,
+  ArrowDownToLine,
 } from "lucide-react";
 import type { TimestampMode } from "@/lib/log-window";
 
@@ -29,6 +31,15 @@ export interface LogToolbarProps {
   leading?: ReactNode;
   textFilter: string;
   onTextFilterChange: (value: string) => void;
+  searchMode: "filter" | "context";
+  onSearchModeChange: (mode: "filter" | "context") => void;
+  contextLines: number;
+  onContextLinesChange: (lines: number) => void;
+  matchCount: number;
+  canShowPreviousMatch: boolean;
+  canShowNextMatch: boolean;
+  onShowPreviousMatch: () => void;
+  onShowNextMatch: () => void;
   summary: string;
   timestampMode: TimestampMode;
   onTimestampModeChange: (mode: TimestampMode) => void;
@@ -69,6 +80,15 @@ export function LogToolbar({
   leading,
   textFilter,
   onTextFilterChange,
+  searchMode,
+  onSearchModeChange,
+  contextLines,
+  onContextLinesChange,
+  matchCount,
+  canShowPreviousMatch,
+  canShowNextMatch,
+  onShowPreviousMatch,
+  onShowNextMatch,
   summary,
   timestampMode,
   onTimestampModeChange,
@@ -99,11 +119,70 @@ export function LogToolbar({
           type="text"
           value={textFilter}
           onChange={(e) => onTextFilterChange(e.target.value)}
-          placeholder="Filter..."
+          placeholder={searchMode === "context" ? "Search with context..." : "Filter..."}
           className="w-full rounded border bg-background py-1 pl-7 pr-2 text-xs"
           data-testid="log-filter-input"
         />
       </div>
+
+      <div className="flex rounded border" role="group" aria-label="Log search mode">
+        <button
+          onClick={() => onSearchModeChange("filter")}
+          className={`px-2 py-1 text-xs ${searchMode === "filter" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+          aria-pressed={searchMode === "filter"}
+          data-testid="log-search-mode-filter"
+        >
+          Filter
+        </button>
+        <button
+          onClick={() => onSearchModeChange("context")}
+          className={`border-l px-2 py-1 text-xs ${searchMode === "context" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+          aria-pressed={searchMode === "context"}
+          data-testid="log-search-mode-context"
+        >
+          Context
+        </button>
+      </div>
+
+      {searchMode === "context" && (
+        <>
+          <label className="flex items-center gap-1 text-xs">
+            ±
+            <select
+              value={contextLines}
+              onChange={(e) => onContextLinesChange(Number(e.target.value))}
+              className="rounded border bg-background px-2 py-1 text-xs"
+              aria-label="Context lines"
+              data-testid="log-context-lines"
+            >
+              {[2, 5, 10].map((lines) => <option key={lines} value={lines}>{lines} lines</option>)}
+            </select>
+          </label>
+          <span className="whitespace-nowrap text-xs text-muted-foreground" data-testid="log-match-count">
+            {matchCount} {matchCount === 1 ? "match" : "matches"}
+          </span>
+          <div className="flex gap-0.5">
+            <button
+              onClick={onShowPreviousMatch}
+              disabled={!canShowPreviousMatch}
+              className={BUTTON_CLASS}
+              title="Previous match"
+              data-testid="log-previous-match"
+            >
+              <ArrowUpToLine className="h-3 w-3" />
+            </button>
+            <button
+              onClick={onShowNextMatch}
+              disabled={!canShowNextMatch}
+              className={BUTTON_CLASS}
+              title="Next match"
+              data-testid="log-next-match"
+            >
+              <ArrowDownToLine className="h-3 w-3" />
+            </button>
+          </div>
+        </>
+      )}
 
       <label className="flex items-center gap-1 text-xs" title="Timestamp display">
         <Clock className="h-3 w-3 text-muted-foreground" />

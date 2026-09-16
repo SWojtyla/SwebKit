@@ -4,6 +4,7 @@ import {
   timestampMs,
   formatLogTimestamp,
   filterLogEntries,
+  searchLogEntries,
   computeLogWindow,
   windowSummary,
   mergeByTimestamp,
@@ -115,6 +116,45 @@ describe("filterLogEntries", () => {
   it("cannot match the timestamp, which is not part of the text", () => {
     const stamped = [entry({ seq: 0, text: "GET /health", ts: "2026-09-09T10:22:30Z" })];
     expect(filterLogEntries(stamped, "2026")).toHaveLength(0);
+  });
+});
+
+describe("searchLogEntries", () => {
+  const entries = Array.from({ length: 12 }, (_, seq) =>
+    entry({ seq, text: seq === 2 || seq === 9 ? `ERROR ${seq}` : `line ${seq}` }),
+  );
+
+  it("includes context, marks matches, and separates non-contiguous groups", () => {
+    const result = searchLogEntries(entries, "error", 1);
+
+    expect(result.map((item) => item.searchKind)).toEqual([
+      "context", "match", "context", "gap", "context", "match", "context",
+    ]);
+    expect(result.find((item) => item.searchKind === "gap")?.omitted).toBe(4);
+  });
+
+  it("merges overlapping context windows", () => {
+    const close = [
+      entry({ seq: 0, text: "hit" }),
+      entry({ seq: 1, text: "between" }),
+      entry({ seq: 2, text: "hit" }),
+    ];
+    const result = searchLogEntries(close, "hit", 1);
+
+    expect(result).toHaveLength(3);
+    expect(result.some((item) => item.searchKind === "gap")).toBe(false);
+  });
+
+  it("with zero context returns only marked matches and clamps buffer edges", () => {
+    const result = searchLogEntries(entries, "error", 0);
+
+    expect(result).toHaveLength(3);
+    expect(result.filter((item) => item.searchKind === "match")).toHaveLength(2);
+  });
+
+  it("does not search timestamps", () => {
+    const stamped = [entry({ seq: 0, text: "healthy", ts: "2026-09-09T10:22:30Z" })];
+    expect(searchLogEntries(stamped, "2026", 5)).toEqual([]);
   });
 });
 

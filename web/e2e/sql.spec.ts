@@ -94,14 +94,12 @@ test.describe("SQL", () => {
         await page
             .getByTestId("sql-editor-input")
             .fill("SELECT * FROM dbo.products");
+        await page.getByTestId("sql-save-query-open").click();
+        await page.getByTestId("sql-save-popover-name").fill("All products");
+        await page.getByTestId("sql-save-popover-submit").click();
         await page.getByTestId("sql-tab-saved").click();
 
-        await page.getByTestId("sql-save-name").fill("All products");
-        await page.getByTestId("sql-save-submit").click();
-
-        await expect(page.getByTestId("sql-saved-panel")).toContainText(
-            "All products",
-        );
+        await expect(page.getByTestId("sql-saved-panel")).toContainText("All products");
     });
 
     test("records executions in history", async ({ page }) => {
@@ -128,11 +126,11 @@ test.describe("SQL", () => {
         await page.getByTestId("sql-tab-compare").click();
 
         await page.getByTestId("sql-compare-mode").selectOption("schema");
-        // Source = demo-sql (selected connection); the target select only offers non-source
-        // connections, so orders-prod-sql is already resolved automatically.
-        await expect(page.getByTestId("sql-compare-target")).toHaveValue(
-            "demo-sql-2",
-        );
+        // Target selection is deliberate: compare must never silently choose another live database.
+        await expect(page.getByTestId("sql-compare-run")).toBeDisabled();
+        await page
+            .getByTestId("sql-compare-target")
+            .selectOption("demo-sql-2");
         await page.getByTestId("sql-compare-run").click();
 
         await expect(page.getByTestId("sql-compare-schema-result")).toBeVisible(

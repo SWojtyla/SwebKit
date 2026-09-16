@@ -45,6 +45,7 @@ import { useSettingsStore, isTheme } from "@/lib/stores/settings";
 import { onSidecarLifecycleEvent, restartSidecar } from "@/lib/tauri-bridge";
 import { initSidecarBaseUrl } from "@/lib/api";
 import { useNotification } from "./NotificationSystem";
+import { ActivityIndicator } from "@/components/shared/ActivityIndicator";
 
 const navItems = [
     { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -406,6 +407,7 @@ export function AppLayout() {
                         </kbd>
                     </button>
                     <div className="ml-auto flex flex-wrap items-center gap-2">
+                        <ActivityIndicator />
                         <button
                             onClick={() => {
                                 toggleTheme();

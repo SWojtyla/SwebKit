@@ -73,6 +73,23 @@ test.describe("Global AI Agent panel", () => {
     await expect(page.getByTestId("agent-messages")).toContainText("Pod is healthy.");
   });
 
+  test("Ask & do mode is shared with the full page and sent to the backend", async ({ page }) => {
+    await mockAgentChatStreamDone(page, { text: "Action prepared." });
+    await page.goto("/aks");
+    await page.getByTestId("global-agent-panel-toggle").click();
+    await page.getByTestId("global-agent-panel-mode-ask-and-do").click();
+
+    const requestPromise = page.waitForRequest("**/api/agent/chat/stream");
+    await page.getByTestId("global-agent-panel-input").fill("apply the change");
+    await page.getByTestId("global-agent-panel-send").click();
+    const request = await requestPromise;
+    expect(request.postDataJSON()).toMatchObject({ mode: "ask_and_do" });
+
+    await page.getByTestId("global-agent-panel-close").click();
+    await page.getByTestId("nav-ai-agent").click();
+    await expect(page.getByTestId("agent-mode-ask-and-do")).toHaveAttribute("aria-checked", "true");
+  });
+
   test("messages sent from the docked panel appear on the /agent page too — one shared conversation", async ({ page }) => {
     await mockAgentChatStreamDone(page, { text: "42 pods running." });
 

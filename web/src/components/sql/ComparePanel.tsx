@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { GitCompareArrows } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { useSqlDataCompare, useSqlSchema, useSqlSchemaCompare } from "@/lib/hooks";
+import { useSqlDataCompare, useSqlDatabases, useSqlSchema, useSqlSchemaCompare } from "@/lib/hooks";
 import type { SqlConnectionEntry, SqlObjectInfo } from "@/lib/types";
 
 interface ComparePanelProps {
@@ -14,13 +14,20 @@ interface ComparePanelProps {
  * scripts, per the feature's non-goals) between two configured connections. */
 export function ComparePanel({ connections, sourceId, onSourceChange }: ComparePanelProps) {
   const [targetId, setTargetId] = useState<string>("");
+  const [sourceDatabase, setSourceDatabase] = useState<string>("");
+  const [targetDatabase, setTargetDatabase] = useState<string>("");
   const [schemaName, setSchemaName] = useState("");
   const [tableName, setTableName] = useState("");
   const [keyColumns, setKeyColumns] = useState("");
   const [mode, setMode] = useState<"data" | "schema">("data");
 
-  const resolvedTarget = targetId || connections.find((c) => c.id !== sourceId)?.id || "";
-  const sourceSchema = useSqlSchema(sourceId || null, null);
+  const source = connections.find((c) => c.id === sourceId) ?? null;
+  const target = connections.find((c) => c.id === targetId) ?? null;
+  const sourceDatabases = useSqlDatabases(sourceId || null);
+  const targetDatabases = useSqlDatabases(targetId || null);
+  // The schema/object pickers describe the chosen source database, not whatever the
+  // connection happens to default to.
+  const sourceSchema = useSqlSchema(sourceId || null, sourceDatabase || null);
 
   const dataCompare = useSqlDataCompare();
   const schemaCompare = useSqlSchemaCompare();
@@ -34,27 +41,42 @@ export function ComparePanel({ connections, sourceId, onSourceChange }: CompareP
 
   const runCompare = () => {
     if (mode === "schema") {
-      schemaCompare.mutate({ sourceConnectionId: sourceId, targetConnectionId: resolvedTarget });
+      schemaCompare.mutate({
+        sourceConnectionId: sourceId,
+        targetConnectionId: targetId,
+        sourceDatabase: sourceDatabase || null,
+        targetDatabase: targetDatabase || null,
+      });
     } else {
       const keys = keyColumns.split(",").map((k) => k.trim()).filter(Boolean);
       dataCompare.mutate({
         sourceConnectionId: sourceId,
-        targetConnectionId: resolvedTarget,
+        targetConnectionId: targetId,
         schema: schemaName,
         table: tableName,
         keyColumns: keys,
+        sourceDatabase: sourceDatabase || null,
+        targetDatabase: targetDatabase || null,
       });
     }
   };
 
   const canRun =
-    !!sourceId && !!resolvedTarget && sourceId !== resolvedTarget &&
+    !!sourceId && !!targetId && sourceId !== targetId &&
     (mode === "schema" || (!!schemaName && !!tableName && keyColumns.trim().length > 0));
 
   const running = dataCompare.isPending || schemaCompare.isPending;
 
+  // What the result header echoes — server / database(.schema.table) per side.
+  const sideLabel = (conn: SqlConnectionEntry | null, database: string) =>
+    conn ? `${conn.server} / ${database || conn.database || "(default)"}` : "";
+  const comparedObject = mode === "data" && schemaName && tableName ? `${schemaName}.${tableName}` : "";
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4" data-testid="sql-compare-panel">
+      <p className="mb-2 text-xs text-muted-foreground" data-testid="sql-compare-explainer">
+        Compares live data between the two connections — nothing is copied or stored.
+      </p>
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <select
           value={mode}
@@ -67,7 +89,7 @@ export function ComparePanel({ connections, sourceId, onSourceChange }: CompareP
         </select>
         <select
           value={sourceId}
-          onChange={(e) => onSourceChange(e.target.value)}
+          onChange={(e) => { onSourceChange(e.target.value); setSourceDatabase(""); setSchemaName(""); setTableName(""); }}
           className="rounded border bg-card px-2 py-1.5"
           data-testid="sql-compare-source"
           aria-label="Source connection"
@@ -76,17 +98,47 @@ export function ComparePanel({ connections, sourceId, onSourceChange }: CompareP
             <option key={c.id} value={c.id}>{c.displayName}</option>
           ))}
         </select>
+        <select
+          value={sourceDatabase}
+          onChange={(e) => { setSourceDatabase(e.target.value); setSchemaName(""); setTableName(""); }}
+          className="rounded border bg-card px-2 py-1.5"
+          data-testid="sql-compare-source-database"
+          aria-label="Source database"
+        >
+          <option value="">{source?.database || "database…"}</option>
+          {(sourceDatabases.data ?? [])
+            .filter((d) => d.name !== (sourceDatabase || source?.database))
+            .map((d) => (
+              <option key={d.name} value={d.name}>{d.name}</option>
+            ))}
+        </select>
         <span className="text-muted-foreground">vs</span>
         <select
-          value={resolvedTarget}
-          onChange={(e) => setTargetId(e.target.value)}
+          value={targetId}
+          onChange={(e) => { setTargetId(e.target.value); setTargetDatabase(""); }}
           className="rounded border bg-card px-2 py-1.5"
           data-testid="sql-compare-target"
           aria-label="Target connection"
         >
+          <option value="">target connection…</option>
           {connections.filter((c) => c.id !== sourceId).map((c) => (
             <option key={c.id} value={c.id}>{c.displayName}</option>
           ))}
+        </select>
+        <select
+          value={targetDatabase}
+          onChange={(e) => setTargetDatabase(e.target.value)}
+          className="rounded border bg-card px-2 py-1.5"
+          data-testid="sql-compare-target-database"
+          aria-label="Target database"
+          disabled={!targetId}
+        >
+          <option value="">{target?.database || "database…"}</option>
+          {(targetDatabases.data ?? [])
+            .filter((d) => d.name !== (targetDatabase || target?.database))
+            .map((d) => (
+              <option key={d.name} value={d.name}>{d.name}</option>
+            ))}
         </select>
 
         {mode === "data" && (
@@ -146,7 +198,14 @@ export function ComparePanel({ connections, sourceId, onSourceChange }: CompareP
       {mode === "data" && (
         <div className="mt-4 flex-1" data-testid="sql-compare-data-result">
           {dataCompare.data ? (
-            <DataCompareResult result={dataCompare.data} />
+            <>
+              <p className="mb-3 rounded border bg-muted/30 p-2 text-xs" data-testid="sql-compare-result-sides">
+                <span className="font-medium">Source:</span> {sideLabel(source, sourceDatabase)}{comparedObject ? `.${comparedObject}` : ""}
+                <span className="mx-2 text-muted-foreground">→</span>
+                <span className="font-medium">Target:</span> {sideLabel(target, targetDatabase)}{comparedObject ? `.${comparedObject}` : ""}
+              </p>
+              <DataCompareResult result={dataCompare.data} />
+            </>
           ) : (
             !dataCompare.isPending && (
               <EmptyState
@@ -161,7 +220,14 @@ export function ComparePanel({ connections, sourceId, onSourceChange }: CompareP
       {mode === "schema" && (
         <div className="mt-4 flex-1" data-testid="sql-compare-schema-result">
           {schemaCompare.data ? (
-            <SchemaCompareResult result={schemaCompare.data} />
+            <>
+              <p className="mb-3 rounded border bg-muted/30 p-2 text-xs" data-testid="sql-compare-result-sides">
+                <span className="font-medium">Source:</span> {sideLabel(source, sourceDatabase)}
+                <span className="mx-2 text-muted-foreground">→</span>
+                <span className="font-medium">Target:</span> {sideLabel(target, targetDatabase)}
+              </p>
+              <SchemaCompareResult result={schemaCompare.data} />
+            </>
           ) : (
             !schemaCompare.isPending && (
               <EmptyState
