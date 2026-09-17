@@ -109,8 +109,8 @@ temporarily unreachable cache — means a connect **past** the cap still *succee
 on that dead multiplexer then blocks for the full async timeout before throwing, so the app hangs
 rather than reporting a connection problem.
 
-This has now happened three times: Storage (fixed in `cc700f33`), then Redis and Service Bus,
-both fixed under `docs/features/active/data-fetch-performance/`.
+This has now happened three times: Storage (fixed in `cc700f33`), then Redis and Service Bus.
+All three now route requests through shared connection pools.
 
 **Fix:** Pool the client per account/namespace/cache with the existing generic
 `ClientCache<TClient>` (`src/SwebKit.Core/Services/ClientCache.cs`) and route every handler

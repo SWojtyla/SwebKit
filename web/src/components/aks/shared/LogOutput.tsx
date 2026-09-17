@@ -18,6 +18,7 @@ export interface LogOutputProps {
   /** Index of the first entry within the filtered list, so line keys stay stable while paging. */
   startIndex: number;
   timestampMode: TimestampMode;
+  highlightTerm?: string;
   /** Shows the emitting pod before each line. On for the multi-pod view. */
   showPod?: boolean;
   emptyMessage: string;
@@ -25,7 +26,7 @@ export interface LogOutputProps {
 }
 
 export const LogOutput = forwardRef<HTMLDivElement, LogOutputProps>(function LogOutput(
-  { entries, startIndex, timestampMode, showPod = false, emptyMessage, testId },
+  { entries, startIndex, timestampMode, highlightTerm = "", showPod = false, emptyMessage, testId },
   ref,
 ) {
   return (
@@ -36,19 +37,27 @@ export const LogOutput = forwardRef<HTMLDivElement, LogOutputProps>(function Log
         </div>
       ) : (
         entries.map((entry, i) => {
+          if (entry.searchKind === "gap") {
+            return (
+              <div key={entry.seq} className="my-1 text-center text-muted-foreground" data-testid="log-context-gap">
+                ── {entry.omitted} lines ──
+              </div>
+            );
+          }
           const stamp = formatLogTimestamp(entry.ts, timestampMode);
           return (
             <div
               key={entry.seq}
-              className="whitespace-pre-wrap break-all"
+              className={`whitespace-pre-wrap break-all ${entry.searchKind === "context" ? "opacity-60" : ""}`}
               data-testid={`log-line-${startIndex + i}`}
+              data-search-kind={entry.searchKind}
             >
               {stamp && <span className="mr-2 text-muted-foreground">{stamp}</span>}
               {showPod && entry.pod && (
                 <span className="mr-2 text-muted-foreground">{entry.pod}:</span>
               )}
               <span className={`log-line ${getLogLineClass(entry.text)}`}>
-                <LogLineText line={entry.text} />
+                <LogLineText line={entry.text} highlightTerm={entry.searchKind === "match" ? highlightTerm : ""} />
               </span>
             </div>
           );

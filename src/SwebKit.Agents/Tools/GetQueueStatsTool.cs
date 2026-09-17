@@ -10,25 +10,21 @@ namespace SwebKit.Agents.Tools;
 /// </summary>
 public sealed class GetQueueStatsTool : IAgentTool
 {
-    private readonly IServiceBusClientFactory _sbFactory;
+    private readonly IServiceBusConnectionPool _pool;
     private readonly AppStateService _appState;
-    private readonly ICredentialStore _credentialStore;
 
-    public GetQueueStatsTool(
-        IServiceBusClientFactory sbFactory,
-        AppStateService appState,
-        ICredentialStore credentialStore)
+    public GetQueueStatsTool(IServiceBusConnectionPool pool, AppStateService appState)
     {
-        _sbFactory = sbFactory;
+        _pool = pool;
         _appState = appState;
-        _credentialStore = credentialStore;
     }
 
     public string Name => "get_queue_stats";
 
     public string Description =>
         "Returns statistics for a Service Bus queue including active message count, dead-letter count, " +
-        "scheduled message count, and last update time. If no queue specified, returns stats for all queues.";
+        "scheduled message count, and last update time. If no queue is specified, returns all queues. " +
+        "Omit namespace to use the namespace selected in the UI.";
 
     public FeatureArea FeatureArea => FeatureArea.ServiceBus;
 
@@ -39,6 +35,10 @@ public sealed class GetQueueStatsTool : IAgentTool
             "queue_name": {
               "type": "string",
               "description": "Name of the specific queue to get stats for. If omitted, returns stats for all queues."
+            },
+            "namespace": {
+              "type": "string",
+              "description": "Configured namespace alias, FQDN, or id. Omit to use the namespace selected in the UI."
             }
           },
           "required": []
@@ -54,39 +54,20 @@ public sealed class GetQueueStatsTool : IAgentTool
             return await GetStatsFromDemoClientAsync(arguments, demoClient, ct);
         }
 
-        // Use the first configured Service Bus namespace
-        var namespaces = _appState.ServiceBusNamespaces;
-        if (namespaces.Count == 0)
-        {
-            return JsonSerializer.Serialize(new { error = "Service Bus not configured. Add a namespace in settings." });
-        }
+        var requested = arguments.TryGetProperty("namespace", out var nsEl) ? nsEl.GetString() : null;
+        var resolution = ServiceBusToolContext.ResolveNamespace(_appState, requested);
+        if (!resolution.IsSuccess)
+            return JsonSerializer.Serialize(new { error = resolution.Error });
 
-        var ns = namespaces[0];
-        var connectionString = _credentialStore.Get(ns.CredentialKey);
-
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return JsonSerializer.Serialize(new
-            {
-                error = "Service Bus connection string not available for namespace: " + ns.Alias
-            });
-        }
-
-        var queueName = arguments.TryGetProperty("queue_name", out var qnEl)
-            ? qnEl.GetString()
-            : null;
-
-        IServiceBusClient? client = null;
+        var ns = resolution.Namespace!;
+        var queueName = arguments.TryGetProperty("queue_name", out var qnEl) ? qnEl.GetString() : null;
         try
         {
-            client = _sbFactory.Create(connectionString);
-
+            var client = _pool.GetOrCreate(ns);
             if (string.IsNullOrWhiteSpace(queueName))
             {
-                // Get stats for all queues
                 var queues = await client.ListQueuesAsync(ct);
                 var queueStats = new List<object>();
-
                 foreach (var queue in queues)
                 {
                     var stats = await client.GetEntityStatsAsync(queue.EntityPath, ct);
@@ -102,7 +83,6 @@ public sealed class GetQueueStatsTool : IAgentTool
                         updated_at = stats?.UpdatedAt?.ToString("o")
                     });
                 }
-
                 return JsonSerializer.Serialize(new
                 {
                     namespace_name = ns.FullyQualifiedNamespace,
@@ -111,47 +91,28 @@ public sealed class GetQueueStatsTool : IAgentTool
                     queues = queueStats
                 });
             }
-            else
+
+            var entityPath = "queues/" + queueName;
+            var entityStats = await client.GetEntityStatsAsync(entityPath, ct);
+            if (entityStats is null)
+                return JsonSerializer.Serialize(new { error = "Queue not found: " + queueName, queue_name = queueName });
+
+            return JsonSerializer.Serialize(new
             {
-                // Get stats for specific queue
-                var entityPath = "queues/" + queueName;
-                var stats = await client.GetEntityStatsAsync(entityPath, ct);
-
-                if (stats == null)
-                {
-                    return JsonSerializer.Serialize(new
-                    {
-                        error = "Queue not found: " + queueName,
-                        queue_name = queueName
-                    });
-                }
-
-                return JsonSerializer.Serialize(new
-                {
-                    namespace_name = ns.FullyQualifiedNamespace,
-                    namespace_alias = ns.Alias,
-                    queue_name = queueName,
-                    entity_path = entityPath,
-                    active_message_count = stats.ActiveMessageCount,
-                    dead_letter_message_count = stats.DeadLetterMessageCount,
-                    scheduled_message_count = stats.ScheduledMessageCount,
-                    transfer_count = stats.TransferCount,
-                    updated_at = stats.UpdatedAt?.ToString("o")
-                });
-            }
+                namespace_name = ns.FullyQualifiedNamespace,
+                namespace_alias = ns.Alias,
+                queue_name = queueName,
+                entity_path = entityPath,
+                active_message_count = entityStats.ActiveMessageCount,
+                dead_letter_message_count = entityStats.DeadLetterMessageCount,
+                scheduled_message_count = entityStats.ScheduledMessageCount,
+                transfer_count = entityStats.TransferCount,
+                updated_at = entityStats.UpdatedAt?.ToString("o")
+            });
         }
         catch (Exception ex)
         {
             return JsonSerializer.Serialize(new { error = ex.Message, queue_name = queueName });
-        }
-        finally
-        {
-            // IServiceBusClient implements IAsyncDisposable, not IDisposable
-            // so we don't use 'using' but we should still dispose it
-            if (client is IAsyncDisposable asyncDisp)
-            {
-                await asyncDisp.DisposeAsync();
-            }
         }
     }
 

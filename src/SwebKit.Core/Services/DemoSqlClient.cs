@@ -181,19 +181,20 @@ public sealed class DemoSqlClient : ISqlClient
     }
 
     public async Task<SqlDataCompareResult> CompareDataAsync(ISqlClient target, string schemaName, string tableName,
-        IReadOnlyList<string> keyColumns, string? database, int maxDiffRows, CancellationToken ct = default)
+        IReadOnlyList<string> keyColumns, string? sourceDatabase, string? targetDatabase,
+        int maxDiffRows, CancellationToken ct = default)
     {
         var sourceRows = RowsFor(schemaName, tableName);
         var targetRows = target is DemoSqlClient demo
             ? demo.RowsFor(schemaName, tableName)
-            : (await target.ExecuteQueryAsync($"SELECT * FROM [{schemaName}].[{tableName}]", database, maxDiffRows + 1, allowWrites: false, ct)).Rows;
+            : (await target.ExecuteQueryAsync($"SELECT * FROM [{schemaName}].[{tableName}]", targetDatabase, maxDiffRows + 1, allowWrites: false, ct)).Rows;
         return SqlDataComparer.Compare(sourceRows, targetRows, keyColumns, maxDiffRows);
     }
 
-    public async Task<SqlSchemaCompareResult> CompareSchemaAsync(ISqlClient target, string? database, CancellationToken ct = default)
+    public async Task<SqlSchemaCompareResult> CompareSchemaAsync(ISqlClient target, string? sourceDatabase, string? targetDatabase, CancellationToken ct = default)
     {
-        var source = await GetSchemaAsync(database, ct);
-        var targetModel = await target.GetSchemaAsync(database, ct);
+        var source = await GetSchemaAsync(sourceDatabase, ct);
+        var targetModel = await target.GetSchemaAsync(targetDatabase, ct);
         return SqlSchemaComparer.Compare(source, targetModel);
     }
 

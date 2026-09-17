@@ -315,7 +315,7 @@ a per-profile `RequireToolApproval` toggle instead parks the request in `AcpPerm
 `POST /api/agent/acp/permissions/{id}/respond`, rendered as `AcpPermissionCard` in the chat
 surfaces. `fs/*` and `terminal/*` client capabilities are not advertised, so agent calls to
 them receive JSON-RPC `-32601`. `session/clear` drops the ACP session alongside the local
-conversation. See `docs/features/active/acp-external-agents/` for the full plan.
+conversation. The implementation lives under `src-sidecar/Services/Acp/`.
 
 ## Future Enhancements
 

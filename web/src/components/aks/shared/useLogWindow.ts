@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   computeLogWindow,
   filterLogEntries,
+  searchLogEntries,
   windowSummary,
   type LogEntry,
 } from "@/lib/log-window";
@@ -25,6 +26,15 @@ export interface UseLogWindowResult {
   visibleStart: number;
   textFilter: string;
   setTextFilter: (value: string) => void;
+  searchMode: "filter" | "context";
+  setSearchMode: (mode: "filter" | "context") => void;
+  contextLines: number;
+  setContextLines: (lines: number) => void;
+  matchCount: number;
+  canShowPreviousMatch: boolean;
+  canShowNextMatch: boolean;
+  showPreviousMatch: () => void;
+  showNextMatch: () => void;
   paused: boolean;
   togglePause: () => void;
   /** True while the window is pinned — paused, or paged away from the newest lines. */
@@ -43,11 +53,23 @@ export interface UseLogWindowResult {
 
 export function useLogWindow(entries: readonly LogEntry[], pageSize: number): UseLogWindowResult {
   const [textFilter, setTextFilterRaw] = useState("");
+  const [searchMode, setSearchModeRaw] = useState<"filter" | "context">("filter");
+  const [contextLines, setContextLinesRaw] = useState(5);
+  const [currentMatch, setCurrentMatch] = useState(-1);
   const [paused, setPaused] = useState(false);
   const [pageFromNewest, setPageFromNewest] = useState(0);
   const [frozenTotal, setFrozenTotal] = useState<number | null>(null);
 
-  const filtered = useMemo(() => filterLogEntries(entries, textFilter), [entries, textFilter]);
+  const filtered = useMemo(
+    () => searchMode === "context"
+      ? searchLogEntries(entries, textFilter, contextLines)
+      : filterLogEntries(entries, textFilter),
+    [entries, textFilter, searchMode, contextLines],
+  );
+  const matchIndexes = useMemo(
+    () => filtered.map((entry, index) => entry.searchKind === "match" ? index : -1).filter((index) => index >= 0),
+    [filtered],
+  );
 
   const frozen = paused || pageFromNewest > 0;
   const total =
@@ -66,10 +88,36 @@ export function useLogWindow(entries: readonly LogEntry[], pageSize: number): Us
   const setTextFilter = useCallback(
     (value: string) => {
       setTextFilterRaw(value);
+      setCurrentMatch(-1);
       if (frozen) setFrozenTotal(filtered.length);
     },
     [frozen, filtered.length],
   );
+
+  const setSearchMode = useCallback((mode: "filter" | "context") => {
+    setSearchModeRaw(mode);
+    setCurrentMatch(-1);
+    setPageFromNewest(0);
+    setFrozenTotal(null);
+  }, []);
+
+  const setContextLines = useCallback((lines: number) => {
+    setContextLinesRaw(lines);
+    setCurrentMatch(-1);
+    setPageFromNewest(0);
+    setFrozenTotal(null);
+  }, []);
+
+  const navigateMatch = useCallback((direction: -1 | 1) => {
+    if (matchIndexes.length === 0) return;
+    const next = currentMatch < 0
+      ? (direction > 0 ? 0 : matchIndexes.length - 1)
+      : Math.min(matchIndexes.length - 1, Math.max(0, currentMatch + direction));
+    setCurrentMatch(next);
+    const targetIndex = matchIndexes[next];
+    setFrozenTotal(filtered.length);
+    setPageFromNewest(Math.floor((filtered.length - 1 - targetIndex) / pageSize));
+  }, [matchIndexes, currentMatch, filtered.length, pageSize]);
 
   const togglePause = useCallback(() => {
     setPaused((wasPaused) => {
@@ -114,6 +162,15 @@ export function useLogWindow(entries: readonly LogEntry[], pageSize: number): Us
     visibleStart: start,
     textFilter,
     setTextFilter,
+    searchMode,
+    setSearchMode,
+    contextLines,
+    setContextLines,
+    matchCount: matchIndexes.length,
+    canShowPreviousMatch: matchIndexes.length > 0 && currentMatch !== 0,
+    canShowNextMatch: matchIndexes.length > 0 && currentMatch < matchIndexes.length - 1,
+    showPreviousMatch: () => navigateMatch(-1),
+    showNextMatch: () => navigateMatch(1),
     paused,
     togglePause,
     frozen,

@@ -31,7 +31,7 @@
 ## Current Deferrals
 
 - Pre-request scripts, arbitrary code execution, hosted collaboration, mock servers, gRPC, and automatic cookie jar remain out of scope.
-- **Linked `.swebkit-api` collection roots** — the Blazor model where collections and environments loaded *from* a repository, with content-stamp conflict detection on linked files, has no React equivalent. The React app treats a repository as a folder containing API files and scopes Git operations to a configured subpath instead. See `docs/features/active/api-client-git-completion/decisions.md` DEC-G4.
+- **Linked `.swebkit-api` collection roots** — the Blazor model where collections and environments loaded *from* a repository, with content-stamp conflict detection on linked files, has no React equivalent. The React app treats a repository as a folder containing API files and scopes Git operations to a configured subpath instead.
 - **Git rebase, stash, merge and conflict resolution** — conflicted files are listed and can be diffed, but not resolved in-app. `pull` and `push` are implemented.
 
 ## Core Runtime Flow

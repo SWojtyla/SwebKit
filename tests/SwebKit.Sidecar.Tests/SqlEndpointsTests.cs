@@ -254,7 +254,7 @@ public class SqlEndpointsTests : IDisposable
     public async Task CompareData_MissingKeyColumns_ReturnsBadRequest()
     {
         var (profile, demo, pool, _) = Build();
-        var req = new SqlEndpoints.SqlDataCompareRequest(ConnectionId, ConnectionId, "dbo", "t", null, null, null);
+        var req = new SqlEndpoints.SqlDataCompareRequest(ConnectionId, ConnectionId, "dbo", "t", null, null, null, null);
 
         var result = await SqlEndpoints.CompareDataAsync(req, profile, pool, demo, CancellationToken.None);
 
@@ -266,7 +266,7 @@ public class SqlEndpointsTests : IDisposable
     public async Task CompareData_UnknownConnection_ReturnsNotFound()
     {
         var (profile, demo, pool, _) = Build();
-        var req = new SqlEndpoints.SqlDataCompareRequest(ConnectionId, "missing", "dbo", "t", ["id"], null, null);
+        var req = new SqlEndpoints.SqlDataCompareRequest(ConnectionId, "missing", "dbo", "t", ["id"], null, null, null);
 
         var result = await SqlEndpoints.CompareDataAsync(req, profile, pool, demo, CancellationToken.None);
 
@@ -281,7 +281,7 @@ public class SqlEndpointsTests : IDisposable
         // each connection id maps to its own variant client.
         pool.ClientFactory = demo.GetSqlClient;
         var req = new SqlEndpoints.SqlSchemaCompareRequest(
-            DemoModeService.DemoSqlConnectionId, DemoModeService.DemoSqlConnectionId2, null);
+            DemoModeService.DemoSqlConnectionId, DemoModeService.DemoSqlConnectionId2, null, null);
 
         var result = await SqlEndpoints.CompareSchemaAsync(req, profile, pool, demo, CancellationToken.None);
 

@@ -74,6 +74,7 @@ public sealed class AgentModelRequest
     /// <c>AcpAgentModelClient</c> maps it to an ACP <c>sessionId</c>; request/response providers
     /// (OpenAI-compatible) ignore it because their history rides in <see cref="History"/>.</summary>
     public string? SessionKey { get; init; }
+    public IReadOnlyDictionary<string, string>? Selection { get; init; }
 }
 
 // ── Response DTOs ──

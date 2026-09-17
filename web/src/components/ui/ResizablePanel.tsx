@@ -10,6 +10,7 @@ export interface ResizablePanelProps {
   defaultWidth?: number;
   minWidth?: number;
   maxWidth?: number;
+  maxWidthVw?: number;
   storageKey?: string;
   position?: "left" | "right";
   className?: string;
@@ -21,6 +22,11 @@ const STORAGE_PREFIX = "swokit-resizable-panel-width";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function effectiveMaxWidth(maxWidth: number, maxWidthVw: number | undefined): number {
+  if (typeof window === "undefined" || maxWidthVw === undefined) return maxWidth;
+  return Math.max(maxWidth, Math.round(window.innerWidth * maxWidthVw / 100));
 }
 
 function readStoredWidth(
@@ -61,19 +67,32 @@ export function ResizablePanel({
   defaultWidth = 380,
   minWidth = 240,
   maxWidth = 600,
+  maxWidthVw,
   storageKey,
   position = "right",
   className = "",
   "data-testid": panelTestId = "resizable-panel",
   closeTestId = "resizable-panel-close",
 }: ResizablePanelProps) {
+  const [resolvedMaxWidth, setResolvedMaxWidth] = useState(() => effectiveMaxWidth(maxWidth, maxWidthVw));
   const [width, setWidth] = useState(() =>
-    readStoredWidth(storageKey, defaultWidth, minWidth, maxWidth),
+    readStoredWidth(storageKey, defaultWidth, minWidth, effectiveMaxWidth(maxWidth, maxWidthVw)),
   );
   const widthRef = useRef(width);
   useEffect(() => {
     widthRef.current = width;
   }, [width]);
+
+  useEffect(() => {
+    const updateMaximum = () => {
+      const next = effectiveMaxWidth(maxWidth, maxWidthVw);
+      setResolvedMaxWidth(next);
+      setWidth((current) => clamp(current, minWidth, next));
+    };
+    updateMaximum();
+    window.addEventListener("resize", updateMaximum);
+    return () => window.removeEventListener("resize", updateMaximum);
+  }, [maxWidth, maxWidthVw, minWidth]);
 
   const [isDragging, setIsDragging] = useState(false);
   const startXRef = useRef(0);
@@ -93,11 +112,11 @@ export function ResizablePanel({
   );
 
   const handleDoubleClick = useCallback(() => {
-    const target = widthRef.current >= maxWidth ? defaultWidth : maxWidth;
-    const next = clamp(target, minWidth, maxWidth);
+    const target = widthRef.current >= resolvedMaxWidth ? defaultWidth : resolvedMaxWidth;
+    const next = clamp(target, minWidth, resolvedMaxWidth);
     setWidth(next);
     writeStoredWidth(storageKey, next);
-  }, [maxWidth, defaultWidth, minWidth, storageKey]);
+  }, [resolvedMaxWidth, defaultWidth, minWidth, storageKey]);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -107,7 +126,7 @@ export function ResizablePanel({
         position === "right"
           ? startXRef.current - e.clientX
           : e.clientX - startXRef.current;
-      const next = clamp(startWidthRef.current + delta, minWidth, maxWidth);
+      const next = clamp(startWidthRef.current + delta, minWidth, resolvedMaxWidth);
       setWidth(next);
     };
 
@@ -125,7 +144,7 @@ export function ResizablePanel({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, position, minWidth, maxWidth, storageKey]);
+  }, [isDragging, position, minWidth, resolvedMaxWidth, storageKey]);
 
   if (!visible) return null;
 

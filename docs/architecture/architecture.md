@@ -2,14 +2,11 @@
 
 > **Primary-stack notice (2026-08-01):** this document describes the legacy .NET MAUI Blazor Hybrid
 > app as the sole architecture. Tauri + React is now the primary tool going forward (MAUI is being
-> deprioritized) — see `docs/features/active/tauri-react-primary-tool/`. The primary stack is:
-> a Tauri (Rust) shell (`src-tauri/`) wrapping a React SPA (`web/`), talking to a local .NET
-> "sidecar" HTTP server (`src-sidecar/`, ASP.NET Minimal API) over localhost, which reuses the
-> `SwebKit.Core`/`.Azure`/`.Kubernetes`/`.Redis`/`.Agents` libraries described below **unchanged**.
-> Sibling doc `docs/architecture/codebase-guide.md` is already partially updated for this — read it
-> alongside this file. A full rewrite of this file for the new stack as primary is tracked in
-> `docs/features/active/tauri-react-primary-tool/technical-plan.md` Module 1.3; until that lands,
-> treat everything below this notice as **legacy MAUI reference**, not the current runtime picture.
+> deprioritized). The primary stack is a Tauri (Rust) shell (`src-tauri/`) wrapping a React SPA
+> (`web/`), talking to a local .NET "sidecar" HTTP server (`src-sidecar/`, ASP.NET Minimal API)
+> over localhost, which reuses the `SwebKit.Core`/`.Azure`/`.Kubernetes`/`.Redis`/`.Agents`
+> libraries described below. Read `docs/architecture/codebase-guide.md` alongside this file and
+> treat legacy MAUI-only sections below this notice as reference, not the current runtime picture.
 
 ## Mandate
 
@@ -197,7 +194,7 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 | HTTP resilience                         | `src/SwebKit.App/MauiProgram.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                                                                                                                                                       | Azure DevOps named HttpClient uses standard resilience handler with retries.                                                                                                                                                                                                                                               |
 | Command and shortcut system             | `src/SwebKit.App/Services/CommandRegistry.cs`, `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`                                                                                                                                                                                                | Global and area-scoped commands drive keyboard workflows.                                                                                                                                                                                                                                                                  |
 | Workspace and resource navigation       | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.Core/Domain/WorkspaceModels.cs`, `src/SwebKit.Core/Configuration/ProfileRepository.cs`, `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                                              | Provider-backed search, named favorites, recents, and route-first snapshot restore live here.                                                                                                                                                                                                                              |
-| Structured file logging                 | `src/SwebKit.Core/Diagnostics/` (`FileLoggerProvider`, `FileLogger`, `DailyFileWriter`, `LogRetentionCleanupService`, `LogRedactor`), registered via `builder.Logging.AddProvider(...)` in `src/SwebKit.App/MauiProgram.cs`                                                                     | Custom `ILoggerProvider` writing redacted NDJSON to per-feature-per-day files in `%APPDATA%/SwebKit/logs/`; 7-day age-based cleanup; crash-safe emergency write path bypasses the channel for `AppDomain.UnhandledException`/`TaskScheduler.UnobservedTaskException`. See `docs/features/active/structured-file-logging/`. |
+| Structured file logging                 | `src/SwebKit.Core/Diagnostics/` (`FileLoggerProvider`, `FileLogger`, `DailyFileWriter`, `LogRetentionCleanupService`, `LogRedactor`), registered via `builder.Logging.AddProvider(...)` in `src/SwebKit.App/MauiProgram.cs`                                                                     | Custom `ILoggerProvider` writing redacted NDJSON to per-feature-per-day files in `%APPDATA%/SwebKit/logs/`; 7-day age-based cleanup; crash-safe emergency write path bypasses the channel for `AppDomain.UnhandledException`/`TaskScheduler.UnobservedTaskException`. See `docs/architecture/codebase-guide.md` for the current source map. |
 
 ## Where To Start For Common Tasks
 

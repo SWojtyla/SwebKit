@@ -110,7 +110,7 @@ public sealed class AcpAgentModelClient : IAgentModelClient
         // that decided this turn gets zero tools.
         var allowlist = request.Tools.Select(t => t.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
         var mcpUrl = caps.McpHttp && allowlist.Count > 0
-            ? SwebKitToolsMcpBridge.BuildUrl($"http://127.0.0.1:{BoundPort()}", allowlist)
+            ? SwebKitToolsMcpBridge.BuildUrl($"http://127.0.0.1:{BoundPort()}", allowlist, request.Selection)
             : null;
         // The decoded ?tools= value — the same string the bridge reads back off the request query,
         // so its OutOfScopeCallTracker key matches ours.

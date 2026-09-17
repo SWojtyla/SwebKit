@@ -16,9 +16,12 @@ export interface DraftInputProps
   value: string;
   /** Called with the final text, on blur or Enter, and only when it actually changed. */
   onCommit: (value: string) => void;
+  /** Called with the in-progress text on every keystroke — for callers that need the
+   * current form value before commit (e.g. "test what I typed" actions). */
+  onDraftChange?: (value: string) => void;
 }
 
-export function DraftInput({ value, onCommit, onKeyDown, ...rest }: DraftInputProps) {
+export function DraftInput({ value, onCommit, onDraftChange, onKeyDown, ...rest }: DraftInputProps) {
   const [draft, setDraft] = useState(value);
   const committedRef = useRef(value);
 
@@ -65,7 +68,10 @@ export function DraftInput({ value, onCommit, onKeyDown, ...rest }: DraftInputPr
     <input
       {...rest}
       value={draft}
-      onChange={(e) => setDraft(e.target.value)}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        onDraftChange?.(e.target.value);
+      }}
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === "Enter") {

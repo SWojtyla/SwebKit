@@ -259,6 +259,15 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
         }
         textFilter={win.textFilter}
         onTextFilterChange={win.setTextFilter}
+        searchMode={win.searchMode}
+        onSearchModeChange={win.setSearchMode}
+        contextLines={win.contextLines}
+        onContextLinesChange={win.setContextLines}
+        matchCount={win.matchCount}
+        canShowPreviousMatch={win.canShowPreviousMatch}
+        canShowNextMatch={win.canShowNextMatch}
+        onShowPreviousMatch={win.showPreviousMatch}
+        onShowNextMatch={win.showNextMatch}
         summary={win.summary}
         timestampMode={timestampMode}
         onTimestampModeChange={applyTimestampMode}
@@ -315,6 +324,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
         entries={win.visible}
         startIndex={win.visibleStart}
         timestampMode={timestampMode}
+        highlightTerm={win.searchMode === "context" ? win.textFilter : ""}
         emptyMessage={
           isStreaming ? "Waiting for logs..." : error ? "No logs available" : "No log lines yet"
         }

@@ -960,7 +960,54 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
 
         using var writer = new StringWriter();
         yamlStream.Save(writer, assignAnchors: false);
-        return writer.ToString();
+        return CompactYamlBlankLines(writer.ToString());
+    }
+
+    internal static string CompactYamlBlankLines(string yaml)
+    {
+        var normalized = yaml.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var lines = normalized.Split('\n');
+        var output = new List<string>(lines.Length);
+        int? blockScalarIndent = null;
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var line = lines[index];
+            var blank = string.IsNullOrWhiteSpace(line);
+            var indent = line.TakeWhile(c => c == ' ').Count();
+            if (blockScalarIndent is not null)
+            {
+                if (blank)
+                {
+                    var next = index + 1;
+                    while (next < lines.Length && string.IsNullOrWhiteSpace(lines[next])) next++;
+                    var nextIndent = next < lines.Length ? lines[next].TakeWhile(c => c == ' ').Count() : 0;
+                    if (next < lines.Length && nextIndent > blockScalarIndent.Value)
+                        output.Add(line);
+                    else
+                        blockScalarIndent = null;
+                    continue;
+                }
+                if (indent > blockScalarIndent.Value)
+                {
+                    output.Add(line);
+                    continue;
+                }
+                blockScalarIndent = null;
+            }
+
+            if (blank) continue;
+            output.Add(line);
+            var colon = line.IndexOf(':');
+            if (colon < 0) continue;
+            var value = line[(colon + 1)..].Trim();
+            if (value.Length > 0 && value[0] is '|' or '>' &&
+                value[1..].All(c => c is '+' or '-' || char.IsDigit(c)))
+                blockScalarIndent = indent;
+        }
+
+        var result = string.Join('\n', output);
+        return normalized.EndsWith('\n') ? result + "\n" : result;
     }
 
     /// <summary>

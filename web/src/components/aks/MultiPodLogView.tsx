@@ -282,6 +282,15 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
       <LogToolbar
         textFilter={win.textFilter}
         onTextFilterChange={win.setTextFilter}
+        searchMode={win.searchMode}
+        onSearchModeChange={win.setSearchMode}
+        contextLines={win.contextLines}
+        onContextLinesChange={win.setContextLines}
+        matchCount={win.matchCount}
+        canShowPreviousMatch={win.canShowPreviousMatch}
+        canShowNextMatch={win.canShowNextMatch}
+        onShowPreviousMatch={win.showPreviousMatch}
+        onShowNextMatch={win.showNextMatch}
         summary={win.summary}
         timestampMode={timestampMode}
         onTimestampModeChange={applyTimestampMode}
@@ -305,6 +314,7 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
         entries={win.visible}
         startIndex={win.visibleStart}
         timestampMode={timestampMode}
+        highlightTerm={win.searchMode === "context" ? win.textFilter : ""}
         showPod
         emptyMessage={
           selectedPods.length === 0 ? "Select pods to start streaming logs" : "Connecting..."

@@ -41,7 +41,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
   const [showVisuals, setShowVisuals] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { messages, send, isStreaming, cancel, toolStatus, clear, isClearPending, status } =
+  const { messages, mode, setMode, send, isStreaming, cancel, toolStatus, clear, isClearPending, status } =
     useGlobalAgentConversation();
   const { feed: pendingActionFeed, dismissExpired } = usePendingActionsFeed();
   const acpPermissions = useAcpPermissions();
@@ -82,6 +82,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
       defaultWidth={384}
       minWidth={280}
       maxWidth={600}
+      maxWidthVw={60}
       storageKey="global-agent-panel"
       showHeader={false}
       data-testid="global-agent-panel"
@@ -91,13 +92,26 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
         <div>
           <div className="flex items-center gap-1.5">
             <h2 className="text-sm font-semibold" data-testid="global-agent-panel-title">AI Agent</h2>
-            <span
-              className="cursor-not-allowed rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
-              data-testid="global-agent-panel-mode-indicator"
-              title="This conversation can only answer questions. Open a contextual &quot;Ask AI&quot; panel from a feature page to propose actions like scale, delete, or resubmit."
-            >
-              Ask only
-            </span>
+            <div className="flex rounded border" role="radiogroup" aria-label="Assistant mode">
+              <button
+                role="radio"
+                aria-checked={mode === "ask"}
+                onClick={() => setMode("ask")}
+                className={`px-1.5 py-0.5 text-[10px] ${mode === "ask" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                data-testid="global-agent-panel-mode-ask"
+              >
+                Ask
+              </button>
+              <button
+                role="radio"
+                aria-checked={mode === "ask_and_do"}
+                onClick={() => setMode("ask_and_do")}
+                className={`border-l px-1.5 py-0.5 text-[10px] ${mode === "ask_and_do" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                data-testid="global-agent-panel-mode-ask-and-do"
+              >
+                Ask &amp; do
+              </button>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground" data-testid="global-agent-panel-history-count">
             {status.data?.historyCount ?? 0} messages in history
@@ -190,7 +204,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
         </div>
       )}
 
-      <div ref={scrollRef} className="flex-1 overflow-auto px-4 py-3 space-y-3" data-testid="global-agent-panel-messages">
+      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-4 py-3" data-testid="global-agent-panel-messages">
         {messages.length === 0 && (
           <p className="text-sm text-muted-foreground" data-testid="global-agent-panel-empty">
             Ask about your Kubernetes clusters, Service Bus queues, Redis caches, Storage accounts, and more.
@@ -199,7 +213,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
-              className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
+              className={`min-w-0 max-w-[90%] [overflow-wrap:anywhere] rounded-lg px-3 py-2 text-sm ${
                 msg.role === "user"
                   ? "bg-primary text-primary-foreground"
                   : msg.error

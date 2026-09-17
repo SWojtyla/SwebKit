@@ -20,19 +20,12 @@ public class ServiceBusToolsTests
         CredentialKey = "sb:orders-dev",
     };
 
-    private static Mock<ICredentialStore> CredStore(string? connectionString)
-    {
-        var store = new Mock<ICredentialStore>();
-        store.Setup(s => s.Get(It.IsAny<string>())).Returns(connectionString);
-        return store;
-    }
-
-    private static (Mock<IServiceBusClientFactory> factory, Mock<IServiceBusClient> client) MakeSb()
+    private static (Mock<IServiceBusConnectionPool> pool, Mock<IServiceBusClient> client) MakeSb()
     {
         var client = new Mock<IServiceBusClient>();
-        var factory = new Mock<IServiceBusClientFactory>();
-        factory.Setup(f => f.Create(It.IsAny<string>(), It.IsAny<SbTransportType>())).Returns(client.Object);
-        return (factory, client);
+        var pool = new Mock<IServiceBusConnectionPool>();
+        pool.Setup(p => p.GetOrCreate(It.IsAny<ServiceBusNamespace>())).Returns(client.Object);
+        return (pool, client);
     }
 
     // ── GetQueueStatsTool ─────────────────────────────────────────────────
@@ -40,8 +33,8 @@ public class ServiceBusToolsTests
     [Fact]
     public async Task GetQueueStats_NoNamespaceConfigured_ReturnsError()
     {
-        var (factory, _) = MakeSb();
-        var tool = new GetQueueStatsTool(factory.Object, TestSupport.CreateAppState(), CredStore("conn").Object);
+        var (pool, _) = MakeSb();
+        var tool = new GetQueueStatsTool(pool.Object, TestSupport.CreateAppState());
 
         var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
 
@@ -50,27 +43,29 @@ public class ServiceBusToolsTests
     }
 
     [Fact]
-    public async Task GetQueueStats_MissingConnectionString_ReturnsError()
+    public async Task GetQueueStats_ClientUnavailable_ReturnsError()
     {
-        var (factory, _) = MakeSb();
+        var (pool, _) = MakeSb();
+        pool.Setup(p => p.GetOrCreate(It.IsAny<ServiceBusNamespace>()))
+            .Throws(new InvalidOperationException("client unavailable"));
         var appState = TestSupport.CreateAppState(serviceBusNamespaces: [Namespace()]);
-        var tool = new GetQueueStatsTool(factory.Object, appState, CredStore(null).Object);
+        var tool = new GetQueueStatsTool(pool.Object, appState);
 
         var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
-        Assert.Contains("connection string not available", doc.RootElement.GetProperty("error").GetString());
+        Assert.Contains("client unavailable", doc.RootElement.GetProperty("error").GetString());
     }
 
     [Fact]
     public async Task GetQueueStats_SpecificQueue_ReturnsStats()
     {
-        var (factory, client) = MakeSb();
+        var (pool, client) = MakeSb();
         client.Setup(c => c.GetEntityStatsAsync("queues/orders", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SbEntityStats { ActiveMessageCount = 5, DeadLetterMessageCount = 1, ScheduledMessageCount = 0, TransferCount = 0 });
 
         var appState = TestSupport.CreateAppState(serviceBusNamespaces: [Namespace()]);
-        var tool = new GetQueueStatsTool(factory.Object, appState, CredStore("conn").Object);
+        var tool = new GetQueueStatsTool(pool.Object, appState);
 
         var result = await tool.ExecuteAsync(Args("""{ "queue_name": "orders" }"""), CancellationToken.None);
 
@@ -83,14 +78,14 @@ public class ServiceBusToolsTests
     [Fact]
     public async Task GetQueueStats_AllQueues_ReturnsStatsPerQueue()
     {
-        var (factory, client) = MakeSb();
+        var (pool, client) = MakeSb();
         client.Setup(c => c.ListQueuesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([new SbEntityInfo { Name = "orders", EntityPath = "queues/orders" }]);
         client.Setup(c => c.GetEntityStatsAsync("queues/orders", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SbEntityStats { ActiveMessageCount = 3 });
 
         var appState = TestSupport.CreateAppState(serviceBusNamespaces: [Namespace()]);
-        var tool = new GetQueueStatsTool(factory.Object, appState, CredStore("conn").Object);
+        var tool = new GetQueueStatsTool(pool.Object, appState);
 
         var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
 
@@ -104,10 +99,10 @@ public class ServiceBusToolsTests
     [Fact]
     public async Task GetQueueStats_DemoMode_ReturnsDemoNamespaceStats()
     {
-        var (factory, _) = MakeSb();
+        var (pool, _) = MakeSb();
         var appState = TestSupport.CreateAppState();
         await appState.SetDemoModeAsync(true);
-        var tool = new GetQueueStatsTool(factory.Object, appState, CredStore(null).Object);
+        var tool = new GetQueueStatsTool(pool.Object, appState);
 
         var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
 
@@ -121,12 +116,12 @@ public class ServiceBusToolsTests
     [Fact]
     public async Task GetQueueMessages_PeeksActiveMessages()
     {
-        var (factory, client) = MakeSb();
+        var (pool, client) = MakeSb();
         client.Setup(c => c.PeekMessagesAsync("queues/orders", 10, It.IsAny<CancellationToken>(), null))
             .ReturnsAsync([new SbMessage { MessageId = "m1", Body = "hello", EnqueuedAt = DateTimeOffset.UtcNow }]);
 
         var appState = TestSupport.CreateAppState(serviceBusNamespaces: [Namespace()]);
-        var tool = new GetQueueMessagesTool(factory.Object, appState, CredStore("conn").Object);
+        var tool = new GetQueueMessagesTool(pool.Object, appState);
 
         var result = await tool.ExecuteAsync(Args("""{ "queue_name": "orders" }"""), CancellationToken.None);
 
@@ -139,12 +134,12 @@ public class ServiceBusToolsTests
     [Fact]
     public async Task GetQueueMessages_PeekDeadLetter_UsesDeadLetterApi()
     {
-        var (factory, client) = MakeSb();
+        var (pool, client) = MakeSb();
         client.Setup(c => c.PeekDeadLetterAsync("queues/orders", 3, It.IsAny<CancellationToken>(), null))
             .ReturnsAsync([new SbMessage { MessageId = "dl1", Body = "poison", EnqueuedAt = DateTimeOffset.UtcNow, DeadLetterReason = "MaxDeliveryCountExceeded" }]);
 
         var appState = TestSupport.CreateAppState(serviceBusNamespaces: [Namespace()]);
-        var tool = new GetQueueMessagesTool(factory.Object, appState, CredStore("conn").Object);
+        var tool = new GetQueueMessagesTool(pool.Object, appState);
 
         var result = await tool.ExecuteAsync(Args("""{ "queue_name": "orders", "count": 3, "peek_dead_letter": true }"""), CancellationToken.None);
 
@@ -156,12 +151,12 @@ public class ServiceBusToolsTests
     [Fact]
     public async Task GetQueueMessages_ClientThrows_ReturnsError()
     {
-        var (factory, client) = MakeSb();
+        var (pool, client) = MakeSb();
         client.Setup(c => c.PeekMessagesAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>(), null))
             .ThrowsAsync(new InvalidOperationException("boom"));
 
         var appState = TestSupport.CreateAppState(serviceBusNamespaces: [Namespace()]);
-        var tool = new GetQueueMessagesTool(factory.Object, appState, CredStore("conn").Object);
+        var tool = new GetQueueMessagesTool(pool.Object, appState);
 
         var result = await tool.ExecuteAsync(Args("""{ "queue_name": "orders" }"""), CancellationToken.None);
 
@@ -172,10 +167,10 @@ public class ServiceBusToolsTests
     [Fact]
     public async Task GetQueueMessages_DemoMode_ReturnsDemoMessages()
     {
-        var (factory, _) = MakeSb();
+        var (pool, _) = MakeSb();
         var appState = TestSupport.CreateAppState();
         await appState.SetDemoModeAsync(true);
-        var tool = new GetQueueMessagesTool(factory.Object, appState, CredStore(null).Object);
+        var tool = new GetQueueMessagesTool(pool.Object, appState);
 
         var result = await tool.ExecuteAsync(Args("""{ "queue_name": "order-created" }"""), CancellationToken.None);
 
@@ -193,14 +188,14 @@ public class ServiceBusToolsTests
     [InlineData(2000, 0, "Critical")]
     public async Task AnalyzeQueueHealth_ComputesHealthSummary(long active, long deadLetter, string expected)
     {
-        var (factory, client) = MakeSb();
+        var (pool, client) = MakeSb();
         client.Setup(c => c.GetEntityStatsAsync("queues/orders", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SbEntityStats { ActiveMessageCount = active, DeadLetterMessageCount = deadLetter });
         client.Setup(c => c.PeekDeadLetterAsync("queues/orders", 10, It.IsAny<CancellationToken>(), null))
             .ReturnsAsync([]);
 
         var appState = TestSupport.CreateAppState(serviceBusNamespaces: [Namespace()]);
-        var tool = new AnalyzeQueueHealthTool(factory.Object, appState, CredStore("conn").Object);
+        var tool = new AnalyzeQueueHealthTool(pool.Object, appState);
 
         var result = await tool.ExecuteAsync(Args("""{ "queue_name": "orders" }"""), CancellationToken.None);
 
@@ -211,8 +206,8 @@ public class ServiceBusToolsTests
     [Fact]
     public async Task AnalyzeQueueHealth_NoNamespace_ReturnsError()
     {
-        var (factory, _) = MakeSb();
-        var tool = new AnalyzeQueueHealthTool(factory.Object, TestSupport.CreateAppState(), CredStore("conn").Object);
+        var (pool, _) = MakeSb();
+        var tool = new AnalyzeQueueHealthTool(pool.Object, TestSupport.CreateAppState());
 
         var result = await tool.ExecuteAsync(Args("""{ "queue_name": "orders" }"""), CancellationToken.None);
 
@@ -223,10 +218,10 @@ public class ServiceBusToolsTests
     [Fact]
     public async Task AnalyzeQueueHealth_DemoMode_ReturnsDemoNamespace()
     {
-        var (factory, _) = MakeSb();
+        var (pool, _) = MakeSb();
         var appState = TestSupport.CreateAppState();
         await appState.SetDemoModeAsync(true);
-        var tool = new AnalyzeQueueHealthTool(factory.Object, appState, CredStore(null).Object);
+        var tool = new AnalyzeQueueHealthTool(pool.Object, appState);
 
         var result = await tool.ExecuteAsync(Args("""{ "queue_name": "order-created" }"""), CancellationToken.None);
 

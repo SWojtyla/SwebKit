@@ -54,6 +54,17 @@ internal sealed class TrackingServiceBusConnectionPool : IServiceBusConnectionPo
     public void InvalidateAll() => InvalidateAllCallCount++;
 }
 
+internal sealed class TrackingSqlConnectionPool : ISqlConnectionPool
+{
+    public int InvalidateAllCallCount { get; private set; }
+    public List<string> EvictedIds { get; } = [];
+
+    public ValueTask<ISqlClient> GetOrCreateAsync(SqlConnectionEntry connection, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+    public void Evict(string connectionId) => EvictedIds.Add(connectionId);
+    public void InvalidateAll() => InvalidateAllCallCount++;
+}
+
 public class ConfigEndpointsTests
 {
     private static ConfigurationBundleService BuildService(out CollectionRepository collections, out ProfileRepository profiles)
@@ -176,7 +187,8 @@ public class ConfigEndpointsTests
             data,
             new NoopStorageConnectionPool(),
             new TrackingRedisConnectionPool(),
-            new TrackingServiceBusConnectionPool());
+            new TrackingServiceBusConnectionPool(),
+            new TrackingSqlConnectionPool());
 
         var reloaded = new ProfileRepository();
         await reloaded.LoadAsync();
@@ -218,7 +230,8 @@ public class ConfigEndpointsTests
             data,
             new NoopStorageConnectionPool(),
             new TrackingRedisConnectionPool(),
-            new TrackingServiceBusConnectionPool());
+            new TrackingServiceBusConnectionPool(),
+            new TrackingSqlConnectionPool());
 
         var stored = profile.GetProfileData();
         Assert.Single(stored.ServiceBusNamespaces);
@@ -269,13 +282,39 @@ public class ConfigEndpointsTests
         var storagePool = new TrackingStorageConnectionPool();
         var redisPool = new TrackingRedisConnectionPool();
         var serviceBusPool = new TrackingServiceBusConnectionPool();
+        var sqlPool = new TrackingSqlConnectionPool();
 
-        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool, redisPool, serviceBusPool);
+        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool, redisPool, serviceBusPool, sqlPool);
 
         Assert.Equal(1, storagePool.InvalidateAllCallCount);
         Assert.Equal(1, serviceBusPool.InvalidateAllCallCount);
         Assert.Equal(0, redisPool.InvalidateAllCallCount);
         Assert.Equal(["edited", "removed"], redisPool.EvictedIds);
+    }
+
+    [Fact]
+    public void StaleSqlConnectionIds_OnlyFlagsRemovedOrConnectionChangedEntries()
+    {
+        var before = new List<SqlConnectionEntry>
+        {
+            new() { Id = "same", Server = "a.database.windows.net", Database = "orders" },
+            new() { Id = "renamed", Server = "b.database.windows.net", Database = "orders", DisplayName = "Old" },
+            new() { Id = "server-changed", Server = "old.database.windows.net", Database = "orders" },
+            new() { Id = "database-changed", Server = "a.database.windows.net", Database = "old" },
+            new() { Id = "removed", Server = "gone.database.windows.net", Database = "orders" },
+        };
+        var after = new List<SqlConnectionEntry>
+        {
+            new() { Id = "same", Server = "A.DATABASE.WINDOWS.NET", Database = "ORDERS", AllowWrites = true },
+            new() { Id = "renamed", Server = "b.database.windows.net", Database = "orders", DisplayName = "New" },
+            new() { Id = "server-changed", Server = "new.database.windows.net", Database = "orders" },
+            new() { Id = "database-changed", Server = "a.database.windows.net", Database = "new" },
+            new() { Id = "added", Server = "new.database.windows.net", Database = "orders" },
+        };
+
+        Assert.Equal(
+            ["server-changed", "database-changed", "removed"],
+            ConfigEndpoints.StaleSqlConnectionIds(before, after).ToList());
     }
 
     [Fact]

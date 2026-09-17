@@ -38,13 +38,16 @@ public interface ISqlClient : IAsyncDisposable
 
     /// <summary>Row-level compare of <paramref name="schemaName"/>.<paramref name="tableName"/>
     /// between this connection and <paramref name="target"/>, keyed on
-    /// <paramref name="keyColumns"/>.</summary>
+    /// <paramref name="keyColumns"/>. Either side's database may be overridden — a null
+    /// database falls back to that connection's configured one.</summary>
     Task<SqlDataCompareResult> CompareDataAsync(ISqlClient target, string schemaName, string tableName,
-        IReadOnlyList<string> keyColumns, string? database, int maxDiffRows, CancellationToken ct = default);
+        IReadOnlyList<string> keyColumns, string? sourceDatabase, string? targetDatabase,
+        int maxDiffRows, CancellationToken ct = default);
 
     /// <summary>Catalog compare between this connection's database and
-    /// <paramref name="target"/>'s — report only, no sync scripts.</summary>
-    Task<SqlSchemaCompareResult> CompareSchemaAsync(ISqlClient target, string? database, CancellationToken ct = default);
+    /// <paramref name="target"/>'s — report only, no sync scripts. Either side's database may
+    /// be overridden independently.</summary>
+    Task<SqlSchemaCompareResult> CompareSchemaAsync(ISqlClient target, string? sourceDatabase, string? targetDatabase, CancellationToken ct = default);
 
     /// <summary>Shallow health check for the agent's check_sql_health tool.</summary>
     Task<SqlHealthReport> CheckHealthAsync(string? database, CancellationToken ct = default);

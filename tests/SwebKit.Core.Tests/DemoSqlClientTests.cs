@@ -94,7 +94,7 @@ public class DemoSqlClientTests
         await using var source = new DemoSqlClient(Entry(), variant: 0);
         await using var target = new DemoSqlClient(Entry(), variant: 1);
 
-        var result = await source.CompareDataAsync(target, "dbo", "products", ["id"], "orders", 500);
+        var result = await source.CompareDataAsync(target, "dbo", "products", ["id"], "orders", "orders", 500);
 
         // Variant 1 changes the price of the third product.
         Assert.Equal(1, result.TotalChanged);
@@ -110,7 +110,7 @@ public class DemoSqlClientTests
         await using var source = new DemoSqlClient(Entry(), variant: 0);
         await using var target = new DemoSqlClient(Entry(), variant: 1);
 
-        var result = await source.CompareSchemaAsync(target, "orders");
+        var result = await source.CompareSchemaAsync(target, "orders", "orders");
 
         // Variant 1 adds sales.returns (only in target) and drops products.stock (differing).
         Assert.Contains(result.OnlyInTarget, o => o.Name == "returns");

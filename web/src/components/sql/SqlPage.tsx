@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { Play } from "lucide-react";
+import { Play, Save } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
     useProfile,
+    useSaveSqlQuery,
     useSqlDatabases,
     useSqlSchema,
     useRunSqlQuery,
@@ -15,6 +16,7 @@ import { ResultsGrid } from "./ResultsGrid";
 import { BrowsePanel } from "./BrowsePanel";
 import { SavedQueriesPanel } from "./SavedQueriesPanel";
 import { ComparePanel } from "./ComparePanel";
+import { QueryBuilderPanel } from "./QueryBuilderPanel";
 
 const tabs = [
     { id: "query", label: "Query" },
@@ -36,6 +38,17 @@ export function SqlPage() {
             ),
         [profile],
     );
+
+    // Per-database entries group under their server — the picker shows databases,
+    // not servers (db-less legacy entries keep their display name as the label).
+    const connectionGroups = useMemo(() => {
+        const map = new Map<string, typeof connections>();
+        for (const c of connections) {
+            const key = c.server.trim() || "No server";
+            map.set(key, [...(map.get(key) ?? []), c]);
+        }
+        return [...map.entries()];
+    }, [connections]);
 
     // Deep-link params `/sql?connection=&database=&table=schema.table` — consumed once on
     // mount (workspace-map "Open in SQL" and palette entries land here).
@@ -81,6 +94,10 @@ export function SqlPage() {
         name: string;
     } | null>(() => deepLink.table);
     const [result, setResult] = useState<SqlQueryResult | undefined>(undefined);
+    const [saveOpen, setSaveOpen] = useState(false);
+    const [saveName, setSaveName] = useState("");
+    const [saveFolder, setSaveFolder] = useState("");
+    const saveQuery = useSaveSqlQuery();
 
     // A connection switch resets the per-connection view state — the schema tree, the
     // browsed table and the database override all belong to the previous server. Adjusted
@@ -163,10 +180,14 @@ export function SqlPage() {
                     className="rounded-md border bg-card px-3 py-1.5 text-sm"
                     data-testid="sql-connection-select"
                 >
-                    {connections.map((c) => (
-                        <option key={c.id} value={c.id}>
-                            {c.displayName}
-                        </option>
+                    {connectionGroups.map(([server, conns]) => (
+                        <optgroup key={server} label={server}>
+                            {conns.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                    {c.database || c.displayName}
+                                </option>
+                            ))}
+                        </optgroup>
                     ))}
                 </select>
                 {databases.data && databases.data.length > 1 && (
@@ -246,6 +267,7 @@ export function SqlPage() {
                 <div className="flex min-w-0 flex-1 flex-col">
                     {activeTab === "query" && (
                         <div className="flex min-h-0 flex-1 flex-col p-3">
+                            <QueryBuilderPanel schema={schema.data} onInsert={setEditorSql} />
                             <div className="flex h-40 flex-col">
                                 <SqlEditor
                                     value={editorSql}
@@ -269,6 +291,74 @@ export function SqlPage() {
                                         ? "Running…"
                                         : "Run (Ctrl+Enter)"}
                                 </button>
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setSaveOpen((v) => !v)}
+                                        disabled={!editorSql.trim()}
+                                        className="flex items-center gap-1 rounded border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+                                        data-testid="sql-save-query-open"
+                                        aria-expanded={saveOpen}
+                                    >
+                                        <Save className="h-3.5 w-3.5" />
+                                        Save
+                                    </button>
+                                    {saveOpen && (
+                                        <div
+                                            className="absolute left-0 top-full z-30 mt-1 w-64 space-y-2 rounded-md border bg-popover p-3 shadow-lg"
+                                            data-testid="sql-save-popover"
+                                        >
+                                            <input
+                                                type="text"
+                                                value={saveName}
+                                                onChange={(e) => setSaveName(e.target.value)}
+                                                placeholder="Query name"
+                                                className="w-full rounded border bg-card px-2 py-1 text-xs"
+                                                data-testid="sql-save-popover-name"
+                                                autoFocus
+                                            />
+                                            <input
+                                                type="text"
+                                                value={saveFolder}
+                                                onChange={(e) => setSaveFolder(e.target.value)}
+                                                placeholder="Folder (optional)"
+                                                className="w-full rounded border bg-card px-2 py-1 text-xs"
+                                                data-testid="sql-save-popover-folder"
+                                            />
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => setSaveOpen(false)}
+                                                    className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                                                    data-testid="sql-save-popover-cancel"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={() =>
+                                                        saveQuery.mutate(
+                                                            {
+                                                                name: saveName,
+                                                                folder: saveFolder || null,
+                                                                sql: editorSql,
+                                                                connectionId: resolvedConnectionId,
+                                                            },
+                                                            {
+                                                                onSuccess: () => {
+                                                                    setSaveOpen(false);
+                                                                    setSaveName("");
+                                                                },
+                                                            },
+                                                        )
+                                                    }
+                                                    disabled={!saveName.trim() || saveQuery.isPending}
+                                                    className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50"
+                                                    data-testid="sql-save-popover-submit"
+                                                >
+                                                    Save
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                                 {runQuery.isError && (
                                     <span
                                         className="text-xs text-destructive"

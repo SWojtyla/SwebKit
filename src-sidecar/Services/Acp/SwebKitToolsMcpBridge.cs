@@ -33,17 +33,30 @@ public sealed class SwebKitToolsMcpBridge
 
     /// <summary>Builds the per-session MCP URL handed to the ACP agent, with the mode/area/scope
     /// allowlist baked in as a query param (stateless transport → every call carries it).</summary>
-    public static string BuildUrl(string baseUrl, IEnumerable<string>? allowedTools)
+    public static string BuildUrl(
+        string baseUrl,
+        IEnumerable<string>? allowedTools,
+        IReadOnlyDictionary<string, string>? selection = null)
     {
+        var parameters = new List<string>();
         var list = allowedTools is null ? null : string.Join(',', allowedTools);
-        return string.IsNullOrEmpty(list)
-            ? $"{baseUrl.TrimEnd('/')}{EndpointPath}"
-            : $"{baseUrl.TrimEnd('/')}{EndpointPath}?tools={Uri.EscapeDataString(list)}";
+        if (!string.IsNullOrEmpty(list))
+            parameters.Add($"tools={Uri.EscapeDataString(list)}");
+        if (selection is not null)
+            parameters.AddRange(selection
+                .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => $"sel={Uri.EscapeDataString($"{pair.Key}={pair.Value}")}"));
+        var query = parameters.Count == 0 ? string.Empty : "?" + string.Join('&', parameters);
+        return $"{baseUrl.TrimEnd('/')}{EndpointPath}{query}";
     }
 
     private string? AllowlistKey() => _http.HttpContext?.Request.Query["tools"].FirstOrDefault();
 
     private HashSet<string>? AllowedSet() => ParseAllowedSet(AllowlistKey());
+
+    private IReadOnlyDictionary<string, string>? Selection() =>
+        ParseSelection(_http.HttpContext?.Request.Query["sel"] ?? []);
 
     public ValueTask<ListToolsResult> ListToolsAsync(RequestContext<ListToolsRequestParams> request, CancellationToken ct)
         => ValueTask.FromResult(new ListToolsResult { Tools = ListTools(AllowedSet()) });
@@ -66,11 +79,17 @@ public sealed class SwebKitToolsMcpBridge
         JsonElement args = request.Params?.Arguments is { } a
             ? JsonSerializer.SerializeToElement(a)
             : JsonDocument.Parse("{}").RootElement.Clone();
-        return CallToolAsync(name, args, AllowedSet(), AllowlistKey(), ct);
+        return CallToolAsync(name, args, AllowedSet(), AllowlistKey(), ct, Selection());
     }
 
     /// <summary>Dispatch core, split from the MCP request shape for testability.</summary>
-    internal async ValueTask<CallToolResult> CallToolAsync(string name, JsonElement args, HashSet<string>? allowed, string? allowlistKey, CancellationToken ct)
+    internal async ValueTask<CallToolResult> CallToolAsync(
+        string name,
+        JsonElement args,
+        HashSet<string>? allowed,
+        string? allowlistKey,
+        CancellationToken ct,
+        IReadOnlyDictionary<string, string>? selection = null)
     {
         var tool = _toolRegistry.GetDefinitions()
             .FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -102,6 +121,7 @@ public sealed class SwebKitToolsMcpBridge
             };
         }
 
+        using var executionContext = AgentExecutionContext.Push(selection);
         var result = await _toolRegistry.ExecuteAsync(name, args, ct);
         return new CallToolResult
         {
@@ -116,6 +136,18 @@ public sealed class SwebKitToolsMcpBridge
             ? null
             : new HashSet<string>(raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                 StringComparer.OrdinalIgnoreCase);
+
+    internal static IReadOnlyDictionary<string, string>? ParseSelection(IEnumerable<string?> raw)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in raw)
+        {
+            var separator = item?.IndexOf('=') ?? -1;
+            if (separator <= 0) continue;
+            result[item![..separator]] = item[(separator + 1)..];
+        }
+        return result.Count == 0 ? null : result;
+    }
 
     private static CallToolResult Error(string message) => new()
     {

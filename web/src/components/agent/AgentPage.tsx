@@ -24,7 +24,7 @@ export function AgentPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const visualToggleRef = useRef<HTMLButtonElement>(null);
 
-  const { messages, send, isStreaming, cancel, toolStatus, clear, isClearPending, status } =
+  const { messages, mode, setMode, send, isStreaming, cancel, toolStatus, clear, isClearPending, status } =
     useGlobalAgentConversation();
   const { feed: pendingActionFeed, dismissExpired } = usePendingActionsFeed();
   const acpPermissions = useAcpPermissions();
@@ -95,7 +95,7 @@ export function AgentPage() {
       {/* Chat messages */}
       <div
         ref={scrollRef}
-        className="min-h-[180px] flex-1 space-y-4 overflow-auto px-6 py-4"
+        className="min-h-[180px] flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-6 py-4"
         data-testid="agent-messages"
       >
         {messages.length === 0 && (
@@ -116,7 +116,7 @@ export function AgentPage() {
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[80%] rounded-lg px-4 py-2 ${
+              className={`min-w-0 max-w-[80%] [overflow-wrap:anywhere] rounded-lg px-4 py-2 ${
                 msg.role === "user"
                   ? "bg-primary text-primary-foreground"
                   : msg.error
@@ -225,13 +225,26 @@ export function AgentPage() {
       <div className="flex items-center justify-between border-b px-6 py-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold" data-testid="agent-title">AI Agent</h1>
-          <span
-            className="cursor-not-allowed rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-            data-testid="agent-mode-indicator"
-            title="This conversation can only answer questions. Open a contextual &quot;Ask AI&quot; panel from a feature page (e.g. a pod or Redis key) to propose actions like scale, delete, or resubmit."
-          >
-            Ask only
-          </span>
+          <div className="flex rounded border" role="radiogroup" aria-label="Assistant mode">
+            <button
+              role="radio"
+              aria-checked={mode === "ask"}
+              onClick={() => setMode("ask")}
+              className={`px-2 py-1 text-xs ${mode === "ask" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+              data-testid="agent-mode-ask"
+            >
+              Ask
+            </button>
+            <button
+              role="radio"
+              aria-checked={mode === "ask_and_do"}
+              onClick={() => setMode("ask_and_do")}
+              className={`border-l px-2 py-1 text-xs ${mode === "ask_and_do" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+              data-testid="agent-mode-ask-and-do"
+            >
+              Ask &amp; do
+            </button>
+          </div>
           <span className="text-xs text-muted-foreground" data-testid="agent-history-count">
             {status.data?.historyCount ?? 0} messages in history
             {status.data && status.data.estimatedTokens > 0 && (

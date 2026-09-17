@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
+using SwebKit.Agents.Tools.Aks;
 using SwebKit.Agents.Tools.ApiClient;
 using SwebKit.Agents.Tools.Redis;
 using SwebKit.Agents.Tools.Storage;
@@ -38,6 +39,7 @@ public static partial class SwebKitServiceCollectionExtensions
         services.AddHttpClient<AgentCapabilityTester>();
 
         services.AddSingleton<IAgentContextBuilder, AgentContextBuilder>();
+        services.AddSingleton<IServiceBusConnectionPool, AppServiceBusConnectionPool>();
 
         // Action coordinator for proposal/confirmation flow
         services.AddSingleton<IAgentActionCoordinator, AgentActionCoordinator>();
@@ -51,6 +53,7 @@ public static partial class SwebKitServiceCollectionExtensions
         services.AddSingleton<IAgentActionExecutor, ApiClientActionExecutor>();
         services.AddSingleton<IAgentActionExecutor, RedisActionExecutor>();
         services.AddSingleton<IAgentActionExecutor, StorageActionExecutor>();
+        services.AddSingleton<IAgentActionExecutor, AksActionExecutor>();
 
         // Action applier for confirmed action execution
         services.AddSingleton<AgentActionApplier>();
@@ -63,6 +66,8 @@ public static partial class SwebKitServiceCollectionExtensions
         services.AddSingleton<IAgentTool, GetPodLogsTool>();
         services.AddSingleton<IAgentTool, GetPodEventsTool>();
         services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
+        services.AddSingleton<IAgentTool, GetAksResourceYamlTool>();
+        services.AddSingleton<IAgentTool, ProposeApplyAksYamlTool>();
 
         // Service Bus Tools
         services.AddSingleton<IAgentTool, GetQueueStatsTool>();

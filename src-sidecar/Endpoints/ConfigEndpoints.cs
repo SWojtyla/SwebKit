@@ -88,7 +88,8 @@ public static class ConfigEndpoints
         ProfileData data,
         IStorageConnectionPool storagePool,
         IRedisConnectionPool redisPool,
-        IServiceBusConnectionPool serviceBusPool)
+        IServiceBusConnectionPool serviceBusPool,
+        ISqlConnectionPool sqlPool)
     {
         // The profile GET overlays demo entities while demo mode is on and saves round-trip the
         // whole profile — strip the demo ids so a save can't persist them as real configuration.
@@ -111,9 +112,11 @@ public static class ConfigEndpoints
                 sql.ActiveConnectionId = sql.Connections.FirstOrDefault()?.Id;
         }
 
-        // Snapshot the old cache list before the replace — StaleRedisCacheIds diffs it against
-        // the incoming one per cache id.
-        var previousRedisCaches = repo.GetProfileData().Config?.RedisConfig?.Caches;
+        // Snapshot the old cache/connection lists before the replace — StaleRedisCacheIds and
+        // StaleSqlConnectionIds diff them against the incoming ones per id.
+        var previous = repo.GetProfileData().Config;
+        var previousRedisCaches = previous?.RedisConfig?.Caches;
+        var previousSqlConnections = previous?.SqlConfig?.Connections;
 
         repo.ReplaceProfileData(data);
         await repo.SaveAsync();
@@ -129,6 +132,11 @@ public static class ConfigEndpoints
         // a client an in-flight request is still using — on each switch.
         foreach (var staleId in StaleRedisCacheIds(previousRedisCaches, data.Config?.RedisConfig?.Caches))
             redisPool.Evict(staleId);
+        // SQL gets the same targeted eviction: the pool keys clients by connection id alone, so a
+        // Server/Database edit used to leave a pooled ISqlClient aimed at the old server and
+        // "Test connection" silently exercised the stale one.
+        foreach (var staleId in StaleSqlConnectionIds(previousSqlConnections, data.Config?.SqlConfig?.Connections))
+            sqlPool.Evict(staleId);
         return Results.Ok();
     }
 
@@ -152,6 +160,25 @@ public static class ConfigEndpoints
         a.Database == b.Database &&
         a.UseAad == b.UseAad &&
         a.CacheName == b.CacheName;
+
+    /// <summary>
+    /// Ids of SQL connections whose pooled client a profile save must drop: the entry was removed,
+    /// or a connection-affecting field changed. <c>DisplayName</c>/<c>Active</c>/<c>AllowWrites</c>
+    /// edits don't affect the pooled client, so those stay warm (same rule as the Redis diff).
+    /// </summary>
+    internal static IEnumerable<string> StaleSqlConnectionIds(
+        IReadOnlyList<SqlConnectionEntry>? before,
+        IReadOnlyList<SqlConnectionEntry>? after)
+    {
+        var afterById = (after ?? []).ToDictionary(c => c.Id);
+        foreach (var old in before ?? [])
+            if (!afterById.TryGetValue(old.Id, out var updated) || !SameSqlConnection(old, updated))
+                yield return old.Id;
+    }
+
+    private static bool SameSqlConnection(SqlConnectionEntry a, SqlConnectionEntry b) =>
+        string.Equals(a.Server, b.Server, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(a.Database, b.Database, StringComparison.OrdinalIgnoreCase);
 
     internal static IResult GetEnvironments(EnvironmentRepository repo) =>
         Results.Ok(new { repo.Environments, repo.UiState });

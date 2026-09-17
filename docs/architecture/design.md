@@ -2,9 +2,8 @@
 
 > **Primary-stack notice (2026-08-01):** same caveat as `docs/architecture/architecture.md` — this
 > document describes the legacy MAUI Blazor app's internals. Tauri + React
-> (`web/`/`src-tauri/`/`src-sidecar/`) is now the primary tool; see
-> `docs/features/active/tauri-react-primary-tool/`. Treat everything below as legacy MAUI reference
-> until this file is rewritten (tracked in `technical-plan.md` Module 1.3).
+> (`web/`/`src-tauri/`/`src-sidecar/`) is now the primary tool. Treat MAUI-only sections below as
+> legacy reference until this file is rewritten.
 
 ## Mandate
 
