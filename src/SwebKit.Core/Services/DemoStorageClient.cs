@@ -66,6 +66,7 @@ public sealed class DemoStorageClient : IStorageClient
                 new("mock-orders.json", false, 4_096, "application/json", DateTimeOffset.UtcNow.AddDays(-30), "\"etag-fix-003\""),
                 new("sample-report.csv", false, 8_192, "text/csv", DateTimeOffset.UtcNow.AddDays(-30), "\"etag-fix-004\""),
                 new("readme.txt", false, 256, "text/plain", DateTimeOffset.UtcNow.AddDays(-30), "\"etag-fix-005\""),
+                new("escaped-payload.txt", false, 128, "text/plain", DateTimeOffset.UtcNow.AddDays(-30), "\"etag-fix-006\""),
             ]
         };
 
@@ -124,6 +125,11 @@ public sealed class DemoStorageClient : IStorageClient
                   "total": 9.99,
                   "timestamp": "2026-01-01T00:00:00Z"
                 }
+                """,
+            // Double-encoded on purpose: the whole blob is one JSON string holding an
+            // escaped JSON payload, the way .NET log serializers routinely write it.
+            ["fixtures/escaped-payload.txt"] = """
+                "{\"orderId\":\"ORD-9988\",\"status\":\"fulfilled\",\"total\":129.99}"
                 """,
             ["fixtures/seed-data.json"] = """
                 {
