@@ -279,6 +279,10 @@ test.describe("Contextual assistant entry points", () => {
         body: `data: ${JSON.stringify(done)}\n\n`,
       });
     });
+    // The retry chip escalates to workspace scope — only meaningful when the profile can
+    // tool-call. The e2e sidecar's fresh profile is capability "Unknown", which leaves the
+    // checkbox disabled and the scope-reset effect would revert the escalation.
+    await mockUserSettings(page, "ToolCalling");
 
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });

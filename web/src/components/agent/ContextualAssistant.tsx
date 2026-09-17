@@ -323,7 +323,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
               </div>
             </div>
           ))}
-          {scopeRetry && lastUserText && !chat.isStreaming && (
+          {scopeRetry && lastUserText && !chat.isStreaming && !workspaceScopeDisabled && (
             <div className="flex justify-start">
               <button
                 onClick={handleScopeRetry}
