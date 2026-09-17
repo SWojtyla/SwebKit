@@ -31,8 +31,8 @@ content that is genuinely there. Keep a hidden, `aria-hidden` mirror element hol
 
 ### Tauri does not camelCase struct fields on the way out
 
-Command _arguments_ are converted from JS camelCase to Rust snake_case automatically, but serialized
-_return values_ are not. A Rust field `index_state` arrives in TypeScript as `index_state`, so a TS
+Command _arguments_ are converted from JS camelCase to Rust snake*case automatically, but serialized
+\_return values* are not. A Rust field `index_state` arrives in TypeScript as `index_state`, so a TS
 interface declaring `indexState` silently reads `undefined`. Put
 `#[serde(rename_all = "camelCase")]` on any returned struct with a multi-word field, and keep the TS
 interface next to it.
@@ -72,8 +72,8 @@ error anywhere.
 Treat every error inside `.setup()` as fatal-by-invisible-panic: degrade instead. `manage()` now
 returns a `SidecarState` with `port = 0`, the frontend falls into its existing "Disconnected" state
 (Reconnect button + health poll), and a background thread keeps retrying the spawn and emits the
-usual `sidecar-*` lifecycle events. Also make READY_TIMEOUTs generous — the failure cost is an app
-that _looks_ dead, not a slow start.
+usual `sidecar-*` lifecycle events. Also make READY*TIMEOUTs generous — the failure cost is an app
+that \_looks* dead, not a slow start.
 
 ### `AllowedRoots` is in-memory, so a persisted path is not an authorized path
 
@@ -107,6 +107,17 @@ source left and it could no longer find the clobbered key. Fixed with a single
 is false under Chromium, so every e2e run takes the `localStorage` fallback branch — single-threaded,
 no possible interleaving — never the real keychain path. A Playwright repro of a Tauri-secrets race
 will not reproduce it no matter how the test is written; only the real desktop app can.
+
+### `plugin:event|listen not allowed by ACL` — `core:` plugins need a capability grant
+
+App-defined commands work with no capability file at all, but every `core:` plugin API the
+frontend touches (`@tauri-apps/api/event`'s `listen`/`unlisten`, window controls, …) is
+ACL-gated: with no `src-tauri/capabilities/*.json` granting it, the packaged app throws
+`Command plugin:event|listen not allowed by ACL` while dev mode and every Playwright run
+(browser, no Tauri) stay green. The pod shell's output stream hit exactly this — it subscribes
+with `listen()`, which needs `core:event`'s `allow-listen`/`allow-unlisten`, covered by the
+`core:default` permission set granted in `src-tauri/capabilities/default.json`. Any new
+`@tauri-apps/api/*` import in the frontend needs its matching permission added there.
 
 ## Sidecar contract
 

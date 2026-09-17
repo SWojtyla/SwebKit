@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
-use std::sync::{mpsc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 use tauri::State;
 
@@ -93,8 +93,15 @@ fn validate_within_roots(path: &str, roots: &AllowedRoots) -> Result<PathBuf, St
 }
 
 /// How long we wait for `kubectl port-forward` to either report it's listening
-/// (stdout: "Forwarding from ...") or fail outright (stderr) before giving up.
-const FORWARD_READY_TIMEOUT: Duration = Duration::from_secs(10);
+/// (stdout: "Forwarding from ...") or fail outright (stderr/early exit) before giving up.
+/// Generous on purpose: a cold exec-credential plugin (kubelogin, `az` on Entra-enabled
+/// clusters) can spend most of that budget just producing a token.
+const FORWARD_READY_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// stderr lines retained so a startup failure can report what kubectl actually said — most
+/// real failures ("Unable to connect to the server: ...") don't contain the word "error", so
+/// watching for that substring alone collapsed every failure into an uninformative timeout.
+const STDERR_TAIL_LINES: usize = 20;
 
 /// Active port-forward sessions: local_port -> session (including the live kubectl child).
 pub struct PortForwardState {
@@ -109,7 +116,11 @@ pub struct PortForwardSession {
     // No `local_port` field here — it would just duplicate the HashMap key this session is
     // stored under in `PortForwardState::sessions`; see `list_port_forwards`, which reads the
     // port from the map key, not from a struct field.
-    child: Child,
+    // `Arc<Mutex>` because the waiter thread spawned in `start_port_forward` shares the child:
+    // it polls `try_wait` to detect early exit, so the lock is only ever held briefly — never
+    // across a blocking `wait()`, which would deadlock `stop_port_forward`'s `kill()` the same
+    // way `pod_shell.rs`'s doc comment describes.
+    child: Arc<Mutex<Child>>,
 }
 
 impl PortForwardState {
@@ -136,28 +147,31 @@ pub fn start_port_forward(
     let lp = local_port.unwrap_or(0);
     let context_for_session = context.clone();
 
+    let args = build_port_forward_args(
+        &namespace,
+        &pod,
+        lp,
+        remote_port,
+        context.as_deref(),
+        kubeconfig.as_deref(),
+    );
     let mut cmd = hidden_command("kubectl");
-    cmd.arg("port-forward")
-        .arg("-n")
-        .arg(&namespace)
-        .arg(format!("pod/{pod}"))
-        .arg(format!("{lp}:{remote_port}"))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    if let Some(ctx) = context.filter(|c| !c.is_empty()) {
-        cmd.arg("--context").arg(ctx);
+    for arg in &args {
+        cmd.arg(arg);
     }
-    if let Some(kc) = kubeconfig.filter(|k| !k.is_empty()) {
-        cmd.arg("--kubeconfig").arg(kc);
-    }
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-    let mut child = cmd
+    let mut spawned = cmd
         .spawn()
         .map_err(|e| format!("Failed to start kubectl port-forward: {e}"))?;
 
-    let stdout = child.stdout.take().expect("port-forward stdout was piped");
-    let stderr = child.stderr.take().expect("port-forward stderr was piped");
+    let stdout = spawned.stdout.take().expect("port-forward stdout was piped");
+    let stderr = spawned.stderr.take().expect("port-forward stderr was piped");
+    let child = Arc::new(Mutex::new(spawned));
     let (tx, rx) = mpsc::channel::<Result<u16, String>>();
+
+    // Bounded tail of stderr so any failure path can quote kubectl's own words.
+    let stderr_tail = Arc::new(Mutex::new(VecDeque::with_capacity(STDERR_TAIL_LINES + 1)));
 
     let tx_stdout = tx.clone();
     std::thread::spawn(move || {
@@ -170,28 +184,72 @@ pub fn start_port_forward(
         }
     });
 
+    let tx_stderr = tx.clone();
+    let tail_for_reader = Arc::clone(&stderr_tail);
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines().map_while(Result::ok) {
             eprintln!("[swebkit:port-forward:stderr] {line}");
-            if line.to_ascii_lowercase().contains("error") {
-                let _ = tx.send(Err(line));
+            {
+                let mut tail = tail_for_reader.lock().unwrap();
+                if tail.len() == STDERR_TAIL_LINES {
+                    tail.pop_front();
+                }
+                tail.push_back(line.clone());
             }
+            if line.to_ascii_lowercase().contains("error") {
+                let _ = tx_stderr.send(Err(line));
+            }
+        }
+    });
+
+    // Early-exit detector: `try_wait` polling, never a blocking `wait()` (that would hold the
+    // mutex for the session's lifetime and deadlock `stop_port_forward`'s `kill()` — the same
+    // trap `pod_shell.rs` documents). A kubectl that dies before printing "Forwarding from"
+    // (dead cluster, unknown context, missing pod, failed exec-auth) is reported immediately
+    // with its stderr tail instead of surfacing as a bare timeout.
+    let tx_waiter = tx.clone();
+    let child_for_waiter = Arc::clone(&child);
+    let tail_for_waiter = Arc::clone(&stderr_tail);
+    std::thread::spawn(move || loop {
+        let status = child_for_waiter.lock().unwrap().try_wait();
+        match status {
+            Ok(Some(exit)) => {
+                let _ = tx_waiter.send(Err(format!(
+                    "kubectl exited before the port-forward was ready ({exit}). {}",
+                    stderr_tail_text(&tail_for_waiter)
+                )));
+                break;
+            }
+            // Channel closed (start returned already) — nothing left to report to.
+            Err(_) => break,
+            _ => std::thread::sleep(Duration::from_millis(200)),
         }
     });
 
     let actual_port = match rx.recv_timeout(FORWARD_READY_TIMEOUT) {
         Ok(Ok(port)) => port,
         Ok(Err(e)) => {
-            let _ = child.kill();
+            let mut c = child.lock().unwrap();
+            let _ = c.kill();
+            let _ = c.wait();
             return Err(format!("kubectl port-forward failed: {e}"));
         }
         Err(_) => {
-            let _ = child.kill();
+            {
+                let mut c = child.lock().unwrap();
+                let _ = c.kill();
+                let _ = c.wait();
+            }
+            let detail = stderr_tail_text(&stderr_tail);
             return Err(format!(
-                "kubectl port-forward did not start within {}s — check that kubectl is on PATH \
-                 and the pod is running",
-                FORWARD_READY_TIMEOUT.as_secs()
+                "kubectl port-forward did not start within {}s{}",
+                FORWARD_READY_TIMEOUT.as_secs(),
+                if detail.is_empty() {
+                    " — check that kubectl can reach the cluster and the pod is running".to_string()
+                } else {
+                    format!(" — kubectl said: {detail}")
+                },
             ));
         }
     };
@@ -215,12 +273,55 @@ pub fn start_port_forward(
     Ok(actual_port)
 }
 
+/// Builds the `kubectl port-forward` argument list as a plain `Vec<String>` (rather than
+/// mutating a `Command` directly) so argument construction is unit-testable without spawning
+/// a real process — same convention as `pod_shell.rs`'s `build_exec_args`.
+fn build_port_forward_args(
+    namespace: &str,
+    pod: &str,
+    local_port: u16,
+    remote_port: u16,
+    context: Option<&str>,
+    kubeconfig: Option<&str>,
+) -> Vec<String> {
+    let mut args = vec![
+        "port-forward".to_string(),
+        "-n".to_string(),
+        namespace.to_string(),
+        format!("pod/{pod}"),
+        // `:8080`, not `0:8080` — the empty local side is kubectl's documented "pick a random
+        // local port" form (`kubectl port-forward pod/x :8080`).
+        if local_port == 0 {
+            format!(":{remote_port}")
+        } else {
+            format!("{local_port}:{remote_port}")
+        },
+    ];
+    if let Some(ctx) = context.filter(|c| !c.trim().is_empty()) {
+        args.push("--context".to_string());
+        args.push(ctx.to_string());
+    }
+    if let Some(kc) = kubeconfig.filter(|k| !k.trim().is_empty()) {
+        args.push("--kubeconfig".to_string());
+        args.push(kc.to_string());
+    }
+    args
+}
+
+/// Joins the bounded stderr tail into one sentence for error messages. Empty string when
+/// kubectl never wrote anything (e.g. it hung in an auth plugin before printing).
+fn stderr_tail_text(tail: &Arc<Mutex<VecDeque<String>>>) -> String {
+    tail.lock().unwrap().iter().cloned().collect::<Vec<_>>().join("; ")
+}
+
 /// Parses kubectl's `Forwarding from 127.0.0.1:<port> -> <remote>` startup line to recover the
-/// actual bound local port (needed when the caller asked for port 0 / OS-assigned).
+/// actual bound local port (needed when the caller asked for an OS-assigned port). Accepts the
+/// IPv6 `[::1]:` form too — kubectl normally prints both, but on a host where only the v6
+/// listener binds, the v4-only match would still end in a timeout with a working forward.
 fn parse_forwarded_port(line: &str) -> Option<u16> {
-    let marker = "127.0.0.1:";
-    let idx = line.find(marker)?;
-    let rest = &line[idx + marker.len()..];
+    let rest = ["127.0.0.1:", "[::1]:", "[::]:"]
+        .iter()
+        .find_map(|marker| line.find(marker).map(|idx| &line[idx + marker.len()..]))?;
     let port_str = rest.split(|c: char| !c.is_ascii_digit()).next()?;
     port_str.parse().ok()
 }
@@ -235,8 +336,9 @@ pub fn stop_port_forward(state: State<PortForwardState>, local_port: u16) -> Res
         .remove(&local_port)
         .ok_or_else(|| format!("No session on port {}", local_port))?;
 
-    let _ = session.child.kill();
-    let _ = session.child.wait();
+    let mut child = session.child.lock().unwrap();
+    let _ = child.kill();
+    let _ = child.wait();
 
     eprintln!("[swebkit] Port-forward stopped on port {}", local_port);
     Ok(())
@@ -246,9 +348,10 @@ pub fn stop_port_forward(state: State<PortForwardState>, local_port: u16) -> Res
 /// never survive as orphans holding their local port after the app closes.
 pub fn kill_all_port_forwards(state: &PortForwardState) {
     let mut sessions = state.sessions.lock().unwrap();
-    for (_, mut session) in sessions.drain() {
-        let _ = session.child.kill();
-        let _ = session.child.wait();
+    for (_, session) in sessions.drain() {
+        let mut child = session.child.lock().unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
     }
 }
 
@@ -538,7 +641,7 @@ pub async fn show_notification(
 
 #[cfg(test)]
 mod port_forward_tests {
-    use super::parse_forwarded_port;
+    use super::{build_port_forward_args, parse_forwarded_port};
 
     #[test]
     fn parses_ipv4_forwarding_line() {
@@ -549,13 +652,52 @@ mod port_forward_tests {
     }
 
     #[test]
-    fn ignores_ipv6_forwarding_line() {
-        assert_eq!(parse_forwarded_port("Forwarding from [::1]:37559 -> 8080"), None);
+    fn parses_ipv6_forwarding_line() {
+        assert_eq!(parse_forwarded_port("Forwarding from [::1]:37559 -> 8080"), Some(37559));
+        assert_eq!(parse_forwarded_port("Forwarding from [::]:37559 -> 8080"), Some(37559));
     }
 
     #[test]
     fn ignores_unrelated_lines() {
         assert_eq!(parse_forwarded_port("Handling connection for 37559"), None);
         assert_eq!(parse_forwarded_port(""), None);
+    }
+
+    #[test]
+    fn auto_assign_uses_documented_empty_local_form() {
+        let args = build_port_forward_args("default", "my-pod", 0, 8080, None, None);
+
+        assert!(args.contains(&":8080".to_string()));
+        assert!(!args.contains(&"0:8080".to_string()));
+    }
+
+    #[test]
+    fn explicit_local_port_binds_that_port() {
+        let args = build_port_forward_args("default", "my-pod", 5000, 8080, None, None);
+
+        assert!(args.contains(&"5000:8080".to_string()));
+    }
+
+    #[test]
+    fn includes_context_and_kubeconfig_flags() {
+        let args = build_port_forward_args(
+            "prod",
+            "api-abc",
+            0,
+            443,
+            Some("prod-cluster"),
+            Some(r"C:\kube\config"),
+        );
+
+        assert!(args.windows(2).any(|w| w == ["--context", "prod-cluster"]));
+        assert!(args.windows(2).any(|w| w == ["--kubeconfig", r"C:\kube\config"]));
+    }
+
+    #[test]
+    fn blank_optional_values_are_treated_as_absent() {
+        let args = build_port_forward_args("prod", "api-abc", 0, 443, Some(""), Some("  "));
+
+        assert!(!args.contains(&"--context".to_string()));
+        assert!(!args.contains(&"--kubeconfig".to_string()));
     }
 }

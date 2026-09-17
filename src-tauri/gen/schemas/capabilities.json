@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"Main window capabilities. Core defaults include event listen/unlisten/emit — required for the pod-shell output stream and the sidecar lifecycle events (the frontend subscribes via @tauri-apps/api/event's listen, which is ACL-gated unlike app-defined commands).","local":true,"windows":["*"],"permissions":["core:default"]}}
