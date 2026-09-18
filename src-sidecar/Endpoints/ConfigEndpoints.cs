@@ -89,7 +89,8 @@ public static class ConfigEndpoints
         IStorageConnectionPool storagePool,
         IRedisConnectionPool redisPool,
         IServiceBusConnectionPool serviceBusPool,
-        ISqlConnectionPool sqlPool)
+        ISqlConnectionPool sqlPool,
+        IMonitoringConnectionPool monitoringPool)
     {
         // The profile GET overlays demo entities while demo mode is on and saves round-trip the
         // whole profile — strip the demo ids so a save can't persist them as real configuration.
@@ -117,6 +118,8 @@ public static class ConfigEndpoints
         var previous = repo.GetProfileData().Config;
         var previousRedisCaches = previous?.RedisConfig?.Caches;
         var previousSqlConnections = previous?.SqlConfig?.Connections;
+        var previousAks = previous?.AksConfig;
+        var previousSbNamespaces = repo.GetProfileData().ServiceBusNamespaces;
 
         repo.ReplaceProfileData(data);
         await repo.SaveAsync();
@@ -137,8 +140,53 @@ public static class ConfigEndpoints
         // "Test connection" silently exercised the stale one.
         foreach (var staleId in StaleSqlConnectionIds(previousSqlConnections, data.Config?.SqlConfig?.Connections))
             sqlPool.Evict(staleId);
+
+        // The monitoring pool (signal sources) caches AKS/Service Bus/Redis clients of its own
+        // and used to keep them forever — a credential or kubeconfig-path edit left signal
+        // evaluation running on stale connections. Eviction is targeted for the same reason the
+        // page pools are: the Redis page PUTs the profile on every cache switch, and a blanket
+        // drain would drop the warm AKS client (and its 5-minute namespace cache) on each flip.
+        if (!string.Equals(previousAks?.KubeconfigPath, data.Config?.AksConfig?.KubeconfigPath, StringComparison.OrdinalIgnoreCase))
+            monitoringPool.EvictAksClients();
+        foreach (var stale in StaleServiceBusNamespaces(previousSbNamespaces, data.ServiceBusNamespaces))
+        {
+            // The pool keys clients by whatever identifier the caller resolved — alias or id —
+            // so both forms have to be evicted.
+            monitoringPool.EvictServiceBusClient(stale.Alias);
+            monitoringPool.EvictServiceBusClient(stale.Id.ToString("N"));
+        }
+        foreach (var staleId in StaleRedisCacheIds(previousRedisCaches, data.Config?.RedisConfig?.Caches))
+        {
+            var staleCache = previousRedisCaches?.FirstOrDefault(c => c.Id == staleId);
+            if (staleCache is not null)
+            {
+                monitoringPool.EvictRedisClient(staleCache.DisplayName);
+                monitoringPool.EvictRedisClient(staleCache.Id);
+            }
+        }
         return Results.Ok();
     }
+
+    /// <summary>
+    /// Service Bus namespaces whose pooled monitoring client a profile save must drop: the entry
+    /// was removed, or a connection-affecting field changed. <c>Alias</c> edits don't affect the
+    /// connection, so those pooled clients stay warm.
+    /// </summary>
+    internal static IEnumerable<ServiceBusNamespace> StaleServiceBusNamespaces(
+        IReadOnlyList<ServiceBusNamespace>? before,
+        IReadOnlyList<ServiceBusNamespace>? after)
+    {
+        var afterById = (after ?? []).ToDictionary(n => n.Id);
+        foreach (var old in before ?? [])
+            if (!afterById.TryGetValue(old.Id, out var updated) || !SameSbConnection(old, updated))
+                yield return old;
+    }
+
+    private static bool SameSbConnection(ServiceBusNamespace a, ServiceBusNamespace b) =>
+        a.CredentialKey == b.CredentialKey &&
+        a.AuthMode == b.AuthMode &&
+        a.TransportType == b.TransportType &&
+        string.Equals(a.FullyQualifiedNamespace, b.FullyQualifiedNamespace, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Ids of Redis caches whose pooled client a profile save must drop: the cache was removed, or

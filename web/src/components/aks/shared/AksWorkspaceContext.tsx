@@ -20,6 +20,7 @@ import {
     useAksContexts,
     useAksPods,
     useProfile,
+    useDemoMode,
 } from "@/lib/hooks";
 import { apiFetch } from "@/lib/api";
 import {
@@ -149,9 +150,14 @@ export interface AksWorkspaceContextValue {
      */
     nsError: string | null;
     contextLoading: boolean;
+    /** Context being switched to while the POST is in flight, for "Switching to X…" labels. */
+    pendingContext: string | null;
     isAksFetching: boolean;
     contexts: KubeContextInfo[] | undefined;
     currentContext: string | null;
+    /** True once the profile query has resolved — gates the first-run "not configured" state. */
+    profileLoaded: boolean;
+    isDemoMode: boolean;
     testResult: { connected: boolean; error?: string } | undefined;
     handleContextChange: (context: string, defaultNamespace?: string) => void;
     allPods: PodInfo[] | undefined;
@@ -295,7 +301,6 @@ export function AksWorkspaceProvider({
         data: namespaces,
         isLoading: nsLoading,
         error: nsErrorRaw,
-        refetch: refetchNamespaces,
     } = useAksNamespaces();
     const nsError =
         nsErrorRaw instanceof Error
@@ -304,10 +309,16 @@ export function AksWorkspaceProvider({
               ? String(nsErrorRaw)
               : null;
     const { data: contexts } = useAksContexts();
-    const { data: testResult, refetch: refetchTest } = useAksTestConnection();
+    const { data: testResult } = useAksTestConnection();
     const { data: profile } = useProfile();
+    const { data: demoMode } = useDemoMode();
+    const isDemoMode = demoMode?.isDemoMode ?? false;
     const setContextMutation = useAksSetContext();
     const contextLoading = setContextMutation.isPending;
+    const pendingContext = contextLoading
+        ? (setContextMutation.variables?.context ?? null)
+        : null;
+    const profileLoaded = profile !== undefined;
     const isAksFetching =
         useIsFetching({
             predicate: (query) => isAksResourceQueryKey(query.queryKey),
@@ -422,6 +433,10 @@ export function AksWorkspaceProvider({
     // An explicit selection is enough to start fetching; the list is only needed to recognise "the
     // user picked every namespace" as the cluster-wide `*`, which is refined once it arrives.
     const namespaceToken = useMemo(() => {
+        // Hold every namespaced query while a context switch is in flight. The sidecar resolves
+        // the *configured* context — still the old cluster until the POST lands — so a fetch fired
+        // now would fill the new context's cache key with the old cluster's rows.
+        if (contextLoading) return null;
         if (selectedNamespaces.length === 0) return null;
         if (selectedNamespaces.includes("*")) return "*";
         if (
@@ -431,7 +446,7 @@ export function AksWorkspaceProvider({
         )
             return "*";
         return selectedNamespaces.join(",");
-    }, [selectedNamespaces, namespaces]);
+    }, [selectedNamespaces, namespaces, contextLoading]);
 
     const isMultiNamespace =
         namespaceToken === "*" || selectedNamespaces.length > 1;
@@ -587,13 +602,25 @@ export function AksWorkspaceProvider({
 
     const handleContextChange = useCallback(
         (context: string, defaultNamespace?: string) => {
+            if (context === currentContextName) return;
             namespacePickedRef.current = false;
-            const defaultNs =
-                defaultNamespace && namespaces?.includes(defaultNamespace)
-                    ? defaultNamespace
-                    : (namespaces?.[0] ?? "");
+            // Restore the *target* context's remembered selection — never the current cluster's
+            // namespace list, which used to leak a ghost namespace into the new context. The
+            // kubeconfig's own namespace hint is the fallback; with neither, `ns` clears and the
+            // init effect picks the configured default or first entry once the new list lands.
+            const persisted = loadViewPreference<string[]>(
+                selectedNsPrefKey(context),
+                [],
+            );
+            const restored =
+                Array.isArray(persisted) && persisted.length > 0
+                    ? persisted
+                    : defaultNamespace
+                      ? [defaultNamespace]
+                      : [];
+            const previousNs = searchParams.get("ns");
             updateParams({
-                ns: defaultNs || null,
+                ns: encodeNamespaces(restored),
                 pod: null,
                 yaml: null,
                 helm: null,
@@ -607,23 +634,49 @@ export function AksWorkspaceProvider({
             // running/silently reconnected under the new context for a pod of the same name.
             setShellPod(null);
             setAskAiPod(null);
+            // "Updated 3s ago" would otherwise keep describing the previous cluster's data.
+            setLastRefreshedAt(null);
             setContextMutation.mutate(
                 { context, defaultNamespace },
                 {
-                    onSuccess: () => {
-                        refetchNamespaces();
-                        refetchTest();
-                        void refreshAksResources();
-                        notify("success", "AKS context switched", context);
+                    onSuccess: (data) => {
+                        if (data?.connected) {
+                            notify("success", "AKS context switched", context);
+                            // Recency order for the context picker's MRU section (cap 5).
+                            const mru = [
+                                context,
+                                ...loadViewPreference<string[]>(
+                                    "aks-context-mru",
+                                    [],
+                                ).filter((c) => c !== context),
+                            ].slice(0, 5);
+                            saveViewPreference("aks-context-mru", mru);
+                        } else {
+                            notify(
+                                "error",
+                                "Couldn't switch AKS context",
+                                data?.error ?? "The cluster did not respond.",
+                            );
+                            // The profile stayed on the previous context — put its selection back.
+                            updateParams({ ns: previousNs }, { replace: true });
+                        }
+                    },
+                    onError: (error) => {
+                        notify(
+                            "error",
+                            "Couldn't switch AKS context",
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                        );
+                        updateParams({ ns: previousNs }, { replace: true });
                     },
                 },
             );
         },
         [
-            namespaces,
-            refreshAksResources,
-            refetchNamespaces,
-            refetchTest,
+            currentContextName,
+            searchParams,
             setContextMutation,
             updateParams,
             notify,
@@ -867,10 +920,13 @@ export function AksWorkspaceProvider({
             nsLoading,
             nsError,
             contextLoading,
+            pendingContext,
             isAksFetching,
             contexts,
             currentContext:
                 profile?.config.aksConfig?.kubeconfigContext ?? null,
+            profileLoaded,
+            isDemoMode,
             testResult,
             handleContextChange,
             allPods,
@@ -932,9 +988,12 @@ export function AksWorkspaceProvider({
             nsLoading,
             nsError,
             contextLoading,
+            pendingContext,
             isAksFetching,
             contexts,
             profile?.config.aksConfig?.kubeconfigContext,
+            profileLoaded,
+            isDemoMode,
             testResult,
             handleContextChange,
             allPods,

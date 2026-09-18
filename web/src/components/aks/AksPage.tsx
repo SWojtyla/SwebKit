@@ -39,7 +39,9 @@ import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { NamespaceSelector } from "./NamespaceSelector";
 import { ContextSelector } from "./ContextSelector";
-import { RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2, Ship } from "lucide-react";
+import { useNavigate } from "react-router";
+import { EmptyState } from "@/components/shared/EmptyState";
 
 export function AksPage() {
     return (
@@ -51,6 +53,7 @@ export function AksPage() {
 
 function AksPageContent() {
     const ws = useAksWorkspace();
+    const navigate = useNavigate();
     const isNetworkTabActive = networkTabIds.has(ws.activeTab);
 
     return (
@@ -66,6 +69,7 @@ function AksPageContent() {
                     currentContext={ws.currentContext}
                     onChange={ws.handleContextChange}
                     isLoading={ws.contextLoading}
+                    pendingContext={ws.pendingContext}
                 />
 
                 <span className="text-sm font-medium">Namespace:</span>
@@ -73,7 +77,13 @@ function AksPageContent() {
                     namespaces={ws.namespaces}
                     selected={ws.selectedNamespaces}
                     onChange={ws.setSelectedNamespaces}
-                    isLoading={ws.nsLoading}
+                    isLoading={ws.contextLoading || ws.nsLoading}
+                    loadingLabel={
+                        ws.contextLoading
+                            ? `Switching to ${ws.pendingContext ?? "…"}`
+                            : "Loading namespaces…"
+                    }
+                    contextName={ws.currentContext}
                     error={ws.nsError}
                     disabledReason={
                         ws.activeTab === "gatewayclasses"
@@ -82,7 +92,7 @@ function AksPageContent() {
                     }
                 />
 
-                {ws.contextLoading && (
+                {ws.contextLoading ? (
                     <div
                         className="flex items-center gap-1.5 text-xs text-primary"
                         data-testid="aks-loading-indicator"
@@ -90,7 +100,15 @@ function AksPageContent() {
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         Switching context…
                     </div>
-                )}
+                ) : ws.nsLoading ? (
+                    <div
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                        data-testid="aks-ns-loading-indicator"
+                    >
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Loading namespaces…
+                    </div>
+                ) : null}
 
                 {/* Auto-refresh controls. The in-flight state lives on the Refresh button's
             icon rather than a separate "Loading resources…" label — with auto-refresh
@@ -281,12 +299,45 @@ function AksPageContent() {
             >
                 <div className="flex min-w-0 flex-1 flex-col">
                     <div className="flex-1 overflow-auto">
-                        {!ws.namespaceToken ? (
+                        {ws.contextLoading ? (
+                            // namespaceToken is held null while the POST is in flight, so the
+                            // previous cluster's rows are gone already — this is the stage label.
+                            <div
+                                className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground"
+                                data-testid="aks-switching-state"
+                            >
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Switching to {ws.pendingContext ?? "…"}
+                            </div>
+                        ) : ws.profileLoaded && !ws.currentContext && !ws.isDemoMode ? (
+                            <EmptyState
+                                icon={Ship}
+                                title="No AKS cluster configured"
+                                description="Point SwebKit at a kubeconfig to browse deployments, pods, logs and more."
+                                action={
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            navigate("/settings", {
+                                                state: { tab: "aks" },
+                                            })
+                                        }
+                                        className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90"
+                                        data-testid="aks-configure-cta"
+                                    >
+                                        Configure kubeconfig
+                                    </button>
+                                }
+                                testId="aks-first-run"
+                            />
+                        ) : !ws.namespaceToken ? (
                             <div
                                 className="flex h-full items-center justify-center text-sm text-muted-foreground"
                                 data-testid="aks-empty-state"
                             >
-                                Select a namespace to view resources
+                                {ws.currentContext
+                                    ? "Select a namespace to view resources"
+                                    : "Select a context to get started"}
                             </div>
                         ) : (
                             <>

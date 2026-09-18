@@ -1,10 +1,21 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, Check, Loader2 } from "lucide-react";
 
 interface NamespaceSelectorProps {
   namespaces: string[] | undefined;
   selected: string[];
   isLoading?: boolean;
+  /**
+   * What the button shows while `isLoading` — e.g. "Switching to staging…" during a context
+   * switch vs. "Loading namespaces…" for the list fetch. Without it the button displayed
+   * either stale names or a bare spinner with no idea what was happening.
+   */
+  loadingLabel?: string;
+  /**
+   * Active kubeconfig context, rendered as a small breadcrumb inside the dropdown so the
+   * namespace list is explicitly tied to the cluster it belongs to.
+   */
+  contextName?: string | null;
   /**
    * Why the list could not be loaded, if it failed. An empty list on its own is ambiguous — a
    * cluster with no namespaces looks exactly like an auth failure — so the error has to be shown
@@ -21,6 +32,8 @@ export function NamespaceSelector({
   namespaces = [],
   selected,
   isLoading,
+  loadingLabel,
+  contextName,
   error,
   onChange,
   disabledReason,
@@ -57,13 +70,15 @@ export function NamespaceSelector({
   }, [filtered, pending]);
 
   const isAllSelected = all.length > 0 && (selected.includes("*") || selected.length === all.length);
-  const display = isAllSelected
-    ? "All namespaces"
-    : selected.length === 0
-      ? "Select namespace..."
-      : selected.length === 1
-        ? selected[0]
-        : `${selected.length} namespaces`;
+  const display = isLoading
+    ? (loadingLabel ?? "Loading namespaces…")
+    : isAllSelected
+      ? "All namespaces"
+      : selected.length === 0
+        ? "Select namespace..."
+        : selected.length === 1
+          ? selected[0]
+          : `${selected.length} namespaces`;
 
   const toggleNs = (ns: string) => {
     setPending((prev) => (prev.includes(ns) ? prev.filter((n) => n !== ns) : [...prev, ns]));
@@ -90,8 +105,15 @@ export function NamespaceSelector({
   const selectAll = () => setPending(all);
   const selectNone = () => setPending([]);
 
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (open && e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+    }
+  };
+
   return (
-    <div ref={ref} className="relative flex items-center gap-2">
+    <div ref={ref} className="relative flex items-center gap-2" onKeyDown={onKeyDown}>
       {/*
         Hidden native select keeps Playwright tests working. `sr-only` alone is
         the right class: it renders a 1x1 clipped element that is invisible to
@@ -127,7 +149,10 @@ export function NamespaceSelector({
         className="flex min-w-[14rem] max-w-[24rem] items-center justify-between rounded-md border bg-card px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
         data-testid="aks-namespace-dropdown"
       >
-        <span className="truncate">{display}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          {isLoading && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />}
+          <span className="truncate">{display}</span>
+        </span>
         <span className="text-muted-foreground">{open ? "▲" : "▼"}</span>
       </button>
 
@@ -171,6 +196,11 @@ export function NamespaceSelector({
               )}
             </div>
             <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
+              {contextName && (
+                <span className="truncate" data-testid="aks-namespace-context">
+                  {contextName} ›
+                </span>
+              )}
               <span>{all.length} total</span>
               {filtered.length !== all.length && <span>· {filtered.length} matching</span>}
             </div>

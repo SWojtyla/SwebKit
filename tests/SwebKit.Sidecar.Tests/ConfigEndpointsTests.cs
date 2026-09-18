@@ -65,6 +65,25 @@ internal sealed class TrackingSqlConnectionPool : ISqlConnectionPool
     public void InvalidateAll() => InvalidateAllCallCount++;
 }
 
+/// <summary>Monitoring-pool counterpart that records the targeted evictions a profile save issues.</summary>
+internal sealed class TrackingMonitoringConnectionPool : IMonitoringConnectionPool
+{
+    public int EvictAksClientsCallCount { get; private set; }
+    public List<string> EvictedServiceBusAliases { get; } = [];
+    public List<string> EvictedRedisKeys { get; } = [];
+
+    public IAksClient? GetAksClient() => throw new NotSupportedException();
+    public IAksClient? GetAksClient(string? context) => throw new NotSupportedException();
+    public IServiceBusClient? GetServiceBusClient(string alias) => throw new NotSupportedException();
+    public ValueTask<IRedisClient?> GetRedisClientAsync(string displayName, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+    public void InvalidateStaleConnections() { }
+    public void EvictServiceBusClient(string alias) => EvictedServiceBusAliases.Add(alias);
+    public void EvictAksClients() => EvictAksClientsCallCount++;
+    public void EvictRedisClient(string key) => EvictedRedisKeys.Add(key);
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
 public class ConfigEndpointsTests
 {
     private static ConfigurationBundleService BuildService(out CollectionRepository collections, out ProfileRepository profiles)
@@ -188,7 +207,8 @@ public class ConfigEndpointsTests
             new NoopStorageConnectionPool(),
             new TrackingRedisConnectionPool(),
             new TrackingServiceBusConnectionPool(),
-            new TrackingSqlConnectionPool());
+            new TrackingSqlConnectionPool(),
+            new TrackingMonitoringConnectionPool());
 
         var reloaded = new ProfileRepository();
         await reloaded.LoadAsync();
@@ -231,7 +251,8 @@ public class ConfigEndpointsTests
             new NoopStorageConnectionPool(),
             new TrackingRedisConnectionPool(),
             new TrackingServiceBusConnectionPool(),
-            new TrackingSqlConnectionPool());
+            new TrackingSqlConnectionPool(),
+            new TrackingMonitoringConnectionPool());
 
         var stored = profile.GetProfileData();
         Assert.Single(stored.ServiceBusNamespaces);
@@ -260,9 +281,9 @@ public class ConfigEndpointsTests
         {
             Caches =
             [
-                new RedisCacheEntry { Id = "unchanged", ConnectionString = "a:6379" },
-                new RedisCacheEntry { Id = "edited", ConnectionString = "old:6379" },
-                new RedisCacheEntry { Id = "removed", ConnectionString = "gone:6379" },
+                new RedisCacheEntry { Id = "unchanged", DisplayName = "cache-u", ConnectionString = "a:6379" },
+                new RedisCacheEntry { Id = "edited", DisplayName = "cache-e", ConnectionString = "old:6379" },
+                new RedisCacheEntry { Id = "removed", DisplayName = "cache-r", ConnectionString = "gone:6379" },
             ],
             ActiveCacheId = "unchanged",
         };
@@ -283,13 +304,117 @@ public class ConfigEndpointsTests
         var redisPool = new TrackingRedisConnectionPool();
         var serviceBusPool = new TrackingServiceBusConnectionPool();
         var sqlPool = new TrackingSqlConnectionPool();
+        var monitoringPool = new TrackingMonitoringConnectionPool();
 
-        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool, redisPool, serviceBusPool, sqlPool);
+        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool, redisPool, serviceBusPool, sqlPool, monitoringPool);
 
         Assert.Equal(1, storagePool.InvalidateAllCallCount);
         Assert.Equal(1, serviceBusPool.InvalidateAllCallCount);
         Assert.Equal(0, redisPool.InvalidateAllCallCount);
         Assert.Equal(["edited", "removed"], redisPool.EvictedIds);
+        // The monitoring pool gets the same targeted Redis eviction, keyed by both resolution
+        // forms — and an ActiveCacheId-only save must not touch its AKS/Service Bus clients.
+        Assert.Equal(["cache-e", "edited", "cache-r", "removed"], monitoringPool.EvictedRedisKeys);
+        Assert.Equal(0, monitoringPool.EvictAksClientsCallCount);
+        Assert.Empty(monitoringPool.EvictedServiceBusAliases);
+    }
+
+    [Fact]
+    public async Task SaveProfileAsync_KubeconfigPathChange_EvictsAllPooledAksClients()
+    {
+        using var sandbox = new AppDataSandbox();
+        var profile = new ProfileRepository();
+        var sbId = Guid.NewGuid();
+        profile.GetProfileData().Config.AksConfig = new AksConfig { KubeconfigPath = "/old/kubeconfig", KubeconfigContext = "ctx-a" };
+        profile.GetProfileData().ServiceBusNamespaces.Add(new ServiceBusNamespace
+        {
+            Id = sbId,
+            Alias = "orders",
+            FullyQualifiedNamespace = "old.servicebus.windows.net",
+            CredentialKey = "sb-key",
+        });
+        var data = new ProfileData();
+        data.Config.AksConfig = new AksConfig { KubeconfigPath = "/new/kubeconfig", KubeconfigContext = "ctx-a" };
+        data.ServiceBusNamespaces =
+        [
+            new ServiceBusNamespace
+            {
+                Id = sbId,
+                Alias = "orders",
+                FullyQualifiedNamespace = "new.servicebus.windows.net",
+                CredentialKey = "sb-key",
+            },
+        ];
+        var monitoringPool = new TrackingMonitoringConnectionPool();
+
+        await ConfigEndpoints.SaveProfileAsync(
+            profile,
+            data,
+            new NoopStorageConnectionPool(),
+            new TrackingRedisConnectionPool(),
+            new TrackingServiceBusConnectionPool(),
+            new TrackingSqlConnectionPool(),
+            monitoringPool);
+
+        // A kubeconfig path change invalidates every pooled AKS client (they were all built from
+        // the old file); the Service Bus FQDN change evicts that namespace's client under both
+        // resolution keys (alias and id).
+        Assert.Equal(1, monitoringPool.EvictAksClientsCallCount);
+        Assert.Equal(["orders", sbId.ToString("N")], monitoringPool.EvictedServiceBusAliases);
+    }
+
+    [Fact]
+    public async Task SaveProfileAsync_ContextOnlyChange_KeepsPooledAksClientsWarm()
+    {
+        // The context selection is the pool's cache key — changing it leaves every pooled client
+        // valid, so evicting here would just destroy the namespace cache the switch-back relies on.
+        using var sandbox = new AppDataSandbox();
+        var profile = new ProfileRepository();
+        profile.GetProfileData().Config.AksConfig = new AksConfig { KubeconfigPath = "/same/kubeconfig", KubeconfigContext = "ctx-a" };
+        var data = new ProfileData();
+        data.Config.AksConfig = new AksConfig { KubeconfigPath = "/same/kubeconfig", KubeconfigContext = "ctx-b" };
+        var monitoringPool = new TrackingMonitoringConnectionPool();
+
+        await ConfigEndpoints.SaveProfileAsync(
+            profile,
+            data,
+            new NoopStorageConnectionPool(),
+            new TrackingRedisConnectionPool(),
+            new TrackingServiceBusConnectionPool(),
+            new TrackingSqlConnectionPool(),
+            monitoringPool);
+
+        Assert.Equal(0, monitoringPool.EvictAksClientsCallCount);
+    }
+
+    [Fact]
+    public void StaleServiceBusNamespaces_OnlyFlagsRemovedOrConnectionChangedEntries()
+    {
+        var idSame = Guid.NewGuid();
+        var idRenamed = Guid.NewGuid();
+        var idCred = Guid.NewGuid();
+        var idTransport = Guid.NewGuid();
+        var idRemoved = Guid.NewGuid();
+        var before = new List<ServiceBusNamespace>
+        {
+            new() { Id = idSame, Alias = "same", CredentialKey = "k1" },
+            new() { Id = idRenamed, Alias = "old-alias", CredentialKey = "k2" },
+            new() { Id = idCred, Alias = "cred", CredentialKey = "k3" },
+            new() { Id = idTransport, Alias = "transport", CredentialKey = "k4", TransportType = SbTransportType.Amqp },
+            new() { Id = idRemoved, Alias = "gone", CredentialKey = "k5" },
+        };
+        var after = new List<ServiceBusNamespace>
+        {
+            new() { Id = idSame, Alias = "same", CredentialKey = "k1" },
+            // An alias rename alone doesn't affect the pooled connection — not stale.
+            new() { Id = idRenamed, Alias = "new-alias", CredentialKey = "k2" },
+            new() { Id = idCred, Alias = "cred", CredentialKey = "k3-new" },
+            new() { Id = idTransport, Alias = "transport", CredentialKey = "k4", TransportType = SbTransportType.AmqpWebSockets },
+        };
+
+        Assert.Equal(
+            [idCred, idTransport, idRemoved],
+            ConfigEndpoints.StaleServiceBusNamespaces(before, after).Select(n => n.Id).ToList());
     }
 
     [Fact]

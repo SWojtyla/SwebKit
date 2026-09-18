@@ -240,6 +240,8 @@ public sealed class RedisSignalSourceTests
         public IServiceBusClient? GetServiceBusClient(string alias) => null;
         public void InvalidateStaleConnections() { }
         public void EvictServiceBusClient(string alias) { }
+        public void EvictAksClients() { }
+        public void EvictRedisClient(string key) { }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 

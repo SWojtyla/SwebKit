@@ -120,20 +120,56 @@ public static class AksEndpoints
         }
     }
 
-    public static void MapAksEndpoints(this WebApplication app)
+    /// <summary>
+    /// Handler body for the contexts list endpoint, extracted so the demo-mode branch is unit
+    /// testable. Demo contexts come from <see cref="DemoAksClient"/> via the pool — reading the
+    /// real kubeconfig in demo mode either yields nothing (no kubeconfig on the machine) or
+    /// leaks the user's real clusters into a demo session.
+    /// </summary>
+    internal static async Task<IResult> GetContextsAsync(ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
     {
-        // ── Connection / context ─────────────────────────────────────────────────
+        if (demo.IsDemoMode)
+            return Results.Ok(await GetClient(pool).GetContextsAsync(ct));
 
-        app.MapGet("/api/aks/test", TestConnectionAsync);
+        var aksConfig = profile.GetProfileData().Config.AksConfig;
+        var contexts = KubernetesAksClient.ReadContextsFromKubeconfig(aksConfig?.KubeconfigPath);
+        return Results.Ok(contexts);
+    }
 
-        app.MapGet("/api/aks/contexts", (ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool) =>
+    /// <summary>
+    /// Handler body for the context-switch endpoint, extracted so it's unit testable. The target
+    /// context is connection-tested <em>before</em> the profile is persisted: a failed switch must
+    /// not leave <c>KubeconfigContext</c> pointing at an unreachable context (the next launch would
+    /// restore onto it). The client resolves through the context-keyed pool, so a previously-visited
+    /// context reuses its warm client — no blanket invalidation, which used to destroy every pooled
+    /// client's namespace cache on each switch.
+    /// </summary>
+    internal static async Task<IResult> SetContextAsync(SetContextRequest request, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, ILogger<Program> logger, CancellationToken ct)
+    {
+        bool connected;
+        try
         {
-            var aksConfig = profile.GetProfileData().Config.AksConfig;
-            var contexts = KubernetesAksClient.ReadContextsFromKubeconfig(aksConfig?.KubeconfigPath);
-            return Results.Ok(contexts);
-        });
+            var client = GetClient(pool, request.Context);
+            connected = await client.TestConnectionAsync(ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // GetClient's "AKS is not configured" message is already user-facing — don't run it
+            // through ConnectionTestError.Describe, which rewrites raw exception text.
+            return Results.Ok(new { connected = false, context = request.Context, error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "AKS context switch connection test failed for {Context}", request.Context);
+            return Results.Ok(new { connected = false, context = request.Context, error = ConnectionTestError.Describe(ex) });
+        }
 
-        app.MapPost("/api/aks/context", async (SetContextRequest request, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, ILogger<Program> logger, CancellationToken ct) =>
+        if (!connected)
+            return Results.Ok(new { connected = false, context = request.Context, error = "The cluster did not respond to the connection test." });
+
+        // Demo context names must not reach the real profile — they don't exist in the user's
+        // kubeconfig and would restore as a broken context after demo mode ends.
+        if (!demo.IsDemoMode)
         {
             var data = profile.GetProfileData();
             data.Config.AksConfig ??= new AksConfig();
@@ -143,20 +179,20 @@ public static class AksEndpoints
                 data.Config.AksConfig.DefaultNamespace = request.DefaultNamespace;
 
             await profile.SaveAsync();
-            pool.InvalidateStaleConnections();
+        }
 
-            try
-            {
-                var client = GetClient(pool, request.Context);
-                var ok = await client.TestConnectionAsync(ct);
-                return Results.Ok(new { connected = ok, context = request.Context });
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "AKS context switch connection test failed for {Context}", request.Context);
-                return Results.Ok(new { connected = false, context = request.Context, error = ConnectionTestError.Describe(ex) });
-            }
-        });
+        return Results.Ok(new { connected = true, context = request.Context });
+    }
+
+    public static void MapAksEndpoints(this WebApplication app)
+    {
+        // ── Connection / context ─────────────────────────────────────────────────
+
+        app.MapGet("/api/aks/test", TestConnectionAsync);
+
+        app.MapGet("/api/aks/contexts", GetContextsAsync);
+
+        app.MapPost("/api/aks/context", SetContextAsync);
 
         app.MapGet("/api/aks/namespaces", async (ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {

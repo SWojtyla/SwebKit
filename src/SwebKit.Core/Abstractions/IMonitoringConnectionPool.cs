@@ -49,4 +49,19 @@ public interface IMonitoringConnectionPool : IAsyncDisposable
     /// Use this when Entra credentials may have changed or a stale connection needs resetting.
     /// </summary>
     void EvictServiceBusClient(string alias);
+
+    /// <summary>
+    /// Evicts every cached <see cref="IAksClient"/>. Call when the kubeconfig path changed — all
+    /// pooled AKS clients were built from the old file. A context-selection change alone needs
+    /// no eviction: clients are keyed by context and remain valid.
+    /// </summary>
+    void EvictAksClients();
+
+    /// <summary>
+    /// Evicts the cached <see cref="IRedisClient"/> for <paramref name="key"/> so that a fresh
+    /// client is created on the next <see cref="GetRedisClientAsync"/> call. The key matches
+    /// whatever identifier callers resolve by (display name or cache id), mirroring
+    /// <see cref="EvictServiceBusClient"/>.
+    /// </summary>
+    void EvictRedisClient(string key);
 }

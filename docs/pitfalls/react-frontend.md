@@ -325,6 +325,23 @@ moment ago is not in this render's snapshot yet — so the guard cancelled exact
 needed the fresh data. Detect the no-op inside the updater, where the data is current, and let a
 genuinely redundant write be a redundant write.
 
+### Query keys that omit the server-side identity serve one backend's data under another's name
+
+Every AKS resource key was `["aks-pods", ns]`, with no context element — the key did not
+identify which cluster the data came from. Two consequences: during a context switch the tables
+kept showing the _previous_ cluster's rows labelled as the new one, and switching _back_ never
+hit cache, so every round trip re-paid the full fetch. Worse, the workspace picked the next
+namespace from the old cluster's list, which could be a name the new cluster doesn't even have.
+
+The fix has three parts that all have to be true at once: put the resolved context in every
+namespaced/cluster key (`["aks-pods", ctx, ns, …]`, derived from the cached profile, not from a
+prop threaded down), hold the queries in a gated token so nothing fires against cluster A with
+cluster B's namespace mid-switch (`namespaceToken` in `AksWorkspaceContext`), and restore the
+target context's _persisted_ namespace (`view-pref:aks-selected-ns:<ctx>`) instead of inferring
+it from whichever list happens to be in memory. Any consumer that bypasses the hook — the
+command palette reading cached namespaces — must prefix-scan (`getQueriesData`) since it can no
+longer know the context element.
+
 ## React Router
 
 ### `searchParams` in a callback is a snapshot, so two writes in one tick clobber each other

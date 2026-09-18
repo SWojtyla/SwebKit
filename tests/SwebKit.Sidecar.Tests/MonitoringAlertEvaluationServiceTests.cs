@@ -38,6 +38,8 @@ internal sealed class FakeConnectionPool : IMonitoringConnectionPool
     public int InvalidateCalls { get; private set; }
     public void InvalidateStaleConnections() => InvalidateCalls++;
     public void EvictServiceBusClient(string alias) { }
+    public void EvictAksClients() { }
+    public void EvictRedisClient(string key) { }
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     // Unused resolver methods return null — the engine never calls them during evaluation.
     public IAksClient? GetAksClient() => null;

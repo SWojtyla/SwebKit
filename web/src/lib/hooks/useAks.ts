@@ -12,6 +12,8 @@ import {
 } from "../api";
 import { useNotifyMutation } from "../useNotifyMutation";
 import { invalidateAksQueries } from "../aks-query-keys";
+import { useProfile } from "./useProfile";
+import type { ProfileData } from "../types";
 import type {
   DeploymentInfo,
   PodInfo,
@@ -37,6 +39,17 @@ import type {
 
 // ── AKS / Kubernetes ─────────────────────────────────────────────────────────
 
+/**
+ * The kubeconfig context the sidecar currently resolves, used as the cache discriminator on
+ * every cluster-scoped query key. Without it a context switch kept showing the previous
+ * cluster's cached rows under the new context's label — `["aks-pods", ns]` means something
+ * different per cluster — and switching back never hit the warm cache.
+ */
+function useAksContextKey(): string {
+    const { data: profile } = useProfile();
+    return profile?.config.aksConfig?.kubeconfigContext ?? "default";
+}
+
 export function useAksTestConnection(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["aks-test"],
@@ -50,10 +63,40 @@ export function useAksSetContext() {
   return useMutation({
     mutationFn: (vars: { context: string; defaultNamespace?: string }) =>
       apiSend<{ connected: boolean; error?: string }>("/api/aks/context", "POST", vars),
-    onSuccess: () => {
+    onSuccess: (data, vars) => {
+      // A failed test leaves the profile untouched server-side — and the caller still owns the
+      // error toast — so there's nothing to re-key or invalidate here.
+      if (!data.connected) return;
+      // Re-key every context-scoped query to the new context without waiting for a profile
+      // refetch — the POST already persisted it. Deliberately not invalidateQueries(["profile"]):
+      // in demo mode the server doesn't save the switch, and a refetch would revert this write.
+      qc.setQueryData<ProfileData | undefined>(["profile"], (old) => {
+        if (!old) return old;
+        const aks = old.config.aksConfig;
+        return {
+          ...old,
+          config: {
+            ...old.config,
+            aksConfig: aks
+              ? {
+                  ...aks,
+                  kubeconfigContext: vars.context,
+                  ...(vars.defaultNamespace != null ? { defaultNamespace: vars.defaultNamespace } : {}),
+                }
+              : {
+                  kubeconfigPath: null,
+                  kubeconfigContext: vars.context,
+                  defaultNamespace: vars.defaultNamespace ?? "",
+                  watchedDeployments: [],
+                  logBufferSize: 10_000,
+                  autoRefreshIntervalSeconds: 30,
+                  monitoringEnabled: false,
+                  monitoredNamespaces: [],
+                },
+          },
+        };
+      });
       qc.invalidateQueries({ queryKey: ["aks-test"] });
-      qc.invalidateQueries({ queryKey: ["aks-namespaces"] });
-      qc.invalidateQueries({ queryKey: ["profile"] });
     },
   });
 }
@@ -61,7 +104,9 @@ export function useAksSetContext() {
 export function useAksContexts() {
   return useQuery({
     queryKey: ["aks-contexts"],
-    queryFn: () => apiFetch<KubeContextInfo[]>("/api/aks/contexts"),
+    queryFn: ({ signal }) => apiFetch<KubeContextInfo[]>("/api/aks/contexts", { signal }),
+    // Contexts come from the kubeconfig file — cheap to read, slow to change.
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -71,76 +116,89 @@ export function useAksContexts() {
 /// for it — it otherwise occupies one of the browser's six per-host connections
 /// and delays every other request behind it.
 export function useAksNamespaces(enabled = true) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-namespaces"],
-    queryFn: () => apiFetch<string[]>("/api/aks/namespaces"),
+    queryKey: ["aks-namespaces", ctx],
+    queryFn: ({ signal }) => apiFetch<string[]>("/api/aks/namespaces", { signal }),
     enabled,
+    // The server caches the list for five minutes; matching that here keeps a context
+    // round-trip from re-paying the ~18s cold list when React Query would have refetched.
+    staleTime: 5 * 60_000,
   });
 }
 
 export function useAksDeployments(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-deployments", ns],
-    queryFn: () => apiFetch<DeploymentInfo[]>(`/api/aks/${ns}/deployments`),
+    queryKey: ["aks-deployments", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<DeploymentInfo[]>(`/api/aks/${ns}/deployments`, { signal }),
     enabled: !!ns,
   });
 }
 
 export function useAksPods(ns: string | null, labelSelector?: string, enabled = true) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-pods", ns, labelSelector],
-    queryFn: () =>
+    queryKey: ["aks-pods", ctx, ns, labelSelector],
+    queryFn: ({ signal }) =>
       apiFetch<PodInfo[]>(
         `/api/aks/${ns}/pods${labelSelector ? `?labelSelector=${labelSelector}` : ""}`,
+        { signal },
       ),
     enabled: !!ns && enabled,
   });
 }
 
 export function useAksServices(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-services", ns],
-    queryFn: () => apiFetch<ServiceInfo[]>(`/api/aks/${ns}/services`),
+    queryKey: ["aks-services", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<ServiceInfo[]>(`/api/aks/${ns}/services`, { signal }),
     enabled: !!ns,
   });
 }
 
 export function useAksHelmReleases(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-helm", ns],
-    queryFn: () => apiFetch<HelmReleaseInfo[]>(`/api/aks/${ns}/helm-releases`),
+    queryKey: ["aks-helm", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<HelmReleaseInfo[]>(`/api/aks/${ns}/helm-releases`, { signal }),
     enabled: !!ns,
   });
 }
 
 export function useAksSecrets(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-secrets", ns],
-    queryFn: () => apiFetch<SecretInfo[]>(`/api/aks/${ns}/secrets`),
+    queryKey: ["aks-secrets", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<SecretInfo[]>(`/api/aks/${ns}/secrets`, { signal }),
     enabled: !!ns,
   });
 }
 
 export function useAksEvents(ns: string | null, limit = 50) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-events", ns, limit],
-    queryFn: () => apiFetch<KubernetesEvent[]>(`/api/aks/${ns}/events?limit=${limit}`),
+    queryKey: ["aks-events", ctx, ns, limit],
+    queryFn: ({ signal }) => apiFetch<KubernetesEvent[]>(`/api/aks/${ns}/events?limit=${limit}`, { signal }),
     enabled: !!ns,
   });
 }
 
 export function useAksStatefulSets(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-statefulsets", ns],
-    queryFn: () => apiFetch<StatefulSetInfo[]>(`/api/aks/${ns}/statefulsets`),
+    queryKey: ["aks-statefulsets", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<StatefulSetInfo[]>(`/api/aks/${ns}/statefulsets`, { signal }),
     enabled: !!ns,
   });
 }
 
 export function useAksHpas(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-hpas", ns],
-    queryFn: () => apiFetch<HpaInfo[]>(`/api/aks/${ns}/hpas`),
+    queryKey: ["aks-hpas", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<HpaInfo[]>(`/api/aks/${ns}/hpas`, { signal }),
     enabled: !!ns,
   });
 }
@@ -173,9 +231,10 @@ export function useAksSetHpaScalingEnabled() {
 }
 
 export function useAksCronJobs(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-cronjobs", ns],
-    queryFn: () => apiFetch<CronJobInfo[]>(`/api/aks/${ns}/cronjobs`),
+    queryKey: ["aks-cronjobs", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<CronJobInfo[]>(`/api/aks/${ns}/cronjobs`, { signal }),
     enabled: !!ns,
   });
 }
@@ -190,9 +249,10 @@ export function useAksSuspendCronJob() {
 }
 
 export function useAksJobs(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-jobs", ns],
-    queryFn: () => apiFetch<JobInfo[]>(`/api/aks/${ns}/jobs`),
+    queryKey: ["aks-jobs", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<JobInfo[]>(`/api/aks/${ns}/jobs`, { signal }),
     enabled: !!ns,
   });
 }
@@ -265,8 +325,9 @@ export function useAksDeleteHttpRoute() {
 }
 
 export function useAksConfigMaps(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-configmaps", ns],
+    queryKey: ["aks-configmaps", ctx, ns],
     queryFn: ({ signal }) => apiFetch<ConfigMapInfo[]>(`/api/aks/${ns}/configmaps`, { signal }),
     enabled: !!ns,
   });
@@ -278,8 +339,9 @@ export function useAksConfigMaps(ns: string | null) {
  * mirroring how Secret values already work.
  */
 export function useAksConfigMapValues(ns: string | null, name: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-configmap-values", ns, name],
+    queryKey: ["aks-configmap-values", ctx, ns, name],
     queryFn: ({ signal }) =>
       apiFetch<Record<string, string>>(`/api/aks/${ns}/configmaps/${encodeURIComponent(name!)}/values`, { signal }),
     enabled: !!ns && !!name,
@@ -287,40 +349,45 @@ export function useAksConfigMapValues(ns: string | null, name: string | null) {
 }
 
 export function useAksIngresses(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-ingresses", ns],
-    queryFn: () => apiFetch<IngressInfo[]>(`/api/aks/${ns}/ingresses`),
+    queryKey: ["aks-ingresses", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<IngressInfo[]>(`/api/aks/${ns}/ingresses`, { signal }),
     enabled: !!ns,
   });
 }
 
 export function useAksGatewayClasses() {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-gatewayclasses"],
-    queryFn: () => apiFetch<GatewayClassInfo[]>("/api/aks/gatewayclasses"),
+    queryKey: ["aks-gatewayclasses", ctx],
+    queryFn: ({ signal }) => apiFetch<GatewayClassInfo[]>("/api/aks/gatewayclasses", { signal }),
   });
 }
 
 export function useAksGateways(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-gateways", ns],
-    queryFn: () => apiFetch<GatewayInfo[]>(`/api/aks/${ns}/gateways`),
+    queryKey: ["aks-gateways", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<GatewayInfo[]>(`/api/aks/${ns}/gateways`, { signal }),
     enabled: !!ns,
   });
 }
 
 export function useAksHelmHistory(ns: string | null, release: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-helm-history", ns, release],
-    queryFn: () => apiFetch<HelmHistoryEntry[]>(`/api/aks/${ns}/helm-releases/${release}/history`),
+    queryKey: ["aks-helm-history", ctx, ns, release],
+    queryFn: ({ signal }) => apiFetch<HelmHistoryEntry[]>(`/api/aks/${ns}/helm-releases/${release}/history`, { signal }),
     enabled: !!ns && !!release,
   });
 }
 
 export function useAksHelmValues(ns: string | null, release: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-helm-values", ns, release],
-    queryFn: () => apiFetch<HelmValuesResponse>(`/api/aks/${ns}/helm-releases/${release}/values`),
+    queryKey: ["aks-helm-values", ctx, ns, release],
+    queryFn: ({ signal }) => apiFetch<HelmValuesResponse>(`/api/aks/${ns}/helm-releases/${release}/values`, { signal }),
     enabled: !!ns && !!release,
   });
 }
@@ -333,16 +400,18 @@ export function useAksHelmValues(ns: string | null, release: string | null) {
  * had asked for.
  */
 export function useAksHelmNotes(ns: string | null, release: string | null, options?: { enabled?: boolean }) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-helm-notes", ns, release],
+    queryKey: ["aks-helm-notes", ctx, ns, release],
     queryFn: () => getHelmReleaseNotes(ns!, release!),
     enabled: !!ns && !!release && (options?.enabled ?? true),
   });
 }
 
 export function useAksHelmManifest(ns: string | null, release: string | null, options?: { enabled?: boolean }) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-helm-manifest", ns, release],
+    queryKey: ["aks-helm-manifest", ctx, ns, release],
     queryFn: () => getHelmReleaseManifest(ns!, release!),
     enabled: !!ns && !!release && (options?.enabled ?? true),
   });
@@ -362,8 +431,9 @@ export function useAksHelmRollback() {
 }
 
 export function useAksResourceYaml(ns: string | null, kind: string | null, name: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-yaml", ns, kind, name],
+    queryKey: ["aks-yaml", ctx, ns, kind, name],
     queryFn: async () => {
       const res = await fetch(`${SIDECAR_BASE_URL}/api/aks/${ns}/yaml/${kind}/${name}`);
       if (!res.ok) {
@@ -385,8 +455,10 @@ export function useAksApplyYaml() {
         "POST",
         { yaml: vars.yaml },
       ),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["aks-yaml", vars.ns, vars.kind, vars.name] });
+    onSuccess: () => {
+      // Prefix match: the concrete key carries the context (`["aks-yaml", ctx, ns, …]`), so
+      // invalidating `["aks-yaml", ns, …]` would silently miss it.
+      qc.invalidateQueries({ queryKey: ["aks-yaml"] });
       // Applying arbitrary YAML can change any resource kind, so refresh them all.
       void invalidateAksQueries(qc);
     },
@@ -401,25 +473,28 @@ export function useAksValidateYaml() {
 }
 
 export function useAksContainerDetails(ns: string | null, podName: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-container-details", ns, podName],
+    queryKey: ["aks-container-details", ctx, ns, podName],
     queryFn: () => apiFetch<ContainerDetail[]>(`/api/aks/${ns}/pods/${podName}/containers`),
     enabled: !!ns && !!podName,
   });
 }
 
 export function useAksPodMetrics(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-pod-metrics", ns],
-    queryFn: () => apiFetch<PodMetricInfo[]>(`/api/aks/${ns}/pod-metrics`),
+    queryKey: ["aks-pod-metrics", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<PodMetricInfo[]>(`/api/aks/${ns}/pod-metrics`, { signal }),
     enabled: !!ns,
   });
 }
 
 export function useAksHttpRoutes(ns: string | null) {
+  const ctx = useAksContextKey();
   return useQuery({
-    queryKey: ["aks-httproutes", ns],
-    queryFn: () => apiFetch<HttpRouteInfo[]>(`/api/aks/${ns}/httproutes`),
+    queryKey: ["aks-httproutes", ctx, ns],
+    queryFn: ({ signal }) => apiFetch<HttpRouteInfo[]>(`/api/aks/${ns}/httproutes`, { signal }),
     enabled: !!ns,
   });
 }
