@@ -355,6 +355,18 @@ The functional setter form (`setSearchParams(prev => …)`) does **not** fix thi
 implementation calls the updater with the same captured `searchParams`. With `<BrowserRouter>`
 (which pushes to history synchronously) read `window.location.search` at call time instead.
 
+### A "restore on launch" read must happen before the save effect's first write
+
+Persisting `last-route` on every navigation and restoring it on launch look independent, but the
+save effect fires on the very first commit — writing `last-route="/"` over the stored value
+_before_ the async settings query that gates the restore has even resolved. The restore then
+reads its own overwrite and does nothing.
+
+Capture the stored value at mount with a lazy initializer (`useState(() => loadViewPreference(…))`)
+— initializers run before any effect — and restore from the capture. Then the save effect can
+truthfully record every navigation, `/` included: if the user's real last page was the dashboard,
+`"/"` is the correct thing to restore (i.e. restore nothing).
+
 ### An effect that defaults a URL param can overwrite the user's choice
 
 "Initialize the selection once the list loads" effects race with the interaction the loaded list

@@ -6,8 +6,8 @@
 
 | Module | Status | Notes |
 | ------ | ------ | ----- |
-| 1. AKS context switching & namespaces | Review | implemented + verified; awaiting user review |
-| 2. Startup warm-up & resume | Proposed | depends on Module 1 key scoping |
+| 1. AKS context switching & namespaces | Done | committed b84a098 on sw/settings-profiles-aks-shell-fixes |
+| 2. Startup warm-up & resume | Review | implemented + verified; awaiting user review |
 | 3. Page restore & deep-link parity | Proposed | Storage/Redis/SQL/Monitoring URL params + persisted selection |
 | 4. Consistency & polish sweep | Proposed | SearchableSelect, signal audit, notify audit, a11y, QueryState |
 
@@ -58,6 +58,25 @@
 - `useCommandPalette` prefix-scans cached namespace lists (keys are now
   context-scoped).
 
+### Module 2 — startup warm-up & resume (`web/`, `src/`)
+
+- `useWorkspaceWarmup` (new, mounted in `AppLayout` — app startup is the trigger,
+  independent of which page loads): prefetches `aks-contexts`, ctx-scoped
+  `aks-namespaces`, `aks-deployments` for the restorable namespace, and
+  `sb-queues`/`sb-topics` for the first Service Bus namespace. Honors the
+  pre-existing `warmupConnectionsOnStartup` toggle (rendered in settings but
+  never consumed by the React app until now). Footer health probes and
+  selection-dependent data are deliberately not duplicated.
+- Route restore: `view-pref:last-route` captured lazily at mount (before the
+  save effect can overwrite it), restored via `navigate(replace)` once settings
+  resolve and only while still on `/`. Every navigation — `/` included — is
+  truthfully saved.
+- New `UserSettings.RestoreLastWorkspaceOnStartup` (C# default `true`) +
+  `restoreLastWorkspaceOnStartup` TS field + "Restore last workspace on launch"
+  checkbox in General → Startup.
+- `areaHealth` verified already rendered per-area in the status bar — no
+  nav-dot change needed.
+
 ## Validation
 
 - `dotnet build` sidecar + app: 0 warnings, 0 errors.
@@ -68,6 +87,11 @@
   (demo contexts, Escape, per-context ns restore, failed/throwing switch,
   switching-stage label, first-run empty state) + 27 existing across
   `aks*.spec.ts` with zero regressions.
+- Module 2: **5 new** `e2e/workspace-resume.spec.ts` (warmup fires on
+  non-dashboard landing, warmup toggle off, restore at `/`, restore off,
+  deep-link safety); `SwebKit.Core.Tests` 1000/1000; dashboard/layout/
+  monitoring/settings specs green (one assertion updated: `/api/aks/namespaces`
+  now fires exactly once — the intentional warm-up call).
 - Aikido MCP scan: **server not installed** in this environment — flagged to
   user; run `aikido_full_scan` on the changed files once configured.
 
@@ -77,7 +101,9 @@
   server-side identity serve one backend's data under another's name.
 - `docs/pitfalls/dotnet-csharp.md` — CS-10: pooled-client cache key and factory
   argument must describe the same target.
+- `docs/pitfalls/react-frontend.md` — restore-on-launch reads must precede the
+  save effect's first write (lazy mount capture).
 
 ## Next
 
-- User review of Module 1, then Module 2 (startup warm-up & resume).
+- User review of Module 2, then Module 3 (page restore & deep-link parity).

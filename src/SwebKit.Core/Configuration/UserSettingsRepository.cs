@@ -80,6 +80,10 @@ public sealed class UserSettings
     public string Theme { get; set; } = string.Empty;
     public bool WarmupConnectionsOnStartup { get; set; } = true;
 
+    /// <summary>When true, the web app reopens the route (path + query) it was last on at launch;
+    /// independent of <see cref="WarmupConnectionsOnStartup"/>, which controls data prefetching.</summary>
+    public bool RestoreLastWorkspaceOnStartup { get; set; } = true;
+
     /// <summary>Incremented once per app launch by the sidecar. Drives the Fathom theme's unlock progress.</summary>
     public int SessionCount { get; set; }
 

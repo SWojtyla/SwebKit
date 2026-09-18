@@ -39,7 +39,9 @@ import {
     useToggleDemoMode,
     useUserSettings,
     useUpdateUserSettings,
+    useWorkspaceWarmup,
 } from "@/lib/hooks";
+import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
 import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
 import { useSettingsStore, isTheme } from "@/lib/stores/settings";
 import { onSidecarLifecycleEvent, restartSidecar } from "@/lib/tauri-bridge";
@@ -95,6 +97,27 @@ export function AppLayout() {
     const { theme, toggleTheme, setTheme } = useSettingsStore();
     const { data: userSettings } = useUserSettings();
     const updateUserSettings = useUpdateUserSettings();
+    useWorkspaceWarmup();
+
+    // Route restore: capture the stored route lazily at mount — before the save
+    // effect below can overwrite it with "/" on this very launch — then navigate
+    // back to it once settings resolve, but only while still sitting on "/"
+    // (any explicit navigation away means the user already chose a page).
+    const [initialRoute] = useState(() => loadViewPreference<string>("last-route", ""));
+    const restoredRef = useRef(false);
+    useEffect(() => {
+        if (restoredRef.current || !userSettings) return;
+        restoredRef.current = true;
+        if (userSettings.restoreLastWorkspaceOnStartup === false) return;
+        if (location.pathname !== "/") return;
+        if (initialRoute && initialRoute !== "/") {
+            navigate(initialRoute, { replace: true });
+        }
+    }, [userSettings, location.pathname, navigate, initialRoute]);
+
+    useEffect(() => {
+        saveViewPreference("last-route", location.pathname + location.search);
+    }, [location.pathname, location.search]);
 
     // Theme lives in the sidecar's user-settings.json, not just this session's Zustand store —
     // without this, a restart always came back to the "dark" default no matter what was picked.
