@@ -329,7 +329,7 @@ fn parse_forwarded_port(line: &str) -> Option<u16> {
 /// Tauri command: stop a port-forward session, killing the underlying kubectl process.
 #[tauri::command]
 pub fn stop_port_forward(state: State<PortForwardState>, local_port: u16) -> Result<(), String> {
-    let mut session = state
+    let session = state
         .sessions
         .lock()
         .unwrap()
