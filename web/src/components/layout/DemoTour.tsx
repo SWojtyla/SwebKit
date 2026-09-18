@@ -110,6 +110,7 @@ export function DemoTour() {
             <button
               onClick={previous}
               disabled={stepIndex === 0}
+              title={stepIndex === 0 ? "Already at the first step" : undefined}
               className="flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
               data-testid="demo-tour-previous"
             >

@@ -514,6 +514,7 @@ export function AppLayout() {
                             <button
                                 onClick={handleReconnect}
                                 disabled={reconnecting}
+                                title={reconnecting ? "Reconnecting…" : undefined}
                                 className="ml-1 rounded border px-1.5 py-0.5 text-[11px] hover:bg-accent disabled:opacity-50"
                                 data-testid="status-bar-reconnect"
                             >

@@ -127,6 +127,7 @@ export function RequestTabStrip({
           <button
             className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-40"
             disabled={tabs.length <= 1}
+            title={tabs.length <= 1 ? "Only one tab open" : undefined}
             onClick={() => { onCloseOtherTabs?.(contextMenu.tabId); setContextMenu(null); }}
             data-testid="tab-ctx-close-others"
           >

@@ -301,6 +301,12 @@ export function BlobDetailPanel() {
                                                             ctx.setBlobMetadata
                                                                 .isPending
                                                         }
+                                                        title={
+                                                            ctx.setBlobMetadata
+                                                                .isPending
+                                                                ? "Saving…"
+                                                                : undefined
+                                                        }
                                                         className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50"
                                                         data-testid="storage-metadata-save"
                                                     >
@@ -575,6 +581,11 @@ export function BlobDetailPanel() {
                                                             ctx
                                                                 .versionComparison
                                                                 .isFetching
+                                                        }
+                                                        title={
+                                                            !ctx.versionBaseId
+                                                                ? "Pick a base version to compare"
+                                                                : undefined
                                                         }
                                                         className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
                                                         data-testid="storage-version-compare-btn"
@@ -992,6 +1003,14 @@ export function BlobDetailPanel() {
                                         !ctx.copyDestContainer.trim() ||
                                         !ctx.copyDestBlob.trim() ||
                                         ctx.copyBlob.isPending
+                                    }
+                                    title={
+                                        ctx.copyBlob.isPending
+                                            ? "Copying…"
+                                            : !ctx.copyDestContainer.trim() ||
+                                                !ctx.copyDestBlob.trim()
+                                              ? "Pick a destination container and blob name"
+                                              : undefined
                                     }
                                     className="rounded bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
                                     data-testid="storage-copy-confirm"

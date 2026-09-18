@@ -91,6 +91,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
               <button
                 onClick={() => handleToggleScaling(hpa)}
                 disabled={toggleMutation.isPending}
+                title={toggleMutation.isPending ? "Updating…" : undefined}
                 className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
               >
                 {hpa.isScalingDisabled ? "Enable" : "Disable"}
@@ -104,6 +105,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
               <button
                 onClick={() => handleDelete(hpa)}
                 disabled={deleteMutation.isPending}
+                title={deleteMutation.isPending ? "Deleting…" : undefined}
                 className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
               >
                 Delete
@@ -234,6 +236,7 @@ function ScaleHpaForm({
         <button
           onClick={onCancel}
           disabled={isSaving}
+          title={isSaving ? "Saving…" : undefined}
           className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
           data-testid="aks-hpa-scale-cancel"
         >
@@ -242,6 +245,7 @@ function ScaleHpaForm({
         <button
           onClick={() => onSave(min, max)}
           disabled={isSaving || invalid}
+          title={isSaving ? "Scaling…" : invalid ? "Min must be ≤ max and both ≥ 0" : undefined}
           className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
           data-testid="aks-hpa-scale-save"
         >

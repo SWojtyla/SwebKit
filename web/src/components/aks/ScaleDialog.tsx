@@ -79,6 +79,7 @@ export function ScaleDialog({
           <button
             onClick={() => apply(replicas - 1)}
             disabled={replicas <= 0}
+            title={replicas <= 0 ? "Already at 0 replicas" : undefined}
             className="rounded-md border p-1.5 hover:bg-accent disabled:opacity-40"
             aria-label="Decrease replicas"
             data-testid="aks-scale-decrement"
@@ -108,6 +109,7 @@ export function ScaleDialog({
           <button
             onClick={() => apply(replicas + 1)}
             disabled={replicas >= MAX_REPLICAS}
+            title={replicas >= MAX_REPLICAS ? `Maximum ${MAX_REPLICAS} replicas` : undefined}
             className="rounded-md border p-1.5 hover:bg-accent disabled:opacity-40"
             aria-label="Increase replicas"
             data-testid="aks-scale-increment"
@@ -160,6 +162,7 @@ export function ScaleDialog({
         <button
           onClick={submit}
           disabled={unchanged || isSaving}
+          title={isSaving ? "Scaling…" : unchanged ? "Replica count is unchanged" : undefined}
           className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
           data-testid="aks-scale-confirm"
         >

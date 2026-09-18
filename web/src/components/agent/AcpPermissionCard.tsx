@@ -58,6 +58,7 @@ export function AcpPermissionCard({ permission }: { permission: AcpPermission })
         respond.mutate({ id: permission.id, optionId: opt.optionId })
        }
        disabled={respond.isPending}
+       title={respond.isPending ? "Responding…" : undefined}
        className={optionClassName(opt.kind)}
        data-testid={`acp-permission-option-${permission.id}-${opt.optionId}`}
       >

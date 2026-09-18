@@ -56,3 +56,43 @@ Every `useMutation` must notify success/error and invalidate the right keys. Kno
 - Mutation audit list fully green — each entry notifies + invalidates.
 - Playwright: dropdown Escape/arrow navigation specs pass; storage states render shared
   components (testids `query-error`, `skeleton-*`).
+
+## Implementation notes (as built)
+
+- `SearchableSelect` (`web/src/components/shared/SearchableSelect.tsx`) centralizes
+  trigger + filter + keyboard nav + Escape + outside-click + focus return, with
+  `aria-haspopup`/`aria-expanded`/`aria-activedescendant`. Optional `sr-only` native
+  `<select>` (`nativeSelectTestId`) preserves `selectOption()` Playwright paths and
+  screen-reader compat; `nativeExtraOptions` covers clearable selects (Service Bus).
+  Adopted by Redis cache, Storage account, SQL connection (server subtitle via
+  `subtitle`), Service Bus namespace; `ContextSelector` is now a thin wrapper that adds
+  MRU ordering + pending label.
+- Signal audit: all live `queryFn`s destructure `{ signal }`; helper wrappers
+  (`getHelmReleaseNotes`, `getHelmReleaseManifest`, monitoring/redis/sb/storage/sql
+  readers in `api.ts`) take an optional `AbortSignal` threaded into `apiFetch`/`apiSend`.
+  `useAksResourceYaml` uses raw `fetch` — now passes `{ signal }` too.
+- Mutation audit: `useAksHelmRollback` converted to `useNotifyMutation` (was silent on
+  success AND error — `HelmDetailPanel` never even received an `onError`). Apply/validate
+  YAML notify via their `YamlViewer` callers; port-forward/shell surface errors inline in
+  their panels; storage mutations + `useTogglePinnedResource` already notify.
+- Loading/empty/error: Storage container list + Redis key-browser state branches now use
+  `QueryState`; Monitoring already used `SkeletonRows` + dedicated error testids (left as
+  is). Service Bus already renders `LastRefreshed` (`message-list-last-refreshed`).
+- Disabled controls: ~70 buttons audited; every `disabled` button/input now carries a
+  conditional `title` reason ("Type a message first", "Saving…", "Pick a pod first"…).
+  Exceptions where the reason is already in the visible label are intentional
+  (e.g. locked Fathom theme tiles show "N / M sessions").
+- `aria-activedescendant` on the SearchableSelect filter input tracks the highlighted
+  option id; Escape/outside-click return focus to the trigger.
+
+## Validation
+
+- `tsc --noEmit` clean; vitest 473/473; sidecar tests 466/466.
+- New `web/e2e/searchable-select.spec.ts` (3 specs: filter+keyboard select, Escape +
+  focus return, SQL server subtitles) — all pass.
+- Selector regression sweep (AKS/Redis/SB/SQL/Storage, 73 specs) — all pass.
+- Full Playwright suite 345/345 — including a de-flaked monitoring snooze spec
+  (URL-driven tab switch raced a non-retrying `isVisible()`; now waits on
+  `history.or(empty)`).
+- Aikido MCP scan: server not installed in this environment — flagged to user; run
+  `aikido_full_scan` on the changed files once configured.

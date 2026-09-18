@@ -11,6 +11,7 @@ import {
     useUpdateSearchParams,
 } from "@/lib/hooks";
 import type { SqlQueryResult } from "@/lib/types";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { SchemaTree } from "./SchemaTree";
 import { SqlEditor } from "./SqlEditor";
 import { ResultsGrid } from "./ResultsGrid";
@@ -186,22 +187,23 @@ export function SqlPage() {
                 >
                     SQL
                 </h1>
-                <select
+                <SearchableSelect
+                    items={connectionGroups.flatMap(([server, conns]) =>
+                        conns.map((c) => ({
+                            value: c.id,
+                            label: c.database || c.displayName,
+                            subtitle: server,
+                        })),
+                    )}
                     value={resolvedConnectionId}
-                    onChange={(e) => handleConnectionChange(e.target.value)}
-                    className="rounded-md border bg-card px-3 py-1.5 text-sm"
-                    data-testid="sql-connection-select"
-                >
-                    {connectionGroups.map(([server, conns]) => (
-                        <optgroup key={server} label={server}>
-                            {conns.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                    {c.database || c.displayName}
-                                </option>
-                            ))}
-                        </optgroup>
-                    ))}
-                </select>
+                    onChange={(item) => handleConnectionChange(item.value)}
+                    placeholder="Select connection..."
+                    filterPlaceholder="Filter connections..."
+                    testId="sql-connection"
+                    nativeSelectTestId="sql-connection-select"
+                    listAriaLabel="SQL connections"
+                    buttonClassName="min-w-[14rem]"
+                />
                 {databases.data && databases.data.length > 1 && (
                     <select
                         value={effectiveDatabase ?? ""}
@@ -295,6 +297,13 @@ export function SqlPage() {
                                     disabled={
                                         !editorSql.trim() || runQuery.isPending
                                     }
+                                    title={
+                                        runQuery.isPending
+                                            ? "Running…"
+                                            : !editorSql.trim()
+                                              ? "Write a query first"
+                                              : undefined
+                                    }
                                     className="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
                                     data-testid="sql-run-query"
                                 >
@@ -307,6 +316,7 @@ export function SqlPage() {
                                     <button
                                         onClick={() => setSaveOpen((v) => !v)}
                                         disabled={!editorSql.trim()}
+                                        title={!editorSql.trim() ? "Write a query first" : undefined}
                                         className="flex items-center gap-1 rounded border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
                                         data-testid="sql-save-query-open"
                                         aria-expanded={saveOpen}
@@ -362,6 +372,7 @@ export function SqlPage() {
                                                         )
                                                     }
                                                     disabled={!saveName.trim() || saveQuery.isPending}
+                                                    title={saveQuery.isPending ? "Saving…" : !saveName.trim() ? "Name the query first" : undefined}
                                                     className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50"
                                                     data-testid="sql-save-popover-submit"
                                                 >

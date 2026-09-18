@@ -215,6 +215,7 @@ export function GeneralSettings() {
               }
             }}
             disabled={exportSettings.isPending}
+            title={exportSettings.isPending ? "Exporting…" : undefined}
             className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
@@ -223,6 +224,7 @@ export function GeneralSettings() {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={importSettings.isPending}
+            title={importSettings.isPending ? "Importing…" : undefined}
             className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
           >
             <Upload className="h-4 w-4" />

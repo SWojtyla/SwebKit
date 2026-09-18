@@ -401,6 +401,7 @@ function ConnectionRow({
                 <button
                     onClick={() => test.mutate(formValues)}
                     disabled={test.isPending || !formValues.server.trim()}
+                    title={test.isPending ? "Testing…" : !formValues.server.trim() ? "Enter a server first" : undefined}
                     className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid={`sql-test-connection-${connection.id}`}
                 >
@@ -412,6 +413,7 @@ function ConnectionRow({
                         browse.mutate(formValues);
                     }}
                     disabled={browse.isPending || !formValues.server.trim()}
+                    title={browse.isPending ? "Loading…" : !formValues.server.trim() ? "Enter a server first" : undefined}
                     className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid={`sql-browse-databases-${connection.id}`}
                 >

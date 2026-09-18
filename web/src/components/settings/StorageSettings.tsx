@@ -235,6 +235,7 @@ function AccountRow({
                 <button
                     onClick={() => test.refetch()}
                     disabled={test.isFetching}
+                    title={test.isFetching ? "Testing…" : undefined}
                     className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid={`storage-test-connection-${account.id}`}
                 >

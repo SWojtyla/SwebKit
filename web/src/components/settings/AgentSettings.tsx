@@ -367,6 +367,7 @@ export function AgentSettings() {
                                 <button
                                     onClick={() => runTest(i)}
                                     disabled={testingId === p.id}
+                                    title={testingId === p.id ? "Testing…" : undefined}
                                     className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                                     data-testid={`agent-profile-test-${p.id}`}
                                 >
@@ -560,6 +561,7 @@ function ObservabilitySettings({
                         type="button"
                         onClick={() => resources.refetch()}
                         disabled={resources.isLoading}
+                        title={resources.isLoading ? "Loading resources…" : undefined}
                         className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
                         data-testid="observability-refresh"
                     >

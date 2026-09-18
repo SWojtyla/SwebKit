@@ -14,7 +14,7 @@ import type {
 export function useProfile() {
   return useQuery({
     queryKey: ["profile"],
-    queryFn: () => apiFetch<ProfileData>("/api/config/profiles"),
+    queryFn: ({ signal }) => apiFetch<ProfileData>("/api/config/profiles", { signal }),
   });
 }
 
@@ -95,7 +95,7 @@ export function useTogglePinnedResource() {
 export function useUserSettings() {
   return useQuery({
     queryKey: ["user-settings"],
-    queryFn: () => apiFetch<UserSettings>("/api/config/user-settings"),
+    queryFn: ({ signal }) => apiFetch<UserSettings>("/api/config/user-settings", { signal }),
   });
 }
 
@@ -155,7 +155,7 @@ export function useImportSettings() {
 export function useEnvironments() {
   return useQuery({
     queryKey: ["environments"],
-    queryFn: () => apiFetch<EnvironmentsResponse>("/api/config/environments"),
+    queryFn: ({ signal }) => apiFetch<EnvironmentsResponse>("/api/config/environments", { signal }),
   });
 }
 
@@ -178,7 +178,7 @@ export function useUpdateEnvironments() {
 export function useHealth() {
   return useQuery({
     queryKey: ["health"],
-    queryFn: () => apiFetch<{ status: string; version: string }>("/health"),
+    queryFn: ({ signal }) => apiFetch<{ status: string; version: string }>("/health", { signal }),
     refetchInterval: 10_000,
   });
 }
@@ -188,7 +188,7 @@ export function useHealth() {
 export function useDemoMode() {
   return useQuery({
     queryKey: ["demo-mode"],
-    queryFn: () => apiFetch<{ isDemoMode: boolean }>("/api/demo-mode"),
+    queryFn: ({ signal }) => apiFetch<{ isDemoMode: boolean }>("/api/demo-mode", { signal }),
   });
 }
 
@@ -213,7 +213,7 @@ export function useToggleDemoMode() {
 export function useObservabilityResources() {
   return useQuery({
     queryKey: ["observability-resources"],
-    queryFn: () => apiFetch<ObservabilityResource[]>("/api/observability/resources"),
+    queryFn: ({ signal }) => apiFetch<ObservabilityResource[]>("/api/observability/resources", { signal }),
     retry: false,
     staleTime: 60_000,
   });

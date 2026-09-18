@@ -8,8 +8,8 @@
 | ------ | ------ | ----- |
 | 1. AKS context switching & namespaces | Done | committed b84a098 on sw/settings-profiles-aks-shell-fixes |
 | 2. Startup warm-up & resume | Done | committed 46c2168 |
-| 3. Page restore & deep-link parity | Review | implemented + verified; awaiting user review |
-| 4. Consistency & polish sweep | Proposed | SearchableSelect, signal audit, notify audit, a11y, QueryState |
+| 3. Page restore & deep-link parity | Done | committed 3fabd6f; full suite green |
+| 4. Consistency & polish sweep | Review | implemented + verified; awaiting user review |
 
 ## Done
 
@@ -96,6 +96,27 @@
 - **Monitoring** (`MonitoringPage`): `?tab=` for rules|history.
 - **Service Bus** (`ServiceBusPage`): empty state → Settings → Service Bus CTA.
 
+### Module 4 — consistency & polish sweep (`web/`)
+
+- `SearchableSelect` shared component (`web/src/components/shared/SearchableSelect.tsx`):
+  trigger + filter + full keyboard nav + Escape + outside-click + focus return,
+  `aria-haspopup`/`aria-expanded`/`aria-activedescendant`, optional `sr-only` native
+  `<select>` for Playwright/screen-reader parity. Adopted by Redis cache, Storage
+  account, SQL connection (server subtitle), Service Bus namespace; `ContextSelector`
+  is now a thin MRU/pending-label wrapper.
+- Signal audit: every live `queryFn` destructures `{ signal }`; api.ts helper wrappers
+  take optional `AbortSignal`; raw `fetch` in `useAksResourceYaml` passes it too.
+  Zero remaining `queryFn: () =>` hits in `web/src`.
+- Mutation audit: `useAksHelmRollback` → `useNotifyMutation` (was silent on both
+  success and error). Apply/validate YAML, port-forward/shell, storage mutations and
+  `useTogglePinnedResource` verified to notify or surface errors inline.
+- Loading/empty/error: Storage container list + Redis key-browser branches →
+  `QueryState`; Monitoring/SB already used shared primitives.
+- Disabled controls: ~70 audited — every disabled button/input now shows a
+  conditional `title` reason.
+- De-flaked monitoring snooze spec (waits on `history.or(empty)` after the
+  URL-driven tab switch).
+
 ## Validation
 
 - `dotnet build` sidecar + app: 0 warnings, 0 errors.
@@ -117,6 +138,10 @@
   CTAs); regression sweep of 98 storage/redis/sql/monitoring/sb-url-state specs
   — all green; `aks-url-state` + `workspace-resume` re-verified after the
   shared-hook refactor.
+- Module 4: **3 new** `e2e/searchable-select.spec.ts` (filter+keyboard select,
+  Escape + focus return, SQL server subtitles); 73-spec selector regression
+  sweep green; full Playwright suite **345/345**; vitest 473/473; sidecar
+  466/466; `tsc` clean.
 - Aikido MCP scan: **server not installed** in this environment — flagged to
   user; run `aikido_full_scan` on the changed files once configured.
 
@@ -131,4 +156,5 @@
 
 ## Next
 
-- User review of Module 3, then Module 4 (consistency & polish sweep).
+- User review of Module 4; optional stretch items (palette context-switching,
+  namespace MRU badges) remain unscheduled.

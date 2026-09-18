@@ -100,6 +100,7 @@ export function BrowsePanel({ connectionId, database, schema, table }: BrowsePan
           <button
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
+            title={page === 0 ? "Already on the first page" : undefined}
             className="rounded border p-1 hover:bg-accent disabled:opacity-40"
             data-testid="sql-browse-prev"
             aria-label="Previous page"
@@ -110,6 +111,7 @@ export function BrowsePanel({ connectionId, database, schema, table }: BrowsePan
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={(rows.data?.rows.length ?? 0) < PAGE_SIZE}
+            title={(rows.data?.rows.length ?? 0) < PAGE_SIZE ? "No more rows" : undefined}
             className="rounded border p-1 hover:bg-accent disabled:opacity-40"
             data-testid="sql-browse-next"
             aria-label="Next page"

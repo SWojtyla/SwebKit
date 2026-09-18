@@ -53,7 +53,7 @@ function useAksContextKey(): string {
 export function useAksTestConnection(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["aks-test"],
-    queryFn: () => apiFetch<{ connected: boolean; error?: string }>("/api/aks/test"),
+    queryFn: ({ signal }) => apiFetch<{ connected: boolean; error?: string }>("/api/aks/test", { signal }),
     enabled: options?.enabled ?? true,
   });
 }
@@ -403,7 +403,7 @@ export function useAksHelmNotes(ns: string | null, release: string | null, optio
   const ctx = useAksContextKey();
   return useQuery({
     queryKey: ["aks-helm-notes", ctx, ns, release],
-    queryFn: () => getHelmReleaseNotes(ns!, release!),
+    queryFn: ({ signal }) => getHelmReleaseNotes(ns!, release!, signal),
     enabled: !!ns && !!release && (options?.enabled ?? true),
   });
 }
@@ -412,21 +412,18 @@ export function useAksHelmManifest(ns: string | null, release: string | null, op
   const ctx = useAksContextKey();
   return useQuery({
     queryKey: ["aks-helm-manifest", ctx, ns, release],
-    queryFn: () => getHelmReleaseManifest(ns!, release!),
+    queryFn: ({ signal }) => getHelmReleaseManifest(ns!, release!, signal),
     enabled: !!ns && !!release && (options?.enabled ?? true),
   });
 }
 
 export function useAksHelmRollback() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { ns: string; release: string; targetRevision: number }) =>
+  return useNotifyMutation<unknown, { ns: string; release: string; targetRevision: number }>({
+    mutationFn: (vars) =>
       apiSend(`/api/aks/${vars.ns}/helm-releases/${vars.release}/rollback?targetRevision=${vars.targetRevision}`, "POST"),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["aks-helm-history"] });
-      qc.invalidateQueries({ queryKey: ["aks-helm-values"] });
-      qc.invalidateQueries({ queryKey: ["aks-helm"] });
-    },
+    successMessage: (_, vars) => `Rollback of ${vars.release} to revision ${vars.targetRevision} started`,
+    errorPrefix: "Couldn't roll back release",
+    invalidateKeys: [["aks-helm-history"], ["aks-helm-values"], ["aks-helm"]],
   });
 }
 
@@ -434,8 +431,8 @@ export function useAksResourceYaml(ns: string | null, kind: string | null, name:
   const ctx = useAksContextKey();
   return useQuery({
     queryKey: ["aks-yaml", ctx, ns, kind, name],
-    queryFn: async () => {
-      const res = await fetch(`${SIDECAR_BASE_URL}/api/aks/${ns}/yaml/${kind}/${name}`);
+    queryFn: async ({ signal }) => {
+      const res = await fetch(`${SIDECAR_BASE_URL}/api/aks/${ns}/yaml/${kind}/${name}`, { signal });
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         throw new Error(`API ${res.status}: ${body || res.statusText}`);
@@ -476,7 +473,7 @@ export function useAksContainerDetails(ns: string | null, podName: string | null
   const ctx = useAksContextKey();
   return useQuery({
     queryKey: ["aks-container-details", ctx, ns, podName],
-    queryFn: () => apiFetch<ContainerDetail[]>(`/api/aks/${ns}/pods/${podName}/containers`),
+    queryFn: ({ signal }) => apiFetch<ContainerDetail[]>(`/api/aks/${ns}/pods/${podName}/containers`, { signal }),
     enabled: !!ns && !!podName,
   });
 }

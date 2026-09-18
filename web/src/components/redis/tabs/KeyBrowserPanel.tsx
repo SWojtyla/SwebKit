@@ -3,6 +3,7 @@ import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder } from "lucide-rea
 import { useRedisPageContext, redisRowKey, type FlatRedisRow } from "../RedisPageContext";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRedisKeyInfoBatch } from "@/lib/hooks";
+import { QueryState } from "@/components/shared/QueryState";
 import { typeColors } from "./KeyDetailPanel";
 import { formatTtl } from "@/lib/redis-format";
 
@@ -241,6 +242,7 @@ export function KeyBrowserPanel() {
             <button
               onClick={() => ctx.setSelectedKeys(new Set())}
               disabled={ctx.selectedKeys.size === 0}
+              title={ctx.selectedKeys.size === 0 ? "Select keys first" : undefined}
               className="rounded border px-2 py-1 hover:bg-accent disabled:opacity-50"
               data-testid="redis-batch-clear"
             >
@@ -249,6 +251,7 @@ export function KeyBrowserPanel() {
             <button
               onClick={ctx.handleExportSelected}
               disabled={ctx.selectedKeys.size === 0}
+              title={ctx.selectedKeys.size === 0 ? "Select keys to export" : undefined}
               className="rounded border px-2 py-1 hover:bg-accent disabled:opacity-50"
               data-testid="redis-batch-export"
             >
@@ -257,6 +260,7 @@ export function KeyBrowserPanel() {
             <button
               onClick={ctx.handleBatchDelete}
               disabled={ctx.selectedKeys.size === 0}
+              title={ctx.selectedKeys.size === 0 ? "Select keys to delete" : undefined}
               className="rounded border border-destructive px-2 py-1 text-destructive hover:bg-destructive/10 disabled:opacity-50"
               data-testid="redis-batch-delete"
             >
@@ -267,17 +271,16 @@ export function KeyBrowserPanel() {
       </div>
 
       <div ref={ctx.redisTreeRef} className="flex-1 overflow-auto" data-testid="redis-key-tree-scroll">
-        {ctx.scanResult.isLoading && (
-          <div className="p-3 text-sm text-muted-foreground">Loading keys...</div>
-        )}
-        {ctx.scanResult.error && (
-          <div className="p-3 text-sm text-destructive" data-testid="redis-key-error">
-            Error: {ctx.scanResult.error.message}
-          </div>
-        )}
-        {ctx.namespaceTree.length === 0 && !ctx.scanResult.isLoading && (
-          <div className="p-3 text-sm text-muted-foreground">No keys found</div>
-        )}
+        <QueryState
+          isLoading={ctx.scanResult.isLoading}
+          error={ctx.scanResult.error}
+          data={ctx.namespaceTree}
+          emptyTitle="No keys found"
+          emptyDescription="Adjust the pattern or load more keys."
+          skeletonRows={8}
+        >
+          {() => null}
+        </QueryState>
         {ctx.flatRedisRows.length > 0 && (
           <div
             style={{ height: `${redisVirtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
@@ -318,6 +321,7 @@ export function KeyBrowserPanel() {
                 data-testid="redis-load-all"
                 onClick={ctx.handleLoadAll}
                 disabled={ctx.loadAllActive}
+                title={ctx.loadAllActive ? "Loading all keys…" : undefined}
                 className="flex-1 rounded border px-3 py-1.5 text-sm text-primary hover:bg-accent disabled:opacity-50"
               >
                 {ctx.loadAllActive ? "Loading all..." : "Load all"}

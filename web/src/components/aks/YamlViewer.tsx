@@ -134,6 +134,7 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
               <button
                 onClick={handleValidate}
                 disabled={isBusy || !editedYaml.trim()}
+                title={isBusy ? "A YAML operation is in progress" : !editedYaml.trim() ? "YAML is empty" : undefined}
                 className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                 data-testid="yaml-validate"
               >
@@ -147,6 +148,7 @@ export function YamlViewer({ ns, kind, name, onClose }: YamlViewerProps) {
               <button
                 onClick={handleApply}
                 disabled={isBusy || !editedYaml.trim()}
+                title={isBusy ? "A YAML operation is in progress" : !editedYaml.trim() ? "YAML is empty" : undefined}
                 className="flex items-center gap-1 rounded border border-primary bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20 disabled:opacity-50"
                 data-testid="yaml-apply"
               >

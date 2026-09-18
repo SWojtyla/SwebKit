@@ -56,11 +56,11 @@ export function AlertRuleDialog({
   const { data: aksNamespaces } = useAksNamespaces();
   const { data: sbNamespaces } = useQuery({
     queryKey: ["sb-namespaces-list"],
-    queryFn: () => getServiceBusNamespaces(),
+    queryFn: ({ signal }) => getServiceBusNamespaces(signal),
   });
   const { data: redisCaches } = useQuery({
     queryKey: ["redis-caches-list"],
-    queryFn: () => getRedisCaches(),
+    queryFn: ({ signal }) => getRedisCaches(signal),
   });
 
   const set = (patch: Partial<MonitoringAlertRule>) => setDraft((d) => ({ ...d, ...patch }));
@@ -295,6 +295,7 @@ export function AlertRuleDialog({
           <button
             onClick={save}
             disabled={!isComplete}
+            title={!isComplete ? "Fill in the required fields for the selected signal source" : undefined}
             className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
             data-testid="alert-rule-dialog-save"
           >

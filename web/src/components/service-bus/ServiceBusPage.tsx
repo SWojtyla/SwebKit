@@ -14,6 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { EntityTree } from "./EntityTree";
 import { MessageList } from "./MessageList";
 import { MessageDetail } from "./MessageDetail";
@@ -268,21 +269,22 @@ export function ServiceBusPage() {
       {/* Namespace selector + compose button */}
       <div className="flex items-center gap-3 border-b px-4 py-2">
         <span className="text-sm font-medium">Namespace:</span>
-        <select
-          data-testid="sb-namespace-select"
-          value={selectedNsId ?? ""}
-          onChange={(e) => {
-            setSelectedNsId(e.target.value || null);
-          }}
-          className="rounded-md border bg-card px-3 py-1.5 text-sm"
-        >
-          <option value="">Select namespace...</option>
-          {namespaces.map((ns) => (
-            <option key={ns.id} value={ns.id}>
-              {ns.alias || ns.fullyQualifiedNamespace}
-            </option>
-          ))}
-        </select>
+        <SearchableSelect
+          items={namespaces.map((ns) => ({
+            value: ns.id,
+            label: ns.alias || ns.fullyQualifiedNamespace,
+            subtitle: ns.alias ? ns.fullyQualifiedNamespace : undefined,
+          }))}
+          value={selectedNsId}
+          onChange={(item) => setSelectedNsId(item.value || null)}
+          placeholder="Select namespace..."
+          filterPlaceholder="Filter namespaces..."
+          testId="sb-namespace"
+          nativeSelectTestId="sb-namespace-select"
+          nativeExtraOptions={[{ value: "", label: "Select namespace..." }]}
+          listAriaLabel="Service Bus namespaces"
+          buttonClassName="min-w-[14rem]"
+        />
         {namespaces.length === 0 && (
           <button
             onClick={() => navigate("/settings", { state: { tab: "service-bus" } })}
@@ -304,6 +306,7 @@ export function ServiceBusPage() {
           data-testid="sb-entity-search"
           onClick={() => setShowEntityPalette(true)}
           disabled={!selectedNsId}
+          title={!selectedNsId ? "Select a namespace first" : undefined}
           className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
         >
           <Search className="h-3.5 w-3.5" />
@@ -313,6 +316,7 @@ export function ServiceBusPage() {
           data-testid="sb-compose-button"
           onClick={() => setComposerMode("compose")}
           disabled={!selectedNsId}
+          title={!selectedNsId ? "Select a namespace first" : undefined}
           className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -322,6 +326,7 @@ export function ServiceBusPage() {
           data-testid="sb-batch-send-button"
           onClick={() => setShowBatchSend(true)}
           disabled={!selectedNsId}
+          title={!selectedNsId ? "Select a namespace first" : undefined}
           className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
         >
           <Upload className="h-3.5 w-3.5" />
@@ -331,6 +336,7 @@ export function ServiceBusPage() {
           data-testid="sb-scheduled-button"
           onClick={() => setShowScheduled(true)}
           disabled={!selectedNsId || !selectedEntity}
+          title={!selectedNsId ? "Select a namespace first" : !selectedEntity ? "Select a queue or topic first" : undefined}
           className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
         >
           <Clock className="h-3.5 w-3.5" />
@@ -340,6 +346,7 @@ export function ServiceBusPage() {
           data-testid="sb-batch-replay-button"
           onClick={() => setShowBatchReplay(true)}
           disabled={!selectedNsId || !selectedEntity}
+          title={!selectedNsId ? "Select a namespace first" : !selectedEntity ? "Select a queue or topic first" : undefined}
           className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
         >
           <RotateCcw className="h-3.5 w-3.5" />

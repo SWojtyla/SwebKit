@@ -127,6 +127,7 @@ function AksPageContent() {
                                 ws.setAutoRefresh(e.target.checked)
                             }
                             disabled={!ws.namespaceToken}
+                            title={!ws.namespaceToken ? "Namespace is still loading" : undefined}
                             data-testid="aks-auto-refresh-checkbox"
                         />
                         <span>Auto</span>
@@ -137,6 +138,7 @@ function AksPageContent() {
                             ws.setRefreshInterval(Number(e.target.value))
                         }
                         disabled={!ws.autoRefresh || !ws.namespaceToken}
+                        title={!ws.namespaceToken ? "Namespace is still loading" : !ws.autoRefresh ? "Enable Auto to pick an interval" : undefined}
                         className="rounded-md border bg-card px-2 py-1 text-xs disabled:opacity-40"
                         aria-label="Auto-refresh interval"
                         data-testid="aks-refresh-interval"
@@ -157,6 +159,7 @@ function AksPageContent() {
                     <button
                         onClick={ws.handleManualRefresh}
                         disabled={!ws.namespaceToken}
+                        title={!ws.namespaceToken ? "Namespace is still loading" : "Refresh the resources in view"}
                         className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                         data-testid="aks-refresh-btn"
                     >
@@ -174,6 +177,7 @@ function AksPageContent() {
                             ws.openMultiPodLogs(pods);
                         }}
                         disabled={!ws.namespaceToken || ws.podsFetching}
+                        title={!ws.namespaceToken ? "Namespace is still loading" : ws.podsFetching ? "Pods are still loading" : "Stream logs from all pods at once"}
                         className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                         data-testid="aks-multi-pod-logs"
                     >

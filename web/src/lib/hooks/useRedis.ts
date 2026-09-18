@@ -30,7 +30,7 @@ import type {
 export function useRedisTestConnection(cacheId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["redis", cacheId, "test"],
-    queryFn: () => apiFetch<{ connected: boolean; error?: string }>(`/api/redis/${cacheId}/test`),
+    queryFn: ({ signal }) => apiFetch<{ connected: boolean; error?: string }>(`/api/redis/${cacheId}/test`, { signal }),
     enabled: !!cacheId && (options?.enabled ?? true),
   });
 }
@@ -38,7 +38,7 @@ export function useRedisTestConnection(cacheId: string | null, options?: { enabl
 export function useRedisServerInfo(cacheId: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "info"],
-    queryFn: () => apiFetch<RedisServerInfo>(`/api/redis/${cacheId}/info`),
+    queryFn: ({ signal }) => apiFetch<RedisServerInfo>(`/api/redis/${cacheId}/info`, { signal }),
     enabled: !!cacheId,
   });
 }
@@ -56,7 +56,7 @@ export function useRedisKeyspaceHealth(
 ) {
   return useQuery<RedisKeyspaceHealthReport>({
     queryKey: ["redis", cacheId, "health", keys, separator],
-    queryFn: () => analyzeRedisKeyspace(cacheId!, keys, separator),
+    queryFn: ({ signal }) => analyzeRedisKeyspace(cacheId!, keys, separator, signal),
     enabled: !!cacheId && keys.length > 0 && (options?.enabled ?? true),
   });
 }
@@ -69,7 +69,7 @@ export function useRedisPrefixMemory(
 ) {
   return useQuery<RedisPrefixMemoryBucket[]>({
     queryKey: ["redis", cacheId, "prefix-memory", keys, separator],
-    queryFn: () => getRedisPrefixMemory(cacheId!, keys, separator),
+    queryFn: ({ signal }) => getRedisPrefixMemory(cacheId!, keys, separator, signal),
     enabled: !!cacheId && keys.length > 0 && (options?.enabled ?? true),
   });
 }
@@ -147,7 +147,7 @@ export function useRedisKeyInfoBatch(cacheId: string | null, keys: string[]): Ma
 export function useRedisKeyValue(cacheId: string | null, key: string | null, keyType: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "keys", key, "value"],
-    queryFn: () => apiFetch<{ value: string | null }>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/value`),
+    queryFn: ({ signal }) => apiFetch<{ value: string | null }>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/value`, { signal }),
     enabled: !!cacheId && !!key && keyType === "string",
   });
 }
@@ -155,7 +155,7 @@ export function useRedisKeyValue(cacheId: string | null, key: string | null, key
 export function useRedisHashFields(cacheId: string | null, key: string | null, keyType: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "keys", key, "hash"],
-    queryFn: () => apiFetch<RedisHashField[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/hash`),
+    queryFn: ({ signal }) => apiFetch<RedisHashField[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/hash`, { signal }),
     enabled: !!cacheId && !!key && keyType === "hash",
   });
 }
@@ -163,7 +163,7 @@ export function useRedisHashFields(cacheId: string | null, key: string | null, k
 export function useRedisListItems(cacheId: string | null, key: string | null, keyType: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "keys", key, "list"],
-    queryFn: () => apiFetch<string[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/list`),
+    queryFn: ({ signal }) => apiFetch<string[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/list`, { signal }),
     enabled: !!cacheId && !!key && keyType === "list",
   });
 }
@@ -171,7 +171,7 @@ export function useRedisListItems(cacheId: string | null, key: string | null, ke
 export function useRedisSetMembers(cacheId: string | null, key: string | null, keyType: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "keys", key, "set"],
-    queryFn: () => apiFetch<string[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/set`),
+    queryFn: ({ signal }) => apiFetch<string[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/set`, { signal }),
     enabled: !!cacheId && !!key && keyType === "set",
   });
 }
@@ -179,7 +179,7 @@ export function useRedisSetMembers(cacheId: string | null, key: string | null, k
 export function useRedisSortedSetMembers(cacheId: string | null, key: string | null, keyType: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "keys", key, "zset"],
-    queryFn: () => apiFetch<RedisSortedSetEntry[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/zset`),
+    queryFn: ({ signal }) => apiFetch<RedisSortedSetEntry[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/zset`, { signal }),
     enabled: !!cacheId && !!key && keyType === "zset",
   });
 }
@@ -187,7 +187,7 @@ export function useRedisSortedSetMembers(cacheId: string | null, key: string | n
 export function useRedisSlowLog(cacheId: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "slowlog"],
-    queryFn: () => apiFetch<RedisSlowLogSummary>(`/api/redis/${cacheId}/slowlog?top=50`),
+    queryFn: ({ signal }) => apiFetch<RedisSlowLogSummary>(`/api/redis/${cacheId}/slowlog?top=50`, { signal }),
     enabled: !!cacheId,
   });
 }
@@ -195,7 +195,7 @@ export function useRedisSlowLog(cacheId: string | null) {
 export function useRedisPubSub(cacheId: string | null, pattern: string | null = null) {
   return useQuery<RedisPubSubSnapshot>({
     queryKey: ["redis", cacheId, "pubsub", pattern],
-    queryFn: () => getRedisPubSubSnapshot(cacheId!, pattern),
+    queryFn: ({ signal }) => getRedisPubSubSnapshot(cacheId!, pattern, signal),
     enabled: !!cacheId,
   });
 }

@@ -36,6 +36,7 @@ export function CrossFeatureDemoButton({ className }: { className?: string }) {
     <button
       onClick={handleRun}
       disabled={toggleDemo.isPending}
+      title={toggleDemo.isPending ? "Preparing the demo scenario…" : undefined}
       className={`inline-flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-50 ${className ?? ""}`}
       data-testid="cross-feature-demo-button"
     >

@@ -16,7 +16,7 @@ import type { MonitoringAlertRule, AlertFiredEvent, AlertSignalStatus, Proactive
 export function useMonitoringRules(enabled = true) {
   return useQuery({
     queryKey: ["monitoring", "rules"],
-    queryFn: () => getMonitoringRules(),
+    queryFn: ({ signal }) => getMonitoringRules(signal),
     enabled,
   });
 }
@@ -60,7 +60,7 @@ export function useDeleteMonitoringRule() {
 export function useMonitoringHistory() {
   return useQuery({
     queryKey: ["monitoring", "history"],
-    queryFn: () => getMonitoringHistory(),
+    queryFn: ({ signal }) => getMonitoringHistory(signal),
     refetchInterval: 15_000,
   });
 }

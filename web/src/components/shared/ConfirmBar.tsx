@@ -57,6 +57,7 @@ export function ConfirmBar({
       <button
         onClick={onConfirm}
         disabled={!canConfirm}
+        title={!canConfirm ? (requireTypedName && typed !== requireTypedName ? `Type "${requireTypedName}" to confirm` : "Unavailable right now") : undefined}
         className="rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         data-testid={confirmTestId ?? `${testId}-yes`}
       >

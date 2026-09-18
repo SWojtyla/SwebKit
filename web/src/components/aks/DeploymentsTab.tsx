@@ -82,6 +82,7 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
           <button
             onClick={() => restart(dep)}
             disabled={restartMutation.isPending}
+            title={restartMutation.isPending ? "Restarting…" : undefined}
             className="rounded border px-2 py-1 text-xs hover:bg-accent"
           >
             Restart

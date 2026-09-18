@@ -253,6 +253,7 @@ export function NamespaceSelector({
               type="button"
               onClick={apply}
               disabled={!hasChanges}
+              title={!hasChanges ? "No changes to apply — tick namespaces to build a multi-selection, or click a name to select just it" : undefined}
               className="rounded bg-primary px-3 py-1 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               Apply {pending.length > 0 && `(${pending.length})`}

@@ -233,6 +233,7 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
                 data-testid="message-complete-button"
                 onClick={onComplete}
                 disabled={completeMutation.isPending}
+                title={completeMutation.isPending ? "Completing…" : undefined}
                 className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
                 Complete
@@ -244,6 +245,7 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
                   data-testid="message-resubmit-button"
                   onClick={onResubmit}
                   disabled={resubmitMutation.isPending}
+                  title={resubmitMutation.isPending ? "Resubmitting…" : undefined}
                   className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
                 >
                   Resubmit
@@ -252,6 +254,7 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
                   data-testid="message-complete-dlq-button"
                   onClick={onCompleteDlq}
                   disabled={completeDlqMutation.isPending}
+                  title={completeDlqMutation.isPending ? "Completing…" : undefined}
                   className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
                 >
                   Complete DLQ
@@ -364,6 +367,7 @@ export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEdit
             data-testid="template-save-confirm"
             onClick={onSaveAsTemplate}
             disabled={!templateName.trim() || saveTemplateMutation.isPending}
+            title={saveTemplateMutation.isPending ? "Saving…" : !templateName.trim() ? "Name the template first" : undefined}
             className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             Save

@@ -271,10 +271,9 @@ test.describe("Monitoring", () => {
     await page.goto("/monitoring");
     await page.getByTestId("monitoring-tab-history").click();
     const history = page.getByTestId("monitoring-history-panel");
-    if (!(await history.isVisible())) {
-      await expect(page.getByTestId("monitoring-history-empty")).toBeVisible();
-      return;
-    }
+    const empty = page.getByTestId("monitoring-history-empty");
+    await expect(history.or(empty)).toBeVisible();
+    if (!(await history.isVisible())) return;
 
     const row = history.locator("[data-testid^='monitoring-history-row-']").first();
     await expect(row).toBeVisible();

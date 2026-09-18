@@ -176,6 +176,7 @@ export function PortForwardPanel({
                         <button
                             onClick={handleStart}
                             disabled={!pod || !remotePort || loading}
+                            title={loading ? "Starting…" : !pod ? "Pick a pod first" : !remotePort ? "Enter a remote port" : undefined}
                             className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50"
                             data-testid="port-forward-start"
                         >

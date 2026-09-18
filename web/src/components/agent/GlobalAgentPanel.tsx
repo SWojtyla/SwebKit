@@ -130,6 +130,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
               <button
                 onClick={handleClear}
                 disabled={isClearPending}
+                title={isClearPending ? "Clearing…" : undefined}
                 className="rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
                 data-testid="global-agent-panel-clear-confirm"
               >
@@ -163,6 +164,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
               <button
                 onClick={() => setShowClearConfirm(true)}
                 disabled={messages.length === 0}
+                title={messages.length === 0 ? "Nothing to clear" : undefined}
                 className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                 data-testid="global-agent-panel-clear"
               >
@@ -282,6 +284,7 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
             <button
               onClick={handleSend}
               disabled={!input.trim()}
+              title={!input.trim() ? "Type a message first" : undefined}
               className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               data-testid="global-agent-panel-send"
             >

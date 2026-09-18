@@ -266,7 +266,7 @@ export function useSbCancelScheduled() {
 export function useSbTemplates() {
   return useQuery({
     queryKey: ["sb-templates"],
-    queryFn: () => apiFetch<SbMessageTemplate[]>("/api/servicebus/templates"),
+    queryFn: ({ signal }) => apiFetch<SbMessageTemplate[]>("/api/servicebus/templates", { signal }),
   });
 }
 

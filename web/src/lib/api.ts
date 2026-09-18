@@ -272,8 +272,8 @@ export interface ProactiveInsightReadyEvent {
   sessionId: string;
 }
 
-export async function getMonitoringRules(): Promise<MonitoringAlertRule[]> {
-  return apiFetch<MonitoringAlertRule[]>("/api/monitoring/rules");
+export async function getMonitoringRules(signal?: AbortSignal): Promise<MonitoringAlertRule[]> {
+  return apiFetch<MonitoringAlertRule[]>("/api/monitoring/rules", { signal });
 }
 
 export async function createMonitoringRule(rule: MonitoringAlertRule): Promise<MonitoringAlertRule> {
@@ -288,8 +288,8 @@ export async function deleteMonitoringRule(id: string): Promise<void> {
   await apiSend<void>(`/api/monitoring/rules/${id}`, "DELETE");
 }
 
-export async function getMonitoringHistory(): Promise<AlertFiredEvent[]> {
-  return apiFetch<AlertFiredEvent[]>("/api/monitoring/history");
+export async function getMonitoringHistory(signal?: AbortSignal): Promise<AlertFiredEvent[]> {
+  return apiFetch<AlertFiredEvent[]>("/api/monitoring/history", { signal });
 }
 
 export interface SbNamespaceListItem {
@@ -304,14 +304,14 @@ export interface RedisCacheListItem {
 }
 
 /** Returns the configured Service Bus namespaces (alias + id) for the alert entity picker. */
-export async function getServiceBusNamespaces(): Promise<SbNamespaceListItem[]> {
-  const data = await apiFetch<{ serviceBusNamespaces?: SbNamespaceListItem[] }>("/api/config/profiles");
+export async function getServiceBusNamespaces(signal?: AbortSignal): Promise<SbNamespaceListItem[]> {
+  const data = await apiFetch<{ serviceBusNamespaces?: SbNamespaceListItem[] }>("/api/config/profiles", { signal });
   return data.serviceBusNamespaces ?? [];
 }
 
 /** Returns the configured Redis caches (displayName + id) for the alert connection picker. */
-export async function getRedisCaches(): Promise<RedisCacheListItem[]> {
-  const data = await apiFetch<{ config?: { redisConfig?: { caches?: RedisCacheListItem[] } } }>("/api/config/profiles");
+export async function getRedisCaches(signal?: AbortSignal): Promise<RedisCacheListItem[]> {
+  const data = await apiFetch<{ config?: { redisConfig?: { caches?: RedisCacheListItem[] } } }>("/api/config/profiles", { signal });
   return data.config?.redisConfig?.caches ?? [];
 }
 
@@ -335,33 +335,35 @@ export async function exportRedisKeys(cacheId: string, keys: string[]): Promise<
 
 // ── Redis Pub/Sub snapshot ───────────────────────────────────────────────────
 
-export async function getRedisPubSubSnapshot(cacheId: string, pattern: string | null = null): Promise<RedisPubSubSnapshot> {
+export async function getRedisPubSubSnapshot(cacheId: string, pattern: string | null = null, signal?: AbortSignal): Promise<RedisPubSubSnapshot> {
   const params = new URLSearchParams();
   if (pattern) params.set("pattern", pattern);
   const query = params.toString() ? `?${params.toString()}` : "";
-  return apiFetch<RedisPubSubSnapshot>(`/api/redis/${cacheId}/pubsub${query}`);
+  return apiFetch<RedisPubSubSnapshot>(`/api/redis/${cacheId}/pubsub${query}`, { signal });
 }
 
 export async function analyzeRedisKeyspace(
   cacheId: string,
   keys: string[],
   separator: string,
+  signal?: AbortSignal,
 ): Promise<RedisKeyspaceHealthReport> {
   return apiSend<RedisKeyspaceHealthReport>(`/api/redis/${cacheId}/health/analyze`, "POST", {
     keys,
     separator,
-  });
+  }, signal);
 }
 
 export async function getRedisPrefixMemory(
   cacheId: string,
   keys: string[],
   separator: string,
+  signal?: AbortSignal,
 ): Promise<RedisPrefixMemoryBucket[]> {
   return apiSend<RedisPrefixMemoryBucket[]>(`/api/redis/${cacheId}/prefix-memory`, "POST", {
     keys,
     separator,
-  });
+  }, signal);
 }
 
 // ── Settings import/export ─────────────────────────────────────────────────────
@@ -392,12 +394,12 @@ export async function suspendCronJob(ns: string, name: string, suspend: boolean)
   return apiSend(`/api/aks/${encodeURIComponent(ns)}/cronjobs/${encodeURIComponent(name)}/suspend`, "POST", { suspend });
 }
 
-export async function getHelmReleaseNotes(ns: string, release: string): Promise<{ notes: string }> {
-  return apiFetch<{ notes: string }>(`/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/notes`);
+export async function getHelmReleaseNotes(ns: string, release: string, signal?: AbortSignal): Promise<{ notes: string }> {
+  return apiFetch<{ notes: string }>(`/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/notes`, { signal });
 }
 
-export async function getHelmReleaseManifest(ns: string, release: string): Promise<{ manifest: string }> {
-  return apiFetch<{ manifest: string }>(`/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/manifest`);
+export async function getHelmReleaseManifest(ns: string, release: string, signal?: AbortSignal): Promise<{ manifest: string }> {
+  return apiFetch<{ manifest: string }>(`/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/manifest`, { signal });
 }
 
 export async function getAksResourceYaml(ns: string, kind: string, name: string): Promise<string> {

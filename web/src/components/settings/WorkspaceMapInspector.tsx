@@ -264,6 +264,7 @@ export function WorkspaceMapInspector({
                                 setRelLabel("");
                             }}
                             disabled={!relTo}
+                            title={!relTo ? "Pick a target node first" : undefined}
                             className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
                             data-testid="workspace-relationship-add"
                         >

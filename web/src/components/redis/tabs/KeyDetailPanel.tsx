@@ -132,6 +132,7 @@ export function KeyDetailPanel() {
               data-testid="redis-delete-key-btn"
               onClick={() => ctx.requestDeleteKey(ctx.keyInfo.data!.key)}
               disabled={ctx.deleteKey.isPending}
+              title={ctx.deleteKey.isPending ? "Deleting…" : undefined}
               className="flex items-center gap-1 rounded-md border border-destructive px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10"
             >
               <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -155,7 +156,7 @@ export function KeyDetailPanel() {
                 <h3 className="text-sm font-semibold">Value</h3>
                 {ctx.editingValue ? (
                   <div className="flex items-center gap-2">
-                    <button onClick={() => ctx.handleSaveStringValue(ctx.keyInfo.data!.key)} disabled={ctx.setValue.isPending} className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground" data-testid="redis-string-save-btn">
+                    <button onClick={() => ctx.handleSaveStringValue(ctx.keyInfo.data!.key)} disabled={ctx.setValue.isPending} title={ctx.setValue.isPending ? "Saving…" : undefined} className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground" data-testid="redis-string-save-btn">
                       Save
                     </button>
                     <button onClick={() => ctx.setEditingValue(false)} className="rounded border px-2 py-1 text-xs" data-testid="redis-string-cancel-btn">
@@ -343,6 +344,7 @@ export function KeyDetailPanel() {
                   <button
                     onClick={() => ctx.listItemsQuery.fetchNextPage()}
                     disabled={ctx.listItemsQuery.isFetchingNextPage}
+                    title={ctx.listItemsQuery.isFetchingNextPage ? "Loading…" : undefined}
                     className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid="redis-list-load-more"
                   >
@@ -382,6 +384,7 @@ export function KeyDetailPanel() {
                   <button
                     onClick={() => ctx.setMembersQuery.fetchNextPage()}
                     disabled={ctx.setMembersQuery.isFetchingNextPage}
+                    title={ctx.setMembersQuery.isFetchingNextPage ? "Loading…" : undefined}
                     className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid="redis-set-load-more"
                   >

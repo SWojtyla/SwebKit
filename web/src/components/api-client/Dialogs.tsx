@@ -49,6 +49,7 @@ export function NameDialog({ title, label, defaultValue = "", confirmText = "OK"
           <button
             onClick={() => value.trim() && onConfirm(value.trim())}
             disabled={!value.trim()}
+            title={!value.trim() ? "Enter a name first" : undefined}
             className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
             data-testid="name-dialog-confirm"
           >

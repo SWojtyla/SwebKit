@@ -195,6 +195,7 @@ export function AgentPage() {
               data-testid="agent-send"
               onClick={handleSend}
               disabled={!input.trim()}
+              title={!input.trim() ? "Type a message first" : undefined}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               Send
@@ -285,6 +286,7 @@ export function AgentPage() {
               data-testid="agent-clear"
               onClick={() => setShowClearConfirm(true)}
               disabled={messages.length === 0}
+              title={messages.length === 0 ? "Nothing to clear" : undefined}
               className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50"
             >
               Clear

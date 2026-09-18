@@ -113,6 +113,7 @@ export function CollectionImportDialog({ onClose }: CollectionImportDialogProps)
               <button
                 onClick={handleFileImport}
                 disabled={importMutation.isPending || isDemo}
+                title={isDemo ? "Import is not available in demo mode" : importMutation.isPending ? "Importing…" : undefined}
                 className="flex w-full items-center justify-center gap-2 rounded border px-3 py-2 hover:bg-accent disabled:opacity-50"
                 data-testid="collection-import-file-btn"
               >
@@ -127,6 +128,7 @@ export function CollectionImportDialog({ onClose }: CollectionImportDialogProps)
               <button
                 onClick={handleBrunoImport}
                 disabled={importMutation.isPending || isDemo}
+                title={isDemo ? "Import is not available in demo mode" : importMutation.isPending ? "Importing…" : undefined}
                 className="flex w-full items-center justify-center gap-2 rounded border px-3 py-2 hover:bg-accent disabled:opacity-50"
                 data-testid="collection-import-bruno-btn"
               >
