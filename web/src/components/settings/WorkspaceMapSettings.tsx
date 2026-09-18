@@ -1,64 +1,93 @@
-import { Fragment, useState } from "react";
+import { useState } from "react";
+import { List, Network, Plus, Search } from "lucide-react";
 import {
     useProfile,
     useUpdateProfile,
     useWorkspaceTopologyCandidates,
     useWorkspaceTopologySuggestions,
 } from "@/lib/hooks";
-import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { ProfileListLayout } from "./ProfileListLayout";
+import { TopologyGraph } from "@/components/shared/TopologyGraph";
+import { WorkspaceMapAddPicker } from "./WorkspaceMapAddPicker";
+import { WorkspaceMapInspector } from "./WorkspaceMapInspector";
+import { themeColor } from "@/lib/theme-colors";
 import type {
     WorkspaceResourceArea,
+    WorkspaceResourceCandidate,
     WorkspaceResourceNode,
     WorkspaceTopology,
 } from "@/lib/types";
+import {
+    AREA_LABELS,
+    AREAS,
+    buildGraphElements,
+    EMPTY_TOPOLOGY,
+    filterTopology,
+    suggestionKey,
+} from "./workspace-map-utils";
 
-const AREA_LABELS: Record<WorkspaceResourceArea, string> = {
-    Aks: "AKS",
-    ServiceBus: "Service Bus",
-    Redis: "Redis",
-    Sql: "SQL",
-    Storage: "Storage",
+/** Per-area node colors — theme variables, resolved to literal colors at render
+ * (cytoscape can't parse var()/oklch itself — see theme-colors.ts). */
+const AREA_COLOR_VARS: Record<WorkspaceResourceArea, string> = {
+    Aks: "--primary",
+    ServiceBus: "--info",
+    Redis: "--destructive",
+    Sql: "--warning",
+    Storage: "--success",
 };
 
-const AREAS: WorkspaceResourceArea[] = [
-    "Aks",
-    "ServiceBus",
-    "Redis",
-    "Sql",
-    "Storage",
-];
+const AREA_COLOR_FALLBACKS: Record<WorkspaceResourceArea, string> = {
+    Aks: "#5b8dd9",
+    ServiceBus: "#3fa7d6",
+    Redis: "#d9534f",
+    Sql: "#d9a05b",
+    Storage: "#59a869",
+};
 
-const EMPTY_TOPOLOGY: WorkspaceTopology = { nodes: [], relationships: [] };
-
+/**
+ * Settings → Map tab. The workspace topology is a user-curated graph the agent
+ * gets as context on every turn (see AgentSystemPromptBuilder's workspace-map
+ * section), so the view here is graph-first: a canvas showing nodes colored by
+ * area and relationships as labeled edges, an inspector that owns all per-node
+ * editing, and a list fallback (same inspector) for keyboard/screen-reader and
+ * e2e access. Everything still persists through the whole-profile PUT — the
+ * redesign is presentation only, the model is untouched.
+ */
 export function WorkspaceMapSettings() {
     const { data: profile } = useProfile();
     const { data: candidates } = useWorkspaceTopologyCandidates();
     const { data: suggestions } = useWorkspaceTopologySuggestions();
     const updateProfile = useUpdateProfile();
 
-    const [manualArea, setManualArea] = useState<WorkspaceResourceArea>("Aks");
-    const [manualKey, setManualKey] = useState("");
-    const [manualLabel, setManualLabel] = useState("");
-    const [relFrom, setRelFrom] = useState("");
-    const [relTo, setRelTo] = useState("");
-    const [relLabel, setRelLabel] = useState("");
+    const [view, setView] = useState<"graph" | "list">("graph");
+    const [search, setSearch] = useState("");
+    const [hiddenAreas, setHiddenAreas] = useState<Set<WorkspaceResourceArea>>(
+        new Set(),
+    );
+    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    const [pickerOpen, setPickerOpen] = useState(false);
     // Dismissing a suggestion is session-only (per technical-plan.md Module 2 — no server-side
     // "accepted"/"dismissed" bookkeeping was scoped for this module, unlike Module 4's proactive
     // insights, which do need durable de-dup). A reload brings dismissed suggestions back.
     const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
-    // Every other Settings section confirms before removing a configured item (Batch 8.7); a
-    // map node/relationship is always "configured" the moment it exists (there's no blank
-    // placeholder state like a freshly-added namespace), so both removals always confirm here.
-    const [pendingRemoveNodeId, setPendingRemoveNodeId] = useState<
-        string | null
-    >(null);
-    const [pendingRemoveRelId, setPendingRemoveRelId] = useState<string | null>(
-        null,
-    );
 
     if (!profile) return null;
 
     const topology = profile.config.topology ?? EMPTY_TOPOLOGY;
+    const visibleAreas = new Set(AREAS.filter((a) => !hiddenAreas.has(a)));
+    const filtered = filterTopology(topology, search, visibleAreas);
+    const visibleSuggestions = (suggestions ?? []).filter(
+        (s) => !dismissedKeys.has(suggestionKey(s.fromNodeId, s.toNodeId)),
+    );
+    const graphElements = buildGraphElements(filtered, visibleSuggestions);
+    const selectedNode =
+        filtered.nodes.find((n) => n.id === selectedNodeId) ?? null;
+    const areaColors = Object.fromEntries(
+        AREAS.map((area) => [
+            area,
+            themeColor(AREA_COLOR_VARS[area], AREA_COLOR_FALLBACKS[area]),
+        ]),
+    );
 
     // Updater form so concurrent edits queue against current state instead of each
     // PUTting a profile snapshot taken before the other landed.
@@ -72,12 +101,20 @@ export function WorkspaceMapSettings() {
         }));
     };
 
-    const addNode = (node: Omit<WorkspaceResourceNode, "id">) => {
+    const addNode = (node: WorkspaceResourceCandidate) => {
         save({
             nodes: [
                 ...topology.nodes,
                 { id: crypto.randomUUID().slice(0, 8), ...node },
             ],
+        });
+    };
+
+    const renameNode = (id: string, displayLabel: string) => {
+        save({
+            nodes: topology.nodes.map((n) =>
+                n.id === id ? { ...n, displayLabel } : n,
+            ),
         });
     };
 
@@ -88,24 +125,22 @@ export function WorkspaceMapSettings() {
                 (r) => r.fromNodeId !== id && r.toNodeId !== id,
             ),
         });
+        if (selectedNodeId === id) setSelectedNodeId(null);
     };
 
-    const addRelationship = () => {
-        if (!relFrom || !relTo || relFrom === relTo) return;
+    const addRelationship = (fromId: string, toId: string, label: string) => {
+        if (!fromId || !toId || fromId === toId) return;
         save({
             relationships: [
                 ...topology.relationships,
                 {
                     id: crypto.randomUUID().slice(0, 8),
-                    fromNodeId: relFrom,
-                    toNodeId: relTo,
-                    label: relLabel.trim() || null,
+                    fromNodeId: fromId,
+                    toNodeId: toId,
+                    label: label || null,
                 },
             ],
         });
-        setRelFrom("");
-        setRelTo("");
-        setRelLabel("");
     };
 
     const removeRelationship = (id: string) => {
@@ -114,34 +149,8 @@ export function WorkspaceMapSettings() {
         });
     };
 
-    const relationshipCountFor = (nodeId: string) =>
-        topology.relationships.filter(
-            (r) => r.fromNodeId === nodeId || r.toNodeId === nodeId,
-        ).length;
-
-    const isAdded = (area: WorkspaceResourceArea, resourceKey: string) =>
-        topology.nodes.some(
-            (n) => n.area === area && n.resourceKey === resourceKey,
-        );
-
-    const nodeLabel = (id: string) =>
-        topology.nodes.find((n) => n.id === id)?.displayLabel ?? "(unknown)";
-
-    const suggestionKey = (fromNodeId: string, toNodeId: string) =>
-        `${fromNodeId}|${toNodeId}`;
-
     const confirmSuggestion = (fromNodeId: string, toNodeId: string) => {
-        save({
-            relationships: [
-                ...topology.relationships,
-                {
-                    id: crypto.randomUUID().slice(0, 8),
-                    fromNodeId,
-                    toNodeId,
-                    label: null,
-                },
-            ],
-        });
+        addRelationship(fromNodeId, toNodeId, "");
     };
 
     const dismissSuggestion = (fromNodeId: string, toNodeId: string) => {
@@ -150,376 +159,189 @@ export function WorkspaceMapSettings() {
         );
     };
 
-    const visibleSuggestions = (suggestions ?? []).filter(
-        (s) => !dismissedKeys.has(suggestionKey(s.fromNodeId, s.toNodeId)),
+    const toggleArea = (area: WorkspaceResourceArea) => {
+        setHiddenAreas((prev) => {
+            const next = new Set(prev);
+            if (next.has(area)) next.delete(area);
+            else next.add(area);
+            return next;
+        });
+    };
+
+    const inspector = (
+        <WorkspaceMapInspector
+            key={selectedNode?.id ?? "summary"}
+            topology={filtered}
+            node={selectedNode}
+            suggestions={visibleSuggestions}
+            onRenameNode={renameNode}
+            onRemoveNode={removeNode}
+            onAddRelationship={addRelationship}
+            onRemoveRelationship={removeRelationship}
+            onConfirmSuggestion={confirmSuggestion}
+            onDismissSuggestion={dismissSuggestion}
+            onSelectNode={setSelectedNodeId}
+        />
     );
 
     return (
-        <div className="space-y-6" data-testid="workspace-map-settings">
+        <div className="space-y-4" data-testid="workspace-map-settings">
             <div>
                 <h2 className="text-lg font-semibold">Workspace Map</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                     Declare how your resources relate to each other (e.g. "this
-                    deployment consumes this queue") so the AI agent can reason
-                    across areas instead of one at a time. Nothing here is
-                    inferred automatically — you add and remove everything
-                    explicitly.
+                    deployment consumes this queue") — the AI gets this map as
+                    context on every turn, so declared relationships shape how it
+                    investigates. Dashed edges are heuristic suggestions you
+                    haven't confirmed yet.
                 </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-3" data-testid="workspace-map-nodes">
-                    <h3 className="text-sm font-semibold text-muted-foreground">
-                        Known resources
-                    </h3>
-                    {AREAS.map((area) => {
-                        const areaCandidates = (candidates ?? []).filter(
-                            (c) =>
-                                c.area === area &&
-                                !isAdded(c.area, c.resourceKey),
-                        );
-                        const areaNodes = topology.nodes.filter(
-                            (n) => n.area === area,
-                        );
-                        if (
-                            areaCandidates.length === 0 &&
-                            areaNodes.length === 0
-                        )
-                            return null;
-
-                        return (
-                            <div key={area} className="rounded-lg border p-3">
-                                <div className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                                    {AREA_LABELS[area]}
-                                </div>
-                                <ul className="space-y-1">
-                                    {areaNodes.map((node) => (
-                                        <li
-                                            key={node.id}
-                                            className="space-y-1"
-                                            data-testid={`workspace-node-${node.id}`}
-                                        >
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span>
-                                                    {node.displayLabel}{" "}
-                                                    <span className="text-muted-foreground">
-                                                        ({node.resourceKey})
-                                                    </span>
-                                                </span>
-                                                <button
-                                                    onClick={() =>
-                                                        setPendingRemoveNodeId(
-                                                            node.id,
-                                                        )
-                                                    }
-                                                    className="text-xs text-destructive hover:opacity-80"
-                                                >
-                                                    Remove
-                                                </button>
-                                            </div>
-                                            {pendingRemoveNodeId ===
-                                                node.id && (
-                                                <ConfirmBar
-                                                    message={
-                                                        relationshipCountFor(
-                                                            node.id,
-                                                        ) > 0
-                                                            ? `Remove "${node.displayLabel}"? This also removes ${relationshipCountFor(node.id)} relationship(s) that reference it.`
-                                                            : `Remove "${node.displayLabel}" from the workspace map?`
-                                                    }
-                                                    confirmLabel="Remove"
-                                                    onConfirm={() => {
-                                                        removeNode(node.id);
-                                                        setPendingRemoveNodeId(
-                                                            null,
-                                                        );
-                                                    }}
-                                                    onCancel={() =>
-                                                        setPendingRemoveNodeId(
-                                                            null,
-                                                        )
-                                                    }
-                                                    testId={`workspace-node-remove-confirm-${node.id}`}
-                                                />
-                                            )}
-                                        </li>
-                                    ))}
-                                    {areaCandidates.map((candidate) => (
-                                        <li
-                                            key={`${candidate.area}-${candidate.resourceKey}`}
-                                            className="flex items-center justify-between text-sm text-muted-foreground"
-                                            data-testid={`workspace-candidate-${candidate.area}-${candidate.resourceKey}`}
-                                        >
-                                            <span>
-                                                {candidate.displayLabel}{" "}
-                                                <span>
-                                                    ({candidate.resourceKey})
-                                                </span>
-                                            </span>
-                                            <button
-                                                onClick={() =>
-                                                    addNode({
-                                                        area: candidate.area,
-                                                        resourceKey:
-                                                            candidate.resourceKey,
-                                                        displayLabel:
-                                                            candidate.displayLabel,
-                                                    })
-                                                }
-                                                className="text-xs text-primary hover:opacity-80"
-                                            >
-                                                Add
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        );
-                    })}
-
-                    <div className="rounded-lg border p-3">
-                        <div className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                            Add a custom resource
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <select
-                                value={manualArea}
-                                onChange={(e) =>
-                                    setManualArea(
-                                        e.target.value as WorkspaceResourceArea,
-                                    )
-                                }
-                                className="rounded-md border bg-card px-2 py-1.5 text-sm"
-                                data-testid="workspace-manual-area"
-                            >
-                                {AREAS.map((area) => (
-                                    <option key={area} value={area}>
-                                        {AREA_LABELS[area]}
-                                    </option>
-                                ))}
-                            </select>
-                            <input
-                                value={manualKey}
-                                onChange={(e) => setManualKey(e.target.value)}
-                                placeholder="Resource key, e.g. prod-ns/orders-queue"
-                                className="min-w-[220px] flex-1 rounded-md border bg-card px-2 py-1.5 text-sm"
-                                data-testid="workspace-manual-key"
-                            />
-                            <input
-                                value={manualLabel}
-                                onChange={(e) => setManualLabel(e.target.value)}
-                                placeholder="Display label"
-                                className="min-w-[140px] flex-1 rounded-md border bg-card px-2 py-1.5 text-sm"
-                                data-testid="workspace-manual-label"
-                            />
-                            <button
-                                onClick={() => {
-                                    if (!manualKey.trim()) return;
-                                    addNode({
-                                        area: manualArea,
-                                        resourceKey: manualKey.trim(),
-                                        displayLabel:
-                                            manualLabel.trim() ||
-                                            manualKey.trim(),
-                                    });
-                                    setManualKey("");
-                                    setManualLabel("");
-                                }}
-                                className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90"
-                                data-testid="workspace-manual-add"
-                            >
-                                Add
-                            </button>
-                        </div>
-                    </div>
+            <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[200px] flex-1">
+                    <Search className="pointer-events-none absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Filter by name or resource key…"
+                        className="w-full rounded-md border bg-card py-1.5 pl-7 pr-2 text-sm"
+                        data-testid="workspace-map-search"
+                        aria-label="Filter map resources"
+                    />
                 </div>
-
-                <div
-                    className="space-y-3"
-                    data-testid="workspace-map-relationships"
-                >
-                    <h3 className="text-sm font-semibold text-muted-foreground">
-                        Relationships
-                    </h3>
-
-                    {visibleSuggestions.length > 0 && (
-                        <div
-                            className="space-y-2 rounded-lg border border-dashed p-3"
-                            data-testid="workspace-suggestions"
+                {AREAS.map((area) => {
+                    const visible = visibleAreas.has(area);
+                    return (
+                        <button
+                            key={area}
+                            onClick={() => toggleArea(area)}
+                            aria-pressed={visible}
+                            className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs ${
+                                visible
+                                    ? "bg-accent/60 text-foreground"
+                                    : "text-muted-foreground opacity-50"
+                            }`}
+                            data-testid={`workspace-map-area-${area}`}
                         >
-                            <div className="text-xs font-semibold uppercase text-muted-foreground">
-                                Suggested — confirm?
-                            </div>
-                            <ul className="space-y-2">
-                                {visibleSuggestions.map((s) => (
-                                    <li
-                                        key={suggestionKey(
-                                            s.fromNodeId,
-                                            s.toNodeId,
-                                        )}
-                                        className="rounded-md bg-accent/30 p-2 text-sm"
-                                        data-testid={`workspace-suggestion-${s.fromNodeId}-${s.toNodeId}`}
-                                    >
-                                        <div>
-                                            {nodeLabel(s.fromNodeId)} →{" "}
-                                            {nodeLabel(s.toNodeId)}
-                                        </div>
-                                        <div className="mt-0.5 text-xs text-muted-foreground">
-                                            {s.reason}
-                                        </div>
-                                        <div className="mt-1.5 flex gap-2">
-                                            <button
-                                                onClick={() =>
-                                                    confirmSuggestion(
-                                                        s.fromNodeId,
-                                                        s.toNodeId,
-                                                    )
-                                                }
-                                                className="rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:opacity-90"
-                                                data-testid={`workspace-suggestion-confirm-${s.fromNodeId}-${s.toNodeId}`}
-                                            >
-                                                Confirm
-                                            </button>
-                                            <button
-                                                onClick={() =>
-                                                    dismissSuggestion(
-                                                        s.fromNodeId,
-                                                        s.toNodeId,
-                                                    )
-                                                }
-                                                className="rounded-md border px-2 py-1 text-xs hover:bg-accent"
-                                                data-testid={`workspace-suggestion-dismiss-${s.fromNodeId}-${s.toNodeId}`}
-                                            >
-                                                Dismiss
-                                            </button>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
-
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="text-left text-xs text-muted-foreground">
-                                <th className="pb-1">From</th>
-                                <th className="pb-1">Label</th>
-                                <th className="pb-1">To</th>
-                                <th className="pb-1" />
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {topology.relationships.map((rel) => (
-                                <Fragment key={rel.id}>
-                                    <tr
-                                        data-testid={`workspace-relationship-${rel.id}`}
-                                    >
-                                        <td className="py-1">
-                                            {nodeLabel(rel.fromNodeId)}
-                                        </td>
-                                        <td className="py-1 text-muted-foreground">
-                                            {rel.label ?? "—"}
-                                        </td>
-                                        <td className="py-1">
-                                            {nodeLabel(rel.toNodeId)}
-                                        </td>
-                                        <td className="py-1 text-right">
-                                            <button
-                                                onClick={() =>
-                                                    setPendingRemoveRelId(
-                                                        rel.id,
-                                                    )
-                                                }
-                                                className="text-xs text-destructive hover:opacity-80"
-                                            >
-                                                Remove
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    {pendingRemoveRelId === rel.id && (
-                                        <tr>
-                                            <td colSpan={4} className="p-0">
-                                                <ConfirmBar
-                                                    message={`Remove the "${nodeLabel(rel.fromNodeId)} → ${nodeLabel(rel.toNodeId)}" relationship?`}
-                                                    confirmLabel="Remove"
-                                                    onConfirm={() => {
-                                                        removeRelationship(
-                                                            rel.id,
-                                                        );
-                                                        setPendingRemoveRelId(
-                                                            null,
-                                                        );
-                                                    }}
-                                                    onCancel={() =>
-                                                        setPendingRemoveRelId(
-                                                            null,
-                                                        )
-                                                    }
-                                                    testId={`workspace-relationship-remove-confirm-${rel.id}`}
-                                                />
-                                            </td>
-                                        </tr>
-                                    )}
-                                </Fragment>
-                            ))}
-                        </tbody>
-                    </table>
-
-                    {topology.nodes.length < 2 ? (
-                        <p className="text-sm text-muted-foreground">
-                            Add at least two resources on the left before
-                            declaring a relationship.
-                        </p>
-                    ) : (
-                        <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
-                            <select
-                                value={relFrom}
-                                onChange={(e) => setRelFrom(e.target.value)}
-                                className="rounded-md border bg-card px-2 py-1.5 text-sm"
-                                data-testid="workspace-relationship-from"
-                            >
-                                <option value="">From…</option>
-                                {topology.nodes.map((n) => (
-                                    <option key={n.id} value={n.id}>
-                                        {n.displayLabel}
-                                    </option>
-                                ))}
-                            </select>
-                            <input
-                                value={relLabel}
-                                onChange={(e) => setRelLabel(e.target.value)}
-                                placeholder="e.g. consumes"
-                                className="min-w-[120px] flex-1 rounded-md border bg-card px-2 py-1.5 text-sm"
-                                data-testid="workspace-relationship-label"
+                            <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ backgroundColor: areaColors[area] }}
                             />
-                            <select
-                                value={relTo}
-                                onChange={(e) => setRelTo(e.target.value)}
-                                className="rounded-md border bg-card px-2 py-1.5 text-sm"
-                                data-testid="workspace-relationship-to"
-                            >
-                                <option value="">To…</option>
-                                {topology.nodes.map((n) => (
-                                    <option key={n.id} value={n.id}>
-                                        {n.displayLabel}
-                                    </option>
-                                ))}
-                            </select>
-                            <button
-                                onClick={addRelationship}
-                                disabled={
-                                    !relFrom || !relTo || relFrom === relTo
-                                }
-                                className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
-                                data-testid="workspace-relationship-add"
-                            >
-                                Add
-                            </button>
-                        </div>
-                    )}
+                            {AREA_LABELS[area]}
+                        </button>
+                    );
+                })}
+                <div className="flex rounded-md border" role="group" aria-label="Map view">
+                    <button
+                        onClick={() => setView("graph")}
+                        aria-pressed={view === "graph"}
+                        className={`flex items-center gap-1 rounded-l-md px-2 py-1.5 text-xs ${
+                            view === "graph"
+                                ? "bg-primary/15 text-foreground"
+                                : "text-muted-foreground hover:bg-accent"
+                        }`}
+                        data-testid="workspace-map-view-graph"
+                    >
+                        <Network className="h-3 w-3" /> Graph
+                    </button>
+                    <button
+                        onClick={() => setView("list")}
+                        aria-pressed={view === "list"}
+                        className={`flex items-center gap-1 rounded-r-md px-2 py-1.5 text-xs ${
+                            view === "list"
+                                ? "bg-primary/15 text-foreground"
+                                : "text-muted-foreground hover:bg-accent"
+                        }`}
+                        data-testid="workspace-map-view-list"
+                    >
+                        <List className="h-3 w-3" /> List
+                    </button>
                 </div>
+                <button
+                    onClick={() => setPickerOpen((open) => !open)}
+                    aria-expanded={pickerOpen}
+                    className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90"
+                    data-testid="workspace-map-add-toggle"
+                >
+                    <Plus className="h-3.5 w-3.5" /> Add resources
+                </button>
             </div>
+
+            {(pickerOpen || topology.nodes.length === 0) && (
+                <WorkspaceMapAddPicker
+                    candidates={candidates ?? []}
+                    topology={topology}
+                    onAddNode={(node) => {
+                        addNode(node);
+                        // The picker auto-opens on an empty map; pinning it open on
+                        // the first add keeps multi-add sessions from having the
+                        // panel yanked away mid-flow.
+                        setPickerOpen(true);
+                    }}
+                />
+            )}
+
+            {topology.nodes.length === 0 ? (
+                <p
+                    className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
+                    data-testid="workspace-map-empty"
+                >
+                    The map is empty — add resources above, then connect them so
+                    the AI can reason across your workspace instead of one area
+                    at a time.
+                </p>
+            ) : view === "graph" ? (
+                <div className="flex gap-4">
+                    <div className="flex min-h-[420px] min-w-0 flex-1 flex-col">
+                        <TopologyGraph
+                            nodes={graphElements.nodes}
+                            edges={graphElements.edges}
+                            areaColors={areaColors}
+                            selectedNodeId={selectedNodeId}
+                            onNodeClick={(id) =>
+                                setSelectedNodeId(id === "" ? null : id)
+                            }
+                            testId="workspace-map-graph"
+                        />
+                        <p className="mt-1.5 text-xs text-muted-foreground">
+                            Click a node to inspect it · dashed edges are
+                            unconfirmed suggestions
+                        </p>
+                    </div>
+                    <div className="w-80 shrink-0">{inspector}</div>
+                </div>
+            ) : (
+                <div data-testid="workspace-map-nodes">
+                    <ProfileListLayout
+                        items={filtered.nodes}
+                        getKey={(n: WorkspaceResourceNode) => n.id}
+                        getTitle={(n: WorkspaceResourceNode) => n.displayLabel}
+                        getSubtitle={(n: WorkspaceResourceNode) => n.resourceKey}
+                        getGroup={(n: WorkspaceResourceNode) =>
+                            AREA_LABELS[n.area]
+                        }
+                        getFilterText={(n: WorkspaceResourceNode) =>
+                            `${n.displayLabel} ${n.resourceKey}`
+                        }
+                        renderEditor={(n: WorkspaceResourceNode) => (
+                            <WorkspaceMapInspector
+                                key={n.id}
+                                topology={filtered}
+                                node={n}
+                                suggestions={visibleSuggestions}
+                                onRenameNode={renameNode}
+                                onRemoveNode={removeNode}
+                                onAddRelationship={addRelationship}
+                                onRemoveRelationship={removeRelationship}
+                                onConfirmSuggestion={confirmSuggestion}
+                                onDismissSuggestion={dismissSuggestion}
+                            />
+                        )}
+                        emptyMessage="No resources match the current filter."
+                        testIdPrefix="workspace-map"
+                    />
+                </div>
+            )}
         </div>
     );
 }
-

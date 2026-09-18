@@ -66,6 +66,8 @@ public sealed class AgentSystemPromptBuilder
 
         var currentFocus = BuildCurrentFocusSection(context);
 
+        var workspaceMap = BuildWorkspaceMapSection(config);
+
         var fencedAreas = BuildFencedAreasSection(data, config, context, normalizedScope, hasToolCalling);
 
         var toolPolicy = BuildToolPolicySection(hasToolCalling, normalizedMode);
@@ -78,6 +80,7 @@ public sealed class AgentSystemPromptBuilder
             {currentFocus}
             ## Current workspace context
             {workspaceContext}
+            {workspaceMap}
             {fencedAreas}
             ## Response format
             - Be concise and technical. Prefer bullet points and tables over prose.
@@ -108,6 +111,68 @@ public sealed class AgentSystemPromptBuilder
             ## Current focus
             {string.Join("\n", lines)}
 
+            """;
+    }
+
+    /// <summary>Caps on the workspace-map section — the prompt is rebuilt per turn and feeds the
+    /// context budget (<see cref="AgentContextBudgetPlanner"/> counts system-prompt chars), so a
+    /// densely-curated map must overflow gracefully instead of eating the window.</summary>
+    private const int MaxMapNodes = 30;
+    private const int MaxMapEdges = 40;
+
+    private static readonly Dictionary<WorkspaceResourceArea, string> MapAreaLabels = new()
+    {
+        [WorkspaceResourceArea.Aks] = "AKS",
+        [WorkspaceResourceArea.ServiceBus] = "Service Bus",
+        [WorkspaceResourceArea.Redis] = "Redis",
+        [WorkspaceResourceArea.Sql] = "SQL",
+        [WorkspaceResourceArea.Storage] = "Storage",
+    };
+
+    /// <summary>workspace-map-overhaul — the user-curated topology (Settings → Map) as context on
+    /// EVERY turn, not just when the model happens to call a tool. Until now the map was only
+    /// reachable through <c>investigate_workspace_issue</c>, which is fenced behind workspace scope
+    /// on contextual panels — so the declared relationships were invisible on most turns. Rendered
+    /// compactly: nodes grouped by area, edges as "from → to (label)". Empty when no nodes exist —
+    /// an unconfigured map contributes no noise.</summary>
+    private static string BuildWorkspaceMapSection(AppConfig config)
+    {
+        var topology = config.Topology;
+        if (topology.Nodes.Count == 0)
+            return "";
+
+        var nodeById = topology.Nodes.ToDictionary(n => n.Id);
+
+        var areaParts = topology.Nodes
+            .GroupBy(n => n.Area)
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var shown = g.Take(MaxMapNodes).Select(n => $"{n.DisplayLabel} ({n.ResourceKey})");
+                var overflow = g.Count() - MaxMapNodes;
+                return $"{MapAreaLabels[g.Key]}: {string.Join(", ", shown)}"
+                    + (overflow > 0 ? $" (+{overflow} more)" : "");
+            });
+
+        var edgeParts = topology.Relationships
+            .Where(r => nodeById.ContainsKey(r.FromNodeId) && nodeById.ContainsKey(r.ToNodeId))
+            .Select(r =>
+            {
+                var text = $"{nodeById[r.FromNodeId].DisplayLabel} → {nodeById[r.ToNodeId].DisplayLabel}";
+                return string.IsNullOrWhiteSpace(r.Label) ? text : $"{text} ({r.Label})";
+            })
+            .ToList();
+        var edges = edgeParts.Take(MaxMapEdges).ToList();
+        var edgeOverflow = edgeParts.Count - edges.Count;
+        if (edgeOverflow > 0)
+            edges.Add($"(+{edgeOverflow} more)");
+
+        return $"""
+
+            ## Workspace map (user-declared)
+            Resources: {string.Join(" | ", areaParts)}
+            Relationships: {(edges.Count > 0 ? string.Join(" · ", edges) : "(none declared yet)")}
+            These relationships are declared by the user, not inferred — treat them as facts when reasoning across areas.
             """;
     }
 

@@ -348,16 +348,18 @@ test.describe("Settings", () => {
         await page.getByTestId("settings-tab-map").click();
         await expect(page.getByTestId("workspace-map-settings")).toBeVisible();
 
-        // Nodes here don't depend on any of the other tabs being configured — the "Add a custom
-        // resource" form works even with zero auto-populated candidates, which is the common case for
-        // a freshly-provisioned test profile.
-        const nodeList = page.getByTestId("workspace-map-nodes");
+        // Nodes here don't depend on any of the other tabs being configured — the "Custom
+        // resource" form works even with zero auto-populated candidates, which is the common
+        // case for a freshly-provisioned test profile. The picker auto-opens while the map
+        // is empty and stays pinned for multi-add flows.
+        const picker = page.getByTestId("workspace-map-add-picker");
+        await expect(picker).toBeVisible();
 
         await page.getByTestId("workspace-manual-area").selectOption("Aks");
         await page.getByTestId("workspace-manual-key").fill("prod/api");
         await page.getByTestId("workspace-manual-label").fill("api (prod)");
         await page.getByTestId("workspace-manual-add").click();
-        await expect(nodeList.getByText("api (prod)")).toBeVisible();
+        await expect(picker).toBeVisible();
 
         await page
             .getByTestId("workspace-manual-area")
@@ -367,45 +369,49 @@ test.describe("Settings", () => {
             .fill("orders.servicebus.windows.net/orders-queue");
         await page.getByTestId("workspace-manual-label").fill("orders queue");
         await page.getByTestId("workspace-manual-add").click();
+
+        // The list view carries the accessible/readable node rows; the graph canvas is
+        // verified separately by its presence. `workspace-map-list` scopes to the row
+        // list itself — the wider `workspace-map-nodes` wrapper also contains the
+        // inspector's `<option>`s, which would make label text ambiguous.
+        await expect(page.getByTestId("workspace-map-graph")).toBeVisible();
+        await page.getByTestId("workspace-map-view-list").click();
+        const nodeList = page.getByTestId("workspace-map-list");
+        await expect(nodeList.getByText("api (prod)")).toBeVisible();
         await expect(nodeList.getByText("orders queue")).toBeVisible();
 
-        await page
-            .getByTestId("workspace-relationship-from")
-            .selectOption({ label: "api (prod)" });
-        await page.getByTestId("workspace-relationship-label").fill("consumes");
+        // Relationships are created from the selected node's inspector — the "from" is the
+        // inspected node itself.
+        await nodeList
+            .getByRole("button", { name: /api \(prod\)/ })
+            .click();
         await page
             .getByTestId("workspace-relationship-to")
-            .selectOption({ label: "orders queue" });
+            .selectOption({ label: "orders queue (Service Bus)" });
+        await page.getByTestId("workspace-relationship-label").fill("consumes");
         await page.getByTestId("workspace-relationship-add").click();
 
-        await expect(
-            page.getByTestId("workspace-map-relationships"),
-        ).toContainText("api (prod)");
-        await expect(
-            page.getByTestId("workspace-map-relationships"),
-        ).toContainText("consumes");
-        await expect(
-            page.getByTestId("workspace-map-relationships"),
-        ).toContainText("orders queue");
+        const relationships = page.getByTestId("workspace-map-relationships");
+        await expect(relationships).toContainText("orders queue");
+        await expect(relationships).toContainText("consumes");
 
         await page.reload();
         await page.getByTestId("settings-tab-map").click();
+        await page.getByTestId("workspace-map-view-list").click();
+        await nodeList
+            .getByRole("button", { name: /api \(prod\)/ })
+            .click();
+        await expect(relationships).toContainText("consumes");
 
-        await expect(nodeList.getByText("api (prod)")).toBeVisible();
-        await expect(
-            page.getByTestId("workspace-map-relationships"),
-        ).toContainText("consumes");
-
-        // Removing the node also removes the relationship that referenced it — dangling relationships
-        // pointing at a deleted node would be silent, confusing garbage otherwise. Batch 8.7 added a
-        // confirm step (map removals are always "configured" — there's no blank-placeholder state to
-        // skip it for), so the removal only takes effect after confirming.
-        const nodeRow = page.locator('[data-testid^="workspace-node-"]', {
+        // Removing the node also removes the relationship that referenced it — dangling
+        // relationships pointing at a deleted node would be silent, confusing garbage
+        // otherwise. The confirm bar warns about the cascade before it happens.
+        const nodeRow = page.locator('[data-testid^="workspace-map-item-"]', {
             hasText: "api (prod)",
         });
         const nodeTestId = await nodeRow.getAttribute("data-testid");
-        const nodeId = nodeTestId!.replace("workspace-node-", "");
-        await nodeRow.getByRole("button", { name: "Remove" }).click();
+        const nodeId = nodeTestId!.replace("workspace-map-item-", "");
+        await page.getByTestId(`workspace-node-remove-${nodeId}`).click();
         await expect(
             page.getByTestId(`workspace-node-remove-confirm-${nodeId}`),
         ).toContainText("1 relationship(s)");
@@ -413,8 +419,14 @@ test.describe("Settings", () => {
             .getByTestId(`workspace-node-remove-confirm-${nodeId}-yes`)
             .click();
         await expect(
-            page.getByTestId("workspace-map-relationships").locator("tbody tr"),
+            nodeList.getByRole("button", { name: /api \(prod\)/ }),
         ).toHaveCount(0);
+        await nodeList
+            .getByRole("button", { name: /orders queue/ })
+            .click();
+        await expect(
+            page.getByTestId("workspace-map-inspector"),
+        ).toContainText("No relationships declared");
     });
 
     test("Map tab: a suggested relationship can be confirmed (adds a real relationship) or dismissed (just hides it)", async ({
@@ -429,7 +441,9 @@ test.describe("Settings", () => {
 
         await page.goto("/settings");
         await page.getByTestId("settings-tab-map").click();
-        const nodeList = page.getByTestId("workspace-map-nodes");
+        // The previous test leaves a node behind, so the map isn't empty and the picker
+        // stays closed until toggled open.
+        await page.getByTestId("workspace-map-add-toggle").click();
 
         await page.getByTestId("workspace-manual-area").selectOption("Aks");
         await page
@@ -437,7 +451,6 @@ test.describe("Settings", () => {
             .fill(`prod/api${sfx.replace(" ", "-")}`);
         await page.getByTestId("workspace-manual-label").fill(aksLabel);
         await page.getByTestId("workspace-manual-add").click();
-        await expect(nodeList.getByText(aksLabel)).toBeVisible();
 
         await page
             .getByTestId("workspace-manual-area")
@@ -449,16 +462,21 @@ test.describe("Settings", () => {
             .fill(`orders.servicebus.windows.net${sfx}`);
         await page.getByTestId("workspace-manual-label").fill(sbLabel);
         await page.getByTestId("workspace-manual-add").click();
+
+        // Node ids come off the list view's row testids (`workspace-map-item-{id}`).
+        await page.getByTestId("workspace-map-view-list").click();
+        const nodeList = page.getByTestId("workspace-map-list");
+        await expect(nodeList.getByText(aksLabel)).toBeVisible();
         await expect(nodeList.getByText(sbLabel)).toBeVisible();
 
         const aksNodeId = await nodeList
-            .locator('[data-testid^="workspace-node-"]', { hasText: aksLabel })
+            .locator('[data-testid^="workspace-map-item-"]', { hasText: aksLabel })
             .getAttribute("data-testid");
         const sbNodeId = await nodeList
-            .locator('[data-testid^="workspace-node-"]', { hasText: sbLabel })
+            .locator('[data-testid^="workspace-map-item-"]', { hasText: sbLabel })
             .getAttribute("data-testid");
-        const fromNodeId = aksNodeId!.replace("workspace-node-", "");
-        const toNodeId = sbNodeId!.replace("workspace-node-", "");
+        const fromNodeId = aksNodeId!.replace("workspace-map-item-", "");
+        const toNodeId = sbNodeId!.replace("workspace-map-item-", "");
 
         await page.route(
             "**/api/workspace/topology/suggestions",
@@ -488,18 +506,17 @@ test.describe("Settings", () => {
             "may miss or misidentify real relationships",
         );
 
-        // Dismiss just hides it client-side — no relationship gets added.
+        // Dismiss just hides it client-side — no relationship gets added. With nothing
+        // selected the inspector shows the map summary, which is where suggestions live.
         await page
             .getByTestId(
                 `workspace-suggestion-dismiss-${fromNodeId}-${toNodeId}`,
             )
             .click();
         await expect(suggestionRow).toHaveCount(0);
-        const relRows = page
-            .getByTestId("workspace-map-relationships")
-            .locator("tbody tr");
-        const pairRow = relRows.filter({ hasText: sbLabel });
-        await expect(pairRow).toHaveCount(0);
+        await expect(
+            page.getByTestId("workspace-map-inspector"),
+        ).toContainText("0 relationship(s)");
 
         // Reload brings the (still-mocked) suggestion back, since dismissal isn't persisted.
         await page.reload();
@@ -508,20 +525,29 @@ test.describe("Settings", () => {
             page.getByTestId(`workspace-suggestion-${fromNodeId}-${toNodeId}`),
         ).toBeVisible();
 
-        // Confirm adds a real, persisted relationship. Assert on the table row itself —
-        // the mocked endpoint keeps returning the suggestion and the From/To options
-        // echo both labels, so container text can't prove the profile PUT settled
-        // before the reload.
+        // Confirm adds a real, persisted relationship — visible in the inspected node's
+        // relationships table.
         await page
             .getByTestId(
                 `workspace-suggestion-confirm-${fromNodeId}-${toNodeId}`,
             )
             .click();
+        await page.getByTestId("workspace-map-view-list").click();
+        await nodeList
+            .getByRole("button", { name: new RegExp(aksLabel.replace(/[()]/g, "\\$&")) })
+            .click();
+        const pairRow = page
+            .getByTestId("workspace-map-relationships")
+            .locator("tbody tr")
+            .filter({ hasText: sbLabel });
         await expect(pairRow).toHaveCount(1);
-        await expect(pairRow).toContainText(aksLabel);
 
         await page.reload();
         await page.getByTestId("settings-tab-map").click();
+        await page.getByTestId("workspace-map-view-list").click();
+        await nodeList
+            .getByRole("button", { name: new RegExp(aksLabel.replace(/[()]/g, "\\$&")) })
+            .click();
         await expect(pairRow).toHaveCount(1);
     });
 

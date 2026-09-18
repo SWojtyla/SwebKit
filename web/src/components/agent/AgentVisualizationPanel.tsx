@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { MermaidBlock } from "./AgentMarkdown";
+import { TopologyGraph } from "../shared/TopologyGraph";
 import { AlertCircle, BarChart3, Calendar, Code2, GitBranch, Network, X } from "lucide-react";
 
 interface TopologyNode {
@@ -101,75 +102,24 @@ export function parseVisualBlocks(content: string): VisualBlock[] {
   return blocks;
 }
 
-function TopologyGraph({ payload }: { payload: TopologyPayload }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const cyRef = useRef<cytoscape.Core | null>(null);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    let cancelled = false;
-    const nodeIds = new Set(payload.nodes.map((node) => node.id));
-    const edges = payload.edges
-      .filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to))
-      .map((edge) => ({
-        data: { source: edge.from, target: edge.to, label: edge.label ?? "" },
-      }));
-
-    import("cytoscape").then((mod) => {
-      if (cancelled || !containerRef.current) return;
-      cyRef.current = mod.default({
-        container: containerRef.current,
-        elements: [
-          ...payload.nodes.map((node) => ({
-            data: { id: node.id, label: node.label, area: node.area ?? "" },
-          })),
-          ...edges,
-        ],
-        style: [
-          {
-            selector: "node",
-            style: {
-              label: "data(label)",
-              "background-color": "hsl(var(--primary))",
-              color: "hsl(var(--foreground))",
-              "text-valign": "center",
-              "text-halign": "center",
-              "font-size": "10px",
-              width: "40px",
-              height: "40px",
-            },
-          },
-          {
-            selector: "edge",
-            style: {
-              width: 2,
-              "line-color": "hsl(var(--muted-foreground))",
-              "target-arrow-color": "hsl(var(--muted-foreground))",
-              "target-arrow-shape": "triangle",
-              "curve-style": "bezier",
-              label: "data(label)",
-              "font-size": "9px",
-              color: "hsl(var(--foreground))",
-            },
-          },
-        ],
-        layout: { name: "cose", padding: 24, animate: false } as cytoscape.LayoutOptions,
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      cyRef.current?.destroy();
-      cyRef.current = null;
-    };
-  }, [payload]);
-
+function TopologyGraphCard({ payload }: { payload: TopologyPayload }) {
   return (
     <div className="flex h-full min-h-[320px] flex-col rounded-lg border bg-card p-3" data-testid="topology-graph">
       <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <Network className="h-3.5 w-3.5" /> Interactive topology
       </div>
-      <div ref={containerRef} className="min-h-[280px] flex-1 rounded-md bg-muted/30" />
+      <TopologyGraph
+        nodes={payload.nodes.map((node) => ({
+          id: node.id,
+          label: node.label,
+          area: node.area,
+        }))}
+        edges={payload.edges.map((edge) => ({
+          from: edge.from,
+          to: edge.to,
+          label: edge.label,
+        }))}
+      />
     </div>
   );
 }
@@ -210,7 +160,7 @@ function JsonFallback({ code }: { code: string }) {
 function VisualContent({ block }: { block: VisualBlock }) {
   if (block.kind === "mermaid") return <MermaidBlock code={block.code} />;
   if (block.kind === "topology" && block.payload?.type === "topology") {
-    return <TopologyGraph payload={block.payload as TopologyPayload} />;
+    return <TopologyGraphCard payload={block.payload as TopologyPayload} />;
   }
   if (block.kind === "timeline" && block.payload?.type === "timeline") {
     return <TimelineView payload={block.payload as TimelinePayload} />;

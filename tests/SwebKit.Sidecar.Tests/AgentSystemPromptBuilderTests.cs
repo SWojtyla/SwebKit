@@ -163,4 +163,137 @@ public class AgentSystemPromptBuilderTests
 
         Assert.DoesNotContain("## Other configured areas", prompt);
     }
+
+    // ── Workspace map section (workspace-map-overhaul) ──
+
+    private static WorkspaceResourceNode Node(string id, WorkspaceResourceArea area, string key, string label) =>
+        new() { Id = id, Area = area, ResourceKey = key, DisplayLabel = label };
+
+    [Fact]
+    public void Build_TopologyWithNodesAndRelationships_RendersTheWorkspaceMapSection()
+    {
+        var builder = BuilderWith(profiles =>
+        {
+            profiles.Config.Topology.Nodes.Add(Node("n1", WorkspaceResourceArea.Aks, "prod/api", "api"));
+            profiles.Config.Topology.Nodes.Add(Node("n2", WorkspaceResourceArea.ServiceBus, "orders.sb.net", "orders"));
+            profiles.Config.Topology.Relationships.Add(new WorkspaceResourceRelationship
+            {
+                Id = "r1",
+                FromNodeId = "n1",
+                ToNodeId = "n2",
+                Label = "consumes",
+            });
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true);
+
+        Assert.Contains("## Workspace map", prompt);
+        Assert.Contains("AKS: api (prod/api)", prompt);
+        Assert.Contains("Service Bus: orders (orders.sb.net)", prompt);
+        Assert.Contains("api → orders (consumes)", prompt);
+        Assert.Contains("declared by the user", prompt);
+    }
+
+    [Fact]
+    public void Build_EmptyTopology_OmitsTheWorkspaceMapSection()
+    {
+        var prompt = CreateBuilder().Build(context: null, "ask", "feature", hasToolCalling: true);
+
+        Assert.DoesNotContain("## Workspace map", prompt);
+    }
+
+    [Fact]
+    public void Build_NodesWithoutRelationships_RendersResourcesWithNoEdgeLine()
+    {
+        var builder = BuilderWith(profiles =>
+            profiles.Config.Topology.Nodes.Add(Node("n1", WorkspaceResourceArea.Redis, "cache-1", "sessions")));
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true);
+
+        Assert.Contains("## Workspace map", prompt);
+        Assert.Contains("Redis: sessions (cache-1)", prompt);
+        Assert.Contains("(none declared yet)", prompt);
+    }
+
+    [Fact]
+    public void Build_UnlabeledRelationship_RendersEdgeWithoutTrailingParens()
+    {
+        var builder = BuilderWith(profiles =>
+        {
+            profiles.Config.Topology.Nodes.Add(Node("n1", WorkspaceResourceArea.Aks, "prod/api", "api"));
+            profiles.Config.Topology.Nodes.Add(Node("n2", WorkspaceResourceArea.Storage, "mystorageacct", "blobs"));
+            profiles.Config.Topology.Relationships.Add(new WorkspaceResourceRelationship
+            {
+                Id = "r1",
+                FromNodeId = "n1",
+                ToNodeId = "n2",
+                Label = null,
+            });
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true);
+
+        Assert.Contains("api → blobs", prompt);
+        Assert.DoesNotContain("api → blobs (", prompt);
+    }
+
+    [Fact]
+    public void Build_RelationshipWithMissingEndpoint_IsSkipped()
+    {
+        var builder = BuilderWith(profiles =>
+        {
+            profiles.Config.Topology.Nodes.Add(Node("n1", WorkspaceResourceArea.Aks, "prod/api", "api"));
+            profiles.Config.Topology.Relationships.Add(new WorkspaceResourceRelationship
+            {
+                Id = "r1",
+                FromNodeId = "n1",
+                ToNodeId = "ghost",
+                Label = "consumes",
+            });
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true);
+
+        Assert.Contains("## Workspace map", prompt);
+        Assert.Contains("(none declared yet)", prompt);
+        Assert.DoesNotContain("ghost", prompt);
+    }
+
+    [Fact]
+    public void Build_MoreNodesThanTheCap_RendersAnOverflowMarkerPerArea()
+    {
+        var builder = BuilderWith(profiles =>
+        {
+            for (var i = 0; i < 35; i++)
+                profiles.Config.Topology.Nodes.Add(Node($"n{i}", WorkspaceResourceArea.Aks, $"ns/dep{i}", $"dep{i}"));
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true);
+
+        Assert.Contains("(+5 more)", prompt);
+        Assert.DoesNotContain("dep34", prompt);
+    }
+
+    [Fact]
+    public void Build_MoreRelationshipsThanTheCap_RendersAnOverflowMarker()
+    {
+        var builder = BuilderWith(profiles =>
+        {
+            profiles.Config.Topology.Nodes.Add(Node("a", WorkspaceResourceArea.Aks, "ns/api", "api"));
+            profiles.Config.Topology.Nodes.Add(Node("b", WorkspaceResourceArea.Redis, "cache", "cache"));
+            for (var i = 0; i < 45; i++)
+                profiles.Config.Topology.Relationships.Add(new WorkspaceResourceRelationship
+                {
+                    Id = $"r{i}",
+                    FromNodeId = "a",
+                    ToNodeId = "b",
+                    Label = $"rel{i}",
+                });
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true);
+
+        Assert.Contains("(+5 more)", prompt);
+        Assert.DoesNotContain("rel44", prompt);
+    }
 }

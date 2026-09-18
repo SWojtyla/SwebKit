@@ -54,7 +54,9 @@ public sealed class InvestigateWorkspaceIssueTool : IAgentTool
         "Investigates an issue across the workspace, starting from one resource and following up to " +
         "2 hops of relationships the user has declared on the workspace Map (Settings), running each " +
         "related resource's own investigation/health tool and merging the results into one report. " +
-        "Only useful if relationships have been declared — returns a note, not an error, if none exist yet.";
+        "The declared map is already in your context — use this tool to actually inspect the related " +
+        "resources, not to discover the relationships. Only useful if relationships have been " +
+        "declared — returns a note, not an error, if none exist yet.";
 
     public FeatureArea FeatureArea => FeatureArea.Workspace;
 
