@@ -7,6 +7,7 @@ using SwebKit.Agents;
 using SwebKit.Agents.Tools;
 using SwebKit.Agents.Tools.Aks;
 using SwebKit.Agents.Tools.ApiClient;
+using SwebKit.Agents.Tools.Monitoring;
 using SwebKit.Agents.Tools.Redis;
 using SwebKit.Agents.Tools.Sql;
 using SwebKit.Agents.Tools.Storage;
@@ -219,6 +220,7 @@ builder.Services.AddSingleton<IAgentTool, InvestigateWorkspaceIssueTool>();
 // tool can inject it; the endpoint publishes into it, get_screen_state reads it.
 builder.Services.AddSingleton<ScreenStateStore>();
 builder.Services.AddSingleton<IAgentTool, GetScreenStateTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeCreateAlertRuleTool>();
 
 builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 
@@ -241,6 +243,9 @@ builder.Services.AddSingleton<IAgentActionExecutor, RedisActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, StorageActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, SqlActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, AksActionExecutor>();
+// Lives in the sidecar (not SwebKit.Agents) — applying an alert-rule action needs the
+// sidecar-hosted MonitoringAlertEvaluationService for the post-upsert reload.
+builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.MonitoringActionExecutor>();
 builder.Services.AddSingleton<AgentActionApplier>();
 
 // HTTP client used by the API client request executor

@@ -8,7 +8,7 @@
 | ------ | ------ | ----- |
 | 1. Screen-state snapshot | Implemented | store+tool+endpoint+6 providers+route fallback; tests green |
 | 2. Investigation depth | Implemented | `ProactiveInvestigationRunner` with single-shot fallback; evidence on card |
-| 3. Alert → AI activation UX + background notify | Implemented | flag end-to-end; global notification site moved to `AppLayout` (see note) |
+| 3. Alert → AI activation UX + background notify | Implemented | flag end-to-end; global notification site in `AppLayout`; + real OS toasts (D11), agent-proposed rules (D12), notification center read-state (D13) |
 
 ## Progress checklist
 
@@ -73,6 +73,17 @@
       pre-flag-file → `true` backfill), disabled rule fires no investigation
       (new xunit); Playwright specs for editor toggle + row badge added to
       `monitoring.spec.ts`
+- [x] Real OS toasts via `tauri-plugin-notification` replacing the blocking
+      MessageBox fallback in `native.rs show_notification` (D11)
+- [x] Notification center: history items carry `read`+`link`, bell badge =
+      unread count, per-item mark-read+navigate, mark-all-read, dismiss-all;
+      alert/insight stream events feed it with `/monitoring` links (D13)
+- [x] `propose_create_alert_rule` tool (FeatureArea.Monitoring, Mutate/Low) +
+      `AgentActionType.CreateAlertRule` + `MonitoringActionExecutor` in
+      src-sidecar (upsert + engine reload) — agent-proposed rules go through
+      the standard pending-approval card (D12)
+- [x] Tests: 5 tool tests + 5 executor tests (xunit); Playwright spec for the
+      notification center added to `monitoring.spec.ts`
 
 ### Cross-cutting
 
@@ -83,10 +94,13 @@
 
 ## Validation so far
 
-- `dotnet build` sidecar — green
-- `dotnet test`: Agents 240, Core 1002, Sidecar 475 — all green (incl. new
-  runner/store/flag tests)
-- `npx tsc -b` — clean; `npm run test:unit` — 473 green
-- Playwright — new specs written, suite NOT run locally yet (needs demo-mode
-  app + sidecar harness)
+- `dotnet build` sidecar — green; `cargo build --lib` — green (notification
+  plugin compiles)
+- `dotnet test`: Agents 254, Core 1002, Sidecar 475 — all green (incl. new
+  runner/store/flag/tool tests)
+- `npx tsc -b` — clean; `npm run test:unit` — 473 green; `npm run build` — green
+- `MonitoringActionExecutorTests` — written; NOT run locally: the dev sidecar
+  was running and locked `src-sidecar/bin` DLLs. Run once the app restarts.
+- Playwright — new specs written (AI toggle, row badge, notification center),
+  suite NOT run locally yet (needs demo-mode app + sidecar harness)
 - Aikido — MCP server not available in this environment; still pending

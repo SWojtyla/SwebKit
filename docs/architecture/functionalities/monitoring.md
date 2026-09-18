@@ -103,7 +103,16 @@ the UI as `proactiveInsightReady` on the monitoring SSE stream.
 OS + in-app notifications for both `alertFired` and `proactiveInsightReady`
 live in `AppLayout`'s always-mounted subscription — the single notification
 site — so they reach the user while the app is minimized or on another page,
-and can never double-toast from parallel page-level subscriptions.
+and can never double-toast from parallel page-level subscriptions. OS toasts
+go through `tauri-plugin-notification` (real Windows action-center toasts);
+in-app toasts funnel into the notification center's history (unread badge,
+mark-read/mark-all-read/dismiss-all, deep links to `/monitoring`).
+
+The agent can also propose new rules: `propose_create_alert_rule`
+(`FeatureArea.Monitoring`, Mutate) registers a pending action; on user
+confirmation `MonitoringActionExecutor` (src-sidecar) upserts through
+`IAlertRuleRepository` and calls `ReloadRulesAsync`, so the rule evaluates on
+its next interval — same path as the REST endpoints.
 
 ## Connection Pool
 

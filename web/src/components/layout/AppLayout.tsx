@@ -169,14 +169,14 @@ export function AppLayout() {
     useMonitoringStream(
         (evt) => {
             void showNotification(evt.ruleName, evt.message);
-            notify(evt.severity === "Critical" ? "error" : "success", evt.ruleName, evt.message);
+            notify(evt.severity === "Critical" ? "error" : "success", evt.ruleName, evt.message, undefined, "/monitoring");
         },
         (insight) => {
             void showNotification(
                 "Investigation ready",
                 `${insight.ruleName} — ${insight.summary.slice(0, 200)}`,
             );
-            notify("info", "Investigation ready", `${insight.ruleName} — ${insight.summary.slice(0, 120)}`);
+            notify("info", "Investigation ready", `${insight.ruleName} — ${insight.summary.slice(0, 120)}`, undefined, "/monitoring");
         },
     );
 

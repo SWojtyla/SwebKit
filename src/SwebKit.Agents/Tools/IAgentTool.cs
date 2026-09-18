@@ -40,6 +40,12 @@ public enum FeatureArea
     Observability,
     ApiClient,
 
+    /// <summary>Monitoring/alerting tools (agent-workspace-awareness) — e.g. proposing new alert
+    /// rules. Like Workspace, nothing filters TO this area today: rule contextual panels map to
+    /// the rule's *subject* area (an AksPodHealth rule → Aks), so the tools here are reachable from
+    /// the global /agent surface and workspace scope, not from a dedicated Monitoring area.</summary>
+    Monitoring,
+
     /// <summary>Cross-area tools (workspace-intelligence Module 3) — unlike every other area, these
     /// are NOT exempt from the per-area filter the way Observability is; they only become visible
     /// when a turn explicitly requests <c>scope: "workspace"</c> (or from the global <c>/agent</c>

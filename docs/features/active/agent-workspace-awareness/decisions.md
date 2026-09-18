@@ -130,3 +130,51 @@ in-app `notify` toasts.
 - The seeded-session deep link stays where it is (`MonitoringPage`'s
   Investigate button → `/agent`): the toast announces, the card is where you
   act.
+
+## D11 — OS notifications use tauri-plugin-notification, never a dialog
+
+**Chosen:** `show_notification` now goes through `tauri-plugin-notification`
+(real Windows action-center toasts via `tauri-winrt-notification`).
+
+- The previous implementation was `dialog().blocking_show()` — a modal
+  MessageBox that froze the webview until dismissed and looked nothing like a
+  notification (the exact complaint that triggered this work).
+- The plugin is fire-and-forget: no action callbacks, no click-to-focus. A
+  click-through deep link into the app remains a separate enhancement, same
+  as noted in D9.
+
+## D12 — Agent-proposed alert rules are a Monitoring-area mutation applied in the sidecar
+
+**Chosen:** new `propose_create_alert_rule` tool (`FeatureArea.Monitoring`,
+Mutate/Low) + `MonitoringActionExecutor` in `src-sidecar` handling
+`AgentActionType.CreateAlertRule`.
+
+- The tool only registers a `PendingAgentAction` — the existing
+  pending-approvals pipeline is the only path to a real rule, per the
+  feature's no-autonomous-mutation rule.
+- The executor lives in `src-sidecar` (not `SwebKit.Agents`) because applying
+  needs `MonitoringAlertEvaluationService.ReloadRulesAsync` — a sidecar
+  service — so a confirmed rule starts evaluating immediately, same as the
+  REST upsert endpoint does.
+- Tool params are flat (`aks_namespace`, `servicebus_entity_path`, …) rather
+  than the model's nested param bags: LLMs emit flat objects far more
+  reliably; the executor maps them per source and re-validates.
+- `FeatureArea.Monitoring` exists now but nothing filters TO it — rule
+  contextual panels map to the subject area (AksPodHealth → Aks) — so the
+  tool is reachable from global chat and workspace scope, which is where
+  "set an alert on this" conversations happen anyway.
+- `ai_investigation_enabled` is part of the proposed payload so an agent can
+  propose a firing rule with or without the investigation loop attached.
+
+## D13 — Notification center grows read-state inside the existing history
+
+**Chosen:** extend `NotificationSystem`'s history (which already collected
+dismissed toasts) with `read` + `link`, an unread badge, mark-all-read, and
+clear-all — rather than building a separate notification store.
+
+- Every `notify()` toast already funnels into history on dismiss, so alert
+  and insight notifications get center behavior for free once AppLayout
+  passes a `link` ("/monitoring").
+- Unread-count badge (not total-count) is the meaningful signal; items mark
+  themselves read on click, and clicking a linked item navigates and closes
+  the panel.
