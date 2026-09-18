@@ -172,6 +172,7 @@ export function BlobBrowserPanel() {
                   <button
                     onClick={ctx.handleUploadConfirm}
                     disabled={!ctx.uploadBlobName.trim() || !ctx.uploadFile || ctx.uploadBlob.isPending || ctx.uploadCheckingOverwrite}
+                    title={ctx.uploadBlob.isPending ? "Uploading…" : ctx.uploadCheckingOverwrite ? "Checking for an existing blob…" : !ctx.uploadFile || !ctx.uploadBlobName.trim() ? "Choose a file and blob name first" : undefined}
                     className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50"
                     data-testid="storage-upload-confirm"
                   >

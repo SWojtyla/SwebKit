@@ -103,4 +103,14 @@ services.AddHttpClient("MyClient")
 
 ---
 
+## CS-10 — A pooled-client cache key and the factory argument must describe the same target
+
+**Symptom:** A monitoring rule configured with an explicit AKS context queried the _profile's_ context instead; per-rule contexts silently all hit the same cluster. Separately, switching AKS context made switching _back_ pay the ~18s namespace list every time.
+
+**Cause:** Two sides of the same pooling contract were broken in `SidecarMonitoringConnectionPool`. `GetAksClient(context)` cached under the requested context but passed `null` (→ profile context) to the client factory, so the cache key lied about what it held. And `POST /api/aks/context` called `InvalidateStaleConnections()`, which disposed _every_ pooled client — including each client's internal 5-minute namespace cache — even though only the profile's active context changed.
+
+**Fix:** Derive the cache key and pass the _same_ explicit context to the factory; never let the factory fall back to a different default than the key describes. Reserve blanket invalidation for actual configuration changes (`SaveProfileAsync` now snapshots the profile and evicts only entries whose AKS/SB/Redis config diffed) — a user-driven context switch is not a config change. When a pool gains targeted-eviction members, every test fake implementing the interface needs them too; a tracking fake is the cheapest way to assert "evicted exactly X, nothing else".
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md)_

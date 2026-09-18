@@ -22,7 +22,7 @@ import type {
 export function useSqlTestConnection(connectionId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["sql", connectionId, "test"],
-    queryFn: () => apiFetch<{ connected: boolean; error?: string }>(`/api/sql/${connectionId}/test`),
+    queryFn: ({ signal }) => apiFetch<{ connected: boolean; error?: string }>(`/api/sql/${connectionId}/test`, { signal }),
     enabled: !!connectionId && (options?.enabled ?? true),
     retry: false,
   });

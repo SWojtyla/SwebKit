@@ -155,6 +155,7 @@ export function BatchReplayPanel({ nsId, entity, onClose }: Props) {
               <button
                 onClick={() => setShowConfirm(true)}
                 disabled={selectedSeqs.size === 0 || replaying}
+                title={replaying ? "Replaying…" : selectedSeqs.size === 0 ? "Select at least one message" : undefined}
                 className="flex items-center gap-1 rounded-md bg-primary px-4 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
                 data-testid="batch-replay-execute"
               >

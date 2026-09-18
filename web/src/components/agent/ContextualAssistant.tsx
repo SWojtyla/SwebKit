@@ -376,6 +376,7 @@ export function ContextualAssistant({ featureArea, title, selection, onClose }: 
               <button
                 onClick={handleSend}
                 disabled={!input.trim()}
+                title={!input.trim() ? "Type a message first" : undefined}
                 className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 data-testid="contextual-assistant-send"
               >

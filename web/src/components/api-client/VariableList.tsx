@@ -323,6 +323,7 @@ function KeyVaultField({ variable, index, keyVaults, onChange, onPreview, previe
       <button
         onClick={onPreview}
         disabled={!variable.credentialKey || isLoading || keyVaults.length === 0}
+        title={isLoading ? "Loading…" : !variable.credentialKey ? "Link a Key Vault credential first" : keyVaults.length === 0 ? "No Key Vaults configured" : undefined}
         className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
         data-testid={`${testIdPrefix}-preview-btn-${index}`}
       >

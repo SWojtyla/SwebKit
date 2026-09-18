@@ -188,6 +188,31 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
         _logger.LogDebug("MonitoringConnectionPool: Service Bus client for '{Alias}' manually evicted.", alias);
     }
 
+    public void EvictAksClients()
+    {
+        lock (_lock)
+        {
+            DisposeAksClientLocked();
+            foreach (var (_, oc) in _overrideClients)
+                if (oc is IAsyncDisposable od) _ = od.DisposeAsync().AsTask();
+            _overrideClients.Clear();
+        }
+        _logger.LogDebug("MonitoringConnectionPool: AKS clients evicted.");
+    }
+
+    public void EvictRedisClient(string key)
+    {
+        lock (_lock)
+        {
+            if (_redisClients.TryGetValue(key, out var entry))
+            {
+                (entry.Client as IDisposable)?.Dispose();
+                _redisClients.Remove(key);
+            }
+        }
+        _logger.LogDebug("MonitoringConnectionPool: Redis client for '{DisplayName}' evicted.", key);
+    }
+
     // ── IRedisClient ─────────────────────────────────────────────────────────
 
     public async ValueTask<IRedisClient?> GetRedisClientAsync(string displayName, CancellationToken ct = default)

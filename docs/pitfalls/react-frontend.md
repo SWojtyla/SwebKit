@@ -31,8 +31,8 @@ content that is genuinely there. Keep a hidden, `aria-hidden` mirror element hol
 
 ### Tauri does not camelCase struct fields on the way out
 
-Command _arguments_ are converted from JS camelCase to Rust snake_case automatically, but serialized
-_return values_ are not. A Rust field `index_state` arrives in TypeScript as `index_state`, so a TS
+Command _arguments_ are converted from JS camelCase to Rust snake*case automatically, but serialized
+\_return values* are not. A Rust field `index_state` arrives in TypeScript as `index_state`, so a TS
 interface declaring `indexState` silently reads `undefined`. Put
 `#[serde(rename_all = "camelCase")]` on any returned struct with a multi-word field, and keep the TS
 interface next to it.
@@ -72,8 +72,8 @@ error anywhere.
 Treat every error inside `.setup()` as fatal-by-invisible-panic: degrade instead. `manage()` now
 returns a `SidecarState` with `port = 0`, the frontend falls into its existing "Disconnected" state
 (Reconnect button + health poll), and a background thread keeps retrying the spawn and emits the
-usual `sidecar-*` lifecycle events. Also make READY_TIMEOUTs generous — the failure cost is an app
-that _looks_ dead, not a slow start.
+usual `sidecar-*` lifecycle events. Also make READY*TIMEOUTs generous — the failure cost is an app
+that \_looks* dead, not a slow start.
 
 ### `AllowedRoots` is in-memory, so a persisted path is not an authorized path
 
@@ -107,6 +107,17 @@ source left and it could no longer find the clobbered key. Fixed with a single
 is false under Chromium, so every e2e run takes the `localStorage` fallback branch — single-threaded,
 no possible interleaving — never the real keychain path. A Playwright repro of a Tauri-secrets race
 will not reproduce it no matter how the test is written; only the real desktop app can.
+
+### `plugin:event|listen not allowed by ACL` — `core:` plugins need a capability grant
+
+App-defined commands work with no capability file at all, but every `core:` plugin API the
+frontend touches (`@tauri-apps/api/event`'s `listen`/`unlisten`, window controls, …) is
+ACL-gated: with no `src-tauri/capabilities/*.json` granting it, the packaged app throws
+`Command plugin:event|listen not allowed by ACL` while dev mode and every Playwright run
+(browser, no Tauri) stay green. The pod shell's output stream hit exactly this — it subscribes
+with `listen()`, which needs `core:event`'s `allow-listen`/`allow-unlisten`, covered by the
+`core:default` permission set granted in `src-tauri/capabilities/default.json`. Any new
+`@tauri-apps/api/*` import in the frontend needs its matching permission added there.
 
 ## Sidecar contract
 
@@ -314,6 +325,23 @@ moment ago is not in this render's snapshot yet — so the guard cancelled exact
 needed the fresh data. Detect the no-op inside the updater, where the data is current, and let a
 genuinely redundant write be a redundant write.
 
+### Query keys that omit the server-side identity serve one backend's data under another's name
+
+Every AKS resource key was `["aks-pods", ns]`, with no context element — the key did not
+identify which cluster the data came from. Two consequences: during a context switch the tables
+kept showing the _previous_ cluster's rows labelled as the new one, and switching _back_ never
+hit cache, so every round trip re-paid the full fetch. Worse, the workspace picked the next
+namespace from the old cluster's list, which could be a name the new cluster doesn't even have.
+
+The fix has three parts that all have to be true at once: put the resolved context in every
+namespaced/cluster key (`["aks-pods", ctx, ns, …]`, derived from the cached profile, not from a
+prop threaded down), hold the queries in a gated token so nothing fires against cluster A with
+cluster B's namespace mid-switch (`namespaceToken` in `AksWorkspaceContext`), and restore the
+target context's _persisted_ namespace (`view-pref:aks-selected-ns:<ctx>`) instead of inferring
+it from whichever list happens to be in memory. Any consumer that bypasses the hook — the
+command palette reading cached namespaces — must prefix-scan (`getQueriesData`) since it can no
+longer know the context element.
+
 ## React Router
 
 ### `searchParams` in a callback is a snapshot, so two writes in one tick clobber each other
@@ -326,6 +354,18 @@ the first's parameter, leaving the page on "Select a namespace to view resources
 The functional setter form (`setSearchParams(prev => …)`) does **not** fix this: React Router's
 implementation calls the updater with the same captured `searchParams`. With `<BrowserRouter>`
 (which pushes to history synchronously) read `window.location.search` at call time instead.
+
+### A "restore on launch" read must happen before the save effect's first write
+
+Persisting `last-route` on every navigation and restoring it on launch look independent, but the
+save effect fires on the very first commit — writing `last-route="/"` over the stored value
+_before_ the async settings query that gates the restore has even resolved. The restore then
+reads its own overwrite and does nothing.
+
+Capture the stored value at mount with a lazy initializer (`useState(() => loadViewPreference(…))`)
+— initializers run before any effect — and restore from the capture. Then the save effect can
+truthfully record every navigation, `/` included: if the user's real last page was the dashboard,
+`"/"` is the correct thing to restore (i.e. restore nothing).
 
 ### An effect that defaults a URL param can overwrite the user's choice
 

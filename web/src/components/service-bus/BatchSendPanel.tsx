@@ -227,6 +227,7 @@ export function BatchSendPanel({ nsId, namespaces, entity, onClose }: Props) {
           <button
             onClick={onSend}
             disabled={!preview || batchSendMutation.isPending}
+            title={batchSendMutation.isPending ? "Sending…" : !preview ? "Preview the batch first" : undefined}
             className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
             data-testid="batch-send-btn"
           >

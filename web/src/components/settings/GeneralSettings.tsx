@@ -176,6 +176,22 @@ export function GeneralSettings() {
           Connect to your configured AKS/Service Bus/Redis/Storage services as soon as the app
           opens, so the first tab you visit isn't the one waiting on a cold connection.
         </p>
+        <label className="mt-2 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.restoreLastWorkspaceOnStartup !== false}
+            onChange={(e) => {
+              const restoreLastWorkspaceOnStartup = e.target.checked;
+              updateSettings.mutate((prev) => ({ ...prev, restoreLastWorkspaceOnStartup }));
+            }}
+            data-testid="restore-workspace-toggle"
+          />
+          Restore last workspace on launch
+        </label>
+        <p className="mt-0.5 pl-6 text-xs text-muted-foreground">
+          Reopen the page — including its selections — that was open when the app last closed,
+          instead of always starting on the dashboard.
+        </p>
       </section>
 
       <section>
@@ -199,6 +215,7 @@ export function GeneralSettings() {
               }
             }}
             disabled={exportSettings.isPending}
+            title={exportSettings.isPending ? "Exporting…" : undefined}
             className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
@@ -207,6 +224,7 @@ export function GeneralSettings() {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={importSettings.isPending}
+            title={importSettings.isPending ? "Importing…" : undefined}
             className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
           >
             <Upload className="h-4 w-4" />

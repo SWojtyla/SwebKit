@@ -131,6 +131,36 @@ public class SidecarMonitoringConnectionPoolAksTests
     }
 
     [Fact]
+    public void GetAksClient_ExplicitContext_BuildsClientForThatContext_NotTheConfiguredOne()
+    {
+        // Regression: the cache key used to carry the requested context while the factory still
+        // received the profile's configured context — explicit-context callers (context-switch
+        // test, per-rule monitoring) got a client pointed at the wrong cluster.
+        var (pool, profile, _, factory) = Build();
+        profile.Config.AksConfig = new AksConfig { KubeconfigContext = "ctx-default", KubeconfigPath = "/tmp/kubeconfig" };
+
+        var client = pool.GetAksClient("ctx-other");
+
+        Assert.NotNull(client);
+        Assert.Single(factory.Calls);
+        Assert.Equal(("ctx-other", "/tmp/kubeconfig"), factory.Calls[0]);
+    }
+
+    [Fact]
+    public void EvictAksClients_DropsCachedClients_ButLeavesThePoolUsable()
+    {
+        var (pool, profile, _, factory) = Build();
+        profile.Config.AksConfig = new AksConfig { KubeconfigContext = "ctx-a", KubeconfigPath = "/tmp/kubeconfig" };
+
+        var first = pool.GetAksClient();
+        pool.EvictAksClients();
+        var second = pool.GetAksClient();
+
+        Assert.NotSame(first, second);
+        Assert.Equal(2, factory.Calls.Count);
+    }
+
+    [Fact]
     public void InvalidateStaleConnections_ForcesRebuild_OnNextCall()
     {
         var (pool, profile, _, factory) = Build();

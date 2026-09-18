@@ -183,6 +183,7 @@ export function PendingActionCard({ action, onApplied }: PendingActionCardProps)
             <button
               onClick={handleRetry}
               disabled={isBusy}
+              title={isBusy ? "An action is in progress" : undefined}
               className="rounded-md border px-3 py-1 text-xs hover:bg-accent disabled:opacity-50"
               data-testid={`pending-action-retry-${action.id}`}
             >
@@ -191,6 +192,7 @@ export function PendingActionCard({ action, onApplied }: PendingActionCardProps)
             <button
               onClick={handleDismissFailure}
               disabled={isBusy}
+              title={isBusy ? "An action is in progress" : undefined}
               className="rounded-md border px-3 py-1 text-xs hover:bg-accent disabled:opacity-50"
               data-testid={`pending-action-dismiss-error-${action.id}`}
             >
@@ -214,6 +216,7 @@ export function PendingActionCard({ action, onApplied }: PendingActionCardProps)
           <button
             onClick={handleConfirmClick}
             disabled={isBusy}
+            title={isBusy ? "An action is in progress" : undefined}
             className={confirmButtonClassName}
             data-testid={`pending-action-confirm-${action.id}`}
           >
@@ -222,6 +225,7 @@ export function PendingActionCard({ action, onApplied }: PendingActionCardProps)
           <button
             onClick={runReject}
             disabled={isBusy}
+            title={isBusy ? "An action is in progress" : undefined}
             className="rounded-md border px-3 py-1 text-xs hover:bg-accent disabled:opacity-50"
             data-testid={`pending-action-reject-${action.id}`}
           >

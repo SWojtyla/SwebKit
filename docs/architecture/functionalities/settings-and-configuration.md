@@ -10,6 +10,7 @@
   - Incident Timeline workload mappings for App Insights, Service Bus, and Azure DevOps evidence
   - Redis cache entries
   - Storage (Azure Blob) account config
+  - User-curated workspace topology (Map tab): resources across AKS, Service Bus, Redis, SQL, and Storage linked by declared relationships; persisted as `AppConfig.Topology` and injected into every agent turn's system prompt (see `functionalities/agent.md`)
 - Local recent-resource history persisted separately in `ui-state.json`
 - Shell appearance preferences persisted separately in `user-settings.json`
 - The appearance section exposes `Studio Ledger` as the curated dark default plus the supported light palettes, and legacy dark-theme aliases normalize to `Studio Ledger` when loaded.

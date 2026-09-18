@@ -7,7 +7,11 @@ This folder is the canonical feature-first map for implementation work.
 - `docs/features/active/` — features currently being implemented or awaiting a final pass.
 - `docs/features/archive/` — durable summaries and historical feature records.
 
-There are currently no active feature plans. Completed implementation details belong in architecture and pitfall documentation; historical planning records remain under `archive/` where retained.
+Active features:
+
+- `ux-polish/` — UX polish umbrella: AKS context switching, startup warm-up & resume, page restore parity, consistency sweep.
+- `settings-profiles-aks-shell/` — settings profile lists + AKS shell/port-forward fixes.
+- `workspace-map-overhaul/` — workspace topology map overhaul.
 
 ## Folder Contract
 

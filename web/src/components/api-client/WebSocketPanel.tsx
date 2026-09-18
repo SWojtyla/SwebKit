@@ -150,6 +150,7 @@ export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
           <button
             onClick={connect}
             disabled={!request.url.trim()}
+            title={!request.url.trim() ? "Enter a URL first" : undefined}
             className="flex items-center gap-1 rounded px-3 py-1 text-xs hover:opacity-90 disabled:opacity-50"
             style={{ backgroundColor: "var(--success)", color: "var(--success-foreground)" }}
             data-testid="ws-connect-button"
@@ -227,6 +228,7 @@ export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
         <button
           onClick={sendMessage}
           disabled={!connected || !inputText.trim()}
+          title={!connected ? "Connect first" : !inputText.trim() ? "Type a message first" : undefined}
           className="flex items-center gap-1 rounded bg-primary px-3 py-1 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
           data-testid="ws-send-button"
         >
@@ -249,6 +251,7 @@ export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
             <button
               onClick={requestClearMessages}
               disabled={messages.length === 0}
+              title={messages.length === 0 ? "No messages to clear" : undefined}
               className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
               data-testid="ws-clear-messages"
             >
@@ -275,6 +278,7 @@ export function WebSocketPanel({ request, onChange }: WebSocketPanelProps) {
             <button
               onClick={() => sendSavedMessage(msg)}
               disabled={!connected}
+              title={!connected ? "Connect first" : undefined}
               className="rounded p-1 text-primary disabled:opacity-50"
               data-testid={`ws-send-saved-${i}`}
             >

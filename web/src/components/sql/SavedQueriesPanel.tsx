@@ -62,6 +62,7 @@ export function SavedQueriesPanel({ connectionId, currentSql, onLoad, onRun }: S
               );
             }}
             disabled={!name.trim() || !currentSql.trim() || saveQuery.isPending}
+            title={saveQuery.isPending ? "Saving…" : !name.trim() ? "Name the query first" : !currentSql.trim() ? "No SQL to save" : undefined}
             className="flex items-center gap-1 rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50"
             data-testid="sql-save-submit"
           >

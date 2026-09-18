@@ -518,6 +518,7 @@ export function MessageList({
                   <button
                     onClick={handleSaveFilter}
                     disabled={!saveFilterName.trim()}
+                    title={!saveFilterName.trim() ? "Name the filter first" : undefined}
                     className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                   >
                     Save
@@ -791,6 +792,7 @@ export function MessageList({
               <button
                 onClick={handleBulkResubmit}
                 disabled={resubmitDlqMutation.isPending}
+                title={resubmitDlqMutation.isPending ? "Resubmitting…" : undefined}
                 className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                 data-testid="bulk-resubmit"
               >
@@ -800,6 +802,7 @@ export function MessageList({
             <button
               onClick={handleBulkComplete}
               disabled={completeMutation.isPending || completeDlqMutation.isPending}
+              title={completeMutation.isPending || completeDlqMutation.isPending ? "Completing…" : undefined}
               className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
               data-testid="bulk-complete"
             >
@@ -981,6 +984,7 @@ export function MessageList({
           data-testid="load-more-button"
           onClick={onLoadMore}
           disabled={!canLoadMore || isLoadingMore}
+          title={isLoadingMore ? "Loading…" : !canLoadMore ? "All messages are loaded" : undefined}
           className="rounded border px-2 py-0.5 text-xs hover:bg-accent disabled:opacity-50"
         >
           {isLoadingMore ? "Loading…" : canLoadMore ? `Load more (+${prefs.peekCount})` : "All loaded"}

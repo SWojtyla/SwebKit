@@ -367,6 +367,7 @@ export interface UserSettings {
     fontSize: "small" | "medium" | "large";
     density: "comfortable" | "compact";
     warmupConnectionsOnStartup: boolean;
+    restoreLastWorkspaceOnStartup: boolean;
     verifyApiClientSsl: boolean;
     apiClientRequestTabs: boolean;
     autoSaveRequests: boolean;

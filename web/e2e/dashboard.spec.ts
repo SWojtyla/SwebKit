@@ -75,7 +75,10 @@ test.describe("Dashboard", () => {
   // Most users have no RBAC there, so those calls returned 403 after ~37s while
   // holding browser connections, stalling every other page. It must use the
   // namespace from the profile instead, and must not pay for the slow
-  // cluster-scoped namespace listing when it already knows which one to use.
+  // cluster-scoped namespace listing *for its own tile* when it already knows
+  // which one to use — the startup warm-up (useWorkspaceWarmup) does fire one
+  // namespaces call in the background to pre-warm the AKS page, so exactly one
+  // is expected; a second would mean the dashboard fell back to listing.
   test("queries the configured AKS namespace instead of a hardcoded default", async ({ page }) => {
     await patchDefaultNamespace(page, "team-alpha");
     await setDemoMode(page, true);
@@ -90,7 +93,7 @@ test.describe("Dashboard", () => {
       .poll(() => aksPaths.some((p) => p.startsWith("/api/aks/team-alpha/")))
       .toBe(true);
     expect(aksPaths.filter((p) => p.startsWith("/api/aks/default/"))).toEqual([]);
-    expect(aksPaths).not.toContain("/api/aks/namespaces");
+    expect(aksPaths.filter((p) => p === "/api/aks/namespaces")).toHaveLength(1);
   });
 
   // The opposite branch: with no namespace configured the dashboard still has to

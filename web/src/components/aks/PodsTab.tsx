@@ -208,6 +208,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
           handleDelete(pod);
         }}
         disabled={deleteMutation.isPending}
+        title={deleteMutation.isPending ? "Deleting…" : undefined}
         className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
       >
         Delete

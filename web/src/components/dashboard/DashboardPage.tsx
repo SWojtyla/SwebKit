@@ -252,6 +252,7 @@ export function DashboardPage() {
             data-testid="dashboard-demo-mode-toggle"
             onClick={() => toggleDemo.mutate(!isDemo)}
             disabled={toggleDemo.isPending}
+            title={toggleDemo.isPending ? "Toggling demo mode…" : undefined}
             className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-all ${
               isDemo ? "border-primary bg-primary text-primary-foreground shadow-sm" : "hover:bg-accent"
             }`}
@@ -276,6 +277,7 @@ export function DashboardPage() {
         <button
           onClick={handleCommand}
           disabled={!command.trim()}
+          title={!command.trim() ? "Type a question first" : undefined}
           className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
           data-testid="cockpit-command-send"
         >

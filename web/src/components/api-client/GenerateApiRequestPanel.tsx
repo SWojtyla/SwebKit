@@ -70,6 +70,7 @@ export function GenerateApiRequestPanel({ requestId, onClose }: GenerateApiReque
           <button
             onClick={handleGenerate}
             disabled={!description.trim() || chat.isPending}
+            title={chat.isPending ? "Generating…" : !description.trim() ? "Describe the request first" : undefined}
             className="mt-2 w-full rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             data-testid="generate-api-request-submit"
           >

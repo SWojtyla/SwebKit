@@ -55,6 +55,7 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
           toggle(cj);
         }}
         disabled={suspendMutation.isPending}
+        title={suspendMutation.isPending ? "Updating…" : undefined}
         className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
       >
         {cj.suspend ? "Resume" : "Suspend"}

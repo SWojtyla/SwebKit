@@ -61,11 +61,15 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
         if (aksConfig is null)
             return null;
 
-        var key = context ?? aksConfig.KubeconfigContext ?? "default";
+        // The requested context must drive the factory, not just the cache key: previously the
+        // key said "other" while the client was still built for the profile's configured context,
+        // so explicit-context callers (context switch test, per-rule monitoring) silently talked
+        // to the wrong cluster.
+        var effectiveContext = context ?? aksConfig.KubeconfigContext;
         return GetOrCreate(
             _aksCache,
-            key,
-            () => _aksFactory.Create(aksConfig.KubeconfigContext, aksConfig.KubeconfigPath),
+            effectiveContext ?? "default",
+            () => _aksFactory.Create(effectiveContext, aksConfig.KubeconfigPath),
             "AKS");
     }
 
@@ -135,6 +139,14 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
     {
         if (!string.IsNullOrWhiteSpace(alias) && _sbCache.TryRemove(alias, out var client))
             DisposeEntry(client, "Service Bus", alias);
+    }
+
+    public void EvictAksClients() => DrainAndDispose(_aksCache, "AKS");
+
+    public void EvictRedisClient(string key)
+    {
+        if (!string.IsNullOrWhiteSpace(key) && _redisCache.TryRemove(key, out var client))
+            DisposeEntry(client, "Redis", key);
     }
 
     public ValueTask DisposeAsync()

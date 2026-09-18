@@ -92,6 +92,8 @@ internal sealed class FakeConnectionPoolForSuggestions(IAksClient? aksClient) : 
     public ValueTask<IRedisClient?> GetRedisClientAsync(string displayName, CancellationToken ct = default) => throw new NotSupportedException();
     public void InvalidateStaleConnections() { }
     public void EvictServiceBusClient(string alias) { }
+    public void EvictAksClients() { }
+    public void EvictRedisClient(string key) { }
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 

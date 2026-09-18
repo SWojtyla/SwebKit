@@ -28,7 +28,7 @@ const sessionKey = (sessionId?: string) => sessionId ?? "global";
 export function usePendingApprovals() {
   return useQuery({
     queryKey: ["pending-approvals"],
-    queryFn: () => apiFetch<PendingAction[]>("/api/agent/pending-approvals"),
+    queryFn: ({ signal }) => apiFetch<PendingAction[]>("/api/agent/pending-approvals", { signal }),
     refetchInterval: 30_000,
   });
 }
@@ -42,7 +42,7 @@ export function usePendingApprovals() {
 export function useAcpPermissions() {
   return useQuery({
     queryKey: ["acp-permissions"],
-    queryFn: () => apiFetch<AcpPermission[]>("/api/agent/acp/permissions"),
+    queryFn: ({ signal }) => apiFetch<AcpPermission[]>("/api/agent/acp/permissions", { signal }),
     refetchInterval: 5_000,
   });
 }
@@ -190,9 +190,10 @@ export function useRejectAction() {
 export function useAgentStatus(sessionId?: string) {
   return useQuery({
     queryKey: ["agent", "status", sessionKey(sessionId)],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiFetch<AgentStatus>(
         `/api/agent/status${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""}`,
+        { signal },
       ),
     refetchInterval: 5000,
   });

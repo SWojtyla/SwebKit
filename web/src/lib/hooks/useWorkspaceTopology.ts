@@ -9,7 +9,7 @@ import type { WorkspaceResourceCandidate, WorkspaceRelationshipSuggestion } from
 export function useWorkspaceTopologyCandidates() {
   return useQuery({
     queryKey: ["workspace-topology-candidates"],
-    queryFn: () => apiFetch<WorkspaceResourceCandidate[]>("/api/workspace/topology/candidates"),
+    queryFn: ({ signal }) => apiFetch<WorkspaceResourceCandidate[]>("/api/workspace/topology/candidates", { signal }),
   });
 }
 
@@ -20,6 +20,6 @@ export function useWorkspaceTopologyCandidates() {
 export function useWorkspaceTopologySuggestions() {
   return useQuery({
     queryKey: ["workspace-topology-suggestions"],
-    queryFn: () => apiFetch<WorkspaceRelationshipSuggestion[]>("/api/workspace/topology/suggestions"),
+    queryFn: ({ signal }) => apiFetch<WorkspaceRelationshipSuggestion[]>("/api/workspace/topology/suggestions", { signal }),
   });
 }

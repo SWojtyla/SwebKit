@@ -317,7 +317,9 @@ export function useCommandPaletteItems(open = false): CommandPaletteItem[] {
 
         const aksNs =
             aksNamespaces.data ??
-            queryClient.getQueryData<string[]>(["aks-namespaces"]) ??
+            // The key carries the context (`["aks-namespaces", ctx]`); a prefix lookup returns
+            // whichever context's list is cached when this query hasn't populated its own.
+            queryClient.getQueriesData<string[]>({ queryKey: ["aks-namespaces"] })[0]?.[1] ??
             [];
         for (const ns of aksNs) {
             items.push({

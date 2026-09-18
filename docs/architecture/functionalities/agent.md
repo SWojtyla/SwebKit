@@ -317,6 +317,14 @@ surfaces. `fs/*` and `terminal/*` client capabilities are not advertised, so age
 them receive JSON-RPC `-32601`. `session/clear` drops the ACP session alongside the local
 conversation. The implementation lives under `src-sidecar/Services/Acp/`.
 
+The per-turn system prompt (`AgentSystemPromptBuilder`) carries a bounded
+`## Workspace map` section rendering the user-curated `AppConfig.Topology` — nodes
+grouped by area plus relationships as `from → to (label)`, capped (30 nodes/area,
+40 edges, `+N more` overflow) so a dense map can't eat the context window. This is
+how every provider, ACP included, always sees the declared relationships; the
+`investigate_workspace_issue` tool (workspace scope) then walks those edges live
+rather than being the only way the map is discovered.
+
 ## Future Enhancements
 
 - **Context Awareness**: Deep integration with SwebKit state for richer context

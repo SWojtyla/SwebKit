@@ -292,6 +292,7 @@ export function GitPanel() {
           <button
             onClick={() => repoPath && void runAction("Pulled", () => gitPull(repoPath))}
             disabled={busy}
+            title={busy ? "A git operation is in progress" : undefined}
             className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
             data-testid="git-pull"
           >
@@ -300,6 +301,7 @@ export function GitPanel() {
           <button
             onClick={() => repoPath && void runAction("Pushed", () => gitPush(repoPath))}
             disabled={busy}
+            title={busy ? "A git operation is in progress" : undefined}
             className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
             data-testid="git-push"
           >
@@ -426,6 +428,7 @@ export function GitPanel() {
             <button
               onClick={() => void handleCommit()}
               disabled={!commitMessage.trim() || busy || stagedFiles.length === 0}
+              title={busy ? "A git operation is in progress" : stagedFiles.length === 0 ? "No staged files" : !commitMessage.trim() ? "Enter a commit message first" : undefined}
               className="flex items-center gap-1 rounded bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50"
               data-testid="git-commit-submit"
             >

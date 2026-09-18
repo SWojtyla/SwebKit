@@ -1,4 +1,7 @@
 import { RotateCcw } from "lucide-react";
+import { useNavigate } from "react-router";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
+import { QueryState } from "@/components/shared/QueryState";
 import { StoragePageProvider, useStoragePageContext } from "./StoragePageContext";
 import { BlobBrowserPanel } from "./BlobBrowserPanel";
 import { BlobDetailPanel } from "./BlobDetailPanel";
@@ -15,13 +18,22 @@ export function StoragePage() {
 
 function StoragePageContent() {
   const ctx = useStoragePageContext();
+  const navigate = useNavigate();
 
   if (!ctx.resolvedAccountId) {
     return (
       <div className="p-6" data-testid="storage-page">
         <h1 className="text-2xl font-bold" data-testid="storage-title">Storage</h1>
         <p className="mt-4 text-muted-foreground" data-testid="storage-no-account">
-          No storage account configured. Add one in Settings.
+          No storage account configured. Add one in{" "}
+          <button
+            onClick={() => navigate("/settings", { state: { tab: "storage" } })}
+            className="text-primary underline"
+            data-testid="storage-goto-settings"
+          >
+            Settings → Storage
+          </button>
+          .
         </p>
       </div>
     );
@@ -32,30 +44,30 @@ function StoragePageContent() {
   const containerList = (
     <div key="containers" className="h-full w-full overflow-auto" data-testid="storage-container-list">
       <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase">Containers</div>
-      {ctx.containers.isLoading && (
-        <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
-      )}
-      {ctx.containers.error && (
-        <div className="px-3 py-2 text-sm text-destructive" data-testid="storage-container-error">
-          Error: {ctx.containers.error.message}
-        </div>
-      )}
-      {ctx.containers.data?.map((c) => (
-        <button
-          key={c.name}
-          data-testid={`storage-container-${c.name}`}
-          onClick={() => ctx.handleSelectContainer(c.name)}
-          className={`flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
-            ctx.selectedContainer === c.name ? "bg-accent" : ""
-          }`}
-          title={c.name}
-        >
-          <span className="truncate font-mono">{c.name}</span>
-        </button>
-      ))}
-      {(!ctx.containers.data || ctx.containers.data.length === 0) && !ctx.containers.isLoading && (
-        <div className="px-3 py-2 text-sm text-muted-foreground">No containers</div>
-      )}
+      <QueryState
+        isLoading={ctx.containers.isLoading}
+        error={ctx.containers.error}
+        data={ctx.containers.data}
+        emptyTitle="No containers"
+        emptyDescription="This storage account has no blob containers."
+        skeletonRows={6}
+      >
+        {(containers) =>
+          containers.map((c) => (
+            <button
+              key={c.name}
+              data-testid={`storage-container-${c.name}`}
+              onClick={() => ctx.handleSelectContainer(c.name)}
+              className={`flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
+                ctx.selectedContainer === c.name ? "bg-accent" : ""
+              }`}
+              title={c.name}
+            >
+              <span className="truncate font-mono">{c.name}</span>
+            </button>
+          ))
+        }
+      </QueryState>
     </div>
   );
 
@@ -72,18 +84,21 @@ function StoragePageContent() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold" data-testid="storage-title">Storage</h1>
             {ctx.accounts.length > 1 && (
-              <select
-                data-testid="storage-account-select"
-                value={ctx.resolvedAccountId ?? ""}
-                onChange={(e) => ctx.handleSelectAccount(e.target.value)}
-                className="rounded-md border bg-background px-2 py-1 text-sm"
-              >
-                {ctx.accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.displayName}
-                  </option>
-                ))}
-              </select>
+              <SearchableSelect
+                items={ctx.accounts.map((a) => ({
+                  value: a.id,
+                  label: a.displayName,
+                  subtitle: a.accountName,
+                }))}
+                value={ctx.resolvedAccountId}
+                onChange={(item) => ctx.handleSelectAccount(item.value)}
+                placeholder="Select account..."
+                filterPlaceholder="Filter accounts..."
+                testId="storage-account"
+                nativeSelectTestId="storage-account-select"
+                listAriaLabel="Storage accounts"
+                buttonClassName="min-w-[10rem]"
+              />
             )}
           </div>
           <div className="flex gap-1">

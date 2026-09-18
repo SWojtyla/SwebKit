@@ -50,6 +50,7 @@ export function AppearanceSettings() {
                 key={t.id}
                 onClick={() => !locked && selectTheme(t.id)}
                 disabled={locked}
+                title={locked ? `Unlocks after ${FATHOM_UNLOCK_THRESHOLD} sessions` : undefined}
                 className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all duration-200 ${
                   locked
                     ? "cursor-default border-border opacity-60"

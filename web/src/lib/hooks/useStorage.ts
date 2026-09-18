@@ -19,7 +19,7 @@ import type {
 export function useStorageTestConnection(accountId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["storage", accountId, "test"],
-    queryFn: () => apiFetch<{ connected: boolean; error?: string }>(`/api/storage/${accountId}/test`),
+    queryFn: ({ signal }) => apiFetch<{ connected: boolean; error?: string }>(`/api/storage/${accountId}/test`, { signal }),
     enabled: !!accountId && (options?.enabled ?? true),
   });
 }
@@ -27,7 +27,7 @@ export function useStorageTestConnection(accountId: string | null, options?: { e
 export function useStorageContainers(accountId: string | null) {
   return useQuery({
     queryKey: ["storage", accountId, "containers"],
-    queryFn: () => apiFetch<StorageContainerItem[]>(`/api/storage/${accountId}/containers`),
+    queryFn: ({ signal }) => apiFetch<StorageContainerItem[]>(`/api/storage/${accountId}/containers`, { signal }),
     enabled: !!accountId,
   });
 }
@@ -35,10 +35,10 @@ export function useStorageContainers(accountId: string | null) {
 export function useStorageBlobs(accountId: string | null, container: string | null, prefix: string, continuationToken: string | null) {
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "blobs", prefix, continuationToken],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params = new URLSearchParams({ prefix });
       if (continuationToken) params.set("continuationToken", continuationToken);
-      return apiFetch<StorageBlobPage>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs?${params}`);
+      return apiFetch<StorageBlobPage>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs?${params}`, { signal });
     },
     enabled: !!accountId && !!container,
     // 6.5 fix: each "Load more" click changes `continuationToken`, which is part of the
@@ -53,9 +53,9 @@ export function useStorageBlobs(accountId: string | null, container: string | nu
 export function useBlobProperties(accountId: string | null, container: string | null, blobName: string | null) {
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "properties"],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params = new URLSearchParams({ blobName: blobName! });
-      return apiFetch<BlobProperties>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/properties?${params}`);
+      return apiFetch<BlobProperties>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/properties?${params}`, { signal });
     },
     enabled: !!accountId && !!container && !!blobName,
   });
@@ -64,9 +64,9 @@ export function useBlobProperties(accountId: string | null, container: string | 
 export function useBlobContent(accountId: string | null, container: string | null, blobName: string | null) {
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "content"],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params = new URLSearchParams({ blobName: blobName! });
-      return apiFetch<StorageBlobContent>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/content?${params}`);
+      return apiFetch<StorageBlobContent>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/content?${params}`, { signal });
     },
     enabled: !!accountId && !!container && !!blobName,
   });
@@ -75,9 +75,9 @@ export function useBlobContent(accountId: string | null, container: string | nul
 export function useBlobSasUrl(accountId: string | null, container: string | null, blobName: string | null, expiryMinutes: number = 60) {
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "sas", expiryMinutes],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params = new URLSearchParams({ blobName: blobName!, expiryMinutes: String(expiryMinutes) });
-      return apiFetch<{ sasUrl: string }>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/sas?${params}`);
+      return apiFetch<{ sasUrl: string }>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/sas?${params}`, { signal });
     },
     enabled: !!accountId && !!container && !!blobName,
   });
@@ -86,9 +86,9 @@ export function useBlobSasUrl(accountId: string | null, container: string | null
 export function useBlobVersions(accountId: string | null, container: string | null, blobName: string | null) {
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "versions"],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params = new URLSearchParams({ blobName: blobName! });
-      return apiFetch<{ versionId: string; lastModified: string; sizeBytes: number; isCurrent: boolean }[]>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/versions?${params}`);
+      return apiFetch<{ versionId: string; lastModified: string; sizeBytes: number; isCurrent: boolean }[]>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/versions?${params}`, { signal });
     },
     enabled: !!accountId && !!container && !!blobName,
   });
@@ -104,11 +104,12 @@ export function useBlobVersionComparison(
 ) {
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "blobs", blobName, "versions", "compare", baseVersionId, compareVersionId],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params = new URLSearchParams({ blobName: blobName!, baseVersionId: baseVersionId! });
       if (compareVersionId) params.set("compareVersionId", compareVersionId);
       return apiFetch<BlobVersionComparison>(
         `/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/blobs/versions/compare?${params}`,
+        { signal },
       );
     },
     enabled: enabled && !!accountId && !!container && !!blobName && !!baseVersionId,
@@ -165,7 +166,7 @@ export function useRestoreBlobVersion(accountId: string | null, container: strin
 export function useDeletedBlobs(accountId: string | null, container: string | null) {
   return useQuery({
     queryKey: ["storage", accountId, "containers", container, "deleted-blobs"],
-    queryFn: () => apiFetch<{ name: string; deletedOn: string; remainingDays: number }[]>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/deleted-blobs`),
+    queryFn: ({ signal }) => apiFetch<{ name: string; deletedOn: string; remainingDays: number }[]>(`/api/storage/${accountId}/containers/${encodeURIComponent(container!)}/deleted-blobs`, { signal }),
     enabled: !!accountId && !!container,
   });
 }

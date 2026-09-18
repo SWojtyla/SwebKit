@@ -10,8 +10,9 @@ const BOM = 0xfeff;
 
 /** Strips a leading BOM and surrounding whitespace, which `JSON.parse` rejects. */
 function stripPreamble(content: string): string {
-  const withoutBom = content.charCodeAt(0) === BOM ? content.slice(1) : content;
-  return withoutBom.trim();
+    const withoutBom =
+        content.charCodeAt(0) === BOM ? content.slice(1) : content;
+    return withoutBom.trim();
 }
 
 /**
@@ -21,14 +22,41 @@ function stripPreamble(content: string): string {
  * without that guard a plain text file containing `42` would be offered a Prettify
  * toggle that does nothing. Truncated content (the server caps large blobs) fails to
  * parse and returns `null` rather than throwing.
+ *
+ * String roots get unwrapped: some producers store a JSON payload inside a JSON
+ * string (double-encoded — a log blob holding `"{\"a\":1}"`, escapes and all).
+ * Unwrapping the string layers and re-parsing shows the payload, not the envelope.
+ * String values *inside* an object are untouched — only whole-document wrapping
+ * is removed.
  */
 export function tryPrettifyJson(content: string): string | null {
-  const trimmed = stripPreamble(content);
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+    const trimmed = stripPreamble(content);
+    if (
+        !trimmed.startsWith("{") &&
+        !trimmed.startsWith("[") &&
+        !trimmed.startsWith('"')
+    )
+        return null;
 
-  try {
-    return JSON.stringify(JSON.parse(trimmed), null, 2);
-  } catch {
-    return null;
-  }
+    try {
+        let parsed: unknown = JSON.parse(trimmed);
+        // Depth cap: each layer is smaller than the last in practice, but don't trust
+        // that — a pathological input could ping-pong forever otherwise.
+        for (let depth = 0; typeof parsed === "string" && depth < 4; depth++) {
+            const inner = stripPreamble(parsed);
+            // An inner layer may itself be a quoted string (triple-encoded), so
+            // `"` qualifies as a re-parseable start too.
+            if (
+                !inner.startsWith("{") &&
+                !inner.startsWith("[") &&
+                !inner.startsWith('"')
+            )
+                return null;
+            parsed = JSON.parse(inner);
+        }
+        if (typeof parsed !== "object" || parsed === null) return null;
+        return JSON.stringify(parsed, null, 2);
+    } catch {
+        return null;
+    }
 }

@@ -14,7 +14,7 @@ import type {
 export function useCollections(enabled = true) {
   return useQuery<CollectionsStoreResponse, Error, ApiCollection[]>({
     queryKey: ["collections"],
-    queryFn: () => apiFetch<CollectionsStoreResponse>("/api/config/collections/store"),
+    queryFn: ({ signal }) => apiFetch<CollectionsStoreResponse>("/api/config/collections/store", { signal }),
     select: (data) => data.collections ?? [],
     enabled,
   });

@@ -1,5 +1,7 @@
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
+import { useNavigate } from "react-router";
 import { Clock, RefreshCw } from "lucide-react";
 import { RedisPageProvider, useRedisPageContext, mainTabs } from "./RedisPageContext";
 import { KeysTab } from "./tabs/KeysTab";
@@ -19,6 +21,7 @@ export function RedisPage() {
 }
 
 function RedisPageContent() {
+  const navigate = useNavigate();
   const {
     caches,
     resolvedCacheId,
@@ -42,7 +45,15 @@ function RedisPageContent() {
       <div className="p-6" data-testid="redis-page">
         <h1 className="text-2xl font-bold" data-testid="redis-title">Redis</h1>
         <p className="mt-4 text-muted-foreground" data-testid="redis-no-cache">
-          No Redis cache configured. Add one in Settings.
+          No Redis cache configured. Add one in{" "}
+          <button
+            onClick={() => navigate("/settings", { state: { tab: "redis" } })}
+            className="text-primary underline"
+            data-testid="redis-goto-settings"
+          >
+            Settings → Redis
+          </button>
+          .
         </p>
       </div>
     );
@@ -54,16 +65,17 @@ function RedisPageContent() {
       <div className="flex items-center gap-4 border-b px-6 py-2">
         <h1 className="text-lg font-bold shrink-0" data-testid="redis-title">Redis</h1>
         {caches.length > 0 && (
-          <select
-            data-testid="redis-cache-select"
-            className="rounded-md border bg-card px-3 py-1.5 text-sm"
+          <SearchableSelect
+            items={caches.map((c) => ({ value: c.id, label: c.displayName, subtitle: c.connectionString }))}
             value={resolvedCacheId}
-            onChange={(e) => handleCacheChange(e.target.value)}
-          >
-            {caches.map((c) => (
-              <option key={c.id} value={c.id}>{c.displayName}</option>
-            ))}
-          </select>
+            onChange={(item) => handleCacheChange(item.value)}
+            placeholder="Select cache..."
+            filterPlaceholder="Filter caches..."
+            testId="redis-cache"
+            nativeSelectTestId="redis-cache-select"
+            listAriaLabel="Redis caches"
+            buttonClassName="min-w-[10rem]"
+          />
         )}
         {serverInfo.isLoading && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="redis-connection-status">

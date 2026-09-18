@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type JSX,
 } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useDropzone } from "react-dropzone";
 import {
   useProfile,
@@ -25,7 +25,9 @@ import {
   useRestoreBlobVersion,
   useDeletedBlobs,
   useSetBlobMetadata,
+  useUpdateSearchParams,
 } from "@/lib/hooks";
+import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
 import type { BlobProperties, StorageBlobContent, StorageBlobItem, StorageConfig } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 import { buildZip } from "@/lib/zip";
@@ -160,18 +162,40 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
   const { data: profile } = useProfile();
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const updateParams = useUpdateSearchParams();
   const accounts = useMemo(() => profile?.config?.storageAccounts ?? [], [profile]);
-  const [activeAccountId, setActiveAccountId] = useState<string | null>(accounts[0]?.id ?? null);
+  const { notify } = useNotification();
+
+  // Selection state lives in the URL (?account/?container/?prefix/?blob/?view) so
+  // reloads, back/forward and deep links restore the exact browsing position.
+  // Persisted view-prefs only fill in what a bare visit doesn't specify.
+  const accountParam = searchParams.get("account");
+  const activeAccountId =
+    accountParam && accounts.some((a) => a.id === accountParam) ? accountParam : null;
   const resolvedAccountId = activeAccountId ?? accounts[0]?.id ?? null;
   const activeAccount = accounts.find((a) => a.id === resolvedAccountId);
   const allowMutations = activeAccount?.allowMutations ?? false;
-  const { notify } = useNotification();
 
   const blobListRef = useRef<HTMLDivElement | null>(null);
-  const [selectedContainer, setSelectedContainer] = useState<string | null>(null);
-  const [currentPrefix, setCurrentPrefix] = useState("");
-  const [prefixHistory, setPrefixHistory] = useState<string[]>([]);
-  const [selectedBlob, setSelectedBlob] = useState<string | null>(null);
+  const selectedContainer = searchParams.get("container");
+  const currentPrefix = searchParams.get("prefix") ?? "";
+  const selectedBlob = searchParams.get("blob");
+  const storageViewMode: "browser" | "recovery" =
+    searchParams.get("view") === "recovery" ? "recovery" : "browser";
+  // Derived rather than stored: navigation is strictly hierarchical, so the
+  // ancestor list is reconstructable from the prefix itself — and deep links
+  // into a prefix get a complete breadcrumb trail for free.
+  const prefixHistory = useMemo(() => {
+    const segments = currentPrefix.split("/").filter(Boolean);
+    const history = [""];
+    let acc = "";
+    for (const segment of segments.slice(0, -1)) {
+      acc += `${segment}/`;
+      history.push(acc);
+    }
+    return history;
+  }, [currentPrefix]);
   const [continuationToken, setContinuationToken] = useState<string | null>(null);
   const [allItems, setAllItems] = useState<StorageBlobItem[]>([]);
   const [blobFilter, setBlobFilter] = useState("");
@@ -182,7 +206,6 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [metadataEditing, setMetadataEditing] = useState(false);
   const [metadataDraft, setMetadataDraft] = useState<Record<string, string>>({});
-  const [storageViewMode, setStorageViewMode] = useState<"browser" | "recovery">("browser");
   const [blobDetailTab, setBlobDetailTab] = useState<"properties" | "versions" | "content">("properties");
   const [showSasUrl, setShowSasUrl] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
@@ -202,16 +225,74 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
   const [versionCompareRequested, setVersionCompareRequested] = useState(false);
   const [versionRestoreId, setVersionRestoreId] = useState<string | null>(null);
 
+  // Command-palette deep links arrive as location.state.accountId — translate to
+  // the account param (same as clicking the account) so the URL stays canonical.
   useEffect(() => {
     const state = location.state as { accountId?: string } | null;
     if (state?.accountId && accounts.some((a) => a.id === state.accountId)) {
-      setActiveAccountId(state.accountId);
-      setSelectedContainer(null);
+      updateParams(
+        { account: state.accountId, container: null, prefix: null, blob: null },
+        { replace: true },
+      );
       navigate(location.pathname, { replace: true, state: null });
     }
-  }, [location, navigate, accounts]);
+  }, [location, navigate, accounts, updateParams]);
 
+  // First visit without an explicit ?account: fall back to the persisted last
+  // account (validated against the loaded profile), and always settle the param
+  // on the resolved account so the URL is shareable.
+  const accountRestoredRef = useRef(false);
+  useEffect(() => {
+    if (accountRestoredRef.current || accounts.length === 0) return;
+    accountRestoredRef.current = true;
+    if (accountParam) return;
+    const last = loadViewPreference<string>("storage-last-account", "");
+    const target = accounts.some((a) => a.id === last) ? last : resolvedAccountId;
+    if (target) updateParams({ account: target }, { replace: true });
+  }, [accounts, accountParam, resolvedAccountId, updateParams]);
+
+  // Once a container-less visit has the container list, restore that account's
+  // last-used container — only if it still exists.
   const containers = useStorageContainers(resolvedAccountId);
+  const containerRestoredRef = useRef<string | null>(null);
+  const containerList = containers.data;
+  useEffect(() => {
+    if (!resolvedAccountId || selectedContainer !== null) return;
+    if (containerRestoredRef.current === resolvedAccountId || !containerList) return;
+    containerRestoredRef.current = resolvedAccountId;
+    const last = loadViewPreference<string>(`storage-last-container:${resolvedAccountId}`, "");
+    if (last && containerList.some((c) => c.name === last)) {
+      updateParams({ container: last }, { replace: true });
+    }
+  }, [resolvedAccountId, selectedContainer, containerList, updateParams]);
+
+  // Persist the browsed location regardless of how it was reached (clicks, deep
+  // links, back/forward) so a bare visit can resume it.
+  useEffect(() => {
+    if (!resolvedAccountId) return;
+    saveViewPreference("storage-last-account", resolvedAccountId);
+    if (selectedContainer) {
+      saveViewPreference(`storage-last-container:${resolvedAccountId}`, selectedContainer);
+    }
+  }, [resolvedAccountId, selectedContainer]);
+
+  // Pagination is fetch-position state, not navigation state: it resets whenever
+  // the browsed location changes (including via back/forward, which bypasses the
+  // select handlers that used to clear it manually).
+  useEffect(() => {
+    setContinuationToken(null);
+    setAllItems([]);
+  }, [resolvedAccountId, selectedContainer, currentPrefix]);
+
+  // Same for the version-detail panel — a blob arriving via URL/back-forward
+  // must not inherit the previous blob's compare/restore state.
+  useEffect(() => {
+    setVersionBaseId(null);
+    setVersionCompareId(null);
+    setVersionCompareRequested(false);
+    setVersionRestoreId(null);
+  }, [selectedBlob]);
+
   const blobs = useStorageBlobs(resolvedAccountId, selectedContainer, currentPrefix, continuationToken);
   const blobProps = useBlobProperties(resolvedAccountId, selectedContainer, selectedBlob);
   const blobContent = useBlobContent(resolvedAccountId, selectedContainer, selectedBlob);
@@ -236,40 +317,21 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
   });
 
   const handleSelectAccount = useCallback((id: string) => {
-    setActiveAccountId(id);
-    setSelectedContainer(null);
-    setCurrentPrefix("");
-    setPrefixHistory([]);
-    setSelectedBlob(null);
-    setContinuationToken(null);
-    setAllItems([]);
-  }, []);
+    updateParams({ account: id, container: null, prefix: null, blob: null });
+  }, [updateParams]);
 
   const handleSelectContainer = useCallback((name: string) => {
-    setSelectedContainer(name);
-    setCurrentPrefix("");
-    setPrefixHistory([]);
-    setSelectedBlob(null);
-    setContinuationToken(null);
-    setAllItems([]);
-  }, []);
+    updateParams({ container: name, prefix: null, blob: null });
+  }, [updateParams]);
 
   const handleNavigatePrefix = useCallback((prefix: string) => {
-    setPrefixHistory((prev) => [...prev, currentPrefix]);
-    setCurrentPrefix(prefix);
-    setSelectedBlob(null);
-    setContinuationToken(null);
-    setAllItems([]);
-  }, [currentPrefix]);
+    updateParams({ prefix: prefix || null, blob: null });
+  }, [updateParams]);
 
   const handleBreadcrumb = useCallback((index: number) => {
     const newPrefix = index === 0 ? "" : prefixHistory[index - 1] ?? "";
-    setPrefixHistory((prev) => prev.slice(0, index));
-    setCurrentPrefix(newPrefix);
-    setSelectedBlob(null);
-    setContinuationToken(null);
-    setAllItems([]);
-  }, [prefixHistory]);
+    updateParams({ prefix: newPrefix || null, blob: null });
+  }, [prefixHistory, updateParams]);
 
   const handleLoadMore = useCallback(() => {
     if (blobs.data?.continuationToken) {
@@ -279,12 +341,12 @@ export function StoragePageProvider({ children }: { children: ReactNode }): JSX.
   }, [blobs.data]);
 
   const handleSelectBlob = useCallback((name: string) => {
-    setSelectedBlob(name);
-    setVersionBaseId(null);
-    setVersionCompareId(null);
-    setVersionCompareRequested(false);
-    setVersionRestoreId(null);
-  }, []);
+    updateParams({ blob: name });
+  }, [updateParams]);
+
+  const setStorageViewMode = useCallback((v: "browser" | "recovery") => {
+    updateParams({ view: v === "browser" ? null : v });
+  }, [updateParams]);
 
   // Dedupes by name against `allItems`: with `useStorageBlobs`'s `placeholderData:
   // keepPreviousData` (6.5), while the next page is loading `blobs.data` still holds the

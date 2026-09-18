@@ -67,6 +67,7 @@ export function GitFileList({ files, subpath, busy, onAction }: GitFileListProps
                 <button
                   onClick={() => onAction(bulk, sectionFiles)}
                   disabled={busy}
+                  title={busy ? "A git operation is in progress" : undefined}
                   className="ml-auto rounded border px-1.5 py-0.5 text-[11px] hover:bg-accent disabled:opacity-50"
                   data-testid={`git-section-bulk-${section}`}
                 >
