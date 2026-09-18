@@ -7,8 +7,8 @@
 | Module | Status | Notes |
 | ------ | ------ | ----- |
 | 1. AKS context switching & namespaces | Done | committed b84a098 on sw/settings-profiles-aks-shell-fixes |
-| 2. Startup warm-up & resume | Review | implemented + verified; awaiting user review |
-| 3. Page restore & deep-link parity | Proposed | Storage/Redis/SQL/Monitoring URL params + persisted selection |
+| 2. Startup warm-up & resume | Done | committed 46c2168 |
+| 3. Page restore & deep-link parity | Review | implemented + verified; awaiting user review |
 | 4. Consistency & polish sweep | Proposed | SearchableSelect, signal audit, notify audit, a11y, QueryState |
 
 ## Done
@@ -77,6 +77,25 @@
 - `areaHealth` verified already rendered per-area in the status bar — no
   nav-dot change needed.
 
+### Module 3 — page restore & deep-link parity (`web/`)
+
+- `useUpdateSearchParams` extracted from `AksWorkspaceContext` into a shared
+  hook (live-URL-based writes, `null` deletes); now used by AKS, Storage,
+  Redis, SQL, Monitoring.
+- **Storage** (`StoragePageContext`): `?account/?container/?prefix/?blob/?view`
+  drive selection; `prefixHistory` derived from the prefix (deep links get full
+  breadcrumbs); `storage-last-account`/`storage-last-container:<id>` persisted
+  on any location change and validated on restore; palette `state.accountId`
+  still works. `StoragePage` empty state → Settings → Storage CTA.
+- **Redis** (`RedisPageContext`): `?tab=` for all 7 tabs; per-cache
+  `redis-last-pattern:<cacheId>` restored on first resolve and on switch;
+  `activeCacheId` profile write-through confirmed. `RedisPage` empty state →
+  Settings → Redis CTA.
+- **SQL** (`SqlPage`): `?connection` settles on the resolved id and is written
+  back on change; profile `activeConnectionId` remains the persistence.
+- **Monitoring** (`MonitoringPage`): `?tab=` for rules|history.
+- **Service Bus** (`ServiceBusPage`): empty state → Settings → Service Bus CTA.
+
 ## Validation
 
 - `dotnet build` sidecar + app: 0 warnings, 0 errors.
@@ -92,6 +111,12 @@
   deep-link safety); `SwebKit.Core.Tests` 1000/1000; dashboard/layout/
   monitoring/settings specs green (one assertion updated: `/api/aks/namespaces`
   now fires exactly once — the intentional warm-up call).
+- Module 3: **9 new** `e2e/page-restore.spec.ts` (storage URL-driven position +
+  reload, bare-visit container restore, deep-link breadcrumbs, redis
+  tab/pattern, sql connection param, monitoring tab, storage/redis settings
+  CTAs); regression sweep of 98 storage/redis/sql/monitoring/sb-url-state specs
+  — all green; `aks-url-state` + `workspace-resume` re-verified after the
+  shared-hook refactor.
 - Aikido MCP scan: **server not installed** in this environment — flagged to
   user; run `aikido_full_scan` on the changed files once configured.
 
@@ -106,4 +131,4 @@
 
 ## Next
 
-- User review of Module 2, then Module 3 (page restore & deep-link parity).
+- User review of Module 3, then Module 4 (consistency & polish sweep).

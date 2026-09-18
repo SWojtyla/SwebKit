@@ -284,9 +284,13 @@ export function ServiceBusPage() {
           ))}
         </select>
         {namespaces.length === 0 && (
-          <span className="text-xs text-muted-foreground">
+          <button
+            onClick={() => navigate("/settings", { state: { tab: "service-bus" } })}
+            className="text-xs text-primary underline"
+            data-testid="sb-goto-settings"
+          >
             Configure namespaces in Settings
-          </span>
+          </button>
         )}
         <button
           data-testid="toggle-entity-tree"

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Play, Save } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
@@ -8,6 +8,7 @@ import {
     useSqlSchema,
     useRunSqlQuery,
     useUpdateProfile,
+    useUpdateSearchParams,
 } from "@/lib/hooks";
 import type { SqlQueryResult } from "@/lib/types";
 import { SchemaTree } from "./SchemaTree";
@@ -115,8 +116,19 @@ export function SqlPage() {
     const effectiveDatabase = database ?? connection?.database ?? null;
     const schema = useSqlSchema(resolvedConnectionId, effectiveDatabase);
     const runQuery = useRunSqlQuery(resolvedConnectionId);
+    const updateParams = useUpdateSearchParams();
+
+    // Settle ?connection on the resolved id — a bare visit becomes shareable, an
+    // invalid deep-link id is corrected, and last-route restore records the real
+    // connection rather than whatever the mount-time deep link happened to say.
+    useEffect(() => {
+        if (resolvedConnectionId && searchParams.get("connection") !== resolvedConnectionId) {
+            updateParams({ connection: resolvedConnectionId }, { replace: true });
+        }
+    }, [resolvedConnectionId, searchParams, updateParams]);
 
     const handleConnectionChange = (id: string) => {
+        updateParams({ connection: id });
         updateProfile.mutate((prev) => ({
             ...prev,
             config: {

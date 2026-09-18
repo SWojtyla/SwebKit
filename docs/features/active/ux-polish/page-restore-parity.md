@@ -3,9 +3,29 @@
 Every feature page restores where the operator left it and is deep-linkable — the URL-driven
 pattern AKS and Service Bus already use, applied consistently.
 
-Reference pattern: `window.location.search`-based `updateParams` (see `AksWorkspaceContext.tsx`),
-per-context persisted prefs via `view-pref:*` (`lib/stores/panel-preferences.ts`), palette
-`state` items as the existing deep-link convention (`useCommandPalette.ts`).
+Reference pattern: `window.location.search`-based param writes via the shared
+`useUpdateSearchParams` hook (`web/src/lib/hooks/useUpdateSearchParams.ts`, extracted from
+`AksWorkspaceContext` in this module), per-context persisted prefs via `view-pref:*`
+(`lib/stores/panel-preferences.ts`), palette `state` items as the existing deep-link
+convention (`useCommandPalette.ts`).
+
+## Implemented
+
+- **Storage** — `?account/?container/?prefix/?blob/?view` drive all selection state;
+  `prefixHistory` is *derived* from the prefix (identical to the old push-stack, but deep
+  links get a full breadcrumb). `storage-last-account` + `storage-last-container:<id>` are
+  persisted on *any* location change (clicks, deep links, back/forward), validated against
+  the loaded account/container lists on restore, and the resolved account always settles
+  into the URL. Palette `location.state.accountId` translates to the param.
+- **Redis** — `?tab=` (7 tabs), per-cache `redis-last-pattern:<cacheId>` restored on first
+  resolve and on cache switch; `activeCacheId` write-through to the profile confirmed.
+- **SQL** — `?connection=` was already honored on load; it now also *settles* the param on
+  the resolved connection (bare visits become shareable, invalid ids self-correct) and the
+  select writes it back so `last-route` stays accurate. Connection persistence stays in the
+  profile (`activeConnectionId`), which doubles as the agent's default — no view-pref added.
+- **Monitoring** — `?tab=` for rules|history; command-palette `state.ruleId` still works.
+- **CTAs** — Storage, Redis, Service Bus empty states link to their `/settings` tab via
+  `state: { tab }`; SQL already did.
 
 ## Storage — `StoragePageContext.tsx` (biggest gap)
 

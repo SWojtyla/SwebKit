@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type JSX,
 } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient, useIsFetching } from "@tanstack/react-query";
 import {
   useProfile,
@@ -33,7 +33,9 @@ import {
   useRedisExportKeys,
   useRedisKeyspaceHealth,
   useRedisPrefixMemory,
+  useUpdateSearchParams,
 } from "@/lib/hooks";
+import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
 import type { RedisCacheEntry } from "@/lib/types";
 
 export const mainTabs = [
@@ -325,12 +327,23 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   }, [location, caches, navigate]);
 
   const redisTreeRef = useRef<HTMLDivElement | null>(null);
+  const [searchParams] = useSearchParams();
+  const updateParams = useUpdateSearchParams();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [pattern, setPattern] = useState("*");
   const [searchInput, setSearchInput] = useState("*");
   const [cursor, setCursor] = useState(0);
   const [allKeys, setAllKeys] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<TabId>("keys");
+  // `?tab=` is the deep-linkable form of the tab strip; anything unrecognized
+  // falls back to Keys.
+  const tabParam = searchParams.get("tab");
+  const activeTab: TabId = mainTabs.some((t) => t.id === tabParam)
+    ? (tabParam as TabId)
+    : "keys";
+  const setActiveTab = useCallback(
+    (tab: TabId) => updateParams({ tab: tab === "keys" ? null : tab }),
+    [updateParams],
+  );
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [editingValue, setEditingValue] = useState(false);
@@ -432,7 +445,29 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     lastAdvancedCursorRef.current = null;
     setExpandedNamespaces(new Set());
     setSelectedKeys(new Set());
+    if (resolvedCacheId) {
+      saveViewPreference(`redis-last-pattern:${resolvedCacheId}`, newPattern);
+    }
+  }, [resolvedCacheId]);
+
+  // Each cache remembers its own last applied pattern — switching back restores
+  // the filter the operator was actually using there rather than a global "*".
+  const restorePattern = useCallback((cacheId: string) => {
+    const saved = loadViewPreference<string>(`redis-last-pattern:${cacheId}`, "*");
+    setSearchInput(saved);
+    setPattern(saved);
   }, []);
+
+  // First resolve of the active cache (profile load, or the persisted
+  // activeCacheId landing) restores that cache's pattern; explicit switches go
+  // through handleCacheChange's own restore so the pattern updates in the same
+  // commit as the cache id.
+  const patternRestoredRef = useRef(false);
+  useEffect(() => {
+    if (!resolvedCacheId || patternRestoredRef.current) return;
+    patternRestoredRef.current = true;
+    restorePattern(resolvedCacheId);
+  }, [resolvedCacheId, restorePattern]);
 
   const handleSearch = () => applySearchPattern(searchInput);
 
@@ -700,6 +735,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     setSelectedKeys(new Set());
     lastAdvancedCursorRef.current = null;
     setExpandedNamespaces(new Set());
+    restorePattern(cacheId);
     // The browser's selected cache IS the "active" cache: persisted so the page restores it next
     // visit, and because the agent's Redis tools fall back to it (RedisToolContext). The profile
     // PUT evicts only connection-changed caches, so healthy pooled connections survive the save.

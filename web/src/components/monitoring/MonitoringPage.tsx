@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { Plus, AlertCircle } from "lucide-react";
 import { SkeletonRows } from "@/components/shared/Skeleton";
 import type { AlertSignalStatus, MonitoringAlertRule, AlertFiredEvent, ProactiveInsightReadyEvent } from "../../lib/api";
@@ -11,6 +11,7 @@ import {
   useMonitoringHistory,
   useMonitoringStream,
   useProactiveInsightsFeed,
+  useUpdateSearchParams,
 } from "../../lib/hooks";
 import { showNotification } from "../../lib/tauri-bridge";
 import { useNotification } from "../layout/NotificationSystem";
@@ -40,7 +41,13 @@ export function MonitoringPage() {
   const location = useLocation();
   const addAgentMessage = useAgentConversationStore((s) => s.addMessage);
 
-  const [activeTab, setActiveTab] = useState<"rules" | "history">("rules");
+  // `?tab=` keeps the rules/history split deep-linkable and restorable.
+  const [searchParams] = useSearchParams();
+  const updateParams = useUpdateSearchParams();
+  const activeTab: "rules" | "history" =
+    searchParams.get("tab") === "history" ? "history" : "rules";
+  const setActiveTab = (tab: "rules" | "history") =>
+    updateParams({ tab: tab === "rules" ? null : tab });
   const [showEditor, setShowEditor] = useState(false);
   const [editingRule, setEditingRule] = useState<MonitoringAlertRule | null>(null);
 

@@ -1,4 +1,5 @@
 import { RotateCcw } from "lucide-react";
+import { useNavigate } from "react-router";
 import { StoragePageProvider, useStoragePageContext } from "./StoragePageContext";
 import { BlobBrowserPanel } from "./BlobBrowserPanel";
 import { BlobDetailPanel } from "./BlobDetailPanel";
@@ -15,13 +16,22 @@ export function StoragePage() {
 
 function StoragePageContent() {
   const ctx = useStoragePageContext();
+  const navigate = useNavigate();
 
   if (!ctx.resolvedAccountId) {
     return (
       <div className="p-6" data-testid="storage-page">
         <h1 className="text-2xl font-bold" data-testid="storage-title">Storage</h1>
         <p className="mt-4 text-muted-foreground" data-testid="storage-no-account">
-          No storage account configured. Add one in Settings.
+          No storage account configured. Add one in{" "}
+          <button
+            onClick={() => navigate("/settings", { state: { tab: "storage" } })}
+            className="text-primary underline"
+            data-testid="storage-goto-settings"
+          >
+            Settings → Storage
+          </button>
+          .
         </p>
       </div>
     );

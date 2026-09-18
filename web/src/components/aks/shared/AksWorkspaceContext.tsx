@@ -21,6 +21,7 @@ import {
     useAksPods,
     useProfile,
     useDemoMode,
+    useUpdateSearchParams,
 } from "@/lib/hooks";
 import { apiFetch } from "@/lib/api";
 import {
@@ -258,7 +259,7 @@ export function AksWorkspaceProvider({
 }): JSX.Element {
     const location = useLocation();
     const navigate = useNavigate();
-    const [searchParams, setSearchParams] = useSearchParams();
+    const [searchParams] = useSearchParams();
     const { notify } = useNotification();
     const queryClient = useQueryClient();
 
@@ -337,31 +338,8 @@ export function AksWorkspaceProvider({
         wasFetchingRef.current = isAksFetching;
     }, [isAksFetching]);
 
-    const updateParams = useCallback(
-        (
-            updates: Record<string, string | null | undefined>,
-            options?: { replace?: boolean },
-        ) => {
-            // Based on the live URL rather than this render's `searchParams` snapshot.
-            // Two writes inside one React commit — picking a namespace and immediately
-            // clicking a tab, say — otherwise both build on the same stale base, and the
-            // second silently drops the first's parameter: selecting a namespace and
-            // switching tab in quick succession left the page on "Select a namespace to
-            // view resources". Safe with `<BrowserRouter>`, which pushes to history
-            // synchronously, so `window.location` already reflects the previous write.
-            const next = new URLSearchParams(window.location.search);
-            for (const [key, value] of Object.entries(updates)) {
-                if (value === null || value === undefined || value === "")
-                    next.delete(key);
-                else next.set(key, value);
-            }
-            setSearchParams(next, {
-                replace: options?.replace ?? false,
-                preventScrollReset: true,
-            });
-        },
-        [setSearchParams],
-    );
+    // Builds on the live URL, not this render's snapshot — see useUpdateSearchParams.
+    const updateParams = useUpdateSearchParams();
 
     const activeTab = useMemo(
         () => parseTab(searchParams.get("tab")),

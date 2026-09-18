@@ -1,5 +1,6 @@
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
+import { useNavigate } from "react-router";
 import { Clock, RefreshCw } from "lucide-react";
 import { RedisPageProvider, useRedisPageContext, mainTabs } from "./RedisPageContext";
 import { KeysTab } from "./tabs/KeysTab";
@@ -19,6 +20,7 @@ export function RedisPage() {
 }
 
 function RedisPageContent() {
+  const navigate = useNavigate();
   const {
     caches,
     resolvedCacheId,
@@ -42,7 +44,15 @@ function RedisPageContent() {
       <div className="p-6" data-testid="redis-page">
         <h1 className="text-2xl font-bold" data-testid="redis-title">Redis</h1>
         <p className="mt-4 text-muted-foreground" data-testid="redis-no-cache">
-          No Redis cache configured. Add one in Settings.
+          No Redis cache configured. Add one in{" "}
+          <button
+            onClick={() => navigate("/settings", { state: { tab: "redis" } })}
+            className="text-primary underline"
+            data-testid="redis-goto-settings"
+          >
+            Settings → Redis
+          </button>
+          .
         </p>
       </div>
     );
