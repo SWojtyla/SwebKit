@@ -183,6 +183,39 @@ public class AlertRuleRepositoryTests
         Assert.Equal(AlertSeverity.Critical, loaded[0].Severity);
     }
 
+    // ── AiInvestigationEnabled (agent-workspace-awareness M3) ─────────────────
+
+    [Fact]
+    public async Task SaveAllAsync_AiInvestigationEnabled_RoundTrips()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+
+        await repo.SaveAllAsync([
+            new MonitoringAlertRule { Name = "AI on" },
+            new MonitoringAlertRule { Name = "AI off", AiInvestigationEnabled = false },
+        ]);
+
+        var loaded = await repo.GetAllAsync();
+        Assert.True(loaded[0].AiInvestigationEnabled);
+        Assert.False(loaded[1].AiInvestigationEnabled);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_RulePersistedWithoutTheFlag_DeserializesToTrue()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+
+        // Simulate a rules file written before the flag existed — the property initializer
+        // must kick in so pre-flag rules keep their auto-investigate behavior.
+        await File.WriteAllTextAsync(AppDataPaths.MonitoringAlertsJson, """[{"Name":"legacy"}]""");
+
+        var loaded = await repo.GetAllAsync();
+        Assert.Single(loaded);
+        Assert.True(loaded[0].AiInvestigationEnabled);
+    }
+
     // ── Multiple param bags ───────────────────────────────────────────────────
 
     [Fact]

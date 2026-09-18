@@ -27,6 +27,10 @@ public static class AgentEndpoints
 
         app.MapGet("/api/agent/status", GetStatus);
 
+        // ── Screen-state publish (agent-workspace-awareness Module 1) ──────────
+
+        app.MapPost("/api/agent/screen-state", PublishScreenState);
+
         // ── Capability test ─────────────────────────────────────────────────────
 
         app.MapPost("/api/agent/profiles/{id}/test", TestProfileAsync);
@@ -54,6 +58,31 @@ public static class AgentEndpoints
 
         var reply = await agent.SendAsync(req.SessionId, req.Message, req.Context, req.Mode, req.Scope, ct);
         return Results.Ok(reply);
+    }
+
+    /// <summary>Receives the bounded "what's on screen" snapshot the React app publishes
+    /// (debounced + heartbeat, see web/src/lib/stores/screen-state.ts) and stores it latest-wins
+    /// for <c>get_screen_state</c>. The snapshot payload is opaque here — the frontend owns its
+    /// shape; this endpoint only enforces the byte cap.</summary>
+    internal static IResult PublishScreenState(ScreenStateStore store, ScreenStatePublishRequest req)
+    {
+        if (req.Snapshot.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+            return Results.BadRequest("snapshot is required");
+
+        // Clone detaches the element from the request's JsonDocument lifetime (same reason
+        // AgentToolSchema.Parse clones) — the store may hold this for minutes.
+        var snapshot = req.Snapshot.Clone();
+        if (snapshot.GetRawText().Length > ScreenStateStore.MaxSnapshotBytes)
+            return Results.BadRequest($"snapshot exceeds {ScreenStateStore.MaxSnapshotBytes} bytes");
+
+        store.Publish(new ScreenStateSnapshot
+        {
+            Route = req.Route ?? string.Empty,
+            FeatureArea = req.FeatureArea,
+            CapturedAt = req.CapturedAt ?? DateTimeOffset.UtcNow,
+            Snapshot = snapshot,
+        });
+        return Results.NoContent();
     }
 
     private static readonly JsonSerializerOptions StreamEventJsonOptions = new()
@@ -329,4 +358,14 @@ public sealed class AgentChatRequest
     /// area's tools are visible at all, not whether mutate tools are available. Anything other than
     /// exactly "workspace" (including null/omitted) is treated as "feature".</summary>
     public string? Scope { get; set; }
+}
+
+/// <summary>Publish payload for <c>POST /api/agent/screen-state</c> — see
+/// <see cref="ScreenStateSnapshot"/> for field semantics.</summary>
+public sealed class ScreenStatePublishRequest
+{
+    public string? Route { get; set; }
+    public string? FeatureArea { get; set; }
+    public DateTimeOffset? CapturedAt { get; set; }
+    public JsonElement Snapshot { get; set; }
 }

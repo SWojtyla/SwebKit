@@ -42,9 +42,11 @@ import {
     useWorkspaceWarmup,
 } from "@/lib/hooks";
 import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
+import { notifyScreenRouteChanged } from "@/lib/stores/screen-state";
 import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
 import { useSettingsStore, isTheme } from "@/lib/stores/settings";
-import { onSidecarLifecycleEvent, restartSidecar } from "@/lib/tauri-bridge";
+import { useMonitoringStream } from "@/lib/hooks/useMonitoring";
+import { onSidecarLifecycleEvent, restartSidecar, showNotification } from "@/lib/tauri-bridge";
 import { initSidecarBaseUrl } from "@/lib/api";
 import { useNotification } from "./NotificationSystem";
 import { ActivityIndicator } from "@/components/shared/ActivityIndicator";
@@ -77,6 +79,13 @@ export function AppLayout() {
     useEffect(() => {
         if (onAgentPage) setAgentPanelOpen(false);
     }, [onAgentPage]);
+
+    // Screen-state route trigger (agent-workspace-awareness M1): provider-less pages still get
+    // a route+title snapshot published on navigation; provider pages republish their own.
+    useEffect(() => {
+        notifyScreenRouteChanged();
+    }, [location.pathname]);
+
     const { data: health } = useHealth();
     const { data: profile } = useProfile();
     const { data: demoData } = useDemoMode();
@@ -151,6 +160,25 @@ export function AppLayout() {
     const [reconnecting, setReconnecting] = useState(false);
     const queryClient = useQueryClient();
     const { notify } = useNotification();
+
+    // Always-mounted monitoring subscription (agent-workspace-awareness M3): OS notifications for
+    // fired alerts and completed proactive investigations must reach the user while the app is
+    // minimized or while they sit on a page that never subscribes to the stream itself. This is
+    // the single notification site — page-level subscriptions feed their own feeds and
+    // deliberately don't toast, so an event can't double-notify.
+    useMonitoringStream(
+        (evt) => {
+            void showNotification(evt.ruleName, evt.message);
+            notify(evt.severity === "Critical" ? "error" : "success", evt.ruleName, evt.message);
+        },
+        (insight) => {
+            void showNotification(
+                "Investigation ready",
+                `${insight.ruleName} — ${insight.summary.slice(0, 200)}`,
+            );
+            notify("info", "Investigation ready", `${insight.ruleName} — ${insight.summary.slice(0, 120)}`);
+        },
+    );
 
     // Fathom's "thank you" moment: sessionCount lands on the threshold exactly once (it only ever
     // increments), so this fires on the one launch that crosses it and never again — no separate

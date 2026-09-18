@@ -23,6 +23,17 @@ The canonical documentation entry point is `docs/README.md`. Read it first for t
 
 **Never write plans, feature docs, or decisions outside the repository.** Everything belongs under `docs/`.
 
+## Legacy projects — do not touch by default
+
+The primary stack is **Tauri (Rust) + React (`web/`) + .NET sidecar (`src-sidecar/`)**. These projects are legacy, kept in-repo as reference/backup only:
+
+- `src/SwebKit.App/` — .NET MAUI Blazor Hybrid shell (previous primary app)
+- `src/SwebKit.WinUI/` — abandoned WinUI experiment
+- `src/SwebKit.Agent.PocConsole/` — early agent proof-of-concept console
+- `tests/SwebKit.App.Tests/` — bUnit tests for the legacy shell
+
+Do not search, read, or modify them unless the task explicitly concerns the legacy stack. Shared libraries (`SwebKit.Core`, `.Azure`, `.Kubernetes`, `.Redis`, `.Sql`, `.Agents`, etc.) are still live — the sidecar consumes them.
+
 ## Delivery paths
 
 - **Jira-driven (autonomous):** `swebify` — ticket key → full feature end-to-end

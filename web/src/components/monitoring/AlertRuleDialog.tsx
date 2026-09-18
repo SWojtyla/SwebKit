@@ -36,6 +36,7 @@ const empty = (): MonitoringAlertRule => ({
   aksPodParams: { namespace: "", restartThreshold: 5, healthScoreThreshold: 0.25 },
   serviceBusParams: { namespaceConnectionAlias: "", entityPath: "", messageCountThreshold: 1 },
   redisAlertParams: { connectionAlias: "", memoryUsageThresholdPercent: 80, clientCountLowerBound: 1 },
+  aiInvestigationEnabled: true,
 });
 
 export function AlertRuleDialog({
@@ -277,6 +278,26 @@ export function AlertRuleDialog({
               )}
             </div>
           )}
+
+          <div className="rounded-md border p-3">
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.aiInvestigationEnabled}
+                onChange={(e) => set({ aiInvestigationEnabled: e.target.checked })}
+                className="mt-0.5"
+                data-testid="alert-rule-ai-investigation"
+              />
+              <span>
+                <span className="font-medium">AI investigation</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  When this alert fires, the agent investigates related workspace resources and posts
+                  an insight you can open in chat. Requires an active agent profile with tool calling,
+                  and the alert's resource added to the Map (Settings → Map).
+                </span>
+              </span>
+            </label>
+          </div>
         </div>
 
         <div className="mt-6 flex items-center justify-end gap-2">

@@ -91,6 +91,16 @@ export function AlertRuleRow({
             <span className={`rounded px-1.5 py-0.5 text-xs ${severityBadge[rule.severity] ?? severityBadge.Warning}`}>
               {rule.severity}
             </span>
+            {rule.aiInvestigationEnabled && (
+              <span
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs text-primary"
+                title="AI investigation on — when this alert fires, the agent investigates related workspace resources and posts an insight. Requires an agent profile with tool calling and the resource on the Map."
+                data-testid={`monitoring-rule-ai-badge-${rule.id}`}
+              >
+                <Sparkles className="h-3 w-3" />
+                AI
+              </span>
+            )}
           </div>
           <div className="truncate text-xs text-muted-foreground">
             {sourceLabel[rule.source] ?? rule.source}

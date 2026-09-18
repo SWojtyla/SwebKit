@@ -7,6 +7,7 @@ import {
     extraTabs,
     networkTabIds,
 } from "./shared/AksWorkspaceContext";
+import { useScreenStateProvider } from "../../lib/stores/screen-state";
 import { DeploymentsTab } from "./DeploymentsTab";
 import { PodsTab } from "./PodsTab";
 import { ServicesTab } from "./ServicesTab";
@@ -55,6 +56,34 @@ function AksPageContent() {
     const ws = useAksWorkspace();
     const navigate = useNavigate();
     const isNetworkTabActive = networkTabIds.has(ws.activeTab);
+
+    // Screen-state snapshot (agent-workspace-awareness M1): what the user sees on this page —
+    // bounded to the fields the agent needs; read at publish time so it stays current.
+    useScreenStateProvider("aks-page", "Aks", () => ({
+        context: ws.currentContext,
+        namespaces: ws.selectedNamespaces,
+        activeTab: ws.activeTab,
+        podCount: ws.allPods?.length ?? 0,
+        pods: (ws.allPods ?? []).slice(0, 30).map((p) => ({
+            namespace: p.namespace,
+            name: p.name,
+            phase: p.phase,
+            ready: p.ready,
+            restarts: p.restartCount,
+            lastRestartReason: p.lastRestartReason,
+        })),
+        podOverflow: Math.max(0, (ws.allPods?.length ?? 0) - 30),
+        selectedPod: ws.selectedPod
+            ? {
+                  namespace: ws.selectedPod.namespace,
+                  name: ws.selectedPod.name,
+                  phase: ws.selectedPod.phase,
+                  ready: ws.selectedPod.ready,
+                  restarts: ws.selectedPod.restartCount,
+                  lastRestartReason: ws.selectedPod.lastRestartReason,
+              }
+            : null,
+    }), [ws.currentContext, ws.selectedNamespaces, ws.activeTab, ws.allPods, ws.selectedPod]);
 
     return (
         <div className="flex h-full flex-col" data-testid="aks-page">

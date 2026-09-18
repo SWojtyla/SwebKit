@@ -87,6 +87,23 @@ All components live in `web/src/components/monitoring/`.
 | `AlertRuleRow.tsx`        | Single rule row with live status dot, enable/disable, edit/delete   |
 | `AlertRuleDialog.tsx`     | Source-aware create/edit form (AKS / Service Bus / Redis inputs)    |
 | `AlertHistoryPanel.tsx`   | Live alert firing history (seeded from history + SSE), with snooze  |
+| `ProactiveInsightCard.tsx`| Completed background AI investigation: hypothesis + evidence bullets |
+
+## Proactive AI investigation (agent-workspace-awareness)
+
+Each rule carries `AiInvestigationEnabled` (default `true`, editable in
+`AlertRuleDialog` and shown as an AI badge on `AlertRuleRow`). When a qualifying
+rule fires and its resource maps onto a workspace-topology node,
+`ProactiveInsightService` runs a bounded headless investigation through
+`ProactiveInvestigationRunner` (workspace-scope, ask-mode tools only; 5 tool
+rounds + 90s budget; single-flight globally). The structured result —
+hypothesis, evidence, severity, next steps — seeds a chat session and flows to
+the UI as `proactiveInsightReady` on the monitoring SSE stream.
+
+OS + in-app notifications for both `alertFired` and `proactiveInsightReady`
+live in `AppLayout`'s always-mounted subscription — the single notification
+site — so they reach the user while the app is minimized or on another page,
+and can never double-toast from parallel page-level subscriptions.
 
 ## Connection Pool
 

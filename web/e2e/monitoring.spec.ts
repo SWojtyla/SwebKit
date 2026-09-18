@@ -169,6 +169,32 @@ test.describe("Monitoring", () => {
     await expect(page.getByTestId("alert-rule-name")).not.toHaveValue("");
   });
 
+  test("AI investigation defaults on for a new rule, and the row shows the AI badge", async ({ page }) => {
+    await page.goto("/monitoring");
+    const row = await createRule(page, `AI Alert ${Date.now()}`);
+
+    // The editor defaults the toggle on (agent-workspace-awareness M3) and the row
+    // surfaces that state via the AI badge — the discoverability fix this feature adds.
+    await row.locator("[data-testid^='monitoring-rule-edit-']").click();
+    await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
+    await expect(page.getByTestId("alert-rule-ai-investigation")).toBeChecked();
+    await page.getByTestId("alert-rule-dialog-cancel").click();
+
+    await expect(row.locator("[data-testid^='monitoring-rule-ai-badge-']")).toBeVisible();
+  });
+
+  test("turning AI investigation off in the editor removes the row's AI badge", async ({ page }) => {
+    await page.goto("/monitoring");
+    const row = await createRule(page, `No AI Alert ${Date.now()}`);
+
+    await row.locator("[data-testid^='monitoring-rule-edit-']").click();
+    await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
+    await page.getByTestId("alert-rule-ai-investigation").uncheck();
+    await page.getByTestId("alert-rule-dialog-save").click();
+
+    await expect(row.locator("[data-testid^='monitoring-rule-ai-badge-']")).toHaveCount(0);
+  });
+
   test("a rule is discoverable and directly editable from the command palette", async ({ page }) => {
     await page.goto("/monitoring");
     const ruleName = `Palette Alert ${Date.now()}`;

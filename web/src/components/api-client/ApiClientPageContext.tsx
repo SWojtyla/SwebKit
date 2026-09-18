@@ -24,6 +24,7 @@ import { getSecret } from "@/lib/tauri-bridge";
 import { buildResponseExample } from "@/lib/response-example";
 import { runRequestActions } from "@/lib/request-action-runner";
 import { useNotification } from "@/components/layout/NotificationSystem";
+import { useScreenStateProvider } from "@/lib/stores/screen-state";
 import {
   moveNode,
   moveCollection,
@@ -1026,6 +1027,27 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   // The environment whose name the toolbar shows: the project one when there is
   // one, since that is the layer that wins.
   const activeEnvironment = activeScopedEnvironment ?? activeGlobalEnvironment;
+
+  // Screen-state snapshot (agent-workspace-awareness M1) — the open request's method/URL/name.
+  // Headers, auth config, and body are deliberately NOT serialized (D5: secrets live there);
+  // the URL is sent without its query string/fragment since SAS signatures and api-key params
+  // live there too.
+  useScreenStateProvider("api-client-page", "ApiClient", () => {
+    const draft = activeTabId ? tabStates[activeTabId]?.draft : null;
+    if (!draft) return { collection: currentCollection?.name ?? null, openRequest: null };
+    return {
+      collection: activeCollection?.name ?? currentCollection?.name ?? null,
+      environment: activeEnvironment?.name ?? null,
+      openRequest: {
+        id: draft.id,
+        name: draft.name,
+        method: draft.method,
+        url: draft.url.split("?")[0].split("#")[0],
+      },
+      responseStatus: tabStates[activeTabId!]?.response?.statusCode ?? null,
+      openTabCount: tabs.length,
+    };
+  }, [activeTabId, tabStates, activeCollection, currentCollection, activeEnvironment, tabs]);
 
   const dismissConflict = () => setConflict(null);
 

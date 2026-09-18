@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Agents;
+using SwebKit.Agents.Tools;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -19,7 +20,12 @@ internal sealed class FakeToolRegistryForProactiveInsight : IAgentToolRegistry
     public string CannedResult { get; set; } = "{}";
     public Task? BlockUntil { get; set; }
 
-    public IReadOnlyList<ToolDefinition> GetDefinitions() => [];
+    /// <summary>Definitions exposed to the investigation runner's tool resolution — empty by
+    /// default so the runner no-ops and every test exercises the single-shot fallback path;
+    /// add entries to send a test down the model-driven path.</summary>
+    public List<ToolDefinition> Definitions { get; } = [];
+
+    public IReadOnlyList<ToolDefinition> GetDefinitions() => Definitions;
 
     public async Task<string> ExecuteAsync(string toolName, JsonElement arguments, CancellationToken ct)
     {
@@ -67,8 +73,10 @@ public class ProactiveInsightServiceTests
         var settings = SettingsWithCapability(capability);
         var chatService = new SidecarAgentChatService(modelClient, new AgentToolRegistry([]), profiles, settings, new DemoModeService());
 
+        var runner = new ProactiveInvestigationRunner(
+            modelClient, registry, profiles, new DemoModeService(), NullLogger<ProactiveInvestigationRunner>.Instance);
         var insights = new ProactiveInsightService(
-            engine, ruleRepo, profiles, registry, modelClient, settings, chatService, NullLogger<ProactiveInsightService>.Instance);
+            engine, ruleRepo, profiles, registry, modelClient, settings, chatService, runner, NullLogger<ProactiveInsightService>.Instance);
 
         return (insights, engine, ruleRepo, profiles, chatService, registry, modelClient);
     }
@@ -177,7 +185,9 @@ public class ProactiveInsightServiceTests
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => throw new InvalidOperationException("summarizer unreachable") };
         var settings = SettingsWithCapability(AgentCapability.ToolCalling);
         var chatService = new SidecarAgentChatService(modelClient, new AgentToolRegistry([]), profiles, settings, new DemoModeService());
-        var insights = new ProactiveInsightService(engine, ruleRepo, profiles, registry, modelClient, settings, chatService, NullLogger<ProactiveInsightService>.Instance);
+        var runner = new ProactiveInvestigationRunner(
+            modelClient, registry, profiles, new DemoModeService(), NullLogger<ProactiveInvestigationRunner>.Instance);
+        var insights = new ProactiveInsightService(engine, ruleRepo, profiles, registry, modelClient, settings, chatService, runner, NullLogger<ProactiveInsightService>.Instance);
 
         profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
         var rule = AksRule("prod");
@@ -192,6 +202,60 @@ public class ProactiveInsightServiceTests
         await Task.Delay(100); // let the (failing) summarization attempt finish
 
         Assert.False(raised);
+    }
+
+    [Fact]
+    public async Task AlertFired_AiInvestigationDisabled_NeverInvokesTheToolRegistry_OrRaisesAnInsight()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, profiles, _, registry, _) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+        var rule = AksRule("prod");
+        rule.AiInvestigationEnabled = false; // the per-rule opt-out (agent-workspace-awareness M3)
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var raised = false;
+        insights.InsightReady += _ => raised = true;
+
+        await engine.RunEvaluationOnceAsync();
+        await Task.Delay(150); // give a buggy handler a chance to investigate anyway
+
+        Assert.Empty(registry.Calls);
+        Assert.False(raised);
+    }
+
+    [Fact]
+    public async Task AlertFired_RunnerPath_StructuredInsightReachesTheEvent_WithEvidence()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, profiles, _, registry, modelClient) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+
+        // A resolvable read tool sends the runner down the model-driven path; the scripted
+        // model returns the structured JSON the investigation prompt demands.
+        registry.Definitions.Add(new ToolDefinition
+        {
+            Name = "fake_read",
+            Description = "fake read",
+            ParametersSchema = JsonDocument.Parse("""{ "type": "object", "properties": {} }""").RootElement,
+            FeatureArea = FeatureArea.Aks,
+        });
+        modelClient.ChatReplyText = """{"hypothesis":"pod OOMKilled after deploy","evidence":["restart count 7","OOMKilled in last state"],"severity":"high","suggested_next_steps":["raise memory limit"]}""";
+
+        var rule = AksRule("prod");
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => ready is not null);
+
+        Assert.NotNull(ready);
+        Assert.Equal("pod OOMKilled after deploy", ready!.Summary);
+        Assert.Equal(["restart count 7", "OOMKilled in last state"], ready.Evidence);
     }
 
     [Fact]
@@ -210,7 +274,9 @@ public class ProactiveInsightServiceTests
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => "hypothesis" };
         var settings = SettingsWithCapability(AgentCapability.ToolCalling);
         var chatService = new SidecarAgentChatService(modelClient, new AgentToolRegistry([]), profiles, settings, new DemoModeService());
-        var insights = new ProactiveInsightService(engine, ruleRepo, profiles, registry, modelClient, settings, chatService, NullLogger<ProactiveInsightService>.Instance);
+        var runner = new ProactiveInvestigationRunner(
+            modelClient, registry, profiles, new DemoModeService(), NullLogger<ProactiveInvestigationRunner>.Instance);
+        var insights = new ProactiveInsightService(engine, ruleRepo, profiles, registry, modelClient, settings, chatService, runner, NullLogger<ProactiveInsightService>.Instance);
 
         profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
         profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.ServiceBus, ResourceKey = "orders", DisplayLabel = "orders" });
