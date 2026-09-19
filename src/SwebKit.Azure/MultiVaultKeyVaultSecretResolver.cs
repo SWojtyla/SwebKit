@@ -51,17 +51,17 @@ public sealed class MultiVaultKeyVaultSecretResolver : IKeyVaultSecretResolver
     public bool IsAvailable => _defaultClient is not null;
 
     /// <inheritdoc />
-    public async Task<string> GetSecretAsync(
+    public async Task<string?> GetSecretAsync(
         string secretName,
         string? vaultName = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(secretName))
-            return "[KV_ERROR:empty-name]";
+            return null;
 
         var client = ResolveClient(vaultName);
         if (client is null)
-            return $"[KV_UNAVAILABLE:{secretName}]";
+            return null;
 
         try
         {
@@ -75,7 +75,7 @@ public sealed class MultiVaultKeyVaultSecretResolver : IKeyVaultSecretResolver
                 "Key Vault secret fetch failed for '{SecretName}' in vault '{VaultName}'",
                 secretName,
                 vaultName ?? "(default)");
-            return $"[KV_ERROR:{secretName}]";
+            return null;
         }
     }
 

@@ -18,10 +18,10 @@ public sealed class AzureKeyVaultSecretResolver(string vaultUrl, ILogger<AzureKe
     public bool IsAvailable => true;
 
     /// <inheritdoc />
-    public async Task<string> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
+    public async Task<string?> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(secretName))
-            return $"[KV_ERROR:empty-name]";
+            return null;
 
         try
         {
@@ -31,7 +31,7 @@ public sealed class AzureKeyVaultSecretResolver(string vaultUrl, ILogger<AzureKe
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Key Vault secret fetch failed for '{SecretName}'", secretName);
-            return $"[KV_ERROR:{secretName}]";
+            return null;
         }
     }
 }

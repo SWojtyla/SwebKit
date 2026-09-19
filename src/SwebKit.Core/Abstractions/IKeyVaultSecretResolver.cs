@@ -13,8 +13,9 @@ public interface IKeyVaultSecretResolver
     /// Fetches the latest enabled version of <paramref name="secretName"/> from the vault identified by
     /// <paramref name="vaultName"/>. When <paramref name="vaultName"/> is <c>null</c> the resolver uses
     /// a default or only vault.
-    /// Returns <c>[KV_UNAVAILABLE:{secretName}]</c> when <see cref="IsAvailable"/> is false.
-    /// Returns <c>[KV_ERROR:{secretName}]</c> on any retrieval failure, never throws.
+    /// Returns <c>null</c> when the vault is unavailable or the fetch fails — never throws and never
+    /// returns a placeholder string, because a sentinel substituted into a request would go out on
+    /// the wire as if it were the real secret.
     /// </summary>
-    Task<string> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default);
+    Task<string?> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default);
 }

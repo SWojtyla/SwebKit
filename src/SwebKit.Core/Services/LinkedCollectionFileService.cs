@@ -1281,7 +1281,8 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
                 var provider = secret.Value.Provider ?? "CredentialStore";
                 environment.Variables.Add(new EnvironmentVariable
                 {
-                    Key = $"secret:{secret.Key}",
+                    // The bare name — `{{apiKey}}` must keep resolving after a sync round-trip.
+                    Key = secret.Key,
                     CredentialKey = secret.Value.Ref,
                     KeyVaultName = secret.Value.Vault,
                     SecretSource = provider.Equals("KeyVault", StringComparison.OrdinalIgnoreCase)
@@ -1311,23 +1312,26 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
             foreach (var variable in environment.Variables.Where(static variable => variable.IsEnabled && !string.IsNullOrWhiteSpace(variable.Key)))
             {
-                if (variable.Key.StartsWith("secret:", StringComparison.OrdinalIgnoreCase))
+                if (variable.SecretSource is EnvironmentVariableSecretSource.WindowsCredentialStore
+                    or EnvironmentVariableSecretSource.AzureKeyVault)
                 {
-                    var secretName = variable.Key["secret:".Length..];
-                    file.Secrets[secretName] = new LinkedSecretReference
+                    // Keyed by the variable's own name so `{{apiKey}}` resolves identically after
+                    // a sync round-trip — earlier this required a literal `secret:` name prefix,
+                    // which silently dropped every secret variable created through the editor.
+                    file.Secrets[variable.Key] = new LinkedSecretReference
                     {
                         Provider = variable.SecretSource == EnvironmentVariableSecretSource.AzureKeyVault ? "KeyVault" : "CredentialStore",
                         Ref = variable.CredentialKey ?? string.Empty,
                         Vault = variable.KeyVaultName,
                     };
                 }
-                else if (variable.SecretSource == EnvironmentVariableSecretSource.Plain)
-                {
-                    file.Variables[variable.Key] = variable.Value;
-                }
                 else if (variable.SecretSource == EnvironmentVariableSecretSource.Generated && variable.Generator is not null)
                 {
                     file.GeneratedVariables[variable.Key] = variable.Generator;
+                }
+                else
+                {
+                    file.Variables[variable.Key] = variable.Value;
                 }
             }
 

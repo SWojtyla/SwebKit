@@ -428,12 +428,12 @@ public sealed class HttpRequestExecutorGraphQlTests
 
     private sealed class NoopAuthHeaderBuilder : IAuthHeaderBuilder
     {
-        public Task ApplyAsync(
+        public Task<IReadOnlyList<string>> ApplyAsync(
             HttpRequestMessage message,
             AuthConfig? auth,
             IReadOnlyDictionary<string, string?>? scope = null,
             CancellationToken ct = default)
-            => Task.CompletedTask;
+            => Task.FromResult<IReadOnlyList<string>>([]);
     }
 }
 

@@ -218,6 +218,12 @@ public sealed class VariableGeneratorDefinition
     public int DecimalPlaces { get; set; } = 2;
     public int? TrueWeightPercent { get; set; }
     public string? FakerCategory { get; set; } = "person.firstName";
+    /// <summary>Optional lower bound (inclusive) for <c>date.*</c> faker categories; null = the
+    /// category's own default start (past → ~1y ago, future → now, recent → yesterday).</summary>
+    public DateTimeOffset? FakerDateAfter { get; set; }
+    /// <summary>Optional upper bound (inclusive) for <c>date.*</c> faker categories; null = the
+    /// category's own default end (past → now, future → ~1y out, recent → now).</summary>
+    public DateTimeOffset? FakerDateBefore { get; set; }
     public List<string> Values { get; set; } = [];
 }
 

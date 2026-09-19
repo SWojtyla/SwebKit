@@ -38,7 +38,9 @@ public sealed class VariableGeneratorService : IVariableGeneratorService
             return VariableGenerationResult.Failure("Integer generator min cannot be greater than max.");
         }
 
-        return VariableGenerationResult.Success(Random.Shared.Next(min, max + 1).ToString(CultureInfo.InvariantCulture));
+        // Inclusive bound via Int64 so max = int.MaxValue doesn't wrap (max + 1 overflows Int32).
+        var value = min + Random.Shared.NextInt64((long)max - min + 1);
+        return VariableGenerationResult.Success(value.ToString(CultureInfo.InvariantCulture));
     }
 
     private static VariableGenerationResult GenerateDecimal(VariableGeneratorDefinition definition)
@@ -77,6 +79,21 @@ public sealed class VariableGeneratorService : IVariableGeneratorService
     private VariableGenerationResult GenerateFakerValue(VariableGeneratorDefinition definition)
     {
         var category = definition.FakerCategory?.Trim() ?? "person.firstName";
+
+        // Date categories carry user bounds, so they resolve to a result directly rather than a string.
+        var dateResult = category switch
+        {
+            "date.past" => GenerateFakerDate(definition, DateTimeOffset.UtcNow.AddYears(-1), DateTimeOffset.UtcNow),
+            "date.future" => GenerateFakerDate(definition, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddYears(1)),
+            "date.recent" => GenerateFakerDate(definition, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow),
+            "date.between" => GenerateFakerDate(definition, null, null),
+            _ => null,
+        };
+        if (dateResult is not null)
+        {
+            return dateResult;
+        }
+
         var value = category switch
         {
             "person.firstName" => _faker.Name.FirstName(),
@@ -100,14 +117,35 @@ public sealed class VariableGeneratorService : IVariableGeneratorService
             "lorem.paragraph" => _faker.Lorem.Paragraph(),
             "commerce.productName" => _faker.Commerce.ProductName(),
             "commerce.price" => _faker.Commerce.Price(),
-            "date.past" => _faker.Date.Past().ToString("O", CultureInfo.InvariantCulture),
-            "date.future" => _faker.Date.Future().ToString("O", CultureInfo.InvariantCulture),
-            "date.recent" => _faker.Date.Recent().ToString("O", CultureInfo.InvariantCulture),
             _ => null,
         };
 
         return value is null
             ? VariableGenerationResult.Failure($"Unsupported faker category '{category}'.")
             : VariableGenerationResult.Success(value);
+    }
+
+    /// <summary>Picks a random instant inside the user's <c>after</c>/<c>before</c> bounds, falling
+    /// back to the category's default window for whichever bound is unset. Returns a failure string
+    /// for <c>date.between</c> without both bounds or when after &gt; before.</summary>
+    private VariableGenerationResult GenerateFakerDate(
+        VariableGeneratorDefinition definition,
+        DateTimeOffset? defaultAfter,
+        DateTimeOffset? defaultBefore)
+    {
+        var after = definition.FakerDateAfter ?? defaultAfter;
+        var before = definition.FakerDateBefore ?? defaultBefore;
+        if (after is null || before is null)
+        {
+            return VariableGenerationResult.Failure("The 'date.between' category requires both an 'after' and a 'before' date.");
+        }
+
+        if (after > before)
+        {
+            return VariableGenerationResult.Failure("Date generator 'after' cannot be later than 'before'.");
+        }
+
+        var value = _faker.Date.Between(after.Value.UtcDateTime, before.Value.UtcDateTime);
+        return VariableGenerationResult.Success(value.ToString("O", CultureInfo.InvariantCulture));
     }
 }

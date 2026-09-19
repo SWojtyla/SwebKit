@@ -18,8 +18,8 @@ internal sealed class FakeKeyVaultSecretResolver : IKeyVaultSecretResolver
 
     public bool IsAvailable { get; }
 
-    public Task<string> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
-        => Task.FromResult(_secretValue ?? $"[KV_ERROR:{secretName}]");
+    public Task<string?> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
+        => Task.FromResult(_secretValue);
 }
 
 public class ApiClientEndpointsPreviewTests
@@ -54,7 +54,8 @@ public class ApiClientEndpointsPreviewTests
     [Fact]
     public async Task SecretFetchFails_ReturnsErrorStatus_WithoutMaskedValue()
     {
-        var resolver = new FakeKeyVaultSecretResolver(isAvailable: true, secretValue: "[KV_ERROR:my-secret]");
+        // Resolvers return null on failure — never a sentinel, which would go out on the wire.
+        var resolver = new FakeKeyVaultSecretResolver(isAvailable: true, secretValue: null);
         var req = new PreviewKeyVaultSecretRequest("kv1", "my-secret");
 
         var result = await ApiClientEndpoints.PreviewKeyVaultSecretAsync(req, resolver, CancellationToken.None);
@@ -62,19 +63,7 @@ public class ApiClientEndpointsPreviewTests
         var ok = Assert.IsType<Ok<KeyVaultPreviewResponse>>(result);
         Assert.Equal("error", ok.Value!.Status);
         Assert.Null(ok.Value.MaskedValue);
-        Assert.Equal("[KV_ERROR:my-secret]", ok.Value.Error);
-    }
-
-    [Fact]
-    public async Task SecretUnavailable_ReturnsErrorStatus()
-    {
-        var resolver = new FakeKeyVaultSecretResolver(isAvailable: true, secretValue: "[KV_UNAVAILABLE:my-secret]");
-        var req = new PreviewKeyVaultSecretRequest("kv1", "my-secret");
-
-        var result = await ApiClientEndpoints.PreviewKeyVaultSecretAsync(req, resolver, CancellationToken.None);
-
-        var ok = Assert.IsType<Ok<KeyVaultPreviewResponse>>(result);
-        Assert.Equal("error", ok.Value!.Status);
+        Assert.NotNull(ok.Value.Error);
     }
 
     [Fact]

@@ -130,4 +130,11 @@ describe("isLikelySecret", () => {
     expect(isLikelySecret("myPassword")).toBe(true);
     expect(isLikelySecret("AUTH_OFFICE_ID")).toBe(false);
   });
+
+  it("masks authorization variables like the backend does", () => {
+    // ApiClientWorkflowService.IsLikelySecret treats *authorization* as a secret —
+    // the frontend preview must mask the same keys or the parity leaks them.
+    expect(isLikelySecret("AUTHORIZATION")).toBe(true);
+    expect(isLikelySecret("proxy_authorization_header")).toBe(true);
+  });
 });

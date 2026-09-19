@@ -30,7 +30,7 @@ public sealed class SidecarKeyVaultResolver : IKeyVaultSecretResolver
     public bool IsAvailable => GetInner().IsAvailable;
 
     /// <inheritdoc />
-    public Task<string> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
+    public Task<string?> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
         => GetInner().GetSecretAsync(secretName, vaultName, cancellationToken);
 
     /// <summary>Exposes the current inner resolver instance so tests can assert on rebuild-vs-reuse by identity.</summary>
