@@ -461,7 +461,8 @@ export async function saveCredential(key: string, secret: string): Promise<void>
 }
 
 export async function deleteCredential(key: string): Promise<void> {
-  await apiSend(`/api/api-client/credentials/${encodeURIComponent(key)}`, "DELETE");
+  // Query param, not a route segment — a credential key containing '/' would 404 otherwise.
+  await apiSend(`/api/api-client/credentials?key=${encodeURIComponent(key)}`, "DELETE");
 }
 
 export async function previewCredential(key: string): Promise<KeyVaultPreviewResult> {

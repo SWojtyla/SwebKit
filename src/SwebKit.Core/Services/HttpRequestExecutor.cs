@@ -42,26 +42,31 @@ public sealed class HttpRequestExecutor(
         var url = UrlBuilder.Build(request, scope, substitution);
 
         IReadOnlyList<string> unresolvedWarnings = [];
+        IReadOnlyList<string> authWarnings = [];
         var sw = Stopwatch.StartNew();
         try
         {
             using var client = httpClientFactory.CreateClient(ClientName);
             using var httpRequest = BuildHttpRequest(request, url, scope);
 
-            // Apply resolved auth (request → folder → collection chain)
+            // Apply resolved auth (request → folder → collection chain). Auth may rewrite the
+            // request URI (API-key-in-query), so the wire URL is read back afterwards — using the
+            // pre-auth URL for the response echo would hide the parameter the server received.
             var (resolvedAuth, _) = authResolver.Resolve(request, collection);
-            await authHeaderBuilder.ApplyAsync(httpRequest, resolvedAuth, scope, cancellationToken).ConfigureAwait(false);
+            authWarnings = await authHeaderBuilder.ApplyAsync(httpRequest, resolvedAuth, scope, cancellationToken).ConfigureAwait(false);
+            var finalUrl = httpRequest.RequestUri?.ToString() ?? url;
 
             // Snapshot here and nowhere earlier: this is the last point before the request is
             // handed to the socket, so it is the only place that sees auth headers and the body's
             // content headers together.
             var sentHeaders = CollectSentHeaders(httpRequest);
+            var sentBody = await ReadSentBodyAsync(request, httpRequest.Content, cancellationToken).ConfigureAwait(false);
 
             // Scan the fully-substituted wire image: any {{token}} still present means the
             // variable resolved to nothing (typical cause: a credential-store variable whose
             // key has no saved value) and is about to go out literally — warn instead of
             // failing silently downstream.
-            unresolvedWarnings = await CollectUnresolvedVariableWarningsAsync(url, sentHeaders, request.Body.Mode == RequestBodyMode.Binary ? null : httpRequest.Content, cancellationToken).ConfigureAwait(false);
+            unresolvedWarnings = CollectUnresolvedVariableWarnings(finalUrl, sentHeaders, sentBody);
 
             using var response = await client.SendAsync(
                 httpRequest,
@@ -70,8 +75,9 @@ public sealed class HttpRequestExecutor(
 
             sw.Stop();
 
-            var result = await BuildResultAsync(response, url, request.Method.ToString().ToUpperInvariant(), sw.Elapsed, cancellationToken).ConfigureAwait(false);
+            var result = await BuildResultAsync(response, finalUrl, request.Method.ToString().ToUpperInvariant(), sw.Elapsed, cancellationToken).ConfigureAwait(false);
             result.SentHeaders = sentHeaders;
+            result.SentBody = sentBody;
 
             // Parse GraphQL errors from the response body when the method is GraphQL
             if (request.Method == ApiRequestMethod.GraphQl && result.ResponseBody is not null)
@@ -79,7 +85,7 @@ public sealed class HttpRequestExecutor(
 
             // Apply post-request capture rules (mutates collection/environment in place)
             var captureWarnings = await captureExecutor.ExecuteAsync(result, request, collection, activeEnvironment, cancellationToken).ConfigureAwait(false);
-            var allWarnings = unresolvedWarnings.Concat(captureWarnings).ToList();
+            var allWarnings = unresolvedWarnings.Concat(authWarnings).Concat(captureWarnings).ToList();
             if (allWarnings.Count > 0)
                 result.CaptureWarnings = allWarnings;
 
@@ -95,9 +101,31 @@ public sealed class HttpRequestExecutor(
                 Method = request.Method.ToString().ToUpperInvariant(),
                 Elapsed = sw.Elapsed,
                 ErrorMessage = ex.Message,
-                CaptureWarnings = unresolvedWarnings,
+                CaptureWarnings = unresolvedWarnings.Concat(authWarnings).ToList(),
             };
         }
+    }
+
+    /// <summary>
+    /// Reads the request body as it will go out — post-substitution, post-content-headers.
+    /// Binary file bodies are skipped: they are potentially large and cannot carry tokens anyway.
+    /// Everything else (string, form data, GraphQL JSON) is buffered and small — still capped
+    /// defensively. The captured text feeds both the unresolved-token scan and the response's
+    /// <see cref="HttpRequestResult.SentBody"/> echo.
+    /// </summary>
+    private static async Task<string?> ReadSentBodyAsync(
+        HttpRequestEntry request,
+        HttpContent? content,
+        CancellationToken cancellationToken)
+    {
+        if (content is null || request.Body.Mode == RequestBodyMode.Binary)
+            return null;
+
+        var length = content.Headers.ContentLength;
+        if (length is > 1024 * 1024)
+            return null;
+
+        return await content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Same token shape as <see cref="VariableSubstitutionService"/> — kept local because the
@@ -109,11 +137,10 @@ public sealed class HttpRequestExecutor(
     /// <summary>Finds <c>{{token}}</c> occurrences that survived substitution in the URL, the sent
     /// headers (post-auth), or the body — i.e. variables with no definition or a null resolution —
     /// and returns one warning per distinct token.</summary>
-    private static async Task<IReadOnlyList<string>> CollectUnresolvedVariableWarningsAsync(
+    private static IReadOnlyList<string> CollectUnresolvedVariableWarnings(
         string resolvedUrl,
         IReadOnlyList<(string Name, string Value)> sentHeaders,
-        HttpContent? content,
-        CancellationToken cancellationToken)
+        string? sentBody)
     {
         var tokens = new HashSet<string>(StringComparer.Ordinal);
         void Scan(string? text)
@@ -131,18 +158,7 @@ public sealed class HttpRequestExecutor(
             Scan(name);
             Scan(value);
         }
-
-        // Binary file bodies are excluded by the caller (content == null): they're potentially
-        // large and can't carry tokens anyway. Everything else (string, form data, GraphQL JSON)
-        // is buffered and small — still capped defensively.
-        if (content is not null)
-        {
-            var length = content.Headers.ContentLength;
-            if (length is null or <= 1024 * 1024)
-            {
-                Scan(await content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-            }
-        }
+        Scan(sentBody);
 
         return tokens
             .Select(t => $"Variable '{t}' could not be resolved — '{{{{{t}}}}}' was sent literally in the request.")
@@ -364,16 +380,14 @@ public sealed class HttpRequestExecutor(
         {
             if (isBinary)
             {
-                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-                if (bytes.Length > HttpRequestResult.ResponseBodyMaxBytes)
-                {
-                    bodyBytes = bytes[..HttpRequestResult.ResponseBodyMaxBytes];
-                    truncated = true;
-                }
-                else
-                {
-                    bodyBytes = bytes;
-                }
+                // Same stream cap as the text path — ReadAsByteArrayAsync would buffer the whole
+                // response before the size check, turning a large download into a large allocation.
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                using var limited = new LimitedStream(stream, HttpRequestResult.ResponseBodyMaxBytes);
+                using var ms = new MemoryStream();
+                await limited.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+                bodyBytes = ms.ToArray();
+                truncated = limited.WasTruncated;
                 body = Convert.ToHexString(bodyBytes);
             }
             else

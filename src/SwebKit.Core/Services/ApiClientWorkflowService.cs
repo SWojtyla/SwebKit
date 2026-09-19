@@ -62,6 +62,7 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
         var url = string.Empty;
         var headers = new List<KeyValuePair<string>>();
         var bodyParts = new List<string>();
+        string? basicUser = null;
 
         for (var index = 0; index < tokens.Count; index++)
         {
@@ -109,6 +110,15 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
                     method = ApiRequestMethod.Head;
                     break;
 
+                case "-u":
+                case "--user":
+                    // `curl -u alice:secret` is Basic auth — common in API docs, and silently
+                    // dropping it produced an imported request that 401s for no visible reason.
+                    if (value is null) return CurlImportResult.Failure("cURL user value is missing.");
+                    basicUser = value;
+                    index++;
+                    break;
+
                 default:
                     if (!token.StartsWith('-') && LooksLikeUrl(token))
                     {
@@ -138,6 +148,20 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
         {
             request.Body.RawContent = string.Join("&", bodyParts);
             request.Body.Mode = LooksLikeJson(request.Body.RawContent) ? RequestBodyMode.Json : RequestBodyMode.Text;
+        }
+
+        if (basicUser is not null)
+        {
+            // Split on the first ':' — curl's `-u user:pass` contract. The password lands in
+            // CredentialKey, which the auth builder resolves verbatim (the legacy literal fallback)
+            // when it isn't a credential-store key.
+            var separator = basicUser.IndexOf(':', StringComparison.Ordinal);
+            request.Auth = new AuthConfig
+            {
+                Type = AuthType.Basic,
+                BasicUsername = separator >= 0 ? basicUser[..separator] : basicUser,
+                CredentialKey = separator >= 0 ? basicUser[(separator + 1)..] : string.Empty,
+            };
         }
 
         return CurlImportResult.Success(request);

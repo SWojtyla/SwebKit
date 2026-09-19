@@ -9,6 +9,10 @@ namespace SwebKit.Sidecar.Endpoints;
 
 public static class ApiClientEndpoints
 {
+    /// <summary>Upper bound for the body handed to JSONPath evaluation — the request/response
+    /// bodies sent here are already capped far below this, so the limit only guards against abuse.</summary>
+    private const int MaxJsonPathBodyLength = 8 * 1024 * 1024;
+
     public static void MapApiClientEndpoints(this WebApplication app)
     {
         app.MapPost("/api/api-client/execute", async (
@@ -68,6 +72,10 @@ public static class ApiClientEndpoints
         app.MapDelete("/api/api-client/credentials/{key}", (string key, ICredentialStore store) =>
             DeleteCredential(key, store));
 
+        // Query-param variant: a route segment cannot carry keys containing '/'.
+        app.MapDelete("/api/api-client/credentials", (string? key, ICredentialStore store) =>
+            DeleteCredential(key ?? string.Empty, store));
+
         app.MapPost("/api/api-client/preview-credential", (PreviewCredentialRequest req, ICredentialStore store) =>
             PreviewCredential(req, store));
 
@@ -78,6 +86,9 @@ public static class ApiClientEndpoints
     {
         if (string.IsNullOrWhiteSpace(req.JsonPath))
             return ApiErrors.BadRequest("JSONPath is required.");
+
+        if (req.Body?.Length > MaxJsonPathBodyLength)
+            return ApiErrors.BadRequest("Body exceeds the 8 MB limit.");
 
         JsonNode? node;
         try
@@ -127,9 +138,10 @@ public static class ApiClientEndpoints
 
         var raw = await resolver.GetSecretAsync(req.SecretName, req.KeyVaultName, cancellationToken).ConfigureAwait(false);
 
-        if (raw.StartsWith("[KV_ERROR:", StringComparison.Ordinal) || raw.StartsWith("[KV_UNAVAILABLE:", StringComparison.Ordinal))
+        if (raw is null)
         {
-            return Results.Ok(new KeyVaultPreviewResponse("error", null, raw));
+            return Results.Ok(new KeyVaultPreviewResponse("error", null,
+                $"Secret '{req.SecretName}' was not found or the vault could not be reached."));
         }
 
         return Results.Ok(new KeyVaultPreviewResponse("ok", MaskSecret(raw), null));
@@ -204,7 +216,8 @@ public static class ApiClientEndpoints
             result.ResponseHeaders.Select(h => new ResponseHeaderDto(h.Name, h.Value)).ToList(),
             result.CaptureWarnings.ToList(),
             result.GraphQlErrors,
-            result.SentHeaders.Select(h => new ResponseHeaderDto(h.Name, h.Value)).ToList());
+            result.SentHeaders.Select(h => new ResponseHeaderDto(h.Name, h.Value)).ToList(),
+            result.SentBody);
 }
 
 public sealed class ExecuteRequestRequest
@@ -233,7 +246,8 @@ public sealed record ApiClientExecutionResponse(
     IReadOnlyList<ResponseHeaderDto> Headers,
     IReadOnlyList<string> CaptureWarnings,
     IReadOnlyList<GraphQlError>? GraphQlErrors,
-    IReadOnlyList<ResponseHeaderDto> SentHeaders);
+    IReadOnlyList<ResponseHeaderDto> SentHeaders,
+    string? SentBody);
 
 public sealed record ResponseHeaderDto(string Name, string Value);
 

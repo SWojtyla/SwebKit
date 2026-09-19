@@ -18,7 +18,12 @@ public interface IAuthHeaderBuilder
     /// value rather than as the literal token text — the same scope the URL, headers and body are
     /// substituted against. <c>null</c> leaves every auth field verbatim.
     /// </param>
-    Task ApplyAsync(
+    /// <returns>
+    /// Human-readable warnings describing auth that was configured but could not be fully applied —
+    /// e.g. a credential that resolved to nothing, which would otherwise send the request
+    /// unauthenticated with no signal beyond a downstream 401.
+    /// </returns>
+    Task<IReadOnlyList<string>> ApplyAsync(
         System.Net.Http.HttpRequestMessage message,
         AuthConfig? auth,
         IReadOnlyDictionary<string, string?>? scope = null,

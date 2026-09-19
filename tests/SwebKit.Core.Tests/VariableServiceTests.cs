@@ -29,8 +29,8 @@ internal sealed class StubKeyVaultResolver : IKeyVaultSecretResolver
 
     public bool IsAvailable { get; }
 
-    public Task<string> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
-        => Task.FromResult(_secrets.TryGetValue(secretName, out var v) ? v : $"[KV_UNAVAILABLE:{secretName}]");
+    public Task<string?> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
+        => Task.FromResult(_secrets.TryGetValue(secretName, out var v) ? v : null);
 }
 
 // ── VariableSubstitutionService ────────────────────────────────────────────────
@@ -603,10 +603,11 @@ public sealed class NoopKeyVaultSecretResolverTests
     }
 
     [Fact]
-    public async Task GetSecretAsync_ReturnsUnavailableToken()
+    public async Task GetSecretAsync_ReturnsNull_NotASentinel()
     {
         var resolver = new NoopKeyVaultSecretResolver();
         var result = await resolver.GetSecretAsync("my-secret");
-        Assert.Equal("[KV_UNAVAILABLE:my-secret]", result);
+        // null — a sentinel string would be substituted into the request and sent on the wire.
+        Assert.Null(result);
     }
 }

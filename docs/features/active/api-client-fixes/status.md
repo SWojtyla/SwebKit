@@ -35,6 +35,42 @@
       surfaces them in the result warnings shown in the response panel
       (renamed UI label "Capture warnings" → "Warnings")
 
+### 4. Whole-feature scan fixes (second pass)
+
+- [x] Key Vault resolvers return `null` on failure instead of
+      `[KV_ERROR:*]`/`[KV_UNAVAILABLE:*]` sentinels — a vault outage kept the
+      `{{token}}` literal (warning via the D5 scan) instead of sending the
+      sentinel to the server
+- [x] `verifyApiClientSsl` wired into the sidecar's named `ApiClient`
+      `HttpClient` — the toggle was dead in the Tauri runtime; the TLS
+      callback reads the setting per request so it applies immediately
+- [x] Linked `.swebenv.json`: secret variables export keyed by `SecretSource`
+      under their own name (was: required a literal `secret:` key prefix,
+      silently dropping editor-created secrets); reload keeps the bare name
+- [x] Capture rules skip credential/Key Vault/generated targets with a
+      warning (was: dead-write into `.Value` that resolution ignores);
+      repository persistence failures now surface as warnings too
+- [x] `UrlBuilder` inserts query params before `#fragment` and no longer
+      emits `?&` for a trailing `?`
+- [x] cURL panel: header values single-quoted (a `"`/`$`/backtick in a value
+      could alter the pasted command), `-X` uses the transport method
+      (`GraphQl`→POST), as-sent mode renders the echoed `sentBody` (covers
+      GraphQL bodies) and masks an api-key query param inside `resolvedUrl`
+- [x] Binary responses stream through `LimitedStream` instead of buffering
+      the whole body before the 4 MB check
+- [x] Auth that can't be resolved (missing credential/param/OAuth2 fields)
+      returns a warning via `IAuthHeaderBuilder.ApplyAsync` — no more silent
+      unauthenticated sends
+- [x] Post-request actions read the sent values (`resolvedUrl`, transport
+      method, `sentBody`) rather than the raw draft's `{{tokens}}`
+- [x] Variable preview distinguishes deferred (`<resolved when sent>`) from
+      unresolved, matching the highlighter's wording
+- [x] cURL import maps `-u`/`--user` to Basic auth
+- [x] OAuth2 client-credentials tokens are cached per
+      endpoint+client+scopes+secret-hash until `expires_in` − 60s
+- [x] `DELETE /api/api-client/credentials?key=` variant for keys with `/`;
+      `evaluate-jsonpath` rejects bodies over 8 MB
+
 ### Cross-cutting
 
 - [x] Tests: xunit (generator bounds/overflow, credential endpoints, unresolved
@@ -44,14 +80,16 @@
 
 ## Validation
 
-- `dotnet test` — Core **1017**, Sidecar **489**, Agents **253**, all green
+- `dotnet test` — Core **1029**, Sidecar **495**, Agents **253**, Azure **141**,
+  all green
+- `dotnet build` — `SwebKit.App` (legacy MAUI) compiles with the new
+  `IAuthHeaderBuilder` signature
 - `npx tsc -b --force` — clean
 - `npm run lint` — 0 errors (100 pre-existing warnings)
-- `npm run test:unit` — 474 green
+- `npm run test:unit` — 480 green
 - `npm run build` — clean
-- Playwright — `api-client-credentials.spec.ts` 4 new tests green;
-  `api-client.spec.ts` + `api-client-variables.spec.ts` 41 green
-  (faker category count assertion updated 24 → 25 for `date.between`)
+- Playwright — all 45 api-client specs green (`api-client`,
+  `api-client-variables`, `api-client-credentials`, `api-client-generators`)
 - Aikido MCP scan — unavailable in this environment (pending)
 
 ## Non-goals (documented)

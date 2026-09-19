@@ -319,7 +319,13 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
                 <Fragment key={key}>
                   <span className="text-muted-foreground">{key}</span>
                   <span className="font-mono">
-                    {value === null ? "<unresolved>" : isLikelySecret(key) ? "••••••••" : value}
+                    {value === null
+                      ? Object.prototype.hasOwnProperty.call(variableScope, key)
+                        ? "<resolved when sent>" // deferred: credential store / Key Vault / generated
+                        : "<unresolved>"
+                      : isLikelySecret(key)
+                        ? "••••••••"
+                        : value}
                   </span>
                 </Fragment>
               ))}

@@ -163,11 +163,11 @@ public sealed class HttpRequestExecutorHeaderTests
 
     private sealed class NoOpAuthHeaderBuilder : IAuthHeaderBuilder
     {
-        public Task ApplyAsync(
+        public Task<IReadOnlyList<string>> ApplyAsync(
             HttpRequestMessage message,
             AuthConfig? auth,
             IReadOnlyDictionary<string, string?>? scope = null,
             CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+            => Task.FromResult<IReadOnlyList<string>>([]);
     }
 }

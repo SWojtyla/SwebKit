@@ -116,6 +116,163 @@ public sealed class HttpRequestExecutorUnresolvedVariableTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_KeyVaultVariableFailsToResolve_WarnsAndSendsLiteral_NotSentinel()
+    {
+        // A vault outage used to substitute "[KV_ERROR:name]" into the request and send it to the
+        // server as if it were the secret. Resolvers now return null, which keeps {{token}} literal
+        // and surfaces the same warning as any other unresolvable variable.
+        var store = new StubCredentialStore();
+        var handler = new CapturingHandler();
+        var executor = new HttpRequestExecutor(
+            new StubFactory(new HttpClient(handler)),
+            new VariableSubstitutionService(store, new StubKeyVaultResolver(available: true)),
+            new NoOpCaptureExecutor(),
+            new NoOpAuthResolver(),
+            new NoOpAuthHeaderBuilder());
+        var env = new ApiEnvironment
+        {
+            Variables =
+            [
+                new EnvironmentVariable
+                {
+                    Key = "SECRET",
+                    SecretSource = EnvironmentVariableSecretSource.AzureKeyVault,
+                    CredentialKey = "missing-secret",
+                    IsEnabled = true,
+                },
+            ],
+        };
+        var request = new HttpRequestEntry
+        {
+            Name = "R",
+            Url = "https://example.test/",
+            Method = ApiRequestMethod.Get,
+        };
+        request.Headers.Add(new KeyValuePair { Key = "x-secret", Value = "{{SECRET}}", IsEnabled = true });
+
+        var result = await executor.ExecuteAsync(request, new ApiCollection { Name = "C" }, env);
+
+        Assert.Contains(result.CaptureWarnings, w => w.Contains("SECRET"));
+        var sent = handler.LastRequest!.Headers.GetValues("x-secret").Single();
+        Assert.Equal("{{SECRET}}", sent);
+        Assert.DoesNotContain("KV_", sent);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UrlWithFragment_AppendsQueryParamsBeforeFragment()
+    {
+        var (executor, handler) = CreateExecutor(new StubCredentialStore());
+        var request = new HttpRequestEntry
+        {
+            Name = "R",
+            Url = "https://example.test/path#section",
+            Method = ApiRequestMethod.Get,
+        };
+        request.QueryParams.Add(new KeyValuePair { Key = "k", Value = "v", IsEnabled = true });
+
+        var result = await executor.ExecuteAsync(request, new ApiCollection { Name = "C" }, null);
+
+        Assert.Equal("https://example.test/path?k=v#section", result.ResolvedUrl);
+        Assert.Equal("k=v", handler.LastRequest!.RequestUri!.Query.TrimStart('?'));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UrlWithTrailingQuestionMark_DoesNotEmitEmptyAmpersand()
+    {
+        var (executor, _) = CreateExecutor(new StubCredentialStore());
+        var request = new HttpRequestEntry
+        {
+            Name = "R",
+            Url = "https://example.test/path?",
+            Method = ApiRequestMethod.Get,
+        };
+        request.QueryParams.Add(new KeyValuePair { Key = "k", Value = "v", IsEnabled = true });
+
+        var result = await executor.ExecuteAsync(request, new ApiCollection { Name = "C" }, null);
+
+        Assert.Equal("https://example.test/path?k=v", result.ResolvedUrl);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ApiKeyQueryAuth_ResolvedUrlIsPostAuth()
+    {
+        // The auth builder may rewrite the request URI (API-key-in-query). ResolvedUrl must echo
+        // the URL as sent — otherwise the response and the cURL panel disagree with the server.
+        var handler = new CapturingHandler();
+        var executor = new HttpRequestExecutor(
+            new StubFactory(new HttpClient(handler)),
+            new VariableSubstitutionService(new StubCredentialStore(), new StubKeyVaultResolver(available: false)),
+            new NoOpCaptureExecutor(),
+            new NoOpAuthResolver(),
+            new QueryAppendingAuthBuilder());
+        var request = new HttpRequestEntry
+        {
+            Name = "R",
+            Url = "https://example.test/",
+            Method = ApiRequestMethod.Get,
+        };
+
+        var result = await executor.ExecuteAsync(request, new ApiCollection { Name = "C" }, null);
+
+        Assert.Equal("https://example.test/?api_key=k", result.ResolvedUrl);
+        Assert.Equal("?api_key=k", handler.LastRequest!.RequestUri!.Query);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AuthWarnings_AreSurfaced()
+    {
+        var (executor, _) = CreateExecutor(new StubCredentialStore(), new WarningAuthBuilder());
+        var request = new HttpRequestEntry
+        {
+            Name = "R",
+            Url = "https://example.test/",
+            Method = ApiRequestMethod.Get,
+        };
+
+        var result = await executor.ExecuteAsync(request, new ApiCollection { Name = "C" }, null);
+
+        Assert.Contains(result.CaptureWarnings, w => w.Contains("no token"));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SentBody_EchoesPostSubstitutionBody()
+    {
+        var (executor, _) = CreateExecutor(new StubCredentialStore());
+        var env = new ApiEnvironment
+        {
+            Variables = [new EnvironmentVariable { Key = "id", Value = "42", IsEnabled = true }],
+        };
+        var request = new HttpRequestEntry
+        {
+            Name = "R",
+            Url = "https://example.test/",
+            Method = ApiRequestMethod.Post,
+            Body = { Mode = RequestBodyMode.Json, RawContent = """{"id":"{{id}}"}""" },
+        };
+
+        var result = await executor.ExecuteAsync(request, new ApiCollection { Name = "C" }, env);
+
+        Assert.Equal("""{"id":"42"}""", result.SentBody);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SentBody_IsNullForBinaryBody()
+    {
+        var (executor, _) = CreateExecutor(new StubCredentialStore());
+        var request = new HttpRequestEntry
+        {
+            Name = "R",
+            Url = "https://example.test/",
+            Method = ApiRequestMethod.Post,
+            Body = { Mode = RequestBodyMode.Binary, FilePath = "does-not-exist.bin" },
+        };
+
+        var result = await executor.ExecuteAsync(request, new ApiCollection { Name = "C" }, null);
+
+        Assert.Null(result.SentBody);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_AllVariablesResolved_NoWarnings()
     {
         var (executor, _) = CreateExecutor(new StubCredentialStore());
@@ -141,7 +298,9 @@ public sealed class HttpRequestExecutorUnresolvedVariableTests
 
     // ── Harness ───────────────────────────────────────────────────────────────
 
-    private static (HttpRequestExecutor Executor, CapturingHandler Handler) CreateExecutor(StubCredentialStore store)
+    private static (HttpRequestExecutor Executor, CapturingHandler Handler) CreateExecutor(
+        StubCredentialStore store,
+        IAuthHeaderBuilder? authBuilder = null)
     {
         var handler = new CapturingHandler();
         var executor = new HttpRequestExecutor(
@@ -149,7 +308,7 @@ public sealed class HttpRequestExecutorUnresolvedVariableTests
             new VariableSubstitutionService(store, new StubKeyVaultResolver(available: false)),
             new NoOpCaptureExecutor(),
             new NoOpAuthResolver(),
-            new NoOpAuthHeaderBuilder());
+            authBuilder ?? new NoOpAuthHeaderBuilder());
         return (executor, handler);
     }
 
@@ -202,11 +361,37 @@ public sealed class HttpRequestExecutorUnresolvedVariableTests
 
     private sealed class NoOpAuthHeaderBuilder : IAuthHeaderBuilder
     {
-        public Task ApplyAsync(
+        public Task<IReadOnlyList<string>> ApplyAsync(
             HttpRequestMessage message,
             AuthConfig? auth,
             IReadOnlyDictionary<string, string?>? scope = null,
             CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+            => Task.FromResult<IReadOnlyList<string>>([]);
+    }
+
+    /// <summary>Applies an API key as a query param — the URI rewrite the executor must echo.</summary>
+    private sealed class QueryAppendingAuthBuilder : IAuthHeaderBuilder
+    {
+        public Task<IReadOnlyList<string>> ApplyAsync(
+            HttpRequestMessage message,
+            AuthConfig? auth,
+            IReadOnlyDictionary<string, string?>? scope = null,
+            CancellationToken cancellationToken = default)
+        {
+            var uri = message.RequestUri!;
+            message.RequestUri = new Uri(uri + (uri.Query.Length > 0 ? "&" : "?") + "api_key=k");
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
+    }
+
+    /// <summary>Reports an unresolvable credential exactly like the sidecar builder does.</summary>
+    private sealed class WarningAuthBuilder : IAuthHeaderBuilder
+    {
+        public Task<IReadOnlyList<string>> ApplyAsync(
+            HttpRequestMessage message,
+            AuthConfig? auth,
+            IReadOnlyDictionary<string, string?>? scope = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<string>>(["Bearer auth is configured but no token could be resolved."]);
     }
 }

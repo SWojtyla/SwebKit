@@ -1,6 +1,7 @@
 import type { RequestAction, HttpRequestEntry, ApiClientExecutionResponse } from "./types";
 import { evaluateJsonPath } from "./api";
 import { writeClipboard } from "./tauri-bridge";
+import { transportMethod } from "./curl";
 
 export interface ActionRuntimeContext {
   request: HttpRequestEntry;
@@ -35,11 +36,13 @@ async function selectValue(action: RequestAction, ctx: ActionRuntimeContext): Pr
   const { request, response } = ctx;
   switch (action.source) {
     case "RequestUrl":
-      return request.url ?? "";
+      // Post-send, the resolved URL is the wire truth — the draft still holds `{{tokens}}`.
+      return response?.resolvedUrl ?? request.url ?? "";
     case "RequestMethod":
-      return request.method;
+      return transportMethod(request.method);
     case "RequestBody": {
-      const body = request.body.rawContent ?? "";
+      // Prefer the body as it went out (post-substitution, GraphQL-serialized) over the raw draft.
+      const body = response?.sentBody ?? request.body.rawContent ?? "";
       return action.selector ? evaluateJsonPathValue(body, action.selector) : body;
     }
     case "ResponseStatusCode":

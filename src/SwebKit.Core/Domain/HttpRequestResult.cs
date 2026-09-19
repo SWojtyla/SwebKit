@@ -22,6 +22,12 @@ public sealed class HttpRequestResult
     /// </summary>
     public IReadOnlyList<(string Name, string Value)> SentHeaders { get; set; } = [];
 
+    /// <summary>
+    /// The request body as it went out — post-substitution, built from the structured GraphQL
+    /// fields when applicable. <c>null</c> for binary bodies and bodies over 1 MB.
+    /// </summary>
+    public string? SentBody { get; set; }
+
     // ── Response metadata ─────────────────────────────────────────────────────
 
     /// <summary>HTTP status code returned by the server, or <c>0</c> if the request never reached it.</summary>

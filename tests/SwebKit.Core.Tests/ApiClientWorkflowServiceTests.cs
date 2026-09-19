@@ -57,6 +57,29 @@ public sealed class ApiClientWorkflowServiceTests
     }
 
     [Fact]
+    public void ImportCurl_UserFlag_MapsToBasicAuth()
+    {
+        var result = Create().ImportCurl("curl -u alice:s3cret https://api.example.com/me");
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        var auth = result.Request!.Auth;
+        Assert.NotNull(auth);
+        Assert.Equal(AuthType.Basic, auth.Type);
+        Assert.Equal("alice", auth.BasicUsername);
+        Assert.Equal("s3cret", auth.CredentialKey);
+    }
+
+    [Fact]
+    public void ImportCurl_UserFlagWithoutPassword_MapsUsernameOnly()
+    {
+        var result = Create().ImportCurl("curl --user alice https://api.example.com/me");
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal("alice", result.Request!.Auth!.BasicUsername);
+        Assert.Equal(string.Empty, result.Request.Auth.CredentialKey);
+    }
+
+    [Fact]
     public async Task InspectVariablesAsync_ReturnsSourceAndMaskedSecret()
     {
         var creds = new StubCredentialStore();

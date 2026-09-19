@@ -254,6 +254,21 @@ builder.Services.AddSingleton<AgentActionApplier>();
 // HTTP client used by the API client request executor
 builder.Services.AddHttpClient();
 
+// The executor's named client. The Settings → General "verify SSL" toggle must reach it — the
+// callback reads the live repository per request rather than snapshotting at handler creation,
+// so a toggle takes effect immediately (the handler is cached for minutes by the factory).
+builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
+    .ConfigurePrimaryHttpMessageHandler(sp =>
+    {
+        var settings = sp.GetRequiredService<UserSettingsRepository>();
+        return new HttpClientHandler
+        {
+            AllowAutoRedirect = true,
+            ServerCertificateCustomValidationCallback = (_, _, _, errors) =>
+                errors == System.Net.Security.SslPolicyErrors.None || !settings.Settings.VerifyApiClientSsl,
+        };
+    });
+
 // API client request execution pipeline
 builder.Services.AddSingleton<ICredentialStore, SidecarCredentialStore>();
 builder.Services.AddSingleton<IKeyVaultSecretResolver, SidecarKeyVaultResolver>();

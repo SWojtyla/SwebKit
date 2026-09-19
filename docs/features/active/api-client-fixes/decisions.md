@@ -67,3 +67,69 @@ scans the resolved URL, the sent headers, and the body for leftover
   carry tokens. (First implementation guarded on `ByteArrayContent`, which
   silently excluded `StringContent` — it inherits from it. Guard is now on the
   request's body *mode*.)
+
+## D6 — Key Vault failures resolve to null, never to a sentinel string
+
+**Chosen:** `IKeyVaultSecretResolver.GetSecretAsync` returns `Task<string?>`;
+every resolver (multi-vault, single-vault, noop, sidecar wrapper) returns
+`null` on any failure instead of `[KV_ERROR:...]`/`[KV_UNAVAILABLE:...]`.
+
+- A sentinel lands in the substitution scope as a real value, so a vault
+  outage used to send `Authorization: Bearer [KV_ERROR:token]` to the server —
+  with the preview still showing "deferred". `null` keeps `{{token}}` literal,
+  which the wire-image warning scan (D5) then reports by name.
+- The preview endpoint maps `null` to its existing `error` status; the
+  contract the UI consumes is unchanged.
+
+## D7 — `IAuthHeaderBuilder.ApplyAsync` returns warnings
+
+**Chosen:** the method returns `IReadOnlyList<string>` — human-readable
+warnings for auth that was configured but could not be applied (missing
+credential, empty param name, absent OAuth2 fields). The executor merges them
+into the same `CaptureWarnings` channel as unresolved variables and capture
+rules.
+
+- Previously a missing bearer token produced a request sent *without* the
+  header and no signal — the only symptom was a downstream 401 that looked
+  like a server problem.
+- The legacy MAUI `AuthHeaderBuilder` implements the new signature returning
+  `[]` — its per-type warnings were already logged, and the app is
+  reference-only.
+
+## D8 — ResolvedUrl is post-auth, and `SentBody` echoes the wire body
+
+**Chosen:** `HttpRequestExecutor` reads `httpRequest.RequestUri` *after*
+`ApplyAsync` — API-key-in-query auth rewrites the URI — and echoes the
+substituted body as `HttpRequestResult.SentBody` (null for binary or >1 MB).
+
+- Pre-auth `resolvedUrl` hid the api-key parameter the server received; the
+  cURL panel's "as sent" mode reconstructed neither it nor the GraphQL body
+  (which lives in structured editor fields, not `rawContent`).
+- The cURL panel masks the api-key value inside the echoed URL exactly like a
+  sensitive header — `resolvedUrl` is what the server saw, including secrets.
+
+## D9 — Linked env files key secrets by variable name, not a `secret:` prefix
+
+**Chosen:** `SwebKitEnvironmentFile` maps variables by `SecretSource` —
+non-plain sources go into `secrets` under the variable's own name and reload
+with that same name.
+
+- The old contract required the variable to be literally named `secret:x`:
+  a normal `apiKey` credential variable matched no export branch and was
+  silently dropped from `.swebenv.json`, and a file secret reloaded as
+  `secret:x` broke `{{x}}` references.
+- Back-compat note: a pre-existing linked env whose requests reference
+  `{{secret:x}}` will reload that variable as `x` — the rename is the fix,
+  not a regression.
+
+## D10 — `verifyApiClientSsl` reads live inside the TLS callback
+
+**Chosen:** the sidecar registers the named `ApiClient` client with a
+`ServerCertificateCustomValidationCallback` that reads
+`UserSettingsRepository.Settings.VerifyApiClientSsl` per request — the
+setting applies immediately rather than waiting for the ~2-minute handler
+cache to roll over.
+
+- The MAUI host read the setting once at handler creation; in the sidecar
+  (long-lived process, settings edited over HTTP) that would have looked
+  like a dead toggle.

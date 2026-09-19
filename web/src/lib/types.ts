@@ -711,6 +711,8 @@ export interface ApiClientExecutionResponse {
     graphQlErrors: GraphQlError[] | null;
     /** Headers exactly as sent, echoed by the sidecar so the cURL panel can be truthful. */
     sentHeaders?: ResponseHeaderDto[] | null;
+    /** The request body as it went out, post-substitution. Null for binary/oversized bodies. */
+    sentBody?: string | null;
 }
 
 export interface ResponseHeaderDto {

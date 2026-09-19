@@ -484,4 +484,144 @@ public class SidecarAuthHeaderBuilderTests
         Assert.Contains("client_secret=client-secret-value", body);
         Assert.Contains("scope=read+write", body);
     }
+
+    // ── Unresolvable auth surfaces a warning, not a silent unauthenticated send ──
+
+    [Fact]
+    public async Task ApplyAsync_Bearer_NoResolvableSecret_WarnsAndSendsNoHeader()
+    {
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig { Type = AuthType.BearerToken, CredentialKey = "sw-secret:missing" };
+        var request = NewRequest();
+
+        var warnings = await builder.ApplyAsync(request, auth);
+
+        Assert.Null(request.Headers.Authorization);
+        Assert.Single(warnings);
+        Assert.Contains("Bearer", warnings[0]);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_ApiKey_NoResolvableSecret_Warns()
+    {
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig
+        {
+            Type = AuthType.ApiKey,
+            ApiKeyParamName = "x-api-key",
+            ApiKeyLocation = ApiKeyLocation.Header,
+            CredentialKey = "sw-secret:missing",
+        };
+        var request = NewRequest();
+
+        var warnings = await builder.ApplyAsync(request, auth);
+
+        Assert.Single(warnings);
+        Assert.Contains("API key", warnings[0]);
+        Assert.False(request.Headers.Contains("x-api-key"));
+    }
+
+    [Fact]
+    public async Task ApplyAsync_ApiKey_NoParamName_Warns()
+    {
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig
+        {
+            Type = AuthType.ApiKey,
+            ApiKeyLocation = ApiKeyLocation.Header,
+            CredentialSecret = "secret",
+        };
+        var request = NewRequest();
+
+        var warnings = await builder.ApplyAsync(request, auth);
+
+        Assert.Single(warnings);
+        Assert.Contains("parameter name", warnings[0]);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_Basic_NoResolvablePassword_Warns()
+    {
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig
+        {
+            Type = AuthType.Basic,
+            BasicUsername = "alice",
+            CredentialKey = "sw-secret:missing",
+        };
+        var request = NewRequest();
+
+        var warnings = await builder.ApplyAsync(request, auth);
+
+        Assert.Null(request.Headers.Authorization);
+        Assert.Single(warnings);
+        Assert.Contains("Basic", warnings[0]);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_OAuth2_MissingTokenUrl_Warns()
+    {
+        var (builder, _, _) = Build();
+        var auth = new AuthConfig
+        {
+            Type = AuthType.OAuth2,
+            OAuth2GrantType = OAuth2GrantType.ClientCredentials,
+            OAuth2ClientId = "client-1",
+            CredentialSecret = "secret",
+        };
+        var request = NewRequest();
+
+        var warnings = await builder.ApplyAsync(request, auth);
+
+        Assert.Single(warnings);
+        Assert.Contains("token URL or client ID", warnings[0]);
+    }
+
+    // ── OAuth2 client-credentials token caching ──
+
+    [Fact]
+    public async Task ApplyAsync_OAuth2_TokenIsCachedAcrossSends()
+    {
+        var (builder, _, handler) = Build();
+        handler.EnqueueJson("""{"access_token":"cached-token","expires_in":3600}""");
+        var auth = new AuthConfig
+        {
+            Type = AuthType.OAuth2,
+            OAuth2GrantType = OAuth2GrantType.ClientCredentials,
+            OAuth2TokenUrl = "https://auth.example.com/token",
+            OAuth2ClientId = "cache-test-client",
+            CredentialSecret = "cache-test-secret",
+        };
+
+        await builder.ApplyAsync(NewRequest(), auth);
+        await builder.ApplyAsync(NewRequest(), auth);
+
+        // One token fetch for two sends — the second reuses the cached token.
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_OAuth2_DifferentSecrets_DoNotShareCachedTokens()
+    {
+        var (builder, _, handler) = Build();
+        handler.EnqueueJson("""{"access_token":"token-a","expires_in":3600}""");
+        handler.EnqueueJson("""{"access_token":"token-b","expires_in":3600}""");
+        AuthConfig AuthFor(string secret) => new()
+        {
+            Type = AuthType.OAuth2,
+            OAuth2GrantType = OAuth2GrantType.ClientCredentials,
+            OAuth2TokenUrl = "https://auth.example.com/token",
+            OAuth2ClientId = "cache-test-client",
+            CredentialSecret = secret,
+        };
+
+        var reqA = NewRequest();
+        var reqB = NewRequest();
+        await builder.ApplyAsync(reqA, AuthFor("secret-a"));
+        await builder.ApplyAsync(reqB, AuthFor("secret-b"));
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal("token-a", reqA.Headers.Authorization!.Parameter);
+        Assert.Equal("token-b", reqB.Headers.Authorization!.Parameter);
+    }
 }
