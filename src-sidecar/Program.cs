@@ -221,6 +221,9 @@ builder.Services.AddSingleton<IAgentTool, InvestigateWorkspaceIssueTool>();
 builder.Services.AddSingleton<ScreenStateStore>();
 builder.Services.AddSingleton<IAgentTool, GetScreenStateTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeCreateAlertRuleTool>();
+builder.Services.AddSingleton<IAgentTool, ListAlertRulesTool>();
+// Lives in the sidecar — the alert-history ring buffer is held by MonitoringAlertEvaluationService.
+builder.Services.AddSingleton<IAgentTool, SwebKit.Sidecar.Services.GetAlertHistoryTool>();
 
 builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 

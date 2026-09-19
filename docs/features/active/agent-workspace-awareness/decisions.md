@@ -178,3 +178,21 @@ clear-all — rather than building a separate notification store.
 - Unread-count badge (not total-count) is the meaningful signal; items mark
   themselves read on click, and clicking a linked item navigates and closes
   the panel.
+
+## D14 — Monitoring gets read tools, not just the mutation tool
+
+**Chosen:** `list_alert_rules` (SwebKit.Agents, over `IAlertRuleRepository`)
+plus `get_alert_history` (src-sidecar, over `MonitoringAlertEvaluationService.RecentAlerts`).
+
+- Coverage audit showed every feature area had read tools except Monitoring:
+  the agent could propose rules but could not see which rules exist or what
+  fired recently — so during an investigation it could look *down* at
+  resources but not *sideways* at the alert landscape.
+- Recent firings are often the highest-value investigation signal: "three
+  sibling rules fired in the same minute" (storm correlation) and "this rule
+  fires every night" (flapping) are unanswerable without history access.
+- `get_alert_history` lives in src-sidecar for the same reason as
+  `MonitoringActionExecutor` (D12): the history ring buffer is in-memory
+  state of the sidecar-hosted evaluation engine, not a Core abstraction.
+- Both are Read/None risk — visible in workspace scope and global chat; the
+  proactive runner gets them automatically, which is the primary consumer.

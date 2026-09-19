@@ -114,6 +114,14 @@ confirmation `MonitoringActionExecutor` (src-sidecar) upserts through
 `IAlertRuleRepository` and calls `ReloadRulesAsync`, so the rule evaluates on
 its next interval — same path as the REST endpoints.
 
+Monitoring also exposes read tools so the agent can see the alert landscape
+itself during an investigation: `list_alert_rules` (SwebKit.Agents, over
+`IAlertRuleRepository` — every rule's source/target/severity/AI flag/last
+fired) and `get_alert_history` (src-sidecar, over the engine's `RecentAlerts`
+ring buffer — recent firings with rule/source/severity/message). Both are
+Read/None and visible in workspace scope, which is what lets a proactive
+investigation distinguish a single failure from an alert storm.
+
 ## Connection Pool
 
 `SidecarMonitoringConnectionPool` resolves AKS / Service Bus / Redis clients using the **same**

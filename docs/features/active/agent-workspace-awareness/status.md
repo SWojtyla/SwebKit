@@ -84,6 +84,11 @@
       the standard pending-approval card (D12)
 - [x] Tests: 5 tool tests + 5 executor tests (xunit); Playwright spec for the
       notification center added to `monitoring.spec.ts`
+- [x] Monitoring read tools close the investigation-coverage gap (D14):
+      `list_alert_rules` (SwebKit.Agents, over IAlertRuleRepository) and
+      `get_alert_history` (src-sidecar, over the engine's RecentAlerts ring
+      buffer) — the agent can now see sibling rules and recent firings, which
+      is what distinguishes a single failure from an alert storm
 
 ### Cross-cutting
 
@@ -96,11 +101,13 @@
 
 - `dotnet build` sidecar — green; `cargo build --lib` — green (notification
   plugin compiles)
-- `dotnet test`: Agents 254, Core 1002, Sidecar 475 — all green (incl. new
-  runner/store/flag/tool tests)
-- `npx tsc -b` — clean; `npm run test:unit` — 473 green; `npm run build` — green
-- `MonitoringActionExecutorTests` — written; NOT run locally: the dev sidecar
-  was running and locked `src-sidecar/bin` DLLs. Run once the app restarts.
-- Playwright — new specs written (AI toggle, row badge, notification center),
-  suite NOT run locally yet (needs demo-mode app + sidecar harness)
+- `dotnet test`: Agents 253, Core 1002, Sidecar 483 — all green (incl. the
+  previously blocked `MonitoringActionExecutorTests`, `GetAlertHistoryToolTests`,
+  `ListAlertRulesToolTests`)
+- `npx tsc -b` — clean; `npm run test:unit` — 473 green; `npm run lint` —
+  0 errors (3 pre-existing/branch eslint errors fixed: missing `setActiveTab`
+  hook deps in MonitoringPage + RedisPageContext, intentional `open` dep
+  marked in SearchableSelect); `cargo test --lib` — 64 green
+- Playwright — monitoring.spec 24/24 green (incl. AI toggle, row badge,
+  notification center); navigation+layout+aks specs 22/22 green
 - Aikido — MCP server not available in this environment; still pending

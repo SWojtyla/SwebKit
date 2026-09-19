@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { Plus, AlertCircle } from "lucide-react";
 import { SkeletonRows } from "@/components/shared/Skeleton";
@@ -46,8 +46,10 @@ export function MonitoringPage() {
   const updateParams = useUpdateSearchParams();
   const activeTab: "rules" | "history" =
     searchParams.get("tab") === "history" ? "history" : "rules";
-  const setActiveTab = (tab: "rules" | "history") =>
-    updateParams({ tab: tab === "rules" ? null : tab });
+  const setActiveTab = useCallback(
+    (tab: "rules" | "history") => updateParams({ tab: tab === "rules" ? null : tab }),
+    [updateParams],
+  );
   const [showEditor, setShowEditor] = useState(false);
   const [editingRule, setEditingRule] = useState<MonitoringAlertRule | null>(null);
 
@@ -65,7 +67,7 @@ export function MonitoringPage() {
         navigate(location.pathname, { replace: true, state: null });
       }
     }
-  }, [location, rules, navigate]);
+  }, [location, rules, navigate, setActiveTab]);
   // Live status dots, derived from a synthetic evaluation event merged in from the stream + history.
   const [statuses, setStatuses] = useState<Record<string, AlertSignalStatus>>({});
   const [liveEvents, setLiveEvents] = useState<AlertFiredEvent[]>([]);

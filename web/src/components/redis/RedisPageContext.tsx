@@ -478,7 +478,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
       applySearchPattern(`${prefix}${separator}*`);
       setActiveTab("keys");
     },
-    [applySearchPattern, separator],
+    [applySearchPattern, separator, setActiveTab],
   );
 
   const handleLoadMore = () => {
