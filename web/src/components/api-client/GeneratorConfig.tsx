@@ -47,7 +47,20 @@ const FAKER_CATEGORIES: { value: string; label: string }[] = [
   { value: "date.past", label: "Date — in the past" },
   { value: "date.future", label: "Date — in the future" },
   { value: "date.recent", label: "Date — recent" },
+  { value: "date.between", label: "Date — between two dates" },
 ];
+
+const isDateCategory = (category: string | null | undefined) => category?.startsWith("date.") ?? false;
+
+/** datetime-local inputs give "YYYY-MM-DDTHH:mm" in local time; the model stores a full ISO instant (UTC). */
+const toIso = (local: string): string | null => (local ? new Date(local).toISOString() : null);
+const toLocalInput = (iso: string | null | undefined): string => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 const GENERATOR_HELP: Record<VariableGeneratorKind, string> = {
   Integer: "A random whole number between Min and Max (inclusive), picked fresh each request.",
@@ -169,6 +182,28 @@ export function GeneratorConfig({ generator, onChange, testIdPrefix }: Generator
           </select>
         )}
 
+        {generator.kind === "Faker" && isDateCategory(generator.fakerCategory) && (
+          <>
+            <input
+              type="datetime-local"
+              value={toLocalInput(generator.fakerDateAfter)}
+              onChange={(e) => update({ fakerDateAfter: toIso(e.target.value) })}
+              title="Earliest date that can be generated (inclusive); empty = the category's own default start"
+              className="w-40 rounded border bg-background px-2 py-1 text-xs font-mono"
+              data-testid={`${testIdPrefix}-generator-date-after`}
+            />
+            <span className="text-xs text-muted-foreground">→</span>
+            <input
+              type="datetime-local"
+              value={toLocalInput(generator.fakerDateBefore)}
+              onChange={(e) => update({ fakerDateBefore: toIso(e.target.value) })}
+              title="Latest date that can be generated (inclusive); empty = the category's own default end"
+              className="w-40 rounded border bg-background px-2 py-1 text-xs font-mono"
+              data-testid={`${testIdPrefix}-generator-date-before`}
+            />
+          </>
+        )}
+
         {generator.kind === "List" && (
           <input
             type="text"
@@ -183,6 +218,14 @@ export function GeneratorConfig({ generator, onChange, testIdPrefix }: Generator
 
       <p className="pl-4 text-[11px] leading-snug text-muted-foreground" data-testid={`${testIdPrefix}-generator-help`}>
         {GENERATOR_HELP[generator.kind]}
+        {generator.kind === "Faker" && isDateCategory(generator.fakerCategory) && (
+          <>
+            {" "}
+            {generator.fakerCategory === "date.between"
+              ? "Both bounds are required for 'between'."
+              : "Leave a bound empty to use the category's own range."}
+          </>
+        )}
       </p>
     </div>
   );

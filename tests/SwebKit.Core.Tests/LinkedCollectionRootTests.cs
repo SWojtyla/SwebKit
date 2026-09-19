@@ -194,7 +194,9 @@ public sealed class LinkedCollectionRootTests : IDisposable
         var environment = Assert.Single(result.Environments);
         Assert.Equal("dev", environment.Name);
         Assert.Contains(environment.Variables, variable => variable.Key == "baseUrl" && variable.Value == "https://dev.example.com");
-        Assert.Contains(environment.Variables, variable => variable.Key == "secret:apiToken" && variable.CredentialKey == "project/dev/api-token");
+        // The variable keeps its file name — a `secret:` prefix would break every `{{apiToken}}`
+        // reference after a sync round-trip.
+        Assert.Contains(environment.Variables, variable => variable.Key == "apiToken" && variable.CredentialKey == "project/dev/api-token");
         Assert.Equal(environment.Id, Assert.Single(result.EnvironmentFiles).EnvironmentId);
     }
 
@@ -212,7 +214,7 @@ public sealed class LinkedCollectionRootTests : IDisposable
                         new EnvironmentVariable { Key = "baseUrl", Value = "https://dev.example.com", IsEnabled = true },
                                 new EnvironmentVariable
                                 {
-                                        Key = "secret:apiToken",
+                                        Key = "apiToken",
                                         CredentialKey = "project/dev/api-token",
                                         SecretSource = EnvironmentVariableSecretSource.WindowsCredentialStore,
                                         IsEnabled = true,
@@ -226,6 +228,41 @@ public sealed class LinkedCollectionRootTests : IDisposable
         Assert.Contains("project/dev/api-token", json);
         Assert.DoesNotContain("super-secret-value", json);
         Assert.Contains("apiToken", json);
+    }
+
+    [Fact]
+    public async Task EnvironmentFile_SecretVariable_RoundTripsUnderItsOwnName()
+    {
+        // Regression coverage for the silent drop: a credential-backed variable named "apiKey"
+        // used to match no export branch and vanish from the linked .swebenv.json entirely.
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var envPath = Path.Combine(apiRoot, "environments", "dev.swebenv.json");
+        var environment = new ApiEnvironment
+        {
+            Id = "dev",
+            Name = "dev",
+            Variables =
+                [
+                        new EnvironmentVariable
+                        {
+                                Key = "apiKey",
+                                CredentialKey = "project/dev/api-key",
+                                SecretSource = EnvironmentVariableSecretSource.AzureKeyVault,
+                                KeyVaultName = "kv1",
+                                IsEnabled = true,
+                        },
+                        ],
+        };
+
+        await _fileService.SaveEnvironmentAsync(envPath, environment);
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+
+        var loaded = Assert.Single(result.Environments);
+        var variable = Assert.Single(loaded.Variables);
+        Assert.Equal("apiKey", variable.Key);
+        Assert.Equal("project/dev/api-key", variable.CredentialKey);
+        Assert.Equal("kv1", variable.KeyVaultName);
+        Assert.Equal(EnvironmentVariableSecretSource.AzureKeyVault, variable.SecretSource);
     }
 
     [Fact]

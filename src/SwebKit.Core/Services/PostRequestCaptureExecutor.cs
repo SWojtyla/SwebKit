@@ -47,14 +47,16 @@ public sealed class PostRequestCaptureExecutor(
                 // Write to the target scope
                 if (string.Equals(rule.TargetScope, "collection", StringComparison.OrdinalIgnoreCase))
                 {
-                    WriteToCollection(collection, rule.TargetVariable, extracted);
-                    collectionDirty = true;
+                    var skipped = WriteToCollection(collection, rule.TargetVariable, extracted);
+                    if (skipped is not null) warnings.Add($"Capture '{rule.TargetVariable}': {skipped}");
+                    else collectionDirty = true;
                 }
                 else if (activeEnvironment is not null &&
                          string.Equals(rule.TargetScope, activeEnvironment.Id, StringComparison.Ordinal))
                 {
-                    WriteToEnvironment(activeEnvironment, rule.TargetVariable, extracted);
-                    environmentDirty = true;
+                    var skipped = WriteToEnvironment(activeEnvironment, rule.TargetVariable, extracted);
+                    if (skipped is not null) warnings.Add($"Capture '{rule.TargetVariable}': {skipped}");
+                    else environmentDirty = true;
                 }
                 else
                 {
@@ -68,17 +70,24 @@ public sealed class PostRequestCaptureExecutor(
             }
         }
 
-        // Persist mutations asynchronously (fire-and-forget errors logged, not surfaced to user)
         if (collectionDirty)
         {
             try { await collectionRepository.UpdateCollectionAsync(collection).ConfigureAwait(false); }
-            catch (Exception ex) { logger.LogWarning(ex, "Failed to persist collection after capture"); }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to persist collection after capture");
+                warnings.Add("Captured collection variables were updated for this session but could not be saved to disk.");
+            }
         }
 
         if (environmentDirty && activeEnvironment is not null)
         {
             try { await environmentRepository.UpdateEnvironmentAsync(activeEnvironment).ConfigureAwait(false); }
-            catch (Exception ex) { logger.LogWarning(ex, "Failed to persist environment after capture"); }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to persist environment after capture");
+                warnings.Add("Captured environment variables were updated for this session but could not be saved to disk.");
+            }
         }
 
         return warnings;
@@ -133,35 +142,45 @@ public sealed class PostRequestCaptureExecutor(
 
     // ── Mutation helpers ───────────────────────────────────────────────────────
 
-    private static void WriteToCollection(ApiCollection collection, string key, string value)
+    /// <returns>A skip reason when the target exists but is not a plain variable, otherwise null.</returns>
+    private static string? WriteToCollection(ApiCollection collection, string key, string value)
     {
         var existing = collection.Variables.FirstOrDefault(v => v.Key == key);
         if (existing is not null)
         {
+            // A captured Value would be dead data on a generated variable — the generator still
+            // wins at scope-build time, so writing here only pretends the capture worked.
+            if (existing.Generator is not null)
+                return "target is a generated variable — re-point the rule at a plain variable or remove the generator.";
             existing.Value = value;
+            return null;
         }
-        else
-        {
-            collection.Variables.Add(new CollectionVariable { Key = key, Value = value, IsEnabled = true });
-        }
+
+        collection.Variables.Add(new CollectionVariable { Key = key, Value = value, IsEnabled = true });
+        return null;
     }
 
-    private static void WriteToEnvironment(ApiEnvironment env, string key, string value)
+    /// <returns>A skip reason when the target exists but is not a plain variable, otherwise null.</returns>
+    private static string? WriteToEnvironment(ApiEnvironment env, string key, string value)
     {
         var existing = env.Variables.FirstOrDefault(v => v.Key == key);
         if (existing is not null)
         {
+            // Same dead-write problem for credential-store, Key Vault and generated variables:
+            // resolution ignores Value for every non-plain source.
+            if (existing.SecretSource != EnvironmentVariableSecretSource.Plain)
+                return $"target is a {existing.SecretSource} variable — re-point the rule at a plain variable.";
             existing.Value = value;
+            return null;
         }
-        else
+
+        env.Variables.Add(new EnvironmentVariable
         {
-            env.Variables.Add(new EnvironmentVariable
-            {
-                Key = key,
-                Value = value,
-                SecretSource = EnvironmentVariableSecretSource.Plain,
-                IsEnabled = true,
-            });
-        }
+            Key = key,
+            Value = value,
+            SecretSource = EnvironmentVariableSecretSource.Plain,
+            IsEnabled = true,
+        });
+        return null;
     }
 }

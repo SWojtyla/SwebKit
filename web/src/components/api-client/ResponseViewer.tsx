@@ -161,7 +161,7 @@ export function ResponseViewer({
 
   const copyCurl = async () => {
     if (request) {
-      const curl = buildCurl(request, response.resolvedUrl, variableScope, response.sentHeaders ?? null, revealCurlSecrets);
+      const curl = buildCurl(request, response.resolvedUrl, variableScope, response.sentHeaders ?? null, revealCurlSecrets, response.sentBody ?? null);
       await navigator.clipboard.writeText(curl);
       setCopiedCurl(true);
       setTimeout(() => setCopiedCurl(false), 2000);
@@ -237,7 +237,7 @@ export function ResponseViewer({
         )}
       </div>
 
-      {/* Capture warnings */}
+      {/* Send warnings (unresolved variables, failed capture rules) */}
       {response.captureWarnings && response.captureWarnings.length > 0 && (
         <div
           className="border-b p-3"
@@ -246,7 +246,7 @@ export function ResponseViewer({
         >
           <div className="flex items-center gap-2 text-xs font-medium" style={{ color: "var(--warning)" }}>
             <AlertCircle className="h-4 w-4" />
-            Capture warnings
+            Warnings
           </div>
           <ul className="mt-1 list-inside list-disc text-xs" style={{ color: "var(--warning)" }}>
             {response.captureWarnings.map((w, i) => (
@@ -283,7 +283,7 @@ export function ResponseViewer({
             </div>
           </div>
           <pre className="overflow-auto whitespace-pre-wrap break-all font-mono text-xs">
-            {buildCurl(request, response.resolvedUrl, variableScope, response.sentHeaders ?? null, revealCurlSecrets)}
+            {buildCurl(request, response.resolvedUrl, variableScope, response.sentHeaders ?? null, revealCurlSecrets, response.sentBody ?? null)}
           </pre>
         </div>
       )}

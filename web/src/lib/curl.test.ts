@@ -53,7 +53,7 @@ describe("buildCurl", () => {
       "https://example.test/",
       scope,
     );
-    expect(curl).toContain(`-H "X-Office: 15000"`);
+    expect(curl).toContain(`-H 'X-Office: 15000'`);
   });
 
   it("leaves a variable that is only known at send time as its token", () => {
@@ -103,7 +103,7 @@ describe("buildCurl", () => {
   it("falls back to a content type derived from the body mode", () => {
     expect(
       buildCurl(request({ body: { mode: "Xml", rawContent: "<a/>" } as HttpRequestEntry["body"] }), "u", scope),
-    ).toContain(`-H "Content-Type: application/xml"`);
+    ).toContain(`-H 'Content-Type: application/xml'`);
   });
 
   it("prefers an explicit content type over the derived one", () => {
@@ -115,7 +115,7 @@ describe("buildCurl", () => {
         "u",
         scope,
       ),
-    ).toContain(`-H "Content-Type: text/csv"`);
+    ).toContain(`-H 'Content-Type: text/csv'`);
   });
 
   it("emits no body flags for a bodiless request", () => {
@@ -130,7 +130,24 @@ describe("buildCurl", () => {
 
   it("uses the executed URL verbatim, since the backend folds in query parameters", () => {
     const curl = buildCurl(request(), "https://example.test/?a=1&b=2", scope);
-    expect(curl).toContain(`"https://example.test/?a=1&b=2"`);
+    expect(curl).toContain(`'https://example.test/?a=1&b=2'`);
+  });
+
+  it("maps GraphQl to its actual transport method, POST", () => {
+    const curl = buildCurl(request({ method: "GraphQl" }), "https://example.test/graphql", scope);
+    expect(curl).toContain("curl -X POST");
+    expect(curl).not.toContain("GRAPHQL");
+  });
+
+  it("single-quotes header values so a double quote cannot break the command", () => {
+    const curl = buildCurl(
+      request({
+        headers: [{ key: "X-Q", value: 'say "hi" $(rm -rf ~)', isEnabled: true }] as HttpRequestEntry["headers"],
+      }),
+      "https://example.test/",
+      scope,
+    );
+    expect(curl).toContain(`-H 'X-Q: say "hi" $(rm -rf ~)'`);
   });
 });
 
@@ -151,13 +168,13 @@ describe("buildCurl auth", () => {
 
   it("masks a Bearer token", () => {
     const curl = buildCurl(request({ auth: auth({ type: "BearerToken" }) }), "https://example.test/", scope);
-    expect(curl).toContain(`-H "Authorization: Bearer ${MASK}"`);
+    expect(curl).toContain(`-H 'Authorization: Bearer ${MASK}'`);
     expect(curl).not.toContain(SECRET);
   });
 
   it("masks an OAuth2 client secret as a Bearer header, since that's what actually reaches the target", () => {
     const curl = buildCurl(request({ auth: auth({ type: "OAuth2" }) }), "https://example.test/", scope);
-    expect(curl).toContain(`-H "Authorization: Bearer ${MASK}"`);
+    expect(curl).toContain(`-H 'Authorization: Bearer ${MASK}'`);
     expect(curl).not.toContain(SECRET);
   });
 
@@ -167,7 +184,7 @@ describe("buildCurl auth", () => {
       "https://example.test/",
       scope,
     );
-    expect(curl).toContain(`-u "alice:${MASK}"`);
+    expect(curl).toContain(`-u 'alice:${MASK}'`);
     expect(curl).not.toContain(SECRET);
   });
 
@@ -177,7 +194,7 @@ describe("buildCurl auth", () => {
       "https://example.test/",
       scope,
     );
-    expect(curl).toContain(`-H "X-Api-Key: ${MASK}"`);
+    expect(curl).toContain(`-H 'X-Api-Key: ${MASK}'`);
     expect(curl).not.toContain(SECRET);
   });
 
@@ -187,7 +204,7 @@ describe("buildCurl auth", () => {
       "https://example.test/",
       scope,
     );
-    expect(curl).toContain(`"https://example.test/?api_key=${MASK}"`);
+    expect(curl).toContain(`'https://example.test/?api_key=${MASK}'`);
     expect(curl).not.toContain(SECRET);
   });
 
@@ -197,7 +214,7 @@ describe("buildCurl auth", () => {
       "https://example.test/?a=1",
       scope,
     );
-    expect(curl).toContain(`"https://example.test/?a=1&api_key=${MASK}"`);
+    expect(curl).toContain(`'https://example.test/?a=1&api_key=${MASK}'`);
   });
 
   it("substitutes a Basic username written as a variable", () => {
@@ -206,7 +223,7 @@ describe("buildCurl auth", () => {
       "https://example.test/",
       scope,
     );
-    expect(curl).toContain(`-u "brio:${MASK}"`);
+    expect(curl).toContain(`-u 'brio:${MASK}'`);
   });
 
   it("substitutes an API key header name written as a variable", () => {
@@ -215,7 +232,7 @@ describe("buildCurl auth", () => {
       "https://example.test/",
       scope,
     );
-    expect(curl).toContain(`-H "brio: ${MASK}"`);
+    expect(curl).toContain(`-H 'brio: ${MASK}'`);
   });
 
   it("substitutes an API key query-param name written as a variable", () => {
@@ -224,7 +241,7 @@ describe("buildCurl auth", () => {
       "https://example.test/",
       scope,
     );
-    expect(curl).toContain(`"https://example.test/?brio=${MASK}"`);
+    expect(curl).toContain(`'https://example.test/?brio=${MASK}'`);
   });
 
   it("adds nothing for an API key with no param name configured yet", () => {
@@ -244,5 +261,58 @@ describe("buildCurl auth", () => {
     // would swallow the trailing backslash as comment text and orphan every line after it.
     expect(lines[0].endsWith("\\")).toBe(false);
     expect(lines[1].startsWith("curl")).toBe(true);
+  });
+});
+
+describe("buildCurl as-sent", () => {
+  const MASK = "••••••••";
+
+  it("uses the sent body, not the draft — GraphQL payloads are server-serialized", () => {
+    const curl = buildCurl(
+      request({ method: "GraphQl" }),
+      "https://example.test/graphql",
+      scope,
+      [{ name: "Content-Type", value: "application/json" }],
+      false,
+      `{"query":"{ me }"}`,
+    );
+    expect(curl).toContain(`-d '{"query":"{ me }"}'`);
+    expect(curl).toContain("-X POST");
+  });
+
+  it("masks the API key inside the echoed URL for query-param auth", () => {
+    const curl = buildCurl(
+      request({
+        auth: auth({ type: "ApiKey", apiKeyParamName: "api_key", apiKeyLocation: "QueryParam" }),
+      }),
+      "https://example.test/?api_key=real-secret-value",
+      scope,
+      [{ name: "Accept", value: "application/json" }],
+    );
+    expect(curl).toContain(`api_key=${MASK}`);
+    expect(curl).not.toContain("real-secret-value");
+  });
+
+  it("reveals the API key in the URL when secrets are revealed", () => {
+    const curl = buildCurl(
+      request({
+        auth: auth({ type: "ApiKey", apiKeyParamName: "api_key", apiKeyLocation: "QueryParam" }),
+      }),
+      "https://example.test/?api_key=real-secret-value",
+      scope,
+      [{ name: "Accept", value: "application/json" }],
+      true,
+    );
+    expect(curl).toContain("api_key=real-secret-value");
+  });
+
+  it("single-quotes echoed header values", () => {
+    const curl = buildCurl(
+      request(),
+      "https://example.test/",
+      scope,
+      [{ name: "X-Q", value: 'say "hi"' }],
+    );
+    expect(curl).toContain(`-H 'X-Q: say "hi"'`);
   });
 });

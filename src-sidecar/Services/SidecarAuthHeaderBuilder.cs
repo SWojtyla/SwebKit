@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
 using SwebKit.Core.Abstractions;
@@ -13,56 +15,87 @@ namespace SwebKit.Sidecar.Services;
 /// OAuth2 client credentials (minimal sidecar implementation).
 /// Every field is resolved against the request's variable scope first, so a bearer token, API key
 /// or client secret entered as <c>{{TOKEN}}</c> is sent as that variable's value.
+/// When configured auth cannot be fully applied — a missing credential, an empty token URL — the
+/// request still goes out but a warning is returned, because sending it silently would surface
+/// only as a downstream 401 that looks like a server problem.
 /// </summary>
 public sealed class SidecarAuthHeaderBuilder(
     ICredentialStore credentialStore,
     IHttpClientFactory httpClientFactory,
     IVariableSubstitutionService substitution) : IAuthHeaderBuilder
 {
-    public async Task ApplyAsync(
+    /// <summary>
+    /// Client-credentials access tokens are cached until shortly before their
+    /// <c>expires_in</c> deadline — without this, every send re-runs the token exchange.
+    /// Keyed by endpoint + client + scopes + a hash of the secret, so rotating the secret
+    /// invalidates the entry without keeping the plaintext in the key. Instance-level on
+    /// purpose: the builder is a singleton, and a static cache would leak tokens across
+    /// test cases sharing the same key material.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, CachedToken> _tokenCache = new();
+    private static readonly TimeSpan ExpirySkew = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan DefaultTokenLifetime = TimeSpan.FromMinutes(5);
+
+    public async Task<IReadOnlyList<string>> ApplyAsync(
         HttpRequestMessage message,
         AuthConfig? auth,
         IReadOnlyDictionary<string, string?>? scope = null,
         CancellationToken cancellationToken = default)
     {
         if (auth is null || auth.Type is AuthType.None or AuthType.Inherited)
-            return;
+            return [];
 
+        var warnings = new List<string>();
         auth = AuthConfigSubstitution.Substitute(auth, substitution, scope);
 
         switch (auth.Type)
         {
             case AuthType.BearerToken:
-                ApplyBearer(message, auth, scope);
+                ApplyBearer(message, auth, scope, warnings);
                 break;
 
             case AuthType.ApiKey:
-                ApplyApiKey(message, auth, scope);
+                ApplyApiKey(message, auth, scope, warnings);
                 break;
 
             case AuthType.Basic:
-                ApplyBasic(message, auth, scope);
+                ApplyBasic(message, auth, scope, warnings);
                 break;
 
             case AuthType.OAuth2:
-                await ApplyOAuth2Async(message, auth, scope, cancellationToken).ConfigureAwait(false);
+                await ApplyOAuth2Async(message, auth, scope, warnings, cancellationToken).ConfigureAwait(false);
                 break;
         }
+
+        return warnings;
     }
 
-    private void ApplyBearer(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope)
+    private void ApplyBearer(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope, List<string> warnings)
     {
         var token = ResolveSecret(auth, scope);
-        if (string.IsNullOrWhiteSpace(token)) return;
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            warnings.Add("Bearer auth is configured but no token could be resolved — the request was sent without an Authorization header.");
+            return;
+        }
 
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
-    private void ApplyApiKey(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope)
+    private void ApplyApiKey(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope, List<string> warnings)
     {
-        if (string.IsNullOrWhiteSpace(auth.ApiKeyParamName)) return;
+        if (string.IsNullOrWhiteSpace(auth.ApiKeyParamName))
+        {
+            warnings.Add("API key auth is configured but no parameter name is set — the request was sent without an API key.");
+            return;
+        }
+
         var apiKey = ResolveSecret(auth, scope);
-        if (string.IsNullOrWhiteSpace(apiKey)) return;
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            warnings.Add("API key auth is configured but no key value could be resolved — the request was sent without an API key.");
+            return;
+        }
 
         if (auth.ApiKeyLocation == ApiKeyLocation.Header)
         {
@@ -81,10 +114,14 @@ public sealed class SidecarAuthHeaderBuilder(
         }
     }
 
-    private void ApplyBasic(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope)
+    private void ApplyBasic(HttpRequestMessage message, AuthConfig auth, IReadOnlyDictionary<string, string?>? scope, List<string> warnings)
     {
         var password = ResolveSecret(auth, scope);
-        if (string.IsNullOrWhiteSpace(password)) return;
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            warnings.Add("Basic auth is configured but no password could be resolved — the request was sent without an Authorization header.");
+            return;
+        }
         var username = auth.BasicUsername ?? string.Empty;
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
         message.Headers.Authorization = new AuthenticationHeaderValue("Basic", encoded);
@@ -94,11 +131,12 @@ public sealed class SidecarAuthHeaderBuilder(
         HttpRequestMessage message,
         AuthConfig auth,
         IReadOnlyDictionary<string, string?>? scope,
+        List<string> warnings,
         CancellationToken cancellationToken)
     {
         if (auth.OAuth2GrantType == OAuth2GrantType.ClientCredentials)
         {
-            await ApplyOAuth2ClientCredentialsAsync(message, auth, scope, cancellationToken).ConfigureAwait(false);
+            await ApplyOAuth2ClientCredentialsAsync(message, auth, scope, warnings, cancellationToken).ConfigureAwait(false);
         }
         // Authorization code / PKCE is not implemented for the sidecar MVP.
     }
@@ -107,18 +145,45 @@ public sealed class SidecarAuthHeaderBuilder(
         HttpRequestMessage message,
         AuthConfig auth,
         IReadOnlyDictionary<string, string?>? scope,
+        List<string> warnings,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(auth.OAuth2TokenUrl) || string.IsNullOrWhiteSpace(auth.OAuth2ClientId))
+        {
+            warnings.Add("OAuth2 client-credentials auth is configured but the token URL or client ID is missing — the request was sent without an Authorization header.");
             return;
+        }
 
         var clientSecret = ResolveSecret(auth, scope);
-        if (string.IsNullOrWhiteSpace(clientSecret)) return;
+        if (string.IsNullOrWhiteSpace(clientSecret))
+        {
+            warnings.Add("OAuth2 client-credentials auth is configured but no client secret could be resolved — the request was sent without an Authorization header.");
+            return;
+        }
 
+        var cacheKey = CacheKey(auth.OAuth2TokenUrl, auth.OAuth2ClientId, auth.OAuth2Scopes, clientSecret);
+        if (!_tokenCache.TryGetValue(cacheKey, out var cached) || cached.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            cached = await FetchTokenAsync(auth, clientSecret, cancellationToken).ConfigureAwait(false);
+            if (cached is not null)
+                _tokenCache[cacheKey] = cached;
+        }
+
+        if (cached is null)
+            return;
+
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cached.AccessToken);
+    }
+
+    private async Task<CachedToken?> FetchTokenAsync(
+        AuthConfig auth,
+        string clientSecret,
+        CancellationToken cancellationToken)
+    {
         var form = new Dictionary<string, string>
         {
             ["grant_type"] = "client_credentials",
-            ["client_id"] = auth.OAuth2ClientId,
+            ["client_id"] = auth.OAuth2ClientId!,
             ["client_secret"] = clientSecret,
         };
 
@@ -137,10 +202,19 @@ public sealed class SidecarAuthHeaderBuilder(
         response.EnsureSuccessStatusCode();
 
         var json = await response.Content.ReadFromJsonAsync<OAuth2TokenResponse>(cancellationToken).ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(json?.AccessToken))
-        {
-            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", json.AccessToken);
-        }
+        if (string.IsNullOrWhiteSpace(json?.AccessToken))
+            return null;
+
+        var lifetime = json.ExpiresIn is > 0
+            ? TimeSpan.FromSeconds(json.ExpiresIn.Value) - ExpirySkew
+            : DefaultTokenLifetime;
+        return new CachedToken(json.AccessToken, DateTimeOffset.UtcNow + lifetime);
+    }
+
+    private static string CacheKey(string tokenUrl, string clientId, string? scopes, string clientSecret)
+    {
+        var secretHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(clientSecret)));
+        return string.Concat(tokenUrl, "|", clientId, "|", scopes ?? string.Empty, "|", secretHash);
     }
 
     /// <summary>
@@ -177,9 +251,14 @@ public sealed class SidecarAuthHeaderBuilder(
         return auth.CredentialKey;
     }
 
+    private sealed record CachedToken(string AccessToken, DateTimeOffset ExpiresAt);
+
     private sealed class OAuth2TokenResponse
     {
         [JsonPropertyName("access_token")]
         public string? AccessToken { get; set; }
+
+        [JsonPropertyName("expires_in")]
+        public int? ExpiresIn { get; set; }
     }
 }

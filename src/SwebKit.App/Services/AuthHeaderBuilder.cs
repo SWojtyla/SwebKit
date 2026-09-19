@@ -19,14 +19,14 @@ public sealed class AuthHeaderBuilder(
     IVariableSubstitutionService substitution,
     ILogger<AuthHeaderBuilder> logger) : IAuthHeaderBuilder
 {
-    public async Task ApplyAsync(
+    public async Task<IReadOnlyList<string>> ApplyAsync(
         HttpRequestMessage message,
         AuthConfig? auth,
         IReadOnlyDictionary<string, string?>? scope = null,
         CancellationToken cancellationToken = default)
     {
         if (auth is null || auth.Type is AuthType.None or AuthType.Inherited)
-            return;
+            return [];
 
         auth = AuthConfigSubstitution.Substitute(auth, substitution, scope);
 
@@ -48,6 +48,10 @@ public sealed class AuthHeaderBuilder(
                 await ApplyOAuth2Async(message, auth, cancellationToken);
                 break;
         }
+
+        // Warnings here are logged inline per auth type; the sidecar builder is the one that
+        // surfaces them to the response panel.
+        return [];
     }
 
     // ── Auth type handlers ────────────────────────────────────────────────────

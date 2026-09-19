@@ -29,8 +29,22 @@ internal static class UrlBuilder
         if (enabledParams.Count == 0)
             return baseUrl;
 
-        var sb = new StringBuilder(baseUrl);
-        sb.Append(baseUrl.Contains('?') ? '&' : '?');
+        // Query parameters belong before the fragment — appending `?k=v` after `#section`
+        // would land the parameters inside the fragment, where no server ever sees them.
+        var fragmentIndex = baseUrl.IndexOf('#', StringComparison.Ordinal);
+        var fragment = fragmentIndex >= 0 ? baseUrl[fragmentIndex..] : string.Empty;
+        var urlWithoutFragment = fragmentIndex >= 0 ? baseUrl[..fragmentIndex] : baseUrl;
+
+        var sb = new StringBuilder(urlWithoutFragment);
+        if (urlWithoutFragment.Contains('?'))
+        {
+            if (!urlWithoutFragment.EndsWith('?') && !urlWithoutFragment.EndsWith('&'))
+                sb.Append('&');
+        }
+        else
+        {
+            sb.Append('?');
+        }
 
         for (var i = 0; i < enabledParams.Count; i++)
         {
@@ -44,6 +58,7 @@ internal static class UrlBuilder
             }
         }
 
+        sb.Append(fragment);
         return sb.ToString();
     }
 }

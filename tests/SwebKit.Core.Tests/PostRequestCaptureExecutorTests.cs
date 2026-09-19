@@ -431,4 +431,74 @@ public sealed class PostRequestCaptureExecutorTests
         Assert.Single(warnings);
         Assert.Contains("result", warnings[0]);
     }
+
+    // ── Non-plain targets are skipped with a warning, not silently dead-written ──
+
+    [Fact]
+    public async Task ExecuteAsync_TargetIsCredentialBackedEnvVar_SkipsWithWarning()
+    {
+        // Writing .Value on a WindowsCredentialStore variable would be dead data — resolution
+        // reads the credential store, not Value — so the capture would appear to succeed while
+        // changing nothing.
+        using var _ = new AppDataSandbox();
+        var (executor, collRepo, envRepo) = await CaptureExecutorFactory.CreateAsync();
+
+        var collection = await collRepo.AddCollectionAsync("Test");
+        var env = await envRepo.AddEnvironmentAsync("Env", null);
+        env.Variables.Add(new EnvironmentVariable
+        {
+            Key = "token",
+            SecretSource = EnvironmentVariableSecretSource.WindowsCredentialStore,
+            CredentialKey = "sw-secret:x",
+            IsEnabled = true,
+        });
+
+        var request = new HttpRequestEntry { Name = "R1", Url = "https://test.io" };
+        request.CaptureRules.Add(new CaptureRule
+        {
+            Source = CaptureSource.StatusCode,
+            TargetVariable = "token",
+            TargetScope = env.Id,
+            IsEnabled = true,
+        });
+
+        var result = new HttpRequestResult { StatusCode = 200 };
+        var warnings = await executor.ExecuteAsync(result, request, collection, env);
+
+        Assert.Single(warnings);
+        Assert.Contains("token", warnings[0]);
+        Assert.Null(env.Variables[0].Value);
+        Assert.Equal(EnvironmentVariableSecretSource.WindowsCredentialStore, env.Variables[0].SecretSource);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_TargetIsGeneratedCollectionVar_SkipsWithWarning()
+    {
+        using var _ = new AppDataSandbox();
+        var (executor, collRepo, _) = await CaptureExecutorFactory.CreateAsync();
+
+        var collection = await collRepo.AddCollectionAsync("Test");
+        collection.Variables.Add(new CollectionVariable
+        {
+            Key = "gen",
+            Generator = new VariableGeneratorDefinition { Kind = VariableGeneratorKind.Guid },
+            IsEnabled = true,
+        });
+
+        var request = new HttpRequestEntry { Name = "R1", Url = "https://test.io" };
+        request.CaptureRules.Add(new CaptureRule
+        {
+            Source = CaptureSource.StatusCode,
+            TargetVariable = "gen",
+            TargetScope = "collection",
+            IsEnabled = true,
+        });
+
+        var result = new HttpRequestResult { StatusCode = 200 };
+        var warnings = await executor.ExecuteAsync(result, request, collection, null);
+
+        Assert.Single(warnings);
+        Assert.Contains("gen", warnings[0]);
+        Assert.NotNull(collection.Variables[0].Generator);
+    }
 }

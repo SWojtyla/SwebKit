@@ -638,6 +638,10 @@ export interface VariableGeneratorDefinition {
     decimalPlaces?: number;
     trueWeightPercent?: number | null;
     fakerCategory?: string | null;
+    /** Optional ISO lower bound (inclusive) for date.* faker categories. */
+    fakerDateAfter?: string | null;
+    /** Optional ISO upper bound (inclusive) for date.* faker categories. */
+    fakerDateBefore?: string | null;
     values?: string[];
 }
 
@@ -707,6 +711,8 @@ export interface ApiClientExecutionResponse {
     graphQlErrors: GraphQlError[] | null;
     /** Headers exactly as sent, echoed by the sidecar so the cURL panel can be truthful. */
     sentHeaders?: ResponseHeaderDto[] | null;
+    /** The request body as it went out, post-substitution. Null for binary/oversized bodies. */
+    sentBody?: string | null;
 }
 
 export interface ResponseHeaderDto {

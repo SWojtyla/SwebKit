@@ -36,36 +36,37 @@ public class MultiVaultKeyVaultSecretResolverTests
     }
 
     [Fact]
-    public async Task GetSecretAsync_UnknownVaultName_ReturnsUnavailable_WithoutFallingBackToDefaultVault()
+    public async Task GetSecretAsync_UnknownVaultName_ReturnsNull_WithoutFallingBackToDefaultVault()
     {
         // A named vault that doesn't match any configured entry must fail cleanly (e.g. a typo in
         // the UI) rather than silently resolving against the first configured vault — a caller
         // asking for "kv-typo" and getting back a secret from "kv1" would be indistinguishable
-        // from success.
+        // from success. The result is null, not a sentinel: a sentinel substituted into a request
+        // would go out on the wire as if it were the real secret.
         var resolver = Build(new KeyVaultEntry { Name = "kv1", Url = "https://kv1.vault.azure.net/" });
 
         var result = await resolver.GetSecretAsync("my-secret", "kv-typo", CancellationToken.None);
 
-        Assert.Equal("[KV_UNAVAILABLE:my-secret]", result);
+        Assert.Null(result);
     }
 
     [Fact]
-    public async Task GetSecretAsync_EmptySecretName_ReturnsError()
+    public async Task GetSecretAsync_EmptySecretName_ReturnsNull()
     {
         var resolver = Build(new KeyVaultEntry { Name = "kv1", Url = "https://kv1.vault.azure.net/" });
 
         var result = await resolver.GetSecretAsync("   ", null, CancellationToken.None);
 
-        Assert.Equal("[KV_ERROR:empty-name]", result);
+        Assert.Null(result);
     }
 
     [Fact]
-    public async Task GetSecretAsync_NoVaultsConfigured_ReturnsUnavailable()
+    public async Task GetSecretAsync_NoVaultsConfigured_ReturnsNull()
     {
         var resolver = Build();
 
         var result = await resolver.GetSecretAsync("my-secret", null, CancellationToken.None);
 
-        Assert.Equal("[KV_UNAVAILABLE:my-secret]", result);
+        Assert.Null(result);
     }
 }
