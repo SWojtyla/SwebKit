@@ -147,6 +147,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
         var manifest = new SwebKitCollectionManifest
         {
+            Id = collection.Id,
             Name = collection.Name.Trim(),
             Variables = collection.Variables,
             DefaultAuth = collection.DefaultAuth,
@@ -686,7 +687,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(collectionManifestPath, diagnostics, cancellationToken).ConfigureAwait(false);
         var collection = new ApiCollection
         {
-            Id = StableId(collectionDirectory),
+            Id = string.IsNullOrWhiteSpace(manifest?.Id) ? StableId(collectionDirectory) : manifest!.Id,
             Name = manifest?.Name ?? TitleFromFileName(Path.GetFileName(collectionDirectory)),
             Variables = manifest?.Variables ?? [],
             DefaultAuth = manifest?.DefaultAuth,
@@ -907,8 +908,37 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             return null;
         }
 
-        return Directory.GetDirectories(collectionsPath, "*", SearchOption.TopDirectoryOnly)
-            .FirstOrDefault(p => StableId(p) == collection.Id);
+        // Prefer the persisted Id in collection.json — it survives directory renames. Fall back to
+        // the path-derived StableId for directories written before Ids were persisted.
+        string? pathMatch = null;
+        foreach (var directory in Directory.GetDirectories(collectionsPath, "*", SearchOption.TopDirectoryOnly))
+        {
+            if (TryReadCollectionManifestId(directory) == collection.Id)
+            {
+                return directory;
+            }
+            if (pathMatch is null && StableId(directory) == collection.Id)
+            {
+                pathMatch = directory;
+            }
+        }
+
+        return pathMatch;
+    }
+
+    private static string? TryReadCollectionManifestId(string collectionDirectory)
+    {
+        try
+        {
+            var path = Path.Combine(collectionDirectory, CollectionManifestFileName);
+            if (!File.Exists(path)) return null;
+            var json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<SwebKitCollectionManifest>(json, Options)?.Id;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
     }
 
     private static string ResolveExistingCollectionDirectory(string apiRootPath, ApiCollection collection) =>
@@ -922,15 +952,35 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             return null;
         }
 
+        // Prefer the persisted Id inside the file — it survives renames/moves. Fall back to the
+        // path-derived StableId for files written before Ids were persisted.
+        string? pathMatch = null;
         foreach (var file in Directory.GetFiles(directory, $"*{RequestFileExtension}", SearchOption.AllDirectories))
         {
-            if (StableId(file) == requestId)
+            if (TryReadRequestFileId(file) == requestId)
             {
                 return file;
             }
+            if (pathMatch is null && StableId(file) == requestId)
+            {
+                pathMatch = file;
+            }
         }
 
-        return null;
+        return pathMatch;
+    }
+
+    private static string? TryReadRequestFileId(string path)
+    {
+        try
+        {
+            var json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<SwebKitRequestFile>(json, Options)?.Id;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
     }
 
     private static string? FindFolderDirectory(string directory, string folderId)
@@ -1163,6 +1213,11 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         {
             var file = new SwebKitRequestFile
             {
+                // Persist Id + Name explicitly so the request keeps its identity across renames and
+                // folder moves (the file name still tracks the request name for humans browsing the
+                // repo; it is no longer the source of either value).
+                Id = request.Id,
+                Name = request.Name,
                 Method = request.Method,
                 Url = request.Url,
                 Headers = request.Headers.Count == 0 ? null : request.Headers,
@@ -1251,6 +1306,8 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
     private sealed class SwebKitEnvironmentFile
     {
+        /// <summary>Persisted ID so the environment keeps its identity across file renames.</summary>
+        public string? Id { get; set; }
         public string? Name { get; set; }
         public Dictionary<string, string?> Variables { get; set; } = new(StringComparer.Ordinal);
         public Dictionary<string, VariableGeneratorDefinition> GeneratedVariables { get; set; } = new(StringComparer.Ordinal);
@@ -1260,7 +1317,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         {
             var environment = new ApiEnvironment
             {
-                Id = StableId(path),
+                Id = string.IsNullOrWhiteSpace(Id) ? StableId(path) : Id,
                 Name = string.IsNullOrWhiteSpace(Name) ? TitleFromFileName(Path.GetFileName(path)) : Name,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
@@ -1308,7 +1365,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
 
         public static SwebKitEnvironmentFile FromEnvironment(ApiEnvironment environment)
         {
-            var file = new SwebKitEnvironmentFile { Name = environment.Name };
+            var file = new SwebKitEnvironmentFile { Id = environment.Id, Name = environment.Name };
 
             foreach (var variable in environment.Variables.Where(static variable => variable.IsEnabled && !string.IsNullOrWhiteSpace(variable.Key)))
             {

@@ -10,6 +10,12 @@ public sealed class ApiCollection
     public List<ApiCollectionNode> Nodes { get; set; } = [];
     public List<CollectionVariable> Variables { get; set; } = [];
     public AuthConfig? DefaultAuth { get; set; }
+    /// <summary>
+    /// Set when this collection is stored in a linked API project root (a folder on disk) rather
+    /// than app-local <c>collections.json</c>. Populated by the linked-roots loader; also set by
+    /// the client when creating a collection inside a linked root.
+    /// </summary>
+    public string? LinkedRootId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -252,6 +258,12 @@ public sealed class ApiEnvironment
     /// collection's <c>environments/</c> folder) and not stored inside the file.
     /// </summary>
     public string? CollectionId { get; set; }
+    /// <summary>
+    /// Set when this environment is stored in a linked API project root rather than app-local
+    /// <c>environments.json</c>. Populated by the linked-roots loader; also set by the client when
+    /// creating an environment inside a linked root.
+    /// </summary>
+    public string? LinkedRootId { get; set; }
     public List<EnvironmentVariable> Variables { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

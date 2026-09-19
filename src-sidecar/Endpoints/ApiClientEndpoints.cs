@@ -20,10 +20,11 @@ public static class ApiClientEndpoints
             IHttpRequestExecutor executor,
             CollectionRepository collections,
             EnvironmentRepository environments,
+            Services.LinkedCollectionsService linked,
             DemoModeService demo,
             CancellationToken ct) =>
         {
-            var collection = await ResolveCollectionAsync(req.CollectionId, collections, demo);
+            var collection = ResolveCollection(req.CollectionId, collections, linked, demo);
             if (collection is null && req.CollectionId is not null)
                 return ApiErrors.NotFound("Collection not found");
 
@@ -32,7 +33,8 @@ public static class ApiClientEndpoints
             ApiEnvironment? activeEnvironment = null;
             if (!string.IsNullOrWhiteSpace(req.EnvironmentId))
             {
-                activeEnvironment = environments.Environments.FirstOrDefault(e => e.Id == req.EnvironmentId);
+                activeEnvironment = environments.Environments.FirstOrDefault(e => e.Id == req.EnvironmentId)
+                    ?? linked.LinkedEnvironments.FirstOrDefault(e => e.Id == req.EnvironmentId);
                 if (activeEnvironment is null)
                     return ApiErrors.NotFound("Environment not found");
             }
@@ -43,7 +45,8 @@ public static class ApiClientEndpoints
             ApiEnvironment? globalEnvironment = null;
             if (!string.IsNullOrWhiteSpace(req.GlobalEnvironmentId))
             {
-                globalEnvironment = environments.Environments.FirstOrDefault(e => e.Id == req.GlobalEnvironmentId);
+                globalEnvironment = environments.Environments.FirstOrDefault(e => e.Id == req.GlobalEnvironmentId)
+                    ?? linked.LinkedEnvironments.FirstOrDefault(e => e.Id == req.GlobalEnvironmentId);
                 if (globalEnvironment is null)
                     return ApiErrors.NotFound("Global environment not found");
             }
@@ -188,7 +191,9 @@ public static class ApiClientEndpoints
         return new string('•', dots);
     }
 
-    private static async Task<ApiCollection?> ResolveCollectionAsync(string? collectionId, CollectionRepository collections, DemoModeService demo)
+    private static ApiCollection? ResolveCollection(
+        string? collectionId, CollectionRepository collections,
+        Services.LinkedCollectionsService linked, DemoModeService demo)
     {
         if (string.IsNullOrWhiteSpace(collectionId))
             return null;
@@ -196,9 +201,9 @@ public static class ApiClientEndpoints
         if (demo.IsDemoMode && collectionId == DemoApiCollectionFactory.DemoCollectionId)
             return DemoApiCollectionFactory.CreateDemoCollection();
 
-        // Load the latest persisted store so we get the full tree and variables.
-        await collections.LoadAsync().ConfigureAwait(false);
-        return collections.Collections.FirstOrDefault(c => c.Id == collectionId);
+        // Linked collections live in folders on disk; local ones in collections.json.
+        return collections.Collections.FirstOrDefault(c => c.Id == collectionId)
+            ?? linked.LinkedCollections.FirstOrDefault(c => c.Id == collectionId);
     }
 
     private static ApiClientExecutionResponse Map(HttpRequestResult result) =>

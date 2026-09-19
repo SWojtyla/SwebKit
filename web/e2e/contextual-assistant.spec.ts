@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode, scrollToRedisKey } from "./helpers";
+import { setDemoMode, scrollToRedisKey, createCollection } from "./helpers";
 
 /**
  * Captures every /api/agent/chat (or /chat/stream) request body sent while this route is
@@ -357,9 +357,7 @@ test.describe("API Client generate-request flow", () => {
     });
 
     await page.goto("/api-client");
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Test Collection");
     await page.getByTestId(/collection-root-/).first().waitFor();
     await page.getByTestId(/collection-root-/).first().click();
     await page.getByTestId("add-request-button").click();
@@ -399,9 +397,7 @@ test.describe("API Client generate-request flow", () => {
     });
 
     await page.goto("/api-client");
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Test Collection");
     await page.getByTestId(/collection-root-/).first().waitFor();
     await page.getByTestId(/collection-root-/).first().click();
     await page.getByTestId("add-request-button").click();

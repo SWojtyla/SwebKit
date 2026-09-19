@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Plus, Trash2, Globe, Folder, X, Check } from "lucide-react";
+import { Plus, Trash2, Globe, Folder, X, Check, FolderGit2, HardDrive } from "lucide-react";
 import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
 import { VariableList, type VariableListItem } from "./VariableList";
@@ -7,8 +7,8 @@ import {
   environmentVariableToListItem,
   listItemToEnvironmentVariable,
 } from "@/lib/variable-utils";
-import type { ApiEnvironment, ApiCollection } from "@/lib/types";
-import { useProfile } from "@/lib/hooks";
+import type { ApiEnvironment, ApiCollection, LinkedRootSummary } from "@/lib/types";
+import { useProfile, useLinkedRoots } from "@/lib/hooks";
 import { ConfirmDialog } from "./Dialogs";
 
 interface EnvironmentManagerProps {
@@ -46,6 +46,7 @@ export function EnvironmentManager({
 }: EnvironmentManagerProps) {
   const [editingEnv, setEditingEnv] = useState<ApiEnvironment | null>(null);
   const [envList, setEnvList] = useState<ApiEnvironment[]>(environments);
+  const { data: linkedRoots = [] } = useLinkedRoots();
   const [activeId, setActiveId] = useState<string | null>(activeEnvironmentId);
   const [size, setSize] = useState(() =>
     fitToViewport(loadViewPreference("env-manager-size", DEFAULT_SIZE)),
@@ -206,6 +207,7 @@ export function EnvironmentManager({
                   key={editingEnv.id}
                   environment={editingEnv}
                   collections={collections}
+                  linkedRoots={linkedRoots}
                   isActive={activeId === editingEnv.id}
                   onChange={updateEnvironment}
                   onSetActive={() => setActiveId(activeId === editingEnv.id ? null : editingEnv.id)}
@@ -387,12 +389,13 @@ function EnvironmentList({
 interface EnvironmentEditorProps {
   environment: ApiEnvironment;
   collections: ApiCollection[];
+  linkedRoots: LinkedRootSummary[];
   isActive: boolean;
   onChange: (env: ApiEnvironment) => void;
   onSetActive: () => void;
 }
 
-function EnvironmentEditor({ environment, collections, isActive, onChange, onSetActive }: EnvironmentEditorProps) {
+function EnvironmentEditor({ environment, collections, linkedRoots, isActive, onChange, onSetActive }: EnvironmentEditorProps) {
   const { data: profile } = useProfile();
   const keyVaults = profile?.config.keyVaults ?? [];
 
@@ -411,7 +414,24 @@ function EnvironmentEditor({ environment, collections, isActive, onChange, onSet
   };
 
   const setName = (name: string) => onChange({ ...environment, name });
-  const setScope = (collectionId: string | null) => onChange({ ...environment, collectionId });
+  // Scoping to a linked collection moves the environment's file into that
+  // collection's folder — the server auto-links on `linkedRootId`.
+  const setScope = (collectionId: string | null) => {
+    const collection = collectionId ? collections.find((c) => c.id === collectionId) : null;
+    onChange({
+      ...environment,
+      collectionId,
+      linkedRootId: collection?.linkedRootId ?? environment.linkedRootId ?? null,
+    });
+  };
+  const setStorage = (linkedRootId: string | null) => onChange({ ...environment, linkedRootId });
+
+  const scopedCollection = environment.collectionId
+    ? collections.find((c) => c.id === environment.collectionId)
+    : null;
+  const scopedRoot = scopedCollection?.linkedRootId
+    ? linkedRoots.find((r) => r.id === scopedCollection.linkedRootId)
+    : null;
 
   return (
     <div data-testid="env-editor" className="space-y-4">
@@ -439,6 +459,52 @@ function EnvironmentEditor({ environment, collections, isActive, onChange, onSet
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
+      </div>
+
+      {/* Where the environment file lives. An environment scoped to a linked
+          collection always lives in that collection's folder — the scope decides.
+          Only unscoped/global environments get a free choice. */}
+      <div>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">Store in</label>
+        {scopedRoot ? (
+          <p className="flex items-center gap-1.5 rounded border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground" data-testid="env-storage-linked">
+            <FolderGit2 className="h-3.5 w-3.5 shrink-0" />
+            Saved in <span className="font-medium text-foreground">{scopedRoot.displayName}</span>
+            <span className="truncate font-mono" title={scopedRoot.path}>({scopedRoot.path})</span>
+            — follows the collection it is scoped to.
+          </p>
+        ) : (
+          <>
+            <select
+              data-testid="env-storage-select"
+              value={environment.linkedRootId ?? ""}
+              onChange={(e) => setStorage(e.target.value || null)}
+              className="w-full rounded border bg-background px-3 py-1.5 text-sm"
+            >
+              <option value="">App storage (private to SwebKit)</option>
+              {/* Disabled roots stay selectable only while already assigned — an
+                  option must exist for the current value or the select lies. */}
+              {linkedRoots.map((r) => (
+                <option key={r.id} value={r.id} disabled={!r.isEnabled && environment.linkedRootId !== r.id}>
+                  {r.displayName} — {r.path}{r.isEnabled ? "" : " (disabled)"}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+              {environment.linkedRootId ? (
+                <>
+                  <FolderGit2 className="h-3 w-3 shrink-0" />
+                  Stored as a <code>.swebenv.json</code> file inside the linked folder.
+                </>
+              ) : (
+                <>
+                  <HardDrive className="h-3 w-3 shrink-0" />
+                  Stored in SwebKit's own storage — not synced to any folder.
+                </>
+              )}
+            </p>
+          </>
+        )}
       </div>
 
       <div>

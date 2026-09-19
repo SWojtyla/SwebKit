@@ -159,6 +159,11 @@ public sealed class SwebKitApiRootManifest
 
 public sealed class SwebKitCollectionManifest
 {
+    /// <summary>
+    /// Stable collection ID. Older files lack it — <see cref="StableId"/> of the directory is used
+    /// instead — but once written, the ID survives directory renames.
+    /// </summary>
+    public string? Id { get; set; }
     public string? Name { get; set; }
     public List<CollectionVariable> Variables { get; set; } = [];
     public Dictionary<string, VariableGeneratorDefinition> GeneratedVariables { get; set; } = new(StringComparer.Ordinal);

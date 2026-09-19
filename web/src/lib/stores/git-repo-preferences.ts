@@ -88,3 +88,20 @@ export function selectedRepo(state: GitRepoState): GitRepoConfig | null {
   if (!state.selectedPath) return null;
   return state.repos.find((r) => r.path === state.selectedPath) ?? null;
 }
+
+/**
+ * Repository-relative subpath of a linked root's `.swebkit-api/` folder — what
+ * the Git panel scopes staging/committing to. Returns `null` when the API folder
+ * isn't strictly inside the repository root (shouldn't happen — `isGitRepository`
+ * comes from scanning the root itself — but a surprising path must never produce
+ * a subpath that points at a different part of the repo). Also `null` when the
+ * API root *is* the repository root (bare-folder roots): no scoping applies.
+ */
+export function apiSubpathFor(repositoryRoot: string, apiRootPath: string): string | null {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const repo = norm(repositoryRoot);
+  const api = norm(apiRootPath);
+  const prefix = `${repo}/`;
+  if (!api.toLowerCase().startsWith(prefix.toLowerCase())) return null;
+  return api.slice(prefix.length) || null;
+}

@@ -12,9 +12,11 @@ import {
 import { inferCompareUrl, remoteProviderName } from "@/lib/git-remote";
 import type { GitFileAction } from "@/lib/git-status-format";
 import {
-  loadGitRepoState, saveGitRepoState, addRepo, removeRepo, setApiSubpath, selectedRepo,
+  loadGitRepoState, saveGitRepoState, addRepo, removeRepo, setApiSubpath, selectedRepo, apiSubpathFor,
   type GitRepoState,
 } from "@/lib/stores/git-repo-preferences";
+import { useLinkedRoots } from "@/lib/hooks";
+import type { LinkedRootSummary } from "@/lib/types";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import { NameDialog, ConfirmDialog } from "./Dialogs";
 import { GitFileList } from "./GitFileList";
@@ -30,6 +32,7 @@ type Unavailable =
 
 export function GitPanel() {
   const { notify } = useNotification();
+  const { data: linkedRoots = [] } = useLinkedRoots();
 
   const [repoState, setRepoState] = useState<GitRepoState>(() => loadGitRepoState());
   const [status, setStatus] = useState<GitStatusType | null>(null);
@@ -125,6 +128,17 @@ export function GitPanel() {
     }
   };
 
+  // Linked project folders that sit inside a git repository — one click scopes
+  // this panel to the folder's repo, pinned to its `.swebkit-api/` subpath so
+  // staging/committing only ever touches the API files.
+  const gitRoots = linkedRoots.filter((r) => r.isGitRepository && r.repositoryRoot && r.apiRootPath);
+
+  const selectLinkedRoot = (root: LinkedRootSummary) => {
+    const repoPath = root.repositoryRoot!;
+    const next = addRepo(repoState, repoPath);
+    persist(setApiSubpath(next, repoPath, apiSubpathFor(repoPath, root.apiRootPath!)));
+  };
+
   /** Runs a git mutation with consistent busy state, feedback and refresh. */
   const runAction = async (label: string, action: () => Promise<unknown>) => {
     setBusy(true);
@@ -209,6 +223,28 @@ export function GitPanel() {
       >
         <GitBranchIcon className="h-8 w-8 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">{unavailableMessage(unavailable)}</p>
+        {/* Linked projects inside a git repo are the intended target — offer them
+            directly so the panel operates on the collection files themselves. */}
+        {gitRoots.length > 0 && unavailable.kind === "no-repo" && (
+          <div className="w-full space-y-1.5" data-testid="git-linked-root-picks">
+            <p className="text-xs text-muted-foreground">Your linked project folders:</p>
+            {gitRoots.map((root) => (
+              <button
+                key={root.id}
+                onClick={() => selectLinkedRoot(root)}
+                className="flex w-full items-center gap-2 rounded border px-3 py-1.5 text-left text-xs hover:bg-accent"
+                data-testid={`git-use-root-${root.id}`}
+              >
+                <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-medium">{root.displayName}</span>
+                  <span className="block truncate font-mono text-[10px] text-muted-foreground">{root.path}</span>
+                </span>
+                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{root.branch}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {unavailable.kind !== "no-tauri" && unavailable.kind !== "git-missing" && (
           <button
             onClick={chooseRepo}
@@ -366,6 +402,28 @@ export function GitPanel() {
               onCommit={(next) => repoPath && persist(setApiSubpath(repoState, repoPath, next))}
             />
           </div>
+          {/* Linked project folders are the natural target — switch to one with
+              its API subpath pre-scoped rather than typing paths by hand. */}
+          {gitRoots.length > 0 && (
+            <div className="flex items-start gap-2" data-testid="git-settings-linked-roots">
+              <span className="w-20 shrink-0 pt-0.5 text-muted-foreground">Projects</span>
+              <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+                {gitRoots.map((root) => (
+                  <button
+                    key={root.id}
+                    onClick={() => selectLinkedRoot(root)}
+                    className={`rounded border px-1.5 py-0.5 hover:bg-accent ${
+                      root.repositoryRoot === repoPath ? "border-primary text-primary" : ""
+                    }`}
+                    title={`${root.path} — scopes this panel to ${root.apiRootPath}`}
+                    data-testid={`git-settings-root-${root.id}`}
+                  >
+                    {root.displayName}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {!subpath && (
             <p style={{ color: "var(--warning)" }} data-testid="git-subpath-warning">
               Without an API path, staging and committing are not scoped — unrelated changes in this

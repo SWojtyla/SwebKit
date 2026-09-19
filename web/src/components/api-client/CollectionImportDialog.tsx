@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Upload, FolderTree, FileJson, X, CheckCircle, AlertCircle } from "lucide-react";
-import { useImportCollection, useDemoMode } from "@/lib/hooks";
+import { Upload, FolderTree, FileJson, X, CheckCircle, AlertCircle, Link2 } from "lucide-react";
+import { useImportCollection, useDemoMode, useAddLinkedRoot } from "@/lib/hooks";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import { pickFileWithContent, pickDirectory, stringToBase64 } from "@/lib/tauri-bridge";
 import type { CollectionImportResult } from "@/lib/types";
@@ -12,10 +12,12 @@ interface CollectionImportDialogProps {
 export function CollectionImportDialog({ onClose }: CollectionImportDialogProps) {
   const { notify } = useNotification();
   const importMutation = useImportCollection();
+  const addLinkedRoot = useAddLinkedRoot();
   const { data: demoMode } = useDemoMode();
   const [tab, setTab] = useState<"file" | "bruno">("file");
   const [result, setResult] = useState<CollectionImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [brunoMode, setBrunoMode] = useState<"copy" | "link">("copy");
 
   const isDemo = demoMode?.isDemoMode ?? false;
 
@@ -61,6 +63,25 @@ export function CollectionImportDialog({ onClose }: CollectionImportDialogProps)
   const handleBrunoImport = async () => {
     const folderPath = await pickDirectory("Select Bruno collection folder");
     if (!folderPath) return;
+
+    if (brunoMode === "link") {
+      // Link: the folder becomes a live project — .bru files update on every save.
+      setError(null);
+      addLinkedRoot.mutate(
+        { path: folderPath, brunoFolderPath: folderPath },
+        {
+          onSuccess: () => {
+            notify("success", "Bruno folder linked", "Requests now edit the .bru files in place.");
+            onClose();
+          },
+          onError: (err) => {
+            setError(err.message);
+          },
+        },
+      );
+      return;
+    }
+
     doImport({ folderPath });
   };
 
@@ -125,14 +146,47 @@ export function CollectionImportDialog({ onClose }: CollectionImportDialogProps)
           {tab === "bruno" && (
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>Select a Bruno collection folder (containing <code>bruno.json</code> and <code>.bru</code> files).</p>
+              <fieldset className="space-y-1.5" data-testid="bruno-import-mode">
+                <label className="flex cursor-pointer items-start gap-2 rounded border px-2 py-1.5 has-checked:border-primary has-checked:bg-accent/40">
+                  <input
+                    type="radio"
+                    name="bruno-mode"
+                    value="copy"
+                    checked={brunoMode === "copy"}
+                    onChange={() => setBrunoMode("copy")}
+                    className="mt-0.5"
+                    data-testid="bruno-mode-copy"
+                  />
+                  <span>
+                    <span className="block text-xs font-medium text-foreground">Copy into SwebKit</span>
+                    <span className="block text-[11px]">One-time snapshot — edits stay in SwebKit's own storage; the .bru files are untouched.</span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-2 rounded border px-2 py-1.5 has-checked:border-primary has-checked:bg-accent/40">
+                  <input
+                    type="radio"
+                    name="bruno-mode"
+                    value="link"
+                    checked={brunoMode === "link"}
+                    onChange={() => setBrunoMode("link")}
+                    className="mt-0.5"
+                    data-testid="bruno-mode-link"
+                  />
+                  <span>
+                    <span className="block text-xs font-medium text-foreground">Link the folder</span>
+                    <span className="block text-[11px]">The folder becomes a live project — saves write .bru files back so Git and the Bruno app stay in sync.</span>
+                  </span>
+                </label>
+              </fieldset>
               <button
                 onClick={handleBrunoImport}
-                disabled={importMutation.isPending || isDemo}
-                title={isDemo ? "Import is not available in demo mode" : importMutation.isPending ? "Importing…" : undefined}
+                disabled={importMutation.isPending || addLinkedRoot.isPending || isDemo}
+                title={isDemo ? "Import is not available in demo mode" : (importMutation.isPending || addLinkedRoot.isPending) ? "Working…" : undefined}
                 className="flex w-full items-center justify-center gap-2 rounded border px-3 py-2 hover:bg-accent disabled:opacity-50"
                 data-testid="collection-import-bruno-btn"
               >
-                <FolderTree className="h-4 w-4" /> Choose folder…
+                {brunoMode === "link" ? <Link2 className="h-4 w-4" /> : <FolderTree className="h-4 w-4" />}
+                {brunoMode === "link" ? "Choose folder to link…" : "Choose folder to copy…"}
               </button>
             </div>
           )}

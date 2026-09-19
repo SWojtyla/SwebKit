@@ -470,6 +470,11 @@ export interface ApiEnvironment {
     variables: EnvironmentVariable[];
     createdAt: string;
     updatedAt: string;
+    /**
+     * Id of the linked project folder this environment's file lives in. `null`/absent
+     * means app storage (environments.json). Server-set on load; honoured on save.
+     */
+    linkedRootId?: string | null;
 }
 
 export interface EnvironmentVariable {
@@ -533,6 +538,30 @@ export interface ApiCollection {
     defaultAuth: AuthConfig | null;
     createdAt: string;
     updatedAt: string;
+    /**
+     * Id of the linked project folder this collection's files live under
+     * (`<root>/.swebkit-api/`). `null`/absent means app storage (collections.json).
+     */
+    linkedRootId?: string | null;
+}
+
+/** A linked API project folder as reported by GET /api/api-client/linked-roots. */
+export interface LinkedRootSummary {
+    id: string;
+    name: string;
+    path: string;
+    isEnabled: boolean;
+    brunoSyncFolderPath: string | null;
+    brunoSyncEnabled: boolean;
+    displayName: string;
+    apiRootPath: string | null;
+    diagnostics: string[];
+    collectionCount: number;
+    environmentCount: number;
+    isGitRepository: boolean;
+    repositoryRoot: string | null;
+    branch: string | null;
+    changedFileCount: number;
 }
 
 export interface ApiCollectionNode {

@@ -36,7 +36,7 @@ public class ConfigCollectionsCredentialSecretTests
             ],
         };
 
-        var result = await ConfigEndpoints.SaveCollectionsAsync(repo, store, demo);
+        var result = await ConfigEndpoints.SaveCollectionsAsync(repo, store, demo, TestLinkedServices.Empty(), CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<CollectionsStoreResponse>>(result);
         Assert.Null(ok.Value!.Collections[0].DefaultAuth!.CredentialSecret);
@@ -88,7 +88,7 @@ public class ConfigCollectionsCredentialSecretTests
             ],
         };
 
-        var result = await ConfigEndpoints.SaveCollectionsAsync(repo, store, demo);
+        var result = await ConfigEndpoints.SaveCollectionsAsync(repo, store, demo, TestLinkedServices.Empty(), CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<CollectionsStoreResponse>>(result);
         var savedTopFolder = ok.Value!.Collections[0].Nodes[0];
@@ -133,7 +133,7 @@ public class ConfigCollectionsCredentialSecretTests
             ],
         };
 
-        var result = await ConfigEndpoints.SaveCollectionsAsync(repo, store, demo);
+        var result = await ConfigEndpoints.SaveCollectionsAsync(repo, store, demo, TestLinkedServices.Empty(), CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<CollectionsStoreResponse>>(result);
         var auth = ok.Value!.Collections[0].DefaultAuth!;

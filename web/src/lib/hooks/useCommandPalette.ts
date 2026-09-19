@@ -69,6 +69,15 @@ const staticCommandPaletteItems: CommandPaletteItem[] = [
         to: "/api-client",
     },
     {
+        id: "api-client-projects",
+        type: "nav",
+        label: "API Client Project Folders",
+        keywords: "api client linked project folder git storage collections files bruno",
+        icon: FolderOpen,
+        to: "/api-client",
+        state: { openLinkedProjects: true },
+    },
+    {
         id: "redis",
         type: "nav",
         label: "Redis",

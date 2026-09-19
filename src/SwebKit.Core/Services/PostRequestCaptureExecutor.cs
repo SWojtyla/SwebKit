@@ -14,7 +14,8 @@ namespace SwebKit.Core.Services;
 public sealed class PostRequestCaptureExecutor(
     CollectionRepository collectionRepository,
     EnvironmentRepository environmentRepository,
-    ILogger<PostRequestCaptureExecutor> logger) : IPostRequestCaptureExecutor
+    ILogger<PostRequestCaptureExecutor> logger,
+    ILinkedStoreWriter? linkedStoreWriter = null) : IPostRequestCaptureExecutor
 {
     /// <inheritdoc />
     public async Task<IReadOnlyList<string>> ExecuteAsync(
@@ -72,7 +73,15 @@ public sealed class PostRequestCaptureExecutor(
 
         if (collectionDirty)
         {
-            try { await collectionRepository.UpdateCollectionAsync(collection).ConfigureAwait(false); }
+            try
+            {
+                // Linked collections persist to their folder's collection.json — writing them to
+                // collections.json would fork the collection into app storage.
+                var routed = collection.LinkedRootId is not null && linkedStoreWriter is not null &&
+                    await linkedStoreWriter.TryWriteCollectionAsync(collection, cancellationToken).ConfigureAwait(false);
+                if (!routed)
+                    await collectionRepository.UpdateCollectionAsync(collection).ConfigureAwait(false);
+            }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to persist collection after capture");
@@ -82,7 +91,13 @@ public sealed class PostRequestCaptureExecutor(
 
         if (environmentDirty && activeEnvironment is not null)
         {
-            try { await environmentRepository.UpdateEnvironmentAsync(activeEnvironment).ConfigureAwait(false); }
+            try
+            {
+                var routed = activeEnvironment.LinkedRootId is not null && linkedStoreWriter is not null &&
+                    await linkedStoreWriter.TryWriteEnvironmentAsync(activeEnvironment, cancellationToken).ConfigureAwait(false);
+                if (!routed)
+                    await environmentRepository.UpdateEnvironmentAsync(activeEnvironment).ConfigureAwait(false);
+            }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to persist environment after capture");

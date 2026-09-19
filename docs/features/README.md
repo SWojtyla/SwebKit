@@ -10,6 +10,8 @@ This folder is the canonical feature-first map for implementation work.
 Active features:
 
 - `agent-workspace-awareness/` — screen-state snapshots for the agent (pull-via-tool) + multi-step proactive investigation depth.
+- `linked-api-projects/` — per-project linked folders for API collections (`.swebkit-api/` files,
+  conflict-guarded sync, Bruno write-back, Git drawer integration).
 
 ## Folder Contract
 

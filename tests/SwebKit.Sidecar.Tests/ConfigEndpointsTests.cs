@@ -481,8 +481,9 @@ public class ConfigEndpointsTests
             Environments = [new ApiEnvironment { Id = "env-1", Name = "Staging", Variables = [] }],
         };
 
-        await ConfigEndpoints.SaveEnvironmentsAsync(repo, store);
-        var result = Assert.IsAssignableFrom<IValueHttpResult>(ConfigEndpoints.GetEnvironments(repo));
+        await ConfigEndpoints.SaveEnvironmentsAsync(repo, store, TestLinkedServices.Empty(), CancellationToken.None);
+        var result = Assert.IsAssignableFrom<IValueHttpResult>(
+            await ConfigEndpoints.GetEnvironments(repo, TestLinkedServices.Empty(), CancellationToken.None));
         var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
 
         Assert.Contains("Staging", json);
@@ -491,36 +492,39 @@ public class ConfigEndpointsTests
     // ── Collections ──────────────────────────────────────────────────────────
 
     [Fact]
-    public void GetCollections_DemoMode_PrependsTheDemoCollectionFirst()
+    public async Task GetCollections_DemoMode_PrependsTheDemoCollectionFirst()
     {
         var repo = new CollectionRepository();
         var demo = new DemoModeService { IsDemoMode = true };
 
-        var result = Assert.IsAssignableFrom<IValueHttpResult>(ConfigEndpoints.GetCollections(repo, demo));
+        var result = Assert.IsAssignableFrom<IValueHttpResult>(
+            await ConfigEndpoints.GetCollectionsAsync(repo, demo, TestLinkedServices.Empty(), CancellationToken.None));
         var collections = Assert.IsAssignableFrom<IReadOnlyList<ApiCollection>>(result.Value);
 
         Assert.Equal(DemoApiCollectionFactory.DemoCollectionId, collections[0].Id);
     }
 
     [Fact]
-    public void GetCollections_NonDemoMode_DoesNotIncludeTheDemoCollection()
+    public async Task GetCollections_NonDemoMode_DoesNotIncludeTheDemoCollection()
     {
         var repo = new CollectionRepository();
         var demo = new DemoModeService { IsDemoMode = false };
 
-        var result = Assert.IsAssignableFrom<IValueHttpResult>(ConfigEndpoints.GetCollections(repo, demo));
+        var result = Assert.IsAssignableFrom<IValueHttpResult>(
+            await ConfigEndpoints.GetCollectionsAsync(repo, demo, TestLinkedServices.Empty(), CancellationToken.None));
         var collections = Assert.IsAssignableFrom<IReadOnlyList<ApiCollection>>(result.Value);
 
         Assert.DoesNotContain(collections, c => c.Id == DemoApiCollectionFactory.DemoCollectionId);
     }
 
     [Fact]
-    public void GetCollectionsStore_DemoMode_PrependsTheDemoCollectionFirst()
+    public async Task GetCollectionsStore_DemoMode_PrependsTheDemoCollectionFirst()
     {
         var repo = new CollectionRepository();
         var demo = new DemoModeService { IsDemoMode = true };
 
-        var result = Assert.IsAssignableFrom<IValueHttpResult>(ConfigEndpoints.GetCollectionsStore(repo, demo));
+        var result = Assert.IsAssignableFrom<IValueHttpResult>(
+            await ConfigEndpoints.GetCollectionsStoreAsync(repo, demo, TestLinkedServices.Empty(), CancellationToken.None));
         var store = Assert.IsType<CollectionsStoreResponse>(result.Value);
 
         Assert.Equal(DemoApiCollectionFactory.DemoCollectionId, store.Collections[0].Id);

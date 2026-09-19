@@ -3,9 +3,9 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Plus, Folder, FileText, Trash2, ChevronRight, ChevronDown,
   Search, MoreVertical, Pencil, FolderPlus, FilePlus, Download,
-  GripVertical,
+  GripVertical, FolderGit2,
 } from "lucide-react";
-import type { ApiCollection, ApiCollectionNode } from "@/lib/types";
+import type { ApiCollection, ApiCollectionNode, LinkedRootSummary } from "@/lib/types";
 import {
   DEMO_COLLECTION_ID,
   resolveDropTarget,
@@ -22,6 +22,8 @@ import { CollectionImportButton, CollectionImportDialog } from "./CollectionImpo
 
 interface CollectionTreeProps {
   collections: ApiCollection[];
+  /** Linked project folders — drives the storage badge on linked collections. */
+  linkedRoots?: LinkedRootSummary[];
   selectedNodeId: string | null;
   selectedCollectionId: string | null;
   onSelectNode: (node: ApiCollectionNode, collectionId: string) => void;
@@ -33,6 +35,7 @@ interface CollectionTreeProps {
   onMoveNode: (nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => void;
   onMoveCollection: (collectionId: string, target: MoveCollectionTarget) => void;
   onExportCollection: (collectionId: string) => void;
+  onManageProjects?: () => void;
 }
 
 interface ContextMenuState {
@@ -46,6 +49,7 @@ interface ContextMenuState {
 
 export function CollectionTree({
   collections,
+  linkedRoots = [],
   selectedNodeId,
   selectedCollectionId,
   onSelectNode,
@@ -57,6 +61,7 @@ export function CollectionTree({
   onMoveNode,
   onMoveCollection,
   onExportCollection,
+  onManageProjects,
 }: CollectionTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
     const ids = new Set(collections.map((c) => c.id));
@@ -341,6 +346,10 @@ export function CollectionTree({
 
   const renderRow = (row: FlatRow, rowIndex: number) => {
     const { node, collectionId, depth, isCollection } = row;
+    const collection = isCollection ? collections.find((c) => c.id === collectionId) : undefined;
+    const linkedRoot = collection?.linkedRootId
+      ? linkedRoots.find((r) => r.id === collection.linkedRootId) ?? null
+      : null;
     // Matches `flattenTree`'s own forced-expand-during-search rule so the
     // chevron never shows "collapsed" for a folder whose matching children
     // are actually rendered open below it.
@@ -451,6 +460,32 @@ export function CollectionTree({
         ) : (
           <span className="flex-1 truncate">{node.name}</span>
         )}
+        {/* Where this collection's saves actually go — the one thing that must
+            never be implicit, since a linked collection writes real files. */}
+        {isCollection && !isRenaming && (
+          <span
+            className={`flex shrink-0 items-center gap-0.5 rounded px-1 py-0 text-[10px] ${
+              linkedRoot ? "bg-accent text-muted-foreground" : "text-muted-foreground/60"
+            }`}
+            title={
+              linkedRoot
+                ? `Stored as files in ${linkedRoot.path}${linkedRoot.brunoSyncEnabled && linkedRoot.brunoSyncFolderPath ? " · Bruno .bru sync on" : ""}`
+                : collection?.linkedRootId
+                  ? "Linked folder — not reachable right now"
+                  : "App storage — private to SwebKit"
+            }
+            data-testid={`storage-badge-${node.id}`}
+          >
+            {linkedRoot ? (
+              <>
+                <FolderGit2 className="h-3 w-3" />
+                <span className="max-w-20 truncate">{linkedRoot.displayName}</span>
+              </>
+            ) : collection?.linkedRootId ? (
+              <FolderGit2 className="h-3 w-3" />
+            ) : null}
+          </span>
+        )}
         {!isRenaming && (
           <button
             data-testid={`node-menu-${node.id}`}
@@ -501,6 +536,16 @@ export function CollectionTree({
               <Folder className="h-4 w-4" />
             </button>
             <CollectionImportButton onOpen={() => setShowImportDialog(true)} />
+            {onManageProjects && (
+              <button
+                data-testid="linked-projects-button"
+                className="rounded p-1 hover:bg-accent"
+                title="Project folders — link folders that store collections as Git-friendly files"
+                onClick={onManageProjects}
+              >
+                <FolderGit2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
 

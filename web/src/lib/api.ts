@@ -10,6 +10,7 @@ import type {
   AgentChatScope,
   AgentStreamEvent,
   CollectionImportResult,
+  LinkedRootSummary,
   RedisKeyspaceHealthReport,
   RedisPrefixMemoryBucket,
   RedisPubSubSnapshot,
@@ -83,6 +84,22 @@ export async function apiFetch<T>(
   return res.json() as Promise<T>;
 }
 
+/**
+ * Thrown for HTTP 409 responses. Carries the server's `conflicts` list — the file
+ * paths that changed on disk — when the body provides one, so the UI can name the
+ * files instead of just saying "conflict".
+ */
+export class ConflictError extends Error {
+  readonly status = 409;
+  readonly conflicts: string[];
+
+  constructor(message: string, conflicts: string[] = []) {
+    super(message);
+    this.name = "ConflictError";
+    this.conflicts = conflicts;
+  }
+}
+
 export async function apiSend<T>(
   path: string,
   method: "POST" | "PUT" | "PATCH" | "DELETE",
@@ -98,7 +115,20 @@ export async function apiSend<T>(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(extractErrorMessage(res.status, res.statusText, text));
+    const message = extractErrorMessage(res.status, res.statusText, text);
+    if (res.status === 409) {
+      let conflicts: string[] = [];
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed?.conflicts)) {
+          conflicts = parsed.conflicts.filter((c: unknown): c is string => typeof c === "string");
+        }
+      } catch {
+        // Body wasn't JSON — the message is enough.
+      }
+      throw new ConflictError(message, conflicts);
+    }
+    throw new Error(message);
   }
 
   const text = await res.text().catch(() => "");
@@ -481,4 +511,38 @@ export async function evaluateJsonPath(body: string, jsonPath: string): Promise<
     body,
     jsonPath,
   });
+}
+
+// ── Linked API projects ──────────────────────────────────────────────────────
+
+export async function getLinkedRoots(signal?: AbortSignal): Promise<LinkedRootSummary[]> {
+  return apiFetch<LinkedRootSummary[]>("/api/api-client/linked-roots", { signal });
+}
+
+export async function addLinkedRoot(body: {
+  path: string;
+  name?: string | null;
+  brunoFolderPath?: string | null;
+}): Promise<LinkedRootSummary[]> {
+  return apiSend<LinkedRootSummary[]>("/api/api-client/linked-roots", "POST", body);
+}
+
+export async function updateLinkedRoot(
+  id: string,
+  body: {
+    name?: string | null;
+    isEnabled?: boolean;
+    brunoSyncFolderPath?: string | null;
+    brunoSyncEnabled?: boolean;
+  },
+): Promise<LinkedRootSummary[]> {
+  return apiSend<LinkedRootSummary[]>(`/api/api-client/linked-roots/${encodeURIComponent(id)}`, "PUT", body);
+}
+
+export async function removeLinkedRoot(id: string): Promise<LinkedRootSummary[]> {
+  return apiSend<LinkedRootSummary[]>(`/api/api-client/linked-roots/${encodeURIComponent(id)}`, "DELETE");
+}
+
+export async function reloadLinkedRoots(): Promise<LinkedRootSummary[]> {
+  return apiSend<LinkedRootSummary[]>("/api/api-client/linked-roots/reload", "POST");
 }

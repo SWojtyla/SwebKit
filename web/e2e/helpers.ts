@@ -159,3 +159,16 @@ export async function resetCollections(page: Page) {
     data: { schemaVersion: 1, collections: [] },
   });
 }
+
+/**
+ * Creates a collection through the New Collection dialog (app storage — the default
+ * "Store in" option). The dialog replaced the generic name dialog for collections
+ * when the storage picker was added.
+ */
+export async function createCollection(page: Page, name: string) {
+  await page.getByTestId("add-collection-button").click();
+  await expect(page.getByTestId("new-collection-dialog")).toBeVisible();
+  await page.getByTestId("new-collection-name").fill(name);
+  await page.getByTestId("new-collection-create").click();
+  await expect(page.getByTestId("new-collection-dialog")).toBeHidden();
+}

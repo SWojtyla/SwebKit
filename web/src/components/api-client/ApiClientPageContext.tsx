@@ -16,7 +16,9 @@ import {
   useExecuteRequest,
   useEnvironments,
   useUpdateEnvironments,
+  useLinkedRoots,
 } from "@/lib/hooks";
+import { ConflictError } from "@/lib/api";
 import type { ResponseHistoryEntry } from "./ResponseViewer";
 import type { RequestTab } from "./RequestTabStrip";
 import { buildVariableScope } from "@/lib/variable-utils";
@@ -45,6 +47,7 @@ import type {
   CollectionVariable,
   AuthConfig,
   CollectionsStoreResponse,
+  LinkedRootSummary,
 } from "@/lib/types";
 
 function newId() {
@@ -294,6 +297,7 @@ export interface ApiClientPageContextValue {
   variableScope: Record<string, string | null>;
 
   handleAddCollection: () => void;
+  handleCreateCollection: (name: string, linkedRootId: string | null) => void;
   handleAddRequest: (collectionId: string, parentId?: string) => void;
   handleAddFolder: (collectionId: string, parentId?: string) => void;
   handleDeleteNode: (nodeId: string, collectionId: string) => void;
@@ -305,7 +309,7 @@ export interface ApiClientPageContextValue {
   handleSend: () => Promise<void>;
   handleSaveExample: (name: string, response: ApiClientExecutionResponse) => Promise<void>;
 
-  conflict: { message: string } | null;
+  conflict: { message: string; conflicts: string[] } | null;
   dismissConflict: () => void;
   handleReloadConflict: () => Promise<void>;
   handleOverwriteConflict: () => Promise<void>;
@@ -324,6 +328,11 @@ export interface ApiClientPageContextValue {
   exportCollection: ApiCollection | null;
   showGitPanel: boolean;
   setShowGitPanel: (v: boolean) => void;
+  showLinkedProjects: boolean;
+  setShowLinkedProjects: (v: boolean) => void;
+  showNewCollection: boolean;
+  setShowNewCollection: (v: boolean) => void;
+  linkedRoots: LinkedRootSummary[];
 
   nameDialog: NameDialogState | null;
   setNameDialog: (v: NameDialogState | null) => void;
@@ -347,6 +356,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   const updateCollections = useUpdateCollections();
   const executeRequest = useExecuteRequest();
   const { data: envData } = useEnvironments();
+  const { data: linkedRoots = [] } = useLinkedRoots();
   const updateEnvironments = useUpdateEnvironments();
   const location = useLocation();
   const navigate = useNavigate();
@@ -392,7 +402,9 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   const [showColVarEditor, setShowColVarEditor] = useState(false);
   const [exportCollectionId, setExportCollectionId] = useState<string | null>(null);
   const [showGitPanel, setShowGitPanel] = useState(false);
-  const [conflict, setConflict] = useState<{ message: string } | null>(null);
+  const [showLinkedProjects, setShowLinkedProjects] = useState(false);
+  const [showNewCollection, setShowNewCollection] = useState(false);
+  const [conflict, setConflict] = useState<{ message: string; conflicts: string[] } | null>(null);
   const [legacyNoticeDismissed, setLegacyNoticeDismissed] = useState(() =>
     typeof window !== "undefined" && localStorage.getItem("swokit-legacy-secret-notice") === "dismissed"
   );
@@ -459,8 +471,14 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   }, [tabs, tabStates]);
 
   useEffect(() => {
-    const state = location.state as { collectionId?: string; nodeId?: string } | null;
-    if (!state?.collectionId || !state?.nodeId) return;
+    const state = location.state as { collectionId?: string; nodeId?: string; openLinkedProjects?: boolean } | null;
+    if (!state) return;
+    if (state.openLinkedProjects) {
+      setShowLinkedProjects(true);
+      navigate(location.pathname, { replace: true, state: null });
+      return;
+    }
+    if (!state.collectionId || !state.nodeId) return;
     const collection = collections.find((c) => c.id === state.collectionId);
     const node = collection ? findRequestNode(collection.nodes, state.nodeId) : null;
     if (node?.type === "Request" && node.request) {
@@ -567,24 +585,29 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   };
 
   const handleAddCollection = () => {
-    setNameDialog({
-      title: "New Collection",
-      label: "Collection name",
-      defaultValue: "",
-      confirmText: "Create",
-      onConfirm: (name) => {
-        const collection: ApiCollection = {
-          id: newId(),
-          name,
-          nodes: [],
-          variables: [],
-          defaultAuth: null,
-          createdAt: now(),
-          updatedAt: now(),
-        };
-        updateCollections.mutate((prev) => [...prev, collection]);
-        setNameDialog(null);
-      },
+    setShowNewCollection(true);
+  };
+
+  const handleCreateCollection = (name: string, linkedRootId: string | null) => {
+    setShowNewCollection(false);
+    const collection: ApiCollection = {
+      id: newId(),
+      name,
+      nodes: [],
+      variables: [],
+      defaultAuth: null,
+      createdAt: now(),
+      updatedAt: now(),
+      linkedRootId,
+    };
+    const root = linkedRootId ? linkedRoots.find((r) => r.id === linkedRootId) : null;
+    updateCollections.mutate((prev) => [...prev, collection], {
+      onSuccess: () =>
+        notify(
+          "success",
+          "Collection created",
+          root ? `"${name}" is stored as files in ${root.path}` : undefined,
+        ),
     });
   };
 
@@ -739,13 +762,18 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
       setTabs((prev) => prev.map((t) => t.id === activeTabId ? { ...t, dirty: false } : t));
       return true;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes("409") || message.toLowerCase().includes("conflict")) {
+      if (err instanceof ConflictError) {
         setConflict({
-          message: "The collections file changed on disk. Reload the latest version, overwrite with your changes, or save your request as a copy.",
+          // The server's message distinguishes a collections.json race from
+          // linked files that changed on disk (which names the actual files).
+          message: err.conflicts.length > 0
+            ? `${err.message} Reload to see the latest files, overwrite them with your changes, or save your request as a copy.`
+            : "The collections file changed on disk. Reload the latest version, overwrite with your changes, or save your request as a copy.",
+          conflicts: err.conflicts,
         });
       } else {
         console.error("Failed to save collections", err);
+        notify("error", "Couldn't save request", err instanceof Error ? err.message : String(err));
       }
       return false;
     }
@@ -893,7 +921,33 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     setConflict(null);
     await qc.refetchQueries({ queryKey: ["collections"] });
     const latest = getLatestCollections();
-    await saveActiveTab(latest);
+    // `force` tells the server to write over files that changed on disk even if
+    // they changed again between this refetch and the PUT — the user just
+    // explicitly chose overwrite.
+    const tabState = activeTabId ? tabStates[activeTabId] : null;
+    const tab = tabs.find((t) => t.id === activeTabId);
+    if (!activeTabId || !tabState || !tab) return;
+    const draftForSave = deepClone(tabState.draft);
+    if (draftForSave.auth) {
+      draftForSave.auth = { ...draftForSave.auth, credentialSecret: null };
+    }
+    try {
+      await updateCollections.mutateAsync({
+        update: updateRequestInCollections(latest, tab.nodeId, draftForSave),
+        force: true,
+      });
+      setTabStates((prev) => ({ ...prev, [activeTabId]: { ...prev[activeTabId], dirty: false } }));
+      setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, dirty: false } : t)));
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        setConflict({
+          message: `${err.message} Reload to see the latest files, or overwrite again.`,
+          conflicts: err.conflicts,
+        });
+      } else {
+        console.error("Failed to overwrite collections", err);
+      }
+    }
   };
 
   const handleSaveAsCopy = async () => {
@@ -920,10 +974,10 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
       setSelectedNodeId(node.id);
       setSelectedCollectionId(collection.id);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes("409") || message.toLowerCase().includes("conflict")) {
+      if (err instanceof ConflictError) {
         setConflict({
-          message: "The collections file changed on disk. Reload the latest version, overwrite with your changes, or save your request as a copy.",
+          message: `${err.message} Reload to see the latest files, overwrite them with your changes, or save your request as a copy.`,
+          conflicts: err.conflicts,
         });
       } else {
         console.error("Failed to save as copy", err);
@@ -1091,6 +1145,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     variableScope,
 
     handleAddCollection,
+    handleCreateCollection,
     handleAddRequest,
     handleAddFolder,
     handleDeleteNode,
@@ -1121,6 +1176,11 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     exportCollection,
     showGitPanel,
     setShowGitPanel,
+    showLinkedProjects,
+    setShowLinkedProjects,
+    showNewCollection,
+    setShowNewCollection,
+    linkedRoots,
 
     nameDialog,
     setNameDialog,

@@ -23,8 +23,8 @@ public static class ConfigEndpoints
         app.MapGet("/api/config/environments", GetEnvironments);
         app.MapPut("/api/config/environments", SaveEnvironmentsAsync);
 
-        app.MapGet("/api/config/collections", GetCollections);
-        app.MapGet("/api/config/collections/store", GetCollectionsStore);
+        app.MapGet("/api/config/collections", GetCollectionsAsync);
+        app.MapGet("/api/config/collections/store", GetCollectionsStoreAsync);
         app.MapPut("/api/config/collections", SaveCollectionsAsync);
         app.MapPost("/api/config/collections/import", ImportCollectionAsync);
 
@@ -228,28 +228,59 @@ public static class ConfigEndpoints
         string.Equals(a.Server, b.Server, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(a.Database, b.Database, StringComparison.OrdinalIgnoreCase);
 
-    internal static IResult GetEnvironments(EnvironmentRepository repo) =>
-        Results.Ok(new { repo.Environments, repo.UiState });
-
-    internal static async Task<IResult> SaveEnvironmentsAsync(EnvironmentRepository repo, EnvironmentsStore store)
+    internal static async Task<IResult> GetEnvironments(EnvironmentRepository repo, Services.LinkedCollectionsService linked, CancellationToken ct)
     {
-        await repo.ReplaceStoreAsync(store);
-        return Results.Ok();
+        // Reload so external file edits are always visible — the files are the source of truth.
+        await linked.ReloadAsync(ct).ConfigureAwait(false);
+        var environments = repo.Environments.Concat(linked.LinkedEnvironments).ToList();
+        return Results.Ok(new { environments, repo.UiState });
     }
 
-    internal static IResult GetCollections(CollectionRepository repo, DemoModeService demo)
+    internal static async Task<IResult> SaveEnvironmentsAsync(
+        EnvironmentRepository repo, EnvironmentsStore store, Services.LinkedCollectionsService linked, CancellationToken ct)
     {
-        var collections = repo.Collections;
+        // Partition: linked environments go to their files; the rest to environments.json.
+        var linkedEnvs = store.Environments.Where(e => e.LinkedRootId is not null).ToList();
+        var localEnvs = store.Environments.Where(e => e.LinkedRootId is null).ToList();
+        // Envs scoped to a linked collection are linked even if the client didn't tag them.
+        var linkedCollectionIds = linked.LinkedCollections.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var env in localEnvs.Where(e => e.CollectionId is not null && linkedCollectionIds.Contains(e.CollectionId)).ToList())
+        {
+            env.LinkedRootId = linked.LinkedCollections.First(c => c.Id == env.CollectionId).LinkedRootId;
+            localEnvs.Remove(env);
+            linkedEnvs.Add(env);
+        }
+
+        var syncError = await linked.SyncEnvironmentsAsync(linkedEnvs, force: false, ct).ConfigureAwait(false);
+        if (syncError is not null)
+        {
+            return ApiErrors.BadRequest(syncError);
+        }
+
+        store.Environments = localEnvs;
+        await repo.ReplaceStoreAsync(store);
+
+        var environments = repo.Environments.Concat(linked.LinkedEnvironments).ToList();
+        return Results.Ok(new { environments, repo.UiState });
+    }
+
+    internal static async Task<IResult> GetCollectionsAsync(
+        CollectionRepository repo, DemoModeService demo, Services.LinkedCollectionsService linked, CancellationToken ct)
+    {
+        await linked.ReloadAsync(ct).ConfigureAwait(false);
+        var collections = repo.Collections.Concat(linked.LinkedCollections).ToList();
         if (demo.IsDemoMode)
         {
-            collections = [DemoApiCollectionFactory.CreateDemoCollection(), .. collections];
+            collections.Insert(0, DemoApiCollectionFactory.CreateDemoCollection());
         }
         return Results.Ok(collections);
     }
 
-    internal static IResult GetCollectionsStore(CollectionRepository repo, DemoModeService demo)
+    internal static async Task<IResult> GetCollectionsStoreAsync(
+        CollectionRepository repo, DemoModeService demo, Services.LinkedCollectionsService linked, CancellationToken ct)
     {
-        var collections = repo.Collections.ToList();
+        await linked.ReloadAsync(ct).ConfigureAwait(false);
+        var collections = repo.Collections.Concat(linked.LinkedCollections).ToList();
         if (demo.IsDemoMode)
         {
             collections.Insert(0, DemoApiCollectionFactory.CreateDemoCollection());
@@ -351,7 +382,10 @@ public static class ConfigEndpoints
         CollectionRepository repo,
         CollectionsStore store,
         DemoModeService demo,
-        string? concurrencyToken = null)
+        Services.LinkedCollectionsService linked,
+        CancellationToken ct,
+        string? concurrencyToken = null,
+        bool force = false)
     {
         // Demo collection is synthetic and must not be persisted. Remove it before saving.
         if (demo.IsDemoMode || store.Collections.Any(c => c.Id == DemoApiCollectionFactory.DemoCollectionId))
@@ -374,9 +408,83 @@ public static class ConfigEndpoints
             }
         }
 
+        // Partition the store: linked collections sync to their folders, the rest persist to
+        // collections.json. Linkage is decided server-side (a known linked collection stays linked
+        // even if the client dropped the marker); the client's linkedRootId is honoured only for
+        // collections the server doesn't know yet — that's how "new collection in folder X" works.
+        var linkedIds = linked.LinkedCollections.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
+        var knownRootIds = linked.Roots.Select(r => r.Config.Id).ToHashSet(StringComparer.Ordinal);
+        var linkedIncoming = new List<ApiCollection>();
+        var local = new List<ApiCollection>();
+        foreach (var collection in store.Collections)
+        {
+            if (linkedIds.Contains(collection.Id))
+            {
+                collection.LinkedRootId ??= linked.RootIdForCollection(collection);
+                linkedIncoming.Add(collection);
+            }
+            else if (collection.LinkedRootId is not null && knownRootIds.Contains(collection.LinkedRootId))
+            {
+                linkedIncoming.Add(collection); // new collection targeted at a linked root
+            }
+            else
+            {
+                collection.LinkedRootId = null;
+                local.Add(collection);
+            }
+        }
+
+        // Deleted linked collections: known at last load, absent from the incoming store. Only
+        // roots that loaded cleanly count — a missing folder must never delete anything.
+        var deletions = linked.Roots.Where(r => r.IsValid)
+            .SelectMany(r => r.Collections.Select(c => (Result: r, Collection: c)))
+            .Where(pair => !store.Collections.Any(c => c.Id == pair.Collection.Id))
+            .ToList();
+
+        // Verify first — collect every conflict before writing anything.
+        var allConflicts = new List<string>();
+        var syncResults = new List<(ApiCollection Collection, LinkedCollectionSyncResult Result)>();
+        foreach (var collection in linkedIncoming)
+        {
+            var result = await linked.SyncCollectionAsync(collection, force, ct).ConfigureAwait(false);
+            if (result.Conflicts.Count > 0)
+            {
+                allConflicts.AddRange(result.Conflicts);
+            }
+            else if (!result.IsSuccess)
+            {
+                return ApiErrors.BadRequest(result.ErrorMessage ?? "Failed to write linked collection.");
+            }
+            else
+            {
+                syncResults.Add((collection, result));
+            }
+        }
+        foreach (var (result, collection) in deletions)
+        {
+            var deleteResult = await linked.DeleteLinkedCollectionAsync(result, collection, force, ct).ConfigureAwait(false);
+            if (deleteResult.Conflicts.Count > 0)
+            {
+                allConflicts.AddRange(deleteResult.Conflicts);
+            }
+            else if (!deleteResult.IsSuccess)
+            {
+                return ApiErrors.BadRequest(deleteResult.ErrorMessage ?? "Failed to delete linked collection files.");
+            }
+        }
+        if (allConflicts.Count > 0)
+        {
+            return Results.Conflict(new
+            {
+                error = "Linked files changed on disk. Reload to see the latest, or overwrite.",
+                conflicts = allConflicts,
+            });
+        }
+
+        store.Collections = local;
         await repo.ReplaceStoreAsync(store);
 
-        var collections = repo.Collections.ToList();
+        var collections = repo.Collections.Concat(linked.LinkedCollections).ToList();
         if (demo.IsDemoMode)
         {
             collections.Insert(0, DemoApiCollectionFactory.CreateDemoCollection());

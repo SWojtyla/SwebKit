@@ -233,12 +233,16 @@ builder.Services.AddSingleton<SidecarAgentChatService>();
 // here as infrastructure even though nothing in the sidecar can propose an action yet — the API
 // Client propose tools (ApiClientTools.cs) land in Module 4, now that this exists for them to
 // target. IApiClientAgentService needs the same linked-collection chain the MAUI app uses
-// (SwebKitServiceCollectionExtensions.Agents.cs); LinkedCollectionRootRepository's LoadAsync() is
-// deliberately not called at sidecar startup below (linked collections aren't a sidecar feature
-// yet), so it stays empty and ApiClientAgentService correctly sees local collections only.
+// (SwebKitServiceCollectionExtensions.Agents.cs). LinkedCollectionsService is the sidecar's
+// runtime owner of that chain: it loads the root repository at startup, caches the loaded
+// roots, and routes request/environment writes to the on-disk linked files.
 builder.Services.AddSingleton<SwebKit.Core.Services.LinkedGitService>();
 builder.Services.AddSingleton<SwebKit.Core.Services.LinkedCollectionFileService>();
+builder.Services.AddSingleton<SwebKit.Core.Services.BrunoSyncService>();
 builder.Services.AddSingleton<SwebKit.Core.Configuration.LinkedCollectionRootRepository>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.LinkedCollectionsService>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.ILinkedStoreWriter>(
+    sp => sp.GetRequiredService<SwebKit.Sidecar.Services.LinkedCollectionsService>());
 builder.Services.AddSingleton<IApiClientAgentService, SwebKit.Core.Services.ApiClientAgentService>();
 builder.Services.AddSingleton<IAgentActionCoordinator, AgentActionCoordinator>();
 builder.Services.AddSingleton<IAgentActionExecutor, ApiClientActionExecutor>();
@@ -412,6 +416,10 @@ app.UseExceptionHandler(ex =>
 await app.Services.GetRequiredService<ProfileRepository>().LoadAsync();
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
+// Linked API projects: load the root registry and scan every root's .swebkit-api/ folder so the
+// first collections GET already includes linked collections and environments.
+await app.Services.GetRequiredService<SwebKit.Core.Configuration.LinkedCollectionRootRepository>().LoadAsync();
+await app.Services.GetRequiredService<SwebKit.Sidecar.Services.LinkedCollectionsService>().ReloadAsync();
 await userSettingsRepository.LoadAsync();
 // Fathom theme unlock progress: one increment per launch, and the unlock is sticky once earned
 // (a later SessionCount reset — e.g. via settings import — must not re-lock a theme the user
@@ -444,6 +452,7 @@ app.MapAksEndpoints();
 // ── API Client ───────────────────────────────────────────────────────────────
 
 app.MapApiClientEndpoints();
+app.MapLinkedRootsEndpoints();
 
 // ── SQL ───────────────────────────────────────────────────────────────────────
 

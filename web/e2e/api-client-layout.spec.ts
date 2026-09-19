@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { setDemoMode } from "./helpers";
+import { setDemoMode, createCollection } from "./helpers";
 
 const sidecarBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198"}`;
 
@@ -13,9 +13,7 @@ const sidecarBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_SIDECAR_PORT ?
 async function openRequest(page: Page, name: string) {
   const collectionName = `${name} Collection`;
 
-  await page.getByTestId("add-collection-button").click();
-  await page.getByTestId("name-dialog-input").fill(collectionName);
-  await page.getByTestId("name-dialog-confirm").click();
+  await createCollection(page, collectionName);
 
   await page.getByTestId("collection-search").fill(collectionName);
   const collection = page

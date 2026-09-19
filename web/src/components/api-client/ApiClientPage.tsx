@@ -1,4 +1,5 @@
-import { Globe, Folder, Settings2, GitBranch, AlertTriangle } from "lucide-react";
+import { Globe, Folder, Settings2, GitBranch, AlertTriangle, FolderGit2, HardDrive } from "lucide-react";
+import type { ApiCollection, LinkedRootSummary } from "@/lib/types";
 import { ApiClientPageProvider, useApiClientPageContext } from "./ApiClientPageContext";
 import { CollectionTree } from "./CollectionTree";
 import { RequestEditor } from "./RequestEditor";
@@ -9,6 +10,8 @@ import { CollectionVariableEditor } from "./CollectionVariableEditor";
 import { RequestTabStrip } from "./RequestTabStrip";
 import { CollectionExportDialog } from "./CollectionExportDialog";
 import { GitDrawer } from "./GitDrawer";
+import { LinkedProjectsDialog } from "./LinkedProjectsDialog";
+import { NewCollectionDialog } from "./NewCollectionDialog";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
 
 export function ApiClientPage() {
@@ -80,6 +83,15 @@ function ApiClientPageContent() {
           <span className="text-xs text-muted-foreground">
             {ctx.currentCollection ? ctx.currentCollection.name : "Project"}
           </span>
+          {/* Where edits to this collection land — files in the linked folder
+              vs. SwebKit's own storage. Saving a request must never be a
+              surprise about which it was. */}
+          {ctx.currentCollection && (
+            <StorageChip
+              collection={ctx.currentCollection}
+              roots={ctx.linkedRoots}
+            />
+          )}
           <select
             data-testid="env-selector-scoped"
             disabled={!ctx.currentCollection}
@@ -138,13 +150,22 @@ function ApiClientPageContent() {
 
       {/* Conflict-resolution banner */}
       {ctx.conflict && (
-        <div className="flex flex-wrap items-center gap-3 border-b bg-destructive/10 px-4 py-3" data-testid="conflict-banner">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
-          <span className="flex-1 text-sm">{ctx.conflict.message}</span>
-          <button onClick={ctx.handleReloadConflict} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-reload">Reload</button>
-          <button onClick={ctx.handleOverwriteConflict} className="rounded bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:opacity-90" data-testid="conflict-overwrite">Overwrite</button>
-          <button onClick={ctx.handleSaveAsCopy} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-copy">Save as copy</button>
-          <button onClick={ctx.dismissConflict} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-dismiss">Dismiss</button>
+        <div className="border-b bg-destructive/10 px-4 py-3" data-testid="conflict-banner">
+          <div className="flex flex-wrap items-center gap-3">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
+            <span className="flex-1 text-sm">{ctx.conflict.message}</span>
+            <button onClick={ctx.handleReloadConflict} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-reload">Reload</button>
+            <button onClick={ctx.handleOverwriteConflict} className="rounded bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:opacity-90" data-testid="conflict-overwrite">Overwrite</button>
+            <button onClick={ctx.handleSaveAsCopy} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-copy">Save as copy</button>
+            <button onClick={ctx.dismissConflict} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-dismiss">Dismiss</button>
+          </div>
+          {ctx.conflict.conflicts.length > 0 && (
+            <ul className="mt-2 max-h-24 list-disc space-y-0.5 overflow-auto pl-9 font-mono text-[11px] text-muted-foreground" data-testid="conflict-files">
+              {ctx.conflict.conflicts.map((file) => (
+                <li key={file} className="truncate" title={file}>{file}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -188,6 +209,7 @@ function ApiClientPageContent() {
         >
           <CollectionTree
             collections={ctx.collections}
+            linkedRoots={ctx.linkedRoots}
             selectedNodeId={ctx.selectedNodeId}
             selectedCollectionId={ctx.selectedCollectionId}
             onSelectNode={ctx.handleSelectNode}
@@ -199,6 +221,7 @@ function ApiClientPageContent() {
             onMoveNode={ctx.handleMoveNode}
             onMoveCollection={ctx.handleMoveCollection}
             onExportCollection={ctx.setExportCollectionId}
+            onManageProjects={() => ctx.setShowLinkedProjects(true)}
           />
 
           {/* No `border-r` here — RequestEditor already carries one, and the
@@ -289,6 +312,20 @@ function ApiClientPageContent() {
           onClose={() => ctx.setExportCollectionId(null)}
         />
       )}
+      {ctx.showNewCollection && (
+        <NewCollectionDialog
+          roots={ctx.linkedRoots}
+          onConfirm={ctx.handleCreateCollection}
+          onCancel={() => ctx.setShowNewCollection(false)}
+          onManageProjects={() => {
+            ctx.setShowNewCollection(false);
+            ctx.setShowLinkedProjects(true);
+          }}
+        />
+      )}
+      {ctx.showLinkedProjects && (
+        <LinkedProjectsDialog onClose={() => ctx.setShowLinkedProjects(false)} />
+      )}
 
       {/* Git drawer — sits inside the page content area rather than covering the
           app titlebar and status bar as the previous fixed overlay did. */}
@@ -296,5 +333,40 @@ function ApiClientPageContent() {
         <GitDrawer onClose={() => ctx.setShowGitPanel(false)} />
       )}
     </div>
+  );
+}
+
+/** Tiny marker next to the project name in the toolbar — where saves go. */
+function StorageChip({ collection, roots }: { collection: ApiCollection; roots: LinkedRootSummary[] }) {
+  const root = collection.linkedRootId
+    ? roots.find((r) => r.id === collection.linkedRootId)
+    : null;
+
+  if (collection.linkedRootId && !root) {
+    return (
+      <span
+        className="flex items-center gap-0.5 rounded bg-destructive/10 px-1 py-0.5 text-[10px]"
+        style={{ color: "var(--destructive)" }}
+        title="This collection's linked folder is missing or disabled — check Project folders."
+        data-testid="storage-chip-broken"
+      >
+        <FolderGit2 className="h-3 w-3" /> offline
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="flex items-center gap-0.5 rounded bg-accent/60 px-1 py-0.5 text-[10px] text-muted-foreground"
+      title={
+        root
+          ? `Saves write files to ${root.path}${root.brunoSyncEnabled && root.brunoSyncFolderPath ? ` and update .bru files in ${root.brunoSyncFolderPath}` : ""}`
+          : "Saved inside SwebKit's own storage (collections.json) — not synced to any folder"
+      }
+      data-testid={root ? "storage-chip-linked" : "storage-chip-local"}
+    >
+      {root ? <FolderGit2 className="h-3 w-3" /> : <HardDrive className="h-3 w-3" />}
+      {root ? root.displayName : "app storage"}
+    </span>
   );
 }

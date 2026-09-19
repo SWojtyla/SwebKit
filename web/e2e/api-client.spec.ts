@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { setDemoMode, resetCollections } from "./helpers";
+import { setDemoMode, resetCollections, createCollection } from "./helpers";
 
 const sidecarBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198"}`;
 
@@ -19,10 +19,7 @@ test.describe("API Client", () => {
 
   test("creates a collection, request, sends it and shows response", async ({ page }) => {
     // Add collection via dialog
-    await page.getByTestId("add-collection-button").click();
-    await expect(page.getByTestId("name-dialog")).toBeVisible();
-    await page.getByTestId("name-dialog-input").fill("E2E Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "E2E Collection");
 
     await page.getByTestId(/collection-root-/).first().waitFor();
     await page.getByTestId(/collection-root-/).first().click();
@@ -46,9 +43,7 @@ test.describe("API Client", () => {
 
   test("adds and removes a header", async ({ page }) => {
     // Add collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Header Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Header Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     // Add request
@@ -69,9 +64,7 @@ test.describe("API Client", () => {
 
   test("collection tree search filters nodes", async ({ page }) => {
     // Add collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Searchable Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Searchable Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     // Add a request
@@ -94,9 +87,7 @@ test.describe("API Client", () => {
 
   test("inline rename via double-click", async ({ page }) => {
     // Add collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Original Name");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Original Name");
 
     const collectionRoot = page.getByTestId(/collection-root-/).first();
     await collectionRoot.waitFor();
@@ -115,9 +106,7 @@ test.describe("API Client", () => {
 
   test("context menu appears on right-click", async ({ page }) => {
     // Add collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Context Menu Test");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Context Menu Test");
 
     const collectionRoot = page.getByTestId(/collection-root-/).first();
     await collectionRoot.waitFor();
@@ -139,9 +128,7 @@ test.describe("API Client", () => {
   test("delete confirmation dialog works", async ({ page }) => {
     // Add collection with unique name
     const uniqueName = `Delete Test ${Date.now()}`;
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill(uniqueName);
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, uniqueName);
 
     // Filter so the virtualized tree renders our specific collection
     await page.getByTestId("collection-search").fill(uniqueName);
@@ -173,9 +160,7 @@ test.describe("API Client", () => {
 
   test("request editor tabs switch between params, headers, body, auth", async ({ page }) => {
     // Setup collection + request
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Tab Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Tab Test Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -200,9 +185,7 @@ test.describe("API Client", () => {
   });
 
   test("an auth secret can be revealed and hidden again", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Auth Reveal Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Auth Reveal Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -229,9 +212,7 @@ test.describe("API Client", () => {
   });
 
   test("body pretty-print and minify work for JSON", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Body Format Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Body Format Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -259,9 +240,7 @@ test.describe("API Client", () => {
   });
 
   test("response viewer shows pretty-print and copy buttons", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Response Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Response Test Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -429,9 +408,7 @@ test.describe("API Client", () => {
     // The regression this guards: the global picker lists only global environments, so an
     // estate of entirely collection-scoped ones had nothing selectable anywhere while the
     // project picker was hidden until a request tab happened to be open.
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Scoped Env Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Scoped Env Collection");
 
     await page.getByTestId("env-manager-button").click();
     await page.getByTestId("env-add-button").click();
@@ -455,9 +432,7 @@ test.describe("API Client", () => {
 
   test("collection variables editor works", async ({ page }) => {
     // Create a collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Col Var Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Col Var Test Collection");
 
     // Select it (filter so the virtualized tree renders it)
     await page.getByTestId("collection-search").fill("Col Var Test Collection");
@@ -482,9 +457,7 @@ test.describe("API Client", () => {
   });
 
   test("Faker generator is a closed, self-explanatory category dropdown", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Generator Clarity Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Generator Clarity Test Collection");
 
     await page.getByTestId("collection-search").fill("Generator Clarity Test Collection");
     await page.getByTestId(/collection-root-/).filter({ hasText: "Generator Clarity Test Collection" }).first().click();
@@ -518,9 +491,7 @@ test.describe("API Client", () => {
 
   test("multi-tab: opening requests creates tabs and switching preserves state", async ({ page }) => {
     // Create a collection with two requests
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Multi-Tab Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Multi-Tab Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -556,9 +527,7 @@ test.describe("API Client", () => {
   });
 
   test("multi-tab: closing a tab works", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Close Tab Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Close Tab Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -577,9 +546,7 @@ test.describe("API Client", () => {
 
   test("GraphQL panel shows query and variables editors", async ({ page }) => {
     // Create a collection and request
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("GraphQL Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "GraphQL Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -607,9 +574,7 @@ test.describe("API Client", () => {
   });
 
   test("WebSocket panel shows connection controls and message log", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("WebSocket Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "WebSocket Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -640,9 +605,7 @@ test.describe("API Client", () => {
 
   test("collection export dialog opens from context menu", async ({ page }) => {
     // Create a collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Export Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Export Test Collection");
 
     // Right-click on the collection to open context menu
     const collectionNode = page.getByTestId(/collection-root-/).first();
@@ -672,9 +635,7 @@ test.describe("API Client", () => {
     const collectionName = `Secret Store Collection ${Date.now()}`;
     const requestName = `Secret Store Request ${Date.now()}`;
 
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill(collectionName);
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, collectionName);
     await page.getByTestId("collection-search").fill(collectionName);
     await page.getByTestId(/collection-root-/).filter({ hasText: collectionName }).first().click();
     await page.getByTestId("collection-search").fill("");
@@ -768,9 +729,7 @@ test.describe("API Client", () => {
   });
 
   test("JSONPath picker sets capture rule path", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("JSONPath Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "JSONPath Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -797,9 +756,7 @@ test.describe("API Client", () => {
   });
 
   test("JSONPath picker reports invalid expressions", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("JSONPath Invalid Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "JSONPath Invalid Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -828,9 +785,7 @@ test.describe("API Client", () => {
   test("post-request action copies the response status code to the clipboard", async ({ page, context }) => {
     await context.grantPermissions(["clipboard-write", "clipboard-read"]);
 
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Action Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Action Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -854,9 +809,7 @@ test.describe("API Client", () => {
   });
 
   test("pre-request action reports nothing to copy when the source has no value", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Pre Action Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Pre Action Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -878,9 +831,7 @@ test.describe("API Client", () => {
   });
 
   test("reorders requests via drag and drop", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Reorder Drag Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Reorder Drag Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
@@ -907,13 +858,9 @@ test.describe("API Client", () => {
   });
 
   test("reorders collections via drag and drop", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Collection Drag A");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Collection Drag A");
 
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Collection Drag B");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Collection Drag B");
 
     const sourceRow = page.getByTestId(/collection-root-/).filter({ hasText: "Collection Drag B" });
     const source = sourceRow.locator('[data-testid^="drag-handle-"]');
@@ -929,9 +876,7 @@ test.describe("API Client", () => {
   });
 
   test("moves a request into a folder via drag and drop", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Folder Drag Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Folder Drag Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-folder-button").click();
@@ -1058,9 +1003,7 @@ test.describe("API Client", () => {
   });
 
   test("reorders rows via keyboard shortcuts", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Keyboard Reorder Collection");
-    await page.getByTestId("name-dialog-confirm").click();
+    await createCollection(page, "Keyboard Reorder Collection");
     await page.getByTestId(/collection-root-/).first().click();
 
     await page.getByTestId("add-request-button").click();
