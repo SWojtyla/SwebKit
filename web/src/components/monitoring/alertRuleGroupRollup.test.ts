@@ -11,6 +11,7 @@ function rule(id: string): MonitoringAlertRule {
     severity: "Warning",
     intervalSeconds: 60,
     cooldownMinutes: 5,
+    aiInvestigationEnabled: true,
   };
 }
 

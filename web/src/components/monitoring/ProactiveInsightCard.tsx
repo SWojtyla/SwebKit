@@ -22,6 +22,13 @@ export function ProactiveInsightCard({ insight, onInvestigate, onDismiss }: Proa
       <div className="min-w-0">
         <div className="text-sm font-semibold">{insight.ruleName} — possibly related</div>
         <p className="mt-0.5 text-sm text-muted-foreground">{insight.summary}</p>
+        {insight.evidence && insight.evidence.length > 0 && (
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-muted-foreground/80">
+            {insight.evidence.slice(0, 4).map((item, i) => (
+              <li key={i}>{item}</li>
+            ))}
+          </ul>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <button

@@ -1,5 +1,6 @@
 import { useState, createContext, useContext, type ReactNode } from "react";
-import { X, CheckCircle, AlertCircle, Info, Bell } from "lucide-react";
+import { useNavigate } from "react-router";
+import { X, CheckCircle, AlertCircle, Info, Bell, CheckCheck, Trash2 } from "lucide-react";
 
 type NotificationType = "success" | "error" | "info";
 
@@ -16,10 +17,12 @@ interface NotificationItem {
   timestamp: number;
   /** Optional recovery action rendered as a button on the toast (e.g. "Undo"). Never persisted to history. */
   action?: NotificationAction;
+  /** Route to navigate to when the history entry is clicked (e.g. "/monitoring" for a fired alert). */
+  link?: string;
 }
 
 interface NotificationContextValue {
-  notify: (type: NotificationType, title: string, body?: string, action?: NotificationAction) => void;
+  notify: (type: NotificationType, title: string, body?: string, action?: NotificationAction, link?: string) => void;
   notifications: NotificationItem[];
   dismiss: (id: string) => void;
 }
@@ -32,24 +35,46 @@ export function useNotification() {
   return ctx;
 }
 
+interface HistoryItem extends NotificationItem {
+  read: boolean;
+}
+
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [history, setHistory] = useState<NotificationItem[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const navigate = useNavigate();
+
+  const unreadCount = history.filter((n) => !n.read).length;
 
   const dismiss = (id: string) => {
     setNotifications((prev) => {
       const item = prev.find((n) => n.id === id);
-      if (item) setHistory((h) => [{ ...item }, ...h].slice(0, 50));
+      if (item) setHistory((h) => [{ ...item, read: false }, ...h].slice(0, 50));
       return prev.filter((n) => n.id !== id);
     });
   };
 
-  const notify = (type: NotificationType, title: string, body?: string, action?: NotificationAction) => {
+  const notify = (type: NotificationType, title: string, body?: string, action?: NotificationAction, link?: string) => {
     const id = crypto.randomUUID();
-    const item: NotificationItem = { id, type, title, body, timestamp: Date.now(), action };
+    const item: NotificationItem = { id, type, title, body, timestamp: Date.now(), action, link };
     setNotifications((prev) => [...prev, item]);
     setTimeout(() => dismiss(id), 5000);
+  };
+
+  const markRead = (id: string) =>
+    setHistory((h) => h.map((n) => (n.id === id ? { ...n, read: true } : n)));
+
+  const markAllRead = () => setHistory((h) => h.map((n) => ({ ...n, read: true })));
+
+  const clearHistory = () => setHistory([]);
+
+  const openItem = (item: HistoryItem) => {
+    markRead(item.id);
+    if (item.link) {
+      setShowHistory(false);
+      navigate(item.link);
+    }
   };
 
   return (
@@ -66,12 +91,16 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         <button
           onClick={() => setShowHistory(!showHistory)}
           className="relative rounded-full border bg-card p-2 shadow-md hover:bg-accent"
+          title="Notifications"
           data-testid="notification-bell"
         >
           <Bell className="h-4 w-4" />
-          {history.length > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
-              {history.length}
+          {unreadCount > 0 && (
+            <span
+              className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-0.5 text-[10px] text-primary-foreground"
+              data-testid="notification-unread-badge"
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
         </button>
@@ -79,25 +108,58 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           <div className="absolute bottom-10 left-0 w-80 rounded-lg border bg-card shadow-lg" data-testid="notification-history">
             <div className="flex items-center justify-between border-b px-3 py-2">
               <span className="text-sm font-semibold">Notifications</span>
-              <button onClick={() => setShowHistory(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={markAllRead}
+                  disabled={unreadCount === 0}
+                  className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                  title="Mark all read"
+                  data-testid="notification-mark-all-read"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={clearHistory}
+                  disabled={history.length === 0}
+                  className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                  title="Dismiss all"
+                  data-testid="notification-clear-all"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="rounded p-1 text-muted-foreground hover:text-foreground"
+                  title="Close"
+                  data-testid="notification-history-close"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
             <div className="max-h-80 overflow-auto">
               {history.length === 0 ? (
                 <div className="px-3 py-4 text-center text-sm text-muted-foreground">No notifications</div>
               ) : (
                 history.map((n) => (
-                  <div key={n.id} className="border-b last:border-0 px-3 py-2">
+                  <button
+                    key={n.id}
+                    onClick={() => openItem(n)}
+                    className={`block w-full border-b px-3 py-2 text-left last:border-0 hover:bg-accent/50 ${
+                      n.read ? "opacity-60" : ""
+                    }`}
+                    data-testid={`notification-item-${n.id}`}
+                  >
                     <div className="flex items-center gap-2">
                       <NotificationIcon type={n.type} />
-                      <span className="text-sm font-medium">{n.title}</span>
+                      <span className={`text-sm ${n.read ? "font-normal" : "font-medium"}`}>{n.title}</span>
+                      {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" data-testid="notification-unread-dot" />}
                       <span className="ml-auto text-xs text-muted-foreground">
                         {new Date(n.timestamp).toLocaleTimeString()}
                       </span>
                     </div>
                     {n.body && <p className="mt-1 text-xs text-muted-foreground">{n.body}</p>}
-                  </div>
+                  </button>
                 ))
               )}
             </div>

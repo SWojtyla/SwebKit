@@ -26,6 +26,7 @@ import { EntityCommandPalette, type EntityAction } from "./EntityCommandPalette"
 import { BatchReplayPanel } from "./BatchReplayPanel";
 import { loadSbPreferences } from "@/lib/stores/sb-preferences";
 import { loadLastNamespace, saveLastNamespace, loadLastEntity, saveLastEntity } from "@/lib/stores/sb-selection";
+import { useScreenStateProvider } from "@/lib/stores/screen-state";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 
 function maxSequenceNumber(messages: SbMessage[]): number | null {
@@ -204,6 +205,36 @@ export function ServiceBusPage() {
     const seqNum = parseInt(seq, 10);
     return messageWindow.find((m) => m.messageId === msgId && m.sequenceNumber === seqNum) ?? null;
   }, [searchParams, messageWindow]);
+
+  // Screen-state snapshot (agent-workspace-awareness M1) — bounded: no full message bodies,
+  // just metadata + a short body preview so the model can reason about what's on screen.
+  useScreenStateProvider("service-bus-page", "ServiceBus", () => {
+    const nsAlias = namespaces.find((n) => n.id === selectedNsId)?.alias ?? null;
+    const summarize = (m: SbMessage) => ({
+      messageId: m.messageId,
+      sequenceNumber: m.sequenceNumber,
+      subject: m.subject,
+      enqueuedAt: m.enqueuedAt,
+      deliveryCount: m.deliveryCount,
+      deadLetterReason: m.deadLetterReason,
+      bodyPreview: m.body?.slice(0, 300) ?? null,
+    });
+    return {
+      namespace: nsAlias,
+      entity: selectedEntity
+        ? {
+            path: selectedEntity.entityPath,
+            name: selectedEntity.name,
+            activeMessages: selectedEntity.stats?.activeMessageCount ?? null,
+            deadLetterMessages: selectedEntity.stats?.deadLetterMessageCount ?? null,
+          }
+        : null,
+      viewMode,
+      visibleMessageCount: messageWindow.length,
+      messages: messageWindow.slice(0, 15).map(summarize),
+      selectedMessage: selectedMessage ? summarize(selectedMessage) : null,
+    };
+  }, [namespaces, selectedNsId, selectedEntity, viewMode, messageWindow, selectedMessage]);
   const selectMessage = useCallback(
     (message: SbMessage | null) =>
       updateParams({

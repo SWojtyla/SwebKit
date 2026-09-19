@@ -169,6 +169,52 @@ test.describe("Monitoring", () => {
     await expect(page.getByTestId("alert-rule-name")).not.toHaveValue("");
   });
 
+  test("AI investigation defaults on for a new rule, and the row shows the AI badge", async ({ page }) => {
+    await page.goto("/monitoring");
+    const row = await createRule(page, `AI Alert ${Date.now()}`);
+
+    // The editor defaults the toggle on (agent-workspace-awareness M3) and the row
+    // surfaces that state via the AI badge — the discoverability fix this feature adds.
+    await row.locator("[data-testid^='monitoring-rule-edit-']").click();
+    await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
+    await expect(page.getByTestId("alert-rule-ai-investigation")).toBeChecked();
+    await page.getByTestId("alert-rule-dialog-cancel").click();
+
+    await expect(row.locator("[data-testid^='monitoring-rule-ai-badge-']")).toBeVisible();
+  });
+
+  test("turning AI investigation off in the editor removes the row's AI badge", async ({ page }) => {
+    await page.goto("/monitoring");
+    const row = await createRule(page, `No AI Alert ${Date.now()}`);
+
+    await row.locator("[data-testid^='monitoring-rule-edit-']").click();
+    await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
+    await page.getByTestId("alert-rule-ai-investigation").uncheck();
+    await page.getByTestId("alert-rule-dialog-save").click();
+
+    await expect(row.locator("[data-testid^='monitoring-rule-ai-badge-']")).toHaveCount(0);
+  });
+
+  test("notification center: expired toasts land unread, mark-all-read and dismiss-all work", async ({ page }) => {
+    await page.goto("/monitoring");
+    const row = await createRule(page, `Notify ${Date.now()}`);
+
+    // Disabling the rule fires a "Rule disabled" toast; after its 5s lifetime it moves into
+    // the notification center as an UNREAD entry (agent-workspace-awareness).
+    await row.locator("[data-testid^='monitoring-rule-toggle-']").click();
+    await expect(page.getByTestId("notification-unread-badge")).toBeVisible({ timeout: 10000 });
+
+    await page.getByTestId("notification-bell").click();
+    await expect(page.getByTestId("notification-history")).toBeVisible();
+    await expect(page.getByTestId("notification-unread-dot").first()).toBeVisible();
+
+    await page.getByTestId("notification-mark-all-read").click();
+    await expect(page.getByTestId("notification-unread-badge")).toHaveCount(0);
+
+    await page.getByTestId("notification-clear-all").click();
+    await expect(page.getByTestId("notification-history")).toContainText("No notifications");
+  });
+
   test("a rule is discoverable and directly editable from the command palette", async ({ page }) => {
     await page.goto("/monitoring");
     const ruleName = `Palette Alert ${Date.now()}`;

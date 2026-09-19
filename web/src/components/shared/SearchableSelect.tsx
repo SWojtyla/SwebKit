@@ -107,8 +107,8 @@ export function SearchableSelect<T extends SearchableSelectItem = SearchableSele
     });
     // sortItems runs after the current-first float so domain ordering (MRU…)
     // refines within the non-current tail.
+    void open; // dep only: a fresh open re-reads persisted ordering prefs via sortItems.
     return sortItems ? sortItems(sorted) : sorted;
-    // `open` is a dep so a fresh open re-reads persisted ordering prefs.
   }, [filtered, value, currentFirst, sortItems, open]);
 
   useEffect(() => {

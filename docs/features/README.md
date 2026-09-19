@@ -9,9 +9,7 @@ This folder is the canonical feature-first map for implementation work.
 
 Active features:
 
-- `ux-polish/` — UX polish umbrella: AKS context switching, startup warm-up & resume, page restore parity, consistency sweep.
-- `settings-profiles-aks-shell/` — settings profile lists + AKS shell/port-forward fixes.
-- `workspace-map-overhaul/` — workspace topology map overhaul.
+- `agent-workspace-awareness/` — screen-state snapshots for the agent (pull-via-tool) + multi-step proactive investigation depth.
 
 ## Folder Contract
 

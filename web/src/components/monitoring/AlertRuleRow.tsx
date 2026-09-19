@@ -4,10 +4,10 @@ import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import type { MonitoringAlertRule, AlertSignalStatus } from "../../lib/api";
 
-// There's no "Monitoring" backend FeatureArea (no monitoring-specific agent tools exist) — a rule's
-// signal source already names the area it's actually about (an AksPodHealth rule should let the
-// assistant use AKS tools, not a nonexistent "Monitoring" set), so derive from that instead of
-// inventing an enum value with nothing behind it.
+// There's a "Monitoring" backend FeatureArea but it only holds alert-rule *mutation* tools
+// (propose_create_alert_rule) — a rule's signal source already names the area it's actually
+// about (an AksPodHealth rule should let the assistant read AKS state, not the Monitoring set),
+// so derive the area from that instead.
 function featureAreaForSource(source: string): string {
   if (source.startsWith("Aks")) return "Aks";
   if (source.startsWith("ServiceBus")) return "ServiceBus";
@@ -91,6 +91,16 @@ export function AlertRuleRow({
             <span className={`rounded px-1.5 py-0.5 text-xs ${severityBadge[rule.severity] ?? severityBadge.Warning}`}>
               {rule.severity}
             </span>
+            {rule.aiInvestigationEnabled && (
+              <span
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs text-primary"
+                title="AI investigation on — when this alert fires, the agent investigates related workspace resources and posts an insight. Requires an agent profile with tool calling and the resource on the Map."
+                data-testid={`monitoring-rule-ai-badge-${rule.id}`}
+              >
+                <Sparkles className="h-3 w-3" />
+                AI
+              </span>
+            )}
           </div>
           <div className="truncate text-xs text-muted-foreground">
             {sourceLabel[rule.source] ?? rule.source}

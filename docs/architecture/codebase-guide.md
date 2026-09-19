@@ -1,5 +1,12 @@
 # SwebKit Codebase Guide
 
+> **Legacy notice (2026-09-18):** much of this guide routes to the **legacy** .NET MAUI shell
+> (`src/SwebKit.App/`), which is kept in-repo as reference/backup only. The primary stack is
+> Tauri (`src-tauri/`) + React (`web/`) + the .NET sidecar (`src-sidecar/`). Before following a
+> `src/SwebKit.App/` pointer, check whether an equivalent exists under `web/src/` or
+> `src-sidecar/` — in most cases it does, and the legacy path is only for historical reference.
+> `src/SwebKit.WinUI/` and `src/SwebKit.Agent.PocConsole/` are likewise legacy.
+
 ## Mandate
 
 **This is the implementation navigation map.** It answers: _where do I start looking in the code?_

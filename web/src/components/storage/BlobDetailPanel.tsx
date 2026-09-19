@@ -12,6 +12,7 @@ import {
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { useStoragePageContext } from "./StoragePageContext";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
+import { useScreenStateProvider } from "@/lib/stores/screen-state";
 import { tryPrettifyJson } from "@/lib/pretty-json";
 import { tokenizeBody } from "@/lib/bodyHighlight";
 import { HIGHLIGHT_MAX_BYTES } from "@/lib/response-body";
@@ -62,6 +63,24 @@ export function BlobDetailPanel() {
         setPrettyPrinted(next);
         saveViewPreference(CONTENT_PRETTY_PREF_KEY, next);
     };
+
+    // Screen-state snapshot (agent-workspace-awareness M1) — properties + a short content
+    // preview; null when no blob is selected so the fallback takes over.
+    useScreenStateProvider("storage-blob-detail", "Storage", () => {
+        const props = ctx.blobProps.data;
+        if (!props) return null;
+        return {
+            accountId: ctx.activeAccountId,
+            container: ctx.selectedContainer,
+            blob: props.name,
+            sizeBytes: props.sizeBytes,
+            contentType: props.contentType,
+            lastModified: props.lastModified,
+            accessTier: props.accessTier ?? null,
+            metadata: Object.fromEntries(Object.entries(props.metadata ?? {}).slice(0, 10)),
+            contentPreview: ctx.blobContent.data?.content?.slice(0, 300) ?? null,
+        };
+    }, [ctx.blobProps.data, ctx.blobContent.data, ctx.activeAccountId, ctx.selectedContainer]);
 
     return (
         <div

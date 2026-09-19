@@ -21,6 +21,7 @@ public enum AgentActionType
     CopyBlob,
     ExecuteSql,
     ApplyAksYaml,
+    CreateAlertRule,
 }
 
 /// <summary>

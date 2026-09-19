@@ -7,6 +7,7 @@ using SwebKit.Agents;
 using SwebKit.Agents.Tools;
 using SwebKit.Agents.Tools.Aks;
 using SwebKit.Agents.Tools.ApiClient;
+using SwebKit.Agents.Tools.Monitoring;
 using SwebKit.Agents.Tools.Redis;
 using SwebKit.Agents.Tools.Sql;
 using SwebKit.Agents.Tools.Storage;
@@ -132,6 +133,7 @@ builder.Services.AddSingleton<SwebKit.Sidecar.Services.WorkspaceRelationshipSugg
 // Proactive insights (workspace-intelligence Module 4) — subscribes to
 // MonitoringAlertEvaluationService.AlertFired in its own constructor, so it must be resolved once
 // at startup below (a plain AddSingleton alone only registers it, it doesn't instantiate it).
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.ProactiveInvestigationRunner>();
 builder.Services.AddSingleton<SwebKit.Sidecar.Services.ProactiveInsightService>();
 
 // Agent: OpenAI-compatible LLM client + ACP external-agent host, dispatched per active profile
@@ -213,6 +215,16 @@ builder.Services.AddSingleton<IAgentTool, ProposeExecuteSqlTool>();
 // registered IAgentTool, including this one). Registered last among IAgentTool entries purely for
 // readability — registration order has no bearing on the circular-dependency fix.
 builder.Services.AddSingleton<IAgentTool, InvestigateWorkspaceIssueTool>();
+
+// Screen state (agent-workspace-awareness Module 1) — the store lives in SwebKit.Agents so the
+// tool can inject it; the endpoint publishes into it, get_screen_state reads it.
+builder.Services.AddSingleton<ScreenStateStore>();
+builder.Services.AddSingleton<IAgentTool, GetScreenStateTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeCreateAlertRuleTool>();
+builder.Services.AddSingleton<IAgentTool, ListAlertRulesTool>();
+// Lives in the sidecar — the alert-history ring buffer is held by MonitoringAlertEvaluationService.
+builder.Services.AddSingleton<IAgentTool, SwebKit.Sidecar.Services.GetAlertHistoryTool>();
+
 builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 
 builder.Services.AddSingleton<SidecarAgentChatService>();
@@ -234,6 +246,9 @@ builder.Services.AddSingleton<IAgentActionExecutor, RedisActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, StorageActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, SqlActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, AksActionExecutor>();
+// Lives in the sidecar (not SwebKit.Agents) — applying an alert-rule action needs the
+// sidecar-hosted MonitoringAlertEvaluationService for the post-upsert reload.
+builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.MonitoringActionExecutor>();
 builder.Services.AddSingleton<AgentActionApplier>();
 
 // HTTP client used by the API client request executor

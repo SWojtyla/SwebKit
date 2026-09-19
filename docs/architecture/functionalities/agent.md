@@ -325,10 +325,41 @@ how every provider, ACP included, always sees the declared relationships; the
 `investigate_workspace_issue` tool (workspace scope) then walks those edges live
 rather than being the only way the map is discovered.
 
+### Screen state (agent-workspace-awareness)
+
+The "Current focus" prompt section tells the model *where* the user is; the
+`get_screen_state` tool answers *what they see*. Feature pages register bounded,
+whitelisted serializers through `web/src/lib/stores/screen-state.ts`
+(`useScreenStateProvider`), which publishes debounced + heartbeated snapshots to
+`POST /api/agent/screen-state`. A singleton `ScreenStateStore` keeps the latest
+snapshot for 5 minutes; `GetScreenStateTool` returns it on demand — route,
+feature area, capture timestamp/age, and the area-specific payload — so the
+model reasons about data the UI already fetched instead of re-fetching it.
+The tool is fence-exempt in `AgentToolCallOrchestrator` (like Observability):
+it reads UI state, not area data, and reaches ACP agents through the normal
+resolved-tools allowlist. Serializers never include auth headers, tokens,
+connection strings, or full bodies — whitelisted fields and short previews only.
+
+### Proactive investigation (agent-workspace-awareness)
+
+`ProactiveInsightService` subscribes to `MonitoringAlertEvaluationService.AlertFired`.
+When a rule fires with `AiInvestigationEnabled` (per-rule flag, default `true`)
+and its resource maps onto a workspace-topology node, a single-flight background
+investigation runs via `ProactiveInvestigationRunner`: a headless agentic loop
+(`IAgentModelClient.ChatAsync`) with workspace-scope, ask-mode tools — so
+`propose_*` mutations are structurally unreachable — capped at 5 tool rounds and
+a 90-second wall-clock budget. The model is asked to end with a JSON object
+(hypothesis/evidence/severity/next steps); on a null/failed run the service
+falls back to the Module 4 single-shot `investigate_workspace_issue` + summarize
+path. The report seeds a dedicated chat session, `InsightReady` flows over the
+monitoring SSE stream, and `AppLayout`'s always-mounted subscription turns it
+into an OS notification (plus in-app toast) — the only notification site, so it
+fires while the app is minimized without ever double-toasting.
+
 ## Future Enhancements
 
-- **Context Awareness**: Deep integration with SwebKit state for richer context
-- **Advanced Tooling**: Multi-step investigations and correlation
-- **Proactive Monitoring**: Agent-initiated health checks and alerts
-- **Automated Remediation**: Self-healing capabilities
+- **Automated Remediation**: Self-healing capabilities (mutations stay behind
+  the `propose_*` approval pipeline)
 - **Performance Optimization**: Caching, streaming responses, load balancing
+- **Insight feedback loop**: user feedback on proactive hypotheses improving
+  future investigations

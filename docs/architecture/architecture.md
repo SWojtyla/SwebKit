@@ -1,12 +1,15 @@
 # SwebKit Architecture
 
-> **Primary-stack notice (2026-08-01):** this document describes the legacy .NET MAUI Blazor Hybrid
-> app as the sole architecture. Tauri + React is now the primary tool going forward (MAUI is being
-> deprioritized). The primary stack is a Tauri (Rust) shell (`src-tauri/`) wrapping a React SPA
-> (`web/`), talking to a local .NET "sidecar" HTTP server (`src-sidecar/`, ASP.NET Minimal API)
-> over localhost, which reuses the `SwebKit.Core`/`.Azure`/`.Kubernetes`/`.Redis`/`.Agents`
-> libraries described below. Read `docs/architecture/codebase-guide.md` alongside this file and
-> treat legacy MAUI-only sections below this notice as reference, not the current runtime picture.
+> **Primary-stack notice (2026-08-01, updated 2026-09-18):** this document describes the legacy
+> .NET MAUI Blazor Hybrid app. Tauri + React is now the primary stack — and the MAUI app is
+> **legacy**, kept in-repo as reference/backup only. The primary stack is a Tauri (Rust) shell
+> (`src-tauri/`) wrapping a React SPA (`web/`), talking to a local .NET "sidecar" HTTP server
+> (`src-sidecar/`, ASP.NET Minimal API) over localhost, which reuses the
+> `SwebKit.Core`/`.Azure`/`.Kubernetes`/`.Redis`/`.Agents` libraries described below.
+> `src/SwebKit.App/`, `src/SwebKit.WinUI/`, and `src/SwebKit.Agent.PocConsole/` are legacy
+> projects — do not modify them unless a task explicitly concerns the legacy stack. Read
+> `docs/architecture/codebase-guide.md` alongside this file and treat MAUI-only sections below
+> as reference for the legacy shell, not the current runtime picture.
 
 ## Mandate
 

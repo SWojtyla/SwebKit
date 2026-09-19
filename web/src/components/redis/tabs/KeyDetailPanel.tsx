@@ -4,6 +4,7 @@ import { formatTtl, parseTtl, getTtlColorClass } from "@/lib/redis-format";
 import { formatBytes } from "@/lib/format-bytes";
 import { useRedisPageContext } from "../RedisPageContext";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
+import { useScreenStateProvider } from "@/lib/stores/screen-state";
 
 // Exported so `KeyBrowserPanel` can reuse the same type→color mapping for the tree's type dot
 // (derived by swapping the `text-` prefix for `bg-`) instead of duplicating the color choices.
@@ -36,6 +37,26 @@ function TtlBar({ ttl }: { ttl: string | null }) {
 export function KeyDetailPanel() {
   const ctx = useRedisPageContext();
   const [askAiOpen, setAskAiOpen] = useState(false);
+
+  // Screen-state snapshot (agent-workspace-awareness M1) — bounded previews only; returns null
+  // when no key is selected so the fallback/page provider takes over.
+  useScreenStateProvider("redis-key-detail", "Redis", () => {
+    const info = ctx.keyInfo.data;
+    if (!info) return null;
+    return {
+      cacheId: ctx.activeCacheId,
+      key: info.key,
+      type: info.type,
+      ttl: info.ttl,
+      memoryBytes: info.memoryBytes,
+      encoding: info.encoding,
+      valuePreview: info.type === "string" ? (ctx.keyValue.data?.value?.slice(0, 200) ?? null) : null,
+      hashFieldCount: ctx.hashFields.data?.length ?? null,
+      hashFields: ctx.hashFields.data?.slice(0, 20).map((f) => ({ field: f.field, value: f.value?.slice(0, 100) })) ?? null,
+      listItemCount: ctx.listItems.length,
+      listItemsPreview: ctx.listItems.slice(0, 10).map((item) => (typeof item === "string" ? item.slice(0, 100) : item)),
+    };
+  }, [ctx.keyInfo.data, ctx.keyValue.data, ctx.hashFields.data, ctx.listItems, ctx.activeCacheId]);
 
   return (
     <div className="flex-1 overflow-auto" data-testid="redis-key-detail">

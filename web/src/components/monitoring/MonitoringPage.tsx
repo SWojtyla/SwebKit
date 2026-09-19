@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { Plus, AlertCircle } from "lucide-react";
 import { SkeletonRows } from "@/components/shared/Skeleton";
@@ -13,9 +13,9 @@ import {
   useProactiveInsightsFeed,
   useUpdateSearchParams,
 } from "../../lib/hooks";
-import { showNotification } from "../../lib/tauri-bridge";
 import { useNotification } from "../layout/NotificationSystem";
 import { useAgentConversationStore } from "../../lib/stores/agent-conversation";
+import { useScreenStateProvider } from "../../lib/stores/screen-state";
 import { AlertRuleGroups } from "./AlertRuleGroups";
 import { AlertRuleDialog } from "./AlertRuleDialog";
 import { AlertHistoryPanel } from "./AlertHistoryPanel";
@@ -46,8 +46,10 @@ export function MonitoringPage() {
   const updateParams = useUpdateSearchParams();
   const activeTab: "rules" | "history" =
     searchParams.get("tab") === "history" ? "history" : "rules";
-  const setActiveTab = (tab: "rules" | "history") =>
-    updateParams({ tab: tab === "rules" ? null : tab });
+  const setActiveTab = useCallback(
+    (tab: "rules" | "history") => updateParams({ tab: tab === "rules" ? null : tab }),
+    [updateParams],
+  );
   const [showEditor, setShowEditor] = useState(false);
   const [editingRule, setEditingRule] = useState<MonitoringAlertRule | null>(null);
 
@@ -65,7 +67,7 @@ export function MonitoringPage() {
         navigate(location.pathname, { replace: true, state: null });
       }
     }
-  }, [location, rules, navigate]);
+  }, [location, rules, navigate, setActiveTab]);
   // Live status dots, derived from a synthetic evaluation event merged in from the stream + history.
   const [statuses, setStatuses] = useState<Record<string, AlertSignalStatus>>({});
   const [liveEvents, setLiveEvents] = useState<AlertFiredEvent[]>([]);
@@ -77,17 +79,38 @@ export function MonitoringPage() {
     setCollapsedGroups((c) => ({ ...c, [group]: !c[group] }));
   const [showAllInsights, setShowAllInsights] = useState(false);
 
-  // Subscribe to the SSE stream: push fired events into history + raise notifications, and surface
-  // any background proactive investigation that completes (workspace-intelligence Module 4).
+  // Subscribe to the SSE stream: push fired events into history and surface any background
+  // proactive investigation that completes (workspace-intelligence Module 4). OS + in-app
+  // notifications live in AppLayout's always-mounted subscription (agent-workspace-awareness
+  // M3) — toasting here too would double-notify, since each subscription sees every event.
   useMonitoringStream(
     (evt) => {
       setLiveEvents((prev) => [evt, ...prev].slice(0, 200));
       setStatuses((s) => ({ ...s, [evt.ruleId]: "Firing" }));
-      void showNotification(evt.ruleName, evt.message);
-      notify(evt.severity === "Critical" ? "error" : "success", evt.ruleName, evt.message);
     },
-    addInsight,
+    (insight) => addInsight(insight),
   );
+
+  // Screen-state snapshot (agent-workspace-awareness M1) — which rules are on screen and
+  // what's firing right now.
+  useScreenStateProvider("monitoring-page", undefined, () => ({
+    activeTab,
+    rules: rules.slice(0, 30).map((r) => ({
+      name: r.name,
+      source: r.source,
+      severity: r.severity,
+      enabled: r.enabled,
+      aiInvestigation: r.aiInvestigationEnabled,
+      status: statuses[r.id] ?? null,
+      lastFiredAt: r.lastFiredAt ?? null,
+    })),
+    ruleCount: rules.length,
+    recentFirings: liveEvents.slice(0, 10).map((e) => ({
+      ruleName: e.ruleName,
+      severity: e.severity,
+      firedAt: e.firedAt,
+    })),
+  }), [rules, statuses, liveEvents, activeTab]);
 
   const investigateInsight = (insight: ProactiveInsightReadyEvent) => {
     // Reuses the global agent conversation rather than opening a separate "view this session"

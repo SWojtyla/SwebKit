@@ -10,20 +10,24 @@ namespace SwebKit.Sidecar.Services;
 /// <summary>Pushed once a background proactive investigation completes — workspace-intelligence
 /// Module 4. <see cref="RuleId"/>+<see cref="FiredAt"/> together are the same composite identity the
 /// originating <see cref="AlertFiredEvent"/> has, so the frontend can de-dup a dismissed insight
-/// against the firing event it came from.</summary>
+/// against the firing event it came from. <see cref="Evidence"/> carries the investigation's
+/// factual findings (agent-workspace-awareness Module 2) — null/empty for the legacy single-shot
+/// fallback path, so older frontends simply render nothing extra.</summary>
 public sealed record ProactiveInsightReadyEvent(
     string RuleId,
     DateTimeOffset FiredAt,
     string RuleName,
     string Summary,
-    string SessionId);
+    string SessionId,
+    IReadOnlyList<string>? Evidence = null);
 
 /// <summary>
 /// Subscribes to <see cref="MonitoringAlertEvaluationService.AlertFired"/> (workspace-intelligence
 /// Module 4) and, when a fired rule's resource maps to a node in the user-curated workspace
-/// topology, kicks off a fire-and-forget background investigation via the same
-/// <c>investigate_workspace_issue</c> tool Module 3 built, then asks the model for a one-line
-/// hypothesis. Never blocks alert evaluation: <see cref="OnAlertFired"/> only schedules a
+/// topology, kicks off a fire-and-forget background investigation via
+/// <see cref="ProactiveInvestigationRunner"/> — a bounded model-driven loop (agent-workspace-
+/// awareness Module 2). If the runner can't produce a result it falls back to the original
+/// single-shot <c>investigate_workspace_issue</c> call + one-line summary. Never blocks alert evaluation: <see cref="OnAlertFired"/> only schedules a
 /// <see cref="Task.Run(Func{Task})"/> and returns immediately, and the whole thing fails silently
 /// (logged, not thrown) if anything goes wrong — a broken proactive-insight pipeline must never take
 /// the alert engine down with it.
@@ -44,6 +48,7 @@ public sealed class ProactiveInsightService
     private readonly IAgentModelClient _modelClient;
     private readonly UserSettingsRepository _settings;
     private readonly SidecarAgentChatService _chatService;
+    private readonly ProactiveInvestigationRunner _investigationRunner;
     private readonly ILogger<ProactiveInsightService> _logger;
     private int _busy;
 
@@ -57,6 +62,7 @@ public sealed class ProactiveInsightService
         IAgentModelClient modelClient,
         UserSettingsRepository settings,
         SidecarAgentChatService chatService,
+        ProactiveInvestigationRunner investigationRunner,
         ILogger<ProactiveInsightService> logger)
     {
         _rules = rules;
@@ -65,6 +71,7 @@ public sealed class ProactiveInsightService
         _modelClient = modelClient;
         _settings = settings;
         _chatService = chatService;
+        _investigationRunner = investigationRunner;
         _logger = logger;
 
         engine.AlertFired += OnAlertFired;
@@ -98,6 +105,14 @@ public sealed class ProactiveInsightService
             if (rule is null)
                 return; // rule was deleted between firing and now — nothing to correlate against
 
+            if (!rule.AiInvestigationEnabled)
+            {
+                _logger.LogInformation(
+                    "Skipped proactive insight for rule {RuleId} ({RuleName}) — AI investigation is disabled on this rule.",
+                    evt.RuleId, evt.RuleName);
+                return;
+            }
+
             var start = FindStartingResource(rule);
             if (start is null)
                 return; // this rule's source type isn't one we know how to map to a topology node
@@ -110,19 +125,48 @@ public sealed class ProactiveInsightService
             if (startNode is null)
                 return; // the fired rule's resource isn't on the Map yet — nothing declared to correlate
 
-            var reportJson = await _toolRegistry.ExecuteAsync(
-                "investigate_workspace_issue",
-                BuildArgs(new { area = start.Value.Area.ToString(), resource_hint = start.Value.Hint }),
-                CancellationToken.None);
+            // agent-workspace-awareness Module 2: prefer the bounded model-driven investigation
+            // (the model picks its own read-only evidence path across the workspace). When it
+            // can't produce a result — budget exceeded, empty response — fall back to the Module 4
+            // single-shot topology walk + one-line summary so an alert still yields an insight.
+            ProactiveInvestigationResult? result = null;
+            try
+            {
+                result = await _investigationRunner.InvestigateAsync(
+                    evt, $"{start.Value.Area}/{start.Value.Hint}", CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Model-driven investigation for rule {RuleId} ({RuleName}) failed — falling back to the single-shot path.",
+                    evt.RuleId, evt.RuleName);
+            }
 
-            var summary = await SummarizeAsync(evt, reportJson);
-            if (string.IsNullOrWhiteSpace(summary))
-                return; // summarization failed — a missing insight is fine, a garbled one is not
+            string summary;
+            string reportJson;
+            IReadOnlyList<string>? evidence = null;
+            if (result is not null)
+            {
+                summary = result.Hypothesis;
+                reportJson = BuildReportJson(result);
+                evidence = result.Evidence;
+            }
+            else
+            {
+                reportJson = await _toolRegistry.ExecuteAsync(
+                    "investigate_workspace_issue",
+                    BuildArgs(new { area = start.Value.Area.ToString(), resource_hint = start.Value.Hint }),
+                    CancellationToken.None);
+
+                summary = await SummarizeAsync(evt, reportJson) ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(summary))
+                    return; // summarization failed — a missing insight is fine, a garbled one is not
+            }
 
             var sessionId = $"proactive-{evt.RuleId}-{evt.FiredAt.ToUnixTimeMilliseconds()}";
             _chatService.SeedProactiveInsightSession(sessionId, evt.RuleName, evt.Message, reportJson, summary);
 
-            InsightReady?.Invoke(new ProactiveInsightReadyEvent(evt.RuleId, evt.FiredAt, evt.RuleName, summary, sessionId));
+            InsightReady?.Invoke(new ProactiveInsightReadyEvent(evt.RuleId, evt.FiredAt, evt.RuleName, summary, sessionId, evidence));
         }
         catch (Exception ex)
         {
@@ -175,6 +219,21 @@ public sealed class ProactiveInsightService
 
         _ => null,
     };
+
+    /// <summary>Serializes a <see cref="ProactiveInvestigationResult"/> into the report JSON the
+    /// seeded session carries — the structured fields plus the tool audit trail, but not
+    /// <see cref="ProactiveInvestigationResult.RawText"/> (the same content in raw form, which the
+    /// parsed fields already cover).</summary>
+    private static string BuildReportJson(ProactiveInvestigationResult result) =>
+        JsonSerializer.Serialize(new
+        {
+            hypothesis = result.Hypothesis,
+            evidence = result.Evidence,
+            severity = result.Severity,
+            suggested_next_steps = result.SuggestedNextSteps,
+            tools_used = result.ToolsUsed,
+            hit_max_rounds = result.HitMaxRounds,
+        });
 
     private static JsonElement BuildArgs(object obj) => JsonSerializer.SerializeToDocument(obj).RootElement;
 }

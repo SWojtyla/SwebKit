@@ -630,13 +630,16 @@ pub async fn show_notification(
     title: String,
     body: String,
 ) -> Result<(), String> {
-    use tauri_plugin_dialog::DialogExt;
-    // Use dialog as a simple notification fallback
-    app.dialog()
-        .message(body)
+    use tauri_plugin_notification::NotificationExt;
+    // Real OS toast (Windows action center / macOS / linux notify) — the previous
+    // implementation was a blocking MessageBox, which froze the webview and
+    // looked nothing like a notification.
+    app.notification()
+        .builder()
         .title(title)
-        .blocking_show();
-    Ok(())
+        .body(body)
+        .show()
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

@@ -14,6 +14,7 @@ function baseRule(overrides: Partial<MonitoringAlertRule> = {}): MonitoringAlert
     aksPodParams: null,
     serviceBusParams: null,
     redisAlertParams: null,
+    aiInvestigationEnabled: true,
     ...overrides,
   };
 }

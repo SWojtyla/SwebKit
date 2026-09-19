@@ -70,7 +70,13 @@ public sealed class AgentToolCallOrchestrator
             // Redis/Storage/etc. tools are — a contextual AKS conversation should still be able to
             // pull in Application Insights context for the pod it's looking at, not just when the
             // (nonexistent) "Observability" area happens to be the active one.
-            tools = tools.Where(t => t.FeatureArea == area || t.FeatureArea == FeatureArea.Observability);
+            // get_screen_state is exempt for the same reason (agent-workspace-awareness D4): it
+            // reads UI state, not area data — a feature-scoped panel must still be able to ask
+            // what's on its own screen.
+            tools = tools.Where(t =>
+                t.FeatureArea == area
+                || t.FeatureArea == FeatureArea.Observability
+                || t.Name == GetScreenStateTool.ToolName);
         }
 
         return tools.ToList();

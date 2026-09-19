@@ -87,6 +87,40 @@ All components live in `web/src/components/monitoring/`.
 | `AlertRuleRow.tsx`        | Single rule row with live status dot, enable/disable, edit/delete   |
 | `AlertRuleDialog.tsx`     | Source-aware create/edit form (AKS / Service Bus / Redis inputs)    |
 | `AlertHistoryPanel.tsx`   | Live alert firing history (seeded from history + SSE), with snooze  |
+| `ProactiveInsightCard.tsx`| Completed background AI investigation: hypothesis + evidence bullets |
+
+## Proactive AI investigation (agent-workspace-awareness)
+
+Each rule carries `AiInvestigationEnabled` (default `true`, editable in
+`AlertRuleDialog` and shown as an AI badge on `AlertRuleRow`). When a qualifying
+rule fires and its resource maps onto a workspace-topology node,
+`ProactiveInsightService` runs a bounded headless investigation through
+`ProactiveInvestigationRunner` (workspace-scope, ask-mode tools only; 5 tool
+rounds + 90s budget; single-flight globally). The structured result —
+hypothesis, evidence, severity, next steps — seeds a chat session and flows to
+the UI as `proactiveInsightReady` on the monitoring SSE stream.
+
+OS + in-app notifications for both `alertFired` and `proactiveInsightReady`
+live in `AppLayout`'s always-mounted subscription — the single notification
+site — so they reach the user while the app is minimized or on another page,
+and can never double-toast from parallel page-level subscriptions. OS toasts
+go through `tauri-plugin-notification` (real Windows action-center toasts);
+in-app toasts funnel into the notification center's history (unread badge,
+mark-read/mark-all-read/dismiss-all, deep links to `/monitoring`).
+
+The agent can also propose new rules: `propose_create_alert_rule`
+(`FeatureArea.Monitoring`, Mutate) registers a pending action; on user
+confirmation `MonitoringActionExecutor` (src-sidecar) upserts through
+`IAlertRuleRepository` and calls `ReloadRulesAsync`, so the rule evaluates on
+its next interval — same path as the REST endpoints.
+
+Monitoring also exposes read tools so the agent can see the alert landscape
+itself during an investigation: `list_alert_rules` (SwebKit.Agents, over
+`IAlertRuleRepository` — every rule's source/target/severity/AI flag/last
+fired) and `get_alert_history` (src-sidecar, over the engine's `RecentAlerts`
+ring buffer — recent firings with rule/source/severity/message). Both are
+Read/None and visible in workspace scope, which is what lets a proactive
+investigation distinguish a single failure from an alert storm.
 
 ## Connection Pool
 

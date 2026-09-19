@@ -113,6 +113,18 @@ export interface StreamAgentChatBody {
   scope?: AgentChatScope;
 }
 
+/** Publish payload for POST /api/agent/screen-state — see lib/stores/screen-state.ts. */
+export interface ScreenStatePublishBody {
+  route: string;
+  featureArea?: string;
+  capturedAt: string;
+  snapshot: unknown;
+}
+
+export async function postScreenState(body: ScreenStatePublishBody): Promise<void> {
+  return apiSend<void>("/api/agent/screen-state", "POST", body);
+}
+
 /**
  * Posts to the streaming agent chat endpoint and invokes `onEvent` for each
  * {@link AgentStreamEvent} as it arrives, in order — one call per SSE `data:` line.
@@ -246,6 +258,9 @@ export interface MonitoringAlertRule {
   aksPodParams?: AksPodAlertParams | null;
   serviceBusParams?: ServiceBusAlertParams | null;
   redisAlertParams?: RedisAlertParams | null;
+  /** When true (default), a firing triggers a background AI investigation that posts a
+   * proactive insight. Old persisted rules without the field deserialize to true. */
+  aiInvestigationEnabled: boolean;
   lastEvaluatedAt?: string | null;
   lastFiredAt?: string | null;
 }
@@ -270,6 +285,9 @@ export interface ProactiveInsightReadyEvent {
   ruleName: string;
   summary: string;
   sessionId: string;
+  /** Factual findings from the multi-step investigation (agent-workspace-awareness Module 2).
+   * Absent/empty on the legacy single-shot fallback path. */
+  evidence?: string[];
 }
 
 export async function getMonitoringRules(signal?: AbortSignal): Promise<MonitoringAlertRule[]> {

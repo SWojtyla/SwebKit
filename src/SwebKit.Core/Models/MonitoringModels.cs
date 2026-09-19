@@ -28,6 +28,10 @@ public sealed class MonitoringAlertRule
     public ServiceBusAlertParams? ServiceBusParams { get; set; }
     public RedisAlertParams? RedisAlertParams { get; set; }
     public StorageAlertParams? StorageParams { get; set; }
+    /// <summary>When true (default), a firing of this rule triggers a background proactive
+    /// investigation (ProactiveInsightService). Default true preserves the pre-flag
+    /// auto-investigate behavior; rules persisted before the flag existed deserialize to true.</summary>
+    public bool AiInvestigationEnabled { get; set; } = true;
     public DateTimeOffset? LastEvaluatedAt { get; set; }
     public DateTimeOffset? LastFiredAt { get; set; }
 }
