@@ -638,6 +638,10 @@ export interface VariableGeneratorDefinition {
     decimalPlaces?: number;
     trueWeightPercent?: number | null;
     fakerCategory?: string | null;
+    /** Optional ISO lower bound (inclusive) for date.* faker categories. */
+    fakerDateAfter?: string | null;
+    /** Optional ISO upper bound (inclusive) for date.* faker categories. */
+    fakerDateBefore?: string | null;
     values?: string[];
 }
 

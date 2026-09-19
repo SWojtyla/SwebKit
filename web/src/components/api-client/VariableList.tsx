@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Wand2 } from "lucide-react";
 import { GeneratorConfig } from "./GeneratorConfig";
-import { previewKeyVaultSecret } from "@/lib/api";
+import { previewCredential, previewKeyVaultSecret, saveCredential, deleteCredential } from "@/lib/api";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import type { VariableGeneratorDefinition, KeyVaultEntry } from "@/lib/types";
 
@@ -107,7 +107,9 @@ export function VariableList({
     if (!variable.credentialKey) return;
     setPreviews((prev) => ({ ...prev, [variable.id]: { status: "loading", message: "Checking…" } }));
     try {
-      const result = await previewKeyVaultSecret(variable.keyVaultName ?? null, variable.credentialKey);
+      const result = variable.mode === "credential"
+        ? await previewCredential(variable.credentialKey)
+        : await previewKeyVaultSecret(variable.keyVaultName ?? null, variable.credentialKey);
       setPreviews((prev) => ({
         ...prev,
         [variable.id]: {
@@ -221,8 +223,19 @@ export function VariableList({
             </button>
           </div>
 
-          {(v.mode === "keyvault" || (v.mode === "generated" && v.generator)) && (
+          {(v.mode === "keyvault" || v.mode === "credential" || (v.mode === "generated" && v.generator)) && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
+              {v.mode === "credential" && (
+                <CredentialField
+                  variable={v}
+                  index={index}
+                  onChange={(patch) => updateVariable(v.id, patch)}
+                  onPreview={() => handlePreview(v)}
+                  preview={previews[v.id]}
+                  testIdPrefix={testIdPrefix}
+                />
+              )}
+
               {v.mode === "keyvault" && (
                 <KeyVaultField
                   variable={v}
@@ -329,6 +342,110 @@ function KeyVaultField({ variable, index, keyVaults, onChange, onPreview, previe
       >
         {isLoading ? "…" : "Preview"}
       </button>
+    </div>
+  );
+}
+
+interface CredentialFieldProps {
+  variable: VariableListItem;
+  index: number;
+  onChange: (patch: Partial<VariableListItem>) => void;
+  onPreview: () => void;
+  preview?: PreviewState;
+  testIdPrefix: string;
+}
+
+const CREDENTIAL_KEY_PREFIX = "sw-secret:";
+
+// Secret Store variables resolve through the sidecar's ICredentialStore at send time —
+// the same store these helpers write to. The key stays editable so a pre-existing OS
+// credential can still be referenced; the value field is the missing half that lets a
+// user actually put a secret behind it (saved debounced, like the auth panel's secret).
+function CredentialField({ variable, index, onChange, onPreview, preview, testIdPrefix }: CredentialFieldProps) {
+  const { notify } = useNotification();
+  const [secretInput, setSecretInput] = useState("");
+  const [saved, setSaved] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef(secretInput);
+  useEffect(() => {
+    inputRef.current = secretInput;
+  }, [secretInput]);
+
+  const key = variable.credentialKey ?? "";
+  // A freshly generated key lands via onChange on the *next* render — the debounced
+  // persist reads it through the ref so the first save isn't silently skipped.
+  const keyRef = useRef(key);
+  useEffect(() => {
+    keyRef.current = key;
+  }, [key]);
+
+  async function persist() {
+    const value = inputRef.current;
+    const k = keyRef.current;
+    if (!k) return;
+    try {
+      if (value === "") {
+        await deleteCredential(k);
+        setSaved(false);
+      } else {
+        await saveCredential(k, value);
+        setSaved(true);
+      }
+    } catch (ex) {
+      notify("error", "Couldn't store secret", ex instanceof Error ? ex.message : "Save failed");
+    }
+  }
+
+  const handleSecretChange = (value: string) => {
+    setSecretInput(value);
+    // The key is what gets persisted with the environment; generate one lazily so the
+    // user only ever types a secret and never has to invent a storage key themselves.
+    if (!key) {
+      const generated = `${CREDENTIAL_KEY_PREFIX}${crypto.randomUUID()}`;
+      keyRef.current = generated;
+      onChange({ credentialKey: generated });
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void persist(), 1000);
+  };
+
+  const handleBlur = () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    void persist();
+  };
+
+  const isLoading = preview?.status === "loading";
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <input
+        type="password"
+        value={secretInput}
+        onChange={(e) => handleSecretChange(e.target.value)}
+        onBlur={handleBlur}
+        placeholder={saved || key ? "Saved — type to replace" : "Secret value"}
+        autoComplete="new-password"
+        className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
+        data-testid={`${testIdPrefix}-secret-${index}`}
+      />
+      <button
+        onClick={onPreview}
+        disabled={!key || isLoading}
+        title={isLoading ? "Loading…" : !key ? "No credential key yet" : "Check the key exists in the credential store"}
+        className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+        data-testid={`${testIdPrefix}-preview-btn-${index}`}
+      >
+        {isLoading ? "…" : "Preview"}
+      </button>
+      <span
+        className={`text-xs ${saved ? "text-success" : "text-muted-foreground"}`}
+        data-testid={`${testIdPrefix}-secret-state-${index}`}
+      >
+        {saved ? "Stored in credential store" : "Stored in your OS credential store under this key"}
+      </span>
     </div>
   );
 }

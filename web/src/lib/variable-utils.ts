@@ -147,6 +147,9 @@ export function isLikelySecret(key: string): boolean {
     lower.includes("token") ||
     lower.includes("apikey") ||
     lower.includes("api_key") ||
+    // Matches IsLikelySecret in ApiClientWorkflowService — a variable named
+    // *authorization* must be masked in the preview exactly like the backend masks it.
+    lower.includes("authorization") ||
     lower.includes("credential") ||
     lower.includes("private")
   );

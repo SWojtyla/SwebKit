@@ -57,6 +57,20 @@ public static class ApiClientEndpoints
             IKeyVaultSecretResolver resolver,
             CancellationToken cancellationToken) => PreviewKeyVaultSecretAsync(req, resolver, cancellationToken));
 
+        // Environment-variable "Secret Store" values live in the OS credential store
+        // (ICredentialStore) — the same store VariableSubstitutionService resolves
+        // WindowsCredentialStore variables from at send time. These endpoints are the only
+        // in-app write path; without them the variable editor could name a key but never
+        // put a value behind it, so {{var}} resolved to null and went out literally.
+        app.MapPost("/api/api-client/credentials", (SaveCredentialRequest req, ICredentialStore store) =>
+            SaveCredential(req, store));
+
+        app.MapDelete("/api/api-client/credentials/{key}", (string key, ICredentialStore store) =>
+            DeleteCredential(key, store));
+
+        app.MapPost("/api/api-client/preview-credential", (PreviewCredentialRequest req, ICredentialStore store) =>
+            PreviewCredential(req, store));
+
         app.MapPost("/api/api-client/evaluate-jsonpath", EvaluateJsonPathAsync);
     }
 
@@ -119,6 +133,36 @@ public static class ApiClientEndpoints
         }
 
         return Results.Ok(new KeyVaultPreviewResponse("ok", MaskSecret(raw), null));
+    }
+
+    /// <summary>Named for unit testing — writes a secret into the OS credential store under the
+    /// given key, the same store <see cref="VariableSubstitutionService"/> resolves
+    /// WindowsCredentialStore environment variables from at send time.</summary>
+    internal static IResult SaveCredential(SaveCredentialRequest req, ICredentialStore store)
+    {
+        if (string.IsNullOrWhiteSpace(req.Key))
+            return ApiErrors.BadRequest("Credential key is required.");
+        store.Save(req.Key, req.Secret ?? string.Empty);
+        return Results.Ok(new { saved = true });
+    }
+
+    internal static IResult DeleteCredential(string key, ICredentialStore store)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return ApiErrors.BadRequest("Credential key is required.");
+        store.Delete(key);
+        return Results.Ok(new { deleted = true });
+    }
+
+    /// <summary>Existence check + masked preview. Never returns the raw secret.</summary>
+    internal static IResult PreviewCredential(PreviewCredentialRequest req, ICredentialStore store)
+    {
+        if (string.IsNullOrWhiteSpace(req.Key))
+            return ApiErrors.BadRequest("Credential key is required.");
+        var value = store.Get(req.Key);
+        return Results.Ok(value is null
+            ? new KeyVaultPreviewResponse("error", null, "No credential found under that key.")
+            : new KeyVaultPreviewResponse("ok", MaskSecret(value), null));
     }
 
     /// <summary>
@@ -194,6 +238,10 @@ public sealed record ApiClientExecutionResponse(
 public sealed record ResponseHeaderDto(string Name, string Value);
 
 public sealed record PreviewKeyVaultSecretRequest(string? KeyVaultName, string SecretName);
+
+public sealed record SaveCredentialRequest(string Key, string? Secret);
+
+public sealed record PreviewCredentialRequest(string Key);
 
 public sealed record KeyVaultPreviewResponse(
     string Status,

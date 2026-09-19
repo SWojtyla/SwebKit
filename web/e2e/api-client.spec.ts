@@ -506,7 +506,7 @@ test.describe("API Client", () => {
     const fakerInput = page.getByTestId("col-var-0-generator-input");
     await expect(fakerInput).toHaveJSProperty("tagName", "SELECT");
     const fakerOptionCount = await fakerInput.locator("option").count();
-    expect(fakerOptionCount).toBe(24);
+    expect(fakerOptionCount).toBe(25);
     await expect(page.getByTestId("col-var-0-generator-help")).toContainText("category you pick below");
 
     const kindOptions = await page.getByTestId("col-var-0-generator-kind").locator("option").allTextContents();

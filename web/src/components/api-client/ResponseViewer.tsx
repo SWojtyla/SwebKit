@@ -237,7 +237,7 @@ export function ResponseViewer({
         )}
       </div>
 
-      {/* Capture warnings */}
+      {/* Send warnings (unresolved variables, failed capture rules) */}
       {response.captureWarnings && response.captureWarnings.length > 0 && (
         <div
           className="border-b p-3"
@@ -246,7 +246,7 @@ export function ResponseViewer({
         >
           <div className="flex items-center gap-2 text-xs font-medium" style={{ color: "var(--warning)" }}>
             <AlertCircle className="h-4 w-4" />
-            Capture warnings
+            Warnings
           </div>
           <ul className="mt-1 list-inside list-disc text-xs" style={{ color: "var(--warning)" }}>
             {response.captureWarnings.map((w, i) => (

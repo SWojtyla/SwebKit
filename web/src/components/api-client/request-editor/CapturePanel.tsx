@@ -118,7 +118,7 @@ export function CapturePanel({
       </button>
       {captureWarnings.length > 0 && (
         <div className="mt-3 border-t pt-2" data-testid="capture-warnings">
-          <div className="mb-1 text-xs font-medium" style={{ color: "var(--warning)" }}>Capture warnings</div>
+          <div className="mb-1 text-xs font-medium" style={{ color: "var(--warning)" }}>Warnings</div>
           {captureWarnings.map((w, i) => (
             <div key={i} className="text-xs" style={{ color: "var(--warning)" }}>{w}</div>
           ))}

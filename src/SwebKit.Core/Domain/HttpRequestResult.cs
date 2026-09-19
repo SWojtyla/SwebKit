@@ -76,8 +76,9 @@ public sealed class HttpRequestResult
     // ── Capture warnings ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// Non-empty when one or more post-request capture rules failed to match.
-    /// Each entry is a human-readable message describing the failure.
+    /// Non-empty when something about the send deserves a warning: post-request capture rules that
+    /// failed to match, or <c>{{variable}}</c> tokens that resolved to nothing and went out literally.
+    /// Each entry is a human-readable message describing the issue.
     /// </summary>
     public IReadOnlyList<string> CaptureWarnings { get; set; } = [];
 

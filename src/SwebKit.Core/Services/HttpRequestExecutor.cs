@@ -41,6 +41,7 @@ public sealed class HttpRequestExecutor(
         // Build the URL (with query params merged in)
         var url = UrlBuilder.Build(request, scope, substitution);
 
+        IReadOnlyList<string> unresolvedWarnings = [];
         var sw = Stopwatch.StartNew();
         try
         {
@@ -55,6 +56,12 @@ public sealed class HttpRequestExecutor(
             // handed to the socket, so it is the only place that sees auth headers and the body's
             // content headers together.
             var sentHeaders = CollectSentHeaders(httpRequest);
+
+            // Scan the fully-substituted wire image: any {{token}} still present means the
+            // variable resolved to nothing (typical cause: a credential-store variable whose
+            // key has no saved value) and is about to go out literally — warn instead of
+            // failing silently downstream.
+            unresolvedWarnings = await CollectUnresolvedVariableWarningsAsync(url, sentHeaders, request.Body.Mode == RequestBodyMode.Binary ? null : httpRequest.Content, cancellationToken).ConfigureAwait(false);
 
             using var response = await client.SendAsync(
                 httpRequest,
@@ -72,8 +79,9 @@ public sealed class HttpRequestExecutor(
 
             // Apply post-request capture rules (mutates collection/environment in place)
             var captureWarnings = await captureExecutor.ExecuteAsync(result, request, collection, activeEnvironment, cancellationToken).ConfigureAwait(false);
-            if (captureWarnings.Count > 0)
-                result.CaptureWarnings = captureWarnings;
+            var allWarnings = unresolvedWarnings.Concat(captureWarnings).ToList();
+            if (allWarnings.Count > 0)
+                result.CaptureWarnings = allWarnings;
 
             return result;
         }
@@ -87,8 +95,58 @@ public sealed class HttpRequestExecutor(
                 Method = request.Method.ToString().ToUpperInvariant(),
                 Elapsed = sw.Elapsed,
                 ErrorMessage = ex.Message,
+                CaptureWarnings = unresolvedWarnings,
             };
         }
+    }
+
+    /// <summary>Same token shape as <see cref="VariableSubstitutionService"/> — kept local because the
+    /// scan runs on the post-substitution wire image, not through the substitution service itself.</summary>
+    private static readonly System.Text.RegularExpressions.Regex LeftoverTokenPattern = new(
+        @"\{\{([^{}]+?)\}\}",
+        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>Finds <c>{{token}}</c> occurrences that survived substitution in the URL, the sent
+    /// headers (post-auth), or the body — i.e. variables with no definition or a null resolution —
+    /// and returns one warning per distinct token.</summary>
+    private static async Task<IReadOnlyList<string>> CollectUnresolvedVariableWarningsAsync(
+        string resolvedUrl,
+        IReadOnlyList<(string Name, string Value)> sentHeaders,
+        HttpContent? content,
+        CancellationToken cancellationToken)
+    {
+        var tokens = new HashSet<string>(StringComparer.Ordinal);
+        void Scan(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            foreach (System.Text.RegularExpressions.Match m in LeftoverTokenPattern.Matches(text))
+            {
+                tokens.Add(m.Groups[1].Value.Trim());
+            }
+        }
+
+        Scan(resolvedUrl);
+        foreach (var (name, value) in sentHeaders)
+        {
+            Scan(name);
+            Scan(value);
+        }
+
+        // Binary file bodies are excluded by the caller (content == null): they're potentially
+        // large and can't carry tokens anyway. Everything else (string, form data, GraphQL JSON)
+        // is buffered and small — still capped defensively.
+        if (content is not null)
+        {
+            var length = content.Headers.ContentLength;
+            if (length is null or <= 1024 * 1024)
+            {
+                Scan(await content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+            }
+        }
+
+        return tokens
+            .Select(t => $"Variable '{t}' could not be resolved — '{{{{{t}}}}}' was sent literally in the request.")
+            .ToList();
     }
 
     /// <summary>Request headers plus the content headers, which live on separate collections.</summary>
