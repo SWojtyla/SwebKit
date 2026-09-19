@@ -176,6 +176,15 @@ const staticCommandPaletteItems: CommandPaletteItem[] = [
         state: { tab: "storage" },
     },
     {
+        id: "settings-api-client",
+        type: "nav",
+        label: "API Client Settings",
+        keywords: "settings api client http request ssl key vault secrets",
+        icon: Code2,
+        to: "/settings",
+        state: { tab: "api-client" },
+    },
+    {
         id: "settings-agent",
         type: "nav",
         label: "AI Agent Settings",

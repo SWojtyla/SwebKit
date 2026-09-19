@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { Plus, Trash2, Wand2 } from "lucide-react";
 import { GeneratorConfig } from "./GeneratorConfig";
 import { previewCredential, previewKeyVaultSecret, saveCredential, deleteCredential } from "@/lib/api";
@@ -309,9 +310,14 @@ function KeyVaultField({ variable, index, keyVaults, onChange, onPreview, previe
   return (
     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
       {keyVaults.length === 0 ? (
-        <span className="text-xs text-muted-foreground" data-testid={`${testIdPrefix}-no-vaults-${index}`}>
-          No vaults configured
-        </span>
+        <Link
+          to="/settings"
+          state={{ tab: "api-client" }}
+          className="text-xs text-primary underline underline-offset-2"
+          data-testid={`${testIdPrefix}-no-vaults-${index}`}
+        >
+          No vaults configured — add one in API Client settings
+        </Link>
       ) : (
         <select
           value={variable.keyVaultName ?? ""}

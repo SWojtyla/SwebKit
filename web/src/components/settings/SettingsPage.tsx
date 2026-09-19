@@ -11,6 +11,7 @@ import { AksSettings } from "./AksSettings";
 import { RedisSettings } from "./RedisSettings";
 import { SqlSettings } from "./SqlSettings";
 import { StorageSettings } from "./StorageSettings";
+import { ApiClientSettings } from "./ApiClientSettings";
 import { AgentSettings } from "./AgentSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
@@ -24,6 +25,7 @@ const tabs = [
     { id: "redis", label: "Redis" },
     { id: "sql", label: "SQL" },
     { id: "storage", label: "Storage" },
+    { id: "api-client", label: "API Client" },
     { id: "agent", label: "AI Agent" },
     { id: "map", label: "Map" },
     { id: "diagnostics", label: "Diagnostics" },
@@ -164,6 +166,7 @@ export function SettingsPage() {
                     {activeTab === "redis" && <RedisSettings />}
                     {activeTab === "sql" && <SqlSettings />}
                     {activeTab === "storage" && <StorageSettings />}
+                    {activeTab === "api-client" && <ApiClientSettings />}
                     {activeTab === "agent" && <AgentSettings />}
                     {activeTab === "map" && <WorkspaceMapSettings />}
                     {activeTab === "diagnostics" && <DiagnosticsSettings />}

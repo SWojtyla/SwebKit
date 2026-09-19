@@ -296,6 +296,7 @@ test.describe("API Client", () => {
 
     // Configure a Key Vault in Settings so the picker has something to list.
     await page.goto("/settings");
+    await page.getByTestId("settings-tab-api-client").click();
     await expect(page.getByTestId("key-vaults-section")).toBeVisible();
     const existingVaultCount = await page.locator('[data-testid^="kv-name-"]').count();
     await Promise.all([saveProfile(), page.getByTestId("kv-add").click()]);
@@ -311,6 +312,7 @@ test.describe("API Client", () => {
     // Reload and confirm the vault persisted before moving on, so the environment editor's fetch
     // below can't race the save.
     await page.reload();
+    await page.getByTestId("settings-tab-api-client").click();
     await expect(page.getByTestId(`kv-name-${existingVaultCount}`)).toHaveValue(uniqueVaultName);
 
     await page.goto("/api-client");
@@ -346,6 +348,7 @@ test.describe("API Client", () => {
 
     // Removing the vault in Settings takes it out of the list.
     await page.goto("/settings");
+    await page.getByTestId("settings-tab-api-client").click();
     await expect(page.getByTestId("key-vaults-section")).toBeVisible();
     const countBeforeRemove = await page.locator('[data-testid^="kv-name-"]').count();
     await page.getByTestId(`kv-remove-${existingVaultCount}`).click();

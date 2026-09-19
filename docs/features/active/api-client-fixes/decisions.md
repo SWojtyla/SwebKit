@@ -133,3 +133,18 @@ cache to roll over.
 - The MAUI host read the setting once at handler creation; in the sidecar
   (long-lived process, settings edited over HTTP) that would have looked
   like a dead toggle.
+
+## D11 — Dedicated "API Client" settings tab hosts the feature's settings + Key Vaults
+
+**Chosen:** a new `api-client` settings tab (`ApiClientSettings.tsx`) holds the
+request toggles (`verifyApiClientSsl`, `apiClientRequestTabs`,
+`autoSaveRequests`) and the Azure Key Vault list, moved out of General settings.
+
+- Every other feature already has its own settings tab; API Client was the only
+  one buried inside General — and the environment editor's "No vaults
+  configured" hint now deep-links here.
+- `profile.config.keyVaults` stays the persisted source of truth; the tab is a
+  UI move only. The vault list is API-Client-facing today (env-var secret
+  resolution); if another feature needs it later, the component can be lifted.
+- No readiness dot: key vaults are optional, so "not configured" isn't a
+  degraded state worth signaling.

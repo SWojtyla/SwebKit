@@ -89,7 +89,12 @@
 - `npm run test:unit` — 480 green
 - `npm run build` — clean
 - Playwright — all 45 api-client specs green (`api-client`,
-  `api-client-variables`, `api-client-credentials`, `api-client-generators`)
+  `api-client-variables`, `api-client-credentials`, `api-client-generators`);
+  settings tab move re-verified via `settings.spec.ts` + `api-client.spec.ts`
+  (57 green)
+- Dedicated "API Client" settings tab (D11): request toggles + Key Vault list
+  moved out of General; command-palette deep-link; env editor's empty-vault
+  hint links to the new tab
 - Aikido MCP scan — unavailable in this environment (pending)
 
 ## Non-goals (documented)
