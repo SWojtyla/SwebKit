@@ -12,7 +12,7 @@ Use this skill for every SwebKit React/Tauri feature, fix, or MAUI-parity change
 ## Before writing code
 
 1. Read `docs/README.md` and `docs/features/README.md` for the feature model.
-2. Open or create `docs/features/active/<feature>/index.md` and `technical-plan.md` per the repo's documentation rules.
+2. Open or create `docs/features/active/<feature>.md` (the single plan file) per the repo's documentation rules.
 3. List acceptance criteria that explicitly cover:
    - empty, loading, error, and single-item states
    - values with special characters (`/`, spaces, unicode, URL-encoded chars) in resource names or IDs

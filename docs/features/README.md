@@ -1,31 +1,30 @@
 # Feature Catalog
 
-This folder is the canonical feature-first map for implementation work.
+This folder tracks in-flight implementation work — **one plan file per feature**, nothing more.
 
-## Current Structure
+Plan files are the shared intent record: any tool or later session reads them to know what's being built and why. Session-native planning (plan mode, conversation) produces the content; this file persists it.
 
-- `docs/features/active/` — features currently being implemented or awaiting a final pass.
-- `docs/features/archive/` — durable summaries and historical feature records.
+## Structure
 
-Active features:
+- `docs/features/active/<feature>.md` — a single plan file per active feature.
+- No `archive/`. When a feature ships: fold durable learnings into
+  `docs/pitfalls/` or `docs/architecture/`, delete the plan file, and remove its
+  line from this catalog. Git history preserves the full record.
 
-- `agent-workspace-awareness/` — screen-state snapshots for the agent (pull-via-tool) + multi-step proactive investigation depth.
+## Active features
 
-## Folder Contract
+_(none)_
 
-An active feature folder contains:
+## Plan file contract
 
-- `index.md` — scope, outcomes, dependencies, and source traceability
-- `technical-plan.md` — detailed technical plan with implementation tasks
-- `test-plan.md` — feature-level test scope and scenarios
-- `status.md` — lifecycle state and validation results
+An active feature file is a single Markdown document containing:
 
-## Status Values
+- `State:` — exactly one of `Proposed`, `Planned`, `In Progress`, `Review`, `Done`
+- Goal, scope, non-goals
+- Implementation tasks (checklist)
+- Test plan
+- Validation results
+- Decisions — only when non-obvious tradeoffs were made; omit the section otherwise
 
-Use exactly one of: `Proposed`, `Planned`, `In Progress`, `Review`, `Done`, `Archived`.
-
-## Traceability Contract
-
-- Links must resolve inside `docs/features/` or current supporting architecture documentation.
-- Feature documents must not depend on retired phase-era or global plan-era files.
-- New implementation updates are recorded in the relevant feature folder first.
+Keep it to one file and keep it honest — update `State` and the checklist as work
+proceeds. If a section isn't needed, omit it rather than leaving a stub.
