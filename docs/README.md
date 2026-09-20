@@ -5,24 +5,23 @@ This is the canonical starting point for SwebKit documentation.
 ## Recommended Reading Order
 
 1. `docs/README.md` (this file)
-2. `docs/features/README.md` (feature catalog and order)
-3. `docs/architecture/architecture.md` and `docs/architecture/design.md` (supporting product context)
-4. `docs/MIGRATION-NOTES.md` (what was removed and why)
+2. `docs/context.md` — global orientation: stack, directory map, conventions, commands
+3. `docs/features/README.md` — active feature catalog
+4. `docs/architecture/index.md` — routes you to the deep dives relevant to the task
+5. `docs/pitfalls/` — read the file for the stack you're touching before non-trivial changes
 
 ## Documentation Model
 
-SwebKit docs are feature-first and self-contained. Planning and testing details live with each feature under `docs/features/`.
+Feature docs are **working memory**: one `docs/features/active/<feature>.md` per
+in-flight feature, deleted at close-out after durable learnings are folded into
+`docs/pitfalls/` or `docs/architecture/`. Long-lived knowledge lives in
+`docs/context.md`, `docs/architecture/`, and `docs/pitfalls/` — not in
+per-feature folders or archives.
 
 ## Canonical Sources
 
+- Global context: `docs/context.md`
 - Feature catalog: `docs/features/README.md`
-- Feature scope and dependencies: `docs/features/*/index.md`
-- Feature implementation tasks: `docs/features/*/technical-plan.md`
-- Feature test scope and scenarios: `docs/features/*/test-plan.md`
-- Supporting product context: `docs/architecture/architecture.md`, `docs/architecture/design.md`
-
-## Traceability Rules
-
-- Every feature folder must contain `index.md`, `technical-plan.md`, and `test-plan.md`.
-- Every feature document must link to current feature-first sources, not retired phase-era docs.
-- New implementation updates are recorded in feature docs first.
+- Architecture router: `docs/architecture/index.md`
+- Pitfalls index: `docs/pitfalls/index.md`
+- History: `docs/MIGRATION-NOTES.md`
