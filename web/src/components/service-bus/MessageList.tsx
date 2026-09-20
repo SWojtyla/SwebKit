@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Search, Filter, X, Columns, Pin, Plus, RotateCw, Check, AlertCircle, ArrowUpRight, Bookmark, Download, Loader2, RefreshCw } from "lucide-react";
-import { useSbCompleteMessages, useSbCompleteDlq, useSbResubmitDlq } from "@/lib/hooks";
+import { Search, Filter, X, Columns, Pin, Plus, RotateCw, Check, AlertCircle, ArrowUpRight, Bookmark, CopyPlus, Download, Loader2, RefreshCw } from "lucide-react";
+import { useSbCompleteMessages, useSbCompleteDlq, useSbResubmitDlq, useSbResendMessages } from "@/lib/hooks";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
@@ -10,6 +10,7 @@ import { useNotification } from "@/components/layout/NotificationSystem";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { messageToDownloadObject, safeFileName, messageKey as sbMessageKey } from "./exportHelpers";
+import { cloneForResend, sendableEntityPath } from "./resendHelpers";
 import { applyFilters, hasActiveFilters } from "./filterLogic";
 import { AdvancedFilterPanel } from "./AdvancedFilterPanel";
 import type { AdvancedFilterRule } from "./filterTypes";
@@ -239,8 +240,12 @@ export function MessageList({
   const completeMutation = useSbCompleteMessages();
   const completeDlqMutation = useSbCompleteDlq();
   const resubmitDlqMutation = useSbResubmitDlq();
+  const resendMutation = useSbResendMessages();
   const [pendingBulkConfirm, setPendingBulkConfirm] = useState<
-    { kind: "complete" | "resubmit"; seqNumbers: number[] } | null
+    | { kind: "complete"; seqNumbers: number[] }
+    | { kind: "resubmit"; seqNumbers: number[] }
+    | { kind: "resend"; messages: SbMessage[] }
+    | null
   >(null);
 
   const handleBulkComplete = useCallback(() => {
@@ -263,21 +268,45 @@ export function MessageList({
     setPendingBulkConfirm({ kind: "resubmit", seqNumbers });
   }, [nsId, entity, selectedMsgs, messages]);
 
+  // Resend clones the selected peeked messages with fresh MessageIds and sends
+  // them back as copies — the originals stay put (unlike Resubmit, which moves
+  // DLQ messages). Cloning happens here, at click time, so the confirmed
+  // payload is frozen even if the list refreshes before confirm.
+  const handleBulkResend = useCallback(() => {
+    if (!nsId || !entity || selectedMsgs.size === 0) return;
+    const selected = messages.filter((m) => selectedMsgs.has(sbMessageKey(m)));
+    if (selected.length === 0) return;
+    setPendingBulkConfirm({ kind: "resend", messages: selected.map(cloneForResend) });
+  }, [nsId, entity, selectedMsgs, messages]);
+
   const runPendingBulkConfirm = useCallback(() => {
     if (!nsId || !entity || !pendingBulkConfirm) return;
-    const { kind, seqNumbers } = pendingBulkConfirm;
-    if (kind === "complete") {
-      if (viewMode === "active") {
-        completeMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers });
-      } else {
-        completeDlqMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers.map(String) });
-      }
+    if (pendingBulkConfirm.kind === "resend") {
+      const clones = pendingBulkConfirm.messages;
+      resendMutation.mutate(
+        {
+          nsId,
+          entityPath: sendableEntityPath(entity),
+          refreshEntityPath: entity.entityPath,
+          messages: clones,
+        },
+        { onSuccess: () => notify("success", `Resent ${clones.length} message(s) as new copies`) },
+      );
     } else {
-      resubmitDlqMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers.map(String), targetEntityPath: null });
+      const { kind, seqNumbers } = pendingBulkConfirm;
+      if (kind === "complete") {
+        if (viewMode === "active") {
+          completeMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers });
+        } else {
+          completeDlqMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers.map(String) });
+        }
+      } else {
+        resubmitDlqMutation.mutate({ nsId, entityPath: entity.entityPath, sequenceNumbers: seqNumbers.map(String), targetEntityPath: null });
+      }
     }
     setSelectedMsgs(new Set());
     setPendingBulkConfirm(null);
-  }, [nsId, entity, viewMode, pendingBulkConfirm, completeMutation, completeDlqMutation, resubmitDlqMutation]);
+  }, [nsId, entity, viewMode, pendingBulkConfirm, completeMutation, completeDlqMutation, resubmitDlqMutation, resendMutation, notify]);
 
   const toggleSelect = (msg: SbMessage) => {
     const key = sbMessageKey(msg);
@@ -788,6 +817,21 @@ export function MessageList({
             {selectedMsgs.size === filteredMessages.length ? "Deselect all" : "Select all"}
           </button>
           <div className="ml-auto flex items-center gap-1.5">
+            {/* Resend is copy semantics — originals stay — so unlike Resubmit it
+                applies to active messages too, not just the DLQ. */}
+            <button
+              onClick={handleBulkResend}
+              disabled={resendMutation.isPending}
+              title={
+                resendMutation.isPending
+                  ? "Resending…"
+                  : "Send a copy of each selected message with a new Message ID — originals are kept"
+              }
+              className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+              data-testid="bulk-resend"
+            >
+              <CopyPlus className="h-3 w-3" /> Resend
+            </button>
             {viewMode === "dlq" && (
               <button
                 onClick={handleBulkResubmit}
@@ -823,9 +867,17 @@ export function MessageList({
           message={
             pendingBulkConfirm.kind === "complete"
               ? `Complete ${pendingBulkConfirm.seqNumbers.length} message(s)?`
-              : `Resubmit ${pendingBulkConfirm.seqNumbers.length} message(s)?`
+              : pendingBulkConfirm.kind === "resubmit"
+                ? `Resubmit ${pendingBulkConfirm.seqNumbers.length} message(s)?`
+                : `Send a copy of ${pendingBulkConfirm.messages.length} message(s) to ${entity ? sendableEntityPath(entity) : ""}? Originals stay in place — each copy gets a new Message ID.`
           }
-          confirmLabel={pendingBulkConfirm.kind === "complete" ? "Complete" : "Resubmit"}
+          confirmLabel={
+            pendingBulkConfirm.kind === "complete"
+              ? "Complete"
+              : pendingBulkConfirm.kind === "resubmit"
+                ? "Resubmit"
+                : "Resend"
+          }
           onConfirm={runPendingBulkConfirm}
           onCancel={() => setPendingBulkConfirm(null)}
           testId="bulk-action-confirm"

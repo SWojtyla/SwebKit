@@ -254,7 +254,7 @@ test.describe("Service Bus", () => {
 
     await page.getByTestId("sb-compose-button").click();
     await expect(page.getByTestId("message-composer")).toBeVisible();
-    await expect(page.getByTestId("composer-title")).toContainText("Compose");
+    await expect(page.getByTestId("composer-panel")).toContainText("Compose Message");
 
     // Close
     await page.getByTestId("composer-close").click();
@@ -367,6 +367,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
     await page.getByTestId("entity-tree-queue-order-created").click();
 
+    await page.getByTestId("sb-actions-menu").click();
     await page.getByTestId("sb-batch-send-button").click();
     await expect(page.getByTestId("batch-send-panel")).toBeVisible();
 
@@ -392,6 +393,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
     await page.getByTestId("entity-tree-queue-order-created").click();
 
+    await page.getByTestId("sb-actions-menu").click();
     await page.getByTestId("sb-batch-send-button").click();
     await expect(page.getByTestId("batch-send-panel")).toBeVisible();
 
@@ -411,6 +413,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
     await page.getByTestId("entity-tree-queue-order-created").click();
 
+    await page.getByTestId("sb-actions-menu").click();
     await page.getByTestId("sb-scheduled-button").click();
     await expect(page.getByTestId("scheduled-messages-panel")).toBeVisible();
     await expect(page.getByTestId("scheduled-title")).toContainText("order-created");
@@ -523,6 +526,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
     await page.getByTestId("entity-tree-queue-order-failed").click();
 
+    await page.getByTestId("sb-actions-menu").click();
     await page.getByTestId("sb-batch-replay-button").click();
     await expect(page.getByTestId("batch-replay-panel")).toBeVisible();
 
@@ -593,6 +597,7 @@ test.describe("Service Bus", () => {
     await page.getByTestId("composer-send").click();
     await expect(page.getByTestId("message-composer")).not.toBeVisible();
 
+    await page.getByTestId("sb-actions-menu").click();
     await page.getByTestId("sb-scheduled-button").click();
     await expect(page.getByTestId("scheduled-messages-panel")).toBeVisible();
 
@@ -603,5 +608,135 @@ test.describe("Service Bus", () => {
     await expect(page.getByTestId("scheduled-cancel-confirm")).toBeVisible();
     await page.getByTestId("scheduled-cancel-confirm-yes").click();
     await expect(page.getByTestId("scheduled-cancel-confirm")).not.toBeVisible();
+  });
+
+  test("bulk resend asks for confirmation, then sends copies without removing originals", async ({ page }) => {
+    // Resend is copy semantics (fresh Message ID, source kept) — the "GUID gets
+    // regenerated" feature request — unlike Resubmit, which moves DLQ messages.
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+    await expect(page.getByTestId("message-list")).toBeVisible();
+
+    await page.getByTestId("message-checkbox-4501").check();
+    await page.getByTestId("message-checkbox-4502").check();
+
+    await page.getByTestId("bulk-resend").click();
+    const confirm = page.getByTestId("bulk-action-confirm");
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText("Send a copy of 2 message(s) to order-created");
+
+    // Cancel first — nothing is sent while the bar is up.
+    await page.getByTestId("bulk-action-confirm-cancel").click();
+    await expect(confirm).not.toBeVisible();
+    await expect(page.getByTestId("bulk-action-bar")).toBeVisible();
+
+    // Confirming sends the copies and clears the selection.
+    await page.getByTestId("bulk-resend").click();
+    await page.getByTestId("bulk-action-confirm-yes").click();
+    await expect(page.getByTestId("bulk-action-confirm")).not.toBeVisible();
+    await expect(page.getByTestId("bulk-action-bar")).not.toBeVisible();
+    // Originals are still listed — resend never completes/removes the source.
+    await expect(page.getByTestId("message-item-4501")).toBeVisible();
+    await expect(page.getByTestId("message-item-4502")).toBeVisible();
+  });
+
+  test("bulk resend is also available on dead-letter messages", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+    await page.getByTestId("sb-view-dlq").click();
+    await expect(page.getByTestId("message-list")).toBeVisible();
+
+    await page.getByTestId("message-checkbox-4410").check();
+    await page.getByTestId("bulk-resend").click();
+    const confirm = page.getByTestId("bulk-action-confirm");
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText("Send a copy of 1 message(s) to order-created");
+    await page.getByTestId("bulk-action-confirm-yes").click();
+    await expect(confirm).not.toBeVisible();
+    // The DLQ original stays — resend is a copy, not a resubmit/move.
+    await expect(page.getByTestId("message-item-4410")).toBeVisible();
+  });
+
+  test("replay composer starts with a fresh message id and can restore the original", async ({ page }) => {
+    // Replay used to silently reuse the source MessageId — under duplicate
+    // detection the resend was dropped without any signal. It now generates a
+    // new GUID and offers an explicit "restore original" escape hatch.
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+    await page.getByTestId("entity-tree-queue-order-created").click();
+
+    await page.getByTestId("message-item-4501").click();
+    await expect(page.getByTestId("message-detail")).toBeVisible();
+    await page.getByTestId("message-replay").click();
+
+    await expect(page.getByTestId("composer-panel")).toBeVisible();
+    const idInput = page.getByTestId("composer-message-id");
+    const freshId = await idInput.inputValue();
+    expect(freshId).not.toBe("oc-001");
+    expect(freshId).toMatch(/^[0-9a-f-]{36}$/i);
+
+    // Regenerate produces another fresh GUID.
+    await page.getByTestId("composer-regenerate-id").click();
+    const regenerated = await idInput.inputValue();
+    expect(regenerated).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(regenerated).not.toBe(freshId);
+
+    // Restore puts the source id back.
+    await page.getByTestId("composer-restore-id").click();
+    await expect(idInput).toHaveValue("oc-001");
+  });
+
+  test("templates manager lists, creates, duplicates and deletes templates", async ({ page }) => {
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+
+    await page.getByTestId("sb-templates-button").click();
+    await expect(page.getByTestId("template-manager")).toBeVisible();
+
+    // Create a new template in the editor pane.
+    await page.getByTestId("template-new").click();
+    await page.getByTestId("template-edit-name").fill("Manager E2E Template");
+    await page.getByTestId("template-edit-body").fill('{"fromManager": true}');
+    await page.getByTestId("template-save").click();
+    await expect(page.getByTestId("template-editor-error")).not.toBeVisible();
+
+    // It shows up in the list, filtered by search.
+    const item = page.locator("[data-testid^='template-item-']").filter({ hasText: "Manager E2E Template" });
+    await expect(item).toBeVisible({ timeout: 10000 });
+    await page.getByTestId("template-search").fill("Manager E2E");
+    await expect(item).toBeVisible();
+
+    // Duplicate it — a "(copy)" row appears.
+    const dupButton = item.locator("[data-testid^='template-duplicate-']");
+    await dupButton.click();
+    await expect(
+      page.locator("[data-testid^='template-item-']").filter({ hasText: "Manager E2E Template (copy)" }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Delete requires confirmation.
+    const copyItem = page.locator("[data-testid^='template-item-']").filter({ hasText: "(copy)" });
+    await copyItem.locator("[data-testid^='template-delete-']").click();
+    await expect(page.getByTestId("template-delete-confirm")).toBeVisible();
+    await page.getByTestId("template-delete-confirm-yes").click();
+    await expect(
+      page.locator("[data-testid^='template-item-']").filter({ hasText: "Manager E2E Template (copy)" }),
+    ).not.toBeVisible();
+  });
+
+  test("namespace overview summarizes the namespace and jumps to DLQ backlog", async ({ page }) => {
+    // Replaces the bare "Select an entity" placeholder.
+    await page.goto("/service-bus");
+    await page.getByTestId("sb-namespace-select").selectOption({ label: "orders-dev" });
+
+    await expect(page.getByTestId("sb-namespace-overview")).toBeVisible();
+    await expect(page.getByTestId("sb-overview-title")).toContainText("orders-dev");
+
+    // order-created carries dead-letter backlog — clicking it jumps straight to
+    // the entity's DLQ view.
+    await page.getByTestId("sb-overview-dlq-order-created").click();
+    await expect(page.getByTestId("message-list")).toBeVisible();
+    await expect(page.getByTestId("sb-view-dlq")).toHaveClass(/border-primary/);
   });
 });

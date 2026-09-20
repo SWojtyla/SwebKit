@@ -235,6 +235,32 @@ export function useSbBatchSend() {
   });
 }
 
+/**
+ * Batch resend with copy semantics: sends already-peeked message clones
+ * (fresh MessageId each — see `cloneForResend`) through the existing
+ * batch-send endpoint. Unlike DLQ resubmit, the originals are never touched.
+ *
+ * `refreshEntityPath` differs from `entityPath` when the selection is a
+ * subscription: the send must target the parent topic, but the list being
+ * viewed — and therefore the queries to invalidate — is the subscription's.
+ */
+export function useSbResendMessages() {
+  const qc = useQueryClient();
+  const { notify } = useNotification();
+  return useMutation({
+    mutationFn: (vars: { nsId: string; entityPath: string; messages: SbMessage[]; refreshEntityPath?: string }) =>
+      apiSend<{ sent: number }>(
+        `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/batch-send`,
+        "POST",
+        vars.messages,
+      ),
+    onSuccess: (_data, vars) => {
+      invalidateServiceBusQueries(qc, vars.nsId, vars.refreshEntityPath ?? vars.entityPath);
+    },
+    onError: (error) => notify("error", "Couldn't resend messages", String(error)),
+  });
+}
+
 export function useSbScheduledMessages(nsId: string | null, entityPath: string | null) {
   return useQuery({
     queryKey: ["sb-scheduled", nsId, entityPath],
