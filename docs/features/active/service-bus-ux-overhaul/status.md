@@ -70,7 +70,7 @@ State: `Review`
 - [x] `cd web && npx playwright test e2e/service-bus*.spec.ts` — 34/34 pass,
       including 5 new tests: bulk resend (active + DLQ), fresh-GUID replay,
       templates manager CRUD, namespace overview
-- [ ] Full `npx playwright test` sweep — not run (scoped to service-bus specs)
+- [x] Full `npx playwright test` sweep — 357/357 pass
 - [ ] Manual Tauri-window check for any drag interactions (Playwright can't
       catch `dragDropEnabled` issues)
 - [ ] Aikido MCP scan — server not configured in this session; needs a run
