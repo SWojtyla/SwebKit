@@ -9,6 +9,7 @@ This folder is the canonical feature-first map for implementation work.
 
 Active features:
 
+- `aks-multi-context-alerting/` — per-rule kubeconfig context pinning for AKS alert sources.
 - `agent-workspace-awareness/` — screen-state snapshots for the agent (pull-via-tool) + multi-step proactive investigation depth.
 - `api-client-fixes/` — secret-store variable resolution and bounded faker dates.
 - `service-bus-ux-overhaul/` — batch resend with regenerated MessageIds, composer as resizable side panel, templates manager, toolbar/overview declutter.

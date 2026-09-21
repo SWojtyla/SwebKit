@@ -5,19 +5,21 @@
 // fetches — it can't be a one-shot module-load constant anymore.
 import { getSidecarPort } from "./tauri-bridge";
 import type {
-  AgentChatContext,
-  AgentChatMode,
-  AgentChatScope,
-  AgentStreamEvent,
-  CollectionImportResult,
-  RedisKeyspaceHealthReport,
-  RedisPrefixMemoryBucket,
-  RedisPubSubSnapshot,
+    AgentChatContext,
+    AgentChatMode,
+    AgentChatScope,
+    AgentStreamEvent,
+    CollectionImportResult,
+    RedisKeyspaceHealthReport,
+    RedisPrefixMemoryBucket,
+    RedisPubSubSnapshot,
 } from "./types";
 
 let SIDECAR_BASE_URL = (() => {
-  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-  return env?.VITE_SIDECAR_URL ?? "http://localhost:5199";
+    const env = (
+        import.meta as ImportMeta & { env?: Record<string, string | undefined> }
+    ).env;
+    return env?.VITE_SIDECAR_URL ?? "http://localhost:5199";
 })();
 
 /// Resolves the real sidecar port from Tauri (production: OS-assigned; dev:
@@ -25,13 +27,13 @@ let SIDECAR_BASE_URL = (() => {
 /// (plain browser dev mode keeps the static default above). Must be awaited
 /// before the app renders anything that calls `apiFetch`/`apiSend`.
 export async function initSidecarBaseUrl(): Promise<void> {
-  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
-    return;
-  }
-  const port = await getSidecarPort();
-  if (port) {
-    SIDECAR_BASE_URL = `http://127.0.0.1:${port}`;
-  }
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+        return;
+    }
+    const port = await getSidecarPort();
+    if (port) {
+        SIDECAR_BASE_URL = `http://127.0.0.1:${port}`;
+    }
 }
 
 /**
@@ -39,19 +41,23 @@ export async function initSidecarBaseUrl(): Promise<void> {
  * in shape: `{ error }` (custom BadRequest bodies), `{ detail }`/`{ title }` (ProblemDetails from
  * Results.Problem), or plain text — without this, callers surface the raw JSON blob to the user.
  */
-function extractErrorMessage(status: number, statusText: string, body: string): string {
-  if (body) {
-    try {
-      const parsed = JSON.parse(body);
-      const message = parsed?.error ?? parsed?.detail ?? parsed?.title;
-      if (typeof message === "string" && message.trim()) {
-        return message;
-      }
-    } catch {
-      // Not JSON — fall through to the raw body below.
+function extractErrorMessage(
+    status: number,
+    statusText: string,
+    body: string,
+): string {
+    if (body) {
+        try {
+            const parsed = JSON.parse(body);
+            const message = parsed?.error ?? parsed?.detail ?? parsed?.title;
+            if (typeof message === "string" && message.trim()) {
+                return message;
+            }
+        } catch {
+            // Not JSON — fall through to the raw body below.
+        }
     }
-  }
-  return body || statusText || `Request failed with status ${status}`;
+    return body || statusText || `Request failed with status ${status}`;
 }
 
 /**
@@ -64,65 +70,67 @@ function extractErrorMessage(status: number, statusText: string, body: string): 
  * already thread it, so aborting here really does stop the work server-side.
  */
 export async function apiFetch<T>(
-  path: string,
-  options?: RequestInit,
+    path: string,
+    options?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${SIDECAR_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
+    const res = await fetch(`${SIDECAR_BASE_URL}${path}`, {
+        ...options,
+        headers: {
+            "Content-Type": "application/json",
+            ...options?.headers,
+        },
+    });
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(extractErrorMessage(res.status, res.statusText, body));
-  }
+    if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(extractErrorMessage(res.status, res.statusText, body));
+    }
 
-  return res.json() as Promise<T>;
+    return res.json() as Promise<T>;
 }
 
 export async function apiSend<T>(
-  path: string,
-  method: "POST" | "PUT" | "PATCH" | "DELETE",
-  body?: unknown,
-  signal?: AbortSignal,
+    path: string,
+    method: "POST" | "PUT" | "PATCH" | "DELETE",
+    body?: unknown,
+    signal?: AbortSignal,
 ): Promise<T> {
-  const res = await fetch(`${SIDECAR_BASE_URL}${path}`, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal,
-  });
+    const res = await fetch(`${SIDECAR_BASE_URL}${path}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal,
+    });
 
-  if (!res.ok) {
+    if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(extractErrorMessage(res.status, res.statusText, text));
+    }
+
     const text = await res.text().catch(() => "");
-    throw new Error(extractErrorMessage(res.status, res.statusText, text));
-  }
-
-  const text = await res.text().catch(() => "");
-  return (text ? (JSON.parse(text) as T) : undefined) as T;
+    return (text ? (JSON.parse(text) as T) : undefined) as T;
 }
 
 export interface StreamAgentChatBody {
-  message: string;
-  sessionId?: string;
-  context?: AgentChatContext;
-  mode?: AgentChatMode;
-  scope?: AgentChatScope;
+    message: string;
+    sessionId?: string;
+    context?: AgentChatContext;
+    mode?: AgentChatMode;
+    scope?: AgentChatScope;
 }
 
 /** Publish payload for POST /api/agent/screen-state — see lib/stores/screen-state.ts. */
 export interface ScreenStatePublishBody {
-  route: string;
-  featureArea?: string;
-  capturedAt: string;
-  snapshot: unknown;
+    route: string;
+    featureArea?: string;
+    capturedAt: string;
+    snapshot: unknown;
 }
 
-export async function postScreenState(body: ScreenStatePublishBody): Promise<void> {
-  return apiSend<void>("/api/agent/screen-state", "POST", body);
+export async function postScreenState(
+    body: ScreenStatePublishBody,
+): Promise<void> {
+    return apiSend<void>("/api/agent/screen-state", "POST", body);
 }
 
 /**
@@ -138,77 +146,83 @@ export async function postScreenState(body: ScreenStatePublishBody): Promise<voi
  * rejects if the initial request itself fails (non-2xx, or aborted before any bytes arrive).
  */
 export async function streamAgentChat(
-  body: StreamAgentChatBody,
-  onEvent: (event: AgentStreamEvent) => void,
-  signal?: AbortSignal,
+    body: StreamAgentChatBody,
+    onEvent: (event: AgentStreamEvent) => void,
+    signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(`${SIDECAR_BASE_URL}/api/agent/chat/stream`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal,
-  });
+    const res = await fetch(`${SIDECAR_BASE_URL}/api/agent/chat/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+    });
 
-  if (!res.ok || !res.body) {
-    const text = await res.text().catch(() => "");
-    throw new Error(extractErrorMessage(res.status, res.statusText, text));
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    let separatorIndex: number;
-    while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
-      const record = buffer.slice(0, separatorIndex);
-      buffer = buffer.slice(separatorIndex + 2);
-
-      const dataLine = record.split("\n").find((line) => line.startsWith("data:"));
-      if (!dataLine) continue;
-      const json = dataLine.slice("data:".length).trim();
-      if (!json) continue;
-      onEvent(JSON.parse(json) as AgentStreamEvent);
+    if (!res.ok || !res.body) {
+        const text = await res.text().catch(() => "");
+        throw new Error(extractErrorMessage(res.status, res.statusText, text));
     }
-  }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let separatorIndex: number;
+        while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+            const record = buffer.slice(0, separatorIndex);
+            buffer = buffer.slice(separatorIndex + 2);
+
+            const dataLine = record
+                .split("\n")
+                .find((line) => line.startsWith("data:"));
+            if (!dataLine) continue;
+            const json = dataLine.slice("data:".length).trim();
+            if (!json) continue;
+            onEvent(JSON.parse(json) as AgentStreamEvent);
+        }
+    }
 }
 
 export function apiUpload<T>(
-  path: string,
-  file: File,
-  onProgress?: (percent: number) => void,
+    path: string,
+    file: File,
+    onProgress?: (percent: number) => void,
 ): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open("POST", `${SIDECAR_BASE_URL}${path}`);
-    request.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        onProgress?.(Math.round((event.loaded / event.total) * 100));
-      }
-    };
-    request.onerror = () => reject(new Error("Upload failed"));
-    request.onload = () => {
-      const body = request.responseText || "";
-      if (request.status < 200 || request.status >= 300) {
-        reject(new Error(`API ${request.status}: ${body || request.statusText}`));
-        return;
-      }
+    return new Promise((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("POST", `${SIDECAR_BASE_URL}${path}`);
+        request.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                onProgress?.(Math.round((event.loaded / event.total) * 100));
+            }
+        };
+        request.onerror = () => reject(new Error("Upload failed"));
+        request.onload = () => {
+            const body = request.responseText || "";
+            if (request.status < 200 || request.status >= 300) {
+                reject(
+                    new Error(
+                        `API ${request.status}: ${body || request.statusText}`,
+                    ),
+                );
+                return;
+            }
 
-      try {
-        resolve((body ? JSON.parse(body) : undefined) as T);
-      } catch {
-        reject(new Error("Upload returned invalid JSON"));
-      }
-    };
+            try {
+                resolve((body ? JSON.parse(body) : undefined) as T);
+            } catch {
+                reject(new Error("Upload returned invalid JSON"));
+            }
+        };
 
-    const form = new FormData();
-    form.append("file", file, file.name);
-    request.send(form);
-  });
+        const form = new FormData();
+        form.append("file", file, file.name);
+        request.send(form);
+    });
 }
 
 export { SIDECAR_BASE_URL };
@@ -216,269 +230,439 @@ export { SIDECAR_BASE_URL };
 // ── Monitoring ───────────────────────────────────────────────────────────────
 
 export type AlertRuleSource =
-  | "AksPodHealth"
-  | "AksPodRestartRate"
-  | "AksNamespaceHealthScore"
-  | "ServiceBusDlqDepth"
-  | "ServiceBusActiveDepth"
-  | "ServiceBusDeadSubscription"
-  | "RedisMemoryUsage"
-  | "RedisConnectedClients";
+    | "AksPodHealth"
+    | "AksPodRestartRate"
+    | "AksNamespaceHealthScore"
+    | "ServiceBusDlqDepth"
+    | "ServiceBusActiveDepth"
+    | "ServiceBusDeadSubscription"
+    | "RedisMemoryUsage"
+    | "RedisConnectedClients";
 
 export type AlertSeverity = "Warning" | "Critical";
 export type AlertSignalStatus = "Ok" | "Firing" | "Skipped" | "Error";
 
 export interface AksPodAlertParams {
-  namespace: string;
-  kubeconfigContext?: string;
-  restartThreshold?: number;
-  healthScoreThreshold?: number;
+    namespace: string;
+    kubeconfigContext?: string;
+    restartThreshold?: number;
+    healthScoreThreshold?: number;
 }
 
 export interface ServiceBusAlertParams {
-  namespaceConnectionAlias?: string;
-  entityPath?: string;
-  messageCountThreshold?: number;
+    namespaceConnectionAlias?: string;
+    entityPath?: string;
+    messageCountThreshold?: number;
 }
 
 export interface RedisAlertParams {
-  connectionAlias?: string;
-  memoryUsageThresholdPercent?: number;
-  clientCountLowerBound?: number;
+    connectionAlias?: string;
+    memoryUsageThresholdPercent?: number;
+    clientCountLowerBound?: number;
 }
 
 export interface MonitoringAlertRule {
-  id: string;
-  name: string;
-  enabled: boolean;
-  source: AlertRuleSource;
-  severity: AlertSeverity;
-  intervalSeconds: number;
-  cooldownMinutes: number;
-  aksPodParams?: AksPodAlertParams | null;
-  serviceBusParams?: ServiceBusAlertParams | null;
-  redisAlertParams?: RedisAlertParams | null;
-  /** When true (default), a firing triggers a background AI investigation that posts a
-   * proactive insight. Old persisted rules without the field deserialize to true. */
-  aiInvestigationEnabled: boolean;
-  lastEvaluatedAt?: string | null;
-  lastFiredAt?: string | null;
+    id: string;
+    name: string;
+    enabled: boolean;
+    source: AlertRuleSource;
+    severity: AlertSeverity;
+    intervalSeconds: number;
+    cooldownMinutes: number;
+    aksPodParams?: AksPodAlertParams | null;
+    serviceBusParams?: ServiceBusAlertParams | null;
+    redisAlertParams?: RedisAlertParams | null;
+    /** When true (default), a firing triggers a background AI investigation that posts a
+     * proactive insight. Old persisted rules without the field deserialize to true. */
+    aiInvestigationEnabled: boolean;
+    lastEvaluatedAt?: string | null;
+    lastFiredAt?: string | null;
 }
 
 export interface AlertFiredEvent {
-  ruleId: string;
-  ruleName: string;
-  source: AlertRuleSource;
-  severity: AlertSeverity;
-  message: string;
-  detail: string;
-  firedAt: string;
-  profileName: string;
+    ruleId: string;
+    ruleName: string;
+    source: AlertRuleSource;
+    severity: AlertSeverity;
+    message: string;
+    detail: string;
+    firedAt: string;
+    profileName: string;
+}
+
+/** Emitted after every rule evaluation so the UI can show each rule's real health —
+ * including Error/Skipped states that never produce an alertFired event. */
+export interface AlertEvaluatedEvent {
+    ruleId: string;
+    status: AlertSignalStatus;
+    evaluatedAt: string;
+    /** Failure/skipped reason when status is Error or Skipped. */
+    message?: string | null;
 }
 
 /** Pushed once a background proactive investigation completes (workspace-intelligence Module 4).
  * `ruleId`+`firedAt` together are the same composite identity the originating `AlertFiredEvent` has
  * — used to de-dup a dismissed insight against the firing event it came from. */
 export interface ProactiveInsightReadyEvent {
-  ruleId: string;
-  firedAt: string;
-  ruleName: string;
-  summary: string;
-  sessionId: string;
-  /** Factual findings from the multi-step investigation (agent-workspace-awareness Module 2).
-   * Absent/empty on the legacy single-shot fallback path. */
-  evidence?: string[];
+    ruleId: string;
+    firedAt: string;
+    ruleName: string;
+    summary: string;
+    sessionId: string;
+    /** Factual findings from the multi-step investigation (agent-workspace-awareness Module 2).
+     * Absent/empty on the legacy single-shot fallback path. */
+    evidence?: string[];
 }
 
-export async function getMonitoringRules(signal?: AbortSignal): Promise<MonitoringAlertRule[]> {
-  return apiFetch<MonitoringAlertRule[]>("/api/monitoring/rules", { signal });
+export async function getMonitoringRules(
+    signal?: AbortSignal,
+): Promise<MonitoringAlertRule[]> {
+    return apiFetch<MonitoringAlertRule[]>("/api/monitoring/rules", { signal });
 }
 
-export async function createMonitoringRule(rule: MonitoringAlertRule): Promise<MonitoringAlertRule> {
-  return apiSend<MonitoringAlertRule>("/api/monitoring/rules", "POST", rule);
+export async function createMonitoringRule(
+    rule: MonitoringAlertRule,
+): Promise<MonitoringAlertRule> {
+    return apiSend<MonitoringAlertRule>("/api/monitoring/rules", "POST", rule);
 }
 
-export async function updateMonitoringRule(rule: MonitoringAlertRule): Promise<MonitoringAlertRule> {
-  return apiSend<MonitoringAlertRule>(`/api/monitoring/rules/${rule.id}`, "PUT", rule);
+export async function updateMonitoringRule(
+    rule: MonitoringAlertRule,
+): Promise<MonitoringAlertRule> {
+    return apiSend<MonitoringAlertRule>(
+        `/api/monitoring/rules/${rule.id}`,
+        "PUT",
+        rule,
+    );
 }
 
 export async function deleteMonitoringRule(id: string): Promise<void> {
-  await apiSend<void>(`/api/monitoring/rules/${id}`, "DELETE");
+    await apiSend<void>(`/api/monitoring/rules/${id}`, "DELETE");
 }
 
-export async function getMonitoringHistory(signal?: AbortSignal): Promise<AlertFiredEvent[]> {
-  return apiFetch<AlertFiredEvent[]>("/api/monitoring/history", { signal });
+export async function getMonitoringHistory(
+    signal?: AbortSignal,
+): Promise<AlertFiredEvent[]> {
+    return apiFetch<AlertFiredEvent[]>("/api/monitoring/history", { signal });
 }
 
 export interface SbNamespaceListItem {
-  id: string;
-  alias: string;
-  fullyQualifiedNamespace: string;
+    id: string;
+    alias: string;
+    fullyQualifiedNamespace: string;
 }
 
 export interface RedisCacheListItem {
-  id: string;
-  displayName: string;
+    id: string;
+    displayName: string;
 }
 
 /** Returns the configured Service Bus namespaces (alias + id) for the alert entity picker. */
-export async function getServiceBusNamespaces(signal?: AbortSignal): Promise<SbNamespaceListItem[]> {
-  const data = await apiFetch<{ serviceBusNamespaces?: SbNamespaceListItem[] }>("/api/config/profiles", { signal });
-  return data.serviceBusNamespaces ?? [];
+export async function getServiceBusNamespaces(
+    signal?: AbortSignal,
+): Promise<SbNamespaceListItem[]> {
+    const data = await apiFetch<{
+        serviceBusNamespaces?: SbNamespaceListItem[];
+    }>("/api/config/profiles", { signal });
+    return data.serviceBusNamespaces ?? [];
 }
 
 /** Returns the configured Redis caches (displayName + id) for the alert connection picker. */
-export async function getRedisCaches(signal?: AbortSignal): Promise<RedisCacheListItem[]> {
-  const data = await apiFetch<{ config?: { redisConfig?: { caches?: RedisCacheListItem[] } } }>("/api/config/profiles", { signal });
-  return data.config?.redisConfig?.caches ?? [];
+export async function getRedisCaches(
+    signal?: AbortSignal,
+): Promise<RedisCacheListItem[]> {
+    const data = await apiFetch<{
+        config?: { redisConfig?: { caches?: RedisCacheListItem[] } };
+    }>("/api/config/profiles", { signal });
+    return data.config?.redisConfig?.caches ?? [];
 }
 
 // ── Redis mutations ────────────────────────────────────────────────────────────
 
-export async function setRedisHashField(cacheId: string, key: string, field: string, value: string): Promise<void> {
-  await apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/hash/field`, "POST", { field, value });
+export async function setRedisHashField(
+    cacheId: string,
+    key: string,
+    field: string,
+    value: string,
+): Promise<void> {
+    await apiSend(
+        `/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/hash/field`,
+        "POST",
+        { field, value },
+    );
 }
 
-export async function deleteRedisHashField(cacheId: string, key: string, field: string): Promise<void> {
-  await apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/hash/field/delete`, "POST", { field });
+export async function deleteRedisHashField(
+    cacheId: string,
+    key: string,
+    field: string,
+): Promise<void> {
+    await apiSend(
+        `/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/hash/field/delete`,
+        "POST",
+        { field },
+    );
 }
 
-export async function updateRedisSortedSetScore(cacheId: string, key: string, member: string, score: number): Promise<void> {
-  await apiSend(`/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/zset/score`, "POST", { member, score });
+export async function updateRedisSortedSetScore(
+    cacheId: string,
+    key: string,
+    member: string,
+    score: number,
+): Promise<void> {
+    await apiSend(
+        `/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/zset/score`,
+        "POST",
+        { member, score },
+    );
 }
 
-export async function exportRedisKeys(cacheId: string, keys: string[]): Promise<Record<string, unknown>> {
-  return apiSend<Record<string, unknown>>(`/api/redis/${cacheId}/keys/export`, "POST", { keys });
+export async function exportRedisKeys(
+    cacheId: string,
+    keys: string[],
+): Promise<Record<string, unknown>> {
+    return apiSend<Record<string, unknown>>(
+        `/api/redis/${cacheId}/keys/export`,
+        "POST",
+        { keys },
+    );
 }
 
 // ── Redis Pub/Sub snapshot ───────────────────────────────────────────────────
 
-export async function getRedisPubSubSnapshot(cacheId: string, pattern: string | null = null, signal?: AbortSignal): Promise<RedisPubSubSnapshot> {
-  const params = new URLSearchParams();
-  if (pattern) params.set("pattern", pattern);
-  const query = params.toString() ? `?${params.toString()}` : "";
-  return apiFetch<RedisPubSubSnapshot>(`/api/redis/${cacheId}/pubsub${query}`, { signal });
+export async function getRedisPubSubSnapshot(
+    cacheId: string,
+    pattern: string | null = null,
+    signal?: AbortSignal,
+): Promise<RedisPubSubSnapshot> {
+    const params = new URLSearchParams();
+    if (pattern) params.set("pattern", pattern);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return apiFetch<RedisPubSubSnapshot>(
+        `/api/redis/${cacheId}/pubsub${query}`,
+        { signal },
+    );
 }
 
 export async function analyzeRedisKeyspace(
-  cacheId: string,
-  keys: string[],
-  separator: string,
-  signal?: AbortSignal,
+    cacheId: string,
+    keys: string[],
+    separator: string,
+    signal?: AbortSignal,
 ): Promise<RedisKeyspaceHealthReport> {
-  return apiSend<RedisKeyspaceHealthReport>(`/api/redis/${cacheId}/health/analyze`, "POST", {
-    keys,
-    separator,
-  }, signal);
+    return apiSend<RedisKeyspaceHealthReport>(
+        `/api/redis/${cacheId}/health/analyze`,
+        "POST",
+        {
+            keys,
+            separator,
+        },
+        signal,
+    );
 }
 
 export async function getRedisPrefixMemory(
-  cacheId: string,
-  keys: string[],
-  separator: string,
-  signal?: AbortSignal,
+    cacheId: string,
+    keys: string[],
+    separator: string,
+    signal?: AbortSignal,
 ): Promise<RedisPrefixMemoryBucket[]> {
-  return apiSend<RedisPrefixMemoryBucket[]>(`/api/redis/${cacheId}/prefix-memory`, "POST", {
-    keys,
-    separator,
-  }, signal);
+    return apiSend<RedisPrefixMemoryBucket[]>(
+        `/api/redis/${cacheId}/prefix-memory`,
+        "POST",
+        {
+            keys,
+            separator,
+        },
+        signal,
+    );
 }
 
 // ── Settings import/export ─────────────────────────────────────────────────────
 
 export async function exportSettings(): Promise<unknown> {
-  return apiFetch<unknown>("/api/config/export");
+    return apiFetch<unknown>("/api/config/export");
 }
 
 export async function importSettings(bundle: unknown): Promise<void> {
-  return apiSend("/api/config/import", "POST", bundle);
+    return apiSend("/api/config/import", "POST", bundle);
 }
 
 // ── AKS mutations ────────────────────────────────────────────────────────────────
 
-export async function scaleHpa(ns: string, name: string, minReplicas: number, maxReplicas: number): Promise<void> {
-  return apiSend(`/api/aks/${encodeURIComponent(ns)}/hpas/${encodeURIComponent(name)}/scale`, "POST", { minReplicas, maxReplicas });
+export async function scaleHpa(
+    ns: string,
+    name: string,
+    minReplicas: number,
+    maxReplicas: number,
+): Promise<void> {
+    return apiSend(
+        `/api/aks/${encodeURIComponent(ns)}/hpas/${encodeURIComponent(name)}/scale`,
+        "POST",
+        { minReplicas, maxReplicas },
+    );
 }
 
 export async function deleteHpa(ns: string, name: string): Promise<void> {
-  return apiSend(`/api/aks/${encodeURIComponent(ns)}/hpas/${encodeURIComponent(name)}`, "DELETE");
+    return apiSend(
+        `/api/aks/${encodeURIComponent(ns)}/hpas/${encodeURIComponent(name)}`,
+        "DELETE",
+    );
 }
 
-export async function setHpaScalingEnabled(ns: string, name: string, enabled: boolean): Promise<void> {
-  return apiSend(`/api/aks/${encodeURIComponent(ns)}/hpas/${encodeURIComponent(name)}/scaling-enabled`, "POST", { enabled });
+export async function setHpaScalingEnabled(
+    ns: string,
+    name: string,
+    enabled: boolean,
+): Promise<void> {
+    return apiSend(
+        `/api/aks/${encodeURIComponent(ns)}/hpas/${encodeURIComponent(name)}/scaling-enabled`,
+        "POST",
+        { enabled },
+    );
 }
 
-export async function suspendCronJob(ns: string, name: string, suspend: boolean): Promise<void> {
-  return apiSend(`/api/aks/${encodeURIComponent(ns)}/cronjobs/${encodeURIComponent(name)}/suspend`, "POST", { suspend });
+export async function suspendCronJob(
+    ns: string,
+    name: string,
+    suspend: boolean,
+): Promise<void> {
+    return apiSend(
+        `/api/aks/${encodeURIComponent(ns)}/cronjobs/${encodeURIComponent(name)}/suspend`,
+        "POST",
+        { suspend },
+    );
 }
 
-export async function getHelmReleaseNotes(ns: string, release: string, signal?: AbortSignal): Promise<{ notes: string }> {
-  return apiFetch<{ notes: string }>(`/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/notes`, { signal });
+export async function getHelmReleaseNotes(
+    ns: string,
+    release: string,
+    signal?: AbortSignal,
+): Promise<{ notes: string }> {
+    return apiFetch<{ notes: string }>(
+        `/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/notes`,
+        { signal },
+    );
 }
 
-export async function getHelmReleaseManifest(ns: string, release: string, signal?: AbortSignal): Promise<{ manifest: string }> {
-  return apiFetch<{ manifest: string }>(`/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/manifest`, { signal });
+export async function getHelmReleaseManifest(
+    ns: string,
+    release: string,
+    signal?: AbortSignal,
+): Promise<{ manifest: string }> {
+    return apiFetch<{ manifest: string }>(
+        `/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/manifest`,
+        { signal },
+    );
 }
 
-export async function getAksResourceYaml(ns: string, kind: string, name: string): Promise<string> {
-  const response = await fetch(`${SIDECAR_BASE_URL}/api/aks/${encodeURIComponent(ns)}/yaml/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`);
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Failed to load YAML for ${kind}/${name}`);
-  }
-  return response.text();
+export async function getAksResourceYaml(
+    ns: string,
+    kind: string,
+    name: string,
+): Promise<string> {
+    const response = await fetch(
+        `${SIDECAR_BASE_URL}/api/aks/${encodeURIComponent(ns)}/yaml/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`,
+    );
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Failed to load YAML for ${kind}/${name}`);
+    }
+    return response.text();
 }
 
-export async function applyAksResourceYaml(ns: string, kind: string, name: string, yaml: string): Promise<void> {
-  return apiSend<void>(
-    `/api/aks/${encodeURIComponent(ns)}/yaml/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`,
-    "POST",
-    { yaml },
-  );
+export async function applyAksResourceYaml(
+    ns: string,
+    kind: string,
+    name: string,
+    yaml: string,
+): Promise<void> {
+    return apiSend<void>(
+        `/api/aks/${encodeURIComponent(ns)}/yaml/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`,
+        "POST",
+        { yaml },
+    );
 }
 
-export async function validateAksResourceYaml(ns: string, yaml: string): Promise<{ error?: string }> {
-  return apiSend<{ error?: string }>(`/api/aks/${encodeURIComponent(ns)}/yaml/validate`, "POST", { yaml });
+export async function validateAksResourceYaml(
+    ns: string,
+    yaml: string,
+): Promise<{ error?: string }> {
+    return apiSend<{ error?: string }>(
+        `/api/aks/${encodeURIComponent(ns)}/yaml/validate`,
+        "POST",
+        { yaml },
+    );
 }
 
 export interface KeyVaultPreviewResult {
-  status: "ok" | "error";
-  maskedValue: string | null;
-  error: string | null;
+    status: "ok" | "error";
+    maskedValue: string | null;
+    error: string | null;
 }
 
-export async function previewKeyVaultSecret(keyVaultName: string | null, secretName: string): Promise<KeyVaultPreviewResult> {
-  return apiSend<KeyVaultPreviewResult>("/api/api-client/preview-keyvault-secret", "POST", {
-    keyVaultName: keyVaultName || null,
-    secretName,
-  });
+export async function previewKeyVaultSecret(
+    keyVaultName: string | null,
+    secretName: string,
+): Promise<KeyVaultPreviewResult> {
+    return apiSend<KeyVaultPreviewResult>(
+        "/api/api-client/preview-keyvault-secret",
+        "POST",
+        {
+            keyVaultName: keyVaultName || null,
+            secretName,
+        },
+    );
 }
 
 // Environment-variable "Secret Store" values live in the OS credential store via the sidecar —
 // the same store the executor resolves WindowsCredentialStore variables from at send time.
-export async function saveCredential(key: string, secret: string): Promise<void> {
-  await apiSend("/api/api-client/credentials", "POST", { key, secret });
+export async function saveCredential(
+    key: string,
+    secret: string,
+): Promise<void> {
+    await apiSend("/api/api-client/credentials", "POST", { key, secret });
 }
 
 export async function deleteCredential(key: string): Promise<void> {
-  // Query param, not a route segment — a credential key containing '/' would 404 otherwise.
-  await apiSend(`/api/api-client/credentials?key=${encodeURIComponent(key)}`, "DELETE");
+    // Query param, not a route segment — a credential key containing '/' would 404 otherwise.
+    await apiSend(
+        `/api/api-client/credentials?key=${encodeURIComponent(key)}`,
+        "DELETE",
+    );
 }
 
-export async function previewCredential(key: string): Promise<KeyVaultPreviewResult> {
-  return apiSend<KeyVaultPreviewResult>("/api/api-client/preview-credential", "POST", { key });
+export async function previewCredential(
+    key: string,
+): Promise<KeyVaultPreviewResult> {
+    return apiSend<KeyVaultPreviewResult>(
+        "/api/api-client/preview-credential",
+        "POST",
+        { key },
+    );
 }
 
 export async function importCollection(payload: {
-  folderPath?: string | null;
-  payloadBase64?: string | null;
+    folderPath?: string | null;
+    payloadBase64?: string | null;
 }): Promise<CollectionImportResult> {
-  return apiSend<CollectionImportResult>("/api/config/collections/import", "POST", payload);
+    return apiSend<CollectionImportResult>(
+        "/api/config/collections/import",
+        "POST",
+        payload,
+    );
 }
 
-export async function evaluateJsonPath(body: string, jsonPath: string): Promise<{ value: string | null; error: string | null }> {
-  return apiSend<{ value: string | null; error: string | null }>("/api/api-client/evaluate-jsonpath", "POST", {
-    body,
-    jsonPath,
-  });
+export async function evaluateJsonPath(
+    body: string,
+    jsonPath: string,
+): Promise<{ value: string | null; error: string | null }> {
+    return apiSend<{ value: string | null; error: string | null }>(
+        "/api/api-client/evaluate-jsonpath",
+        "POST",
+        {
+            body,
+            jsonPath,
+        },
+    );
 }

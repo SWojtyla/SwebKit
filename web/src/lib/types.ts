@@ -937,6 +937,7 @@ export interface HpaInfo {
     currentCpuUtilizationPercent: number | null;
     targetCpuUtilizationPercent: number | null;
     isKedaManaged: boolean;
+    scaledObjectName: string | null;
     isScalingDisabled: boolean;
 }
 

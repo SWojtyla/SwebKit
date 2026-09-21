@@ -80,7 +80,11 @@ public enum AlertSignalStatus { Ok, Firing, Skipped, Error }
 public sealed record AlertEvaluatedEvent(
     string RuleId,
     AlertSignalStatus Status,
-    DateTimeOffset EvaluatedAt);
+    DateTimeOffset EvaluatedAt,
+    /// <summary>Failure/skipped reason when <see cref="Status"/> is <c>Error</c> or
+    /// <c>Skipped</c> — lets the UI explain why a rule isn't firing instead of
+    /// looking dead.</summary>
+    string? Message = null);
 
 public sealed record AlertSignalResult(
     AlertSignalStatus Status,

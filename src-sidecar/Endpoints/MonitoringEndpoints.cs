@@ -56,8 +56,10 @@ public static class MonitoringEndpoints
 
         void OnAlertFired(AlertFiredEvent evt) => stream.Enqueue("alertFired", evt);
         void OnInsightReady(ProactiveInsightReadyEvent evt) => stream.Enqueue("proactiveInsightReady", evt);
+        void OnEvaluationCompleted(AlertEvaluatedEvent evt) => stream.Enqueue("evaluationCompleted", evt);
 
         engine.AlertFired += OnAlertFired;
+        engine.EvaluationCompleted += OnEvaluationCompleted;
         insights.InsightReady += OnInsightReady;
         try
         {
@@ -66,6 +68,7 @@ public static class MonitoringEndpoints
         finally
         {
             engine.AlertFired -= OnAlertFired;
+            engine.EvaluationCompleted -= OnEvaluationCompleted;
             insights.InsightReady -= OnInsightReady;
             stream.Complete();
         }

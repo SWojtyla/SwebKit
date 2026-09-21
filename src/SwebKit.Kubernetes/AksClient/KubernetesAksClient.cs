@@ -382,7 +382,11 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
     {
         return await WithAuthRetryAsync(async () =>
         {
-            var result = await _client.CoreV1.ListNamespacedPodAsync(ns, labelSelector: labelSelector, cancellationToken: ct).ConfigureAwait(false);
+            // An empty namespace means "all namespaces" — monitoring rules treat it that way, and
+            // a namespaced list call with "" would just 404 on the API server.
+            var result = string.IsNullOrEmpty(ns)
+                ? await _client.CoreV1.ListPodForAllNamespacesAsync(labelSelector: labelSelector, cancellationToken: ct).ConfigureAwait(false)
+                : await _client.CoreV1.ListNamespacedPodAsync(ns, labelSelector: labelSelector, cancellationToken: ct).ConfigureAwait(false);
             return result.Items.Select(p =>
             {
                 var containerStatuses = p.Status?.ContainerStatuses;

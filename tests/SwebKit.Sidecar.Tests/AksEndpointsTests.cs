@@ -222,6 +222,35 @@ public class AksEndpointsTests
         Assert.Contains(ok.Value!, c => c.Name == "minikube");
     }
 
+    // ── Namespaces ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetNamespacesAsync_NoContext_RequestsDefaultContext()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetNamespacesAsync(null, profile, demo, pool, CancellationToken.None);
+
+        var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<string>>>(result);
+        Assert.NotEmpty(ok.Value!);
+        Assert.Equal([null], pool.RequestedContexts);
+    }
+
+    [Fact]
+    public async Task GetNamespacesAsync_ExplicitContext_RequestsThatContext()
+    {
+        // Monitoring rules pin a kubeconfig context per rule — the namespace picker must list
+        // that cluster's namespaces, not the globally configured one.
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetNamespacesAsync("aks-prd", profile, demo, pool, CancellationToken.None);
+
+        Assert.IsAssignableFrom<Ok<IReadOnlyList<string>>>(result);
+        Assert.Equal(["aks-prd"], pool.RequestedContexts);
+    }
+
     // ── Context switch ───────────────────────────────────────────────────────
 
     /// <summary>Reads the anonymous { connected, context, error? } result without a shared DTO.</summary>

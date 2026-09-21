@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { tryPrettifyJson } from "./pretty-json";
+import { tryPrettifyJson, tryReindentJson } from "./pretty-json";
 
 describe("tryPrettifyJson", () => {
     it("indents a minified object", () => {
@@ -82,5 +82,48 @@ describe("tryPrettifyJson", () => {
 
     it("returns null for empty content", () => {
         expect(tryPrettifyJson("")).toBeNull();
+    });
+});
+
+describe("tryReindentJson", () => {
+    it("indents a minified object", () => {
+        expect(tryReindentJson('{"a":1,"b":{"c":2}}')).toBe(
+            '{\n  "a": 1,\n  "b": {\n    "c": 2\n  }\n}',
+        );
+    });
+
+    it("indents an array root", () => {
+        expect(tryReindentJson("[1,2]")).toBe("[\n  1,\n  2\n]");
+    });
+
+    it("tolerates a leading UTF-8 BOM and surrounding whitespace", () => {
+        expect(
+            tryReindentJson(`${String.fromCharCode(0xfeff)}\n {"a":1}\n`),
+        ).toBe('{\n  "a": 1\n}');
+    });
+
+    it("does NOT unwrap a JSON-string-encoded payload", () => {
+        // A quoted JSON document is a legitimate message body — reindenting must
+        // not change it into a different payload (unlike tryPrettifyJson).
+        const wrapped = JSON.stringify('{"amount":229,"ok":true}');
+        expect(tryReindentJson(wrapped)).toBeNull();
+    });
+
+    it("returns null for scalar roots", () => {
+        expect(tryReindentJson("42")).toBeNull();
+        expect(tryReindentJson("true")).toBeNull();
+    });
+
+    it("returns null for non-JSON content", () => {
+        expect(tryReindentJson("plain text")).toBeNull();
+        expect(tryReindentJson('<?xml version="1.0"?><root />')).toBeNull();
+    });
+
+    it("returns null for truncated JSON rather than throwing", () => {
+        expect(tryReindentJson('{"a":1,"b":')).toBeNull();
+    });
+
+    it("returns null for empty content", () => {
+        expect(tryReindentJson("")).toBeNull();
     });
 });

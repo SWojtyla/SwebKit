@@ -184,6 +184,19 @@ public static class AksEndpoints
         return Results.Ok(new { connected = true, context = request.Context });
     }
 
+    /// <summary>
+    /// Handler body for the namespaces list endpoint, extracted so it's unit testable against a
+    /// fake pool. An explicit <paramref name="context"/> resolves a client for that kubeconfig
+    /// context — monitoring rules can be pinned to a different cluster than the profile's
+    /// configured one — while omitting it falls back to the configured context as before.
+    /// </summary>
+    internal static async Task<IResult> GetNamespacesAsync(string? context, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    {
+        var client = GetClient(pool, string.IsNullOrWhiteSpace(context) ? null : context);
+        var namespaces = await client.GetNamespacesAsync(ct);
+        return Results.Ok(namespaces);
+    }
+
     public static void MapAksEndpoints(this WebApplication app)
     {
         // ── Connection / context ─────────────────────────────────────────────────
@@ -194,12 +207,7 @@ public static class AksEndpoints
 
         app.MapPost("/api/aks/context", SetContextAsync);
 
-        app.MapGet("/api/aks/namespaces", async (ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
-        {
-            var client = GetClient(pool);
-            var namespaces = await client.GetNamespacesAsync(ct);
-            return Results.Ok(namespaces);
-        });
+        app.MapGet("/api/aks/namespaces", GetNamespacesAsync);
 
         // ── Workloads ──────────────────────────────────────────────────────────
 

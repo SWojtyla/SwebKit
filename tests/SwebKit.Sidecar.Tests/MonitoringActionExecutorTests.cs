@@ -47,7 +47,7 @@ public class MonitoringActionExecutorTests
         var result = await executor.ApplyAsync(Action("""
             {"name":"prod pods","source":"AksPodHealth","severity":"Critical",
              "interval_seconds":30,"cooldown_minutes":2,"ai_investigation_enabled":false,
-             "aks_namespace":"prod","aks_restart_threshold":7,"aks_health_score_threshold":0.5}
+             "aks_context":"aks-prd","aks_namespace":"prod","aks_restart_threshold":7,"aks_health_score_threshold":0.5}
             """), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -59,6 +59,7 @@ public class MonitoringActionExecutorTests
         Assert.Equal(30, rule.IntervalSeconds);
         Assert.Equal(2, rule.CooldownMinutes);
         Assert.False(rule.AiInvestigationEnabled);
+        Assert.Equal("aks-prd", rule.AksPodParams?.KubeconfigContext);
         Assert.Equal("prod", rule.AksPodParams?.Namespace);
         Assert.Equal(7, rule.AksPodParams?.RestartThreshold);
         Assert.Equal(0.5, rule.AksPodParams?.HealthScoreThreshold);

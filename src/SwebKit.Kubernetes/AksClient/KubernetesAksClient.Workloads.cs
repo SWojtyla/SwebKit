@@ -527,13 +527,10 @@ public partial class KubernetesAksClient
         {
             var (v2, v1) = await ReadHpaAsync(ns, hpaName, ct).ConfigureAwait(false);
 
-            var labels = v2?.Metadata?.Labels ?? v1?.Metadata?.Labels;
             var annotations = v2?.Metadata?.Annotations ?? v1?.Metadata?.Annotations;
 
             // KEDA-managed HPA: toggle the ScaledObject's native pause annotation.
-            if (labels is not null
-                && labels.TryGetValue(AksScalingAnnotations.KedaScaledObjectNameLabel, out var scaledObjectName)
-                && !string.IsNullOrWhiteSpace(scaledObjectName))
+            if (GetKedaScaledObjectName(v2?.Metadata ?? v1?.Metadata) is { } scaledObjectName)
             {
                 await SetKedaPausedAsync(ns, scaledObjectName, paused: !enabled, ct).ConfigureAwait(false);
                 return;
@@ -618,6 +615,26 @@ public partial class KubernetesAksClient
         await WithAuthRetryAsync(async () =>
         {
             var (v2, v1) = await ReadHpaAsync(ns, hpaName, ct).ConfigureAwait(false);
+
+            // A KEDA ScaledObject owns its generated HPA and recreates it within seconds, so
+            // deleting the HPA alone is silently undone — "delete said it worked but it's still
+            // there". The ScaledObject is the user-managed resource: deleting it removes the HPA
+            // through ownerReference garbage collection. If the ScaledObject (or the KEDA CRD)
+            // is already gone, fall through and delete the orphaned HPA directly.
+            if (GetKedaScaledObjectName(v2?.Metadata ?? v1?.Metadata) is { } scaledObjectName)
+            {
+                try
+                {
+                    await _client.CustomObjects.DeleteNamespacedCustomObjectAsync(
+                        KedaApiGroup, KedaApiVersions[0], ns, KedaScaledObjectsPlural, scaledObjectName,
+                        cancellationToken: ct).ConfigureAwait(false);
+                    return;
+                }
+                catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+                {
+                }
+            }
+
             if (v2 is not null)
             {
                 await _client.AutoscalingV2.DeleteNamespacedHorizontalPodAutoscalerAsync(
@@ -629,6 +646,19 @@ public partial class KubernetesAksClient
                     hpaName, ns, cancellationToken: ct).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Returns the name of the KEDA ScaledObject that owns this HPA — carried on the generated
+    /// HPA via the <c>scaledobject.keda.sh/name</c> label — or <c>null</c> for a plain autoscaler.
+    /// </summary>
+    internal static string? GetKedaScaledObjectName(V1ObjectMeta? meta)
+    {
+        return meta?.Labels is { } labels
+            && labels.TryGetValue(AksScalingAnnotations.KedaScaledObjectNameLabel, out var name)
+            && !string.IsNullOrWhiteSpace(name)
+            ? name
+            : null;
     }
 
     /// <summary>
