@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
-import { Plus, AlertCircle } from "lucide-react";
+import { Plus, AlertCircle, Loader2, Sparkles, X } from "lucide-react";
 import { SkeletonRows } from "@/components/shared/Skeleton";
 import type {
     AlertSignalStatus,
@@ -8,6 +8,7 @@ import type {
     AlertFiredEvent,
     AlertEvaluatedEvent,
     ProactiveInsightReadyEvent,
+    ProactiveInsightStatusEvent,
 } from "../../lib/api";
 import {
     useMonitoringRules,
@@ -98,6 +99,12 @@ export function MonitoringPage() {
     >({});
     const [liveEvents, setLiveEvents] = useState<AlertFiredEvent[]>([]);
     const { insights, addInsight, dismiss } = useProactiveInsightsFeed();
+    // In-flight + terminal investigation outcomes, keyed ruleId|firedAt like the insights feed —
+    // the pipeline drops silently at several gates (no tool-calling profile, AI off, resource not
+    // on the Map, another investigation in flight) and these events are the only way to see why.
+    const [insightStatuses, setInsightStatuses] = useState<
+        Record<string, ProactiveInsightStatusEvent>
+    >({});
     // Owned here (not inside AlertRuleGroups) so a group's collapsed/expanded state survives
     // switching to the History tab and back — AlertRuleGroups only mounts while Rules is active.
     const [collapsedGroups, setCollapsedGroups] = useState<
@@ -116,7 +123,17 @@ export function MonitoringPage() {
             setLiveEvents((prev) => [evt, ...prev].slice(0, 200));
             setStatuses((s) => ({ ...s, [evt.ruleId]: "Firing" }));
         },
-        (insight) => addInsight(insight),
+        (insight) => {
+            addInsight(insight);
+            // The ready card replaces the in-flight status entry for the same firing.
+            setInsightStatuses((s) => {
+                const key = `${insight.ruleId}|${insight.firedAt}`;
+                if (!(key in s)) return s;
+                const next = { ...s };
+                delete next[key];
+                return next;
+            });
+        },
         (evt) => {
             // Don't let a clean tick erase a Firing dot — Firing means "this rule has an
             // active alert" (there's no recovery signal), while an Ok evaluation just means
@@ -127,6 +144,10 @@ export function MonitoringPage() {
                     : { ...s, [evt.ruleId]: evt.status },
             );
             setEvaluations((s) => ({ ...s, [evt.ruleId]: evt }));
+        },
+        (evt) => {
+            const key = `${evt.ruleId}|${evt.firedAt}`;
+            setInsightStatuses((s) => ({ ...s, [key]: evt }));
         },
     );
 
@@ -222,6 +243,18 @@ export function MonitoringPage() {
         if (rule.id) deleteRule.mutate(rule.id);
     };
 
+    const dismissInsightStatus = (key: string) =>
+        setInsightStatuses((s) => {
+            const next = { ...s };
+            delete next[key];
+            return next;
+        });
+
+    // Newest first, capped — a firing storm shouldn't grow the header without bound.
+    const insightStatusList = Object.values(insightStatuses)
+        .reverse()
+        .slice(0, 5);
+
     return (
         <div className="flex h-full flex-col" data-testid="monitoring-page">
             <div className="border-b px-6 py-3">
@@ -235,8 +268,52 @@ export function MonitoringPage() {
                     Alert rules and live alert history
                 </p>
 
-                {insights.length > 0 && (
+                {(insights.length > 0 || insightStatusList.length > 0) && (
                     <div className="mt-3" data-testid="proactive-insights-feed">
+                        {insightStatusList.map((st) => (
+                            <div
+                                key={`${st.ruleId}|${st.firedAt}`}
+                                className={`mb-2 flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${
+                                    st.stage === "Failed"
+                                        ? "border-destructive/30 bg-destructive/5"
+                                        : "bg-muted/30"
+                                }`}
+                                data-testid={`proactive-insight-status-${st.ruleId}-${st.firedAt}`}
+                            >
+                                <div className="flex min-w-0 items-center gap-2 text-sm">
+                                    {st.stage === "Started" ? (
+                                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                                    ) : (
+                                        <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                    )}
+                                    <span className="truncate">
+                                        <span className="font-medium">
+                                            {st.ruleName}
+                                        </span>
+                                        {" — "}
+                                        {st.stage === "Started"
+                                            ? "AI investigation running…"
+                                            : st.stage === "Skipped"
+                                              ? `AI investigation skipped${st.reason ? `: ${st.reason}` : ""}`
+                                              : `AI investigation failed${st.reason ? `: ${st.reason}` : ""}`}
+                                    </span>
+                                </div>
+                                {st.stage !== "Started" && (
+                                    <button
+                                        onClick={() =>
+                                            dismissInsightStatus(
+                                                `${st.ruleId}|${st.firedAt}`,
+                                            )
+                                        }
+                                        className="rounded-md p-1 hover:bg-accent"
+                                        title="Dismiss"
+                                        data-testid={`proactive-insight-status-dismiss-${st.ruleId}-${st.firedAt}`}
+                                    >
+                                        <X className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
                         <div
                             className={
                                 showAllInsights &&

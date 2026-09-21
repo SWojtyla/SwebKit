@@ -641,6 +641,43 @@ test.describe("Monitoring", () => {
         });
     }
 
+    test("a proactiveInsightStatus frame renders a status card with the skip reason, dismissible", async ({
+        page,
+    }) => {
+        const statusFrame = {
+            kind: "proactiveInsightStatus",
+            event: {
+                ruleId: "rule-1",
+                firedAt: "2026-08-03T12:00:00Z",
+                ruleName: "Pod restart rate",
+                stage: "Skipped",
+                reason: '"prod" is not on the Map — add it in Settings → Map',
+            },
+        };
+        await page.route("**/api/monitoring/stream", async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: "text/event-stream",
+                body: `data: ${JSON.stringify(statusFrame)}\n\n`,
+            });
+        });
+        await page.goto("/monitoring");
+
+        const card = page.getByTestId(
+            `proactive-insight-status-${statusFrame.event.ruleId}-${statusFrame.event.firedAt}`,
+        );
+        await expect(card).toBeVisible();
+        await expect(card).toContainText("AI investigation skipped");
+        await expect(card).toContainText("not on the Map");
+
+        await page
+            .getByTestId(
+                `proactive-insight-status-dismiss-${statusFrame.event.ruleId}-${statusFrame.event.firedAt}`,
+            )
+            .click();
+        await expect(card).toHaveCount(0);
+    });
+
     test("a proactive insight card appears, shows its summary, and Investigate opens it in the AI Agent page", async ({
         page,
     }) => {

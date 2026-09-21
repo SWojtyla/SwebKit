@@ -15,6 +15,7 @@ import type {
     AlertSignalStatus,
     AlertEvaluatedEvent,
     ProactiveInsightReadyEvent,
+    ProactiveInsightStatusEvent,
 } from "../api";
 
 // ── Monitoring hooks ──────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ export function useMonitoringStream(
     onEvent: (evt: AlertFiredEvent) => void,
     onInsightReady?: (evt: ProactiveInsightReadyEvent) => void,
     onEvaluation?: (evt: AlertEvaluatedEvent) => void,
+    onInsightStatus?: (evt: ProactiveInsightStatusEvent) => void,
 ) {
     const cbRef = useRef(onEvent);
     cbRef.current = onEvent;
@@ -100,6 +102,8 @@ export function useMonitoringStream(
     insightCbRef.current = onInsightReady;
     const evalCbRef = useRef(onEvaluation);
     evalCbRef.current = onEvaluation;
+    const statusCbRef = useRef(onInsightStatus);
+    statusCbRef.current = onInsightStatus;
 
     useEffect(() => {
         const es = new EventSource(`${SIDECAR_BASE_URL}/api/monitoring/stream`);
@@ -117,6 +121,10 @@ export function useMonitoringStream(
                     );
                 } else if (frame.kind === "evaluationCompleted") {
                     evalCbRef.current?.(frame.event as AlertEvaluatedEvent);
+                } else if (frame.kind === "proactiveInsightStatus") {
+                    statusCbRef.current?.(
+                        frame.event as ProactiveInsightStatusEvent,
+                    );
                 }
             } catch {
                 /* ignore malformed frames */

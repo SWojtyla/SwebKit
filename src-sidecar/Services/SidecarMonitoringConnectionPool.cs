@@ -65,7 +65,12 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
         // key said "other" while the client was still built for the profile's configured context,
         // so explicit-context callers (context switch test, per-rule monitoring) silently talked
         // to the wrong cluster.
-        var effectiveContext = context ?? aksConfig.KubeconfigContext;
+        // Empty string means "configured context" too — rules persist kubeconfigContext as ""
+        // (the dialog's "Configured context" option), and passing "" through would build a client
+        // for the kubeconfig's *current* context instead (BuildClientConfiguration treats
+        // whitespace as "no explicit context"), silently evaluating the rule against a different
+        // cluster than the pages show.
+        var effectiveContext = string.IsNullOrWhiteSpace(context) ? aksConfig.KubeconfigContext : context;
         return GetOrCreate(
             _aksCache,
             effectiveContext ?? "default",

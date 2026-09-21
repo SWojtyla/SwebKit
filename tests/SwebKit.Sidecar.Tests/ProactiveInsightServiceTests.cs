@@ -93,7 +93,7 @@ public class ProactiveInsightServiceTests
     };
 
     [Fact]
-    public async Task AlertFired_NoMatchingWorkspaceNode_NeverInvokesTheToolRegistry()
+    public async Task AlertFired_NoMatchingWorkspaceNode_NeverInvokesTheToolRegistry_AndReportsSkipped()
     {
         using var _sandbox = new AppDataSandbox();
         var (insights, engine, ruleRepo, profiles, _, registry, _) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
@@ -102,10 +102,64 @@ public class ProactiveInsightServiceTests
         await ruleRepo.UpsertAsync(rule);
         await engine.ReloadRulesAsync();
 
+        ProactiveInsightStatusEvent? status = null;
+        insights.InsightStatus += e => status = e;
+
         await engine.RunEvaluationOnceAsync();
-        await Task.Delay(100); // give the fire-and-forget handler a chance to (incorrectly) run
+        await WaitUntilAsync(() => status is not null);
 
         Assert.Empty(registry.Calls);
+        Assert.NotNull(status);
+        Assert.Equal(ProactiveInsightStage.Skipped, status!.Stage);
+        Assert.Equal(rule.Id, status.RuleId);
+        Assert.Contains("not on the Map", status.Reason);
+    }
+
+    [Fact]
+    public async Task AlertFired_AiDisabledOrNoToolCalling_ReportsSkippedWithReason()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, profiles, _, registry, _) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+        var rule = AksRule("prod");
+        rule.AiInvestigationEnabled = false;
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var statuses = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => statuses.Add(e);
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => statuses.Count >= 1);
+
+        var skipped = Assert.Single(statuses);
+        Assert.Equal(ProactiveInsightStage.Skipped, skipped.Stage);
+        Assert.Contains("disabled", skipped.Reason);
+        Assert.Empty(registry.Calls);
+    }
+
+    [Fact]
+    public async Task AlertFired_SuccessfulInvestigation_ReportsStartedBeforeReady()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, profiles, _, registry, _) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+        var rule = AksRule("prod");
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var statuses = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => statuses.Add(e);
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => ready is not null);
+
+        var started = Assert.Single(statuses);
+        Assert.Equal(ProactiveInsightStage.Started, started.Stage);
+        Assert.Equal(rule.Id, started.RuleId);
+        Assert.Null(started.Reason);
     }
 
     [Fact]
@@ -197,11 +251,14 @@ public class ProactiveInsightServiceTests
         var raised = false;
         insights.InsightReady += _ => raised = true;
 
+        var failed = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => { if (e.Stage == ProactiveInsightStage.Failed) failed.Add(e); };
+
         await engine.RunEvaluationOnceAsync();
-        await WaitUntilAsync(() => registry.Calls.Count > 0);
-        await Task.Delay(100); // let the (failing) summarization attempt finish
+        await WaitUntilAsync(() => failed.Count > 0);
 
         Assert.False(raised);
+        Assert.Single(failed);
     }
 
     [Fact]
@@ -217,12 +274,16 @@ public class ProactiveInsightServiceTests
 
         var raised = false;
         insights.InsightReady += _ => raised = true;
+        ProactiveInsightStatusEvent? status = null;
+        insights.InsightStatus += e => status = e;
 
         await engine.RunEvaluationOnceAsync();
-        await Task.Delay(150); // give a buggy handler a chance to investigate anyway
+        await WaitUntilAsync(() => status is not null);
 
         Assert.Empty(registry.Calls);
         Assert.False(raised);
+        Assert.Equal(ProactiveInsightStage.Skipped, status!.Stage);
+        Assert.Contains("disabled", status.Reason);
     }
 
     [Fact]
@@ -296,12 +357,18 @@ public class ProactiveInsightServiceTests
         await ruleRepo.UpsertAsync(sbRule);
         await engine.ReloadRulesAsync();
 
+        var statuses = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => statuses.Add(e);
+
         await engine.RunEvaluationOnceAsync(); // fires both AlertFired synchronously in one pass
 
         await WaitUntilAsync(() => registry.Calls.Count >= 1);
         await Task.Delay(150); // give a (buggy) second investigation a chance to also start
 
         Assert.Single(registry.Calls); // the rate limit rejected the second one, not just got there second
+        // …and the loser is reported, not silently dropped: one Started + one Skipped(busy).
+        Assert.Contains(statuses, s => s.Stage == ProactiveInsightStage.Started);
+        Assert.Contains(statuses, s => s.Stage == ProactiveInsightStage.Skipped && s.Reason!.Contains("already in flight"));
 
         gate.SetResult(); // release the blocked call so it doesn't leak past this test
         await WaitUntilAsync(() => modelClient.CompleteRequests.Count >= 1);

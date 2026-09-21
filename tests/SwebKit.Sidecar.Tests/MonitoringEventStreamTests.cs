@@ -171,6 +171,25 @@ public class MonitoringEventStreamTests
     }
 
     [Fact]
+    public async Task RunAsync_KeepsTheProactiveInsightStatusEnvelope()
+    {
+        var (context, body) = BuildContext();
+        var stream = new MonitoringEventStream();
+        var run = stream.RunAsync(context, CancellationToken.None, NoKeepAlive);
+
+        stream.Enqueue("proactiveInsightStatus", new ProactiveInsightStatusEvent(
+            "r1", DateTimeOffset.UtcNow, "Pod restart rate", ProactiveInsightStage.Skipped,
+            "\"prod\" is not on the Map"));
+        stream.Complete();
+        await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var text = body.Text;
+        Assert.Contains("\"kind\":\"proactiveInsightStatus\"", text);
+        Assert.Contains("\"stage\":\"Skipped\"", text);
+        Assert.Contains("not on the Map", text);
+    }
+
+    [Fact]
     public async Task RunAsync_SetsSseResponseHeaders()
     {
         var (context, body) = BuildContext();

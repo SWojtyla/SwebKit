@@ -21,6 +21,20 @@ public sealed record ProactiveInsightReadyEvent(
     string SessionId,
     IReadOnlyList<string>? Evidence = null);
 
+public enum ProactiveInsightStage { Started, Skipped, Failed }
+
+/// <summary>Lifecycle event for a background proactive investigation — without it every
+/// early-return gate in <see cref="ProactiveInsightService"/> was a silent drop, so a fired
+/// alert could produce no insight and no explanation anywhere in the UI. <see cref="Reason"/>
+/// carries the human-readable cause for <see cref="ProactiveInsightStage.Skipped"/> and
+/// <see cref="ProactiveInsightStage.Failed"/>.</summary>
+public sealed record ProactiveInsightStatusEvent(
+    string RuleId,
+    DateTimeOffset FiredAt,
+    string RuleName,
+    ProactiveInsightStage Stage,
+    string? Reason = null);
+
 /// <summary>
 /// Subscribes to <see cref="MonitoringAlertEvaluationService.AlertFired"/> (workspace-intelligence
 /// Module 4) and, when a fired rule's resource maps to a node in the user-curated workspace
@@ -54,6 +68,12 @@ public sealed class ProactiveInsightService
 
     public event Action<ProactiveInsightReadyEvent>? InsightReady;
 
+    /// <summary>Raised for every investigation outcome other than success: <c>Started</c> when
+    /// the runner kicks off, <c>Skipped</c> when a gate rejects it (with the reason), and
+    /// <c>Failed</c> when it errors out. Streamed to the UI so an alert that produces no insight
+    /// still produces an explanation.</summary>
+    public event Action<ProactiveInsightStatusEvent>? InsightStatus;
+
     public ProactiveInsightService(
         MonitoringAlertEvaluationService engine,
         IAlertRuleRepository rules,
@@ -85,6 +105,18 @@ public sealed class ProactiveInsightService
         _ = Task.Run(() => HandleAlertFiredAsync(evt));
     }
 
+    private void RaiseStatus(AlertFiredEvent evt, ProactiveInsightStage stage, string? reason = null)
+    {
+        try
+        {
+            InsightStatus?.Invoke(new ProactiveInsightStatusEvent(evt.RuleId, evt.FiredAt, evt.RuleName, stage, reason));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "InsightStatus handler threw for rule {RuleId}", evt.RuleId);
+        }
+    }
+
     private async Task HandleAlertFiredAsync(AlertFiredEvent evt)
     {
         if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
@@ -92,6 +124,7 @@ public sealed class ProactiveInsightService
             _logger.LogInformation(
                 "Dropped proactive insight for rule {RuleId} ({RuleName}) — another investigation is already in flight.",
                 evt.RuleId, evt.RuleName);
+            RaiseStatus(evt, ProactiveInsightStage.Skipped, "another investigation is already in flight");
             return;
         }
 
@@ -99,23 +132,33 @@ public sealed class ProactiveInsightService
         {
             var hasToolCalling = (_settings.Settings.Agent.GetActiveProfile()?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
             if (!hasToolCalling)
+            {
+                RaiseStatus(evt, ProactiveInsightStage.Skipped, "no agent profile with tool calling is configured");
                 return; // Module 7: nothing a tool-less model could usefully investigate with
+            }
 
             var rule = await _rules.GetByIdAsync(evt.RuleId);
             if (rule is null)
+            {
+                RaiseStatus(evt, ProactiveInsightStage.Skipped, "the rule was deleted before the investigation started");
                 return; // rule was deleted between firing and now — nothing to correlate against
+            }
 
             if (!rule.AiInvestigationEnabled)
             {
                 _logger.LogInformation(
                     "Skipped proactive insight for rule {RuleId} ({RuleName}) — AI investigation is disabled on this rule.",
                     evt.RuleId, evt.RuleName);
+                RaiseStatus(evt, ProactiveInsightStage.Skipped, "AI investigation is disabled on this rule");
                 return;
             }
 
             var start = FindStartingResource(rule);
             if (start is null)
+            {
+                RaiseStatus(evt, ProactiveInsightStage.Skipped, "this alert source can't be mapped to a workspace resource");
                 return; // this rule's source type isn't one we know how to map to a topology node
+            }
 
             var topology = _profiles.Config.Topology;
             var startNode = topology.Nodes.FirstOrDefault(n =>
@@ -123,7 +166,13 @@ public sealed class ProactiveInsightService
                 (n.ResourceKey.Contains(start.Value.Hint, StringComparison.OrdinalIgnoreCase) ||
                  n.DisplayLabel.Contains(start.Value.Hint, StringComparison.OrdinalIgnoreCase)));
             if (startNode is null)
+            {
+                RaiseStatus(evt, ProactiveInsightStage.Skipped,
+                    $"\"{start.Value.Hint}\" is not on the Map — add it in Settings → Map");
                 return; // the fired rule's resource isn't on the Map yet — nothing declared to correlate
+            }
+
+            RaiseStatus(evt, ProactiveInsightStage.Started);
 
             // agent-workspace-awareness Module 2: prefer the bounded model-driven investigation
             // (the model picks its own read-only evidence path across the workspace). When it
@@ -160,7 +209,10 @@ public sealed class ProactiveInsightService
 
                 summary = await SummarizeAsync(evt, reportJson) ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(summary))
+                {
+                    RaiseStatus(evt, ProactiveInsightStage.Failed, "the investigation produced no summary");
                     return; // summarization failed — a missing insight is fine, a garbled one is not
+                }
             }
 
             var sessionId = $"proactive-{evt.RuleId}-{evt.FiredAt.ToUnixTimeMilliseconds()}";
@@ -171,6 +223,7 @@ public sealed class ProactiveInsightService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Proactive insight investigation failed for rule {RuleId} ({RuleName})", evt.RuleId, evt.RuleName);
+            RaiseStatus(evt, ProactiveInsightStage.Failed, ex.Message);
         }
         finally
         {

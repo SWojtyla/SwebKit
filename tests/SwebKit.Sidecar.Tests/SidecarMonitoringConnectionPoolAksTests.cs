@@ -147,6 +147,27 @@ public class SidecarMonitoringConnectionPoolAksTests
     }
 
     [Fact]
+    public void GetAksClient_EmptyContext_ResolvesToConfiguredContext_AndSharesItsCacheEntry()
+    {
+        // Regression: rules persist kubeconfigContext as "" (the dialog's "Configured context"
+        // option). Passing "" straight to the factory built a client for the kubeconfig's
+        // *current* context — evaluating the rule against a different cluster than the pages
+        // (which normalize "" → null before calling) and surfacing RBAC "forbidden" errors for
+        // namespaces the user can browse fine.
+        var (pool, profile, _, factory) = Build();
+        profile.Config.AksConfig = new AksConfig { KubeconfigContext = "ctx-default", KubeconfigPath = "/tmp/kubeconfig" };
+
+        var defaultClient = pool.GetAksClient();
+        var emptyContextClient = pool.GetAksClient("");
+        var whitespaceClient = pool.GetAksClient("   ");
+
+        Assert.Same(defaultClient, emptyContextClient);
+        Assert.Same(defaultClient, whitespaceClient);
+        Assert.Single(factory.Calls);
+        Assert.Equal(("ctx-default", "/tmp/kubeconfig"), factory.Calls[0]);
+    }
+
+    [Fact]
     public void EvictAksClients_DropsCachedClients_ButLeavesThePoolUsable()
     {
         var (pool, profile, _, factory) = Build();

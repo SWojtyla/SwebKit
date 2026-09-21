@@ -88,14 +88,14 @@ that validation — or via the agent tool — can carry one.
 
 ## HTTP Surface (sidecar)
 
-| Route                        | Method | Purpose                                                                  |
-| ---------------------------- | ------ | ------------------------------------------------------------------------ |
-| `/api/monitoring/rules`      | GET    | List all rules                                                           |
-| `/api/monitoring/rules`      | POST   | Create a rule (triggers engine reload)                                   |
-| `/api/monitoring/rules/{id}` | PUT    | Update a rule (triggers engine reload)                                   |
-| `/api/monitoring/rules/{id}` | DELETE | Delete a rule (triggers engine reload)                                   |
-| `/api/monitoring/history`    | GET    | Ring-buffer snapshot (up to 200 events)                                  |
-| `/api/monitoring/stream`     | GET    | SSE: `alertFired`, `evaluationCompleted`, `proactiveInsightReady` frames |
+| Route                        | Method | Purpose                                                                                            |
+| ---------------------------- | ------ | -------------------------------------------------------------------------------------------------- |
+| `/api/monitoring/rules`      | GET    | List all rules                                                                                     |
+| `/api/monitoring/rules`      | POST   | Create a rule (triggers engine reload)                                                             |
+| `/api/monitoring/rules/{id}` | PUT    | Update a rule (triggers engine reload)                                                             |
+| `/api/monitoring/rules/{id}` | DELETE | Delete a rule (triggers engine reload)                                                             |
+| `/api/monitoring/history`    | GET    | Ring-buffer snapshot (up to 200 events)                                                            |
+| `/api/monitoring/stream`     | GET    | SSE: `alertFired`, `evaluationCompleted`, `proactiveInsightReady`, `proactiveInsightStatus` frames |
 
 All routes are demo-mode gated and use the `IsAllowedOrigin` CORS predicate established by
 `tauri-security-hardening`.
@@ -126,6 +126,13 @@ the UI as `proactiveInsightReady` on the monitoring SSE stream, where
 `MonitoringPage` renders it as a `ProactiveInsightCard` at the top of the page;
 the card's Investigate action opens the seeded agent conversation.
 
+Every gate in that pipeline also raises `proactiveInsightStatus` (`Started` /
+`Skipped` / `Failed` + reason) on the same stream — so a fired alert that yields
+no insight still yields an explanation (AI disabled on the rule, no tool-calling
+profile, the resource not on the Map, another investigation in flight). The
+Monitoring page shows these as small status cards in the same feed area, and
+`AppLayout` toasts the terminal (Skipped/Failed) outcomes.
+
 OS + in-app notifications for both `alertFired` and `proactiveInsightReady`
 live in `AppLayout`'s always-mounted subscription — the single notification
 site — so they reach the user while the app is minimized or on another page,
@@ -152,6 +159,10 @@ investigation distinguish a single failure from an alert storm.
 
 `SidecarMonitoringConnectionPool` resolves AKS / Service Bus / Redis clients using the **same**
 `ProfileRepository` + `DemoModeService` + client-factory resolution the REST endpoints use, so a
-rule evaluates against the same backend the pages talk to. Demo mode is honored for all three
+rule evaluates against the same backend the pages talk to. A rule's `kubeconfigContext` of `""`
+(persisted by the dialog's "Configured context" option) is normalized to the profile's configured
+context before hitting the factory — passing `""` through would make `KubernetesAksClient` fall
+back to the kubeconfig's _current_ context, silently evaluating the rule against a different
+cluster than the pages show. Demo mode is honored for all three
 client families. Connections are cached and reused across polling intervals; `InvalidateStaleConnections()`
 is called on rule reload so credential changes are picked up.
