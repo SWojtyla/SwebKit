@@ -1,80 +1,160 @@
 import { useCallback, useMemo, type MouseEvent } from "react";
-import { useAksCronJobs, useAksSuspendCronJob } from "@/lib/hooks";
+import {
+    useAksCronJobs,
+    useAksSuspendCronJob,
+    useAksTriggerCronJob,
+} from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { CronJobInfo } from "@/lib/types";
 
 interface CronJobsTabProps {
-  ns: string;
-  isMulti?: boolean;
+    ns: string;
+    isMulti?: boolean;
 }
 
 export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
-  const { data: cronjobs, isLoading, error } = useAksCronJobs(ns);
-  const ws = useAksWorkspace();
-  const suspendMutation = useAksSuspendCronJob();
+    const { data: cronjobs, isLoading, error } = useAksCronJobs(ns);
+    const ws = useAksWorkspace();
+    const suspendMutation = useAksSuspendCronJob();
+    const triggerMutation = useAksTriggerCronJob();
 
-  const buildMenu = useCallback((cj: CronJobInfo): ContextMenuItem[] => [
-    { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(cj.name) },
-    { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("cronjob", cj.name, cj.namespace) },
-    { label: "Trigger", icon: "▶", onClick: () => {}, disabled: true, title: "Not yet implemented — trigger a run manually via kubectl for now" },
-  ], [ws]);
+    const toggle = useCallback(
+        (cj: CronJobInfo) => {
+            const next = !cj.suspend;
+            const action = next ? "suspend" : "resume";
+            ws.requestConfirm({
+                message: `${action === "suspend" ? "Suspend" : "Resume"} cronjob "${cj.name}"?`,
+                resourceName: cj.name,
+                onConfirm: () =>
+                    suspendMutation.mutate({
+                        ns: cj.namespace,
+                        name: cj.name,
+                        suspend: next,
+                    }),
+            });
+        },
+        [ws, suspendMutation],
+    );
 
-  const toggle = useCallback((cj: CronJobInfo) => {
-    const next = !cj.suspend;
-    const action = next ? "suspend" : "resume";
-    ws.requestConfirm({
-      message: `${action === "suspend" ? "Suspend" : "Resume"} cronjob "${cj.name}"?`,
-      resourceName: cj.name,
-      onConfirm: () => suspendMutation.mutate({ ns: cj.namespace, name: cj.name, suspend: next }),
-    });
-  }, [ws, suspendMutation]);
+    const buildMenu = useCallback(
+        (cj: CronJobInfo): ContextMenuItem[] => [
+            {
+                label: "Copy name",
+                icon: "📋",
+                onClick: () => ws.copyToClipboard(cj.name),
+            },
+            {
+                label: "View YAML",
+                icon: "{ }",
+                onClick: () => ws.openYaml("cronjob", cj.name, cj.namespace),
+            },
+            {
+                label: "Trigger",
+                icon: "▶",
+                onClick: () =>
+                    triggerMutation.mutate({
+                        ns: cj.namespace,
+                        name: cj.name,
+                    }),
+                disabled: triggerMutation.isPending,
+            },
+            {
+                label: cj.suspend ? "Resume" : "Suspend",
+                icon: cj.suspend ? "▶" : "⏸",
+                onClick: () => toggle(cj),
+            },
+        ],
+        [ws, triggerMutation, toggle],
+    );
 
-  const handleRowContextMenu = useCallback(
-    (e: MouseEvent<HTMLTableRowElement>, cj: CronJobInfo) => ws.showContextMenu(e, buildMenu(cj)),
-    [ws, buildMenu],
-  );
+    const handleRowContextMenu = useCallback(
+        (e: MouseEvent<HTMLTableRowElement>, cj: CronJobInfo) =>
+            ws.showContextMenu(e, buildMenu(cj)),
+        [ws, buildMenu],
+    );
 
-  const columns: Column<CronJobInfo>[] = useMemo(() => [
-    { header: "Schedule", cell: (cj) => <span className="font-mono text-xs">{cj.schedule ?? "—"}</span> },
-    { header: "Suspend", cell: (cj) => (
-      cj.suspend ? <span className="text-warning">Yes</span> : <span className="text-success">No</span>
-    ), sortValue: (cj) => (cj.suspend ? 0 : 1) },
-    { header: "Active", cell: (cj) => cj.activeCount, sortValue: (cj) => cj.activeCount },
-    { header: "Last Schedule", cell: (cj) => (
-      <span className="text-xs text-muted-foreground">{cj.lastScheduleTime ? new Date(cj.lastScheduleTime).toLocaleString() : "—"}</span>
-    )},
-    { header: "Last Success", cell: (cj) => (
-      <span className="text-xs text-muted-foreground">{cj.lastSuccessfulTime ? new Date(cj.lastSuccessfulTime).toLocaleString() : "—"}</span>
-    )},
-    { header: "Actions", cell: (cj) => (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          toggle(cj);
-        }}
-        disabled={suspendMutation.isPending}
-        title={suspendMutation.isPending ? "Updating…" : undefined}
-        className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
-      >
-        {cj.suspend ? "Resume" : "Suspend"}
-      </button>
-    )},
-  ], [toggle, suspendMutation.isPending]);
+    const columns: Column<CronJobInfo>[] = useMemo(
+        () => [
+            {
+                header: "Schedule",
+                cell: (cj) => (
+                    <span className="font-mono text-xs">
+                        {cj.schedule ?? "—"}
+                    </span>
+                ),
+            },
+            {
+                header: "Suspend",
+                cell: (cj) =>
+                    cj.suspend ? (
+                        <span className="text-warning">Yes</span>
+                    ) : (
+                        <span className="text-success">No</span>
+                    ),
+                sortValue: (cj) => (cj.suspend ? 0 : 1),
+            },
+            {
+                header: "Active",
+                cell: (cj) => cj.activeCount,
+                sortValue: (cj) => cj.activeCount,
+            },
+            {
+                header: "Last Schedule",
+                cell: (cj) => (
+                    <span className="text-xs text-muted-foreground">
+                        {cj.lastScheduleTime
+                            ? new Date(cj.lastScheduleTime).toLocaleString()
+                            : "—"}
+                    </span>
+                ),
+            },
+            {
+                header: "Last Success",
+                cell: (cj) => (
+                    <span className="text-xs text-muted-foreground">
+                        {cj.lastSuccessfulTime
+                            ? new Date(cj.lastSuccessfulTime).toLocaleString()
+                            : "—"}
+                    </span>
+                ),
+            },
+            {
+                header: "Actions",
+                cell: (cj) => (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggle(cj);
+                        }}
+                        disabled={suspendMutation.isPending}
+                        title={
+                            suspendMutation.isPending ? "Updating…" : undefined
+                        }
+                        className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
+                        data-testid={`cronjob-suspend-${cj.name}`}
+                    >
+                        {cj.suspend ? "Resume" : "Suspend"}
+                    </button>
+                ),
+            },
+        ],
+        [toggle, suspendMutation.isPending],
+    );
 
-  return (
-    <ResourceTable
-      data={cronjobs}
-      isLoading={isLoading}
-      error={error}
-      isMulti={isMulti}
-      testIdPrefix="cronjob"
-      tableBodyTestId="cronjobs-table-body"
-      emptyMessage="No cron jobs found"
-      onRowClick={(cj) => ws.openYaml("cronjob", cj.name, cj.namespace)}
-      onRowContextMenu={handleRowContextMenu}
-      columns={columns}
-    />
-  );
+    return (
+        <ResourceTable
+            data={cronjobs}
+            isLoading={isLoading}
+            error={error}
+            isMulti={isMulti}
+            testIdPrefix="cronjob"
+            tableBodyTestId="cronjobs-table-body"
+            emptyMessage="No cron jobs found"
+            onRowClick={(cj) => ws.openYaml("cronjob", cj.name, cj.namespace)}
+            onRowContextMenu={handleRowContextMenu}
+            columns={columns}
+        />
+    );
 }

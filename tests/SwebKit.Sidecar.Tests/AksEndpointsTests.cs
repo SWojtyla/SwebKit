@@ -205,6 +205,61 @@ public class AksEndpointsTests
         Assert.Equal("simulated RBAC/connectivity failure", ex.Message);
     }
 
+    // ── CronJobs ────────────────────────────────────────────────────────────
+
+    /// <summary>Reads the anonymous { jobNames } result without a shared DTO.</summary>
+    private static string[] ReadJobNames(IResult result)
+    {
+        var value = Assert.IsAssignableFrom<IValueHttpResult>(result).Value!;
+        return (string[])value.GetType().GetProperty("jobNames")!.GetValue(value)!;
+    }
+
+    [Fact]
+    public async Task TriggerCronJobAsync_DemoMode_ReturnsCreatedJobName()
+    {
+        var (profile, demo) = Deps();
+        demo.IsDemoMode = true;
+        var pool = new FakeMonitoringConnectionPool { AksClient = demo.GetAksClient() };
+
+        var result = await AksEndpoints.TriggerCronJobAsync("ecommerce", "inventory-sync", profile, demo, pool, CancellationToken.None);
+
+        var jobName = Assert.Single(ReadJobNames(result));
+        Assert.StartsWith("inventory-sync-manual-", jobName);
+    }
+
+    [Fact]
+    public async Task TriggerCronJobAsync_MultiNamespaceToken_TriggersInEachResolvedNamespace()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.TriggerCronJobAsync("ecommerce,infra", "inventory-sync", profile, demo, pool, CancellationToken.None);
+
+        var jobNames = ReadJobNames(result);
+        Assert.Equal(2, jobNames.Length);
+        Assert.All(jobNames, name => Assert.StartsWith("inventory-sync-manual-", name));
+    }
+
+    [Fact]
+    public async Task TriggerCronJobAsync_UnknownCronJob_ClientErrorPropagates()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => AksEndpoints.TriggerCronJobAsync("ecommerce", "no-such-cronjob", profile, demo, pool, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task TriggerCronJobAsync_NotConfigured_Throws()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = null };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => AksEndpoints.TriggerCronJobAsync("ecommerce", "inventory-sync", profile, demo, pool, CancellationToken.None));
+    }
+
     // ── Contexts list ────────────────────────────────────────────────────────
 
     [Fact]

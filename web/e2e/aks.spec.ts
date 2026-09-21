@@ -102,6 +102,46 @@ test.describe("AKS", () => {
         await expect(page.getByTestId("yaml-viewer")).toBeVisible();
     });
 
+    test("cronjob context menu triggers a run and toggles suspend", async ({
+        page,
+    }) => {
+        await page.goto("/aks");
+        await page
+            .getByTestId("aks-namespace-select")
+            .selectOption("ecommerce");
+        await page.getByTestId("aks-tab-cronjobs").click();
+        await expect(page.getByTestId("cronjobs-table-body")).toBeVisible();
+
+        // Trigger via the right-click menu — the demo client persists the created Job.
+        await page
+            .getByTestId("cronjob-row-inventory-sync")
+            .click({ button: "right" });
+        await expect(page.getByTestId("aks-context-menu")).toBeVisible();
+        await page.getByTestId("ctx-item-trigger").click();
+        await expect(page.getByTestId("notification-toasts")).toContainText(
+            "inventory-sync",
+        );
+
+        // The created job is discoverable on the Jobs tab.
+        await page.getByTestId("aks-tab-jobs").click();
+        await expect(page.getByTestId("jobs-table-body")).toContainText(
+            "inventory-sync-manual-",
+        );
+
+        // Suspend goes through the confirm bar, then the row flips to suspended.
+        await page.getByTestId("aks-tab-cronjobs").click();
+        await expect(page.getByTestId("cronjobs-table-body")).toBeVisible();
+        await page
+            .getByTestId("cronjob-row-report-generator")
+            .click({ button: "right" });
+        await page.getByTestId("ctx-item-suspend").click();
+        await expect(page.getByTestId("aks-confirm-bar")).toBeVisible();
+        await page.getByTestId("aks-confirm-yes").click();
+        await expect(
+            page.getByTestId("cronjob-row-report-generator"),
+        ).toContainText("Yes");
+    });
+
     test("pod detail panel opens on pod click", async ({ page }) => {
         await page.goto("/aks");
         await page

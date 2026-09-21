@@ -103,6 +103,19 @@ public static class AksEndpoints
         return Results.Ok(routes);
     }
 
+    /// <summary>
+    /// Handler body for the CronJob trigger endpoint, extracted so it's unit testable against a fake
+    /// pool/client. Returns the created Job names so the UI can surface them in its success toast —
+    /// the generated name is what the operator then looks for on the Jobs tab.
+    /// </summary>
+    internal static async Task<IResult> TriggerCronJobAsync(string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    {
+        var client = GetClient(pool);
+        var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+        var jobNames = await Task.WhenAll(namespaces.Select(n => client.TriggerCronJobAsync(n, name, ct)));
+        return Results.Ok(new { jobNames });
+    }
+
     /// <summary>Handler body for the connection-test endpoint, extracted so the error-sanitization
     /// behavior (never return a raw exception message) is unit testable.</summary>
     internal static async Task<IResult> TestConnectionAsync(ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, ILogger<Program> logger, CancellationToken ct)
@@ -453,6 +466,8 @@ public static class AksEndpoints
             await Task.WhenAll(namespaces.Select(n => client.SuspendCronJobAsync(n, name, dto.Suspend, ct)));
             return Results.Ok();
         });
+
+        app.MapPost("/api/aks/{ns}/cronjobs/{name}/trigger", TriggerCronJobAsync);
 
         app.MapGet("/api/aks/{ns}/jobs", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {

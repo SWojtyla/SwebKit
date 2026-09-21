@@ -300,6 +300,17 @@ export interface AlertEvaluatedEvent {
     message?: string | null;
 }
 
+/** Lifecycle event for a background proactive investigation: `Started` when the agent begins,
+ * `Skipped` when a gate rejects it (reason explains why — no tool-calling profile, AI disabled
+ * on the rule, resource not on the Map, another investigation in flight), `Failed` on error. */
+export interface ProactiveInsightStatusEvent {
+    ruleId: string;
+    firedAt: string;
+    ruleName: string;
+    stage: "Started" | "Skipped" | "Failed";
+    reason?: string | null;
+}
+
 /** Pushed once a background proactive investigation completes (workspace-intelligence Module 4).
  * `ruleId`+`firedAt` together are the same composite identity the originating `AlertFiredEvent` has
  * — used to de-dup a dismissed insight against the firing event it came from. */
@@ -531,6 +542,16 @@ export async function suspendCronJob(
         `/api/aks/${encodeURIComponent(ns)}/cronjobs/${encodeURIComponent(name)}/suspend`,
         "POST",
         { suspend },
+    );
+}
+
+export async function triggerCronJob(
+    ns: string,
+    name: string,
+): Promise<{ jobNames: string[] }> {
+    return apiSend(
+        `/api/aks/${encodeURIComponent(ns)}/cronjobs/${encodeURIComponent(name)}/trigger`,
+        "POST",
     );
 }
 

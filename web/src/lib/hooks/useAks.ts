@@ -7,6 +7,7 @@ import {
     deleteHpa,
     setHpaScalingEnabled,
     suspendCronJob,
+    triggerCronJob,
     getHelmReleaseNotes,
     getHelmReleaseManifest,
 } from "../api";
@@ -298,6 +299,23 @@ export function useAksSuspendCronJob() {
             `CronJob ${vars.name} ${vars.suspend ? "suspended" : "resumed"}`,
         errorPrefix: "Toggle CronJob failed",
         invalidateKeys: [["aks-cronjobs"]],
+    });
+}
+
+export function useAksTriggerCronJob() {
+    return useNotifyMutation<
+        { jobNames: string[] },
+        { ns: string; name: string }
+    >({
+        mutationFn: (vars) => triggerCronJob(vars.ns, vars.name),
+        successMessage: (data, vars) =>
+            data.jobNames.length > 0
+                ? `CronJob ${vars.name} triggered — job ${data.jobNames.join(", ")} created`
+                : `CronJob ${vars.name} triggered`,
+        errorPrefix: "Trigger CronJob failed",
+        // Triggering creates a Job — invalidate the Jobs list too so the new
+        // execution shows up without a manual refresh (MAUI did RefreshJobsAsync).
+        invalidateKeys: [["aks-cronjobs"], ["aks-jobs"]],
     });
 }
 
