@@ -58,10 +58,13 @@ public static class AksEndpoints
         return parsed;
     }
 
-    /// <summary>Handler body for the Deployments list endpoint, extracted so it's unit testable against a fake pool.</summary>
-    internal static async Task<IResult> GetDeploymentsAsync(string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    /// <summary>Handler body for the Deployments list endpoint, extracted so it's unit testable against a fake pool.
+    /// An explicit <paramref name="context"/> resolves a client for that kubeconfig context — the
+    /// Map picker's cross-cluster add flow uses it — while omitting it falls back to the configured
+    /// context as before.</summary>
+    internal static async Task<IResult> GetDeploymentsAsync(string ns, string? context, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
     {
-        var client = GetClient(pool);
+        var client = GetClient(pool, string.IsNullOrWhiteSpace(context) ? null : context);
         var namespaces = await ResolveNamespacesAsync(client, ns, ct);
         var deployments = await client.GetDeploymentsAsync(namespaces, ct);
         return Results.Ok(deployments);

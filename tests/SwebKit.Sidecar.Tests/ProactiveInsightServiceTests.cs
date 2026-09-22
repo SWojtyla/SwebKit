@@ -93,26 +93,66 @@ public class ProactiveInsightServiceTests
     };
 
     [Fact]
-    public async Task AlertFired_NoMatchingWorkspaceNode_NeverInvokesTheToolRegistry_AndReportsSkipped()
+    public async Task AlertFired_NoMatchingWorkspaceNode_StillInvestigates_WithoutAMap()
     {
         using var _sandbox = new AppDataSandbox();
         var (insights, engine, ruleRepo, profiles, _, registry, _) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
-        // Deliberately no topology nodes added — nothing to correlate against.
+        // Deliberately no map nodes — map membership enriches the investigation but must not
+        // gate it: an unmapped fired resource still gets a (direct) investigation.
         var rule = AksRule("prod");
         await ruleRepo.UpsertAsync(rule);
         await engine.ReloadRulesAsync();
 
-        ProactiveInsightStatusEvent? status = null;
-        insights.InsightStatus += e => status = e;
+        var statuses = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => statuses.Add(e);
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
 
         await engine.RunEvaluationOnceAsync();
-        await WaitUntilAsync(() => status is not null);
+        await WaitUntilAsync(() => ready is not null);
 
-        Assert.Empty(registry.Calls);
-        Assert.NotNull(status);
-        Assert.Equal(ProactiveInsightStage.Skipped, status!.Stage);
-        Assert.Equal(rule.Id, status.RuleId);
-        Assert.Contains("not on the Map", status.Reason);
+        // The runner resolves zero tools (empty Definitions) → the single-shot fallback runs —
+        // and reaches the tool registry even though nothing matched a map.
+        var call = Assert.Single(registry.Calls);
+        Assert.Equal("investigate_workspace_issue", call.ToolName);
+        Assert.Equal("Aks", call.Arguments.GetProperty("area").GetString());
+        Assert.Equal("prod", call.Arguments.GetProperty("resource_hint").GetString());
+        Assert.Equal(JsonValueKind.Null, call.Arguments.GetProperty("map_id").ValueKind);
+
+        Assert.NotNull(ready);
+        Assert.Equal(rule.Id, ready!.RuleId);
+        Assert.Contains(statuses, s => s.Stage == ProactiveInsightStage.Started);
+        Assert.DoesNotContain(statuses, s => s.Stage == ProactiveInsightStage.Skipped);
+    }
+
+    [Fact]
+    public async Task AlertFired_MatchingNodeInOneOfSeveralMaps_PassesThatMapsIdToTheFallback()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, profiles, _, registry, _) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        // Two maps carry same-shaped AKS nodes on different clusters — the rule's pinned
+        // context decides which map (and which cluster) the investigation scopes to.
+        var mapA = new WorkspaceMap { Name = "Project A" };
+        mapA.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api", KubeconfigContext = "ctx-a" });
+        var mapB = new WorkspaceMap { Name = "Project B" };
+        mapB.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api", KubeconfigContext = "ctx-b" });
+        profiles.Config.Maps.AddRange([mapA, mapB]);
+
+        var rule = AksRule("prod");
+        rule.AksPodParams!.KubeconfigContext = "ctx-b";
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => ready is not null);
+
+        var call = Assert.Single(registry.Calls);
+        Assert.Equal("investigate_workspace_issue", call.ToolName);
+        Assert.Equal(mapB.Id, call.Arguments.GetProperty("map_id").GetString());
+        Assert.Equal("ctx-b", call.Arguments.GetProperty("context").GetString());
     }
 
     [Fact]

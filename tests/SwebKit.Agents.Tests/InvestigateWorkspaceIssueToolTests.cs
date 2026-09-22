@@ -116,14 +116,119 @@ public class InvestigateWorkspaceIssueToolTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_NoNodeMatchesAreaAndHint_ReturnsError()
+    public async Task ExecuteAsync_NoNodeMatchesAreaAndHint_InvestigatesTheHintedResourceDirectly()
     {
+        // Map membership enriches but doesn't gate: an unmapped resource is investigated
+        // directly (here: nothing to inspect because AKS isn't configured — still a real
+        // report, not a refusal).
         var (tool, profiles, _) = Build();
         profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
 
         var result = await tool.ExecuteAsync(Args(new { area = "Aks", resource_hint = "nothing-like-this-exists" }), CancellationToken.None);
 
-        Assert.Contains("No workspace topology node found", result);
+        using var doc = JsonDocument.Parse(result);
+        Assert.False(doc.RootElement.TryGetProperty("error", out _));
+        Assert.Equal(0, doc.RootElement.GetProperty("related_resources_investigated").GetInt32());
+        Assert.Contains("not on any workspace Map", doc.RootElement.GetProperty("note").GetString());
+        Assert.Contains("AKS is not configured", result);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NoNodeMatches_StillDelegatesToAreaTool()
+    {
+        // A Service Bus hint that isn't on any map still reaches analyze_queue_health.
+        var (tool, profiles, registry) = Build();
+        registry.CannedResults["analyze_queue_health"] = """{"health_summary":"Degraded"}""";
+
+        var result = await tool.ExecuteAsync(Args(new { area = "ServiceBus", resource_hint = "orders-queue" }), CancellationToken.None);
+
+        var call = Assert.Single(registry.Calls);
+        Assert.Equal("analyze_queue_health", call.ToolName);
+        Assert.Equal("orders-queue", call.Arguments.GetProperty("queue_name").GetString());
+        Assert.Contains("Degraded", result);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MapId_RestrictsTheLookupToThatMap()
+    {
+        // Two maps both carry a "prod/api"-shaped node on different clusters; map_id picks one.
+        var mapA = new WorkspaceMap { Name = "Project A" };
+        mapA.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api-a", KubeconfigContext = "ctx-a" });
+        var mapB = new WorkspaceMap { Name = "Project B" };
+        mapB.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api-b", KubeconfigContext = "ctx-b" });
+        var (tool, profiles, _) = Build();
+        profiles.Config.Maps.AddRange([mapA, mapB]);
+
+        var result = await tool.ExecuteAsync(Args(new { area = "Aks", resource_hint = "prod", map_id = mapB.Id }), CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(result);
+        Assert.Equal("Project B", doc.RootElement.GetProperty("map").GetString());
+        Assert.Equal("api-b", doc.RootElement.GetProperty("starting_resource").GetProperty("DisplayLabel").GetString());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ContextMismatch_DoesNotMatchANodePinnedToAnotherCluster()
+    {
+        // "prod" exists on the map — but pinned to ctx-a. Asking with context ctx-b must not
+        // silently inspect cluster A's resource; it falls back to a direct (unmapped) lookup.
+        var (tool, profiles, _) = Build();
+        var map = new WorkspaceMap { Name = "Project A" };
+        map.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api", KubeconfigContext = "ctx-a" });
+        profiles.Config.Maps.Add(map);
+
+        var result = await tool.ExecuteAsync(Args(new { area = "Aks", resource_hint = "prod", context = "ctx-b" }), CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(result);
+        Assert.False(doc.RootElement.TryGetProperty("map", out _));
+        Assert.Contains("not on any workspace Map", doc.RootElement.GetProperty("note").GetString());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AksNamespaceLevelNode_InvestigatesTheLeastHealthyPod()
+    {
+        // The picker's "whole namespace" option produces a bare "ns" key — when such a node is
+        // reached as a relationship neighbor, the tool inspects the namespace as a whole and digs
+        // into the worst pod.
+        var aksClient = new FakeAksClientForWorkspaceInvestigation(pods:
+        [
+            new PodInfo { Name = "web-abc", Namespace = "prod", Phase = "Running", Ready = true, RestartCount = 0 },
+            new PodInfo { Name = "worker-7c9f", Namespace = "prod", Phase = "Running", Ready = false, RestartCount = 9 },
+        ]);
+        var (tool, profiles, registry) = Build(aksClient);
+        registry.CannedResults["investigate_pod_issue"] = """{"pod":"worker-7c9f","status":"CrashLoopBackOff"}""";
+        var sbNode = new WorkspaceResourceNode { Area = WorkspaceResourceArea.ServiceBus, ResourceKey = "orders.servicebus.windows.net", DisplayLabel = "orders" };
+        var nsNode = new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod", DisplayLabel = "prod ns", KubeconfigContext = "ctx-a" };
+        profiles.Config.Topology.Nodes.Add(sbNode);
+        profiles.Config.Topology.Nodes.Add(nsNode);
+        profiles.Config.Topology.Relationships.Add(new WorkspaceResourceRelationship { FromNodeId = sbNode.Id, ToNodeId = nsNode.Id });
+
+        var result = await tool.ExecuteAsync(Args(new { area = "ServiceBus", resource_hint = "orders" }), CancellationToken.None);
+
+        var call = Assert.Single(registry.Calls);
+        Assert.Equal("investigate_pod_issue", call.ToolName);
+        Assert.Equal("worker-7c9f", call.Arguments.GetProperty("pod_name").GetString());
+        // The node's pinned context is forwarded so the nested tool hits the right cluster.
+        Assert.Equal("ctx-a", call.Arguments.GetProperty("context").GetString());
+        Assert.Contains("Namespace-level node", result);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnmappedNamespaceHint_InvestigatesItDirectly_WithTheGivenContext()
+    {
+        // No map at all: the bare-namespace hint goes down the same namespace-level path, and the
+        // caller-supplied context is forwarded to the nested pod investigation.
+        var aksClient = new FakeAksClientForWorkspaceInvestigation(pods:
+            [new PodInfo { Name = "api-1", Namespace = "prod", Phase = "Running", Ready = false, RestartCount = 3 }]);
+        var (tool, _, registry) = Build(aksClient);
+        registry.CannedResults["investigate_pod_issue"] = """{"pod":"api-1"}""";
+
+        var result = await tool.ExecuteAsync(Args(new { area = "Aks", resource_hint = "prod", context = "ctx-b" }), CancellationToken.None);
+
+        var call = Assert.Single(registry.Calls);
+        Assert.Equal("investigate_pod_issue", call.ToolName);
+        Assert.Equal("prod", call.Arguments.GetProperty("namespace").GetString());
+        Assert.Equal("ctx-b", call.Arguments.GetProperty("context").GetString());
+        Assert.Contains("not on any workspace Map", result);
     }
 
     [Fact]

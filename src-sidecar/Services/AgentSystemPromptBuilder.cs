@@ -24,7 +24,12 @@ public sealed class AgentSystemPromptBuilder
         _demo = demo;
     }
 
-    public string Build(AgentChatContext? context, string normalizedMode, string normalizedScope, bool hasToolCalling)
+    /// <param name="maps">Which workspace maps to render in the `## Workspace map` section.
+    /// <c>null</c> renders every map the profile carries (chat turns); an explicit list scopes the
+    /// section — the proactive-investigation runner passes just the map a fired alert matched, or
+    /// an empty list when nothing matched (no map section at all).</param>
+    public string Build(AgentChatContext? context, string normalizedMode, string normalizedScope, bool hasToolCalling,
+        IReadOnlyList<WorkspaceMap>? maps = null)
     {
         var data = _profiles.GetProfileData();
         var config = data.Config;
@@ -66,7 +71,7 @@ public sealed class AgentSystemPromptBuilder
 
         var currentFocus = BuildCurrentFocusSection(context);
 
-        var workspaceMap = BuildWorkspaceMapSection(config);
+        var workspaceMap = BuildWorkspaceMapSection(maps ?? [.. config.EffectiveMaps()]);
 
         var fencedAreas = BuildFencedAreasSection(data, config, context, normalizedScope, hasToolCalling);
 
@@ -129,51 +134,62 @@ public sealed class AgentSystemPromptBuilder
         [WorkspaceResourceArea.Storage] = "Storage",
     };
 
-    /// <summary>workspace-map-overhaul — the user-curated topology (Settings → Map) as context on
+    /// <summary>workspace-map-overhaul — the user-curated maps (Settings → Map) as context on
     /// EVERY turn, not just when the model happens to call a tool. Until now the map was only
     /// reachable through <c>investigate_workspace_issue</c>, which is fenced behind workspace scope
     /// on contextual panels — so the declared relationships were invisible on most turns. Rendered
-    /// compactly: nodes grouped by area, edges as "from → to (label)". Empty when no nodes exist —
-    /// an unconfigured map contributes no noise.</summary>
-    private static string BuildWorkspaceMapSection(AppConfig config)
+    /// compactly per map: nodes grouped by area, edges as "from → to (label)". A profile carries
+    /// one named map per project/environment; empty maps contribute no noise.</summary>
+    private static string BuildWorkspaceMapSection(IReadOnlyList<WorkspaceMap> maps)
     {
-        var topology = config.Topology;
-        if (topology.Nodes.Count == 0)
+        var nonEmpty = maps.Where(m => m.Nodes.Count > 0).ToList();
+        if (nonEmpty.Count == 0)
             return "";
-
-        var nodeById = topology.Nodes.ToDictionary(n => n.Id);
-
-        var areaParts = topology.Nodes
-            .GroupBy(n => n.Area)
-            .OrderBy(g => g.Key)
-            .Select(g =>
-            {
-                var shown = g.Take(MaxMapNodes).Select(n => $"{n.DisplayLabel} ({n.ResourceKey})");
-                var overflow = g.Count() - MaxMapNodes;
-                return $"{MapAreaLabels[g.Key]}: {string.Join(", ", shown)}"
-                    + (overflow > 0 ? $" (+{overflow} more)" : "");
-            });
-
-        var edgeParts = topology.Relationships
-            .Where(r => nodeById.ContainsKey(r.FromNodeId) && nodeById.ContainsKey(r.ToNodeId))
-            .Select(r =>
-            {
-                var text = $"{nodeById[r.FromNodeId].DisplayLabel} → {nodeById[r.ToNodeId].DisplayLabel}";
-                return string.IsNullOrWhiteSpace(r.Label) ? text : $"{text} ({r.Label})";
-            })
-            .ToList();
-        var edges = edgeParts.Take(MaxMapEdges).ToList();
-        var edgeOverflow = edgeParts.Count - edges.Count;
-        if (edgeOverflow > 0)
-            edges.Add($"(+{edgeOverflow} more)");
 
         return $"""
 
-            ## Workspace map (user-declared)
-            Resources: {string.Join(" | ", areaParts)}
-            Relationships: {(edges.Count > 0 ? string.Join(" · ", edges) : "(none declared yet)")}
+            ## Workspace map{(nonEmpty.Count > 1 ? "s" : "")} (user-declared)
+            {string.Join("\n", nonEmpty.Select(RenderMap))}
             These relationships are declared by the user, not inferred — treat them as facts when reasoning across areas.
             """;
+
+        static string RenderMap(WorkspaceMap map)
+        {
+            var nodeById = map.Nodes.ToDictionary(n => n.Id);
+
+            var areaParts = map.Nodes
+                .GroupBy(n => n.Area)
+                .OrderBy(g => g.Key)
+                .Select(g =>
+                {
+                    var shown = g.Take(MaxMapNodes).Select(n =>
+                        n.KubeconfigContext is { Length: > 0 } ctx
+                            ? $"{n.DisplayLabel} ({n.ResourceKey}, ctx: {ctx})"
+                            : $"{n.DisplayLabel} ({n.ResourceKey})");
+                    var overflow = g.Count() - MaxMapNodes;
+                    return $"{MapAreaLabels[g.Key]}: {string.Join(", ", shown)}"
+                        + (overflow > 0 ? $" (+{overflow} more)" : "");
+                });
+
+            var edgeParts = map.Relationships
+                .Where(r => nodeById.ContainsKey(r.FromNodeId) && nodeById.ContainsKey(r.ToNodeId))
+                .Select(r =>
+                {
+                    var text = $"{nodeById[r.FromNodeId].DisplayLabel} → {nodeById[r.ToNodeId].DisplayLabel}";
+                    return string.IsNullOrWhiteSpace(r.Label) ? text : $"{text} ({r.Label})";
+                })
+                .ToList();
+            var edges = edgeParts.Take(MaxMapEdges).ToList();
+            var edgeOverflow = edgeParts.Count - edges.Count;
+            if (edgeOverflow > 0)
+                edges.Add($"(+{edgeOverflow} more)");
+
+            return $"""
+                ### {map.Name}
+                Resources: {string.Join(" | ", areaParts)}
+                Relationships: {(edges.Count > 0 ? string.Join(" · ", edges) : "(none declared yet)")}
+                """;
+        }
     }
 
     /// <summary>agent-correlation Module 2 — when a contextual turn's "feature" scope fences off

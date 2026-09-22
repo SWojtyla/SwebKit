@@ -146,14 +146,16 @@ export function useAksNamespaces(enabled = true, context?: string) {
     });
 }
 
-export function useAksDeployments(ns: string | null) {
-    const ctx = useAksContextKey();
+export function useAksDeployments(ns: string | null, context?: string) {
+    const configuredCtx = useAksContextKey();
+    const ctx = context || configuredCtx;
     return useQuery({
         queryKey: ["aks-deployments", ctx, ns],
         queryFn: ({ signal }) =>
-            apiFetch<DeploymentInfo[]>(`/api/aks/${ns}/deployments`, {
-                signal,
-            }),
+            apiFetch<DeploymentInfo[]>(
+                `/api/aks/${ns}/deployments${context ? `?context=${encodeURIComponent(context)}` : ""}`,
+                { signal },
+            ),
         enabled: !!ns,
     });
 }

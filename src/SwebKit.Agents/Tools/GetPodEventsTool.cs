@@ -40,6 +40,10 @@ public sealed class GetPodEventsTool : IAgentTool
             "pod_name": {
               "type": "string",
               "description": "Optional: filter events to a specific pod or resource name"
+            },
+            "context": {
+              "type": "string",
+              "description": "Optional kubeconfig context — target this cluster instead of the globally configured one"
             }
           },
           "required": []
@@ -57,7 +61,7 @@ public sealed class GetPodEventsTool : IAgentTool
             : null;
 
         // Use DemoAksClient in demo mode
-        IAksClient client = _appState.UseDemoData ? _demoAksClient : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
+        IAksClient client = AksToolContext.ResolveClient(_aksFactory, _demoAksClient, _appState, AksToolContext.GetContext(arguments));
 
         var events = await client.GetEventsAsync(ns, podName, ct);
 

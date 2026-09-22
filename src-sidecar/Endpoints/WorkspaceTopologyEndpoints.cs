@@ -6,7 +6,7 @@ namespace SwebKit.Sidecar.Endpoints;
 
 /// <summary>
 /// Read-only support for the workspace topology "Map" settings tab. Nodes and relationships
-/// themselves are NOT exposed here — they're plain fields on <see cref="SwebKit.Core.Domain.AppConfig.Topology"/>
+/// themselves are NOT exposed here — they're plain fields on <see cref="SwebKit.Core.Domain.AppConfig.Maps"/>
 /// and round-trip through the existing whole-profile <c>GET/PUT /api/config/profiles</c> endpoints,
 /// the same way <c>RedisConfig</c>/<c>StorageAccounts</c> already do (see <see cref="ConfigEndpoints"/>).
 /// The only thing that genuinely needs a dedicated endpoint is this candidate list, since it's
@@ -71,6 +71,9 @@ public static class WorkspaceTopologyEndpoints
                     Area = WorkspaceResourceArea.Aks,
                     ResourceKey = $"{ns}/{deployment}",
                     DisplayLabel = $"{deployment} ({ns})",
+                    // These candidates only ever come from the configured context — the picker's
+                    // dedicated context+namespace flow is what reaches other clusters.
+                    KubeconfigContext = aks.KubeconfigContext,
                 };
             }
         }

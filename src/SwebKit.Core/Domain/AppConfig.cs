@@ -15,7 +15,33 @@ public class AppConfig
     public List<FavoriteEntity> FavoriteEntities { get; set; } = [];
     public List<FavoriteResource> FavoriteResources { get; set; } = [];
     public List<SavedWorkspace> SavedWorkspaces { get; set; } = [];
+
+    /// <summary>The user-curated workspace maps (Settings → Map) — one named component graph per
+    /// project/environment. Consumers should read <see cref="EffectiveMaps"/> rather than this list
+    /// directly so a not-yet-migrated legacy <see cref="Topology"/> still counts.</summary>
+    public List<WorkspaceMap> Maps { get; set; } = [];
+
+    /// <summary>Legacy single-map storage from before <see cref="Maps"/> existed. Profiles still
+    /// carrying nodes/relationships here get migrated into <see cref="Maps"/> by profile
+    /// normalization; the property remains so those documents keep deserializing.</summary>
     public WorkspaceTopology Topology { get; set; } = new();
+
+    /// <summary>Every map the workspace effectively has: <see cref="Maps"/> plus — when it still
+    /// holds content — the legacy <see cref="Topology"/> wrapped as a pseudo-map. Normalization
+    /// drains the legacy graph into <see cref="Maps"/> on load/save, but in-memory writes (and a
+    /// profile PUT that raced normalization) can leave nodes there; reading through this keeps
+    /// every consumer honest. The wrapper's stable <c>"legacy"</c> id means two calls in one
+    /// operation still agree on which map a node belongs to.</summary>
+    public IEnumerable<WorkspaceMap> EffectiveMaps() =>
+        Topology.Nodes.Count > 0 || Topology.Relationships.Count > 0
+            ? Maps.Append(new WorkspaceMap
+            {
+                Id = "legacy",
+                Name = string.IsNullOrWhiteSpace(Name) ? "Default" : Name,
+                Nodes = Topology.Nodes,
+                Relationships = Topology.Relationships,
+            })
+            : Maps;
     public Dictionary<string, FilterState> LastUsedFilters { get; set; } = [];
     /// <summary>Azure Key Vault URL for resolving <c>AzureKeyVault</c> environment variables (e.g. https://my-vault.vault.azure.net/). Optional.</summary>
     [Obsolete("Use KeyVaults instead. Kept for backward-compatible deserialization of existing profiles.")]

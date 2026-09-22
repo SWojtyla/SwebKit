@@ -37,7 +37,8 @@ public sealed class GetPodLogsTool : IAgentTool
             "pod_name":  { "type": "string",  "description": "Name of the pod" },
             "namespace": { "type": "string",  "description": "Kubernetes namespace (default: \"default\")" },
             "container": { "type": "string",  "description": "Container name. Omit to use the first container." },
-            "tail_lines":{ "type": "integer", "description": "Number of log lines to return (default: 100, max: 500)" }
+            "tail_lines":{ "type": "integer", "description": "Number of log lines to return (default: 100, max: 500)" },
+            "context":   { "type": "string",  "description": "Optional kubeconfig context — target this cluster instead of the globally configured one" }
           },
           "required": ["pod_name"]
         }
@@ -60,7 +61,7 @@ public sealed class GetPodLogsTool : IAgentTool
             : 100;
 
         // Use DemoAksClient in demo mode
-        IAksClient client = _appState.UseDemoData ? _demoAksClient : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
+        IAksClient client = AksToolContext.ResolveClient(_aksFactory, _demoAksClient, _appState, AksToolContext.GetContext(arguments));
 
         var opts = new LogStreamOptions
         {

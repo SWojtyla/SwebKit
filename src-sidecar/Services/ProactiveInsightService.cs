@@ -160,17 +160,14 @@ public sealed class ProactiveInsightService
                 return; // this rule's source type isn't one we know how to map to a topology node
             }
 
-            var topology = _profiles.Config.Topology;
-            var startNode = topology.Nodes.FirstOrDefault(n =>
-                n.Area == start.Value.Area &&
-                (n.ResourceKey.Contains(start.Value.Hint, StringComparison.OrdinalIgnoreCase) ||
-                 n.DisplayLabel.Contains(start.Value.Hint, StringComparison.OrdinalIgnoreCase)));
-            if (startNode is null)
-            {
-                RaiseStatus(evt, ProactiveInsightStage.Skipped,
-                    $"\"{start.Value.Hint}\" is not on the Map — add it in Settings → Map");
-                return; // the fired rule's resource isn't on the Map yet — nothing declared to correlate
-            }
+            // A fired resource that isn't on any map no longer gates the investigation — the
+            // model has workspace-scope tools and can correlate on its own. The map only scopes
+            // *which* declared relationships it sees (the map containing the resource, auto-matched
+            // across every map the profile carries).
+            var config = _profiles.Config;
+            var effectiveContext = start.Value.Context
+                ?? (start.Value.Area == WorkspaceResourceArea.Aks ? config.AksConfig?.KubeconfigContext : null);
+            var match = WorkspaceMapLookup.FindNode(config.EffectiveMaps(), start.Value.Area, start.Value.Hint, effectiveContext);
 
             RaiseStatus(evt, ProactiveInsightStage.Started);
 
@@ -182,7 +179,7 @@ public sealed class ProactiveInsightService
             try
             {
                 result = await _investigationRunner.InvestigateAsync(
-                    evt, $"{start.Value.Area}/{start.Value.Hint}", CancellationToken.None);
+                    evt, DescribeStart(start.Value, effectiveContext), match?.Map, CancellationToken.None);
             }
             catch (Exception ex)
             {
@@ -204,7 +201,13 @@ public sealed class ProactiveInsightService
             {
                 reportJson = await _toolRegistry.ExecuteAsync(
                     "investigate_workspace_issue",
-                    BuildArgs(new { area = start.Value.Area.ToString(), resource_hint = start.Value.Hint }),
+                    BuildArgs(new
+                    {
+                        area = start.Value.Area.ToString(),
+                        resource_hint = start.Value.Hint,
+                        context = effectiveContext,
+                        map_id = match?.Map.Id,
+                    }),
                     CancellationToken.None);
 
                 summary = await SummarizeAsync(evt, reportJson) ?? string.Empty;
@@ -252,23 +255,37 @@ public sealed class ProactiveInsightService
         }
     }
 
-    /// <summary>Maps a fired rule's own params to the same (area, hint) shape
+    /// <summary>Renders the starting resource for the runner's user message — "Aks/prod" for a
+    /// context-less match, "Aks/aks-dev/dev-briocomp" when a kubeconfig context pins the cluster,
+    /// so the model knows which cluster's tools to point at.</summary>
+    private static string DescribeStart(
+        (WorkspaceResourceArea Area, string Hint, string? Context) start, string? effectiveContext) =>
+        string.IsNullOrWhiteSpace(effectiveContext)
+            ? $"{start.Area}/{start.Hint}"
+            : $"{start.Area}/{effectiveContext}/{start.Hint}";
+
+    /// <summary>Maps a fired rule's own params to the same (area, hint, context) shape
     /// <c>InvestigateWorkspaceIssueTool</c> expects — the rule doesn't carry an internal
     /// <c>WorkspaceResourceNode</c> id any more than the model does, so this is the same
-    /// hint-matching approach, not a different mechanism.</summary>
-    private static (WorkspaceResourceArea Area, string Hint)? FindStartingResource(MonitoringAlertRule rule) => rule.Source switch
+    /// hint-matching approach, not a different mechanism. <c>Context</c> is the rule's pinned
+    /// kubeconfig context for AKS sources (null for everything else and for rules that follow
+    /// the globally configured context).</summary>
+    private static (WorkspaceResourceArea Area, string Hint, string? Context)? FindStartingResource(MonitoringAlertRule rule) => rule.Source switch
     {
         AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore =>
-            string.IsNullOrWhiteSpace(rule.AksPodParams?.Namespace) ? null : (WorkspaceResourceArea.Aks, rule.AksPodParams.Namespace),
+            string.IsNullOrWhiteSpace(rule.AksPodParams?.Namespace)
+                ? null
+                : (WorkspaceResourceArea.Aks, rule.AksPodParams.Namespace,
+                    string.IsNullOrWhiteSpace(rule.AksPodParams.KubeconfigContext) ? null : rule.AksPodParams.KubeconfigContext),
 
         AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or AlertRuleSource.ServiceBusDeadSubscription =>
-            string.IsNullOrWhiteSpace(rule.ServiceBusParams?.EntityPath) ? null : (WorkspaceResourceArea.ServiceBus, rule.ServiceBusParams.EntityPath),
+            string.IsNullOrWhiteSpace(rule.ServiceBusParams?.EntityPath) ? null : (WorkspaceResourceArea.ServiceBus, rule.ServiceBusParams.EntityPath, null),
 
         AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients =>
-            string.IsNullOrWhiteSpace(rule.RedisAlertParams?.ConnectionAlias) ? null : (WorkspaceResourceArea.Redis, rule.RedisAlertParams.ConnectionAlias),
+            string.IsNullOrWhiteSpace(rule.RedisAlertParams?.ConnectionAlias) ? null : (WorkspaceResourceArea.Redis, rule.RedisAlertParams.ConnectionAlias, null),
 
         AlertRuleSource.StorageBlobCount =>
-            string.IsNullOrWhiteSpace(rule.StorageParams?.AccountAlias) ? null : (WorkspaceResourceArea.Storage, rule.StorageParams.AccountAlias),
+            string.IsNullOrWhiteSpace(rule.StorageParams?.AccountAlias) ? null : (WorkspaceResourceArea.Storage, rule.StorageParams.AccountAlias, null),
 
         _ => null,
     };

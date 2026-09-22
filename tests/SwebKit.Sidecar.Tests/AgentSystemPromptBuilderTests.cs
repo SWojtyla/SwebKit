@@ -296,4 +296,62 @@ public class AgentSystemPromptBuilderTests
         Assert.Contains("(+5 more)", prompt);
         Assert.DoesNotContain("rel44", prompt);
     }
+
+    [Fact]
+    public void Build_NamedMaps_RenderUnderTheirOwnHeaders()
+    {
+        var builder = BuilderWith(profiles =>
+        {
+            var payments = new WorkspaceMap { Name = "Payments" };
+            payments.Nodes.Add(Node("n1", WorkspaceResourceArea.Aks, "prod/api", "api"));
+            var shipping = new WorkspaceMap { Name = "Shipping" };
+            shipping.Nodes.Add(Node("n2", WorkspaceResourceArea.Redis, "cache-1", "sessions"));
+            profiles.Config.Maps.AddRange([payments, shipping]);
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true);
+
+        Assert.Contains("## Workspace maps", prompt);
+        Assert.Contains("### Payments", prompt);
+        Assert.Contains("### Shipping", prompt);
+    }
+
+    [Fact]
+    public void Build_ScopedToOneMap_RendersOnlyThatMap()
+    {
+        // The proactive-investigation runner passes just the map the fired resource matched —
+        // other projects' maps stay out of the model's context.
+        WorkspaceMap? payments = null;
+        var builder = BuilderWith(profiles =>
+        {
+            payments = new WorkspaceMap { Name = "Payments" };
+            payments.Nodes.Add(Node("n1", WorkspaceResourceArea.Aks, "prod/api", "api"));
+            var shipping = new WorkspaceMap { Name = "Shipping" };
+            shipping.Nodes.Add(Node("n2", WorkspaceResourceArea.Redis, "cache-1", "sessions"));
+            profiles.Config.Maps.AddRange([payments, shipping]);
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true, maps: [payments!]);
+
+        Assert.Contains("### Payments", prompt);
+        Assert.DoesNotContain("Shipping", prompt);
+    }
+
+    [Fact]
+    public void Build_ScopedToAnEmptyList_OmitsTheMapSectionEntirely()
+    {
+        // The no-map investigation variant: an explicit empty list means "nothing matched" —
+        // different from null (render everything), so the runner can suppress the section.
+        var builder = BuilderWith(profiles =>
+        {
+            var m = new WorkspaceMap { Name = "Payments" };
+            m.Nodes.Add(Node("n1", WorkspaceResourceArea.Aks, "prod/api", "api"));
+            profiles.Config.Maps.Add(m);
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true, maps: []);
+
+        Assert.DoesNotContain("## Workspace map", prompt);
+        Assert.DoesNotContain("Payments", prompt);
+    }
 }

@@ -35,7 +35,8 @@ public sealed class InvestigatePodIssueTool : IAgentTool
           "type": "object",
           "properties": {
             "namespace": { "type": "string", "description": "Kubernetes namespace" },
-            "pod_name":  { "type": "string", "description": "Exact pod name" }
+            "pod_name":  { "type": "string", "description": "Exact pod name" },
+            "context":   { "type": "string", "description": "Optional kubeconfig context — target this cluster instead of the globally configured one" }
           },
           "required": ["namespace", "pod_name"]
         }
@@ -47,9 +48,7 @@ public sealed class InvestigatePodIssueTool : IAgentTool
         var ns = arguments.GetProperty("namespace").GetString()!;
 
         // Use DemoAksClient in demo mode
-        IAksClient client = _appState.UseDemoData 
-            ? _demoAksClient 
-            : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
+        IAksClient client = AksToolContext.ResolveClient(_aksFactory, _demoAksClient, _appState, AksToolContext.GetContext(arguments));
 
         try
         {

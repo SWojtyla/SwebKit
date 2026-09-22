@@ -1,6 +1,7 @@
 using System.Text.Json;
 using SwebKit.Agents;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Sidecar.Endpoints;
 
@@ -68,6 +69,31 @@ public sealed class ProactiveInvestigationRunner
         No prose, no markdown fences — the JSON object only.
         """;
 
+    /// <summary>The map-less instructions variant: no declared map covers the fired resource, so
+    /// there are no relationships to follow — the model has to find likely neighbors from live
+    /// data instead. An alert must still yield an investigation even when the user never mapped
+    /// the resource.</summary>
+    private const string InvestigationInstructionsNoMap = """
+
+        ## Background investigation mode
+        A monitoring alert just fired. The user is NOT watching this conversation — you are
+        investigating on their behalf. Use the available tools to gather evidence across the
+        workspace: start from the resource the alert names and inspect it directly. No workspace
+        map covers this resource, so there are no declared relationships to follow — look for
+        likely neighbors yourself (same-namespace workloads, queues or caches a failing resource
+        would plausibly depend on, observability telemetry for the same timeframe). Prefer a few
+        high-signal tool calls over exhaustive enumeration.
+
+        When you have enough evidence, respond with ONLY a JSON object in this exact shape:
+        {
+          "hypothesis": "one-sentence root-cause hypothesis",
+          "evidence": ["short factual findings taken from the tool results"],
+          "severity": "low" | "medium" | "high",
+          "suggested_next_steps": ["concrete actions the user could take"]
+        }
+        No prose, no markdown fences — the JSON object only.
+        """;
+
     private readonly IAgentModelClient _modelClient;
     private readonly AgentToolCallOrchestrator _toolOrchestrator;
     private readonly AgentSystemPromptBuilder _promptBuilder;
@@ -96,10 +122,15 @@ public sealed class ProactiveInvestigationRunner
 
     /// <summary>Runs the bounded loop and parses the structured output. Returns null when the
     /// investigation could not produce anything usable (no tools resolved, budget exceeded, model
-    /// returned nothing) — the caller decides whether to fall back or drop the insight.</summary>
+    /// returned nothing) — the caller decides whether to fall back or drop the insight.
+    /// <paramref name="map"/> scopes the prompt's workspace-map section to the one map the fired
+    /// resource matched (auto-match by resource — other projects' maps stay out of context);
+    /// <c>null</c> means nothing matched, which switches the instructions to map-less
+    /// self-discovery rather than skipping the investigation.</summary>
     public async Task<ProactiveInvestigationResult?> InvestigateAsync(
         AlertFiredEvent evt,
         string startingResourceHint,
+        WorkspaceMap? map,
         CancellationToken ct)
     {
         var tools = _toolOrchestrator.ResolveTools(
@@ -114,8 +145,9 @@ public sealed class ProactiveInvestigationRunner
         }
 
         var systemPrompt =
-            _promptBuilder.Build(null, AgentToolCallOrchestrator.NormalizeMode(null), AgentToolCallOrchestrator.WorkspaceScope, hasToolCalling: true)
-            + InvestigationInstructions;
+            _promptBuilder.Build(null, AgentToolCallOrchestrator.NormalizeMode(null), AgentToolCallOrchestrator.WorkspaceScope, hasToolCalling: true,
+                maps: map is null ? [] : [map])
+            + (map is null ? InvestigationInstructionsNoMap : InvestigationInstructions);
 
         var steps = new List<AgentChatStep>();
         var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps);

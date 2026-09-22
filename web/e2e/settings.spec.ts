@@ -348,6 +348,13 @@ test.describe("Settings", () => {
         await page.getByTestId("settings-tab-map").click();
         await expect(page.getByTestId("workspace-map-settings")).toBeVisible();
 
+        // Maps are named per project — a fresh profile has none, so create one first.
+        // The picker only auto-opens once a (still empty) map is selected.
+        if (await page.getByTestId("workspace-map-no-maps").isVisible()) {
+            await page.getByTestId("workspace-map-new-name").fill("Test map");
+            await page.getByTestId("workspace-map-create").click();
+        }
+
         // Nodes here don't depend on any of the other tabs being configured — the "Custom
         // resource" form works even with zero auto-populated candidates, which is the common
         // case for a freshly-provisioned test profile. The picker auto-opens while the map
@@ -382,9 +389,7 @@ test.describe("Settings", () => {
 
         // Relationships are created from the selected node's inspector — the "from" is the
         // inspected node itself.
-        await nodeList
-            .getByRole("button", { name: /api \(prod\)/ })
-            .click();
+        await nodeList.getByRole("button", { name: /api \(prod\)/ }).click();
         await page
             .getByTestId("workspace-relationship-to")
             .selectOption({ label: "orders queue (Service Bus)" });
@@ -398,9 +403,7 @@ test.describe("Settings", () => {
         await page.reload();
         await page.getByTestId("settings-tab-map").click();
         await page.getByTestId("workspace-map-view-list").click();
-        await nodeList
-            .getByRole("button", { name: /api \(prod\)/ })
-            .click();
+        await nodeList.getByRole("button", { name: /api \(prod\)/ }).click();
         await expect(relationships).toContainText("consumes");
 
         // Removing the node also removes the relationship that referenced it — dangling
@@ -421,12 +424,10 @@ test.describe("Settings", () => {
         await expect(
             nodeList.getByRole("button", { name: /api \(prod\)/ }),
         ).toHaveCount(0);
-        await nodeList
-            .getByRole("button", { name: /orders queue/ })
-            .click();
-        await expect(
-            page.getByTestId("workspace-map-inspector"),
-        ).toContainText("No relationships declared");
+        await nodeList.getByRole("button", { name: /orders queue/ }).click();
+        await expect(page.getByTestId("workspace-map-inspector")).toContainText(
+            "No relationships declared",
+        );
     });
 
     test("Map tab: a suggested relationship can be confirmed (adds a real relationship) or dismissed (just hides it)", async ({
@@ -441,6 +442,12 @@ test.describe("Settings", () => {
 
         await page.goto("/settings");
         await page.getByTestId("settings-tab-map").click();
+        // Runs standalone (e.g. a filtered test run) need the map created first — the
+        // full-suite run reuses the map the previous test made.
+        if (await page.getByTestId("workspace-map-no-maps").isVisible()) {
+            await page.getByTestId("workspace-map-new-name").fill("Test map");
+            await page.getByTestId("workspace-map-create").click();
+        }
         // The previous test leaves a node behind, so the map isn't empty and the picker
         // stays closed until toggled open.
         await page.getByTestId("workspace-map-add-toggle").click();
@@ -470,10 +477,14 @@ test.describe("Settings", () => {
         await expect(nodeList.getByText(sbLabel)).toBeVisible();
 
         const aksNodeId = await nodeList
-            .locator('[data-testid^="workspace-map-item-"]', { hasText: aksLabel })
+            .locator('[data-testid^="workspace-map-item-"]', {
+                hasText: aksLabel,
+            })
             .getAttribute("data-testid");
         const sbNodeId = await nodeList
-            .locator('[data-testid^="workspace-map-item-"]', { hasText: sbLabel })
+            .locator('[data-testid^="workspace-map-item-"]', {
+                hasText: sbLabel,
+            })
             .getAttribute("data-testid");
         const fromNodeId = aksNodeId!.replace("workspace-map-item-", "");
         const toNodeId = sbNodeId!.replace("workspace-map-item-", "");
@@ -514,9 +525,9 @@ test.describe("Settings", () => {
             )
             .click();
         await expect(suggestionRow).toHaveCount(0);
-        await expect(
-            page.getByTestId("workspace-map-inspector"),
-        ).toContainText("0 relationship(s)");
+        await expect(page.getByTestId("workspace-map-inspector")).toContainText(
+            "0 relationship(s)",
+        );
 
         // Reload brings the (still-mocked) suggestion back, since dismissal isn't persisted.
         await page.reload();
@@ -534,7 +545,9 @@ test.describe("Settings", () => {
             .click();
         await page.getByTestId("workspace-map-view-list").click();
         await nodeList
-            .getByRole("button", { name: new RegExp(aksLabel.replace(/[()]/g, "\\$&")) })
+            .getByRole("button", {
+                name: new RegExp(aksLabel.replace(/[()]/g, "\\$&")),
+            })
             .click();
         const pairRow = page
             .getByTestId("workspace-map-relationships")
@@ -546,7 +559,9 @@ test.describe("Settings", () => {
         await page.getByTestId("settings-tab-map").click();
         await page.getByTestId("workspace-map-view-list").click();
         await nodeList
-            .getByRole("button", { name: new RegExp(aksLabel.replace(/[()]/g, "\\$&")) })
+            .getByRole("button", {
+                name: new RegExp(aksLabel.replace(/[()]/g, "\\$&")),
+            })
             .click();
         await expect(pairRow).toHaveCount(1);
     });

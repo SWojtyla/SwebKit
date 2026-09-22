@@ -100,7 +100,7 @@ public class ProactiveInvestigationRunnerTests
         var modelClient = new ScriptedInvestigationModelClient();
         var runner = BuildRunner(modelClient, new AgentToolRegistry([]));
 
-        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", CancellationToken.None);
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None);
 
         Assert.Null(result);
         Assert.Null(modelClient.LastRequest); // never even asked the model
@@ -127,7 +127,7 @@ public class ProactiveInvestigationRunnerTests
         };
         var runner = BuildRunner(modelClient, new AgentToolRegistry([tool]));
 
-        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", CancellationToken.None);
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal("pod OOMKilled", result!.Hypothesis);
@@ -145,7 +145,7 @@ public class ProactiveInvestigationRunnerTests
         var modelClient = new ScriptedInvestigationModelClient { ChatReplyText = "the pod is crashlooping after the last deploy" };
         var runner = BuildRunner(modelClient, new AgentToolRegistry([tool]));
 
-        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", CancellationToken.None);
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal("the pod is crashlooping after the last deploy", result!.Hypothesis);
@@ -161,7 +161,7 @@ public class ProactiveInvestigationRunnerTests
         var modelClient = new ScriptedInvestigationModelClient();
         var runner = BuildRunner(modelClient, new AgentToolRegistry([read, mutate]));
 
-        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", CancellationToken.None);
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.NotNull(modelClient.LastRequest);
@@ -176,7 +176,7 @@ public class ProactiveInvestigationRunnerTests
         var modelClient = new ScriptedInvestigationModelClient { ChatReplyText = "   " };
         var runner = BuildRunner(modelClient, new AgentToolRegistry([tool]));
 
-        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", CancellationToken.None);
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None);
 
         Assert.Null(result);
     }
@@ -196,7 +196,7 @@ public class ProactiveInvestigationRunnerTests
         var runner = BuildRunner(modelClient, new AgentToolRegistry([tool]), budget: TimeSpan.FromMilliseconds(50));
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", CancellationToken.None);
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None);
         sw.Stop();
 
         Assert.Null(result);
@@ -214,6 +214,43 @@ public class ProactiveInvestigationRunnerTests
         var runner = BuildRunner(modelClient, new AgentToolRegistry([tool]));
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => runner.InvestigateAsync(Fired(), "Aks/prod", CancellationToken.None));
+            () => runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task NoMatchingMap_PromptUsesTheMaplessInstructions_AndRendersNoMapSection()
+    {
+        var tool = new FakeInvestigationTool("fake_read", FeatureArea.Aks);
+        var modelClient = new ScriptedInvestigationModelClient();
+        var runner = BuildRunner(modelClient, new AgentToolRegistry([tool]));
+
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.NotNull(modelClient.LastRequest);
+        var prompt = modelClient.LastRequest!.SystemPrompt;
+        Assert.Contains("map covers this resource", prompt);
+        Assert.DoesNotContain("## Workspace map", prompt);
+        Assert.DoesNotContain("map relationships to check neighboring resources", prompt);
+    }
+
+    [Fact]
+    public async Task MatchingMap_PromptScopesTheMapSectionToThatMap_AndUsesTheMapInstructions()
+    {
+        var tool = new FakeInvestigationTool("fake_read", FeatureArea.Aks);
+        var modelClient = new ScriptedInvestigationModelClient();
+        var runner = BuildRunner(modelClient, new AgentToolRegistry([tool]));
+
+        var map = new WorkspaceMap { Name = "Payments" };
+        map.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map, CancellationToken.None);
+
+        Assert.NotNull(result);
+        var prompt = modelClient.LastRequest!.SystemPrompt;
+        Assert.Contains("### Payments", prompt);
+        Assert.Contains("api (prod/api)", prompt);
+        Assert.Contains("map relationships to check neighboring resources", prompt);
+        Assert.DoesNotContain("map covers this resource", prompt);
     }
 }

@@ -165,6 +165,27 @@ public class ProfileRepository
         config.Topology ??= new WorkspaceTopology();
         config.Topology.Nodes ??= [];
         config.Topology.Relationships ??= [];
+        config.Maps ??= [];
+        foreach (var map in config.Maps)
+        {
+            map.Id = string.IsNullOrWhiteSpace(map.Id) ? Guid.NewGuid().ToString("N")[..8] : map.Id;
+            map.Name = string.IsNullOrWhiteSpace(map.Name) ? "Untitled map" : map.Name.Trim();
+            map.Nodes ??= [];
+            map.Relationships ??= [];
+        }
+
+        // Pre-Maps profiles carried a single unnamed graph in Topology — fold it into Maps as a
+        // map named after the profile, then clear it so it can't be migrated twice.
+        if (config.Topology.Nodes.Count > 0 || config.Topology.Relationships.Count > 0)
+        {
+            config.Maps.Add(new WorkspaceMap
+            {
+                Name = string.IsNullOrWhiteSpace(config.Name) ? "Default" : config.Name,
+                Nodes = config.Topology.Nodes,
+                Relationships = config.Topology.Relationships,
+            });
+            config.Topology = new WorkspaceTopology();
+        }
 
         if (config.FavoriteResources.Count == 0)
         {

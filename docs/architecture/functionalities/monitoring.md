@@ -117,8 +117,8 @@ All components live in `web/src/components/monitoring/`.
 
 Each rule carries `AiInvestigationEnabled` (default `true`, editable in
 `AlertRuleDialog` and shown as an AI badge on `AlertRuleRow`). When a qualifying
-rule fires and its resource maps onto a workspace-topology node,
-`ProactiveInsightService` runs a bounded headless investigation through
+rule fires, `ProactiveInsightService` auto-matches the resource against all
+workspace maps (context-aware for AKS) and runs a bounded headless investigation through
 `ProactiveInvestigationRunner` (workspace-scope, ask-mode tools only; 5 tool
 rounds + 90s budget; single-flight globally). The structured result —
 hypothesis, evidence, severity, next steps — seeds a chat session and flows to
@@ -129,7 +129,8 @@ the card's Investigate action opens the seeded agent conversation.
 Every gate in that pipeline also raises `proactiveInsightStatus` (`Started` /
 `Skipped` / `Failed` + reason) on the same stream — so a fired alert that yields
 no insight still yields an explanation (AI disabled on the rule, no tool-calling
-profile, the resource not on the Map, another investigation in flight). The
+profile, another investigation in flight). Map membership is no longer a gate —
+an unmapped resource is investigated directly with a map-less prompt. The
 Monitoring page shows these as small status cards in the same feed area, and
 `AppLayout` toasts the terminal (Skipped/Failed) outcomes.
 

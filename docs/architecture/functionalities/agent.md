@@ -318,12 +318,16 @@ them receive JSON-RPC `-32601`. `session/clear` drops the ACP session alongside 
 conversation. The implementation lives under `src-sidecar/Services/Acp/`.
 
 The per-turn system prompt (`AgentSystemPromptBuilder`) carries a bounded
-`## Workspace map` section rendering the user-curated `AppConfig.Topology` — nodes
-grouped by area plus relationships as `from → to (label)`, capped (30 nodes/area,
-40 edges, `+N more` overflow) so a dense map can't eat the context window. This is
+`## Workspace map` section rendering the user-curated `AppConfig.Maps` — multiple
+named maps, each rendered under a `### {name}` heading with nodes grouped by area
+(AKS nodes show `ctx: {kubeconfigContext}` when pinned) plus relationships as
+`from → to (label)`, capped (30 nodes/area, 40 edges, `+N more` overflow) so dense
+maps can't eat the context window. This is
 how every provider, ACP included, always sees the declared relationships; the
 `investigate_workspace_issue` tool (workspace scope) then walks those edges live
-rather than being the only way the map is discovered.
+rather than being the only way the map is discovered. When no declared node
+matches the investigated resource, the tool inspects the hinted resource
+directly — the map is enrichment, never a gate.
 
 ### Screen state (agent-workspace-awareness)
 
@@ -343,9 +347,13 @@ connection strings, or full bodies — whitelisted fields and short previews onl
 ### Proactive investigation (agent-workspace-awareness)
 
 `ProactiveInsightService` subscribes to `MonitoringAlertEvaluationService.AlertFired`.
-When a rule fires with `AiInvestigationEnabled` (per-rule flag, default `true`)
-and its resource maps onto a workspace-topology node, a single-flight background
-investigation runs via `ProactiveInvestigationRunner`: a headless agentic loop
+When a rule fires with `AiInvestigationEnabled` (per-rule flag, default `true`),
+a single-flight background investigation runs via `ProactiveInvestigationRunner`.
+The service auto-matches the fired resource against every map
+(`WorkspaceMapLookup.FindNode` — context-aware for AKS, so a `prod/api` node
+pinned to `aks-dev` doesn't match an `aks-prod` alert); the matching map alone
+scopes the runner's prompt, while an unmatched resource switches to map-less
+self-discovery instructions instead of being skipped: a headless agentic loop
 (`IAgentModelClient.ChatAsync`) with workspace-scope, ask-mode tools — so
 `propose_*` mutations are structurally unreachable — capped at 5 tool rounds and
 a 90-second wall-clock budget. The model is asked to end with a JSON object

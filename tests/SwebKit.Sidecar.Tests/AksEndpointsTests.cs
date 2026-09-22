@@ -68,7 +68,7 @@ public class AksEndpointsTests
         demo.IsDemoMode = true;
         var pool = new FakeMonitoringConnectionPool { AksClient = demo.GetAksClient() };
 
-        var result = await AksEndpoints.GetDeploymentsAsync("ecommerce", profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.GetDeploymentsAsync("ecommerce", null, profile, demo, pool, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.DeploymentInfo>>>(result);
         Assert.NotEmpty(ok.Value!);
@@ -81,11 +81,23 @@ public class AksEndpointsTests
         var (profile, demo) = Deps();
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
-        var result = await AksEndpoints.GetDeploymentsAsync("infra", profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.GetDeploymentsAsync("infra", null, profile, demo, pool, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.DeploymentInfo>>>(result);
         Assert.NotEmpty(ok.Value!);
         Assert.Contains(pool.RequestedContexts, c => c is null); // GetClient(pool) requests the default context
+    }
+
+    [Fact]
+    public async Task GetDeploymentsAsync_ExplicitContext_RequestsThatContext()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetDeploymentsAsync("infra", "aks-prd", profile, demo, pool, CancellationToken.None);
+
+        Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.DeploymentInfo>>>(result);
+        Assert.Equal(["aks-prd"], pool.RequestedContexts);
     }
 
     [Fact]
@@ -95,7 +107,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = null };
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => AksEndpoints.GetDeploymentsAsync("infra", profile, demo, pool, CancellationToken.None));
+            () => AksEndpoints.GetDeploymentsAsync("infra", null, profile, demo, pool, CancellationToken.None));
     }
 
     // ── Pods ─────────────────────────────────────────────────────────────────

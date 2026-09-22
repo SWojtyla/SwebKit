@@ -351,4 +351,24 @@ public class WorkspaceRelationshipSuggestionServiceTests
 
         Assert.Empty(result); // no crash, no exception propagated
     }
+
+    [Fact]
+    public async Task GetSuggestionsAsync_NodesInDifferentMaps_AreNeverSuggestedToEachOther()
+    {
+        // Suggestions are per-map: a matching value across a map boundary is still meaningless —
+        // the user grouped those nodes into different project graphs on purpose.
+        var aksClient = new FakeAksClientForSuggestions(
+            pods: [new PodInfo { Name = "api-7c9f", Namespace = "prod", Phase = "Running" }],
+            containers: [new ContainerDetail { Name = "api", Image = "api:latest", EnvVars = [new EnvVarDetail { Name = "SB_HOST", Value = "orders.servicebus.windows.net" }] }]);
+        var (service, profiles) = Build(aksClient);
+        var mapA = new WorkspaceMap { Name = "A" };
+        mapA.Nodes.Add(AksNode("prod/api"));
+        var mapB = new WorkspaceMap { Name = "B" };
+        mapB.Nodes.Add(SbNode("orders.servicebus.windows.net", "orders"));
+        profiles.Config.Maps.AddRange([mapA, mapB]);
+
+        var result = await service.GetSuggestionsAsync(CancellationToken.None);
+
+        Assert.Empty(result);
+    }
 }
