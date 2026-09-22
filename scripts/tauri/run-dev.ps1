@@ -69,6 +69,29 @@ else {
         -WindowStyle Normal
 }
 
+# Keep frontend deps in sync with the lockfile. npm tracks its own installed
+# state in node_modules\.package-lock.json -- if the repo lockfile is newer
+# (e.g. after a pull that added a package) or node_modules is missing entirely,
+# install before Vite starts or it will crash on unresolved imports.
+$nodeModules = Join-Path $viteDir 'node_modules'
+$installedLock = Join-Path $nodeModules '.package-lock.json'
+$repoLock = Join-Path $viteDir 'package-lock.json'
+$needsInstall = -not (Test-Path $nodeModules)
+if (-not $needsInstall -and (Test-Path $repoLock)) {
+    $needsInstall = -not (Test-Path $installedLock) -or
+    ((Get-Item $repoLock).LastWriteTime -gt (Get-Item $installedLock).LastWriteTime)
+}
+if ($needsInstall) {
+    Write-Host "[deps]  frontend dependencies out of date -- running npm install..." -ForegroundColor Cyan
+    Push-Location $viteDir
+    npm install
+    $npmExit = $LASTEXITCODE
+    Pop-Location
+    if ($npmExit -ne 0) {
+        Write-Warning "[warn] npm install failed (exit $npmExit) -- the frontend may not start"
+    }
+}
+
 # 2. Vite
 if (Wait-ForUrl "http://localhost:1420/" "Vite" 2) {
     Write-Host "[skip]  vite already running" -ForegroundColor Yellow
