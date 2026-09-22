@@ -128,11 +128,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
     const columns: Column<HpaInfo>[] = useMemo(
         () => [
             {
-                // The only flexible column. The table is w-full and every other column is
-                // content-sized, so without one slack-absorbing column the extra width is
-                // smeared across all of them and the row reads as disconnected fragments.
                 header: "Target",
-                className: "w-full py-2 pr-4",
                 cell: (hpa) => (
                     <span className="text-xs text-muted-foreground">
                         {hpa.targetKind}/{hpa.targetName}
@@ -249,6 +245,7 @@ export function HpaTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                 isLoading={isLoading}
                 error={error}
                 isMulti={isMulti}
+                compact
                 testIdPrefix="hpa"
                 tableBodyTestId="hpas-table-body"
                 emptyMessage="No HPAs found"

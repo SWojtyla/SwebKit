@@ -7,7 +7,8 @@ rem   2. Vite frontend (http://localhost:1420)
 rem   3. Tauri window  (opens the desktop app)
 rem
 rem Double-click this file. If a tier is already running it is skipped.
-rem Close the spawned console windows to stop. Logs: scripts\logs\*.log
+rem The spawned tier windows stay blank on purpose -- all output is redirected
+rem to scripts\logs\*.log. Close those windows to stop.
 rem
 rem NOTE: the repo path must have no spaces for `start`'s quoting to hold.
 
@@ -72,6 +73,11 @@ rem subfolders, and the config lives in src-tauri/. Running it from web/ panics
 rem with "Couldn't recognize the current folder as a Tauri project".
 echo [launch] starting Tauri window...
 start "SwebKit Tauri" /D "%REPO%" cmd /k "call "%TAURI%" dev > "%LOGDIR%\tauri.log" 2>&1"
-echo [done]  SwebKit launching. Close the three console windows to stop.
+
+rem Open the frontend in the default browser as visible proof the stack is up
+rem (the Tauri window still needs a Rust build on first run).
+start "" "http://localhost:1420/"
+echo [done]  SwebKit launching. Browser opened at http://localhost:1420/.
+echo         Close the three console windows to stop.
 echo         Logs: scripts\logs\sidecar.log, scripts\logs\vite.log, scripts\logs\tauri.log
 endlocal
