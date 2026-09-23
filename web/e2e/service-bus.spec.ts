@@ -815,11 +815,13 @@ test.describe("Service Bus", () => {
         ).not.toBeVisible();
     });
 
-    test("bulk resend asks for confirmation, then sends copies without removing originals", async ({
+    test("bulk resend asks for confirmation, then moves copies and removes originals", async ({
         page,
     }) => {
-        // Resend is copy semantics (fresh Message ID, source kept) — the "GUID gets
-        // regenerated" feature request — unlike Resubmit, which moves DLQ messages.
+        // Resend is move-to-origin semantics (fresh Message ID, source removed once
+        // the copy lands) — it targets NServiceBus.FailedQ or falls back to the
+        // source entity, which is why the demo copies reappear here with new
+        // sequence numbers while the originals leave the list.
         await page.goto("/service-bus");
         await page
             .getByTestId("sb-namespace-select")
@@ -834,7 +836,7 @@ test.describe("Service Bus", () => {
         const confirm = page.getByTestId("bulk-action-confirm");
         await expect(confirm).toBeVisible();
         await expect(confirm).toContainText(
-            "Send a copy of 2 message(s) to order-created",
+            "Resend 2 message(s) to order-created",
         );
 
         // Cancel first — nothing is sent while the bar is up.
@@ -842,14 +844,14 @@ test.describe("Service Bus", () => {
         await expect(confirm).not.toBeVisible();
         await expect(page.getByTestId("bulk-action-bar")).toBeVisible();
 
-        // Confirming sends the copies and clears the selection.
+        // Confirming resends the copies and clears the selection.
         await page.getByTestId("bulk-resend").click();
         await page.getByTestId("bulk-action-confirm-yes").click();
         await expect(page.getByTestId("bulk-action-confirm")).not.toBeVisible();
         await expect(page.getByTestId("bulk-action-bar")).not.toBeVisible();
-        // Originals are still listed — resend never completes/removes the source.
-        await expect(page.getByTestId("message-item-4501")).toBeVisible();
-        await expect(page.getByTestId("message-item-4502")).toBeVisible();
+        // Originals leave the list — resend completes the source after the copy lands.
+        await expect(page.getByTestId("message-item-4501")).not.toBeVisible();
+        await expect(page.getByTestId("message-item-4502")).not.toBeVisible();
     });
 
     test("bulk resend is also available on dead-letter messages", async ({
@@ -868,12 +870,12 @@ test.describe("Service Bus", () => {
         const confirm = page.getByTestId("bulk-action-confirm");
         await expect(confirm).toBeVisible();
         await expect(confirm).toContainText(
-            "Send a copy of 1 message(s) to order-created",
+            "Resend 1 message(s) to order-created",
         );
         await page.getByTestId("bulk-action-confirm-yes").click();
         await expect(confirm).not.toBeVisible();
-        // The DLQ original stays — resend is a copy, not a resubmit/move.
-        await expect(page.getByTestId("message-item-4410")).toBeVisible();
+        // The DLQ original is removed once the copy lands — resend is a move, not a copy.
+        await expect(page.getByTestId("message-item-4410")).not.toBeVisible();
     });
 
     test("replay composer starts with a fresh message id and can restore the original", async ({

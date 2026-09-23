@@ -226,12 +226,22 @@ export function invalidateServiceBusQueries(
     qc.invalidateQueries({ queryKey: ["sb-entity-stats", nsId, entityPath] });
     qc.invalidateQueries({ queryKey: ["sb-scheduled", nsId, entityPath] });
 
-    // Sending, completing, purging or resubmitting changes message *counts*, not which entities
-    // exist — and `sb-subs` is per-topic, so invalidating it re-fires one request per topic in the
-    // tree after a single message send. The explicit Refresh action opts in; mutations do not.
+    // Message mutations change the counts the entity-tree badges render from the
+    // queue/topic lists — one request each, cheap enough to refresh on every
+    // mutation. Skipping them left the tree counts stale next to the refreshed
+    // tab header. `sb-subs` is keyed per topic, so only the affected
+    // subscription's topic is invalidated — a blanket `sb-subs` invalidate would
+    // re-fire one request per topic in the tree after a single message action.
+    qc.invalidateQueries({ queryKey: ["sb-queues", nsId] });
+    qc.invalidateQueries({ queryKey: ["sb-topics", nsId] });
+    const subMarker = entityPath.indexOf("/subscriptions/");
+    if (subMarker > 0) {
+        qc.invalidateQueries({
+            queryKey: ["sb-subs", nsId, entityPath.slice(0, subMarker)],
+        });
+    }
+
     if (options?.includeTopology) {
-        qc.invalidateQueries({ queryKey: ["sb-queues", nsId] });
-        qc.invalidateQueries({ queryKey: ["sb-topics", nsId] });
         qc.invalidateQueries({ queryKey: ["sb-subs", nsId] });
     }
 }

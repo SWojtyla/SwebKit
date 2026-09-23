@@ -550,7 +550,10 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         }
 
         var dlqPath = $"{entityPath}/$DeadLetterQueue";
-        var target = targetEntityPath ?? entityPath;
+        // The fallback target must be sendable: a subscription path is receive-only,
+        // so it normalizes to the parent topic (same rule as resend's FailedQ fallback).
+        var target = targetEntityPath
+            ?? (TryParseSubscriptionPath(entityPath, out var fallbackTopic, out _) ? fallbackTopic : entityPath);
         var requestedSequenceNumbers = ParseRequestedSequenceNumbers(sequenceNumbers);
 
         await using var receiver = _client.CreateReceiver(dlqPath, new ServiceBusReceiverOptions

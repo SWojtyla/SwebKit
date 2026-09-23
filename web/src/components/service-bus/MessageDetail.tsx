@@ -1,15 +1,30 @@
 import { useState, useMemo } from "react";
-import { Copy, Check, AlertTriangle, Save, Pencil, RotateCcw, Clock, Search, X, Download, FileArchive } from "lucide-react";
 import {
-  useSbCompleteMessages,
-  useSbCompleteDlq,
-  useSbResubmitDlq,
-  useSbSaveTemplate,
+    Copy,
+    Check,
+    AlertTriangle,
+    Save,
+    Pencil,
+    RotateCcw,
+    Clock,
+    Search,
+    X,
+    Download,
+    FileArchive,
+} from "lucide-react";
+import {
+    useSbCompleteMessages,
+    useSbCompleteDlq,
+    useSbResubmitDlq,
+    useSbSaveTemplate,
 } from "@/lib/hooks";
 import { downloadText, downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
 import { useNotification } from "@/components/layout/NotificationSystem";
-import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
+import {
+    loadViewPreference,
+    saveViewPreference,
+} from "@/lib/stores/panel-preferences";
 import { tryPrettifyJson } from "@/lib/pretty-json";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
 import { messageToDownloadObject, safeFileName } from "./exportHelpers";
@@ -19,607 +34,806 @@ const BODY_PRETTY_PREF_KEY = "sb-message-body-pretty";
 const BODY_WRAP_PREF_KEY = "sb-message-body-wrap";
 
 interface Props {
-  message: SbMessage | null;
-  nsId: string | null;
-  entity: SbEntityInfo | null;
-  viewMode: "active" | "dlq";
-  onClose?: () => void;
-  onEditResubmit?: (message: SbMessage) => void;
-  onReplay?: (message: SbMessage) => void;
-  onSchedule?: (message: SbMessage) => void;
+    message: SbMessage | null;
+    nsId: string | null;
+    entity: SbEntityInfo | null;
+    viewMode: "active" | "dlq";
+    onClose?: () => void;
+    onEditResubmit?: (message: SbMessage) => void;
+    onReplay?: (message: SbMessage) => void;
+    onSchedule?: (message: SbMessage) => void;
 }
 
 type DetailTab = "body" | "properties" | "system" | "dlq";
 
-export function MessageDetail({ message, nsId, entity, viewMode, onClose, onEditResubmit, onReplay, onSchedule }: Props) {
-  const { notify } = useNotification();
-  const completeMutation = useSbCompleteMessages();
-  const completeDlqMutation = useSbCompleteDlq();
-  const resubmitMutation = useSbResubmitDlq();
-  const [activeTab, setActiveTab] = useState<DetailTab>("body");
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
-  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
-  const [templateName, setTemplateName] = useState("");
-  const [propFilter, setPropFilter] = useState("");
-  // Pretty by default, and remembered: a 300-byte payload on one line is not a readable
-  // message, and until now this was not a choice at all.
-  const [prettyPrinted, setPrettyPrinted] = useState<boolean>(() =>
-    loadViewPreference<boolean>(BODY_PRETTY_PREF_KEY, true),
-  );
-  const [wrapBody, setWrapBody] = useState<boolean>(() =>
-    loadViewPreference<boolean>(BODY_WRAP_PREF_KEY, true),
-  );
-  const [copyPropKey, setCopyPropKey] = useState<string | null>(null);
-  const saveTemplateMutation = useSbSaveTemplate();
+export function MessageDetail({
+    message,
+    nsId,
+    entity,
+    viewMode,
+    onClose,
+    onEditResubmit,
+    onReplay,
+    onSchedule,
+}: Props) {
+    const { notify } = useNotification();
+    const completeMutation = useSbCompleteMessages();
+    const completeDlqMutation = useSbCompleteDlq();
+    const resubmitMutation = useSbResubmitDlq();
+    const [activeTab, setActiveTab] = useState<DetailTab>("body");
+    const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+    const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+    const [templateName, setTemplateName] = useState("");
+    const [propFilter, setPropFilter] = useState("");
+    // Pretty by default, and remembered: a 300-byte payload on one line is not a readable
+    // message, and until now this was not a choice at all.
+    const [prettyPrinted, setPrettyPrinted] = useState<boolean>(() =>
+        loadViewPreference<boolean>(BODY_PRETTY_PREF_KEY, true),
+    );
+    const [wrapBody, setWrapBody] = useState<boolean>(() =>
+        loadViewPreference<boolean>(BODY_WRAP_PREF_KEY, true),
+    );
+    const [copyPropKey, setCopyPropKey] = useState<string | null>(null);
+    const saveTemplateMutation = useSbSaveTemplate();
 
-  /// Strips whatever sits in front of the payload before sniffing its format.
-  ///
-  /// This once trimmed while the prettifier did not, so a body carrying a UTF-8 BOM —
-  /// routine for messages published by .NET — was reported as JSON and then silently
-  /// failed to parse, leaving it rendered as one unreadable line with no explanation.
-  /// `tryPrettifyJson` strips the same preamble, so the two now agree by construction.
-  const stripPreamble = (body: string): string => body.replace(/^\uFEFF/, "").trim();
+    /// Strips whatever sits in front of the payload before sniffing its format.
+    ///
+    /// This once trimmed while the prettifier did not, so a body carrying a UTF-8 BOM —
+    /// routine for messages published by .NET — was reported as JSON and then silently
+    /// failed to parse, leaving it rendered as one unreadable line with no explanation.
+    /// `tryPrettifyJson` strips the same preamble, so the two now agree by construction.
+    const stripPreamble = (body: string): string =>
+        body.replace(/^\uFEFF/, "").trim();
 
-  const detectFormat = (body: string): "json" | "xml" | "text" => {
-    const trimmed = stripPreamble(body);
-    if (trimmed.startsWith("{") || trimmed.startsWith("[")) return "json";
-    if (trimmed.startsWith("<")) return "xml";
-    return "text";
-  };
+    const detectFormat = (body: string): "json" | "xml" | "text" => {
+        const trimmed = stripPreamble(body);
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) return "json";
+        if (trimmed.startsWith("<")) return "xml";
+        return "text";
+    };
 
-  const bodyFormat = message ? detectFormat(message.body) : "text";
-  const bodySize = message ? new TextEncoder().encode(message.body).length : 0;
-  const prettyBody = message && bodyFormat === "json" ? tryPrettifyJson(message.body) : null;
-  // What is actually on screen, so Pretty/Raw and the line count cannot disagree.
-  const displayedBody = prettyPrinted && prettyBody !== null ? prettyBody : (message?.body ?? "");
-  const bodyLineCount = displayedBody ? displayedBody.split("\n").length : 0;
+    const bodyFormat = message ? detectFormat(message.body) : "text";
+    const bodySize = message
+        ? new TextEncoder().encode(message.body).length
+        : 0;
+    const prettyBody =
+        message && bodyFormat === "json" ? tryPrettifyJson(message.body) : null;
+    // What is actually on screen, so Pretty/Raw and the line count cannot disagree.
+    const displayedBody =
+        prettyPrinted && prettyBody !== null
+            ? prettyBody
+            : (message?.body ?? "");
+    const bodyLineCount = displayedBody ? displayedBody.split("\n").length : 0;
 
-  const filteredProps = useMemo(() => {
-    if (!message) return [];
-    const entries = Object.entries(message.applicationProperties);
-    if (!propFilter.trim()) return entries;
-    const q = propFilter.toLowerCase();
-    return entries.filter(([k, v]) => k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q));
-  }, [message, propFilter]);
+    const filteredProps = useMemo(() => {
+        if (!message) return [];
+        const entries = Object.entries(message.applicationProperties);
+        if (!propFilter.trim()) return entries;
+        const q = propFilter.toLowerCase();
+        return entries.filter(
+            ([k, v]) =>
+                k.toLowerCase().includes(q) ||
+                String(v).toLowerCase().includes(q),
+        );
+    }, [message, propFilter]);
 
-  // Above the early return below: a hook after a conditional return changes the hook
-  // count the moment `message` goes from null to a value, which React rejects outright.
-  const baseFileName = useMemo(() => {
-    if (!message) return "";
-    const seq = message.sequenceNumber != null ? `-${message.sequenceNumber}` : "";
-    return `message-${safeFileName(message.messageId)}${seq}`;
-  }, [message]);
+    // Above the early return below: a hook after a conditional return changes the hook
+    // count the moment `message` goes from null to a value, which React rejects outright.
+    const baseFileName = useMemo(() => {
+        if (!message) return "";
+        const seq =
+            message.sequenceNumber != null ? `-${message.sequenceNumber}` : "";
+        return `message-${safeFileName(message.messageId)}${seq}`;
+    }, [message]);
 
-  if (!message) {
+    if (!message) {
+        return (
+            <div
+                className="flex h-full items-center justify-center text-sm text-muted-foreground"
+                data-testid="message-detail-empty"
+            >
+                Select a message to view details
+            </div>
+        );
+    }
+
+    const copyProp = async (key: string, value: unknown) => {
+        try {
+            await navigator.clipboard.writeText(String(value));
+            setCopyPropKey(key);
+            setTimeout(() => setCopyPropKey(null), 2000);
+        } catch {
+            // Clipboard API unavailable — the copy simply does not happen.
+        }
+    };
+
+    const copyToClipboard = async (text: string, feedbackKey: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopyFeedback(feedbackKey);
+            setTimeout(() => setCopyFeedback(null), 2000);
+        } catch {
+            // Fallback for environments without clipboard API
+        }
+    };
+
+    const togglePretty = (next: boolean) => {
+        setPrettyPrinted(next);
+        saveViewPreference(BODY_PRETTY_PREF_KEY, next);
+    };
+
+    const toggleWrap = () => {
+        const next = !wrapBody;
+        setWrapBody(next);
+        saveViewPreference(BODY_WRAP_PREF_KEY, next);
+    };
+
+    const copyBody = () => copyToClipboard(message.body, "body");
+
+    const copyFullMessage = () => {
+        copyToClipboard(
+            JSON.stringify(messageToDownloadObject(message), null, 2),
+            "full",
+        );
+    };
+
+    const downloadJson = () => {
+        downloadText(
+            `${baseFileName}.json`,
+            JSON.stringify(messageToDownloadObject(message), null, 2),
+        );
+        notify("success", "Message downloaded as JSON");
+    };
+
+    const downloadZip = async () => {
+        const files: Record<string, string> = {
+            [`${baseFileName}.json`]: JSON.stringify(
+                messageToDownloadObject(message),
+                null,
+                2,
+            ),
+        };
+        const zipped = await buildZip(files);
+        downloadBlob(`${baseFileName}.zip`, zipped);
+        notify("success", "Message downloaded as ZIP");
+    };
+
+    // Complete/Resubmit already get an error toast from the mutation hook itself (Batch 0.2). What
+    // was still missing was success feedback — without it, the panel just sat there after a
+    // completed action with no confirmation anything happened.
+    const onComplete = () => {
+        if (!nsId || !entity || !message.sequenceNumber) return;
+        completeMutation.mutate(
+            {
+                nsId,
+                entityPath: entity.entityPath,
+                sequenceNumbers: [message.sequenceNumber],
+            },
+            { onSuccess: () => notify("success", "Message completed") },
+        );
+    };
+
+    const onCompleteDlq = () => {
+        if (!nsId || !entity || !message.sequenceNumber) return;
+        completeDlqMutation.mutate(
+            {
+                nsId,
+                entityPath: entity.entityPath,
+                sequenceNumbers: [String(message.sequenceNumber)],
+            },
+            { onSuccess: () => notify("success", "Message completed") },
+        );
+    };
+
+    const onResubmit = () => {
+        if (!nsId || !entity || !message.sequenceNumber) return;
+        resubmitMutation.mutate(
+            {
+                nsId,
+                entityPath: entity.entityPath,
+                sequenceNumbers: [String(message.sequenceNumber)],
+            },
+            { onSuccess: () => notify("success", "Message resubmitted") },
+        );
+    };
+
+    const onSaveAsTemplate = () => {
+        if (!templateName.trim()) return;
+        const template: SbMessageTemplate = {
+            id: crypto.randomUUID(),
+            name: templateName.trim(),
+            body: message.body,
+            contentType: message.contentType,
+            subject: message.subject,
+            correlationId: message.correlationId,
+            properties: Object.fromEntries(
+                Object.entries(message.applicationProperties).map(([k, v]) => [
+                    k,
+                    String(v),
+                ]),
+            ),
+            createdAt: new Date().toISOString(),
+        };
+        saveTemplateMutation.mutate(template);
+        setShowSaveTemplate(false);
+        setTemplateName("");
+    };
+
+    const tabs: { id: DetailTab; label: string; visible: boolean }[] = [
+        { id: "body", label: "Body", visible: true },
+        { id: "properties", label: "Properties", visible: true },
+        { id: "system", label: "System", visible: true },
+        { id: "dlq", label: "DLQ Info", visible: !!message.deadLetterReason },
+    ];
+
+    const visibleTabs = tabs.filter((t) => t.visible);
+
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground" data-testid="message-detail-empty">
-        Select a message to view details
-      </div>
-    );
-  }
+        <div className="flex h-full flex-col" data-testid="message-detail">
+            {/* Header */}
+            <div className="border-b px-4 py-3">
+                <div className="flex items-start justify-between">
+                    <div className="min-w-0 flex-1">
+                        <h2
+                            className="truncate text-lg font-semibold"
+                            data-testid="message-detail-subject"
+                        >
+                            {message.subject || message.messageId}
+                        </h2>
+                        <p
+                            className="mt-0.5 text-xs text-muted-foreground"
+                            data-testid="message-detail-meta"
+                        >
+                            Message ID: {message.messageId} · Seq: #
+                            {message.sequenceNumber}
+                        </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                        {onClose && (
+                            <button
+                                data-testid="message-detail-close"
+                                onClick={onClose}
+                                className="rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                                title="Close message details"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                        {viewMode === "active" && (
+                            <button
+                                data-testid="message-complete-button"
+                                onClick={onComplete}
+                                disabled={completeMutation.isPending}
+                                title={
+                                    completeMutation.isPending
+                                        ? "Completing…"
+                                        : "Settle this message — permanently removed from the queue"
+                                }
+                                className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                            >
+                                Complete
+                            </button>
+                        )}
+                        {viewMode === "dlq" && (
+                            <>
+                                <button
+                                    data-testid="message-resubmit-button"
+                                    onClick={onResubmit}
+                                    disabled={resubmitMutation.isPending}
+                                    title={
+                                        resubmitMutation.isPending
+                                            ? "Resubmitting…"
+                                            : `Send this message back to ${entity?.entityPath ?? "the source entity"} with a new Message ID, then remove it from the dead-letter queue`
+                                    }
+                                    className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                                >
+                                    Resubmit
+                                </button>
+                                <button
+                                    data-testid="message-complete-dlq-button"
+                                    onClick={onCompleteDlq}
+                                    disabled={completeDlqMutation.isPending}
+                                    title={
+                                        completeDlqMutation.isPending
+                                            ? "Completing…"
+                                            : "Permanently remove this message from the dead-letter queue"
+                                    }
+                                    className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+                                >
+                                    Complete DLQ
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
 
-  const copyProp = async (key: string, value: unknown) => {
-    try {
-      await navigator.clipboard.writeText(String(value));
-      setCopyPropKey(key);
-      setTimeout(() => setCopyPropKey(null), 2000);
-    } catch {
-      // Clipboard API unavailable — the copy simply does not happen.
-    }
-  };
-
-  const copyToClipboard = async (text: string, feedbackKey: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopyFeedback(feedbackKey);
-      setTimeout(() => setCopyFeedback(null), 2000);
-    } catch {
-      // Fallback for environments without clipboard API
-    }
-  };
-
-  const togglePretty = (next: boolean) => {
-    setPrettyPrinted(next);
-    saveViewPreference(BODY_PRETTY_PREF_KEY, next);
-  };
-
-  const toggleWrap = () => {
-    const next = !wrapBody;
-    setWrapBody(next);
-    saveViewPreference(BODY_WRAP_PREF_KEY, next);
-  };
-
-  const copyBody = () => copyToClipboard(message.body, "body");
-
-  const copyFullMessage = () => {
-    copyToClipboard(JSON.stringify(messageToDownloadObject(message), null, 2), "full");
-  };
-
-  const downloadJson = () => {
-    downloadText(`${baseFileName}.json`, JSON.stringify(messageToDownloadObject(message), null, 2));
-    notify("success", "Message downloaded as JSON");
-  };
-
-  const downloadZip = async () => {
-    const files: Record<string, string> = {
-      [`${baseFileName}.json`]: JSON.stringify(messageToDownloadObject(message), null, 2),
-    };
-    const zipped = await buildZip(files);
-    downloadBlob(`${baseFileName}.zip`, zipped);
-    notify("success", "Message downloaded as ZIP");
-  };
-
-  // Complete/Resubmit already get an error toast from the mutation hook itself (Batch 0.2). What
-  // was still missing was success feedback — without it, the panel just sat there after a
-  // completed action with no confirmation anything happened.
-  const onComplete = () => {
-    if (!nsId || !entity || !message.sequenceNumber) return;
-    completeMutation.mutate(
-      { nsId, entityPath: entity.entityPath, sequenceNumbers: [message.sequenceNumber] },
-      { onSuccess: () => notify("success", "Message completed") },
-    );
-  };
-
-  const onCompleteDlq = () => {
-    if (!nsId || !entity || !message.sequenceNumber) return;
-    completeDlqMutation.mutate(
-      { nsId, entityPath: entity.entityPath, sequenceNumbers: [String(message.sequenceNumber)] },
-      { onSuccess: () => notify("success", "Message completed") },
-    );
-  };
-
-  const onResubmit = () => {
-    if (!nsId || !entity || !message.sequenceNumber) return;
-    resubmitMutation.mutate(
-      { nsId, entityPath: entity.entityPath, sequenceNumbers: [String(message.sequenceNumber)] },
-      { onSuccess: () => notify("success", "Message resubmitted") },
-    );
-  };
-
-  const onSaveAsTemplate = () => {
-    if (!templateName.trim()) return;
-    const template: SbMessageTemplate = {
-      id: crypto.randomUUID(),
-      name: templateName.trim(),
-      body: message.body,
-      contentType: message.contentType,
-      subject: message.subject,
-      correlationId: message.correlationId,
-      properties: Object.fromEntries(
-        Object.entries(message.applicationProperties).map(([k, v]) => [k, String(v)]),
-      ),
-      createdAt: new Date().toISOString(),
-    };
-    saveTemplateMutation.mutate(template);
-    setShowSaveTemplate(false);
-    setTemplateName("");
-  };
-
-  const tabs: { id: DetailTab; label: string; visible: boolean }[] = [
-    { id: "body", label: "Body", visible: true },
-    { id: "properties", label: "Properties", visible: true },
-    { id: "system", label: "System", visible: true },
-    { id: "dlq", label: "DLQ Info", visible: !!message.deadLetterReason },
-  ];
-
-  const visibleTabs = tabs.filter((t) => t.visible);
-
-  return (
-    <div className="flex h-full flex-col" data-testid="message-detail">
-      {/* Header */}
-      <div className="border-b px-4 py-3">
-        <div className="flex items-start justify-between">
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold" data-testid="message-detail-subject">
-              {message.subject || message.messageId}
-            </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground" data-testid="message-detail-meta">
-              Message ID: {message.messageId} · Seq: #{message.sequenceNumber}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            {onClose && (
-              <button
-                data-testid="message-detail-close"
-                onClick={onClose}
-                className="rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-                title="Close message details"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {viewMode === "active" && (
-              <button
-                data-testid="message-complete-button"
-                onClick={onComplete}
-                disabled={completeMutation.isPending}
-                title={completeMutation.isPending ? "Completing…" : undefined}
-                className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
-              >
-                Complete
-              </button>
-            )}
-            {viewMode === "dlq" && (
-              <>
-                <button
-                  data-testid="message-resubmit-button"
-                  onClick={onResubmit}
-                  disabled={resubmitMutation.isPending}
-                  title={resubmitMutation.isPending ? "Resubmitting…" : undefined}
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
-                >
-                  Resubmit
-                </button>
-                <button
-                  data-testid="message-complete-dlq-button"
-                  onClick={onCompleteDlq}
-                  disabled={completeDlqMutation.isPending}
-                  title={completeDlqMutation.isPending ? "Completing…" : undefined}
-                  className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
-                >
-                  Complete DLQ
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Action buttons row. Wraps: the panel is resizable down to 240px, and without
+                {/* Action buttons row. Wraps: the panel is resizable down to 240px, and without
             wrapping the trailing actions were simply clipped off the right edge with no
             indication they existed. */}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <button
-            data-testid="message-copy-body"
-            onClick={copyBody}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-            title="Copy message body to clipboard"
-          >
-            {copyFeedback === "body" ? (
-              <><Check className="h-3 w-3" /> Copied!</>
-            ) : (
-              <><Copy className="h-3 w-3" /> Copy Body</>
-            )}
-          </button>
-          <button
-            data-testid="message-copy-full"
-            onClick={copyFullMessage}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-            title="Copy full message (all properties + body) as JSON"
-          >
-            {copyFeedback === "full" ? (
-              <><Check className="h-3 w-3" /> Copied!</>
-            ) : (
-              <><Copy className="h-3 w-3" /> Copy Full Message</>
-            )}
-          </button>
-          <button
-            data-testid="message-download-json"
-            onClick={downloadJson}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-            title="Download message as JSON"
-          >
-            <Download className="h-3 w-3" /> JSON
-          </button>
-          <button
-            data-testid="message-download-zip"
-            onClick={downloadZip}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-            title="Download message as ZIP"
-          >
-            <FileArchive className="h-3 w-3" /> ZIP
-          </button>
-          <button
-            data-testid="message-save-template"
-            onClick={() => setShowSaveTemplate(true)}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-            title="Save this message as a reusable template"
-          >
-            <Save className="h-3 w-3" /> Save as Template
-          </button>
-          {onEditResubmit && (
-            <button
-              data-testid="message-edit-resubmit"
-              onClick={() => onEditResubmit(message)}
-              className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-              title="Edit and resubmit this message"
-            >
-              <Pencil className="h-3 w-3" /> Edit & Resubmit
-            </button>
-          )}
-          {onReplay && (
-            <button
-              data-testid="message-replay"
-              onClick={() => onReplay(message)}
-              className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-              title="Replay this message"
-            >
-              <RotateCcw className="h-3 w-3" /> Replay
-            </button>
-          )}
-          {onSchedule && (
-            <button
-              data-testid="message-schedule"
-              onClick={() => onSchedule(message)}
-              className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-              title="Schedule this message for later delivery"
-            >
-              <Clock className="h-3 w-3" /> Schedule
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Save as template dialog */}
-      {showSaveTemplate && (
-        <div className="flex items-center gap-3 border-b bg-primary/5 px-4 py-3" data-testid="save-template-dialog">
-          <Save className="h-5 w-5 shrink-0 text-primary" />
-          <input
-            type="text"
-            data-testid="template-name-input"
-            value={templateName}
-            onChange={(e) => setTemplateName(e.target.value)}
-            placeholder="Template name..."
-            className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm"
-            autoFocus
-            onKeyDown={(e) => { if (e.key === "Enter") onSaveAsTemplate(); }}
-          />
-          <button
-            data-testid="template-save-confirm"
-            onClick={onSaveAsTemplate}
-            disabled={!templateName.trim() || saveTemplateMutation.isPending}
-            title={saveTemplateMutation.isPending ? "Saving…" : !templateName.trim() ? "Name the template first" : undefined}
-            className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            Save
-          </button>
-          <button
-            data-testid="template-save-cancel"
-            onClick={() => { setShowSaveTemplate(false); setTemplateName(""); }}
-            className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="flex border-b">
-        {visibleTabs.map((tab) => (
-          <button
-            key={tab.id}
-            data-testid={`detail-tab-${tab.id}`}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 text-sm font-medium ${
-              activeTab === tab.id
-                ? "border-b-2 border-primary text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      <div className="flex-1 overflow-auto p-4">
-        {activeTab === "body" && (
-          <div data-testid="detail-tab-content-body">
-            <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <span data-testid="body-format">Format: {bodyFormat.toUpperCase()}</span>
-              <span data-testid="body-size">Size: {formatBytesLong(bodySize)}</span>
-              <span data-testid="body-lines">Lines: {bodyLineCount}</span>
-
-              {bodyFormat === "json" && prettyBody !== null && (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => togglePretty(true)}
-                    aria-pressed={prettyPrinted}
-                    className={`rounded border px-2 py-0.5 ${prettyPrinted ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
-                    data-testid="body-pretty-toggle"
-                  >
-                    Pretty
-                  </button>
-                  <button
-                    onClick={() => togglePretty(false)}
-                    aria-pressed={!prettyPrinted}
-                    className={`rounded border px-2 py-0.5 ${!prettyPrinted ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
-                    data-testid="body-raw-toggle"
-                  >
-                    Raw
-                  </button>
-                </div>
-              )}
-
-              {/* Says so rather than quietly showing one long line, which is how a body that
-                  looks like JSON but does not parse used to present. */}
-              {bodyFormat === "json" && prettyBody === null && (
-                <span className="text-warning" data-testid="body-unparseable">
-                  Not valid JSON — showing raw
-                </span>
-              )}
-
-              <button
-                onClick={toggleWrap}
-                aria-pressed={wrapBody}
-                className={`rounded border px-2 py-0.5 ${wrapBody ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
-                data-testid="body-wrap-toggle"
-                title="Wrap long lines"
-              >
-                Wrap
-              </button>
-
-              <button
-                onClick={copyBody}
-                className="flex items-center gap-1 rounded border px-2 py-0.5 hover:bg-accent"
-                data-testid="body-copy-btn"
-              >
-                {copyFeedback === "body" ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
-              </button>
-            </div>
-            <pre
-              data-testid="message-detail-body"
-              className={`max-h-[60vh] overflow-auto rounded-lg border bg-card p-3 text-xs ${
-                wrapBody ? "whitespace-pre-wrap break-all" : "whitespace-pre"
-              }`}
-            >
-              {bodyFormat === "json" ? (
-                <JsonHighlight text={displayedBody} />
-              ) : (
-                displayedBody
-              )}
-            </pre>
-          </div>
-        )}
-
-        {activeTab === "properties" && (
-          <div data-testid="detail-tab-content-properties">
-            {Object.keys(message.applicationProperties).length > 0 ? (
-              <>
-                <div className="relative mb-2">
-                  <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    data-testid="prop-filter-input"
-                    value={propFilter}
-                    onChange={(e) => setPropFilter(e.target.value)}
-                    placeholder="Filter properties..."
-                    className="w-full rounded-md border bg-card py-1.5 pl-8 pr-7 text-xs"
-                  />
-                  {propFilter && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                     <button
-                      onClick={() => setPropFilter("")}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        data-testid="message-copy-body"
+                        onClick={copyBody}
+                        className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                        title="Copy message body to clipboard"
                     >
-                      <X className="h-3.5 w-3.5" />
+                        {copyFeedback === "body" ? (
+                            <>
+                                <Check className="h-3 w-3" /> Copied!
+                            </>
+                        ) : (
+                            <>
+                                <Copy className="h-3 w-3" /> Copy Body
+                            </>
+                        )}
                     </button>
-                  )}
-                </div>
-                <div className="rounded-lg border">
-                  {filteredProps.map(([key, value]) => (
-                    // A two-column grid rather than a fixed-width span: `w-48 shrink-0` gave
-                    // the key a hard 192px with nothing to stop a longer name spilling over
-                    // the value beside it. The key column now grows to the longest name up to
-                    // a cap, then wraps, and the value always starts clear of it.
-                    <div
-                      key={key}
-                      className="group grid grid-cols-[minmax(0,14rem)_1fr_auto] items-start gap-x-3 border-b px-3 py-1.5 text-xs last:border-0"
+                    <button
+                        data-testid="message-copy-full"
+                        onClick={copyFullMessage}
+                        className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                        title="Copy full message (all properties + body) as JSON"
                     >
-                      <span className="break-all font-medium text-muted-foreground" title={key}>{key}</span>
-                      <span className="min-w-0 break-all">{String(value)}</span>
-                      <button
-                        onClick={() => copyProp(key, value)}
-                        className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-within:opacity-100"
-                        data-testid={`prop-copy-${key}`}
-                        title="Copy value"
-                      >
-                        {copyPropKey === key ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                      </button>
-                    </div>
-                  ))}
-                  {filteredProps.length === 0 && (
-                    <div className="px-3 py-2 text-xs text-muted-foreground">No properties match filter</div>
-                  )}
+                        {copyFeedback === "full" ? (
+                            <>
+                                <Check className="h-3 w-3" /> Copied!
+                            </>
+                        ) : (
+                            <>
+                                <Copy className="h-3 w-3" /> Copy Full Message
+                            </>
+                        )}
+                    </button>
+                    <button
+                        data-testid="message-download-json"
+                        onClick={downloadJson}
+                        className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                        title="Download message as JSON"
+                    >
+                        <Download className="h-3 w-3" /> JSON
+                    </button>
+                    <button
+                        data-testid="message-download-zip"
+                        onClick={downloadZip}
+                        className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                        title="Download message as ZIP"
+                    >
+                        <FileArchive className="h-3 w-3" /> ZIP
+                    </button>
+                    <button
+                        data-testid="message-save-template"
+                        onClick={() => setShowSaveTemplate(true)}
+                        className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                        title="Save this message as a reusable template"
+                    >
+                        <Save className="h-3 w-3" /> Save as Template
+                    </button>
+                    {onEditResubmit && (
+                        <button
+                            data-testid="message-edit-resubmit"
+                            onClick={() => onEditResubmit(message)}
+                            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                            title="Edit and resubmit this message"
+                        >
+                            <Pencil className="h-3 w-3" /> Edit & Resubmit
+                        </button>
+                    )}
+                    {onReplay && (
+                        <button
+                            data-testid="message-replay"
+                            onClick={() => onReplay(message)}
+                            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                            title="Replay this message"
+                        >
+                            <RotateCcw className="h-3 w-3" /> Replay
+                        </button>
+                    )}
+                    {onSchedule && (
+                        <button
+                            data-testid="message-schedule"
+                            onClick={() => onSchedule(message)}
+                            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                            title="Schedule this message for later delivery"
+                        >
+                            <Clock className="h-3 w-3" /> Schedule
+                        </button>
+                    )}
                 </div>
-              </>
-            ) : (
-              <span className="text-sm text-muted-foreground">No application properties</span>
-            )}
-          </div>
-        )}
-
-        {activeTab === "system" && (
-          // Fits the columns to the panel rather than always forcing two: the panel is
-          // resizable down to 240px, where two columns leave nothing readable in either.
-          // Container-driven, so a viewport breakpoint would not have worked.
-          <div
-            data-testid="detail-tab-content-system"
-            className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-x-6 gap-y-3 text-sm"
-          >
-            <Field label="Message ID" value={message.messageId} />
-            <Field label="Correlation ID" value={message.correlationId} />
-            <Field label="Subject" value={message.subject} />
-            <Field label="Content Type" value={message.contentType} />
-            <Field label="Delivery Count" value={String(message.deliveryCount)} />
-            <Field label="Enqueued At" value={new Date(message.enqueuedAt).toLocaleString()} />
-            <Field label="Sequence Number" value={message.sequenceNumber != null ? String(message.sequenceNumber) : null} />
-            <Field label="Session ID" value={message.sessionId} />
-            <Field label="Partition Key" value={message.systemProperties?.partitionKey ?? null} />
-            <Field label="Expires At" value={message.systemProperties?.expiresAt ? new Date(message.systemProperties.expiresAt).toLocaleString() : null} />
-            {message.systemProperties?.lockedUntil && (
-              <Field label="Locked Until" value={new Date(message.systemProperties.lockedUntil).toLocaleString()} />
-            )}
-            <Field label="Enqueued Seq #" value={message.systemProperties?.enqueuedSequenceNumber ?? null} />
-          </div>
-        )}
-
-        {activeTab === "dlq" && message.deadLetterReason && (
-          <div data-testid="detail-tab-content-dlq" className="space-y-3">
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-destructive" />
-                <span className="text-sm font-semibold text-destructive">Dead-Letter Reason</span>
-              </div>
-              <p className="mt-1 text-sm">{message.deadLetterReason}</p>
-              {message.deadLetterErrorDescription && (
-                <p className="mt-2 text-xs text-muted-foreground">{message.deadLetterErrorDescription}</p>
-              )}
             </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+
+            {/* Save as template dialog */}
+            {showSaveTemplate && (
+                <div
+                    className="flex items-center gap-3 border-b bg-primary/5 px-4 py-3"
+                    data-testid="save-template-dialog"
+                >
+                    <Save className="h-5 w-5 shrink-0 text-primary" />
+                    <input
+                        type="text"
+                        data-testid="template-name-input"
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                        placeholder="Template name..."
+                        className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm"
+                        autoFocus
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") onSaveAsTemplate();
+                        }}
+                    />
+                    <button
+                        data-testid="template-save-confirm"
+                        onClick={onSaveAsTemplate}
+                        disabled={
+                            !templateName.trim() ||
+                            saveTemplateMutation.isPending
+                        }
+                        title={
+                            saveTemplateMutation.isPending
+                                ? "Saving…"
+                                : !templateName.trim()
+                                  ? "Name the template first"
+                                  : undefined
+                        }
+                        className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                    >
+                        Save
+                    </button>
+                    <button
+                        data-testid="template-save-cancel"
+                        onClick={() => {
+                            setShowSaveTemplate(false);
+                            setTemplateName("");
+                        }}
+                        className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            )}
+
+            {/* Tabs */}
+            <div className="flex border-b">
+                {visibleTabs.map((tab) => (
+                    <button
+                        key={tab.id}
+                        data-testid={`detail-tab-${tab.id}`}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`px-4 py-2 text-sm font-medium ${
+                            activeTab === tab.id
+                                ? "border-b-2 border-primary text-foreground"
+                                : "text-muted-foreground hover:text-foreground"
+                        }`}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Tab content */}
+            <div className="flex-1 overflow-auto p-4">
+                {activeTab === "body" && (
+                    <div data-testid="detail-tab-content-body">
+                        <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            <span data-testid="body-format">
+                                Format: {bodyFormat.toUpperCase()}
+                            </span>
+                            <span data-testid="body-size">
+                                Size: {formatBytesLong(bodySize)}
+                            </span>
+                            <span data-testid="body-lines">
+                                Lines: {bodyLineCount}
+                            </span>
+
+                            {bodyFormat === "json" && prettyBody !== null && (
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => togglePretty(true)}
+                                        aria-pressed={prettyPrinted}
+                                        className={`rounded border px-2 py-0.5 ${prettyPrinted ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                                        data-testid="body-pretty-toggle"
+                                    >
+                                        Pretty
+                                    </button>
+                                    <button
+                                        onClick={() => togglePretty(false)}
+                                        aria-pressed={!prettyPrinted}
+                                        className={`rounded border px-2 py-0.5 ${!prettyPrinted ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                                        data-testid="body-raw-toggle"
+                                    >
+                                        Raw
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Says so rather than quietly showing one long line, which is how a body that
+                  looks like JSON but does not parse used to present. */}
+                            {bodyFormat === "json" && prettyBody === null && (
+                                <span
+                                    className="text-warning"
+                                    data-testid="body-unparseable"
+                                >
+                                    Not valid JSON — showing raw
+                                </span>
+                            )}
+
+                            <button
+                                onClick={toggleWrap}
+                                aria-pressed={wrapBody}
+                                className={`rounded border px-2 py-0.5 ${wrapBody ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                                data-testid="body-wrap-toggle"
+                                title="Wrap long lines"
+                            >
+                                Wrap
+                            </button>
+
+                            <button
+                                onClick={copyBody}
+                                className="flex items-center gap-1 rounded border px-2 py-0.5 hover:bg-accent"
+                                data-testid="body-copy-btn"
+                            >
+                                {copyFeedback === "body" ? (
+                                    <>
+                                        <Check className="h-3 w-3" /> Copied
+                                    </>
+                                ) : (
+                                    <>
+                                        <Copy className="h-3 w-3" /> Copy
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                        <pre
+                            data-testid="message-detail-body"
+                            className={`max-h-[60vh] overflow-auto rounded-lg border bg-card p-3 text-xs ${
+                                wrapBody
+                                    ? "whitespace-pre-wrap break-all"
+                                    : "whitespace-pre"
+                            }`}
+                        >
+                            {bodyFormat === "json" ? (
+                                <JsonHighlight text={displayedBody} />
+                            ) : (
+                                displayedBody
+                            )}
+                        </pre>
+                    </div>
+                )}
+
+                {activeTab === "properties" && (
+                    <div data-testid="detail-tab-content-properties">
+                        {Object.keys(message.applicationProperties).length >
+                        0 ? (
+                            <>
+                                <div className="relative mb-2">
+                                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                                    <input
+                                        type="text"
+                                        data-testid="prop-filter-input"
+                                        value={propFilter}
+                                        onChange={(e) =>
+                                            setPropFilter(e.target.value)
+                                        }
+                                        placeholder="Filter properties..."
+                                        className="w-full rounded-md border bg-card py-1.5 pl-8 pr-7 text-xs"
+                                    />
+                                    {propFilter && (
+                                        <button
+                                            onClick={() => setPropFilter("")}
+                                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="rounded-lg border">
+                                    {filteredProps.map(([key, value]) => (
+                                        // A two-column grid rather than a fixed-width span: `w-48 shrink-0` gave
+                                        // the key a hard 192px with nothing to stop a longer name spilling over
+                                        // the value beside it. The key column now grows to the longest name up to
+                                        // a cap, then wraps, and the value always starts clear of it.
+                                        <div
+                                            key={key}
+                                            className="group grid grid-cols-[minmax(0,14rem)_1fr_auto] items-start gap-x-3 border-b px-3 py-1.5 text-xs last:border-0"
+                                        >
+                                            <span
+                                                className="break-all font-medium text-muted-foreground"
+                                                title={key}
+                                            >
+                                                {key}
+                                            </span>
+                                            <span className="min-w-0 break-all">
+                                                {String(value)}
+                                            </span>
+                                            <button
+                                                onClick={() =>
+                                                    copyProp(key, value)
+                                                }
+                                                className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-within:opacity-100"
+                                                data-testid={`prop-copy-${key}`}
+                                                title="Copy value"
+                                            >
+                                                {copyPropKey === key ? (
+                                                    <Check className="h-3 w-3" />
+                                                ) : (
+                                                    <Copy className="h-3 w-3" />
+                                                )}
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {filteredProps.length === 0 && (
+                                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                                            No properties match filter
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        ) : (
+                            <span className="text-sm text-muted-foreground">
+                                No application properties
+                            </span>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === "system" && (
+                    // Fits the columns to the panel rather than always forcing two: the panel is
+                    // resizable down to 240px, where two columns leave nothing readable in either.
+                    // Container-driven, so a viewport breakpoint would not have worked.
+                    <div
+                        data-testid="detail-tab-content-system"
+                        className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-x-6 gap-y-3 text-sm"
+                    >
+                        <Field label="Message ID" value={message.messageId} />
+                        <Field
+                            label="Correlation ID"
+                            value={message.correlationId}
+                        />
+                        <Field label="Subject" value={message.subject} />
+                        <Field
+                            label="Content Type"
+                            value={message.contentType}
+                        />
+                        <Field
+                            label="Delivery Count"
+                            value={String(message.deliveryCount)}
+                        />
+                        <Field
+                            label="Enqueued At"
+                            value={new Date(
+                                message.enqueuedAt,
+                            ).toLocaleString()}
+                        />
+                        <Field
+                            label="Sequence Number"
+                            value={
+                                message.sequenceNumber != null
+                                    ? String(message.sequenceNumber)
+                                    : null
+                            }
+                        />
+                        <Field label="Session ID" value={message.sessionId} />
+                        <Field
+                            label="Partition Key"
+                            value={
+                                message.systemProperties?.partitionKey ?? null
+                            }
+                        />
+                        <Field
+                            label="Expires At"
+                            value={
+                                message.systemProperties?.expiresAt
+                                    ? new Date(
+                                          message.systemProperties.expiresAt,
+                                      ).toLocaleString()
+                                    : null
+                            }
+                        />
+                        {message.systemProperties?.lockedUntil && (
+                            <Field
+                                label="Locked Until"
+                                value={new Date(
+                                    message.systemProperties.lockedUntil,
+                                ).toLocaleString()}
+                            />
+                        )}
+                        <Field
+                            label="Enqueued Seq #"
+                            value={
+                                message.systemProperties
+                                    ?.enqueuedSequenceNumber ?? null
+                            }
+                        />
+                    </div>
+                )}
+
+                {activeTab === "dlq" && message.deadLetterReason && (
+                    <div
+                        data-testid="detail-tab-content-dlq"
+                        className="space-y-3"
+                    >
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                            <div className="flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-destructive" />
+                                <span className="text-sm font-semibold text-destructive">
+                                    Dead-Letter Reason
+                                </span>
+                            </div>
+                            <p className="mt-1 text-sm">
+                                {message.deadLetterReason}
+                            </p>
+                            {message.deadLetterErrorDescription && (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                    {message.deadLetterErrorDescription}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 }
 
-function Field({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div className="min-w-0">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {/* A message id is longer than the column at most panel widths, and without this it
+function Field({
+    label,
+    value,
+}: {
+    label: string;
+    value: string | null | undefined;
+}) {
+    return (
+        <div className="min-w-0">
+            <span className="text-xs text-muted-foreground">{label}</span>
+            {/* A message id is longer than the column at most panel widths, and without this it
           ran over the field beside it. */}
-      <p className="break-all text-sm">{value || "—"}</p>
-    </div>
-  );
+            <p className="break-all text-sm">{value || "—"}</p>
+        </div>
+    );
 }
 
 function JsonHighlight({ text }: { text: string }) {
-  const tokens = useMemo(() => {
-    const parts: { text: string; cls: string }[] = [];
-    const regex = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g;
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push({ text: text.slice(lastIndex, match.index), cls: "" });
-      }
-      let cls = "text-blue-400";
-      if (/^"/.test(match[0])) {
-        if (/:$/.test(match[0])) {
-          cls = "text-purple-400";
-        } else {
-          cls = "text-green-400";
+    const tokens = useMemo(() => {
+        const parts: { text: string; cls: string }[] = [];
+        const regex =
+            /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g;
+        let lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = regex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+                parts.push({
+                    text: text.slice(lastIndex, match.index),
+                    cls: "",
+                });
+            }
+            let cls = "text-blue-400";
+            if (/^"/.test(match[0])) {
+                if (/:$/.test(match[0])) {
+                    cls = "text-purple-400";
+                } else {
+                    cls = "text-green-400";
+                }
+            } else if (/true|false/.test(match[0])) {
+                cls = "text-orange-400";
+            } else if (/null/.test(match[0])) {
+                cls = "text-muted-foreground";
+            } else if (/-?\d/.test(match[0])) {
+                cls = "text-cyan-400";
+            }
+            parts.push({ text: match[0], cls });
+            lastIndex = match.index + match[0].length;
         }
-      } else if (/true|false/.test(match[0])) {
-        cls = "text-orange-400";
-      } else if (/null/.test(match[0])) {
-        cls = "text-muted-foreground";
-      } else if (/-?\d/.test(match[0])) {
-        cls = "text-cyan-400";
-      }
-      parts.push({ text: match[0], cls });
-      lastIndex = match.index + match[0].length;
-    }
-    if (lastIndex < text.length) {
-      parts.push({ text: text.slice(lastIndex), cls: "" });
-    }
-    return parts;
-  }, [text]);
+        if (lastIndex < text.length) {
+            parts.push({ text: text.slice(lastIndex), cls: "" });
+        }
+        return parts;
+    }, [text]);
 
-  return (
-    <span>
-      {tokens.map((tok, i) => (
-        <span key={i} className={tok.cls}>{tok.text}</span>
-      ))}
-    </span>
-  );
+    return (
+        <span>
+            {tokens.map((tok, i) => (
+                <span key={i} className={tok.cls}>
+                    {tok.text}
+                </span>
+            ))}
+        </span>
+    );
 }

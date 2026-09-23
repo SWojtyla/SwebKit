@@ -19,13 +19,8 @@ import {
     Loader2,
     RefreshCw,
 } from "lucide-react";
-import {
-    useSbCompleteMessages,
-    useSbCompleteDlq,
-    useSbResubmitDlq,
-    useSbResendMessages,
-    useSbDeadLetterMessages,
-} from "@/lib/hooks";
+import { invalidateServiceBusQueries } from "@/lib/hooks";
+import { apiSend } from "@/lib/api";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
@@ -37,7 +32,8 @@ import {
     safeFileName,
     messageKey as sbMessageKey,
 } from "./exportHelpers";
-import { resendTargetText } from "./resendHelpers";
+import { resendTargetText, sendableEntityPath } from "./resendHelpers";
+import { runInChunks } from "./bulkOps";
 import { applyFilters, hasActiveFilters } from "./filterLogic";
 import { AdvancedFilterPanel } from "./AdvancedFilterPanel";
 import type { AdvancedFilterRule } from "./filterTypes";
@@ -339,12 +335,10 @@ export function MessageList({
         return () => observer.disconnect();
     }, [canLoadMore, isLoadingMore, onLoadMore]);
 
-    // Bulk action mutations
-    const completeMutation = useSbCompleteMessages();
-    const completeDlqMutation = useSbCompleteDlq();
-    const resubmitDlqMutation = useSbResubmitDlq();
-    const resendMutation = useSbResendMessages();
-    const deadLetterMutation = useSbDeadLetterMessages();
+    // Bulk action mutations — the chunked runner below POSTs through apiSend
+    // directly rather than the mutation hooks: per-chunk onSuccess would
+    // invalidate (and refetch) the entity queries once per chunk, so the loop
+    // invalidates once when the whole run ends.
     const [pendingBulkConfirm, setPendingBulkConfirm] = useState<
         | { kind: "complete"; seqNumbers: number[] }
         | { kind: "resubmit"; seqNumbers: number[] }
@@ -352,6 +346,13 @@ export function MessageList({
         | { kind: "resend"; messages: SbMessage[] }
         | null
     >(null);
+    // Non-null while a chunked bulk run is in flight — drives the progress
+    // indicator and disables the action buttons for the run's duration.
+    const [bulkProgress, setBulkProgress] = useState<{
+        label: string;
+        done: number;
+        total: number;
+    } | null>(null);
 
     const handleBulkComplete = useCallback(() => {
         if (!nsId || !entity || selectedMsgs.size === 0) return;
@@ -402,77 +403,91 @@ export function MessageList({
         setPendingBulkConfirm({ kind: "resend", messages: selected });
     }, [nsId, entity, selectedMsgs, messages]);
 
-    const runPendingBulkConfirm = useCallback(() => {
-        if (!nsId || !entity || !pendingBulkConfirm) return;
-        if (pendingBulkConfirm.kind === "resend") {
-            const seqNumbers = pendingBulkConfirm.messages
+    // Bulk runs are chunked so the progress bar reflects real completed work —
+    // a single request gives no signal until it finishes. The selection stays
+    // checked for the duration so the bar (which only renders with a selection)
+    // keeps showing progress; errors stop at the failed chunk with earlier
+    // chunks already applied (the ops are per-message, never atomic).
+    const runPendingBulkConfirm = useCallback(async () => {
+        if (!nsId || !entity || !pendingBulkConfirm || bulkProgress) return;
+        const action = pendingBulkConfirm;
+        setPendingBulkConfirm(null);
+
+        const base = `/api/servicebus/${nsId}/entities/${encodeURIComponent(entity.entityPath)}`;
+        let label: string;
+        let failTitle: string;
+        let successText: string;
+        let run: (chunk: number[]) => Promise<unknown>;
+        let items: number[];
+        if (action.kind === "resend") {
+            const seqNumbers = action.messages
                 .map((m) => m.sequenceNumber)
                 .filter((n): n is number => n !== null);
-            if (seqNumbers.length === 0) {
-                setSelectedMsgs(new Set());
-                setPendingBulkConfirm(null);
-                return;
-            }
-            resendMutation.mutate(
-                {
-                    nsId,
-                    entityPath: entity.entityPath,
-                    sequenceNumbers: seqNumbers.map(String),
+            if (seqNumbers.length === 0) return;
+            items = seqNumbers;
+            const target = resendTargetText(action.messages, entity.entityPath);
+            label = "Resending";
+            failTitle = "Couldn't resend messages";
+            successText = `Resent ${items.length} message(s) to ${target}`;
+            run = (chunk) =>
+                apiSend(`${base}/resend`, "POST", {
+                    sequenceNumbers: chunk.map(String),
                     deadLetter: viewMode === "dlq",
-                },
-                {
-                    onSuccess: () =>
-                        notify(
-                            "success",
-                            `Resent ${seqNumbers.length} message(s) to their original queue`,
-                        ),
-                },
-            );
+                });
         } else {
-            const { kind, seqNumbers } = pendingBulkConfirm;
-            if (kind === "complete") {
-                if (viewMode === "active") {
-                    completeMutation.mutate({
-                        nsId,
-                        entityPath: entity.entityPath,
-                        sequenceNumbers: seqNumbers,
-                    });
-                } else {
-                    completeDlqMutation.mutate({
-                        nsId,
-                        entityPath: entity.entityPath,
-                        sequenceNumbers: seqNumbers.map(String),
-                    });
-                }
-            } else if (kind === "deadletter") {
-                deadLetterMutation.mutate({
-                    nsId,
-                    entityPath: entity.entityPath,
-                    sequenceNumbers: seqNumbers,
-                });
+            items = action.seqNumbers;
+            if (action.kind === "complete") {
+                label = "Completing";
+                failTitle = "Couldn't complete messages";
+                successText = `Completed ${items.length} message(s)`;
+                run = (chunk) =>
+                    viewMode === "active"
+                        ? apiSend(`${base}/complete`, "POST", chunk)
+                        : apiSend(
+                              `${base}/dlq/complete`,
+                              "POST",
+                              chunk.map(String),
+                          );
+            } else if (action.kind === "deadletter") {
+                label = "Dead-lettering";
+                failTitle = "Couldn't dead-letter messages";
+                successText = `Moved ${items.length} message(s) to the dead-letter queue`;
+                run = (chunk) => apiSend(`${base}/deadletter`, "POST", chunk);
             } else {
-                resubmitDlqMutation.mutate({
-                    nsId,
-                    entityPath: entity.entityPath,
-                    sequenceNumbers: seqNumbers.map(String),
-                    targetEntityPath: null,
-                });
+                label = "Resubmitting";
+                failTitle = "Couldn't resubmit messages";
+                successText = `Resubmitted ${items.length} message(s) to ${sendableEntityPath(entity)}`;
+                run = (chunk) =>
+                    apiSend(`${base}/resubmit`, "POST", {
+                        sequenceNumbers: chunk.map(String),
+                        targetEntityPath: null,
+                    });
             }
         }
-        setSelectedMsgs(new Set());
-        setPendingBulkConfirm(null);
-    }, [
-        nsId,
-        entity,
-        viewMode,
-        pendingBulkConfirm,
-        completeMutation,
-        completeDlqMutation,
-        resubmitDlqMutation,
-        resendMutation,
-        deadLetterMutation,
-        notify,
-    ]);
+
+        let done = 0;
+        try {
+            await runInChunks(items, run, (d, total) => {
+                done = d;
+                setBulkProgress({ label, done: d, total });
+            });
+            notify("success", successText);
+        } catch (err) {
+            // When some chunks landed before the failure, say how far the run
+            // got so it doesn't look like nothing happened.
+            notify(
+                "error",
+                failTitle,
+                done > 0
+                    ? `${String(err)} — ${done} of ${items.length} message(s) processed before failing`
+                    : String(err),
+            );
+        } finally {
+            setSelectedMsgs(new Set());
+            setBulkProgress(null);
+            invalidateServiceBusQueries(qc, nsId, entity.entityPath);
+        }
+    }, [nsId, entity, viewMode, pendingBulkConfirm, bulkProgress, qc, notify]);
 
     const toggleSelect = (msg: SbMessage) => {
         const key = sbMessageKey(msg);
@@ -1150,9 +1165,33 @@ export function MessageList({
                     className="flex items-center gap-2 border-b bg-primary/10 px-3 py-1.5"
                     data-testid="bulk-action-bar"
                 >
-                    <span className="text-xs font-medium">
-                        {selectedMsgs.size} selected
-                    </span>
+                    {bulkProgress ? (
+                        <span
+                            className="flex items-center gap-1.5 text-xs font-medium"
+                            data-testid="bulk-progress"
+                        >
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            {bulkProgress.label} {bulkProgress.done}/
+                            {bulkProgress.total}
+                        </span>
+                    ) : (
+                        <span className="text-xs font-medium">
+                            {selectedMsgs.size} selected
+                        </span>
+                    )}
+                    {bulkProgress && (
+                        <div
+                            className="h-1.5 w-24 overflow-hidden rounded bg-muted"
+                            data-testid="bulk-progress-bar"
+                        >
+                            <div
+                                className="h-full bg-primary transition-all"
+                                style={{
+                                    width: `${(bulkProgress.done / Math.max(1, bulkProgress.total)) * 100}%`,
+                                }}
+                            />
+                        </div>
+                    )}
                     <button
                         onClick={toggleSelectAll}
                         className="text-xs text-muted-foreground hover:text-foreground"
@@ -1168,58 +1207,55 @@ export function MessageList({
                 NServiceBus error queue) and on the DLQ. */}
                         <button
                             onClick={handleBulkResend}
-                            disabled={resendMutation.isPending}
+                            disabled={bulkProgress !== null}
                             title={
-                                resendMutation.isPending
+                                bulkProgress !== null
                                     ? "Resending…"
-                                    : "Forward each selected message back to its original queue with a new Message ID, then remove the original"
+                                    : "Send each selected message back to the queue it originally failed in (NServiceBus.FailedQ — or this entity if unset), then remove it here"
                             }
                             className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                             data-testid="bulk-resend"
                         >
-                            <CopyPlus className="h-3 w-3" /> Resend
+                            <CopyPlus className="h-3 w-3" /> Resend to origin
                         </button>
-                        {viewMode === "dlq" && (
+                        {viewMode === "dlq" && entity && (
                             <button
                                 onClick={handleBulkResubmit}
-                                disabled={resubmitDlqMutation.isPending}
+                                disabled={bulkProgress !== null}
                                 title={
-                                    resubmitDlqMutation.isPending
+                                    bulkProgress !== null
                                         ? "Resubmitting…"
-                                        : undefined
+                                        : `Send each selected message back to ${sendableEntityPath(entity)} — the entity this dead-letter queue belongs to — then remove it from the DLQ`
                                 }
                                 className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                                 data-testid="bulk-resubmit"
                             >
-                                <ArrowUpRight className="h-3 w-3" /> Resubmit
+                                <ArrowUpRight className="h-3 w-3" /> Resubmit to{" "}
+                                {sendableEntityPath(entity)}
                             </button>
                         )}
                         {viewMode === "active" && (
                             <button
                                 onClick={handleBulkDeadLetter}
-                                disabled={deadLetterMutation.isPending}
+                                disabled={bulkProgress !== null}
                                 title={
-                                    deadLetterMutation.isPending
+                                    bulkProgress !== null
                                         ? "Dead-lettering…"
-                                        : "Move each selected message to this entity's dead-letter queue"
+                                        : "Move each selected message into this entity's dead-letter queue — a broker move, not a copy (a dead-letter reason is recorded)"
                                 }
                                 className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                                 data-testid="bulk-deadletter"
                             >
-                                <Ban className="h-3 w-3" /> Dead-letter
+                                <Ban className="h-3 w-3" /> Move to DLQ
                             </button>
                         )}
                         <button
                             onClick={handleBulkComplete}
-                            disabled={
-                                completeMutation.isPending ||
-                                completeDlqMutation.isPending
-                            }
+                            disabled={bulkProgress !== null}
                             title={
-                                completeMutation.isPending ||
-                                completeDlqMutation.isPending
+                                bulkProgress !== null
                                     ? "Completing…"
-                                    : undefined
+                                    : `Settle each selected message — permanently removed from ${viewMode === "dlq" ? "the dead-letter queue" : "the queue"}, no redelivery`
                             }
                             className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                             data-testid="bulk-complete"
@@ -1240,11 +1276,11 @@ export function MessageList({
                 <ConfirmBar
                     message={
                         pendingBulkConfirm.kind === "complete"
-                            ? `Complete ${pendingBulkConfirm.seqNumbers.length} message(s)?`
+                            ? `Complete ${pendingBulkConfirm.seqNumbers.length} message(s)? They are settled and permanently removed — no redelivery.`
                             : pendingBulkConfirm.kind === "resubmit"
-                              ? `Resubmit ${pendingBulkConfirm.seqNumbers.length} message(s)?`
+                              ? `Resubmit ${pendingBulkConfirm.seqNumbers.length} message(s) back to ${entity ? sendableEntityPath(entity) : "the source entity"}? Each copy gets a new Message ID and the original leaves the dead-letter queue once sent.`
                               : pendingBulkConfirm.kind === "deadletter"
-                                ? `Move ${pendingBulkConfirm.seqNumbers.length} message(s) to the dead-letter queue?`
+                                ? `Move ${pendingBulkConfirm.seqNumbers.length} message(s) to the dead-letter queue of ${entity?.entityPath ?? "this entity"}?`
                                 : `Resend ${pendingBulkConfirm.messages.length} message(s) to ${resendTargetText(pendingBulkConfirm.messages, entity?.entityPath ?? "")}? Originals are removed once each copy is sent — every copy gets a new Message ID.`
                     }
                     confirmLabel={
