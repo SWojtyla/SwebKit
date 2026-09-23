@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using SwebKit.Agents;
 using SwebKit.Core.Abstractions;
@@ -57,6 +58,7 @@ public sealed record ProactiveInsightStatusEvent(
 public sealed class ProactiveInsightService
 {
     private readonly IAlertRuleRepository _rules;
+    private readonly IProactiveInsightReportRepository _reports;
     private readonly ProfileRepository _profiles;
     private readonly IAgentToolRegistry _toolRegistry;
     private readonly IAgentModelClient _modelClient;
@@ -77,6 +79,7 @@ public sealed class ProactiveInsightService
     public ProactiveInsightService(
         MonitoringAlertEvaluationService engine,
         IAlertRuleRepository rules,
+        IProactiveInsightReportRepository reports,
         ProfileRepository profiles,
         IAgentToolRegistry toolRegistry,
         IAgentModelClient modelClient,
@@ -86,6 +89,7 @@ public sealed class ProactiveInsightService
         ILogger<ProactiveInsightService> logger)
     {
         _rules = rules;
+        _reports = reports;
         _profiles = profiles;
         _toolRegistry = toolRegistry;
         _modelClient = modelClient;
@@ -191,11 +195,25 @@ public sealed class ProactiveInsightService
             string summary;
             string reportJson;
             IReadOnlyList<string>? evidence = null;
+            var report = new ProactiveInsightReport
+            {
+                RuleId = evt.RuleId,
+                RuleName = evt.RuleName,
+                FiredAt = evt.FiredAt,
+                AlertMessage = evt.Message,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
             if (result is not null)
             {
                 summary = result.Hypothesis;
                 reportJson = BuildReportJson(result);
                 evidence = result.Evidence;
+                report.Severity = result.Severity;
+                report.Evidence = [.. result.Evidence];
+                report.SuggestedNextSteps = [.. result.SuggestedNextSteps];
+                report.ProposedFix = result.ProposedFix;
+                report.ToolsUsed = [.. result.ToolsUsed];
+                report.HitMaxRounds = result.HitMaxRounds;
             }
             else
             {
@@ -219,7 +237,23 @@ public sealed class ProactiveInsightService
             }
 
             var sessionId = $"proactive-{evt.RuleId}-{evt.FiredAt.ToUnixTimeMilliseconds()}";
-            _chatService.SeedProactiveInsightSession(sessionId, evt.RuleName, evt.Message, reportJson, summary);
+            report.Id = sessionId;
+            report.SessionId = sessionId;
+            report.Hypothesis = summary;
+            report.ReportJson = reportJson;
+
+            _chatService.SeedProactiveInsightSession(sessionId, evt.RuleName, evt.Message, FormatReportMarkdown(report));
+
+            // Persist before raising InsightReady so a report is on disk even if the app closes
+            // right after the notification. A persistence failure must not eat the insight.
+            try
+            {
+                await _reports.UpsertAsync(report);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist proactive insight report for rule {RuleId} ({RuleName})", evt.RuleId, evt.RuleName);
+            }
 
             InsightReady?.Invoke(new ProactiveInsightReadyEvent(evt.RuleId, evt.FiredAt, evt.RuleName, summary, sessionId, evidence));
         }
@@ -290,6 +324,62 @@ public sealed class ProactiveInsightService
         _ => null,
     };
 
+    /// <summary>Re-materializes the chat session for a persisted report (ai-insight-reports):
+    /// the in-memory <see cref="AgentSessionStore"/> idle-evicts sessions, so the seeded
+    /// conversation behind an hours-old report is usually gone — <see cref="SidecarAgentChatService.SeedProactiveInsightSession"/>
+    /// is idempotent, so calling it again either re-seeds the session from the stored report or
+    /// no-ops against the live one. Returns the session's current transcript.</summary>
+    public IReadOnlyList<AgentMessage> EnsureSession(ProactiveInsightReport report)
+    {
+        _chatService.SeedProactiveInsightSession(
+            report.SessionId, report.RuleName, report.AlertMessage ?? string.Empty, FormatReportMarkdown(report));
+        return _chatService.GetSessionMessages(report.SessionId);
+    }
+
+    /// <summary>Renders a persisted report as the seeded session's assistant message — readable
+    /// markdown sections (the chat UI renders <c>AgentMarkdown</c>) rather than the raw JSON dump
+    /// the first version used, which forced users to parse the whole payload to find the answer.
+    /// The raw report JSON rides along in a fenced block at the end so a follow-up turn still has
+    /// the full structured context.</summary>
+    private static string FormatReportMarkdown(ProactiveInsightReport report)
+    {
+        var sb = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(report.Severity))
+            sb.Append($"**Severity: {report.Severity}** — ");
+        sb.Append(report.Hypothesis);
+
+        if (report.Evidence.Count > 0)
+        {
+            sb.Append("\n\n### Evidence");
+            foreach (var item in report.Evidence)
+                sb.Append($"\n- {item}");
+        }
+
+        if (report.SuggestedNextSteps.Count > 0)
+        {
+            sb.Append("\n\n### Suggested next steps");
+            for (var i = 0; i < report.SuggestedNextSteps.Count; i++)
+                sb.Append($"\n{i + 1}. {report.SuggestedNextSteps[i]}");
+        }
+
+        if (report.ProposedFix is { Snippet.Length: > 0 } fix)
+        {
+            sb.Append("\n\n### Proposed fix");
+            if (!string.IsNullOrWhiteSpace(fix.Explanation))
+                sb.Append($"\n{fix.Explanation}");
+            var lang = string.IsNullOrWhiteSpace(fix.Language) ? "" : fix.Language;
+            sb.Append($"\n```{lang}\n{fix.Snippet}\n```");
+        }
+
+        if (report.ToolsUsed.Count > 0)
+            sb.Append($"\n\n_Investigation used: {string.Join(", ", report.ToolsUsed)}{(report.HitMaxRounds ? " (hit the tool-round limit — evidence may be partial)" : "")}_");
+
+        if (!string.IsNullOrWhiteSpace(report.ReportJson))
+            sb.Append($"\n\n### Full investigation data\n```json\n{report.ReportJson}\n```");
+
+        return sb.ToString();
+    }
+
     /// <summary>Serializes a <see cref="ProactiveInvestigationResult"/> into the report JSON the
     /// seeded session carries — the structured fields plus the tool audit trail, but not
     /// <see cref="ProactiveInvestigationResult.RawText"/> (the same content in raw form, which the
@@ -301,6 +391,12 @@ public sealed class ProactiveInsightService
             evidence = result.Evidence,
             severity = result.Severity,
             suggested_next_steps = result.SuggestedNextSteps,
+            proposed_fix = result.ProposedFix is null ? null : new
+            {
+                explanation = result.ProposedFix.Explanation,
+                language = result.ProposedFix.Language,
+                snippet = result.ProposedFix.Snippet,
+            },
             tools_used = result.ToolsUsed,
             hit_max_rounds = result.HitMaxRounds,
         });

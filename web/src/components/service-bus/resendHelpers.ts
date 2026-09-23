@@ -1,37 +1,30 @@
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 
-// The broker writes these into ApplicationProperties when it dead-letters a
-// message; a resent copy must not carry them. Mirrors the strip the server-side
-// clone does in AzureServiceBusClient.ResubmitDeadLetterAsync.
-const DLQ_PROP_KEYS = ["DeadLetterReason", "DeadLetterErrorDescription"];
+/**
+ * The queue a resend will target for a message: the `NServiceBus.FailedQ` application
+ * property when present (the queue the message failed in — the same target
+ * ServiceInsight/ServicePulse retry to), otherwise the entity the message was selected
+ * from. Mirrors `AzureServiceBusClient.ResolveResendTarget`, including the MSMQ-era
+ * "@machine" suffix strip — used here only to preview the target in the confirm bar;
+ * the sidecar resolves the real target per message when it forwards.
+ */
+export function resendTargetQueue(message: SbMessage, fallbackEntityPath: string): string {
+  const value = message.applicationProperties?.["NServiceBus.FailedQ"];
+  if (typeof value === "string" && value.trim().length > 0) {
+    const at = value.indexOf("@");
+    return at > 0 ? value.slice(0, at) : value;
+  }
+  return fallbackEntityPath;
+}
 
 /**
- * Clones a peeked message for resend-as-copy: every clone gets a fresh
- * MessageId so broker duplicate detection can't silently drop it, and all
- * broker-owned fields (sequence number, lock token, delivery count, DLQ
- * metadata) are cleared — the broker reassigns them on send.
+ * Human-readable target for a resend selection in the confirm bar: the single queue
+ * every selected message resolves to, or a generic label when the selection spans
+ * multiple original queues.
  */
-export function cloneForResend(source: SbMessage): SbMessage {
-  const applicationProperties = { ...source.applicationProperties };
-  for (const key of DLQ_PROP_KEYS) {
-    delete applicationProperties[key];
-  }
-  return {
-    messageId: crypto.randomUUID(),
-    correlationId: source.correlationId,
-    subject: source.subject,
-    contentType: source.contentType,
-    body: source.body,
-    applicationProperties,
-    systemProperties: null,
-    deadLetterReason: null,
-    deadLetterErrorDescription: null,
-    enqueuedAt: new Date().toISOString(),
-    deliveryCount: 0,
-    lockToken: null,
-    sequenceNumber: null,
-    sessionId: source.sessionId,
-  };
+export function resendTargetText(messages: SbMessage[], fallbackEntityPath: string): string {
+  const targets = new Set(messages.map((m) => resendTargetQueue(m, fallbackEntityPath)));
+  return targets.size === 1 ? [...targets][0] : "their original queues";
 }
 
 /**

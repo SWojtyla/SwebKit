@@ -27,6 +27,14 @@ public static class MonitoringEndpoints
 
         group.MapGet("/history", GetHistory);
 
+        // ── Persisted AI insight reports (ai-insight-reports) ───────────────
+
+        group.MapGet("/insights", GetInsightsAsync);
+
+        group.MapDelete("/insights/{id}", DeleteInsightAsync);
+
+        group.MapPost("/insights/{id}/open-chat", OpenInsightChatAsync);
+
         // ── Live SSE stream of fired alerts ─────────────────────────────────
 
         group.MapGet("/stream", (
@@ -122,4 +130,49 @@ public static class MonitoringEndpoints
 
     internal static Ok<IReadOnlyList<AlertFiredEvent>> GetHistory(MonitoringAlertEvaluationService engine) =>
         TypedResults.Ok(engine.RecentAlerts);
+
+    internal static async Task<Ok<IReadOnlyList<ProactiveInsightReport>>> GetInsightsAsync(
+        IProactiveInsightReportRepository repo) =>
+        TypedResults.Ok(await repo.GetAllAsync());
+
+    internal static async Task<NoContent> DeleteInsightAsync(
+        string id,
+        IProactiveInsightReportRepository repo)
+    {
+        await repo.DeleteAsync(id);
+        return TypedResults.NoContent();
+    }
+
+    /// <summary>Materializes the report's chat session (re-seeding it from the persisted report
+    /// when the in-memory store already evicted it) and returns the session id plus its
+    /// transcript — everything the "Discuss in chat" panel needs in one round trip.</summary>
+    internal static async Task<Results<Ok<InsightChatSession>, NotFound>> OpenInsightChatAsync(
+        string id,
+        IProactiveInsightReportRepository repo,
+        ProactiveInsightService insights)
+    {
+        var report = await repo.GetByIdAsync(id);
+        if (report is null)
+            return TypedResults.NotFound();
+
+        var messages = insights.EnsureSession(report);
+        return TypedResults.Ok(new InsightChatSession
+        {
+            SessionId = report.SessionId,
+            Messages = messages.Select(m => new InsightChatMessage { Role = m.Role, Content = m.Content }).ToList(),
+        });
+    }
+}
+
+/// <summary>Response of <c>POST /api/monitoring/insights/{id}/open-chat</c>.</summary>
+public sealed class InsightChatSession
+{
+    public required string SessionId { get; init; }
+    public required IReadOnlyList<InsightChatMessage> Messages { get; init; }
+}
+
+public sealed class InsightChatMessage
+{
+    public required string Role { get; init; }
+    public string? Content { get; init; }
 }

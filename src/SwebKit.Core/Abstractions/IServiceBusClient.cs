@@ -34,6 +34,30 @@ public interface IServiceBusClient
     /// message before forwarding. Optional <paramref name="targetEntityPath"/> overrides the destination entity.
     /// </summary>
     Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default);
+    /// <summary>
+    /// Resends messages back toward the queue they originally failed in — resolved per message
+    /// from the NServiceBus <c>NServiceBus.FailedQ</c> application property, falling back to
+    /// <paramref name="entityPath"/> — then removes each original once its copy is sent. Unlike
+    /// resend-as-copy this is move semantics, so a resend never leaves a duplicate behind.
+    /// <paramref name="deadLetter"/> selects the entity's dead-letter sub-queue as the source.
+    /// Returns the number of messages forwarded.
+    /// </summary>
+    /// <remarks>
+    /// The default throws so pre-existing <see cref="IServiceBusClient"/> implementations (test
+    /// fakes, legacy shells) that never served resend keep compiling; real clients must override.
+    /// </remarks>
+    Task<int> ResendMessagesAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, bool deadLetter, CancellationToken ct = default) =>
+        throw new NotSupportedException("Resend is not supported by this Service Bus client.");
+    /// <summary>
+    /// Moves active messages to the entity's dead-letter sub-queue by sequence number — the
+    /// broker-side equivalent of a consumer dead-lettering them. Returns the number moved.
+    /// </summary>
+    /// <remarks>
+    /// The default throws so pre-existing <see cref="IServiceBusClient"/> implementations (test
+    /// fakes, legacy shells) keep compiling; real clients must override.
+    /// </remarks>
+    Task<int> DeadLetterMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default) =>
+        throw new NotSupportedException("Dead-lettering is not supported by this Service Bus client.");
     Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
 }

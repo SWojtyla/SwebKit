@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus, AlertCircle, Loader2, Sparkles, X } from "lucide-react";
 import { SkeletonRows } from "@/components/shared/Skeleton";
 import type {
@@ -9,29 +10,30 @@ import type {
     AlertEvaluatedEvent,
     ProactiveInsightReadyEvent,
     ProactiveInsightStatusEvent,
+    ProactiveInsightReport,
 } from "../../lib/api";
+import type { ChatMessage } from "../../lib/types";
 import {
     useMonitoringRules,
     useCreateMonitoringRule,
     useUpdateMonitoringRule,
     useDeleteMonitoringRule,
     useMonitoringHistory,
+    useMonitoringInsights,
+    useDeleteMonitoringInsight,
+    useOpenInsightChat,
     useMonitoringStream,
     useProactiveInsightsFeed,
     useUpdateSearchParams,
 } from "../../lib/hooks";
 import { useNotification } from "../layout/NotificationSystem";
-import { useAgentConversationStore } from "../../lib/stores/agent-conversation";
 import { useScreenStateProvider } from "../../lib/stores/screen-state";
+import { ContextualAssistant } from "../agent/ContextualAssistant";
 import { AlertRuleGroups } from "./AlertRuleGroups";
 import { AlertRuleDialog } from "./AlertRuleDialog";
 import { AlertHistoryPanel } from "./AlertHistoryPanel";
 import { ProactiveInsightCard } from "./ProactiveInsightCard";
-
-let proactiveMsgIdCounter = 0;
-function nextProactiveMsgId() {
-    return `proactive-msg-${++proactiveMsgIdCounter}`;
-}
+import { AiReportsPanel } from "./AiReportsPanel";
 
 // Keeps a burst of proactive insights from pushing the tab strip below the fold — a "+N more"
 // toggle (scrollable once expanded) surfaces the rest without an unbounded list.
@@ -50,23 +52,42 @@ export function MonitoringPage() {
         isError: historyIsError,
         error: historyError,
     } = useMonitoringHistory();
+    const {
+        data: insightReports = [],
+        isLoading: insightsIsLoading,
+        isError: insightsIsError,
+        error: insightsError,
+    } = useMonitoringInsights();
+    const deleteInsight = useDeleteMonitoringInsight();
+    const openInsightChat = useOpenInsightChat();
     const createRule = useCreateMonitoringRule();
     const updateRule = useUpdateMonitoringRule();
     const deleteRule = useDeleteMonitoringRule();
     const { notify } = useNotification();
     const navigate = useNavigate();
     const location = useLocation();
-    const addAgentMessage = useAgentConversationStore((s) => s.addMessage);
+    const queryClient = useQueryClient();
 
-    // `?tab=` keeps the rules/history split deep-linkable and restorable.
+    // `?tab=` keeps the rules/history/reports split deep-linkable and restorable;
+    // `?report=` selects one persisted AI report inside the reports tab.
     const [searchParams] = useSearchParams();
     const updateParams = useUpdateSearchParams();
-    const activeTab: "rules" | "history" =
-        searchParams.get("tab") === "history" ? "history" : "rules";
+    const activeTab: "rules" | "history" | "reports" =
+        searchParams.get("tab") === "history"
+            ? "history"
+            : searchParams.get("tab") === "reports"
+              ? "reports"
+              : "rules";
+    const selectedReportId = searchParams.get("report");
     const setActiveTab = useCallback(
-        (tab: "rules" | "history") =>
-            updateParams({ tab: tab === "rules" ? null : tab }),
-        [updateParams],
+        (tab: "rules" | "history" | "reports") =>
+            updateParams({
+                tab: tab === "rules" ? null : tab,
+                // Keep a selected report when landing on the reports tab; clear it
+                // when leaving — `undefined` would delete the key either way.
+                report: tab === "reports" ? searchParams.get("report") : null,
+            }),
+        [updateParams, searchParams],
     );
     const [showEditor, setShowEditor] = useState(false);
     const [editingRule, setEditingRule] = useState<MonitoringAlertRule | null>(
@@ -125,6 +146,11 @@ export function MonitoringPage() {
         },
         (insight) => {
             addInsight(insight);
+            // The persisted report is already on disk (the sidecar writes it before
+            // raising this event) — refresh the AI Reports tab list immediately.
+            queryClient.invalidateQueries({
+                queryKey: ["monitoring", "insights"],
+            });
             // The ready card replaces the in-flight status entry for the same firing.
             setInsightStatuses((s) => {
                 const key = `${insight.ruleId}|${insight.firedAt}`;
@@ -177,25 +203,51 @@ export function MonitoringPage() {
         [rules, statuses, liveEvents, activeTab],
     );
 
-    const investigateInsight = (insight: ProactiveInsightReadyEvent) => {
-        // Reuses the global agent conversation rather than opening a separate "view this session"
-        // surface — the sidecar-seeded session (identified by insight.sessionId) is the real source of
-        // truth for any follow-up questions asked from here forward, but the global page/panel only
-        // knows how to render the one global session today, so the summary is injected there directly
-        // as a real, honest scope reduction (documented in status.md) rather than a half-built session
-        // viewer.
-        addAgentMessage({
-            id: nextProactiveMsgId(),
-            role: "user",
-            content: `What's related to the "${insight.ruleName}" alert that just fired?`,
-        });
-        addAgentMessage({
-            id: nextProactiveMsgId(),
-            role: "assistant",
-            content: insight.summary,
-        });
+    // The header card's primary action deep-links to the persisted report — the
+    // report's id is the insight's sessionId (`proactive-{ruleId}-{firedAt ms}`),
+    // which is also the composite identity the card is keyed by.
+    const viewInsightReport = (insight: ProactiveInsightReadyEvent) => {
         dismiss(insight);
-        navigate("/agent");
+        updateParams({ tab: "reports", report: insight.sessionId });
+    };
+
+    // "Discuss in chat" continues the report's own seeded session (re-materialized
+    // server-side if the in-memory store already evicted it) in a contextual panel —
+    // follow-up questions then run against the real transcript, not a pasted summary.
+    const [reportChat, setReportChat] = useState<{
+        sessionId: string;
+        title: string;
+        messages: ChatMessage[];
+    } | null>(null);
+
+    const discussReport = (report: ProactiveInsightReport) => {
+        openInsightChat.mutate(report.id, {
+            onSuccess: (session) =>
+                setReportChat({
+                    sessionId: session.sessionId,
+                    title: report.ruleName,
+                    messages: session.messages
+                        .filter(
+                            (m) =>
+                                (m.role === "user" || m.role === "assistant") &&
+                                m.content,
+                        )
+                        .map((m, i) => ({
+                            id: `seed-${i}`,
+                            role: m.role as "user" | "assistant",
+                            content: m.content!,
+                        })),
+                }),
+        });
+    };
+
+    const deleteReport = (report: ProactiveInsightReport) => {
+        deleteInsight.mutate(report.id, {
+            onSuccess: () => {
+                if (selectedReportId === report.id)
+                    updateParams({ report: null });
+            },
+        });
     };
 
     const mergedHistory = [...liveEvents, ...history].sort(
@@ -329,7 +381,7 @@ export function MonitoringPage() {
                                 <ProactiveInsightCard
                                     key={`${insight.ruleId}|${insight.firedAt}`}
                                     insight={insight}
-                                    onInvestigate={investigateInsight}
+                                    onViewReport={viewInsightReport}
                                     onDismiss={dismiss}
                                 />
                             ))}
@@ -363,12 +415,12 @@ export function MonitoringPage() {
             </div>
 
             <div className="flex gap-1 border-b px-6">
-                {(["rules", "history"] as const).map((tab) => (
+                {(["rules", "history", "reports"] as const).map((tab) => (
                     <button
                         key={tab}
                         data-testid={`monitoring-tab-${tab}`}
                         onClick={() => setActiveTab(tab)}
-                        className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
+                        className={`px-4 py-2 text-sm font-medium transition-colors ${
                             activeTab === tab
                                 ? "border-b-2 border-primary text-primary"
                                 : "text-muted-foreground hover:text-foreground"
@@ -376,7 +428,9 @@ export function MonitoringPage() {
                     >
                         {tab === "rules"
                             ? `Alert Rules (${rules.length})`
-                            : `Alert History (${mergedHistory.length})`}
+                            : tab === "history"
+                              ? `Alert History (${mergedHistory.length})`
+                              : `AI Reports (${insightReports.length})`}
                     </button>
                 ))}
             </div>
@@ -448,7 +502,34 @@ export function MonitoringPage() {
                     ) : (
                         <AlertHistoryPanel events={mergedHistory} />
                     ))}
+
+                {activeTab === "reports" && (
+                    <AiReportsPanel
+                        reports={insightReports}
+                        isLoading={insightsIsLoading}
+                        isError={insightsIsError}
+                        error={insightsError}
+                        selectedId={selectedReportId}
+                        onSelect={(id) => updateParams({ report: id })}
+                        onDiscuss={discussReport}
+                        onDelete={deleteReport}
+                        discussPending={openInsightChat.isPending}
+                        deletePending={deleteInsight.isPending}
+                    />
+                )}
             </div>
+
+            {reportChat && (
+                <ContextualAssistant
+                    key={reportChat.sessionId}
+                    featureArea="Monitoring"
+                    title={reportChat.title}
+                    sessionId={reportChat.sessionId}
+                    initialMessages={reportChat.messages}
+                    defaultScope="workspace"
+                    onClose={() => setReportChat(null)}
+                />
+            )}
 
             {showEditor && (
                 <AlertRuleDialog

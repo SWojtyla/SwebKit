@@ -7,6 +7,9 @@ import {
     updateMonitoringRule,
     deleteMonitoringRule,
     getMonitoringHistory,
+    getMonitoringInsights,
+    deleteMonitoringInsight,
+    openInsightChat,
 } from "../api";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import type {
@@ -72,6 +75,49 @@ export function useMonitoringHistory() {
         queryKey: ["monitoring", "history"],
         queryFn: ({ signal }) => getMonitoringHistory(signal),
         refetchInterval: 15_000,
+    });
+}
+
+/**
+ * Persisted AI investigation reports backing the Monitoring "AI Reports" tab
+ * (ai-insight-reports). The query is invalidated by `useMonitoringStream`'s
+ * `proactiveInsightReady` handler on the page so a completed investigation shows
+ * up without waiting for a poll; the modest refetchInterval covers reports written
+ * while no monitoring page was mounted.
+ */
+export function useMonitoringInsights() {
+    return useQuery({
+        queryKey: ["monitoring", "insights"],
+        queryFn: ({ signal }) => getMonitoringInsights(signal),
+        refetchInterval: 30_000,
+    });
+}
+
+export function useDeleteMonitoringInsight() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (id: string) => deleteMonitoringInsight(id),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["monitoring", "insights"] });
+        },
+        onError: (error) =>
+            notify("error", "Couldn't delete the AI report", String(error)),
+    });
+}
+
+/** Materializes a report's chat session (re-seeded server-side if evicted) and
+ * returns it with its transcript — the "Discuss in chat" handoff. */
+export function useOpenInsightChat() {
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (id: string) => openInsightChat(id),
+        onError: (error) =>
+            notify(
+                "error",
+                "Couldn't open the report conversation",
+                String(error),
+            ),
     });
 }
 

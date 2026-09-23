@@ -26,6 +26,8 @@
 - Manage message templates from composer workflows (create/save, search, apply, rename, duplicate, edit, delete).
 - Cancel scheduled messages and view scheduled message history.
 - Resubmit dead-letter messages to original or target entity, processing the full requested sequence set across receive batches.
+- Resend selected messages back to their original queue — resolved per message from `NServiceBus.FailedQ`, falling back to the viewed entity — with a fresh Message ID, then remove the original (move semantics; works on the active list and the DLQ).
+- Move selected active messages to the entity's dead-letter queue via the broker's own dead-letter settlement (`DeadLetterMessageAsync` with a `SwebKit.ManualTransfer` reason) — not a copy-and-delete.
 - Complete dead-letter messages with the same exhaustive sequence matching.
 - Use production-safe confirmation dialogs for destructive actions.
 - Favorite Service Bus resources through the shared operator workspace model, with the Service Bus page, dashboard pins, command palette, and top-bar workspace hub all reading the same canonical favorite snapshots.
@@ -37,7 +39,7 @@
 2. Each namespace that should reconnect resolves credentials and attempts connection through `IServiceBusNamespaceBootstrapper.ConnectAsync`, so the page only owns row state and per-namespace progress updates.
 3. `EntityTree` loads queues/topics/subscriptions, surfaces entity status, and invokes enable/disable operations.
 4. `MessageListView` applies text + advanced filtering rules in-memory over loaded messages, persists/reapplies saved filter profiles, applies per-scope column and row-density preferences, supports expanding windows via `Load More`, and calls `IServiceBusClient` operations for delete selected, delete filtered, JSON export, and purge.
-5. `DlqView` continues to support existing DLQ resubmit/complete workflows and shares filtered-delete capability through `MessageListView` when in DLQ mode. `AzureServiceBusClient` routes DLQ complete and resubmit through `DeadLetterSequenceProcessor`, which keeps receiving until the requested sequence set is exhausted, releases non-target messages predictably, and fails explicitly if the broker is drained before all requested sequence numbers are found.
+5. `DlqView` continues to support existing DLQ resubmit/complete workflows and shares filtered-delete capability through `MessageListView` when in DLQ mode. `AzureServiceBusClient` routes DLQ complete and resubmit through `MessageSequenceProcessor`, which keeps receiving until the requested sequence set is exhausted, releases non-target messages predictably, and fails explicitly if the broker is drained before all requested sequence numbers are found. The same processor backs resend: `ResendMessagesAsync` receives the requested sequence set under PeekLock (active list or DLQ per `deadLetter`), forwards a clone with a fresh Message ID to each message's `NServiceBus.FailedQ` target (falling back to the source entity) through per-target senders, and completes the original once the copy is sent.
 6. `MessageComposer` can save templates to profile-backed app state and apply templates selected from `TemplatePicker` before send/replay/schedule actions.
 7. `TemplatePicker` supports in-dialog search and inline validation for invalid template rename/edit inputs, then persists template mutations through `AppStateService`.
 8. Destructive mutations are gated by `ConfirmDialog`, and post-mutation refresh is handled via list reload plus refresh-token wiring for DLQ flows.
@@ -57,7 +59,7 @@
 - `src/SwebKit.Core/Abstractions/IServiceBusNamespaceBootstrapper.cs`
 - `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`
 - `src/SwebKit.Azure/ServiceBus/IncidentTimeline/ServiceBusEvidenceSignalSource.cs`
-- `src/SwebKit.Azure/ServiceBus/DeadLetterSequenceProcessor.cs`
+- `src/SwebKit.Azure/ServiceBus/MessageSequenceProcessor.cs`
 - `src/SwebKit.Core/Configuration/ScheduledMessageRepository.cs`
 
 ## Important Notes
@@ -69,7 +71,9 @@
 - Entity status toggles are exposed through `SetQueueEnabledAsync`, `SetTopicEnabledAsync`, and `SetSubscriptionEnabledAsync`.
 - Active single-message delete uses `CompleteMessagesAsync(entityPath, sequenceNumbers)` from `MessageListView`.
 - Purge-all uses `PurgeMessagesAsync(entityPath, deadLetter)` for both active and DLQ modes.
-- Existing DLQ resubmit/complete paths now share `DeadLetterSequenceProcessor` so selected sequence numbers are processed across batches instead of only the first receive window.
+- Existing DLQ resubmit/complete paths now share `MessageSequenceProcessor` so selected sequence numbers are processed across batches instead of only the first receive window; resend and move-to-dead-letter (`DeadLetterMessagesAsync`, PeekLock `DeadLetterMessageAsync` on the active entity) use it for the active list too.
+- Resend targets the queue each message failed in — `NServiceBus.FailedQ`, with any MSMQ-era `@machine` suffix stripped — and removes the original after the copy is sent, so resending an NServiceBus error queue behaves like a ServiceInsight/ServicePulse retry and never leaves duplicates.
+- Messages bound from a JSON body reach `MapToSdk` with `JsonElement` application-property values; `NormalizePropertyValue` unwraps them to AMQP primitives because raw `JsonElement` is not broker-serializable (the previous opaque 500 on resend/replay).
 - If any requested sequence numbers are still missing after the dead-letter receiver is drained, the operation fails explicitly with the missing sequence numbers.
 - Pagination/load-more is implemented as an expanding peek window (request count grows by the configured page size) so existing `IServiceBusClient` contracts remain unchanged.
 - `MessageListView` surfaces window state (`loaded/total` and next target) and disables load-more when the loaded window reaches the known entity total.
@@ -77,8 +81,8 @@
 - Template interactions are profile-backed through `ProfileRepository` and exposed via `AppStateService.MessageTemplates`.
 - Template picker invalid-input safeguards include blank/duplicate name checks and duplicate property-key validation during template edits.
 - Filtered delete routing is mode-aware:
-  - active mode uses `CompleteMessagesAsync(entityPath, sequenceNumbers)`
-  - DLQ mode uses `CompleteDeadLetterAsync(entityPath, sequenceNumbers)`
+    - active mode uses `CompleteMessagesAsync(entityPath, sequenceNumbers)`
+    - DLQ mode uses `CompleteDeadLetterAsync(entityPath, sequenceNumbers)`
 - Filtered export for parity Wave 2 is JSON-only; CSV export is intentionally deferred.
 - Production protections rely on the current production-marked configuration and are enforced by `ConfirmDialog` at UI interaction level.
 - Service Bus UI uses a collapsible entity panel and a responsive message detail drawer (push on wide screens, overlay on narrow).
@@ -100,4 +104,5 @@
 - `tests/SwebKit.App.Tests/TemplatePickerTests.cs`
 - `tests/SwebKit.Core.Tests/ServiceBusNamespaceTests.cs`
 - `tests/SwebKit.Core.Tests/ScheduledMessageRepositoryTests.cs`
-- `tests/SwebKit.Azure.Tests/ServiceBus/DeadLetterSequenceProcessorTests.cs`
+- `tests/SwebKit.Azure.Tests/ServiceBus/MessageSequenceProcessorTests.cs`
+- `tests/SwebKit.Azure.Tests/ServiceBus/ResendTests.cs`

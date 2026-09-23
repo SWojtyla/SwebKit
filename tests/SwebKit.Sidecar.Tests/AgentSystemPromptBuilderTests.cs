@@ -354,4 +354,34 @@ public class AgentSystemPromptBuilderTests
         Assert.DoesNotContain("## Workspace map", prompt);
         Assert.DoesNotContain("Payments", prompt);
     }
+
+    // ── Background-investigation variant (ai-insight-reports) ──
+
+    [Fact]
+    public void Build_BackgroundInvestigation_DropsInteractiveOnlyGuidance_ButKeepsWorkspaceContext()
+    {
+        var prompt = CreateBuilder().Build(context: null, "ask", "workspace", hasToolCalling: true,
+            forBackgroundInvestigation: true);
+
+        // The interactive response-format block would contradict the runner's JSON-only contract.
+        Assert.DoesNotContain("## Response format", prompt);
+        Assert.DoesNotContain("bullet points and tables", prompt);
+        // Nobody reads the reply live — "tell the user to switch modes" is dead guidance.
+        Assert.DoesNotContain("Ask & do", prompt);
+        // The investigation-scoped tool policy replaces the interactive one.
+        Assert.Contains("## Tool policy (background investigation)", prompt);
+        Assert.Contains("read-only", prompt);
+        // Role + workspace context are what the investigation reasons over — they stay.
+        Assert.Contains("SwebKit Assistant", prompt);
+        Assert.Contains("## Current workspace context", prompt);
+    }
+
+    [Fact]
+    public void Build_InteractiveTurn_UnchangedByTheNewParameter()
+    {
+        var prompt = CreateBuilder().Build(context: null, "ask", "workspace", hasToolCalling: true);
+
+        Assert.Contains("## Response format", prompt);
+        Assert.Contains("## Tool policy (Ask mode)", prompt);
+    }
 }

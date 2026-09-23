@@ -16,6 +16,7 @@ public sealed record ProactiveInvestigationResult(
     IReadOnlyList<string> Evidence,
     string? Severity,
     IReadOnlyList<string> SuggestedNextSteps,
+    ProposedFix? ProposedFix,
     string RawText,
     IReadOnlyList<string> ToolsUsed,
     bool HitMaxRounds);
@@ -54,18 +55,28 @@ public sealed class ProactiveInvestigationRunner
 
         ## Background investigation mode
         A monitoring alert just fired. The user is NOT watching this conversation — you are
-        investigating on their behalf. Use the available tools to gather evidence across the
-        workspace: start from the resource the alert names, then follow the declared workspace
-        map relationships to check neighboring resources (the map is already in context above).
-        Prefer a few high-signal tool calls over exhaustive enumeration.
+        investigating on their behalf, and your final reply is stored as a report they read later.
+        Use the available tools to gather evidence across the workspace: start from the resource
+        the alert names, then follow the declared workspace map relationships to check neighboring
+        resources (the map is already in context above). Prefer a few high-signal tool calls over
+        exhaustive enumeration.
 
         When you have enough evidence, respond with ONLY a JSON object in this exact shape:
         {
           "hypothesis": "one-sentence root-cause hypothesis",
           "evidence": ["short factual findings taken from the tool results"],
           "severity": "low" | "medium" | "high",
-          "suggested_next_steps": ["concrete actions the user could take"]
+          "suggested_next_steps": ["concrete actions the user could take, most actionable first"],
+          "proposed_fix": {
+            "explanation": "one line describing the change",
+            "language": "yaml" | "json" | "env" | "text",
+            "snippet": "the minimal corrected configuration, ready to apply"
+          }
         }
+        Set "proposed_fix" to null when the root cause is not a concrete misconfiguration (e.g. a
+        resource or external dependency is simply down). When it is — a bad hostname, a wrong env
+        var, a malformed connection string, a wrong image tag — always include the corrected value
+        itself, not just a description of what to change.
         No prose, no markdown fences — the JSON object only.
         """;
 
@@ -89,8 +100,17 @@ public sealed class ProactiveInvestigationRunner
           "hypothesis": "one-sentence root-cause hypothesis",
           "evidence": ["short factual findings taken from the tool results"],
           "severity": "low" | "medium" | "high",
-          "suggested_next_steps": ["concrete actions the user could take"]
+          "suggested_next_steps": ["concrete actions the user could take, most actionable first"],
+          "proposed_fix": {
+            "explanation": "one line describing the change",
+            "language": "yaml" | "json" | "env" | "text",
+            "snippet": "the minimal corrected configuration, ready to apply"
+          }
         }
+        Set "proposed_fix" to null when the root cause is not a concrete misconfiguration (e.g. a
+        resource or external dependency is simply down). When it is — a bad hostname, a wrong env
+        var, a malformed connection string, a wrong image tag — always include the corrected value
+        itself, not just a description of what to change.
         No prose, no markdown fences — the JSON object only.
         """;
 
@@ -146,7 +166,7 @@ public sealed class ProactiveInvestigationRunner
 
         var systemPrompt =
             _promptBuilder.Build(null, AgentToolCallOrchestrator.NormalizeMode(null), AgentToolCallOrchestrator.WorkspaceScope, hasToolCalling: true,
-                maps: map is null ? [] : [map])
+                maps: map is null ? [] : [map], forBackgroundInvestigation: true)
             + (map is null ? InvestigationInstructionsNoMap : InvestigationInstructions);
 
         var steps = new List<AgentChatStep>();
@@ -208,6 +228,7 @@ public sealed class ProactiveInvestigationRunner
                 Evidence: [],
                 Severity: null,
                 SuggestedNextSteps: [],
+                ProposedFix: null,
                 RawText: text,
                 ToolsUsed: toolsUsed,
                 HitMaxRounds: result.HitMaxRounds);
@@ -226,6 +247,7 @@ public sealed class ProactiveInvestigationRunner
                     ? s.GetString()
                     : null,
                 SuggestedNextSteps: ReadStringArray(root, "suggested_next_steps"),
+                ProposedFix: ReadProposedFix(root),
                 RawText: text,
                 ToolsUsed: toolsUsed,
                 HitMaxRounds: result.HitMaxRounds);
@@ -238,10 +260,46 @@ public sealed class ProactiveInvestigationRunner
                 Evidence: [],
                 Severity: null,
                 SuggestedNextSteps: [],
+                ProposedFix: null,
                 RawText: text,
                 ToolsUsed: toolsUsed,
                 HitMaxRounds: result.HitMaxRounds);
         }
+    }
+
+    /// <summary>Reads the optional <c>proposed_fix</c> object. Tolerant of the model emitting a
+    /// bare string instead of the {explanation, language, snippet} object — a fix described in
+    /// the wrong shape still beats none. Returns null for null/missing/empty values.</summary>
+    private static ProposedFix? ReadProposedFix(JsonElement root)
+    {
+        if (!root.TryGetProperty("proposed_fix", out var fix))
+            return null;
+
+        if (fix.ValueKind == JsonValueKind.String)
+        {
+            var snippet = fix.GetString();
+            return string.IsNullOrWhiteSpace(snippet) ? null : new ProposedFix { Snippet = snippet };
+        }
+
+        if (fix.ValueKind != JsonValueKind.Object)
+            return null;
+
+        var snippetText = fix.TryGetProperty("snippet", out var sn) && sn.ValueKind == JsonValueKind.String
+            ? sn.GetString()
+            : null;
+        if (string.IsNullOrWhiteSpace(snippetText))
+            return null;
+
+        return new ProposedFix
+        {
+            Snippet = snippetText,
+            Explanation = fix.TryGetProperty("explanation", out var ex) && ex.ValueKind == JsonValueKind.String
+                ? ex.GetString() ?? string.Empty
+                : string.Empty,
+            Language = fix.TryGetProperty("language", out var lang) && lang.ValueKind == JsonValueKind.String
+                ? lang.GetString() ?? "text"
+                : "text",
+        };
     }
 
     private static IReadOnlyList<string> ReadStringArray(JsonElement root, string property)

@@ -84,9 +84,11 @@ public sealed class SidecarAgentChatService
     /// follow-up question the user asks continues through the exact same turn-taking logic as any
     /// other session. A no-op safeguard: does nothing if a session with this id already exists,
     /// since the id is derived from the firing event's own identity (rule id + fired-at) and should
-    /// never be seeded twice.
+    /// never be seeded twice — which is also what makes it safe to call again to re-materialize
+    /// an evicted session from a persisted <see cref="SwebKit.Core.Models.ProactiveInsightReport"/>
+    /// (ai-insight-reports).
     /// </summary>
-    public void SeedProactiveInsightSession(string sessionId, string ruleName, string alertMessage, string reportJson, string summary)
+    public void SeedProactiveInsightSession(string sessionId, string ruleName, string alertMessage, string assistantContent)
     {
         var session = _sessions.CreateIfAbsent(sessionId);
         if (session is null)
@@ -100,9 +102,15 @@ public sealed class SidecarAgentChatService
         session.History.Enqueue(new AgentMessage
         {
             Role = "assistant",
-            Content = $"{summary}\n\nFull correlation report:\n{reportJson}",
+            Content = assistantContent,
         });
     }
+
+    /// <summary>Returns the session's stored messages (oldest first), or an empty list when no
+    /// session exists under <paramref name="sessionId"/>. Used by the insight open-chat endpoint
+    /// to hand a report chat its seeded transcript.</summary>
+    public IReadOnlyList<AgentMessage> GetSessionMessages(string? sessionId) =>
+        _sessions.TryGet(sessionId, out var session) ? session.History.ToList() : [];
 
     /// <inheritdoc cref="AgentSessionStore.GetEstimatedTokens"/>
     public int GetEstimatedTokens(string? sessionId) => _sessions.GetEstimatedTokens(sessionId);

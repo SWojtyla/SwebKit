@@ -90,3 +90,47 @@ public sealed record AlertSignalResult(
     AlertSignalStatus Status,
     string? Message = null,
     string? Detail = null);
+
+/// <summary>One concrete config fix a background investigation produced (ai-insight-reports) —
+/// the minimal corrected snippet (YAML fragment, env var, connection string...) plus a one-line
+/// explanation. Null on <see cref="ProactiveInsightReport.ProposedFix"/> when the root cause
+/// wasn't a misconfiguration.</summary>
+public sealed class ProposedFix
+{
+    public string Explanation { get; set; } = string.Empty;
+    /// <summary>Code-block language hint for rendering: "yaml" | "json" | "env" | "text".</summary>
+    public string Language { get; set; } = "text";
+    public string Snippet { get; set; } = string.Empty;
+}
+
+/// <summary>Persisted record of one completed background proactive investigation
+/// (ai-insight-reports). <see cref="Id"/> is the same value as <see cref="SessionId"/>
+/// (<c>proactive-{ruleId}-{firedAt ms}</c>) so the transient <c>ProactiveInsightReadyEvent</c>
+/// can deep-link straight to this record without an extra identity. <see cref="ReportJson"/>
+/// keeps the structured/tool output so the chat session can be faithfully re-seeded after the
+/// in-memory <c>AgentSessionStore</c> evicts it.</summary>
+public sealed class ProactiveInsightReport
+{
+    public string Id { get; set; } = string.Empty;
+    public string RuleId { get; set; } = string.Empty;
+    public string RuleName { get; set; } = string.Empty;
+    public DateTimeOffset FiredAt { get; set; }
+    public string? AlertMessage { get; set; }
+    /// <summary>One-sentence root-cause hypothesis — also the insight card's summary.</summary>
+    public string Hypothesis { get; set; } = string.Empty;
+    /// <summary>Model-assessed severity ("low" | "medium" | "high"), distinct from the rule's own
+    /// <see cref="AlertSeverity"/>. Null on the legacy single-shot fallback path.</summary>
+    public string? Severity { get; set; }
+    public List<string> Evidence { get; set; } = [];
+    public List<string> SuggestedNextSteps { get; set; } = [];
+    public ProposedFix? ProposedFix { get; set; }
+    /// <summary>Audit trail of which tools the investigation loop actually called.</summary>
+    public List<string> ToolsUsed { get; set; } = [];
+    public bool HitMaxRounds { get; set; }
+    /// <summary>Structured result JSON (model-driven path) or raw investigate_workspace_issue
+    /// output (fallback path) — the payload the seeded chat session carries for follow-up
+    /// questions. Not rendered in the reports UI.</summary>
+    public string? ReportJson { get; set; }
+    public string SessionId { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+}

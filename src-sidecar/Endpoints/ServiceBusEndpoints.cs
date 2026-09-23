@@ -232,6 +232,8 @@ public static class ServiceBusEndpoints
 
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/complete", CompleteMessagesAsync);
 
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/deadletter", DeadLetterMessagesAsync);
+
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/purge", PurgeMessagesAsync);
 
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/dlq/complete", async (
@@ -253,6 +255,8 @@ public static class ServiceBusEndpoints
         });
 
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/resubmit", ResubmitDeadLetterAsync);
+
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/resend", ResendMessagesAsync);
 
         // ── Message Templates ──────────────────────────────────────────────────
         app.MapGet("/api/servicebus/templates", (ProfileRepository profile) =>
@@ -348,6 +352,29 @@ public static class ServiceBusEndpoints
         return Results.Ok(new { completed = count });
     }
 
+    /// <summary>
+    /// Handler body for the move-to-dead-letter mutation endpoint. Same "exactly once" regression
+    /// concern as <see cref="CompleteMessagesAsync"/> — tests assert <c>DeadLetterMessagesAsync</c>
+    /// is invoked exactly once per handler invocation.
+    /// </summary>
+    internal static async Task<IResult> DeadLetterMessagesAsync(
+        string nsId,
+        string entityPath,
+        long[] sequenceNumbers,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        CancellationToken ct)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+
+        var client = pool.GetOrCreate(ns);
+        var count = await client.DeadLetterMessagesAsync(entityPath, sequenceNumbers, ct);
+        return Results.Ok(new { deadLettered = count });
+    }
+
     /// <summary>Handler body for the purge mutation endpoint.</summary>
     internal static async Task<IResult> PurgeMessagesAsync(
         string nsId,
@@ -390,6 +417,29 @@ public static class ServiceBusEndpoints
         return Results.Ok();
     }
 
+    /// <summary>
+    /// Handler body for the resend-to-original-queue mutation endpoint. Same "exactly once"
+    /// regression concern as <see cref="CompleteMessagesAsync"/> — tests assert
+    /// <c>ResendMessagesAsync</c> is invoked exactly once per handler invocation.
+    /// </summary>
+    internal static async Task<IResult> ResendMessagesAsync(
+        string nsId,
+        string entityPath,
+        ResendRequest req,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        CancellationToken ct)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+
+        var client = pool.GetOrCreate(ns);
+        var resent = await client.ResendMessagesAsync(entityPath, req.SequenceNumbers, req.DeadLetter, ct);
+        return Results.Ok(new { resent });
+    }
+
     private static string DecodeEntityPath(string entityPath) => Uri.UnescapeDataString(entityPath);
 
     private static ServiceBusNamespace? ResolveNamespace(
@@ -421,6 +471,13 @@ public static class ServiceBusEndpoints
         public string[] SequenceNumbers { get; set; } = [];
         public string? TargetEntityPath { get; set; }
         public RemapRules? RemapRules { get; set; }
+    }
+
+    public sealed class ResendRequest
+    {
+        public string[] SequenceNumbers { get; set; } = [];
+        /// <summary>When true the messages are read from the entity's dead-letter sub-queue.</summary>
+        public bool DeadLetter { get; set; }
     }
 
     public sealed class ScheduleRequest

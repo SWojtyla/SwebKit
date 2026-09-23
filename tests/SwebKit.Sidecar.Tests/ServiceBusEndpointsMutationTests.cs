@@ -27,12 +27,16 @@ internal sealed class CountingServiceBusClient : IServiceBusClient
     public int CompleteMessagesCallCount { get; private set; }
     public int PurgeMessagesCallCount { get; private set; }
     public int ResubmitDeadLetterCallCount { get; private set; }
+    public int ResendMessagesCallCount { get; private set; }
+    public int DeadLetterMessagesCallCount { get; private set; }
 
     public Exception? ThrowOnPeekMessages { get; set; }
     public Exception? ThrowOnPeekDeadLetter { get; set; }
     public Exception? ThrowOnComplete { get; set; }
     public Exception? ThrowOnPurge { get; set; }
     public Exception? ThrowOnResubmit { get; set; }
+    public Exception? ThrowOnResend { get; set; }
+    public Exception? ThrowOnDeadLetter { get; set; }
 
     public Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default) => _inner.GetNamespaceInfoAsync(ct);
     public Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default) => _inner.ListQueuesAsync(ct);
@@ -70,6 +74,18 @@ internal sealed class CountingServiceBusClient : IServiceBusClient
     {
         ResubmitDeadLetterCallCount++;
         return ThrowOnResubmit is not null ? Task.FromException(ThrowOnResubmit) : _inner.ResubmitDeadLetterAsync(entityPath, sequenceNumbers, targetEntityPath, remapRules, ct);
+    }
+
+    public Task<int> ResendMessagesAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, bool deadLetter, CancellationToken ct = default)
+    {
+        ResendMessagesCallCount++;
+        return ThrowOnResend is not null ? Task.FromException<int>(ThrowOnResend) : _inner.ResendMessagesAsync(entityPath, sequenceNumbers, deadLetter, ct);
+    }
+
+    public Task<int> DeadLetterMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)
+    {
+        DeadLetterMessagesCallCount++;
+        return ThrowOnDeadLetter is not null ? Task.FromException<int>(ThrowOnDeadLetter) : _inner.DeadLetterMessagesAsync(entityPath, sequenceNumbers, ct);
     }
 
     public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) => _inner.CompleteDeadLetterAsync(entityPath, sequenceNumbers, ct);
@@ -322,5 +338,88 @@ public class ServiceBusEndpointsMutationTests
             () => ServiceBusEndpoints.ResubmitDeadLetterAsync(nsId.ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None));
         Assert.Equal("service bus unavailable", ex.Message);
         Assert.Equal(1, faulty.ResubmitDeadLetterCallCount); // still called exactly once even though it threw
+    }
+
+    // ── Resend to original queue — same "exactly once" regression concern ──────────
+
+    [Fact]
+    public async Task ResendMessagesAsync_Success_CallsUnderlyingClientExactlyOnce()
+    {
+        var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
+        var (profile, demo, factory, nsId) = Build(faulty);
+        var req = new ServiceBusEndpoints.ResendRequest { SequenceNumbers = ["4501", "4502"], DeadLetter = false };
+
+        var result = await ServiceBusEndpoints.ResendMessagesAsync(nsId.ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IValueHttpResult>(result);
+        Assert.Equal(1, faulty.ResendMessagesCallCount);
+        Assert.Equal(2, ReadAnonymousIntProperty(result, "resent"));
+    }
+
+    [Fact]
+    public async Task ResendMessagesAsync_NamespaceNotFound_ReturnsNotFound_AndNeverCallsClient()
+    {
+        var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
+        var (profile, demo, factory, _) = Build(faulty);
+        var req = new ServiceBusEndpoints.ResendRequest { SequenceNumbers = ["4501"] };
+
+        var result = await ServiceBusEndpoints.ResendMessagesAsync(Guid.NewGuid().ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Equal(0, faulty.ResendMessagesCallCount);
+    }
+
+    [Fact]
+    public async Task ResendMessagesAsync_ClientThrows_ExceptionPropagates_NotSwallowed()
+    {
+        var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev()) { ThrowOnResend = new InvalidOperationException("service bus unavailable") };
+        var (profile, demo, factory, nsId) = Build(faulty);
+        var req = new ServiceBusEndpoints.ResendRequest { SequenceNumbers = ["4501"] };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ServiceBusEndpoints.ResendMessagesAsync(nsId.ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None));
+        Assert.Equal("service bus unavailable", ex.Message);
+        Assert.Equal(1, faulty.ResendMessagesCallCount); // still called exactly once even though it threw
+    }
+
+    // ── Move to dead-letter queue — same "exactly once" regression concern ──────
+
+    [Fact]
+    public async Task DeadLetterMessagesAsync_Success_CallsUnderlyingClientExactlyOnce()
+    {
+        var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
+        var (profile, demo, factory, nsId) = Build(faulty);
+
+        var result = await ServiceBusEndpoints.DeadLetterMessagesAsync(nsId.ToString(), EntityPath, [4501, 4502], profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IValueHttpResult>(result);
+        Assert.Equal(1, faulty.DeadLetterMessagesCallCount);
+        Assert.Equal(2, ReadAnonymousIntProperty(result, "deadLettered"));
+    }
+
+    [Fact]
+    public async Task DeadLetterMessagesAsync_NamespaceNotFound_ReturnsNotFound_AndNeverCallsClient()
+    {
+        var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
+        var (profile, demo, factory, _) = Build(faulty);
+
+        var result = await ServiceBusEndpoints.DeadLetterMessagesAsync(Guid.NewGuid().ToString(), EntityPath, [4501], profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Equal(0, faulty.DeadLetterMessagesCallCount);
+    }
+
+    [Fact]
+    public async Task DeadLetterMessagesAsync_ClientThrows_ExceptionPropagates_NotSwallowed()
+    {
+        var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev()) { ThrowOnDeadLetter = new InvalidOperationException("service bus unavailable") };
+        var (profile, demo, factory, nsId) = Build(faulty);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ServiceBusEndpoints.DeadLetterMessagesAsync(nsId.ToString(), EntityPath, [4501], profile, factory, demo, CancellationToken.None));
+        Assert.Equal("service bus unavailable", ex.Message);
+        Assert.Equal(1, faulty.DeadLetterMessagesCallCount); // still called exactly once even though it threw
     }
 }

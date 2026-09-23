@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cloneForResend, sendableEntityPath } from "./resendHelpers";
+import { resendTargetQueue, resendTargetText, sendableEntityPath } from "./resendHelpers";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 
 function makeMessage(overrides: Partial<SbMessage> = {}): SbMessage {
@@ -36,62 +36,50 @@ function makeEntity(overrides: Partial<SbEntityInfo> = {}): SbEntityInfo {
   };
 }
 
-describe("cloneForResend", () => {
-  it("assigns a fresh MessageId that differs from the source", () => {
-    const source = makeMessage();
-    const clone = cloneForResend(source);
-    expect(clone.messageId).not.toBe(source.messageId);
-    expect(clone.messageId).toMatch(/^[0-9a-f-]{36}$/);
-  });
-
-  it("generates a distinct MessageId per clone", () => {
-    const source = makeMessage();
-    const a = cloneForResend(source);
-    const b = cloneForResend(source);
-    expect(a.messageId).not.toBe(b.messageId);
-  });
-
-  it("clears broker-owned fields", () => {
-    const clone = cloneForResend(makeMessage());
-    expect(clone.sequenceNumber).toBeNull();
-    expect(clone.lockToken).toBeNull();
-    expect(clone.deliveryCount).toBe(0);
-    expect(clone.deadLetterReason).toBeNull();
-    expect(clone.deadLetterErrorDescription).toBeNull();
-    expect(clone.systemProperties).toBeNull();
-  });
-
-  it("strips dead-letter application properties", () => {
-    const clone = cloneForResend(
-      makeMessage({
-        applicationProperties: {
-          orderId: "ORD-1",
-          DeadLetterReason: "MaxDeliveryCount",
-          DeadLetterErrorDescription: "boom",
-        },
-      }),
-    );
-    expect(clone.applicationProperties).toEqual({ orderId: "ORD-1" });
-  });
-
-  it("preserves payload and routing fields", () => {
-    const source = makeMessage();
-    const clone = cloneForResend(source);
-    expect(clone.body).toBe(source.body);
-    expect(clone.subject).toBe(source.subject);
-    expect(clone.correlationId).toBe(source.correlationId);
-    expect(clone.contentType).toBe(source.contentType);
-    expect(clone.sessionId).toBe(source.sessionId);
-    expect(clone.applicationProperties.orderId).toBe("ORD-1");
-  });
-
-  it("does not mutate the source message", () => {
-    const source = makeMessage({
-      applicationProperties: { DeadLetterReason: "x", keep: "y" },
+describe("resendTargetQueue", () => {
+  it("returns the NServiceBus.FailedQ queue when the header is present", () => {
+    const message = makeMessage({
+      applicationProperties: { "NServiceBus.FailedQ": "sbq-orders" },
     });
-    cloneForResend(source);
-    expect(source.applicationProperties.DeadLetterReason).toBe("x");
-    expect(source.messageId).toBe("original-id");
+    expect(resendTargetQueue(message, "error")).toBe("sbq-orders");
+  });
+
+  it("strips an MSMQ-era @machine suffix from the FailedQ value", () => {
+    const message = makeMessage({
+      applicationProperties: { "NServiceBus.FailedQ": "sbq-orders@machine" },
+    });
+    expect(resendTargetQueue(message, "error")).toBe("sbq-orders");
+  });
+
+  it("falls back to the viewed entity when the header is absent", () => {
+    expect(resendTargetQueue(makeMessage(), "error")).toBe("error");
+  });
+
+  it("falls back when the header is blank or not a string", () => {
+    expect(
+      resendTargetQueue(makeMessage({ applicationProperties: { "NServiceBus.FailedQ": "  " } }), "error"),
+    ).toBe("error");
+    expect(
+      resendTargetQueue(makeMessage({ applicationProperties: { "NServiceBus.FailedQ": 42 } }), "error"),
+    ).toBe("error");
+  });
+});
+
+describe("resendTargetText", () => {
+  it("names the queue when every message resolves to the same target", () => {
+    const messages = [
+      makeMessage({ applicationProperties: { "NServiceBus.FailedQ": "sbq-orders" } }),
+      makeMessage({ applicationProperties: { "NServiceBus.FailedQ": "sbq-orders" } }),
+    ];
+    expect(resendTargetText(messages, "error")).toBe("sbq-orders");
+  });
+
+  it("uses the generic label when the selection spans multiple queues", () => {
+    const messages = [
+      makeMessage({ applicationProperties: { "NServiceBus.FailedQ": "sbq-orders" } }),
+      makeMessage({ applicationProperties: { "NServiceBus.FailedQ": "sbq-billing" } }),
+    ];
+    expect(resendTargetText(messages, "error")).toBe("their original queues");
   });
 });
 

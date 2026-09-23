@@ -678,7 +678,7 @@ test.describe("Monitoring", () => {
         await expect(card).toHaveCount(0);
     });
 
-    test("a proactive insight card appears, shows its summary, and Investigate opens it in the AI Agent page", async ({
+    test("a proactive insight card appears, shows its summary, and 'View report' deep-links to the report tab", async ({
         page,
     }) => {
         await mockInsightStream(page);
@@ -691,18 +691,24 @@ test.describe("Monitoring", () => {
         await expect(card).toContainText(insightFrame.event.ruleName);
         await expect(card).toContainText(insightFrame.event.summary);
 
+        // ai-insight-reports: the card's action no longer jumps to the AI Agent page —
+        // it deep-links into the durable Reports tab (the report's id is the sessionId).
+        await page.route("**/api/monitoring/insights", async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: "application/json",
+                body: "[]",
+            });
+        });
         await page
             .getByTestId(
-                `proactive-insight-investigate-${insightFrame.event.ruleId}-${insightFrame.event.firedAt}`,
+                `proactive-insight-view-report-${insightFrame.event.ruleId}-${insightFrame.event.firedAt}`,
             )
             .click();
 
-        await expect(page).toHaveURL(/\/agent$/);
-        await expect(page.getByTestId("agent-messages")).toContainText(
-            insightFrame.event.ruleName,
-        );
-        await expect(page.getByTestId("agent-messages")).toContainText(
-            insightFrame.event.summary,
+        await expect(page).toHaveURL(/tab=reports/);
+        await expect(page).toHaveURL(
+            new RegExp(`report=${insightFrame.event.sessionId}`),
         );
     });
 
@@ -785,5 +791,203 @@ test.describe("Monitoring", () => {
         for (const n of [1, 2, 3, 4]) {
             await expect(cardFor(n)).toHaveCount(0);
         }
+    });
+
+    // ── AI Reports tab (ai-insight-reports) ───────────────────────────────────
+    // The report archive is durable server-side state — the tab reads it back via
+    // GET /api/monitoring/insights, so these tests stub that endpoint rather than
+    // driving a real investigation.
+
+    const cannedReport = {
+        id: insightFrame.event.sessionId,
+        sessionId: insightFrame.event.sessionId,
+        ruleId: "rule-1",
+        ruleName: "Pod restart rate",
+        firedAt: "2026-08-03T12:00:00Z",
+        alertMessage: "pod api-7c9f is not ready",
+        hypothesis:
+            "A bad rollout points the pod at an invalid Key Vault host.",
+        severity: "high",
+        evidence: ["Pod api-7c9f is in CrashLoopBackOff with 12 restarts"],
+        suggestedNextSteps: [
+            "Fix the vault URI in the deployment",
+            "Roll back the release",
+        ],
+        proposedFix: {
+            explanation: "Correct the Key Vault DNS suffix",
+            language: "yaml",
+            snippet: "vaultUri: https://kv.vault.azure.net",
+        },
+        toolsUsed: ["get_pod_logs", "get_pod_events"],
+        hitMaxRounds: false,
+        createdAt: "2026-08-03T12:00:05Z",
+    };
+
+    async function mockInsightsList(page: Page, reports: unknown[]) {
+        await page.route("**/api/monitoring/insights", async (route) => {
+            if (route.request().method() !== "GET") return route.fallback();
+            await route.fulfill({
+                status: 200,
+                contentType: "application/json",
+                body: JSON.stringify(reports),
+            });
+        });
+    }
+
+    test("AI Reports tab lists persisted reports and renders the full detail", async ({
+        page,
+    }) => {
+        await mockInsightsList(page, [cannedReport]);
+        await page.goto("/monitoring");
+        await page.getByTestId("monitoring-tab-reports").click();
+
+        const row = page.getByTestId(`ai-report-row-${cannedReport.id}`);
+        await expect(row).toBeVisible();
+        await expect(row).toContainText("Pod restart rate");
+        await row.click();
+
+        await expect(page.getByTestId("ai-report-rule-name")).toContainText(
+            "Pod restart rate",
+        );
+        await expect(page.getByTestId("ai-report-hypothesis")).toContainText(
+            "bad rollout",
+        );
+        await expect(page.getByTestId("ai-report-evidence")).toContainText(
+            "CrashLoopBackOff",
+        );
+        await expect(page.getByTestId("ai-report-next-steps")).toContainText(
+            "Fix the vault URI",
+        );
+        await expect(page.getByTestId("ai-report-proposed-fix")).toContainText(
+            "kv.vault.azure.net",
+        );
+        await expect(page.getByTestId("ai-report-tools-used")).toContainText(
+            "get_pod_logs",
+        );
+        await expect(page.getByTestId("ai-report-discuss")).toBeVisible();
+    });
+
+    test("reports tab surfaces a request failure instead of an empty state", async ({
+        page,
+    }) => {
+        const authError =
+            "The insight report store rejected the request (HTTP 503): backend unavailable.";
+        await page.route("**/api/monitoring/insights", async (route) => {
+            await route.fulfill({
+                status: 503,
+                contentType: "application/json",
+                body: JSON.stringify({ error: authError }),
+            });
+        });
+
+        await page.goto("/monitoring");
+        await page.getByTestId("monitoring-tab-reports").click();
+        await expect(page.getByTestId("ai-reports-error")).toBeVisible();
+        await expect(page.getByTestId("ai-reports-error")).toContainText(
+            authError,
+        );
+        await expect(page.getByTestId("ai-reports-empty")).toHaveCount(0);
+    });
+
+    test("an empty archive shows the empty state, not an error", async ({
+        page,
+    }) => {
+        await mockInsightsList(page, []);
+        await page.goto("/monitoring?tab=reports");
+        await expect(page.getByTestId("ai-reports-empty")).toBeVisible();
+    });
+
+    test("'View report' on a live insight card deep-links into the Reports tab", async ({
+        page,
+    }) => {
+        await mockInsightStream(page);
+        await mockInsightsList(page, [cannedReport]);
+        await page.goto("/monitoring");
+
+        await page
+            .getByTestId(
+                `proactive-insight-view-report-${insightFrame.event.ruleId}-${insightFrame.event.firedAt}`,
+            )
+            .click();
+
+        await expect(page).toHaveURL(/tab=reports/);
+        await expect(page.getByTestId("ai-report-detail")).toBeVisible();
+        await expect(page.getByTestId("ai-report-rule-name")).toContainText(
+            cannedReport.ruleName,
+        );
+    });
+
+    test("deleting a report requires confirmation, then removes it", async ({
+        page,
+    }) => {
+        let deleted = false;
+        await page.route("**/api/monitoring/insights", async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: "application/json",
+                body: JSON.stringify(deleted ? [] : [cannedReport]),
+            });
+        });
+        await page.route(
+            `**/api/monitoring/insights/${cannedReport.id}`,
+            async (route) => {
+                if (route.request().method() === "DELETE") {
+                    deleted = true;
+                    return route.fulfill({ status: 200, body: "{}" });
+                }
+                return route.fallback();
+            },
+        );
+
+        await page.goto(`/monitoring?tab=reports&report=${cannedReport.id}`);
+        await expect(page.getByTestId("ai-report-detail")).toBeVisible();
+
+        await page.getByTestId("ai-report-delete").click();
+        await page.getByTestId("ai-report-delete-confirm").click();
+
+        await expect(
+            page.getByTestId(`ai-report-row-${cannedReport.id}`),
+        ).toHaveCount(0);
+        await expect(page.getByTestId("ai-reports-empty")).toBeVisible();
+    });
+
+    test("'Discuss in chat' opens the report's seeded session in the assistant panel", async ({
+        page,
+    }) => {
+        await mockInsightsList(page, [cannedReport]);
+        await page.route(
+            `**/api/monitoring/insights/${cannedReport.id}/open-chat`,
+            async (route) => {
+                await route.fulfill({
+                    status: 200,
+                    contentType: "application/json",
+                    body: JSON.stringify({
+                        sessionId: cannedReport.sessionId,
+                        messages: [
+                            {
+                                role: "user",
+                                content:
+                                    "Monitoring alert 'Pod restart rate' fired.",
+                            },
+                            {
+                                role: "assistant",
+                                content:
+                                    "Hypothesis: bad rollout with an invalid vault host.",
+                            },
+                        ],
+                    }),
+                });
+            },
+        );
+
+        await page.goto(`/monitoring?tab=reports&report=${cannedReport.id}`);
+        await page.getByTestId("ai-report-discuss").click();
+
+        await expect(
+            page.getByTestId("contextual-assistant-panel"),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId("contextual-assistant-messages"),
+        ).toContainText("bad rollout with an invalid vault host");
     });
 });

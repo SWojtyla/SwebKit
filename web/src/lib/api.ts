@@ -357,6 +357,67 @@ export async function getMonitoringHistory(
     return apiFetch<AlertFiredEvent[]>("/api/monitoring/history", { signal });
 }
 
+// ── AI insight reports (ai-insight-reports) ──────────────────────────────────
+
+/** One concrete config fix the investigation produced — a minimal corrected snippet
+ * (YAML fragment, env var, connection string...) with a one-line explanation. */
+export interface ProposedFix {
+    explanation: string;
+    language: string;
+    snippet: string;
+}
+
+/** Persisted record of one completed background proactive investigation — the
+ * permanent record behind the Monitoring "AI Reports" tab. `id` equals `sessionId`
+ * (`proactive-{ruleId}-{firedAt ms}`) so a live `ProactiveInsightReadyEvent` can
+ * deep-link straight to it. */
+export interface ProactiveInsightReport {
+    id: string;
+    ruleId: string;
+    ruleName: string;
+    firedAt: string;
+    alertMessage?: string | null;
+    hypothesis: string;
+    severity?: string | null;
+    evidence: string[];
+    suggestedNextSteps: string[];
+    proposedFix?: ProposedFix | null;
+    toolsUsed: string[];
+    hitMaxRounds: boolean;
+    sessionId: string;
+    createdAt: string;
+}
+
+/** Response of `openInsightChat` — the report's chat session plus its transcript. */
+export interface InsightChatSession {
+    sessionId: string;
+    messages: { role: string; content: string | null }[];
+}
+
+export async function getMonitoringInsights(
+    signal?: AbortSignal,
+): Promise<ProactiveInsightReport[]> {
+    return apiFetch<ProactiveInsightReport[]>("/api/monitoring/insights", {
+        signal,
+    });
+}
+
+export async function deleteMonitoringInsight(id: string): Promise<void> {
+    await apiSend<void>(
+        `/api/monitoring/insights/${encodeURIComponent(id)}`,
+        "DELETE",
+    );
+}
+
+/** Materializes the report's chat session (re-seeded from the persisted report if
+ * the in-memory store evicted it) and returns it with its transcript. */
+export async function openInsightChat(id: string): Promise<InsightChatSession> {
+    return apiSend<InsightChatSession>(
+        `/api/monitoring/insights/${encodeURIComponent(id)}/open-chat`,
+        "POST",
+    );
+}
+
 export interface SbNamespaceListItem {
     id: string;
     alias: string;
