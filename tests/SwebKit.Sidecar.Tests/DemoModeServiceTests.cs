@@ -105,6 +105,29 @@ public class DemoModeServiceTests
     }
 
     [Fact]
+    public async Task IsDemoMode_ReEnabled_ReseedsServiceBusData()
+    {
+        // Demo clients are stateful: mutations must not leak into the next demo session.
+        // The Playwright suite toggles demo mode around every test and relies on each
+        // test starting from the pristine seed data.
+        var service = new DemoModeService { IsDemoMode = true };
+        var ns = service.GetDemoNamespaces().Single(n => n.Id == DemoModeService.DemoNamespaceId1);
+        var client = service.GetSbClient(ns);
+
+        var seeded = await client.PeekMessagesAsync("order-created", 10);
+        var seq = Assert.Single(seeded, m => m.MessageId == "oc-001").SequenceNumber!.Value;
+        Assert.Equal(1, await client.CompleteMessagesAsync("order-created", [seq]));
+        Assert.DoesNotContain(await client.PeekMessagesAsync("order-created", 10), m => m.MessageId == "oc-001");
+
+        service.IsDemoMode = false;
+        service.IsDemoMode = true;
+
+        var reseeded = service.GetSbClient(ns);
+        Assert.NotSame(client, reseeded);
+        Assert.Contains(await reseeded.PeekMessagesAsync("order-created", 10), m => m.MessageId == "oc-001");
+    }
+
+    [Fact]
     public void Dispose_DoesNotThrow()
     {
         var service = new DemoModeService();
