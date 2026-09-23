@@ -2,13 +2,13 @@
 
 ---
 
-## AW-1 — Agent forgot to update `status.md` after implementation
+## AW-1 — Agent forgot to update the plan file after implementation
 
 **Symptom:** Feature plan shows tasks as "not started" even though code is already merged.
 
-**Cause:** Implementing agents completed their work but did not update `docs/features/active/<feature-name>/status.md`. Progress tracking diverges from reality.
+**Cause:** Implementing agents completed their work but did not update `docs/features/active/<feature>.md`. Progress tracking diverges from reality.
 
-**Fix:** Every implementing agent has a "Before starting work" section that includes updating `status.md` after completing work. If you notice stale status, update it immediately.
+**Fix:** Update the plan file's `State` and checklist as part of completing work. If you notice stale status, update it immediately.
 
 ---
 
@@ -32,13 +32,13 @@
 
 ---
 
-## AW-4 — Feature archived without summary
+## AW-4 — Feature closed out without folding learnings
 
-**Symptom:** Archived feature folder has no `summary.md`. Future readers cannot understand what was built or learned without reading every file.
+**Symptom:** A hard-won lesson (gotcha, non-obvious constraint, debugging insight) is lost when the feature's plan file is deleted at close-out.
 
-**Cause:** Feature was moved from `active/` to `archive/` without creating an archive summary from the template at `ai-setup/templates/archive-summary.md`.
+**Cause:** The plan file was deleted and the catalog line removed, but nothing was folded back into the living docs.
 
-**Fix:** Always create `summary.md` before archiving. A new reader should understand the feature in under 2 minutes.
+**Fix:** Before deleting `docs/features/active/<feature>.md`, check whether anything learned belongs in `docs/pitfalls/` or `docs/architecture/`. That fold-in is the only "archive" step — git history preserves the plan itself.
 
 ---
 
@@ -48,17 +48,17 @@
 
 **Cause:** Implementation diverged from documented architecture for a valid reason, but the agent did not record the decision or update the architecture docs.
 
-**Fix:** If implementation must diverge from architecture, create a decision entry in the feature's `decisions.md` and update the relevant architecture file in the same change set.
+**Fix:** If implementation must diverge from architecture, record the decision in the feature plan file's Decisions section and update the relevant architecture file in the same change set.
 
 ---
 
-## AW-6 — Active feature folder not fully deleted after archiving
+## AW-6 — Closed-out feature left behind in the catalog or on disk
 
-**Symptom:** `docs/features/active/<feature-name>/` still exists with one or more files after archiving. The feature appears active in directory listings even though it is archived.
+**Symptom:** `docs/features/active/<feature>.md` still exists, or its line is still listed under "Active features" in `docs/features/README.md`, even though the feature shipped.
 
-**Cause:** The archive procedure moves `summary.md` and then calls `Remove-Item` on the folder in the same chained command. If a file was edited between the move and the delete (e.g. `status.md` was updated to Done just before the move), it can be left behind. Using two separate commands (`Move-Item` then `Remove-Item`) is fragile if the shell reports success on the first even when the item was not fully flushed.
+**Cause:** The close-out deleted the plan file but not the catalog line (or vice versa). A stale index is worse than no index — agents route to ghosts.
 
-**Fix:** After moving `summary.md`, verify the folder is empty before deleting it — or use a single `Remove-Item -Recurse -Force` on the folder _first_, accepting that `summary.md` was already moved out. Always confirm with `Test-Path` or `Get-ChildItem` that the active folder is gone before declaring the archive complete.
+**Fix:** Close-out removes both in the same commit: the plan file AND the catalog line. Verify with `git status` that neither is left behind.
 
 ---
 
@@ -102,7 +102,7 @@ See `blazor-expert.agent.md` and `dotnet-expert.agent.md` → "Before starting w
 
 **Cause:** The repo relies only on global or toolkit-level agent configuration. Without a local `.github/copilot-instructions.md`, the agent has less project-specific guidance about how to split work in this codebase.
 
-**Fix:** Add a concise repo-level workspace instruction file that describes the local docs-first workflow, feature-folder expectations, and any repository-specific delegation constraints such as slicing large shell/UI work.
+**Fix:** Add a concise repo-level workspace instruction file that describes the local docs-first workflow, the single-plan-file expectation (`docs/features/active/<feature>.md`), and any repository-specific delegation constraints such as slicing large shell/UI work.
 
 ---
 
