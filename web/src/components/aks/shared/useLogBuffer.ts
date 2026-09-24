@@ -5,7 +5,8 @@ import { parseLogLine, type LogEntry } from "@/lib/log-window";
 /// ~10 fps instead of once per line.
 ///
 /// A busy pod emits far faster than the browser can paint. Rendering per line saturates
-/// the render queue and freezes the UI — pitfall BL-8 in `docs/pitfalls/blazor-maui.md`,
+/// the render queue and freezes the UI — see "Never render per received message" in
+/// `docs/pitfalls/react-frontend.md`,
 /// re-stated as a hard constraint by the archived logs feature ("do not render per log
 /// line"). `PodLogView` had its own buffer for this reason; `MultiPodLogView` did not,
 /// and called `setLogs` on every message of every pod.

@@ -152,7 +152,6 @@ An SSE stream opened with `follow=true` never ends on its own. Without a cleanup
 `close()`, navigating away leaves it delivering into an unmounted component, and each remount opens
 another one on top. The multi-pod log view holds a `Map<pod, EventSource>` precisely so it can close
 them individually when a pod is deselected and all of them on unmount — see `MultiPodLogView.tsx`.
-This is the React form of BL-7 in `blazor-maui.md`.
 
 It matters more than it looks: browsers cap concurrent HTTP/1.1 connections per origin at six, so a
 handful of leaked streams will silently stall every later request to the sidecar rather than failing
@@ -163,8 +162,7 @@ loudly.
 A busy pod emits far faster than the browser can paint, and calling `setState` per message saturates
 the render queue until the UI stops responding. Buffer into a ref and flush on a timer — `useLogBuffer`
 does it at 10 fps, and `LogLineText` is memoised so the flush does not re-tokenize every visible line.
-This is BL-8 in `blazor-maui.md`; the React log views hit it just as hard, and `MultiPodLogView`
-shipped violating it (one `setLogs` per line, per pod).
+`MultiPodLogView` shipped violating it (one `setLogs` per line, per pod).
 
 ### `EventSource` is GET-only, so every option is a query parameter
 

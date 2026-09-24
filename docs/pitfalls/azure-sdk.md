@@ -169,4 +169,4 @@ assigning, never trust the declared `object` type.
 
 ---
 
-_See also: [blazor-maui.md](blazor-maui.md) · [dotnet-csharp.md](dotnet-csharp.md) · [api-client.md](api-client.md)_
+_See also: [dotnet-csharp.md](dotnet-csharp.md) · [api-client.md](api-client.md)_

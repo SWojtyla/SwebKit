@@ -1,15 +1,11 @@
 # Scripts
 
-All repo scripts live here, split by which app they belong to. SwebKit is mid-migration:
-the **MAUI** app (`src/SwebKit.App`, MSIX) is the legacy shipping app; the **Tauri**
-app (`src-tauri` + `web` + `src-sidecar`, MSI/NSIS) is the rewrite. The two have
-completely separate build and packaging chains — nothing is shared between them.
+All repo scripts live here. The app is the **Tauri** shell (`src-tauri` + `web` +
+`src-sidecar`, MSI/NSIS) — the legacy MAUI chain was removed (git history preserves
+`scripts/maui/` if ever needed).
 
 ```
 scripts/
-├── maui/                  legacy .NET MAUI app (MSIX, self-signed sideload)
-│   ├── install.ps1        build + sign + trust + install + launch  (the MAUI installer)
-│   └── style-inventory.ps1  Razor/CSS style audit for the MAUI Blazor UI
 ├── tauri/                 Tauri + React + .NET sidecar app (MSI/NSIS)
 │   ├── build-msi.ps1      fresh clean build -> installer
 │   ├── test-frontend.ps1  fresh production frontend + published sidecar, in the browser
@@ -21,20 +17,6 @@ scripts/
 
 Run everything from a full clone; the scripts locate the repo root themselves, so the
 working directory does not matter.
-
-## MAUI (legacy)
-
-```powershell
-pwsh -File scripts/maui/install.ps1
-```
-
-One command: generates a local `CN=SwebKit` signing certificate, syncs the csproj
-thumbprint, bumps the package version so Windows treats the install as an upgrade
-(preserving your config), publishes the Release MSIX, trusts the certificate (one UAC
-prompt per machine), installs, and launches. Idempotent — safe to re-run after a pull.
-Flags: `-SkipInstall`, `-NoLaunch`.
-
-Full detail: [docs/packaging-and-install.md](../docs/packaging-and-install.md).
 
 ## Tauri
 

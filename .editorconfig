@@ -25,8 +25,8 @@ dotnet_diagnostic.CA1848.severity = suggestion
 dotnet_diagnostic.CA1873.severity = suggestion
 
 # CA1716 flags the 'Shared' namespace segment because it collides with a VB.NET
-# reserved word. SwebKit ships no VB, and renaming SwebKit.App.Components.Shared
-# would churn the entire component tree for a non-issue.
+# reserved word. SwebKit ships no VB, and renaming Shared namespaces would churn
+# the codebase for a non-issue.
 dotnet_diagnostic.CA1716.severity = none
 
 # CA1305 (IFormatProvider) matters most for libraries that round-trip data across

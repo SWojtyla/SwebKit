@@ -113,4 +113,4 @@ services.AddHttpClient("MyClient")
 
 ---
 
-_See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md)_
+_See also: [azure-sdk.md](azure-sdk.md)_

@@ -58,24 +58,34 @@ Seed findings found during recon:
 
 ### Phase 0 — Repo hygiene & dead code
 
-- [ ] Delete `src/*/artifacts/copilot-build/**` (28 committed binaries); add
-  `artifacts/` to `.gitignore`
-- [ ] Delete `src/SwebKit.App/`, `src/SwebKit.WinUI/`, `src/SwebKit.Agent.PocConsole/`,
-  `tests/SwebKit.App.Tests/`, `scripts/maui/`
-- [ ] Remove MAUI job + `maui` filter from `.github/workflows/build.yml` paths-filter
-  (keep `shared_dotnet` — core/sidecar jobs still need it)
-- [ ] Remove deleted csprojs from the solution file(s) and MAUI-only packages from
-  `Directory.Packages.props` (FluentUI, MAUI packages — only if exclusively used by
-  deleted projects)
-- [ ] Delete or rewrite `docs/packaging-and-install.md` (MAUI-only doc); update
-  `scripts/README.md`, `README.md` legacy section, `CLAUDE.md` legacy list,
-  `docs/context.md` dir map, `docs/pitfalls/blazor-maui.md` (delete or mark historical)
-- [ ] Dependency audit: unused npm deps in `web/package.json`, unused NuGet refs
-- [ ] Close out `docs/features/active/aks-storage-ux-improvements.md` and the stale
-  folder-style plans (`ai-insight-reports/`, `aks-multi-context-alerting/`) — shipped;
-  fold durable learnings into `docs/pitfalls/`, delete files, drop catalog lines
+- [x] Delete `src/*/artifacts/copilot-build/**` (28 committed binaries; `.gitignore`
+  already covered `artifacts/` — files predated the rule)
+- [x] Delete `src/SwebKit.App/`, `src/SwebKit.WinUI/`, `src/SwebKit.Agent.PocConsole/`,
+  `tests/SwebKit.App.Tests/`, `scripts/maui/`, plus `tests/SwebKit.E2E.Tests/`
+  (found during scan: it drove the MAUI app via WebView2 CDP — dead with MAUI gone)
+- [x] Remove MAUI job + `maui` filter from `.github/workflows/build.yml`;
+  **fixed a real CI gap**: `src/SwebKit.Sql/**` and `tests/SwebKit.Sql.Tests/**` were in
+  no filter — a Sql-only change would have skipped every job. Added to `shared_dotnet`,
+  Sql build+test added to the core job.
+- [x] `SwebKit.slnx`: removed 3 deleted projects; **found it was also missing**
+  `src-sidecar`, `SwebKit.Sidecar.Tests`, `SwebKit.Agents.Tests` — added, so
+  solution-level `dotnet build`/`dotnet test` now covers everything.
+- [x] Delete `docs/packaging-and-install.md`, `docs/pitfalls/blazor-maui.md`; updated
+  `scripts/README.md`, `README.md`, `CLAUDE.md`, `docs/context.md`, pitfalls index +
+  see-also footers, `.gitignore`, `.editorconfig`, `useLogBuffer.ts` comment
+- [x] Dependency audit: removed 11 unused `PackageVersion` entries
+  (Maui.Controls, WebView.Maui, Blazor-ApexCharts, BlazorMonaco, FluentUI ×2, Markdig,
+  bunit.web, Microsoft.Playwright, Logging.Debug, DependencyInjection) and 2 unused
+  npm deps (`@tauri-apps/plugin-dialog`, `plugin-clipboard-manager` — JS bindings
+  unused; Rust-side commands still registered)
+- [x] Closed out shipped feature plans (`aks-storage-ux-improvements.md`,
+  `ai-insight-reports/`, `aks-multi-context-alerting/`) + catalog
 
 ### Phase 1 — Global architecture
+
+- [ ] **`docs/architecture/` rewrite** — `architecture.md`, `codebase-guide.md`, and
+  most `functionalities/*.md` still describe the MAUI app's file paths as the live
+  implementation. Rewrite against `web/` + `src-sidecar/` (found in Phase 0 sweep).
 
 - [ ] Sidecar: `Program.cs` DI wiring audit (lifetime/pooling per
   `docs/pitfalls/azure-sdk.md`), endpoint organization, error-handling consistency,
@@ -114,8 +124,27 @@ Seed findings found during recon:
 
 ## Validation results
 
-_Appended per phase._
+- **Phase 0** (2026-09-24): `dotnet build SwebKit.slnx` clean (0 warn/0 err);
+  `dotnet test` 2260/2260 (Core 1074, Sidecar 542, Agents 258, K8s 159, Azure 152,
+  Sql 46, DevOps 29); vitest 534/534; `vite build` clean; Playwright: _running_
 
 ## Findings Log
 
-_Appended per phase._
+### Phase 0
+
+- **Fixed inline**: 28 committed `artifacts/copilot-build/` binaries; ~560 legacy
+  MAUI/WinUI/PocConsole files; `tests/SwebKit.E2E.Tests` (drove MAUI via WebView2 CDP);
+  untracked `tests/SwebKit.WinUI.Tests` leftover; 11 unused NuGet `PackageVersion`s;
+  2 unused npm deps (`@tauri-apps/plugin-dialog`, `plugin-clipboard-manager` —
+  Rust-side plugin commands still work via `invoke()`); dead `.gitignore`/`.editorconfig`
+  MAUI refs; dangling `blazor-maui.md` links in pitfalls.
+- **CI gap fixed**: `src/SwebKit.Sql`/`tests/SwebKit.Sql.Tests` were in no paths-filter —
+  Sql-only changes skipped all CI. Added to `shared_dotnet` + core job test step.
+- **slnx was stale**: missing `src-sidecar`, `Sidecar.Tests`, `Agents.Tests` — added;
+  solution-level build/test now covers the whole product.
+- **Deferred to Phase 1**: `docs/architecture/` (architecture.md, codebase-guide.md,
+  functionalities/*) still documents the MAUI app as live — needs rewrite against
+  `web/` + `src-sidecar/`. `docs/environment-variables-redesign.md` references legacy
+  paths — historical design doc, left as-is.
+- Per-csproj unused `PackageReference` audit: shallow pass only (props-level cleanup
+  done); a per-project audit is worth a Phase 1 look.

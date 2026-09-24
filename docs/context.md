@@ -10,10 +10,6 @@ One-page orientation. Read this first for any non-trivial task; follow the links
 - **Shared .NET libs**: `src/SwebKit.*` (Core, Azure, Kubernetes, Redis, Sql, Agents, DevOps, Observability)
 - **Tests**: `tests/SwebKit.<Area>.Tests` (xUnit) · `web/src/**/*.test.ts` (vitest) · `web/e2e/` (Playwright, demo mode)
 
-## Legacy — do not touch
-
-`src/SwebKit.App` (MAUI Blazor), `src/SwebKit.WinUI`, `src/SwebKit.Agent.PocConsole`, `tests/SwebKit.App.Tests`, `tests/SwebKit.WinUI.Tests` — kept as reference only.
-
 ## Directory map
 
 | Path | Contents |
