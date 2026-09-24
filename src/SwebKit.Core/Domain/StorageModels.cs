@@ -126,3 +126,46 @@ public record DeletedBlobItem(
     string Name,
     DateTimeOffset DeletedOn,
     int RemainingDays);
+
+// ── Azure Files (file shares) ───────────────────────────────────────────────
+
+public sealed record StorageShareItem(
+    string Name,
+    int? QuotaGiB,
+    string? AccessTier,
+    DateTimeOffset? LastModified);
+
+/// <summary>
+/// Either a directory (IsDirectory = true) or a file inside a share. Name is the
+/// path relative to the share root ("dir/sub/file.txt"); directories carry no
+/// size.
+/// </summary>
+public sealed record StorageShareEntryItem(
+    string Name,
+    bool IsDirectory,
+    long? SizeBytes,
+    DateTimeOffset? LastModified);
+
+public sealed record StorageShareEntryPage(
+    IReadOnlyList<StorageShareEntryItem> Items,
+    string? ContinuationToken);
+
+public sealed record ShareFileProperties(
+    string Name,
+    long SizeBytes,
+    string? ContentType,
+    DateTimeOffset? LastModified,
+    string? ETag,
+    IReadOnlyDictionary<string, string> Metadata);
+
+/// <summary>Same contract as <see cref="StorageBlobContent"/> for share files:
+/// text content up to a cap; IsBinary means Content is empty and the file must
+/// be fetched via SAS URL instead.</summary>
+public sealed record ShareFileContent(
+    string ShareName,
+    string Path,
+    string Content,
+    string? ContentType,
+    long TotalSizeBytes,
+    bool WasTruncated,
+    bool IsBinary);

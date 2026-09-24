@@ -102,6 +102,76 @@ test.describe("AKS", () => {
         await expect(page.getByTestId("yaml-viewer")).toBeVisible();
     });
 
+    test("autoscaling tab also lists and controls KEDA ScaledJobs", async ({
+        page,
+    }) => {
+        await page.goto("/aks");
+        await page
+            .getByTestId("aks-namespace-select")
+            .selectOption("ecommerce");
+        await page.getByTestId("aks-tab-hpa").click();
+        await expect(page.getByTestId("hpas-table-body")).toBeVisible();
+
+        // KEDA ScaledJobs never appear as HPAs — they get their own section.
+        await expect(page.getByTestId("scaledjobs-table-body")).toBeVisible();
+        await expect(
+            page.getByTestId("scaledjob-row-nightly-reindex"),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId("scaledjob-row-queue-drain-worker"),
+        ).toBeVisible();
+
+        // Pause scaling through the actions menu — confirm bar, then Paused state.
+        await page.getByTestId("scaledjob-actions-queue-drain-worker").click();
+        await page.getByTestId("ctx-item-pause-scaling").click();
+        await expect(page.getByTestId("aks-confirm-bar")).toBeVisible();
+        await page.getByTestId("aks-confirm-yes").click();
+        await expect(
+            page.getByTestId("scaledjob-row-queue-drain-worker"),
+        ).toContainText("Paused");
+    });
+
+    test("cronjob schedule dialog edits the schedule without YAML", async ({
+        page,
+    }) => {
+        await page.goto("/aks");
+        await page
+            .getByTestId("aks-namespace-select")
+            .selectOption("ecommerce");
+        await page.getByTestId("aks-tab-cronjobs").click();
+        await expect(page.getByTestId("cronjobs-table-body")).toBeVisible();
+
+        // The Next Run column shows a real local-time value for active jobs.
+        await expect(
+            page.getByTestId("cronjob-nextrun-report-generator"),
+        ).not.toHaveText("—");
+        // …and "—" for the suspended one.
+        await expect(
+            page.getByTestId("cronjob-nextrun-audit-log-archiver"),
+        ).toHaveText("—");
+
+        // The schedule cell opens the friendly editor (no YAML, no cron syntax required).
+        await page.getByTestId("cronjob-schedule-report-generator").click();
+        await expect(page.getByTestId("cronjob-schedule-dialog")).toBeVisible();
+        await expect(
+            page.getByTestId("cronjob-schedule-preview"),
+        ).toContainText("0 2 * * *");
+        await expect(
+            page.getByTestId("cronjob-schedule-next-run"),
+        ).not.toHaveText("—");
+
+        // Hourly preset → save → confirm → the row shows the new expression.
+        await page
+            .getByTestId("cronjob-schedule-preset")
+            .selectOption("hourly");
+        await page.getByTestId("cronjob-schedule-save").click();
+        await expect(page.getByTestId("aks-confirm-bar")).toBeVisible();
+        await page.getByTestId("aks-confirm-yes").click();
+        await expect(
+            page.getByTestId("cronjob-schedule-report-generator"),
+        ).toHaveText("0 * * * *");
+    });
+
     test("cronjob context menu triggers a run and toggles suspend", async ({
         page,
     }) => {
@@ -169,6 +239,84 @@ test.describe("AKS", () => {
         await expect(page.getByTestId("helm-detail-panel")).toBeVisible();
         await expect(page.getByTestId("helm-tab-history")).toBeVisible();
         await expect(page.getByTestId("helm-tab-values")).toBeVisible();
+    });
+
+    test("httproute detail panel shows rules, filters and timeouts", async ({
+        page,
+    }) => {
+        await page.goto("/aks");
+        await page
+            .getByTestId("aks-namespace-select")
+            .selectOption("ecommerce");
+        await page.getByTestId("aks-tab-network").click();
+        await page.getByTestId("aks-tab-httproutes").click();
+        await expect(page.getByTestId("httproutes-table-body")).toBeVisible();
+
+        // Row click opens the detail panel (not the YAML viewer).
+        await page.getByTestId("httproute-row-orders-api-route").click();
+        await expect(page.getByTestId("httproute-detail-panel")).toBeVisible();
+        await expect(page.getByTestId("httproute-detail-name")).toHaveText(
+            "orders-api-route",
+        );
+        await expect(page.getByTestId("httproute-detail-status")).toContainText(
+            "Accepted",
+        );
+
+        // Two rules: the first carries the header-modifier + extension-ref
+        // filters and a 15s backend timeout.
+        await expect(page.getByTestId("httproute-rule-0")).toBeVisible();
+        await expect(page.getByTestId("httproute-rule-1")).toBeVisible();
+        await expect(page.getByTestId("httproute-rule-0")).toContainText(
+            "PathPrefix /orders GET",
+        );
+        await expect(
+            page.getByTestId("httproute-rule-0-filter").first(),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId("httproute-rule-0-timeouts"),
+        ).toContainText("backend 15s");
+        await expect(
+            page.getByTestId("httproute-rule-1-timeouts"),
+        ).toContainText("request 5s");
+        await expect(
+            page.getByTestId("httproute-parent-status-0"),
+        ).toContainText("public-gateway#https-api");
+
+        // Close returns to the table.
+        await page.getByTestId("httproute-detail-close").click();
+        await expect(page.getByTestId("httproute-detail-panel")).toHaveCount(0);
+    });
+
+    test("envoy tab lists envoy gateway resources with spec highlights", async ({
+        page,
+    }) => {
+        await page.goto("/aks");
+        await page
+            .getByTestId("aks-namespace-select")
+            .selectOption("ecommerce");
+        await page.getByTestId("aks-tab-network").click();
+        await page.getByTestId("aks-tab-envoy").click();
+        await expect(page.getByTestId("envoy-tab")).toBeVisible();
+
+        // BackendTrafficPolicy is the default kind — the connection-limit
+        // numbers are what this view exists for.
+        await expect(page.getByTestId("envoy-table-body")).toBeVisible();
+        await expect(
+            page.getByTestId("envoy-row-orders-api-limits"),
+        ).toContainText("Max connections: 1024");
+        await expect(
+            page.getByTestId("envoy-row-admin-circuit-breaker"),
+        ).toContainText("Retries: 3");
+
+        // Switching kind refetches — SecurityPolicy shows the JWT issuer.
+        await page.getByTestId("envoy-kind-securitypolicies").click();
+        await expect(
+            page.getByTestId("envoy-row-orders-api-auth"),
+        ).toContainText("login.ecommerce.example.com");
+
+        // Row click opens the shared YAML viewer like every other resource.
+        await page.getByTestId("envoy-row-orders-api-auth").click();
+        await expect(page.getByTestId("yaml-viewer")).toBeVisible();
     });
 
     test("surfaces the reason when namespaces cannot be listed", async ({

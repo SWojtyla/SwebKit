@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pencil, Trash2, Sparkles } from "lucide-react";
+import { formatLocalTime } from "@/lib/datetime";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import type {
@@ -144,10 +145,10 @@ export function AlertRuleRow({
                             <>
                                 {" "}
                                 · evaluated{" "}
-                                {new Date(
+                                {formatLocalTime(
                                     evaluation?.evaluatedAt ??
                                         rule.lastEvaluatedAt!,
-                                ).toLocaleTimeString()}
+                                )}
                             </>
                         )}
                         {evaluation?.message &&
@@ -168,10 +169,7 @@ export function AlertRuleRow({
                         {rule.lastFiredAt && (
                             <span className="text-destructive">
                                 {" "}
-                                · fired{" "}
-                                {new Date(
-                                    rule.lastFiredAt,
-                                ).toLocaleTimeString()}
+                                · fired {formatLocalTime(rule.lastFiredAt)}
                             </span>
                         )}
                     </div>

@@ -320,6 +320,29 @@ test.describe("Service Bus", () => {
         await expect(page.getByTestId("purge-confirm")).not.toBeVisible();
     });
 
+    test("purge all actually purges the messages after confirming", async ({
+        page,
+    }) => {
+        // Regression: the endpoint used to bind `deadLetter` as a bare query param while the
+        // frontend sent it in the JSON body, so every real purge request 400'd. Confirming must
+        // empty the list, not just close the dialog.
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+        await page.getByTestId("entity-tree-queue-order-created").click();
+        await expect(page.getByTestId("message-list")).toBeVisible();
+        const messageRows = page.locator("[data-testid^='message-item-']");
+        await expect(messageRows.first()).toBeVisible();
+
+        await page.getByTestId("sb-purge-all-button").click();
+        await expect(page.getByTestId("purge-confirm")).toBeVisible();
+        await page.getByTestId("purge-confirm-yes").click();
+
+        await expect(page.getByText("No active messages")).toBeVisible();
+        await expect(messageRows).toHaveCount(0);
+    });
+
     test("DLQ message shows DLQ Info tab", async ({ page }) => {
         await page.goto("/service-bus");
         await page

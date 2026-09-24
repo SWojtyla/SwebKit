@@ -962,10 +962,22 @@ export interface CronJobInfo {
     name: string;
     namespace: string;
     schedule: string | null;
+    /** spec.timeZone — the IANA zone the schedule is evaluated in, or null. */
+    timeZone: string | null;
     suspend: boolean;
     activeCount: number;
     lastScheduleTime: string | null;
     lastSuccessfulTime: string | null;
+}
+
+/** A KEDA ScaledJob — job-based autoscaling that produces no HPA. */
+export interface ScaledJobInfo {
+    name: string;
+    namespace: string;
+    isPaused: boolean;
+    minReplicas: number;
+    maxReplicas: number;
+    triggers: string[];
 }
 
 export interface IngressInfo {
@@ -985,6 +997,20 @@ export interface IngressInfo {
     labels: Record<string, string>;
 }
 
+export interface HttpRouteRuleInfo {
+    matches: string[];
+    filters: string[];
+    backendRefs: string[];
+    requestTimeout: string | null;
+    backendRequestTimeout: string | null;
+}
+
+export interface HttpRouteParentStatus {
+    parentRef: string;
+    status: string;
+    reason: string | null;
+}
+
 export interface HttpRouteInfo {
     name: string;
     namespace: string;
@@ -992,6 +1018,22 @@ export interface HttpRouteInfo {
     hostnames: string[];
     parentRefs: string[];
     backendRefs: string[];
+    rules: HttpRouteRuleInfo[];
+    parentStatuses: HttpRouteParentStatus[];
+    labels: Record<string, string>;
+}
+
+export interface EnvoyHighlight {
+    label: string;
+    value: string;
+}
+
+export interface EnvoyResourceInfo {
+    kind: string;
+    name: string;
+    namespace: string;
+    targetRefs: string[];
+    highlights: EnvoyHighlight[];
     labels: Record<string, string>;
 }
 
@@ -1234,6 +1276,47 @@ export interface BlobMutationResult {
     success: boolean;
     errorMessage?: string | null;
     resultBlobPath?: string | null;
+}
+
+// ── Azure Files (file shares) ────────────────────────────────────────────────
+
+export interface StorageShareItem {
+    name: string;
+    quotaGiB: number | null;
+    accessTier: string | null;
+    lastModified: string | null;
+}
+
+export interface StorageShareEntryItem {
+    /** Path relative to the share root ("dir/sub/file.txt"). */
+    name: string;
+    isDirectory: boolean;
+    sizeBytes: number | null;
+    lastModified: string | null;
+}
+
+export interface StorageShareEntryPage {
+    items: StorageShareEntryItem[];
+    continuationToken: string | null;
+}
+
+export interface ShareFileProperties {
+    name: string;
+    sizeBytes: number;
+    contentType: string | null;
+    lastModified: string | null;
+    eTag: string | null;
+    metadata: Record<string, string>;
+}
+
+export interface ShareFileContent {
+    shareName: string;
+    path: string;
+    content: string;
+    contentType: string | null;
+    totalSizeBytes: number;
+    wasTruncated: boolean;
+    isBinary: boolean;
 }
 
 export type BlobRecoveryState =

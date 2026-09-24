@@ -29,6 +29,7 @@ import { tryPrettifyJson } from "@/lib/pretty-json";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
 import { messageToDownloadObject, safeFileName } from "./exportHelpers";
 import { formatBytesLong } from "@/lib/format-bytes";
+import { formatLocalDateTime } from "@/lib/datetime";
 
 const BODY_PRETTY_PREF_KEY = "sb-message-body-pretty";
 const BODY_WRAP_PREF_KEY = "sb-message-body-wrap";
@@ -698,9 +699,7 @@ export function MessageDetail({
                         />
                         <Field
                             label="Enqueued At"
-                            value={new Date(
-                                message.enqueuedAt,
-                            ).toLocaleString()}
+                            value={formatLocalDateTime(message.enqueuedAt)}
                         />
                         <Field
                             label="Sequence Number"
@@ -721,18 +720,18 @@ export function MessageDetail({
                             label="Expires At"
                             value={
                                 message.systemProperties?.expiresAt
-                                    ? new Date(
+                                    ? formatLocalDateTime(
                                           message.systemProperties.expiresAt,
-                                      ).toLocaleString()
+                                      )
                                     : null
                             }
                         />
                         {message.systemProperties?.lockedUntil && (
                             <Field
                                 label="Locked Until"
-                                value={new Date(
+                                value={formatLocalDateTime(
                                     message.systemProperties.lockedUntil,
-                                ).toLocaleString()}
+                                )}
                             />
                         )}
                         <Field

@@ -272,6 +272,97 @@ public class AksEndpointsTests
             () => AksEndpoints.TriggerCronJobAsync("ecommerce", "inventory-sync", profile, demo, pool, CancellationToken.None));
     }
 
+    // ── CronJob schedule ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SetCronJobScheduleAsync_UpdatesScheduleAndReadsBack()
+    {
+        var (profile, demo) = Deps();
+        var client = new DemoAksClient();
+        var pool = new FakeMonitoringConnectionPool { AksClient = client };
+
+        var result = await AksEndpoints.SetCronJobScheduleAsync(
+            "ecommerce", "report-generator", new SetCronJobScheduleRequest("*/10 * * * *"),
+            profile, demo, pool, CancellationToken.None);
+
+        Assert.Equal(200, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        var cj = (await client.GetCronJobsAsync("ecommerce")).First(c => c.Name == "report-generator");
+        Assert.Equal("*/10 * * * *", cj.Schedule);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("* * *")]
+    [InlineData("0 0 * * * *")] // 6 fields — Kubernetes cron has no seconds field
+    public async Task SetCronJobScheduleAsync_RejectsMalformedSchedules(string schedule)
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.SetCronJobScheduleAsync(
+            "ecommerce", "report-generator", new SetCronJobScheduleRequest(schedule),
+            profile, demo, pool, CancellationToken.None);
+
+        Assert.Equal(400, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+    }
+
+    [Fact]
+    public async Task SetCronJobScheduleAsync_AcceptsMacroSchedule()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.SetCronJobScheduleAsync(
+            "ecommerce", "report-generator", new SetCronJobScheduleRequest("@daily"),
+            profile, demo, pool, CancellationToken.None);
+
+        Assert.Equal(200, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+    }
+
+    // ── Envoy Gateway resources ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetEnvoyResourcesAsync_ReturnsResourcesForKnownPlural()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetEnvoyResourcesAsync(
+            "ecommerce", "backendtrafficpolicies", profile, demo, pool, CancellationToken.None);
+
+        Assert.Equal(200, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        var items = Assert.IsAssignableFrom<IValueHttpResult>(result).Value
+            as IReadOnlyList<Core.Models.EnvoyResourceInfo>;
+        Assert.NotNull(items);
+        Assert.NotEmpty(items);
+        Assert.All(items, r => Assert.Equal("BackendTrafficPolicy", r.Kind));
+    }
+
+    [Fact]
+    public async Task GetEnvoyResourcesAsync_UnknownPlural_ReturnsBadRequest()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetEnvoyResourcesAsync(
+            "ecommerce", "foobarpolicies", profile, demo, pool, CancellationToken.None);
+
+        Assert.Equal(400, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+    }
+
+    [Fact]
+    public async Task GetEnvoyResourcesAsync_PluralIsCaseInsensitive()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetEnvoyResourcesAsync(
+            "ecommerce", "SecurityPolicies", profile, demo, pool, CancellationToken.None);
+
+        Assert.Equal(200, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+    }
+
     // ── Contexts list ────────────────────────────────────────────────────────
 
     [Fact]

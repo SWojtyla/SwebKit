@@ -173,6 +173,78 @@ public class HttpRouteInfo
     public List<string> Hostnames { get; set; } = [];
     public List<string> ParentRefs { get; set; } = [];
     public List<string> BackendRefs { get; set; } = [];
+    public List<HttpRouteRuleInfo> Rules { get; set; } = [];
+    public List<HttpRouteParentStatus> ParentStatuses { get; set; } = [];
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
+
+/// <summary>One <c>spec.rules[]</c> entry of an HTTPRoute, flattened to display strings.</summary>
+public class HttpRouteRuleInfo
+{
+    /// <summary>Match summary like "PathPrefix /orders", "GET", "header x-version=2".</summary>
+    public List<string> Matches { get; set; } = [];
+    /// <summary>Filter type names like "RequestRedirect", "URLRewrite".</summary>
+    public List<string> Filters { get; set; } = [];
+    /// <summary>Backend summary like "order-api:80" or "order-api:80 w=80".</summary>
+    public List<string> BackendRefs { get; set; } = [];
+    /// <summary><c>timeouts.request</c> as written in the spec (e.g. "10s").</summary>
+    public string? RequestTimeout { get; set; }
+    /// <summary><c>timeouts.backendRequest</c> as written in the spec.</summary>
+    public string? BackendRequestTimeout { get; set; }
+}
+
+/// <summary>Per-parent attachment status of an HTTPRoute (<c>status.parents[]</c>).</summary>
+public class HttpRouteParentStatus
+{
+    public required string ParentRef { get; set; }
+    public string Status { get; set; } = "Pending";
+    public string? Reason { get; set; }
+}
+
+/// <summary>One "label: value" pair in an Envoy resource's highlight row.</summary>
+public class EnvoyHighlight
+{
+    public required string Label { get; set; }
+    public required string Value { get; set; }
+}
+
+/// <summary>
+/// The Envoy Gateway resource kinds SwebKit surfaces, plural → proper Kind name. Single source of
+/// truth shared by the Kubernetes client (list/YAML reads), the sidecar ({plural} route-segment
+/// whitelist) and demo data.
+/// </summary>
+public static class EnvoyGatewayKinds
+{
+    public const string ProxyPlural = "envoyproxies";
+
+    public static readonly IReadOnlyDictionary<string, string> PluralToKind =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["backends"] = "Backend",
+            ["backendtrafficpolicies"] = "BackendTrafficPolicy",
+            ["clienttrafficpolicies"] = "ClientTrafficPolicy",
+            ["envoyextensionpolicies"] = "EnvoyExtensionPolicy",
+            ["envoypatchpolicies"] = "EnvoyPatchPolicy",
+            ["envoyproxies"] = "EnvoyProxy",
+            ["httproutefilters"] = "HTTPRouteFilter",
+            ["securitypolicies"] = "SecurityPolicy",
+        };
+}
+
+/// <summary>
+/// An Envoy Gateway (<c>gateway.envoyproxy.io</c>) custom resource — Backend, traffic policies,
+/// security policies, etc. Spec details are flattened into <see cref="Highlights"/>; the full
+/// object stays reachable through the YAML view.
+/// </summary>
+public class EnvoyResourceInfo
+{
+    public required string Kind { get; set; }
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    /// <summary>What the policy/resource attaches to, e.g. "HTTPRoute/orders-api-route".</summary>
+    public List<string> TargetRefs { get; set; } = [];
+    /// <summary>Kind-specific headline settings (maxConnections, rate limits, JWT issuer, ...).</summary>
+    public List<EnvoyHighlight> Highlights { get; set; } = [];
     public Dictionary<string, string> Labels { get; set; } = [];
 }
 
@@ -401,11 +473,39 @@ public class CronJobInfo
     public required string Name { get; set; }
     public required string Namespace { get; set; }
     public string? Schedule { get; set; }
+
+    /// <summary><c>spec.timeZone</c> — the IANA zone the cron expression is evaluated in,
+    /// or <see langword="null"/> when the CronJob relies on the controller-manager's zone.</summary>
+    public string? TimeZone { get; set; }
+
     public bool Suspend { get; set; }
     public int ActiveCount { get; set; }
     public DateTimeOffset? LastScheduleTime { get; set; }
     public DateTimeOffset? LastSuccessfulTime { get; set; }
     public Dictionary<string, string> Labels { get; set; } = [];
+}
+
+/// <summary>
+/// A KEDA <c>ScaledJob</c> (<c>scaledjobs.keda.sh</c>) — job-based autoscaling that creates
+/// Jobs rather than scaling a Deployment, so it produces no HPA and would otherwise be
+/// invisible next to the HPA/KEDA ScaledObject rows.
+/// </summary>
+public class ScaledJobInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+
+    /// <summary>True when paused via the <c>autoscaling.keda.sh/paused</c> annotation.</summary>
+    public bool IsPaused { get; set; }
+
+    /// <summary><c>spec.minReplicaCount</c> — max concurrent Jobs KEDA may run (0 = unlimited).</summary>
+    public int MinReplicas { get; set; }
+
+    /// <summary><c>spec.maxReplicaCount</c> — cap on concurrently running Jobs.</summary>
+    public int MaxReplicas { get; set; }
+
+    /// <summary>Trigger types from <c>spec.triggers[].type</c> (e.g. "cron", "azure-queue").</summary>
+    public List<string> Triggers { get; set; } = [];
 }
 
 // ── Runtime diagnostics ─────────────────────────────────────────────────────

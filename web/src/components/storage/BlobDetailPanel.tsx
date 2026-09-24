@@ -17,6 +17,7 @@ import { tryPrettifyJson } from "@/lib/pretty-json";
 import { tokenizeBody } from "@/lib/bodyHighlight";
 import { HIGHLIGHT_MAX_BYTES } from "@/lib/response-body";
 import { formatBytes } from "@/lib/format-bytes";
+import { formatLocalDateTime } from "@/lib/datetime";
 import {
     loadViewPreference,
     saveViewPreference,
@@ -25,12 +26,7 @@ import {
 const CONTENT_PRETTY_PREF_KEY = "storage-blob-content-pretty";
 
 function formatDate(date: string | null | undefined): string {
-    if (!date) return "-";
-    try {
-        return new Date(date).toLocaleString();
-    } catch {
-        return String(date);
-    }
+    return formatLocalDateTime(date) || "-";
 }
 
 export function BlobDetailPanel() {
@@ -66,21 +62,34 @@ export function BlobDetailPanel() {
 
     // Screen-state snapshot (agent-workspace-awareness M1) — properties + a short content
     // preview; null when no blob is selected so the fallback takes over.
-    useScreenStateProvider("storage-blob-detail", "Storage", () => {
-        const props = ctx.blobProps.data;
-        if (!props) return null;
-        return {
-            accountId: ctx.activeAccountId,
-            container: ctx.selectedContainer,
-            blob: props.name,
-            sizeBytes: props.sizeBytes,
-            contentType: props.contentType,
-            lastModified: props.lastModified,
-            accessTier: props.accessTier ?? null,
-            metadata: Object.fromEntries(Object.entries(props.metadata ?? {}).slice(0, 10)),
-            contentPreview: ctx.blobContent.data?.content?.slice(0, 300) ?? null,
-        };
-    }, [ctx.blobProps.data, ctx.blobContent.data, ctx.activeAccountId, ctx.selectedContainer]);
+    useScreenStateProvider(
+        "storage-blob-detail",
+        "Storage",
+        () => {
+            const props = ctx.blobProps.data;
+            if (!props) return null;
+            return {
+                accountId: ctx.activeAccountId,
+                container: ctx.selectedContainer,
+                blob: props.name,
+                sizeBytes: props.sizeBytes,
+                contentType: props.contentType,
+                lastModified: props.lastModified,
+                accessTier: props.accessTier ?? null,
+                metadata: Object.fromEntries(
+                    Object.entries(props.metadata ?? {}).slice(0, 10),
+                ),
+                contentPreview:
+                    ctx.blobContent.data?.content?.slice(0, 300) ?? null,
+            };
+        },
+        [
+            ctx.blobProps.data,
+            ctx.blobContent.data,
+            ctx.activeAccountId,
+            ctx.selectedContainer,
+        ],
+    );
 
     return (
         <div

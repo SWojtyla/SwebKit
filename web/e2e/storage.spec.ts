@@ -42,6 +42,50 @@ test.describe("Storage", () => {
         ).toBeVisible();
     });
 
+    test("lists file shares and browses directories", async ({ page }) => {
+        await page.goto("/storage");
+
+        await expect(
+            page.getByTestId("storage-share-team-shared"),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId("storage-share-build-artifacts"),
+        ).toBeVisible();
+
+        await page.getByTestId("storage-share-team-shared").click();
+        await expect(page.getByTestId("storage-share-browser")).toBeVisible();
+        await expect(page.getByTestId("share-item-docs")).toBeVisible();
+        await expect(page.getByTestId("share-item-media")).toBeVisible();
+        await expect(page.getByTestId("share-item-readme.md")).toBeVisible();
+
+        // Into a directory and back via the share breadcrumb.
+        await page.getByTestId("share-item-docs").click();
+        await expect(
+            page.getByTestId("share-item-docs/onboarding.md"),
+        ).toBeVisible();
+        await page.getByTestId("share-breadcrumb-0").click();
+        await expect(page.getByTestId("share-item-readme.md")).toBeVisible();
+        await expect(
+            page.getByTestId("share-item-docs/onboarding.md"),
+        ).not.toBeVisible();
+    });
+
+    test("shows share file properties, content preview and SAS action", async ({
+        page,
+    }) => {
+        await page.goto("/storage");
+        await page.getByTestId("storage-share-team-shared").click();
+        await page.getByTestId("share-item-readme.md").click();
+
+        await expect(page.getByTestId("share-file-name")).toHaveText(
+            "readme.md",
+        );
+        await expect(page.getByTestId("share-file-copy-sas")).toBeVisible();
+        await expect(page.getByTestId("share-file-content")).toContainText(
+            "Demo content for readme.md",
+        );
+    });
+
     test("shows blob detail with properties and content", async ({ page }) => {
         await page.goto("/storage");
 

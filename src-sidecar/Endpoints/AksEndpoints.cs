@@ -107,6 +107,23 @@ public static class AksEndpoints
     }
 
     /// <summary>
+    /// Handler body for the Envoy Gateway resources endpoint. The <c>{plural}</c> segment is
+    /// validated against <see cref="EnvoyGatewayKinds.PluralToKind"/> — an arbitrary plural must
+    /// never reach the CustomObjects API.
+    /// </summary>
+    internal static async Task<IResult> GetEnvoyResourcesAsync(string ns, string plural, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    {
+        var normalized = plural.ToLowerInvariant();
+        if (!EnvoyGatewayKinds.PluralToKind.ContainsKey(normalized))
+            return ApiErrors.BadRequest($"Unknown Envoy Gateway resource kind '{plural}'");
+
+        var client = GetClient(pool);
+        var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+        var resources = await client.GetEnvoyResourcesAsync(namespaces, normalized, ct);
+        return Results.Ok(resources);
+    }
+
+    /// <summary>
     /// Handler body for the CronJob trigger endpoint, extracted so it's unit testable against a fake
     /// pool/client. Returns the created Job names so the UI can surface them in its success toast —
     /// the generated name is what the operator then looks for on the Jobs tab.
@@ -117,6 +134,26 @@ public static class AksEndpoints
         var namespaces = await ResolveNamespacesAsync(client, ns, ct);
         var jobNames = await Task.WhenAll(namespaces.Select(n => client.TriggerCronJobAsync(n, name, ct)));
         return Results.Ok(new { jobNames });
+    }
+
+    /// <summary>
+    /// Handler body for the CronJob schedule-edit endpoint, extracted so the validation is unit
+    /// testable. The shape check here is deliberately shallow (5 fields or a supported @macro) —
+    /// the API server remains the authority on whether an expression is valid and rejects bad
+    /// ones with a descriptive 422 that reaches the UI.
+    /// </summary>
+    internal static async Task<IResult> SetCronJobScheduleAsync(string ns, string name, SetCronJobScheduleRequest dto, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    {
+        var schedule = dto.Schedule?.Trim() ?? string.Empty;
+        if (schedule.Length == 0)
+            return ApiErrors.BadRequest("Schedule cannot be empty");
+        if (!schedule.StartsWith('@') && schedule.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length != 5)
+            return ApiErrors.BadRequest("Schedule must be a 5-field cron expression or an @macro (@hourly, @daily, @weekly, @monthly, @yearly)");
+
+        var client = GetClient(pool);
+        var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+        await Task.WhenAll(namespaces.Select(n => client.SetCronJobScheduleAsync(n, name, schedule, ct)));
+        return Results.Ok();
     }
 
     /// <summary>Handler body for the connection-test endpoint, extracted so the error-sanitization
@@ -452,6 +489,40 @@ public static class AksEndpoints
             return Results.Ok();
         });
 
+        // ── KEDA ScaledJobs ──────────────────────────────────────────────────
+
+        app.MapGet("/api/aks/{ns}/scaledjobs", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        {
+            var client = GetClient(pool);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            var scaledJobs = await client.GetScaledJobsAsync(namespaces, ct);
+            return Results.Ok(scaledJobs);
+        });
+
+        app.MapPost("/api/aks/{ns}/scaledjobs/{name}/scaling-enabled", async (string ns, string name, SetScalingEnabledRequest dto, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        {
+            var client = GetClient(pool);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            await Task.WhenAll(namespaces.Select(n => client.SetScaledJobScalingEnabledAsync(n, name, dto.Enabled, ct)));
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/aks/{ns}/scaledjobs/{name}/scale", async (string ns, string name, ScaleHpaRequest dto, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        {
+            var client = GetClient(pool);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            await Task.WhenAll(namespaces.Select(n => client.ScaleScaledJobAsync(n, name, dto.MinReplicas, dto.MaxReplicas, ct)));
+            return Results.Ok();
+        });
+
+        app.MapDelete("/api/aks/{ns}/scaledjobs/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        {
+            var client = GetClient(pool);
+            var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+            await Task.WhenAll(namespaces.Select(n => client.DeleteScaledJobAsync(n, name, ct)));
+            return Results.NoContent();
+        });
+
         // ── Jobs & CronJobs ────────────────────────────────────────────────────
 
         app.MapGet("/api/aks/{ns}/cronjobs", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
@@ -471,6 +542,8 @@ public static class AksEndpoints
         });
 
         app.MapPost("/api/aks/{ns}/cronjobs/{name}/trigger", TriggerCronJobAsync);
+
+        app.MapPost("/api/aks/{ns}/cronjobs/{name}/schedule", SetCronJobScheduleAsync);
 
         app.MapGet("/api/aks/{ns}/jobs", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
@@ -505,6 +578,10 @@ public static class AksEndpoints
             var gateways = await client.GetGatewaysAsync(namespaces, ct);
             return Results.Ok(gateways);
         });
+
+        // ── Envoy Gateway ─────────────────────────────────────────────────────
+
+        app.MapGet("/api/aks/{ns}/envoy/{plural}", GetEnvoyResourcesAsync);
 
         // ── Container details ──────────────────────────────────────────────────
 
@@ -632,5 +709,6 @@ public sealed record SetContextRequest(string Context, string? DefaultNamespace 
 public sealed record ScaleHpaRequest(int MinReplicas, int MaxReplicas);
 public sealed record SetScalingEnabledRequest(bool Enabled);
 public sealed record SuspendCronJobRequest(bool Suspend);
+public sealed record SetCronJobScheduleRequest(string Schedule);
 public sealed record YamlApplyRequest(string Yaml);
 public sealed record YamlValidateRequest(string Yaml);

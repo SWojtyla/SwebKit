@@ -8,6 +8,10 @@ import {
     setHpaScalingEnabled,
     suspendCronJob,
     triggerCronJob,
+    setCronJobSchedule,
+    scaleScaledJob,
+    deleteScaledJob,
+    setScaledJobScalingEnabled,
     getHelmReleaseNotes,
     getHelmReleaseManifest,
 } from "../api";
@@ -26,6 +30,8 @@ import type {
     StatefulSetInfo,
     HpaInfo,
     CronJobInfo,
+    ScaledJobInfo,
+    EnvoyResourceInfo,
     JobInfo,
     ConfigMapInfo,
     IngressInfo,
@@ -281,6 +287,58 @@ export function useAksSetHpaScalingEnabled() {
     });
 }
 
+export function useAksScaledJobs(ns: string | null) {
+    const ctx = useAksContextKey();
+    return useQuery({
+        queryKey: ["aks-scaledjobs", ctx, ns],
+        queryFn: ({ signal }) =>
+            apiFetch<ScaledJobInfo[]>(`/api/aks/${ns}/scaledjobs`, { signal }),
+        enabled: !!ns,
+    });
+}
+
+export function useAksScaleScaledJob() {
+    return useNotifyMutation<
+        unknown,
+        { ns: string; name: string; minReplicas: number; maxReplicas: number }
+    >({
+        mutationFn: (vars) =>
+            scaleScaledJob(
+                vars.ns,
+                vars.name,
+                vars.minReplicas,
+                vars.maxReplicas,
+            ),
+        successMessage: (_data, vars) =>
+            `ScaledJob ${vars.name} scaled to ${vars.minReplicas}–${vars.maxReplicas} replicas`,
+        errorPrefix: "Scale ScaledJob failed",
+        invalidateKeys: [["aks-scaledjobs"]],
+    });
+}
+
+export function useAksDeleteScaledJob() {
+    return useNotifyMutation<unknown, { ns: string; name: string }>({
+        mutationFn: (vars) => deleteScaledJob(vars.ns, vars.name),
+        successMessage: (_data, vars) => `ScaledJob ${vars.name} deleted`,
+        errorPrefix: "Delete ScaledJob failed",
+        invalidateKeys: [["aks-scaledjobs"]],
+    });
+}
+
+export function useAksSetScaledJobScalingEnabled() {
+    return useNotifyMutation<
+        unknown,
+        { ns: string; name: string; enabled: boolean }
+    >({
+        mutationFn: (vars) =>
+            setScaledJobScalingEnabled(vars.ns, vars.name, vars.enabled),
+        successMessage: (_data, vars) =>
+            `Scaling ${vars.enabled ? "enabled" : "disabled"} for ${vars.name}`,
+        errorPrefix: "Toggle ScaledJob scaling failed",
+        invalidateKeys: [["aks-scaledjobs"]],
+    });
+}
+
 export function useAksCronJobs(ns: string | null) {
     const ctx = useAksContextKey();
     return useQuery({
@@ -318,6 +376,20 @@ export function useAksTriggerCronJob() {
         // Triggering creates a Job — invalidate the Jobs list too so the new
         // execution shows up without a manual refresh (MAUI did RefreshJobsAsync).
         invalidateKeys: [["aks-cronjobs"], ["aks-jobs"]],
+    });
+}
+
+export function useAksSetCronJobSchedule() {
+    return useNotifyMutation<
+        unknown,
+        { ns: string; name: string; schedule: string }
+    >({
+        mutationFn: (vars) =>
+            setCronJobSchedule(vars.ns, vars.name, vars.schedule),
+        successMessage: (_data, vars) =>
+            `CronJob ${vars.name} schedule updated`,
+        errorPrefix: "Update CronJob schedule failed",
+        invalidateKeys: [["aks-cronjobs"]],
     });
 }
 
@@ -650,6 +722,19 @@ export function useAksHttpRoutes(ns: string | null) {
         queryKey: ["aks-httproutes", ctx, ns],
         queryFn: ({ signal }) =>
             apiFetch<HttpRouteInfo[]>(`/api/aks/${ns}/httproutes`, { signal }),
+        enabled: !!ns,
+    });
+}
+
+export function useAksEnvoyResources(ns: string | null, plural: string) {
+    const ctx = useAksContextKey();
+    return useQuery({
+        queryKey: ["aks-envoy", plural, ctx, ns],
+        queryFn: ({ signal }) =>
+            apiFetch<EnvoyResourceInfo[]>(
+                `/api/aks/${ns}/envoy/${encodeURIComponent(plural)}`,
+                { signal },
+            ),
         enabled: !!ns,
     });
 }

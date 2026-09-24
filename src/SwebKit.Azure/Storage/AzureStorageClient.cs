@@ -1,6 +1,8 @@
 using Azure;
 using Azure.Storage.Blobs;
+using Azure.Storage.Files.Shares;
 using Azure.Storage.Sas;
+using ShareFileDownloadOptions = Azure.Storage.Files.Shares.Models.ShareFileDownloadOptions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
@@ -18,6 +20,7 @@ namespace SwebKit.Azure.Storage;
 public class AzureStorageClient : IStorageClient
 {
     private readonly BlobServiceClient _blobService;
+    private readonly ShareServiceClient _shareService;
 
     public StorageConfig Config { get; }
 
@@ -30,12 +33,16 @@ public class AzureStorageClient : IStorageClient
             var connStr = credentialStore.Get(config.ConnectionStringRef)
                 ?? throw new InvalidOperationException($"Credential '{config.ConnectionStringRef}' not found.");
             _blobService = new BlobServiceClient(connStr);
+            _shareService = new ShareServiceClient(connStr);
         }
         else if (config.UseAad && !string.IsNullOrEmpty(config.AccountName))
         {
             // See AzureCredentialFactory for why EnvironmentCredential is excluded.
             _blobService = new BlobServiceClient(
                 new Uri($"https://{config.AccountName}.blob.core.windows.net"),
+                AzureCredentialFactory.CreateDefault());
+            _shareService = new ShareServiceClient(
+                new Uri($"https://{config.AccountName}.file.core.windows.net"),
                 AzureCredentialFactory.CreateDefault());
         }
         else
@@ -489,6 +496,114 @@ public class AzureStorageClient : IStorageClient
 
         return result;
     }
+
+    // ── Azure Files (file shares) ─────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<StorageShareItem>> ListFileSharesAsync(CancellationToken ct = default)
+    {
+        var result = new List<StorageShareItem>();
+        await foreach (var share in _shareService.GetSharesAsync(cancellationToken: ct).ConfigureAwait(false))
+        {
+            result.Add(new StorageShareItem(
+                Name: share.Name,
+                QuotaGiB: share.Properties?.QuotaInGB,
+                AccessTier: share.Properties?.AccessTier,
+                LastModified: share.Properties?.LastModified));
+        }
+        return result;
+    }
+
+    public async Task<StorageShareEntryPage> ListShareEntriesAsync(
+        string shareName,
+        string directoryPath,
+        string? continuationToken = null,
+        int pageSize = 100,
+        CancellationToken ct = default)
+    {
+        var directory = _shareService.GetShareClient(shareName)
+            .GetDirectoryClient(directoryPath ?? string.Empty);
+        var items = new List<StorageShareEntryItem>();
+        string? nextToken = null;
+
+        await foreach (var page in directory
+            .GetFilesAndDirectoriesAsync(cancellationToken: ct)
+            .AsPages(continuationToken, pageSize).ConfigureAwait(false))
+        {
+            foreach (var entry in page.Values)
+            {
+                var fullPath = string.IsNullOrEmpty(directoryPath)
+                    ? entry.Name
+                    : $"{directoryPath.TrimEnd('/')}/{entry.Name}";
+                items.Add(new StorageShareEntryItem(
+                    Name: fullPath,
+                    IsDirectory: entry.IsDirectory,
+                    SizeBytes: entry.IsDirectory ? null : entry.FileSize,
+                    LastModified: entry.Properties?.LastModified));
+            }
+            nextToken = page.ContinuationToken;
+            break; // only first page
+        }
+
+        return new StorageShareEntryPage(items, string.IsNullOrEmpty(nextToken) ? null : nextToken);
+    }
+
+    public async Task<ShareFileProperties> GetShareFilePropertiesAsync(
+        string shareName, string filePath, CancellationToken ct = default)
+    {
+        var file = GetShareFileClient(shareName, filePath);
+        var response = await file.GetPropertiesAsync(cancellationToken: ct).ConfigureAwait(false);
+        var props = response.Value;
+        return new ShareFileProperties(
+            Name: filePath,
+            SizeBytes: props.ContentLength,
+            ContentType: props.ContentType,
+            LastModified: props.LastModified,
+            ETag: props.ETag.ToString(),
+            Metadata: props.Metadata is not null ? new Dictionary<string, string>(props.Metadata) : new Dictionary<string, string>());
+    }
+
+    public async Task<ShareFileContent> GetShareFileContentAsync(
+        string shareName, string filePath, int maxBytes = 524_288, CancellationToken ct = default)
+    {
+        var file = GetShareFileClient(shareName, filePath);
+        var propsResponse = await file.GetPropertiesAsync(cancellationToken: ct).ConfigureAwait(false);
+        var props = propsResponse.Value;
+
+        if (!IsTextContentType(props.ContentType, filePath))
+        {
+            return new ShareFileContent(shareName, filePath, string.Empty, props.ContentType, props.ContentLength, false, true);
+        }
+
+        bool wasTruncated = props.ContentLength > maxBytes;
+        string text;
+        if (wasTruncated)
+        {
+            var rangeResponse = await file.DownloadAsync(new ShareFileDownloadOptions { Range = new HttpRange(0, maxBytes) }, cancellationToken: ct).ConfigureAwait(false);
+            using var ms = new MemoryStream();
+            await rangeResponse.Value.Content.CopyToAsync(ms, ct).ConfigureAwait(false);
+            text = System.Text.Encoding.UTF8.GetString(ms.ToArray());
+        }
+        else
+        {
+            var downloadResponse = await file.DownloadAsync(cancellationToken: ct).ConfigureAwait(false);
+            using var ms = new MemoryStream();
+            await downloadResponse.Value.Content.CopyToAsync(ms, ct).ConfigureAwait(false);
+            text = System.Text.Encoding.UTF8.GetString(ms.ToArray());
+        }
+
+        return new ShareFileContent(shareName, filePath, text, props.ContentType, props.ContentLength, wasTruncated, false);
+    }
+
+    public Task<string> GetShareFileSasUrlAsync(
+        string shareName, string filePath, TimeSpan expiry, CancellationToken ct = default)
+    {
+        var file = GetShareFileClient(shareName, filePath);
+        var uri = file.GenerateSasUri(ShareFileSasPermissions.Read, DateTimeOffset.UtcNow.Add(expiry));
+        return Task.FromResult(uri.ToString());
+    }
+
+    private ShareFileClient GetShareFileClient(string shareName, string filePath)
+        => _shareService.GetShareClient(shareName).GetRootDirectoryClient().GetFileClient(filePath);
 
     /// <remarks>Internal rather than private so the diff rendering is unit-testable.</remarks>
     internal static string ProduceSimpleLineDiff(string baseText, string compareText)

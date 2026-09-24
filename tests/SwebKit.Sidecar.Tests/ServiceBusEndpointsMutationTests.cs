@@ -269,7 +269,7 @@ public class ServiceBusEndpointsMutationTests
         var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
         var (profile, demo, factory, nsId) = Build(faulty);
 
-        var result = await ServiceBusEndpoints.PurgeMessagesAsync(nsId.ToString(), EntityPath, false, profile, factory, demo, CancellationToken.None);
+        var result = await ServiceBusEndpoints.PurgeMessagesAsync(nsId.ToString(), EntityPath, new ServiceBusEndpoints.PurgeRequest(), profile, factory, demo, CancellationToken.None);
 
         Assert.Equal(1, faulty.PurgeMessagesCallCount);
         Assert.Equal(5, ReadAnonymousIntProperty(result, "purged")); // 5 active messages seeded for order-created
@@ -280,7 +280,7 @@ public class ServiceBusEndpointsMutationTests
     {
         var (profile, demo, factory, _) = Build();
 
-        var result = await ServiceBusEndpoints.PurgeMessagesAsync(Guid.NewGuid().ToString(), EntityPath, false, profile, factory, demo, CancellationToken.None);
+        var result = await ServiceBusEndpoints.PurgeMessagesAsync(Guid.NewGuid().ToString(), EntityPath, new ServiceBusEndpoints.PurgeRequest(), profile, factory, demo, CancellationToken.None);
 
         Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
@@ -293,7 +293,7 @@ public class ServiceBusEndpointsMutationTests
         var (profile, demo, factory, nsId) = Build(faulty);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => ServiceBusEndpoints.PurgeMessagesAsync(nsId.ToString(), EntityPath, false, profile, factory, demo, CancellationToken.None));
+            () => ServiceBusEndpoints.PurgeMessagesAsync(nsId.ToString(), EntityPath, new ServiceBusEndpoints.PurgeRequest(), profile, factory, demo, CancellationToken.None));
         Assert.Equal("service bus unavailable", ex.Message);
         Assert.Equal(1, faulty.PurgeMessagesCallCount);
     }

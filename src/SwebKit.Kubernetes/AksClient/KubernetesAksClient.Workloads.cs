@@ -854,6 +854,17 @@ public partial class KubernetesAksClient
         }).ConfigureAwait(false);
     }
 
+    public async Task SetCronJobScheduleAsync(string ns, string cronJobName, string schedule, CancellationToken ct = default)
+    {
+        await WithAuthRetryAsync(async () =>
+        {
+            var patch = new V1CronJob { Spec = new V1CronJobSpec { Schedule = schedule } };
+            await _client.BatchV1.PatchNamespacedCronJobAsync(
+                new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+                cronJobName, ns, cancellationToken: ct).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default)
     {
         return await WithAuthRetryAsync(async () =>
@@ -864,6 +875,7 @@ public partial class KubernetesAksClient
                 Name = cj.Metadata.Name,
                 Namespace = cj.Metadata.NamespaceProperty ?? ns,
                 Schedule = cj.Spec?.Schedule,
+                TimeZone = cj.Spec?.TimeZone,
                 Suspend = cj.Spec?.Suspend ?? false,
                 ActiveCount = cj.Status?.Active?.Count ?? 0,
                 LastScheduleTime = cj.Status?.LastScheduleTime.HasValue == true

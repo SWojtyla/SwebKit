@@ -1,11 +1,15 @@
-import { useCallback, useMemo, type MouseEvent } from "react";
+import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import {
     useAksCronJobs,
     useAksSuspendCronJob,
     useAksTriggerCronJob,
+    useAksSetCronJobSchedule,
 } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { CronJobScheduleDialog } from "./CronJobScheduleDialog";
+import { nextCronRun } from "@/lib/cron";
+import { formatLocalDateTime } from "@/lib/datetime";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { CronJobInfo } from "@/lib/types";
 
@@ -19,6 +23,11 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
     const ws = useAksWorkspace();
     const suspendMutation = useAksSuspendCronJob();
     const triggerMutation = useAksTriggerCronJob();
+    const scheduleMutation = useAksSetCronJobSchedule();
+
+    const [scheduleTarget, setScheduleTarget] = useState<CronJobInfo | null>(
+        null,
+    );
 
     const toggle = useCallback(
         (cj: CronJobInfo) => {
@@ -38,6 +47,25 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
         [ws, suspendMutation],
     );
 
+    const handleSaveSchedule = useCallback(
+        (schedule: string) => {
+            if (!scheduleTarget) return;
+            const cj = scheduleTarget;
+            setScheduleTarget(null);
+            ws.requestConfirm({
+                message: `Change schedule for "${cj.name}" to "${schedule}"?`,
+                resourceName: cj.name,
+                onConfirm: () =>
+                    scheduleMutation.mutate({
+                        ns: cj.namespace,
+                        name: cj.name,
+                        schedule,
+                    }),
+            });
+        },
+        [ws, scheduleTarget, scheduleMutation],
+    );
+
     const buildMenu = useCallback(
         (cj: CronJobInfo): ContextMenuItem[] => [
             {
@@ -50,6 +78,12 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
                 icon: "{ }",
                 onClick: () => ws.openYaml("cronjob", cj.name, cj.namespace),
             },
+            {
+                label: "Edit schedule…",
+                icon: "🕐",
+                onClick: () => setScheduleTarget(cj),
+            },
+            { label: "", separator: true, onClick: () => {} },
             {
                 label: "Trigger",
                 icon: "▶",
@@ -80,9 +114,17 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
             {
                 header: "Schedule",
                 cell: (cj) => (
-                    <span className="font-mono text-xs">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setScheduleTarget(cj);
+                        }}
+                        title={`Edit schedule${cj.timeZone ? ` (evaluates in ${cj.timeZone})` : ""}`}
+                        className="rounded px-1 font-mono text-xs hover:bg-accent/50 hover:underline"
+                        data-testid={`cronjob-schedule-${cj.name}`}
+                    >
                         {cj.schedule ?? "—"}
-                    </span>
+                    </button>
                 ),
             },
             {
@@ -101,12 +143,46 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
                 sortValue: (cj) => cj.activeCount,
             },
             {
+                header: "Next Run",
+                cell: (cj) => {
+                    if (cj.suspend || !cj.schedule) {
+                        return (
+                            <span
+                                className="text-xs text-muted-foreground"
+                                title={
+                                    cj.suspend
+                                        ? "CronJob is suspended"
+                                        : undefined
+                                }
+                                data-testid={`cronjob-nextrun-${cj.name}`}
+                            >
+                                —
+                            </span>
+                        );
+                    }
+                    const next = nextCronRun(cj.schedule, {
+                        timeZone: cj.timeZone,
+                    });
+                    return (
+                        <span
+                            className="text-xs text-muted-foreground"
+                            title={
+                                cj.timeZone
+                                    ? `Schedule evaluates in ${cj.timeZone}; shown in your local time`
+                                    : "Shown in your local time"
+                            }
+                            data-testid={`cronjob-nextrun-${cj.name}`}
+                        >
+                            {next ? formatLocalDateTime(next) : "—"}
+                        </span>
+                    );
+                },
+            },
+            {
                 header: "Last Schedule",
                 cell: (cj) => (
                     <span className="text-xs text-muted-foreground">
-                        {cj.lastScheduleTime
-                            ? new Date(cj.lastScheduleTime).toLocaleString()
-                            : "—"}
+                        {formatLocalDateTime(cj.lastScheduleTime) || "—"}
                     </span>
                 ),
             },
@@ -114,9 +190,7 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
                 header: "Last Success",
                 cell: (cj) => (
                     <span className="text-xs text-muted-foreground">
-                        {cj.lastSuccessfulTime
-                            ? new Date(cj.lastSuccessfulTime).toLocaleString()
-                            : "—"}
+                        {formatLocalDateTime(cj.lastSuccessfulTime) || "—"}
                     </span>
                 ),
             },
@@ -144,17 +218,30 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
     );
 
     return (
-        <ResourceTable
-            data={cronjobs}
-            isLoading={isLoading}
-            error={error}
-            isMulti={isMulti}
-            testIdPrefix="cronjob"
-            tableBodyTestId="cronjobs-table-body"
-            emptyMessage="No cron jobs found"
-            onRowClick={(cj) => ws.openYaml("cronjob", cj.name, cj.namespace)}
-            onRowContextMenu={handleRowContextMenu}
-            columns={columns}
-        />
+        <>
+            <ResourceTable
+                data={cronjobs}
+                isLoading={isLoading}
+                error={error}
+                isMulti={isMulti}
+                testIdPrefix="cronjob"
+                tableBodyTestId="cronjobs-table-body"
+                emptyMessage="No cron jobs found"
+                onRowClick={(cj) =>
+                    ws.openYaml("cronjob", cj.name, cj.namespace)
+                }
+                onRowContextMenu={handleRowContextMenu}
+                columns={columns}
+            />
+
+            {scheduleTarget && (
+                <CronJobScheduleDialog
+                    cronJob={scheduleTarget}
+                    isSaving={scheduleMutation.isPending}
+                    onCancel={() => setScheduleTarget(null)}
+                    onSave={handleSaveSchedule}
+                />
+            )}
+        </>
     );
 }
