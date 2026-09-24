@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
-import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, Sparkles } from "lucide-react";
+import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, ChevronDown, Sparkles, FileText } from "lucide-react";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import {
   useProfile,
@@ -24,10 +24,12 @@ import { BatchSendPanel } from "./BatchSendPanel";
 import { ScheduledMessages } from "./ScheduledMessages";
 import { EntityCommandPalette, type EntityAction } from "./EntityCommandPalette";
 import { BatchReplayPanel } from "./BatchReplayPanel";
+import { TemplateManager } from "./TemplateManager";
+import { NamespaceOverview } from "./NamespaceOverview";
 import { loadSbPreferences } from "@/lib/stores/sb-preferences";
 import { loadLastNamespace, saveLastNamespace, loadLastEntity, saveLastEntity } from "@/lib/stores/sb-selection";
 import { useScreenStateProvider } from "@/lib/stores/screen-state";
-import type { SbEntityInfo, SbMessage } from "@/lib/types";
+import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
 
 function maxSequenceNumber(messages: SbMessage[]): number | null {
   const values = messages.map((m) => m.sequenceNumber).filter((n): n is number => n != null);
@@ -39,17 +41,26 @@ function messageKey(m: SbMessage): string {
   return `${m.messageId}-${m.sequenceNumber ?? ""}`;
 }
 
+function composerTitle(mode: ComposerMode): string {
+  if (mode === "schedule") return "Schedule Message";
+  if (mode === "replay" || mode === "edit") return "Replay Message";
+  return "Compose Message";
+}
+
 export function ServiceBusPage() {
   const { data: profile } = useProfile();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [composerMode, setComposerMode] = useState<ComposerMode | null>(null);
+  const [composerTemplate, setComposerTemplate] = useState<SbMessageTemplate | null>(null);
   const [askAiOpen, setAskAiOpen] = useState(false);
   const [showBatchSend, setShowBatchSend] = useState(false);
   const [showScheduled, setShowScheduled] = useState(false);
   const [showEntityPalette, setShowEntityPalette] = useState(false);
   const [showBatchReplay, setShowBatchReplay] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showEntityTree, setShowEntityTree] = useState(true);
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const queryClient = useQueryClient();
@@ -57,6 +68,13 @@ export function ServiceBusPage() {
   const purgeMutation = useSbPurgeMessages();
 
   const namespaces = useMemo(() => profile?.serviceBusNamespaces ?? [], [profile?.serviceBusNamespaces]);
+
+  // Every composer open goes through here so the optional template prefill is
+  // cleared unless a template is actually being applied.
+  const openComposer = useCallback((mode: ComposerMode, template?: SbMessageTemplate | null) => {
+    setComposerTemplate(template ?? null);
+    setComposerMode(mode);
+  }, []);
 
   const updateParams = useCallback(
     (updates: Record<string, string | null | undefined>, options?: { replace?: boolean }) => {
@@ -258,7 +276,7 @@ export function ServiceBusPage() {
     setSelectedEntity(entity);
     if (action === "peek-active") setViewMode("active");
     if (action === "peek-dlq") setViewMode("dlq");
-    if (action === "send") setComposerMode("compose");
+    if (action === "send") openComposer("compose");
     // `invalidateQueries({ queryKey: ["sb-"] })` matched nothing — TanStack Query compares key
     // elements, not string prefixes, and every real key here is ["sb-peek", nsId, entityPath, …]
     // and friends. Reuse the real key set instead of re-deriving it.
@@ -270,7 +288,7 @@ export function ServiceBusPage() {
     // Previously fell through every branch — presented as a working destructive action while
     // doing nothing. Routes through the same entity-level confirm as the toolbar's Purge All.
     if (action === "purge") setShowPurgeConfirm(true);
-  }, [queryClient, selectedNsId, setSelectedEntity, setViewMode]);
+  }, [queryClient, selectedNsId, setSelectedEntity, setViewMode, openComposer]);
 
   const onPurgeAll = useCallback(() => {
     if (!selectedNsId || !selectedEntity) return;
@@ -344,8 +362,17 @@ export function ServiceBusPage() {
           Search Entities
         </button>
         <button
+          data-testid="sb-templates-button"
+          onClick={() => setShowTemplates(true)}
+          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+          title="Manage message templates"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Templates
+        </button>
+        <button
           data-testid="sb-compose-button"
-          onClick={() => setComposerMode("compose")}
+          onClick={() => openComposer("compose")}
           disabled={!selectedNsId}
           title={!selectedNsId ? "Select a namespace first" : undefined}
           className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
@@ -353,36 +380,76 @@ export function ServiceBusPage() {
           <Plus className="h-3.5 w-3.5" />
           Compose
         </button>
-        <button
-          data-testid="sb-batch-send-button"
-          onClick={() => setShowBatchSend(true)}
-          disabled={!selectedNsId}
-          title={!selectedNsId ? "Select a namespace first" : undefined}
-          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
-        >
-          <Upload className="h-3.5 w-3.5" />
-          Batch Send
-        </button>
-        <button
-          data-testid="sb-scheduled-button"
-          onClick={() => setShowScheduled(true)}
-          disabled={!selectedNsId || !selectedEntity}
-          title={!selectedNsId ? "Select a namespace first" : !selectedEntity ? "Select a queue or topic first" : undefined}
-          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
-        >
-          <Clock className="h-3.5 w-3.5" />
-          Scheduled
-        </button>
-        <button
-          data-testid="sb-batch-replay-button"
-          onClick={() => setShowBatchReplay(true)}
-          disabled={!selectedNsId || !selectedEntity}
-          title={!selectedNsId ? "Select a namespace first" : !selectedEntity ? "Select a queue or topic first" : undefined}
-          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          Batch Replay
-        </button>
+        {/* Secondary operations live behind one menu — six peer buttons used to
+            crowd this row and push the namespace selector off narrow windows. */}
+        <div className="relative">
+          <button
+            data-testid="sb-actions-menu"
+            onClick={() => setShowActionsMenu((v) => !v)}
+            disabled={!selectedNsId}
+            title={!selectedNsId ? "Select a namespace first" : "More actions"}
+            aria-expanded={showActionsMenu}
+            aria-haspopup="menu"
+            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+          >
+            Actions
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+          {showActionsMenu && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowActionsMenu(false)} />
+              <div
+                className="absolute right-0 top-full z-20 mt-1 w-56 rounded-md border bg-card p-1 shadow-lg"
+                role="menu"
+                data-testid="sb-actions-dropdown"
+              >
+                <button
+                  data-testid="sb-batch-send-button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowBatchSend(true);
+                  }}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Batch Send
+                  <span className="ml-auto text-muted-foreground">paste CSV/JSON</span>
+                </button>
+                <button
+                  data-testid="sb-scheduled-button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowScheduled(true);
+                  }}
+                  disabled={!selectedEntity}
+                  title={!selectedEntity ? "Select a queue or topic first" : "View and cancel scheduled messages on this entity"}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50"
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  Scheduled
+                  <span className="ml-auto text-muted-foreground">this entity</span>
+                </button>
+                <button
+                  data-testid="sb-batch-replay-button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowBatchReplay(true);
+                  }}
+                  disabled={!selectedEntity}
+                  title={!selectedEntity ? "Select a queue or topic first" : "Resubmit dead-lettered messages on this entity"}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Batch Replay
+                  <span className="ml-auto text-muted-foreground">DLQ</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Main content: entity tree | message list | detail */}
@@ -508,24 +575,35 @@ export function ServiceBusPage() {
               cancelTestId="purge-confirm-cancel"
             />
           )}
-          <MessageList
-            nsId={selectedNsId}
-            entity={selectedEntity}
-            viewMode={viewMode}
-            messages={messageWindow}
-            isLoading={viewMode === "active" ? activeMessagesQuery.isLoading : dlqMessagesQuery.isLoading}
-            isError={viewMode === "active" ? activeMessagesQuery.isError : dlqMessagesQuery.isError}
-            error={viewMode === "active" ? activeMessagesQuery.error : dlqMessagesQuery.error}
-            isFetching={viewMode === "active" ? activeMessagesQuery.isFetching : dlqMessagesQuery.isFetching}
-            onRefresh={() => (viewMode === "active" ? activeMessagesQuery.refetch() : dlqMessagesQuery.refetch())}
-            lastRefreshedAt={lastRefreshedAt}
-            isLoadingMore={isLoadingMore}
-            canLoadMore={canLoadMore}
-            totalAvailable={totalAvailable}
-            selectedMessage={selectedMessage}
-            onSelectMessage={selectMessage}
-            onLoadMore={loadMore}
-          />
+          {selectedEntity ? (
+            <MessageList
+              nsId={selectedNsId}
+              entity={selectedEntity}
+              viewMode={viewMode}
+              messages={messageWindow}
+              isLoading={viewMode === "active" ? activeMessagesQuery.isLoading : dlqMessagesQuery.isLoading}
+              isError={viewMode === "active" ? activeMessagesQuery.isError : dlqMessagesQuery.isError}
+              error={viewMode === "active" ? activeMessagesQuery.error : dlqMessagesQuery.error}
+              isFetching={viewMode === "active" ? activeMessagesQuery.isFetching : dlqMessagesQuery.isFetching}
+              onRefresh={() => (viewMode === "active" ? activeMessagesQuery.refetch() : dlqMessagesQuery.refetch())}
+              lastRefreshedAt={lastRefreshedAt}
+              isLoadingMore={isLoadingMore}
+              canLoadMore={canLoadMore}
+              totalAvailable={totalAvailable}
+              selectedMessage={selectedMessage}
+              onSelectMessage={selectMessage}
+              onLoadMore={loadMore}
+            />
+          ) : (
+            <NamespaceOverview
+              nsId={selectedNsId}
+              namespaces={namespaces}
+              onSelectEntity={(e, mode) => {
+                setSelectedEntity(e);
+                if (mode) setViewMode(mode);
+              }}
+            />
+          )}
         </div>
 
         {/* Detail pane */}
@@ -545,25 +623,39 @@ export function ServiceBusPage() {
               nsId={selectedNsId}
               entity={selectedEntity}
               viewMode={viewMode}
-              onEditResubmit={(msg) => { selectMessage(msg); setComposerMode("edit"); }}
-              onReplay={(msg) => { selectMessage(msg); setComposerMode("replay"); }}
-              onSchedule={(msg) => { selectMessage(msg); setComposerMode("schedule"); }}
+              onEditResubmit={(msg) => { selectMessage(msg); openComposer("edit"); }}
+              onReplay={(msg) => { selectMessage(msg); openComposer("replay"); }}
+              onSchedule={(msg) => { selectMessage(msg); openComposer("schedule"); }}
+            />
+          </SidePanel>
+        )}
+
+        {/* Message composer — resizable side panel in the same flex row as the
+            detail pane, not the old fixed modal, so the message list stays in
+            view while composing/replaying. */}
+        {composerMode && (
+          <SidePanel
+            title={composerTitle(composerMode)}
+            onClose={() => setComposerMode(null)}
+            defaultWidth={640}
+            minWidth={420}
+            maxWidth={1400}
+            storageKey="service-bus-composer"
+            data-testid="composer-panel"
+            closeTestId="composer-close"
+          >
+            <MessageComposer
+              mode={composerMode}
+              nsId={selectedNsId}
+              namespaces={namespaces}
+              entity={selectedEntity}
+              sourceMessage={composerMode === "replay" || composerMode === "edit" ? selectedMessage : null}
+              initialTemplate={composerTemplate}
+              onClose={() => setComposerMode(null)}
             />
           </SidePanel>
         )}
       </div>
-
-      {/* Message composer modal */}
-      {composerMode && (
-        <MessageComposer
-          mode={composerMode}
-          nsId={selectedNsId}
-          namespaces={namespaces}
-          entity={selectedEntity}
-          sourceMessage={composerMode === "replay" || composerMode === "edit" ? selectedMessage : null}
-          onClose={() => setComposerMode(null)}
-        />
-      )}
 
       {/* Batch send modal */}
       {showBatchSend && (
@@ -590,6 +682,18 @@ export function ServiceBusPage() {
           nsId={selectedNsId}
           entity={selectedEntity}
           onClose={() => setShowBatchReplay(false)}
+        />
+      )}
+
+      {/* Templates manager — "Use in composer" hands the template to a fresh
+          compose panel. */}
+      {showTemplates && (
+        <TemplateManager
+          onUseInComposer={(t) => {
+            setShowTemplates(false);
+            openComposer("compose", t);
+          }}
+          onClose={() => setShowTemplates(false)}
         />
       )}
 

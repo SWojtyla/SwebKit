@@ -68,7 +68,7 @@ public class AksEndpointsTests
         demo.IsDemoMode = true;
         var pool = new FakeMonitoringConnectionPool { AksClient = demo.GetAksClient() };
 
-        var result = await AksEndpoints.GetDeploymentsAsync("ecommerce", profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.GetDeploymentsAsync("ecommerce", null, profile, demo, pool, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.DeploymentInfo>>>(result);
         Assert.NotEmpty(ok.Value!);
@@ -81,11 +81,23 @@ public class AksEndpointsTests
         var (profile, demo) = Deps();
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
-        var result = await AksEndpoints.GetDeploymentsAsync("infra", profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.GetDeploymentsAsync("infra", null, profile, demo, pool, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.DeploymentInfo>>>(result);
         Assert.NotEmpty(ok.Value!);
         Assert.Contains(pool.RequestedContexts, c => c is null); // GetClient(pool) requests the default context
+    }
+
+    [Fact]
+    public async Task GetDeploymentsAsync_ExplicitContext_RequestsThatContext()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetDeploymentsAsync("infra", "aks-prd", profile, demo, pool, CancellationToken.None);
+
+        Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.DeploymentInfo>>>(result);
+        Assert.Equal(["aks-prd"], pool.RequestedContexts);
     }
 
     [Fact]
@@ -95,7 +107,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = null };
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => AksEndpoints.GetDeploymentsAsync("infra", profile, demo, pool, CancellationToken.None));
+            () => AksEndpoints.GetDeploymentsAsync("infra", null, profile, demo, pool, CancellationToken.None));
     }
 
     // ── Pods ─────────────────────────────────────────────────────────────────
@@ -205,6 +217,61 @@ public class AksEndpointsTests
         Assert.Equal("simulated RBAC/connectivity failure", ex.Message);
     }
 
+    // ── CronJobs ────────────────────────────────────────────────────────────
+
+    /// <summary>Reads the anonymous { jobNames } result without a shared DTO.</summary>
+    private static string[] ReadJobNames(IResult result)
+    {
+        var value = Assert.IsAssignableFrom<IValueHttpResult>(result).Value!;
+        return (string[])value.GetType().GetProperty("jobNames")!.GetValue(value)!;
+    }
+
+    [Fact]
+    public async Task TriggerCronJobAsync_DemoMode_ReturnsCreatedJobName()
+    {
+        var (profile, demo) = Deps();
+        demo.IsDemoMode = true;
+        var pool = new FakeMonitoringConnectionPool { AksClient = demo.GetAksClient() };
+
+        var result = await AksEndpoints.TriggerCronJobAsync("ecommerce", "inventory-sync", profile, demo, pool, CancellationToken.None);
+
+        var jobName = Assert.Single(ReadJobNames(result));
+        Assert.StartsWith("inventory-sync-manual-", jobName);
+    }
+
+    [Fact]
+    public async Task TriggerCronJobAsync_MultiNamespaceToken_TriggersInEachResolvedNamespace()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.TriggerCronJobAsync("ecommerce,infra", "inventory-sync", profile, demo, pool, CancellationToken.None);
+
+        var jobNames = ReadJobNames(result);
+        Assert.Equal(2, jobNames.Length);
+        Assert.All(jobNames, name => Assert.StartsWith("inventory-sync-manual-", name));
+    }
+
+    [Fact]
+    public async Task TriggerCronJobAsync_UnknownCronJob_ClientErrorPropagates()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => AksEndpoints.TriggerCronJobAsync("ecommerce", "no-such-cronjob", profile, demo, pool, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task TriggerCronJobAsync_NotConfigured_Throws()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = null };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => AksEndpoints.TriggerCronJobAsync("ecommerce", "inventory-sync", profile, demo, pool, CancellationToken.None));
+    }
+
     // ── Contexts list ────────────────────────────────────────────────────────
 
     [Fact]
@@ -220,6 +287,35 @@ public class AksEndpointsTests
         Assert.Equal(5, ok.Value!.Count);
         Assert.Contains(ok.Value!, c => c.Name == "aks-ecommerce-prod");
         Assert.Contains(ok.Value!, c => c.Name == "minikube");
+    }
+
+    // ── Namespaces ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetNamespacesAsync_NoContext_RequestsDefaultContext()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetNamespacesAsync(null, profile, demo, pool, CancellationToken.None);
+
+        var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<string>>>(result);
+        Assert.NotEmpty(ok.Value!);
+        Assert.Equal([null], pool.RequestedContexts);
+    }
+
+    [Fact]
+    public async Task GetNamespacesAsync_ExplicitContext_RequestsThatContext()
+    {
+        // Monitoring rules pin a kubeconfig context per rule — the namespace picker must list
+        // that cluster's namespaces, not the globally configured one.
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetNamespacesAsync("aks-prd", profile, demo, pool, CancellationToken.None);
+
+        Assert.IsAssignableFrom<Ok<IReadOnlyList<string>>>(result);
+        Assert.Equal(["aks-prd"], pool.RequestedContexts);
     }
 
     // ── Context switch ───────────────────────────────────────────────────────

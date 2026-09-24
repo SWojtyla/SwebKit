@@ -112,7 +112,9 @@ public static class PodHealthDiffer
                 prev.Phase, pod.Phase, pod.RestartCount, message);
         }
 
-        if (prev.Phase == "Running" && pod.Phase == "Failed")
+        // Any transition into Failed counts — a pod that never reached Running (init crash,
+        // Pending → Failed) is just as much a failure as Running → Failed.
+        if (prev.Phase != "Failed" && pod.Phase == "Failed")
         {
             return new PodDiffResult(
                 pod.Name, PodHealthEventType.PodFailed,

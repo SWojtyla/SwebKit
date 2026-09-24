@@ -18,8 +18,8 @@ public sealed class DemoModeService : IDisposable
     public const string DemoSqlConnectionId = "demo-sql";
     public const string DemoSqlConnectionId2 = "demo-sql-2";
 
-    private readonly DemoServiceBusClient _ordersClient = DemoServiceBusClient.OrdersDev();
-    private readonly DemoServiceBusClient _paymentsClient = DemoServiceBusClient.PaymentsDev();
+    private DemoServiceBusClient _ordersClient = DemoServiceBusClient.OrdersDev();
+    private DemoServiceBusClient _paymentsClient = DemoServiceBusClient.PaymentsDev();
     private readonly DemoAksClient _aksClient = new();
     private readonly DemoRedisClient _redisClient = new(0);
     private readonly DemoStorageClient _storageClient = new();
@@ -41,7 +41,26 @@ public sealed class DemoModeService : IDisposable
         Database = "orders",
     }, variant: 1);
 
-    public bool IsDemoMode { get; set; }
+    private bool _isDemoMode;
+
+    public bool IsDemoMode
+    {
+        get => _isDemoMode;
+        set
+        {
+            // Re-entering demo mode re-seeds the Service Bus data: the demo clients are
+            // stateful in-memory stores (send/complete/resend mutate them), and consumers —
+            // including the Playwright suite, which toggles demo mode around every test —
+            // assume each demo session starts from the pristine seed data.
+            if (value && !_isDemoMode)
+            {
+                _ordersClient = DemoServiceBusClient.OrdersDev();
+                _paymentsClient = DemoServiceBusClient.PaymentsDev();
+            }
+
+            _isDemoMode = value;
+        }
+    }
 
     public IReadOnlyList<ServiceBusNamespace> GetDemoNamespaces() =>
     [

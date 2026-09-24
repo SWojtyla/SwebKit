@@ -1,3 +1,4 @@
+using System.Globalization;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
 
@@ -172,6 +173,44 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         return Task.FromResult(removed);
     }
 
+    public Task<int> DeadLetterMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (sequenceNumbers.Count == 0 || !_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            return Task.FromResult(0);
+        }
+
+        var sequenceSet = new HashSet<long>(sequenceNumbers);
+        var kept = new List<SbMessage>(entityData.ActiveMessages.Count);
+        var deadLettered = new List<SbMessage>();
+        foreach (var message in entityData.ActiveMessages)
+        {
+            if (message.SequenceNumber is { } seq && sequenceSet.Contains(seq))
+            {
+                message.DeadLetterReason = "SwebKit.ManualTransfer";
+                message.DeadLetterErrorDescription = "Moved to the dead-letter queue by the user";
+                deadLettered.Add(message);
+            }
+            else
+            {
+                kept.Add(message);
+            }
+        }
+
+        if (deadLettered.Count > 0)
+        {
+            _entityData[entityPath] = entityData with
+            {
+                ActiveMessages = kept,
+                DeadLetterMessages = [.. entityData.DeadLetterMessages, .. deadLettered]
+            };
+        }
+
+        return Task.FromResult(deadLettered.Count);
+    }
+
     public Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
@@ -207,6 +246,88 @@ public sealed class DemoServiceBusClient : IServiceBusClient
 
     public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default) =>
         Task.CompletedTask;
+
+    public Task<int> ResendMessagesAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, bool deadLetter, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (sequenceNumbers.Count == 0 || !_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            return Task.FromResult(0);
+        }
+
+        var requested = new HashSet<long>();
+        foreach (var s in sequenceNumbers)
+        {
+            if (!long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                throw new InvalidOperationException($"Sequence number '{s}' is not valid.");
+            }
+
+            requested.Add(parsed);
+        }
+
+        // Move semantics, mirroring the Azure client: the copy (fresh MessageId, broker fields
+        // cleared) lands on the NServiceBus.FailedQ target — or the source entity when the header
+        // is absent — and the original leaves the source list.
+        var source = deadLetter ? entityData.DeadLetterMessages : entityData.ActiveMessages;
+        var kept = new List<SbMessage>(source.Count);
+        var moved = new List<(string Target, SbMessage Clone)>();
+        foreach (var message in source)
+        {
+            if (message.SequenceNumber is { } seq && requested.Remove(seq))
+            {
+                var applicationProperties = new Dictionary<string, object>(message.ApplicationProperties);
+                applicationProperties.Remove("DeadLetterReason");
+                applicationProperties.Remove("DeadLetterErrorDescription");
+                moved.Add((ResolveResendTarget(message, entityPath), new SbMessage
+                {
+                    MessageId = Guid.NewGuid().ToString(),
+                    CorrelationId = message.CorrelationId,
+                    Subject = message.Subject,
+                    ContentType = message.ContentType,
+                    Body = message.Body,
+                    ApplicationProperties = applicationProperties,
+                    EnqueuedAt = DateTimeOffset.UtcNow,
+                    SequenceNumber = Interlocked.Increment(ref _nextSequence),
+                    SessionId = message.SessionId
+                }));
+            }
+            else
+            {
+                kept.Add(message);
+            }
+        }
+
+        _entityData[entityPath] = deadLetter
+            ? entityData with { DeadLetterMessages = kept }
+            : entityData with { ActiveMessages = kept };
+
+        foreach (var (target, clone) in moved)
+        {
+            var targetData = _entityData.TryGetValue(target, out var existing)
+                ? existing
+                : new DemoEntityData([], []);
+            _entityData[target] = targetData with { ActiveMessages = [.. targetData.ActiveMessages, clone] };
+        }
+
+        return Task.FromResult(moved.Count);
+    }
+
+    private static string ResolveResendTarget(SbMessage message, string fallbackEntityPath)
+    {
+        if (message.ApplicationProperties.TryGetValue("NServiceBus.FailedQ", out var value) &&
+            value is string failedQueue &&
+            !string.IsNullOrWhiteSpace(failedQueue))
+        {
+            return failedQueue.Split('@')[0];
+        }
+
+        // Subscriptions are receive-only — the sendable fallback is the parent topic.
+        const string marker = "/subscriptions/";
+        var markerIndex = fallbackEntityPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        return markerIndex > 0 ? fallbackEntityPath[..markerIndex] : fallbackEntityPath;
+    }
 
     public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) =>
         Task.CompletedTask;

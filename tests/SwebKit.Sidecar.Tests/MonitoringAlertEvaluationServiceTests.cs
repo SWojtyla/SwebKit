@@ -104,6 +104,35 @@ public class MonitoringAlertEvaluationServiceTests
     }
 
     [Fact]
+    public async Task EvaluationCompleted_CarriesStatusAndMessage_ForEachOutcome()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+        var okSource = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Ok);
+        var errSource = new FakeSignalSource(AlertRuleSource.ServiceBusDlqDepth, AlertSignalStatus.Error);
+        var engine = Build(repo, okSource, errSource);
+
+        var okRule = Rule(AlertRuleSource.AksPodHealth);
+        var errRule = Rule(AlertRuleSource.ServiceBusDlqDepth);
+        await repo.SaveAllAsync([okRule, errRule]);
+        await engine.ReloadRulesAsync();
+
+        var events = new List<AlertEvaluatedEvent>();
+        engine.EvaluationCompleted += e => events.Add(e);
+
+        await engine.RunEvaluationOnceAsync();
+
+        var ok = Assert.Single(events, e => e.RuleId == okRule.Id);
+        Assert.Equal(AlertSignalStatus.Ok, ok.Status);
+        Assert.Equal($"value for {okRule.Name}", ok.Message);
+
+        // FakeSignalSource throws for Error — the engine reports the exception message.
+        var err = Assert.Single(events, e => e.RuleId == errRule.Id);
+        Assert.Equal(AlertSignalStatus.Error, err.Status);
+        Assert.Equal("fake signal failure", err.Message);
+    }
+
+    [Fact]
     public async Task DisabledRule_IsNotEvaluated()
     {
         using var _ = new AppDataSandbox();

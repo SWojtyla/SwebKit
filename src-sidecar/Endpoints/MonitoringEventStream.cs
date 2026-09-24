@@ -29,6 +29,10 @@ internal sealed class MonitoringEventStream
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
+        // The frontend types these payloads with string-union enums ("Critical", "AksPodHealth",
+        // "Error") — without the converter they streamed as numbers, so severity comparisons and
+        // badge lookups on the client silently never matched.
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
     };
 
     private readonly Channel<string> _frames = Channel.CreateUnbounded<string>(new UnboundedChannelOptions

@@ -53,6 +53,7 @@ public sealed class MonitoringActionExecutor : IAgentActionExecutor
             AksPodParams = source is AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore
                 ? new AksPodAlertParams
                 {
+                    KubeconfigContext = Get(args, "aks_context") ?? string.Empty,
                     Namespace = Get(args, "aks_namespace") ?? string.Empty,
                     RestartThreshold = GetInt(args, "aks_restart_threshold") ?? 5,
                     HealthScoreThreshold = GetDouble(args, "aks_health_score_threshold") ?? 0.25,

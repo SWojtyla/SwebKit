@@ -296,4 +296,92 @@ public class AgentSystemPromptBuilderTests
         Assert.Contains("(+5 more)", prompt);
         Assert.DoesNotContain("rel44", prompt);
     }
+
+    [Fact]
+    public void Build_NamedMaps_RenderUnderTheirOwnHeaders()
+    {
+        var builder = BuilderWith(profiles =>
+        {
+            var payments = new WorkspaceMap { Name = "Payments" };
+            payments.Nodes.Add(Node("n1", WorkspaceResourceArea.Aks, "prod/api", "api"));
+            var shipping = new WorkspaceMap { Name = "Shipping" };
+            shipping.Nodes.Add(Node("n2", WorkspaceResourceArea.Redis, "cache-1", "sessions"));
+            profiles.Config.Maps.AddRange([payments, shipping]);
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true);
+
+        Assert.Contains("## Workspace maps", prompt);
+        Assert.Contains("### Payments", prompt);
+        Assert.Contains("### Shipping", prompt);
+    }
+
+    [Fact]
+    public void Build_ScopedToOneMap_RendersOnlyThatMap()
+    {
+        // The proactive-investigation runner passes just the map the fired resource matched —
+        // other projects' maps stay out of the model's context.
+        WorkspaceMap? payments = null;
+        var builder = BuilderWith(profiles =>
+        {
+            payments = new WorkspaceMap { Name = "Payments" };
+            payments.Nodes.Add(Node("n1", WorkspaceResourceArea.Aks, "prod/api", "api"));
+            var shipping = new WorkspaceMap { Name = "Shipping" };
+            shipping.Nodes.Add(Node("n2", WorkspaceResourceArea.Redis, "cache-1", "sessions"));
+            profiles.Config.Maps.AddRange([payments, shipping]);
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true, maps: [payments!]);
+
+        Assert.Contains("### Payments", prompt);
+        Assert.DoesNotContain("Shipping", prompt);
+    }
+
+    [Fact]
+    public void Build_ScopedToAnEmptyList_OmitsTheMapSectionEntirely()
+    {
+        // The no-map investigation variant: an explicit empty list means "nothing matched" —
+        // different from null (render everything), so the runner can suppress the section.
+        var builder = BuilderWith(profiles =>
+        {
+            var m = new WorkspaceMap { Name = "Payments" };
+            m.Nodes.Add(Node("n1", WorkspaceResourceArea.Aks, "prod/api", "api"));
+            profiles.Config.Maps.Add(m);
+        });
+
+        var prompt = builder.Build(context: null, "ask", "feature", hasToolCalling: true, maps: []);
+
+        Assert.DoesNotContain("## Workspace map", prompt);
+        Assert.DoesNotContain("Payments", prompt);
+    }
+
+    // ── Background-investigation variant (ai-insight-reports) ──
+
+    [Fact]
+    public void Build_BackgroundInvestigation_DropsInteractiveOnlyGuidance_ButKeepsWorkspaceContext()
+    {
+        var prompt = CreateBuilder().Build(context: null, "ask", "workspace", hasToolCalling: true,
+            forBackgroundInvestigation: true);
+
+        // The interactive response-format block would contradict the runner's JSON-only contract.
+        Assert.DoesNotContain("## Response format", prompt);
+        Assert.DoesNotContain("bullet points and tables", prompt);
+        // Nobody reads the reply live — "tell the user to switch modes" is dead guidance.
+        Assert.DoesNotContain("Ask & do", prompt);
+        // The investigation-scoped tool policy replaces the interactive one.
+        Assert.Contains("## Tool policy (background investigation)", prompt);
+        Assert.Contains("read-only", prompt);
+        // Role + workspace context are what the investigation reasons over — they stay.
+        Assert.Contains("SwebKit Assistant", prompt);
+        Assert.Contains("## Current workspace context", prompt);
+    }
+
+    [Fact]
+    public void Build_InteractiveTurn_UnchangedByTheNewParameter()
+    {
+        var prompt = CreateBuilder().Build(context: null, "ask", "workspace", hasToolCalling: true);
+
+        Assert.Contains("## Response format", prompt);
+        Assert.Contains("## Tool policy (Ask mode)", prompt);
+    }
 }

@@ -29,7 +29,8 @@ public sealed class GetPodStatusTool : IAgentTool
           "type": "object",
           "properties": {
             "pod_name": { "type": "string", "description": "Name of the pod" },
-            "namespace": { "type": "string", "description": "Kubernetes namespace (default: \"default\")" }
+            "namespace": { "type": "string", "description": "Kubernetes namespace (default: \"default\")" },
+            "context": { "type": "string", "description": "Optional kubeconfig context — target this cluster instead of the globally configured one" }
           },
           "required": ["pod_name"]
         }
@@ -45,7 +46,7 @@ public sealed class GetPodStatusTool : IAgentTool
             : "default";
 
         // Use DemoAksClient in demo mode
-        IAksClient client = _appState.UseDemoData ? _demoAksClient : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
+        IAksClient client = AksToolContext.ResolveClient(_aksFactory, _demoAksClient, _appState, AksToolContext.GetContext(arguments));
         var pods = await client.GetPodsAsync(ns, null, ct);
         var targetPod = pods.FirstOrDefault(p => p.Name.Equals(podName, StringComparison.OrdinalIgnoreCase));
 

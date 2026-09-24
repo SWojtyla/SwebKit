@@ -1,0 +1,24 @@
+{
+  "theme": "",
+  "warmupConnectionsOnStartup": true,
+  "restoreLastWorkspaceOnStartup": true,
+  "sessionCount": 1,
+  "fathomUnlocked": false,
+  "fathomDeveloperOverride": false,
+  "fontSize": "medium",
+  "density": "comfortable",
+  "pinnedPortForwards": {},
+  "autoSaveRequests": false,
+  "verifyApiClientSsl": true,
+  "apiClientRequestTabs": false,
+  "agent": {
+    "isEnabled": false,
+    "profiles": [],
+    "activeProfileId": "",
+    "modelOverride": ""
+  },
+  "logging": {
+    "enabled": true,
+    "minimumLevel": "Warning"
+  }
+}

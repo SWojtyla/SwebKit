@@ -533,6 +533,33 @@ public class DemoAksClientTests
     }
 
     [Fact]
+    public async Task DeleteHpaAsync_RemovesHpaFromSubsequentLists()
+    {
+        var before = (await _client.GetHpasAsync("default")).ToList();
+        var target = before.First(h => !h.IsKedaManaged);
+
+        await _client.DeleteHpaAsync("default", target.Name);
+
+        var after = (await _client.GetHpasAsync("default")).ToList();
+        Assert.DoesNotContain(after, h => h.Name == target.Name);
+        Assert.Equal(before.Count - 1, after.Count);
+    }
+
+    [Fact]
+    public async Task DeleteHpaAsync_KedaManagedHpa_AlsoRemovedFromList()
+    {
+        // The real client deletes the owning ScaledObject for a KEDA-managed HPA — the HPA
+        // alone would be recreated — so the demo models the observable outcome: the row is
+        // gone from subsequent lists.
+        var keda = (await _client.GetHpasAsync("default")).Single(h => h.IsKedaManaged);
+
+        await _client.DeleteHpaAsync("default", keda.Name);
+
+        var after = await _client.GetHpasAsync("default");
+        Assert.DoesNotContain(after, h => h.Name == keda.Name);
+    }
+
+    [Fact]
     public async Task StreamDeploymentLogsAsync_EmitsLinesWithPodName()
     {
         var lines = new List<AggregatedLogLine>();

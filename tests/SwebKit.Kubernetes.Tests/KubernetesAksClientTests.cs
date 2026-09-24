@@ -1126,6 +1126,59 @@ users:
         Assert.Equal(string.Empty, resolved);
     }
 
+    // ── GetKedaScaledObjectName() ──
+    // DeleteHpaAsync/SetHpaScalingEnabledAsync decide between the HPA and its owning KEDA
+    // ScaledObject purely from the `scaledobject.keda.sh/name` label on the HPA's metadata.
+
+    [Fact]
+    public void GetKedaScaledObjectName_ReturnsName_WhenKedaLabelPresent()
+    {
+        var meta = new V1ObjectMeta
+        {
+            Labels = new Dictionary<string, string>
+            {
+                [AksScalingAnnotations.KedaScaledObjectNameLabel] = "order-queue-scaler",
+            },
+        };
+
+        Assert.Equal("order-queue-scaler", KubernetesAksClient.GetKedaScaledObjectName(meta));
+    }
+
+    [Fact]
+    public void GetKedaScaledObjectName_ReturnsNull_ForPlainHpa()
+    {
+        var meta = new V1ObjectMeta
+        {
+            Labels = new Dictionary<string, string> { ["app"] = "orders" },
+        };
+
+        Assert.Null(KubernetesAksClient.GetKedaScaledObjectName(meta));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void GetKedaScaledObjectName_ReturnsNull_WhenLabelValueMissingOrBlank(string? value)
+    {
+        var meta = new V1ObjectMeta
+        {
+            Labels = new Dictionary<string, string>
+            {
+                [AksScalingAnnotations.KedaScaledObjectNameLabel] = value!,
+            },
+        };
+
+        Assert.Null(KubernetesAksClient.GetKedaScaledObjectName(meta));
+    }
+
+    [Fact]
+    public void GetKedaScaledObjectName_ReturnsNull_WhenMetadataOrLabelsAbsent()
+    {
+        Assert.Null(KubernetesAksClient.GetKedaScaledObjectName(null));
+        Assert.Null(KubernetesAksClient.GetKedaScaledObjectName(new V1ObjectMeta()));
+    }
+
     private sealed class TempKubeconfig(DirectoryInfo directory, string path) : IDisposable
     {
         public string Path { get; } = path;

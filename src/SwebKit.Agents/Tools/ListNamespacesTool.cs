@@ -22,13 +22,19 @@ public sealed class ListNamespacesTool : IAgentTool
     public FeatureArea FeatureArea => FeatureArea.Aks;
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
-        { "type": "object", "properties": {}, "required": [] }
+        {
+          "type": "object",
+          "properties": {
+            "context": { "type": "string", "description": "Optional kubeconfig context — list namespaces in this cluster instead of the globally configured one" }
+          },
+          "required": []
+        }
         """);
 
     public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
     {
         // Use DemoAksClient in demo mode
-        IAksClient client = _appState.UseDemoData ? _demoAksClient : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
+        IAksClient client = AksToolContext.ResolveClient(_aksFactory, _demoAksClient, _appState, AksToolContext.GetContext(arguments));
         var namespaces = await client.GetNamespacesAsync(ct);
         return JsonSerializer.Serialize(new { namespaces });
     }

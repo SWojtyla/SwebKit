@@ -2,6 +2,7 @@ using Azure.Core;
 using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
@@ -443,6 +444,41 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         return completed;
     }
 
+    public async Task<int> DeadLetterMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)
+    {
+        if (sequenceNumbers.Count == 0)
+        {
+            return 0;
+        }
+
+        var deadLettered = 0;
+        await using var receiver = _client.CreateReceiver(entityPath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = Math.Min(MaxReceiveBatchSize, sequenceNumbers.Count)
+        });
+
+        await MessageSequenceProcessor.ProcessAsync(
+            new HashSet<long>(sequenceNumbers),
+            MaxReceiveBatchSize,
+            ReceiveWaitTime,
+            (count, waitTime, token) => receiver.ReceiveMessagesAsync(count, waitTime, token),
+            static message => message.SequenceNumber,
+            async (message, token) =>
+            {
+                await receiver.DeadLetterMessageAsync(
+                    message,
+                    deadLetterReason: "SwebKit.ManualTransfer",
+                    deadLetterErrorDescription: "Moved to the dead-letter queue by the user",
+                    cancellationToken: token).ConfigureAwait(false);
+                deadLettered++;
+            },
+            (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
+            ct).ConfigureAwait(false);
+
+        return deadLettered;
+    }
+
     public async Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default)
     {
         var purgePath = deadLetter ? $"{entityPath}/$DeadLetterQueue" : entityPath;
@@ -514,7 +550,10 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         }
 
         var dlqPath = $"{entityPath}/$DeadLetterQueue";
-        var target = targetEntityPath ?? entityPath;
+        // The fallback target must be sendable: a subscription path is receive-only,
+        // so it normalizes to the parent topic (same rule as resend's FailedQ fallback).
+        var target = targetEntityPath
+            ?? (TryParseSubscriptionPath(entityPath, out var fallbackTopic, out _) ? fallbackTopic : entityPath);
         var requestedSequenceNumbers = ParseRequestedSequenceNumbers(sequenceNumbers);
 
         await using var receiver = _client.CreateReceiver(dlqPath, new ServiceBusReceiverOptions
@@ -524,7 +563,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         });
         await using var sender = _client.CreateSender(target);
 
-        await DeadLetterSequenceProcessor.ProcessAsync(
+        await MessageSequenceProcessor.ProcessAsync(
             requestedSequenceNumbers,
             MaxReceiveBatchSize,
             ReceiveWaitTime,
@@ -569,6 +608,90 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         }
     }
 
+    public async Task<int> ResendMessagesAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, bool deadLetter, CancellationToken ct = default)
+    {
+        if (sequenceNumbers.Count == 0)
+        {
+            return 0;
+        }
+
+        var sourcePath = deadLetter ? $"{entityPath}/$DeadLetterQueue" : entityPath;
+        var requestedSequenceNumbers = ParseRequestedSequenceNumbers(sequenceNumbers);
+        var resent = 0;
+
+        await using var receiver = _client.CreateReceiver(sourcePath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = Math.Min(MaxReceiveBatchSize, requestedSequenceNumbers.Count)
+        });
+
+        // Senders are keyed per resolved target — a selection can mix messages that failed in
+        // different queues, and creating a sender per message would churn AMQP links.
+        var senders = new Dictionary<string, ServiceBusSender>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            await MessageSequenceProcessor.ProcessAsync(
+                requestedSequenceNumbers,
+                MaxReceiveBatchSize,
+                ReceiveWaitTime,
+                (count, waitTime, token) => receiver.ReceiveMessagesAsync(count, waitTime, token),
+                static message => message.SequenceNumber,
+                async (message, token) =>
+                {
+                    // The fallback when no FailedQ header exists is the *sendable* path:
+                    // a subscription is receive-only, so it normalizes to the parent topic
+                    // (same rule as the composer's sendableEntityPath client-side).
+                    var fallback = TryParseSubscriptionPath(entityPath, out var fallbackTopic, out _)
+                        ? fallbackTopic
+                        : entityPath;
+                    var target = ResolveResendTarget(message, fallback);
+                    if (!senders.TryGetValue(target, out var sender))
+                    {
+                        sender = _client.CreateSender(target);
+                        senders[target] = sender;
+                    }
+
+                    var forwarded = new ServiceBusMessage(message) { MessageId = Guid.NewGuid().ToString() };
+                    forwarded.ApplicationProperties.Remove("DeadLetterReason");
+                    forwarded.ApplicationProperties.Remove("DeadLetterErrorDescription");
+                    await sender.SendMessageAsync(forwarded, token).ConfigureAwait(false);
+                    await receiver.CompleteMessageAsync(message, token).ConfigureAwait(false);
+                    resent++;
+                },
+                (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
+                ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            foreach (var sender in senders.Values)
+            {
+                await sender.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        return resent;
+    }
+
+    /// <summary>
+    /// Resolves the queue a message should be resent to: the <c>NServiceBus.FailedQ</c>
+    /// application property when present (the queue the message failed in — the same target
+    /// ServiceInsight/ServicePulse retry to), otherwise <paramref name="fallbackEntityPath"/>.
+    /// </summary>
+    internal static string ResolveResendTarget(ServiceBusReceivedMessage message, string fallbackEntityPath)
+    {
+        if (message.ApplicationProperties.TryGetValue("NServiceBus.FailedQ", out var value) &&
+            value is string failedQueue &&
+            !string.IsNullOrWhiteSpace(failedQueue))
+        {
+            // MSMQ-era values can carry an "@machine" suffix; the Service Bus transport only
+            // ever uses the bare entity name (which cannot itself contain '@').
+            var atIndex = failedQueue.IndexOf('@');
+            return atIndex > 0 ? failedQueue[..atIndex] : failedQueue;
+        }
+
+        return fallbackEntityPath;
+    }
+
     public async Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default)
     {
         if (sequenceNumbers.Count == 0)
@@ -585,7 +708,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             PrefetchCount = Math.Min(MaxReceiveBatchSize, requestedSequenceNumbers.Count)
         });
 
-        await DeadLetterSequenceProcessor.ProcessAsync(
+        await MessageSequenceProcessor.ProcessAsync(
             requestedSequenceNumbers,
             MaxReceiveBatchSize,
             ReceiveWaitTime,
@@ -704,10 +827,42 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             ContentType = m.ContentType,
             SessionId = m.SessionId
         };
-        foreach (var (k, v) in m.ApplicationProperties)
-            msg.ApplicationProperties[k] = v;
+        // The dictionary is nullable in practice: a JSON body carrying "applicationProperties":
+        // null binds as null rather than the initialized empty dictionary.
+        if (m.ApplicationProperties is not null)
+        {
+            foreach (var (k, v) in m.ApplicationProperties)
+                msg.ApplicationProperties[k] = NormalizePropertyValue(v);
+        }
         return msg;
     }
+
+    /// <summary>
+    /// Converts an application-property value into a type AMQP accepts.
+    /// </summary>
+    /// <remarks>
+    /// Messages bound from a JSON body (send/replay/resend round-trips through the sidecar)
+    /// arrive with <see cref="JsonElement"/> values — System.Text.Json materializes
+    /// <c>Dictionary&lt;string, object&gt;</c> entries that way — and a raw
+    /// <see cref="JsonElement"/> is not an AMQP-serializable type, so every send of a
+    /// peeked message with properties used to fail as an opaque 500. Numbers stay integral
+    /// when they fit; objects/arrays (not representable as an AMQP map value) degrade to
+    /// their raw JSON text.
+    /// </remarks>
+    internal static object? NormalizePropertyValue(object? value) => value switch
+    {
+        JsonElement e => e.ValueKind switch
+        {
+            JsonValueKind.String => e.GetString(),
+            JsonValueKind.Number when e.TryGetInt64(out var l) => l,
+            JsonValueKind.Number => e.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => e.GetRawText(),
+        },
+        _ => value,
+    };
 
     public async ValueTask DisposeAsync()
     {

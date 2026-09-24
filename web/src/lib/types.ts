@@ -22,6 +22,11 @@ export interface AppConfig {
     favoriteEntities: FavoriteEntity[];
     favoriteResources: FavoriteResource[];
     keyVaults: KeyVaultEntry[];
+    /** The user-curated workspace maps (Settings → Map) — one named component
+     * graph per project/environment. */
+    maps: WorkspaceMap[];
+    /** Legacy single-map storage — pre-maps profiles still carry nodes here and
+     * the sidecar migrates them into `maps` on load/save. */
     topology: WorkspaceTopology;
 }
 
@@ -39,6 +44,9 @@ export interface WorkspaceResourceNode {
     area: WorkspaceResourceArea;
     resourceKey: string;
     displayLabel: string;
+    /** Optional kubeconfig context for AKS nodes — pins the node to one cluster;
+     * null/absent means "whatever context is globally configured". */
+    kubeconfigContext?: string | null;
 }
 
 export interface WorkspaceResourceRelationship {
@@ -53,12 +61,21 @@ export interface WorkspaceTopology {
     relationships: WorkspaceResourceRelationship[];
 }
 
+/** One named workspace map — a project/environment's own component graph. */
+export interface WorkspaceMap extends WorkspaceTopology {
+    id: string;
+    name: string;
+}
+
 /** Not-yet-added node the user can pick from — computed by the sidecar from existing config, never
  * persisted itself. See `GET /api/workspace/topology/candidates`. */
 export interface WorkspaceResourceCandidate {
     area: WorkspaceResourceArea;
     resourceKey: string;
     displayLabel: string;
+    /** Same semantics as `WorkspaceResourceNode.kubeconfigContext` — carried
+     * through so adding an AKS candidate preserves its cluster. */
+    kubeconfigContext?: string | null;
 }
 
 /** A candidate relationship the heuristic scan found but nobody has confirmed yet
@@ -937,6 +954,7 @@ export interface HpaInfo {
     currentCpuUtilizationPercent: number | null;
     targetCpuUtilizationPercent: number | null;
     isKedaManaged: boolean;
+    scaledObjectName: string | null;
     isScalingDisabled: boolean;
 }
 

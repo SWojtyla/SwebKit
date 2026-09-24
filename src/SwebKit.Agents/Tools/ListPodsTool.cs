@@ -40,6 +40,10 @@ public sealed class ListPodsTool : IAgentTool
             "label_selector": {
               "type": "string",
               "description": "Optional Kubernetes label selector, e.g. \"app=myservice\""
+            },
+            "context": {
+              "type": "string",
+              "description": "Optional kubeconfig context — target this cluster instead of the globally configured one"
             }
           },
           "required": []
@@ -57,7 +61,7 @@ public sealed class ListPodsTool : IAgentTool
             : null;
 
         // Use DemoAksClient in demo mode
-        IAksClient client = _appState.UseDemoData ? _demoAksClient : _aksFactory.Create(_appState.Config.AksConfig?.KubeconfigContext, _appState.Config.AksConfig?.KubeconfigPath);
+        IAksClient client = AksToolContext.ResolveClient(_aksFactory, _demoAksClient, _appState, AksToolContext.GetContext(arguments));
 
         var pods = await client.GetPodsAsync(ns, labelSelector, ct);
 

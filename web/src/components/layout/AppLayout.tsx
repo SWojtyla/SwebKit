@@ -41,12 +41,19 @@ import {
     useUpdateUserSettings,
     useWorkspaceWarmup,
 } from "@/lib/hooks";
-import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
+import {
+    loadViewPreference,
+    saveViewPreference,
+} from "@/lib/stores/panel-preferences";
 import { notifyScreenRouteChanged } from "@/lib/stores/screen-state";
 import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
 import { useSettingsStore, isTheme } from "@/lib/stores/settings";
 import { useMonitoringStream } from "@/lib/hooks/useMonitoring";
-import { onSidecarLifecycleEvent, restartSidecar, showNotification } from "@/lib/tauri-bridge";
+import {
+    onSidecarLifecycleEvent,
+    restartSidecar,
+    showNotification,
+} from "@/lib/tauri-bridge";
 import { initSidecarBaseUrl } from "@/lib/api";
 import { useNotification } from "./NotificationSystem";
 import { ActivityIndicator } from "@/components/shared/ActivityIndicator";
@@ -112,7 +119,9 @@ export function AppLayout() {
     // effect below can overwrite it with "/" on this very launch — then navigate
     // back to it once settings resolve, but only while still sitting on "/"
     // (any explicit navigation away means the user already chose a page).
-    const [initialRoute] = useState(() => loadViewPreference<string>("last-route", ""));
+    const [initialRoute] = useState(() =>
+        loadViewPreference<string>("last-route", ""),
+    );
     const restoredRef = useRef(false);
     useEffect(() => {
         if (restoredRef.current || !userSettings) return;
@@ -169,14 +178,41 @@ export function AppLayout() {
     useMonitoringStream(
         (evt) => {
             void showNotification(evt.ruleName, evt.message);
-            notify(evt.severity === "Critical" ? "error" : "success", evt.ruleName, evt.message, undefined, "/monitoring");
+            notify(
+                evt.severity === "Critical" ? "error" : "success",
+                evt.ruleName,
+                evt.message,
+                undefined,
+                "/monitoring",
+            );
         },
         (insight) => {
             void showNotification(
                 "Investigation ready",
                 `${insight.ruleName} — ${insight.summary.slice(0, 200)}`,
             );
-            notify("info", "Investigation ready", `${insight.ruleName} — ${insight.summary.slice(0, 120)}`, undefined, "/monitoring");
+            notify(
+                "info",
+                "Investigation ready",
+                `${insight.ruleName} — ${insight.summary.slice(0, 120)}`,
+                undefined,
+                "/monitoring",
+            );
+        },
+        undefined,
+        // Terminal investigation outcomes toast too — a fired alert that produced no insight
+        // was previously completely silent (resource not on the Map, AI disabled, no
+        // tool-calling profile), which read as "monitoring is broken". "Started" is skipped:
+        // the running card on the Monitoring page covers the in-flight state.
+        (status) => {
+            if (status.stage === "Started") return;
+            notify(
+                status.stage === "Failed" ? "error" : "info",
+                `AI investigation ${status.stage === "Skipped" ? "skipped" : "failed"}`,
+                `${status.ruleName}${status.reason ? ` — ${status.reason}` : ""}`,
+                undefined,
+                "/monitoring",
+            );
         },
     );
 
@@ -542,7 +578,9 @@ export function AppLayout() {
                             <button
                                 onClick={handleReconnect}
                                 disabled={reconnecting}
-                                title={reconnecting ? "Reconnecting…" : undefined}
+                                title={
+                                    reconnecting ? "Reconnecting…" : undefined
+                                }
                                 className="ml-1 rounded border px-1.5 py-0.5 text-[11px] hover:bg-accent disabled:opacity-50"
                                 data-testid="status-bar-reconnect"
                             >

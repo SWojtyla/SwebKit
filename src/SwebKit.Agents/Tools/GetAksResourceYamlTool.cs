@@ -21,7 +21,8 @@ public sealed class GetAksResourceYamlTool(
           "properties": {
             "kind": { "type": "string", "description": "Kubernetes resource kind, for example Deployment." },
             "name": { "type": "string", "description": "Resource name." },
-            "namespace": { "type": "string", "description": "Kubernetes namespace. Omit to use the UI selection or configured default." }
+            "namespace": { "type": "string", "description": "Kubernetes namespace. Omit to use the UI selection or configured default." },
+            "context": { "type": "string", "description": "Optional kubeconfig context — target this cluster instead of the globally configured one." }
           },
           "required": ["kind", "name"]
         }
@@ -37,7 +38,7 @@ public sealed class GetAksResourceYamlTool(
         var ns = ResolveNamespace(arguments, appState);
         try
         {
-            var yaml = await Client().GetResourceYamlAsync(ns, kind, name, ct);
+            var yaml = await Client(AksToolContext.GetContext(arguments)).GetResourceYamlAsync(ns, kind, name, ct);
             var truncated = yaml.Length > MaxResultCharacters;
             if (truncated) yaml = yaml[..MaxResultCharacters] + "\n# Truncated by SwebKit; request a narrower resource if possible.";
             return JsonSerializer.Serialize(new { kind, name, namespace_name = ns, yaml, truncated });
@@ -48,9 +49,8 @@ public sealed class GetAksResourceYamlTool(
         }
     }
 
-    private IAksClient Client() => appState.UseDemoData
-        ? demoAksClient
-        : aksFactory.Create(appState.Config.AksConfig?.KubeconfigContext, appState.Config.AksConfig?.KubeconfigPath);
+    private IAksClient Client(string? context) =>
+        AksToolContext.ResolveClient(aksFactory, demoAksClient, appState, context);
 
     internal static string ResolveNamespace(JsonElement arguments, AppStateService appState)
     {

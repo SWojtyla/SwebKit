@@ -141,6 +141,45 @@ public class PodHealthDiffTests
         Assert.Equal("Running", result[0].PreviousPhase);
     }
 
+    // ── Test 6b ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Diff_PendingToFailed_EmitsPodFailed()
+    {
+        // A pod that never reached Running (init crash, bad image) is just as much a
+        // failure as Running → Failed — this is the demo client's search-indexer scenario.
+        var existing = new Dictionary<string, PodSnapshot>
+        {
+            ["pod-f0"] = Snap("Pending", ready: 0)
+        };
+        var current = new List<PodInfo> { MakePod("pod-f0", "Failed", ready: 0, status: "Error") };
+
+        var result = PodHealthDiffer.Diff(TestNs, existing, current, NoCooldowns, Now);
+
+        Assert.Single(result);
+        Assert.Equal(PodHealthEventType.PodFailed, result[0].EventType);
+        Assert.Equal("Pending", result[0].PreviousPhase);
+        Assert.Equal("Failed", result[0].CurrentPhase);
+    }
+
+    // ── Test 6c ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Diff_FailedStaysFailed_NoEvent()
+    {
+        // A pod still Failed on the next tick must not re-fire — cooldown is rule-level
+        // and shouldn't be the only thing standing between the user and per-tick alerts.
+        var existing = new Dictionary<string, PodSnapshot>
+        {
+            ["pod-f1"] = Snap("Failed", ready: 0)
+        };
+        var current = new List<PodInfo> { MakePod("pod-f1", "Failed", ready: 0, status: "Error") };
+
+        var result = PodHealthDiffer.Diff(TestNs, existing, current, NoCooldowns, Now);
+
+        Assert.Empty(result);
+    }
+
     // ── Test 7 ───────────────────────────────────────────────────────────────
 
     [Fact]

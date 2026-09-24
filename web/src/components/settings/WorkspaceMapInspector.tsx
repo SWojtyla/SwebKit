@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { GitBranch, Trash2 } from "lucide-react";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { useAksContexts } from "@/lib/hooks";
 import { DraftInput } from "./DraftInput";
 import type {
     WorkspaceRelationshipSuggestion,
@@ -23,6 +24,9 @@ interface WorkspaceMapInspectorProps {
     /** Session-visible suggestions (dismissed ones already filtered out). */
     suggestions: WorkspaceRelationshipSuggestion[];
     onRenameNode: (id: string, label: string) => void;
+    /** Re-pins an AKS node to a kubeconfig context (null = follows the globally
+     * configured one). Only wired for AKS nodes. */
+    onSetNodeContext?: (id: string, kubeconfigContext: string | null) => void;
     onRemoveNode: (id: string) => void;
     onAddRelationship: (fromId: string, toId: string, label: string) => void;
     onRemoveRelationship: (id: string) => void;
@@ -44,6 +48,7 @@ export function WorkspaceMapInspector({
     node,
     suggestions,
     onRenameNode,
+    onSetNodeContext,
     onRemoveNode,
     onAddRelationship,
     onRemoveRelationship,
@@ -126,6 +131,12 @@ export function WorkspaceMapInspector({
                 >
                     {node.resourceKey}
                 </div>
+                {node.area === "Aks" && onSetNodeContext && (
+                    <AksContextSelect
+                        node={node}
+                        onSetNodeContext={onSetNodeContext}
+                    />
+                )}
                 {orphan && (
                     <p
                         className="rounded-md bg-warning/10 px-2 py-1 text-xs text-warning"
@@ -264,7 +275,9 @@ export function WorkspaceMapInspector({
                                 setRelLabel("");
                             }}
                             disabled={!relTo}
-                            title={!relTo ? "Pick a target node first" : undefined}
+                            title={
+                                !relTo ? "Pick a target node first" : undefined
+                            }
                             className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
                             data-testid="workspace-relationship-add"
                         >
@@ -282,6 +295,50 @@ export function WorkspaceMapInspector({
                     onDismiss={onDismissSuggestion}
                 />
             )}
+        </div>
+    );
+}
+
+/** Which cluster an AKS node points at — "Configured context" (null) follows
+ * whatever the AKS settings currently resolve; a named context pins the node to
+ * that cluster so the same namespace on two clusters stays distinguishable. */
+function AksContextSelect({
+    node,
+    onSetNodeContext,
+}: {
+    node: WorkspaceResourceNode;
+    onSetNodeContext: (id: string, ctx: string | null) => void;
+}) {
+    const { data: contexts } = useAksContexts();
+    return (
+        <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Cluster:</span>
+            <select
+                value={node.kubeconfigContext ?? ""}
+                onChange={(e) =>
+                    onSetNodeContext(node.id, e.target.value || null)
+                }
+                className="min-w-0 flex-1 rounded-md border bg-card px-2 py-1 text-xs"
+                data-testid="workspace-inspector-context"
+                aria-label="Kubeconfig context"
+            >
+                <option value="">Configured context</option>
+                {(contexts ?? []).map((c) => (
+                    <option key={c.name} value={c.name}>
+                        {c.name}
+                    </option>
+                ))}
+                {/* A pinned context the kubeconfig no longer lists still renders —
+                 * selecting another option is how you fix it. */}
+                {node.kubeconfigContext &&
+                    !(contexts ?? []).some(
+                        (c) => c.name === node.kubeconfigContext,
+                    ) && (
+                        <option value={node.kubeconfigContext}>
+                            {node.kubeconfigContext} (not in kubeconfig)
+                        </option>
+                    )}
+            </select>
         </div>
     );
 }

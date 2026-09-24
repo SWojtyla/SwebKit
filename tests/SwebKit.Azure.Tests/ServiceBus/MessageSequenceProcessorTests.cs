@@ -2,7 +2,7 @@ using SwebKit.Azure.ServiceBus;
 
 namespace SwebKit.Azure.Tests.ServiceBus;
 
-public sealed class DeadLetterSequenceProcessorTests
+public sealed class MessageSequenceProcessorTests
 {
     [Fact]
     public async Task ProcessAsync_ContinuesAcrossBatchesUntilAllRequestedMessagesAreProcessed()
@@ -15,7 +15,7 @@ public sealed class DeadLetterSequenceProcessorTests
         var processed = new List<long>();
         var released = new List<long>();
 
-        await DeadLetterSequenceProcessor.ProcessAsync(
+        await MessageSequenceProcessor.ProcessAsync(
             requestedSequenceNumbers: [1001, 1002],
             maxBatchSize: 100,
             receiveWaitTime: TimeSpan.FromSeconds(1),
@@ -50,7 +50,7 @@ public sealed class DeadLetterSequenceProcessorTests
         ]);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            DeadLetterSequenceProcessor.ProcessAsync(
+            MessageSequenceProcessor.ProcessAsync(
                 requestedSequenceNumbers: [1001, 1002],
                 maxBatchSize: 100,
                 receiveWaitTime: TimeSpan.FromSeconds(1),
@@ -69,7 +69,7 @@ public sealed class DeadLetterSequenceProcessorTests
         cts.Cancel();
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            DeadLetterSequenceProcessor.ProcessAsync(
+            MessageSequenceProcessor.ProcessAsync(
                 requestedSequenceNumbers: [1001],
                 maxBatchSize: 100,
                 receiveWaitTime: TimeSpan.FromSeconds(1),

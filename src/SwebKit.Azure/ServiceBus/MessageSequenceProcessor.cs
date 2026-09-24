@@ -1,6 +1,11 @@
 namespace SwebKit.Azure.ServiceBus;
 
-internal static class DeadLetterSequenceProcessor
+/// <summary>
+/// Drives receive-match-process loops over a queue or dead-letter receiver until a requested
+/// set of sequence numbers is exhausted. Shared by the DLQ resubmit/complete paths and the
+/// active-queue resend path.
+/// </summary>
+internal static class MessageSequenceProcessor
 {
     public static async Task ProcessAsync<TMessage>(
         IReadOnlyCollection<long> requestedSequenceNumbers,
@@ -48,7 +53,7 @@ internal static class DeadLetterSequenceProcessor
         if (remaining.Count > 0)
         {
             throw new InvalidOperationException(
-                $"Dead-letter operation could not find the requested sequence numbers: {string.Join(", ", remaining.OrderBy(static sequenceNumber => sequenceNumber))}.");
+                $"The operation could not find the requested sequence numbers: {string.Join(", ", remaining.OrderBy(static sequenceNumber => sequenceNumber))}.");
         }
     }
 }

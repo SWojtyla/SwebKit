@@ -149,6 +149,47 @@ public class MonitoringEventStreamTests
     }
 
     [Fact]
+    public async Task RunAsync_KeepsTheEvaluationCompletedEnvelope()
+    {
+        var (context, body) = BuildContext();
+        var stream = new MonitoringEventStream();
+        var run = stream.RunAsync(context, CancellationToken.None, NoKeepAlive);
+
+        // AlertEvaluatedEvent is what useMonitoringStream's third callback parses — the
+        // field names here are the wire contract.
+        stream.Enqueue("evaluationCompleted", new AlertEvaluatedEvent(
+            "r1", AlertSignalStatus.Error, DateTimeOffset.UtcNow, "connection refused"));
+        stream.Complete();
+        await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var text = body.Text;
+        Assert.Contains("\"kind\":\"evaluationCompleted\"", text);
+        Assert.Contains("\"ruleId\":\"r1\"", text);
+        Assert.Contains("\"status\":\"Error\"", text);
+        Assert.Contains("\"evaluatedAt\":", text);
+        Assert.Contains("connection refused", text);
+    }
+
+    [Fact]
+    public async Task RunAsync_KeepsTheProactiveInsightStatusEnvelope()
+    {
+        var (context, body) = BuildContext();
+        var stream = new MonitoringEventStream();
+        var run = stream.RunAsync(context, CancellationToken.None, NoKeepAlive);
+
+        stream.Enqueue("proactiveInsightStatus", new ProactiveInsightStatusEvent(
+            "r1", DateTimeOffset.UtcNow, "Pod restart rate", ProactiveInsightStage.Skipped,
+            "\"prod\" is not on the Map"));
+        stream.Complete();
+        await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var text = body.Text;
+        Assert.Contains("\"kind\":\"proactiveInsightStatus\"", text);
+        Assert.Contains("\"stage\":\"Skipped\"", text);
+        Assert.Contains("not on the Map", text);
+    }
+
+    [Fact]
     public async Task RunAsync_SetsSseResponseHeaders()
     {
         var (context, body) = BuildContext();

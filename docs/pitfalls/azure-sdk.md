@@ -75,7 +75,7 @@ All Entra ID authenticated clients in this repo (Storage, Service Bus, Key Vault
 1. **Environment.** The kubeconfig AKS writes uses an exec credential plugin: `kubelogin get-token --login azurecli`, which shells out to `az`. If the Azure CLI is uninstalled or half-installed (the classic leftover is `C:\Program Files\Microsoft SDKs\Azure\CLI2` retaining only `Lib\site-packages` and `Scripts\__pycache__`, with no `wbin\az.cmd`), the plugin exits non-zero with `failed to get token: AzureCLICredential: Azure CLI not found on path`. `KubernetesClientConfiguration` leaves `AccessToken` empty, so every API call gets **401**.
 2. **Code.** The 401 was then swallowed three times over: `TryApplyAzureCredentialFallback` had a bare `catch {}`, `WithAuthRetryAsync` only classified **403**, and `AksClientBootstrapper.TryLoadNamespacesAsync`'s generic catch logged at `Debug` and returned an empty list with a `null` warning. An empty namespace list is indistinguishable from a cluster that has none.
 
-**Diagnosis:** Run `kubectl get namespaces` in a terminal — it prints the plugin's real stderr, which the app never captured. Then check `Get-Command az` and whether the install directory actually contains `wbin\az.cmd`. Note that a leftover `%USERPROFILE%\.azure\azureProfile.json` makes it *look* like the CLI is still installed.
+**Diagnosis:** Run `kubectl get namespaces` in a terminal — it prints the plugin's real stderr, which the app never captured. Then check `Get-Command az` and whether the install directory actually contains `wbin\az.cmd`. Note that a leftover `%USERPROFILE%\.azure\azureProfile.json` makes it _look_ like the CLI is still installed.
 
 **Fix (environment):** Reinstall the Azure CLI and `az login`. Nothing in the app can mint a token otherwise: `AzureCredentialOptions` excludes `InteractiveBrowserCredential`, and the remaining `DefaultAzureCredential` legs need either `az` or the `Az.Accounts` PowerShell module.
 
@@ -94,8 +94,8 @@ All Entra ID authenticated clients in this repo (Storage, Service Bus, Key Vault
 ## AZ-6 — A per-request SDK client is a connection leak that presents as slowness, then as a hang
 
 **Symptom:** A feature area feels sluggish, gets worse the longer the app stays open, and
-eventually commands take seconds and may never visibly fail. The user's words: *"I don't know if
-it crashed or just takes ages."* Restarting the app fixes it for a while.
+eventually commands take seconds and may never visibly fail. The user's words: _"I don't know if
+it crashed or just takes ages."_ Restarting the app fixes it for a while.
 
 **Cause:** An endpoint builds its SDK client per request and never disposes it. Each one holds a
 live connection — a `ConnectionMultiplexer` for Redis, an AMQP connection for Service Bus, an
@@ -105,7 +105,7 @@ out to `az account get-access-token`, once per request).
 
 The failure mode is the nasty part. Azure Cache for Redis caps connections per tier, and
 `AbortOnConnectFail = false` — which this repo sets deliberately, so startup survives a
-temporarily unreachable cache — means a connect **past** the cap still *succeeds*. Every command
+temporarily unreachable cache — means a connect **past** the cap still _succeeds_. Every command
 on that dead multiplexer then blocks for the full async timeout before throwing, so the app hangs
 rather than reporting a connection problem.
 
@@ -146,6 +146,26 @@ entities but not read runtime properties should still get a tree.
 
 Note AZ-2 still applies — the entity-scoped connection-string fallback cannot list and must keep
 reading its single entity's stats directly.
+
+---
+
+## AZ-8 — JSON-bound `Dictionary<string, object>` values are `JsonElement`, which AMQP cannot serialize
+
+**Symptom:** Sending (or replaying/resending) a message that carries application properties fails
+server-side with an opaque 500 "Internal server error" — peeking the same message works fine.
+
+**Cause:** `SbMessage.ApplicationProperties` is `Dictionary<string, object>`. When a request body
+is bound from JSON, System.Text.Json materializes every `object` value as a boxed
+`JsonElement` — not a `string`, `long`, or `bool`. The send path then copies those values into
+`ServiceBusMessage.ApplicationProperties`, and the AMQP serializer rejects `JsonElement` as an
+unsupported type. The exception isn't an `InvalidOperationException`/`ServiceBusException`, so it
+collapsed to the generic 500 instead of a mapped status.
+
+**Fix:** `AzureServiceBusClient.NormalizePropertyValue` unwraps `JsonElement` to AMQP primitives
+(string/integral→`long`/fractional→`double`/`bool`/`null`) and degrades objects/arrays to raw JSON
+text. `MapToSdk` applies it to every property. The same rule applies anywhere a JSON-bound
+`Dictionary<string, object>` reaches an Azure SDK bag of `object` values — normalize before
+assigning, never trust the declared `object` type.
 
 ---
 

@@ -4,7 +4,10 @@ import type {
     WorkspaceResourceCandidate,
     WorkspaceTopology,
 } from "@/lib/types";
-import type { TopologyGraphEdge, TopologyGraphNode } from "@/components/shared/TopologyGraph";
+import type {
+    TopologyGraphEdge,
+    TopologyGraphNode,
+} from "@/components/shared/TopologyGraph";
 
 export const AREA_LABELS: Record<WorkspaceResourceArea, string> = {
     Aks: "AKS",
@@ -22,7 +25,10 @@ export const AREAS: WorkspaceResourceArea[] = [
     "Storage",
 ];
 
-export const EMPTY_TOPOLOGY: WorkspaceTopology = { nodes: [], relationships: [] };
+export const EMPTY_TOPOLOGY: WorkspaceTopology = {
+    nodes: [],
+    relationships: [],
+};
 
 export const suggestionKey = (fromNodeId: string, toNodeId: string) =>
     `${fromNodeId}|${toNodeId}`;
@@ -125,21 +131,32 @@ export const suggestionsForNode = (
     suggestions: WorkspaceRelationshipSuggestion[],
     nodeId: string,
 ) =>
-    suggestions.filter(
-        (s) => s.fromNodeId === nodeId || s.toNodeId === nodeId,
-    );
+    suggestions.filter((s) => s.fromNodeId === nodeId || s.toNodeId === nodeId);
 
-/** Remaining (not-yet-added) candidates grouped by area, sorted by label. */
+/** Remaining (not-yet-added) candidates grouped by area, sorted by label.
+ * The dedupe key includes the kubeconfig context — "prod/api" on cluster A and
+ * "prod/api" on cluster B are different resources, and a map can hold both. */
 export function groupCandidates(
     candidates: WorkspaceResourceCandidate[],
     topology: WorkspaceTopology,
 ): Map<WorkspaceResourceArea, WorkspaceResourceCandidate[]> {
+    const key = (
+        area: WorkspaceResourceArea,
+        resourceKey: string,
+        ctx?: string | null,
+    ) => `${area}|${ctx ?? ""}|${resourceKey}`;
     const added = new Set(
-        topology.nodes.map((n) => `${n.area}|${n.resourceKey}`),
+        topology.nodes.map((n) =>
+            key(n.area, n.resourceKey, n.kubeconfigContext),
+        ),
     );
-    const groups = new Map<WorkspaceResourceArea, WorkspaceResourceCandidate[]>();
+    const groups = new Map<
+        WorkspaceResourceArea,
+        WorkspaceResourceCandidate[]
+    >();
     for (const c of candidates) {
-        if (added.has(`${c.area}|${c.resourceKey}`)) continue;
+        if (added.has(key(c.area, c.resourceKey, c.kubeconfigContext)))
+            continue;
         const list = groups.get(c.area) ?? [];
         list.push(c);
         groups.set(c.area, list);

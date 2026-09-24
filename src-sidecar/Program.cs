@@ -88,6 +88,12 @@ builder.Services.AddSingleton<ScheduledMessageRepository>();
 builder.Services.AddSingleton<SwebKit.Core.Configuration.AlertRuleRepository>();
 builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertRuleRepository>(
     sp => sp.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>());
+
+// Persisted AI insight reports (ai-insight-reports) — the permanent record behind the
+// Monitoring "AI Reports" tab; the seeded chat session it points at stays in-memory.
+builder.Services.AddSingleton<SwebKit.Core.Configuration.ProactiveInsightReportRepository>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IProactiveInsightReportRepository>(
+    sp => sp.GetRequiredService<SwebKit.Core.Configuration.ProactiveInsightReportRepository>());
 builder.Services.AddSingleton<SwebKit.Sidecar.Services.SidecarMonitoringConnectionPool>();
 builder.Services.AddSingleton<SwebKit.Core.Abstractions.IMonitoringConnectionPool>(
     sp => sp.GetRequiredService<SwebKit.Sidecar.Services.SidecarMonitoringConnectionPool>());

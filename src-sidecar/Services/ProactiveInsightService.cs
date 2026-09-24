@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using SwebKit.Agents;
 using SwebKit.Core.Abstractions;
@@ -21,6 +22,20 @@ public sealed record ProactiveInsightReadyEvent(
     string SessionId,
     IReadOnlyList<string>? Evidence = null);
 
+public enum ProactiveInsightStage { Started, Skipped, Failed }
+
+/// <summary>Lifecycle event for a background proactive investigation — without it every
+/// early-return gate in <see cref="ProactiveInsightService"/> was a silent drop, so a fired
+/// alert could produce no insight and no explanation anywhere in the UI. <see cref="Reason"/>
+/// carries the human-readable cause for <see cref="ProactiveInsightStage.Skipped"/> and
+/// <see cref="ProactiveInsightStage.Failed"/>.</summary>
+public sealed record ProactiveInsightStatusEvent(
+    string RuleId,
+    DateTimeOffset FiredAt,
+    string RuleName,
+    ProactiveInsightStage Stage,
+    string? Reason = null);
+
 /// <summary>
 /// Subscribes to <see cref="MonitoringAlertEvaluationService.AlertFired"/> (workspace-intelligence
 /// Module 4) and, when a fired rule's resource maps to a node in the user-curated workspace
@@ -43,6 +58,7 @@ public sealed record ProactiveInsightReadyEvent(
 public sealed class ProactiveInsightService
 {
     private readonly IAlertRuleRepository _rules;
+    private readonly IProactiveInsightReportRepository _reports;
     private readonly ProfileRepository _profiles;
     private readonly IAgentToolRegistry _toolRegistry;
     private readonly IAgentModelClient _modelClient;
@@ -54,9 +70,16 @@ public sealed class ProactiveInsightService
 
     public event Action<ProactiveInsightReadyEvent>? InsightReady;
 
+    /// <summary>Raised for every investigation outcome other than success: <c>Started</c> when
+    /// the runner kicks off, <c>Skipped</c> when a gate rejects it (with the reason), and
+    /// <c>Failed</c> when it errors out. Streamed to the UI so an alert that produces no insight
+    /// still produces an explanation.</summary>
+    public event Action<ProactiveInsightStatusEvent>? InsightStatus;
+
     public ProactiveInsightService(
         MonitoringAlertEvaluationService engine,
         IAlertRuleRepository rules,
+        IProactiveInsightReportRepository reports,
         ProfileRepository profiles,
         IAgentToolRegistry toolRegistry,
         IAgentModelClient modelClient,
@@ -66,6 +89,7 @@ public sealed class ProactiveInsightService
         ILogger<ProactiveInsightService> logger)
     {
         _rules = rules;
+        _reports = reports;
         _profiles = profiles;
         _toolRegistry = toolRegistry;
         _modelClient = modelClient;
@@ -85,6 +109,18 @@ public sealed class ProactiveInsightService
         _ = Task.Run(() => HandleAlertFiredAsync(evt));
     }
 
+    private void RaiseStatus(AlertFiredEvent evt, ProactiveInsightStage stage, string? reason = null)
+    {
+        try
+        {
+            InsightStatus?.Invoke(new ProactiveInsightStatusEvent(evt.RuleId, evt.FiredAt, evt.RuleName, stage, reason));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "InsightStatus handler threw for rule {RuleId}", evt.RuleId);
+        }
+    }
+
     private async Task HandleAlertFiredAsync(AlertFiredEvent evt)
     {
         if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
@@ -92,6 +128,7 @@ public sealed class ProactiveInsightService
             _logger.LogInformation(
                 "Dropped proactive insight for rule {RuleId} ({RuleName}) — another investigation is already in flight.",
                 evt.RuleId, evt.RuleName);
+            RaiseStatus(evt, ProactiveInsightStage.Skipped, "another investigation is already in flight");
             return;
         }
 
@@ -99,31 +136,44 @@ public sealed class ProactiveInsightService
         {
             var hasToolCalling = (_settings.Settings.Agent.GetActiveProfile()?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
             if (!hasToolCalling)
+            {
+                RaiseStatus(evt, ProactiveInsightStage.Skipped, "no agent profile with tool calling is configured");
                 return; // Module 7: nothing a tool-less model could usefully investigate with
+            }
 
             var rule = await _rules.GetByIdAsync(evt.RuleId);
             if (rule is null)
+            {
+                RaiseStatus(evt, ProactiveInsightStage.Skipped, "the rule was deleted before the investigation started");
                 return; // rule was deleted between firing and now — nothing to correlate against
+            }
 
             if (!rule.AiInvestigationEnabled)
             {
                 _logger.LogInformation(
                     "Skipped proactive insight for rule {RuleId} ({RuleName}) — AI investigation is disabled on this rule.",
                     evt.RuleId, evt.RuleName);
+                RaiseStatus(evt, ProactiveInsightStage.Skipped, "AI investigation is disabled on this rule");
                 return;
             }
 
             var start = FindStartingResource(rule);
             if (start is null)
+            {
+                RaiseStatus(evt, ProactiveInsightStage.Skipped, "this alert source can't be mapped to a workspace resource");
                 return; // this rule's source type isn't one we know how to map to a topology node
+            }
 
-            var topology = _profiles.Config.Topology;
-            var startNode = topology.Nodes.FirstOrDefault(n =>
-                n.Area == start.Value.Area &&
-                (n.ResourceKey.Contains(start.Value.Hint, StringComparison.OrdinalIgnoreCase) ||
-                 n.DisplayLabel.Contains(start.Value.Hint, StringComparison.OrdinalIgnoreCase)));
-            if (startNode is null)
-                return; // the fired rule's resource isn't on the Map yet — nothing declared to correlate
+            // A fired resource that isn't on any map no longer gates the investigation — the
+            // model has workspace-scope tools and can correlate on its own. The map only scopes
+            // *which* declared relationships it sees (the map containing the resource, auto-matched
+            // across every map the profile carries).
+            var config = _profiles.Config;
+            var effectiveContext = start.Value.Context
+                ?? (start.Value.Area == WorkspaceResourceArea.Aks ? config.AksConfig?.KubeconfigContext : null);
+            var match = WorkspaceMapLookup.FindNode(config.EffectiveMaps(), start.Value.Area, start.Value.Hint, effectiveContext);
+
+            RaiseStatus(evt, ProactiveInsightStage.Started);
 
             // agent-workspace-awareness Module 2: prefer the bounded model-driven investigation
             // (the model picks its own read-only evidence path across the workspace). When it
@@ -133,7 +183,7 @@ public sealed class ProactiveInsightService
             try
             {
                 result = await _investigationRunner.InvestigateAsync(
-                    evt, $"{start.Value.Area}/{start.Value.Hint}", CancellationToken.None);
+                    evt, DescribeStart(start.Value, effectiveContext), match?.Map, CancellationToken.None);
             }
             catch (Exception ex)
             {
@@ -145,32 +195,72 @@ public sealed class ProactiveInsightService
             string summary;
             string reportJson;
             IReadOnlyList<string>? evidence = null;
+            var report = new ProactiveInsightReport
+            {
+                RuleId = evt.RuleId,
+                RuleName = evt.RuleName,
+                FiredAt = evt.FiredAt,
+                AlertMessage = evt.Message,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
             if (result is not null)
             {
                 summary = result.Hypothesis;
                 reportJson = BuildReportJson(result);
                 evidence = result.Evidence;
+                report.Severity = result.Severity;
+                report.Evidence = [.. result.Evidence];
+                report.SuggestedNextSteps = [.. result.SuggestedNextSteps];
+                report.ProposedFix = result.ProposedFix;
+                report.ToolsUsed = [.. result.ToolsUsed];
+                report.HitMaxRounds = result.HitMaxRounds;
             }
             else
             {
                 reportJson = await _toolRegistry.ExecuteAsync(
                     "investigate_workspace_issue",
-                    BuildArgs(new { area = start.Value.Area.ToString(), resource_hint = start.Value.Hint }),
+                    BuildArgs(new
+                    {
+                        area = start.Value.Area.ToString(),
+                        resource_hint = start.Value.Hint,
+                        context = effectiveContext,
+                        map_id = match?.Map.Id,
+                    }),
                     CancellationToken.None);
 
                 summary = await SummarizeAsync(evt, reportJson) ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(summary))
+                {
+                    RaiseStatus(evt, ProactiveInsightStage.Failed, "the investigation produced no summary");
                     return; // summarization failed — a missing insight is fine, a garbled one is not
+                }
             }
 
             var sessionId = $"proactive-{evt.RuleId}-{evt.FiredAt.ToUnixTimeMilliseconds()}";
-            _chatService.SeedProactiveInsightSession(sessionId, evt.RuleName, evt.Message, reportJson, summary);
+            report.Id = sessionId;
+            report.SessionId = sessionId;
+            report.Hypothesis = summary;
+            report.ReportJson = reportJson;
+
+            _chatService.SeedProactiveInsightSession(sessionId, evt.RuleName, evt.Message, FormatReportMarkdown(report));
+
+            // Persist before raising InsightReady so a report is on disk even if the app closes
+            // right after the notification. A persistence failure must not eat the insight.
+            try
+            {
+                await _reports.UpsertAsync(report);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist proactive insight report for rule {RuleId} ({RuleName})", evt.RuleId, evt.RuleName);
+            }
 
             InsightReady?.Invoke(new ProactiveInsightReadyEvent(evt.RuleId, evt.FiredAt, evt.RuleName, summary, sessionId, evidence));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Proactive insight investigation failed for rule {RuleId} ({RuleName})", evt.RuleId, evt.RuleName);
+            RaiseStatus(evt, ProactiveInsightStage.Failed, ex.Message);
         }
         finally
         {
@@ -199,26 +289,96 @@ public sealed class ProactiveInsightService
         }
     }
 
-    /// <summary>Maps a fired rule's own params to the same (area, hint) shape
+    /// <summary>Renders the starting resource for the runner's user message — "Aks/prod" for a
+    /// context-less match, "Aks/aks-dev/dev-briocomp" when a kubeconfig context pins the cluster,
+    /// so the model knows which cluster's tools to point at.</summary>
+    private static string DescribeStart(
+        (WorkspaceResourceArea Area, string Hint, string? Context) start, string? effectiveContext) =>
+        string.IsNullOrWhiteSpace(effectiveContext)
+            ? $"{start.Area}/{start.Hint}"
+            : $"{start.Area}/{effectiveContext}/{start.Hint}";
+
+    /// <summary>Maps a fired rule's own params to the same (area, hint, context) shape
     /// <c>InvestigateWorkspaceIssueTool</c> expects — the rule doesn't carry an internal
     /// <c>WorkspaceResourceNode</c> id any more than the model does, so this is the same
-    /// hint-matching approach, not a different mechanism.</summary>
-    private static (WorkspaceResourceArea Area, string Hint)? FindStartingResource(MonitoringAlertRule rule) => rule.Source switch
+    /// hint-matching approach, not a different mechanism. <c>Context</c> is the rule's pinned
+    /// kubeconfig context for AKS sources (null for everything else and for rules that follow
+    /// the globally configured context).</summary>
+    private static (WorkspaceResourceArea Area, string Hint, string? Context)? FindStartingResource(MonitoringAlertRule rule) => rule.Source switch
     {
         AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore =>
-            string.IsNullOrWhiteSpace(rule.AksPodParams?.Namespace) ? null : (WorkspaceResourceArea.Aks, rule.AksPodParams.Namespace),
+            string.IsNullOrWhiteSpace(rule.AksPodParams?.Namespace)
+                ? null
+                : (WorkspaceResourceArea.Aks, rule.AksPodParams.Namespace,
+                    string.IsNullOrWhiteSpace(rule.AksPodParams.KubeconfigContext) ? null : rule.AksPodParams.KubeconfigContext),
 
         AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or AlertRuleSource.ServiceBusDeadSubscription =>
-            string.IsNullOrWhiteSpace(rule.ServiceBusParams?.EntityPath) ? null : (WorkspaceResourceArea.ServiceBus, rule.ServiceBusParams.EntityPath),
+            string.IsNullOrWhiteSpace(rule.ServiceBusParams?.EntityPath) ? null : (WorkspaceResourceArea.ServiceBus, rule.ServiceBusParams.EntityPath, null),
 
         AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients =>
-            string.IsNullOrWhiteSpace(rule.RedisAlertParams?.ConnectionAlias) ? null : (WorkspaceResourceArea.Redis, rule.RedisAlertParams.ConnectionAlias),
+            string.IsNullOrWhiteSpace(rule.RedisAlertParams?.ConnectionAlias) ? null : (WorkspaceResourceArea.Redis, rule.RedisAlertParams.ConnectionAlias, null),
 
         AlertRuleSource.StorageBlobCount =>
-            string.IsNullOrWhiteSpace(rule.StorageParams?.AccountAlias) ? null : (WorkspaceResourceArea.Storage, rule.StorageParams.AccountAlias),
+            string.IsNullOrWhiteSpace(rule.StorageParams?.AccountAlias) ? null : (WorkspaceResourceArea.Storage, rule.StorageParams.AccountAlias, null),
 
         _ => null,
     };
+
+    /// <summary>Re-materializes the chat session for a persisted report (ai-insight-reports):
+    /// the in-memory <see cref="AgentSessionStore"/> idle-evicts sessions, so the seeded
+    /// conversation behind an hours-old report is usually gone — <see cref="SidecarAgentChatService.SeedProactiveInsightSession"/>
+    /// is idempotent, so calling it again either re-seeds the session from the stored report or
+    /// no-ops against the live one. Returns the session's current transcript.</summary>
+    public IReadOnlyList<AgentMessage> EnsureSession(ProactiveInsightReport report)
+    {
+        _chatService.SeedProactiveInsightSession(
+            report.SessionId, report.RuleName, report.AlertMessage ?? string.Empty, FormatReportMarkdown(report));
+        return _chatService.GetSessionMessages(report.SessionId);
+    }
+
+    /// <summary>Renders a persisted report as the seeded session's assistant message — readable
+    /// markdown sections (the chat UI renders <c>AgentMarkdown</c>) rather than the raw JSON dump
+    /// the first version used, which forced users to parse the whole payload to find the answer.
+    /// The raw report JSON rides along in a fenced block at the end so a follow-up turn still has
+    /// the full structured context.</summary>
+    private static string FormatReportMarkdown(ProactiveInsightReport report)
+    {
+        var sb = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(report.Severity))
+            sb.Append($"**Severity: {report.Severity}** — ");
+        sb.Append(report.Hypothesis);
+
+        if (report.Evidence.Count > 0)
+        {
+            sb.Append("\n\n### Evidence");
+            foreach (var item in report.Evidence)
+                sb.Append($"\n- {item}");
+        }
+
+        if (report.SuggestedNextSteps.Count > 0)
+        {
+            sb.Append("\n\n### Suggested next steps");
+            for (var i = 0; i < report.SuggestedNextSteps.Count; i++)
+                sb.Append($"\n{i + 1}. {report.SuggestedNextSteps[i]}");
+        }
+
+        if (report.ProposedFix is { Snippet.Length: > 0 } fix)
+        {
+            sb.Append("\n\n### Proposed fix");
+            if (!string.IsNullOrWhiteSpace(fix.Explanation))
+                sb.Append($"\n{fix.Explanation}");
+            var lang = string.IsNullOrWhiteSpace(fix.Language) ? "" : fix.Language;
+            sb.Append($"\n```{lang}\n{fix.Snippet}\n```");
+        }
+
+        if (report.ToolsUsed.Count > 0)
+            sb.Append($"\n\n_Investigation used: {string.Join(", ", report.ToolsUsed)}{(report.HitMaxRounds ? " (hit the tool-round limit — evidence may be partial)" : "")}_");
+
+        if (!string.IsNullOrWhiteSpace(report.ReportJson))
+            sb.Append($"\n\n### Full investigation data\n```json\n{report.ReportJson}\n```");
+
+        return sb.ToString();
+    }
 
     /// <summary>Serializes a <see cref="ProactiveInvestigationResult"/> into the report JSON the
     /// seeded session carries — the structured fields plus the tool audit trail, but not
@@ -231,6 +391,12 @@ public sealed class ProactiveInsightService
             evidence = result.Evidence,
             severity = result.Severity,
             suggested_next_steps = result.SuggestedNextSteps,
+            proposed_fix = result.ProposedFix is null ? null : new
+            {
+                explanation = result.ProposedFix.Explanation,
+                language = result.ProposedFix.Language,
+                snippet = result.ProposedFix.Snippet,
+            },
             tools_used = result.ToolsUsed,
             hit_max_rounds = result.HitMaxRounds,
         });

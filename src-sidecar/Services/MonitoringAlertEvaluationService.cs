@@ -163,13 +163,13 @@ public sealed class MonitoringAlertEvaluationService : BackgroundService
             {
                 _logger.LogWarning(ex, "Signal source {Source} threw for rule {RuleId}", rule.Source, rule.Id);
                 rule.LastEvaluatedAt = now;
-                EvaluationCompleted?.Invoke(new AlertEvaluatedEvent(rule.Id, AlertSignalStatus.Error, now));
+                EvaluationCompleted?.Invoke(new AlertEvaluatedEvent(rule.Id, AlertSignalStatus.Error, now, ex.Message));
                 ScheduleWithBackoff(rule.Id, now, intervalSeconds);
                 return;
             }
 
             rule.LastEvaluatedAt = now;
-            EvaluationCompleted?.Invoke(new AlertEvaluatedEvent(rule.Id, result.Status, now));
+            EvaluationCompleted?.Invoke(new AlertEvaluatedEvent(rule.Id, result.Status, now, result.Message));
 
             if (result.Status is AlertSignalStatus.Error or AlertSignalStatus.Skipped)
             {

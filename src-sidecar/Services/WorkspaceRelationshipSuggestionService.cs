@@ -42,75 +42,79 @@ public sealed class WorkspaceRelationshipSuggestionService
 
     public async Task<IReadOnlyList<WorkspaceRelationshipSuggestion>> GetSuggestionsAsync(CancellationToken ct)
     {
-        var topology = _profiles.Config.Topology;
-        var aksNodes = topology.Nodes.Where(n => n.Area == WorkspaceResourceArea.Aks).ToList();
-        var otherNodes = topology.Nodes.Where(n => n.Area != WorkspaceResourceArea.Aks).ToList();
-        if (aksNodes.Count == 0 || otherNodes.Count == 0)
-            return [];
-
-        // Reuses the same cached-client resolution Monitoring's alert engine already uses (demo vs.
-        // real AKS config handled once, in one place) — this scan shouldn't need its own connection
-        // logic just because it lives in a different feature.
-        var client = _connectionPool.GetAksClient();
-        if (client is null)
-            return [];
-
-        // Either direction — a confirmed A→B relationship should suppress suggesting B→A too.
-        var existingPairs = new HashSet<(string, string)>(
-            topology.Relationships.SelectMany(r => new[] { (r.FromNodeId, r.ToNodeId), (r.ToNodeId, r.FromNodeId) }));
-
         var suggestions = new List<WorkspaceRelationshipSuggestion>();
 
-        foreach (var aksNode in aksNodes)
+        // Per map, never across maps: a suggested edge only makes sense between nodes the user
+        // grouped into the same project graph.
+        foreach (var map in _profiles.Config.EffectiveMaps())
         {
-            var parts = aksNode.ResourceKey.Split('/', 2);
-            if (parts.Length != 2)
-                continue; // not the "namespace/deployment" shape Module 1's AKS candidates use
-
-            var (ns, deployment) = (parts[0], parts[1]);
-
-            Haystack haystack;
-            try
-            {
-                haystack = await CollectHaystackAsync(client, ns, deployment, ct);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception)
-            {
-                // Best-effort: a namespace/pod that no longer exists or a transient API error skips
-                // this one AKS node's scan rather than failing the whole request.
+            var aksNodes = map.Nodes.Where(n => n.Area == WorkspaceResourceArea.Aks).ToList();
+            var otherNodes = map.Nodes.Where(n => n.Area != WorkspaceResourceArea.Aks).ToList();
+            if (aksNodes.Count == 0 || otherNodes.Count == 0)
                 continue;
-            }
 
-            foreach (var otherNode in otherNodes)
+            // Either direction — a confirmed A→B relationship should suppress suggesting B→A too.
+            var existingPairs = new HashSet<(string, string)>(
+                map.Relationships.SelectMany(r => new[] { (r.FromNodeId, r.ToNodeId), (r.ToNodeId, r.FromNodeId) }));
+
+            foreach (var aksNode in aksNodes)
             {
-                if (existingPairs.Contains((aksNode.Id, otherNode.Id)))
+                var parts = aksNode.ResourceKey.Split('/', 2);
+                if (parts.Length != 2)
+                    continue; // namespace-level nodes have no deployment to scope the scan to
+
+                var (ns, deployment) = (parts[0], parts[1]);
+
+                // Reuses the same cached-client resolution Monitoring's alert engine already uses
+                // (demo vs. real AKS config handled once, in one place); the node's own
+                // kubeconfig context picks the right pooled client for multi-context maps.
+                var client = _connectionPool.GetAksClient(aksNode.KubeconfigContext);
+                if (client is null)
                     continue;
 
-                var matchFragment = ResourceKeyMatchFragment(otherNode);
-                if (matchFragment is null)
-                    continue;
-
-                var configMatch = haystack.ConfigValues.Any(value => value.Contains(matchFragment, StringComparison.OrdinalIgnoreCase));
-                // Config wins over logs for the same pair — a config hit is stronger evidence, and
-                // one suggestion per pair regardless of how many sources matched.
-                var logMatch = !configMatch &&
-                    haystack.LogLines.Any(line => line.Contains(matchFragment, StringComparison.OrdinalIgnoreCase));
-                if (configMatch || logMatch)
+                Haystack haystack;
+                try
                 {
-                    suggestions.Add(new WorkspaceRelationshipSuggestion
+                    haystack = await CollectHaystackAsync(client, ns, deployment, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    // Best-effort: a namespace/pod that no longer exists or a transient API error skips
+                    // this one AKS node's scan rather than failing the whole request.
+                    continue;
+                }
+
+                foreach (var otherNode in otherNodes)
+                {
+                    if (existingPairs.Contains((aksNode.Id, otherNode.Id)))
+                        continue;
+
+                    var matchFragment = ResourceKeyMatchFragment(otherNode);
+                    if (matchFragment is null)
+                        continue;
+
+                    var configMatch = haystack.ConfigValues.Any(value => value.Contains(matchFragment, StringComparison.OrdinalIgnoreCase));
+                    // Config wins over logs for the same pair — a config hit is stronger evidence, and
+                    // one suggestion per pair regardless of how many sources matched.
+                    var logMatch = !configMatch &&
+                        haystack.LogLines.Any(line => line.Contains(matchFragment, StringComparison.OrdinalIgnoreCase));
+                    if (configMatch || logMatch)
                     {
-                        FromNodeId = aksNode.Id,
-                        ToNodeId = otherNode.Id,
-                        Reason = configMatch
-                            ? $"Pod config in {ns}/{deployment} contains a value matching \"{otherNode.DisplayLabel}\" "
-                                + "— based on matching names in pod configuration; may miss or misidentify real relationships."
-                            : $"Recent pod logs in {ns}/{deployment} mention \"{otherNode.DisplayLabel}\" "
-                                + "— weaker evidence than configuration (names can appear in error text); confirm before accepting.",
-                    });
+                        suggestions.Add(new WorkspaceRelationshipSuggestion
+                        {
+                            FromNodeId = aksNode.Id,
+                            ToNodeId = otherNode.Id,
+                            Reason = configMatch
+                                ? $"Pod config in {ns}/{deployment} contains a value matching \"{otherNode.DisplayLabel}\" "
+                                    + "— based on matching names in pod configuration; may miss or misidentify real relationships."
+                                : $"Recent pod logs in {ns}/{deployment} mention \"{otherNode.DisplayLabel}\" "
+                                    + "— weaker evidence than configuration (names can appear in error text); confirm before accepting.",
+                        });
+                    }
                 }
             }
         }

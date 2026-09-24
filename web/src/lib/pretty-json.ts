@@ -60,3 +60,23 @@ export function tryPrettifyJson(content: string): string | null {
         return null;
     }
 }
+
+/**
+ * Reindents a JSON object or array, or `null` when the content is not one.
+ *
+ * Unlike `tryPrettifyJson` this never unwraps string roots: callers editing a
+ * *payload* (Service Bus message bodies, templates) must not turn `"{"a":1}"`
+ * into `{"a":1}` — a JSON-encoded string is a legitimate body and unwrapping
+ * changes the bytes that get sent.
+ */
+export function tryReindentJson(content: string): string | null {
+    const trimmed = stripPreamble(content);
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+    try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (typeof parsed !== "object" || parsed === null) return null;
+        return JSON.stringify(parsed, null, 2);
+    } catch {
+        return null;
+    }
+}

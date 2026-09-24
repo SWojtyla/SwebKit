@@ -46,6 +46,7 @@ public sealed class ProposeCreateAlertRuleTool : IAgentTool
             "interval_seconds": { "type": "integer", "description": "Evaluation interval. Default 60." },
             "cooldown_minutes": { "type": "integer", "description": "Minimum minutes between firings. Default 5." },
             "ai_investigation_enabled": { "type": "boolean", "description": "Run a background AI investigation when this rule fires. Default true." },
+            "aks_context": { "type": "string", "description": "Aks* sources: kubeconfig context (cluster) to evaluate against. Empty = the globally configured context." },
             "aks_namespace": { "type": "string", "description": "Required for Aks* sources: the Kubernetes namespace to watch." },
             "aks_restart_threshold": { "type": "integer", "description": "AksPodRestartRate: restarts within the interval that count as firing. Default 5." },
             "aks_health_score_threshold": { "type": "number", "description": "Aks* health sources: unhealthy fraction that counts as firing. Default 0.25." },

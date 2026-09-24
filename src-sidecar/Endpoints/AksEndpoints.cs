@@ -58,10 +58,13 @@ public static class AksEndpoints
         return parsed;
     }
 
-    /// <summary>Handler body for the Deployments list endpoint, extracted so it's unit testable against a fake pool.</summary>
-    internal static async Task<IResult> GetDeploymentsAsync(string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    /// <summary>Handler body for the Deployments list endpoint, extracted so it's unit testable against a fake pool.
+    /// An explicit <paramref name="context"/> resolves a client for that kubeconfig context — the
+    /// Map picker's cross-cluster add flow uses it — while omitting it falls back to the configured
+    /// context as before.</summary>
+    internal static async Task<IResult> GetDeploymentsAsync(string ns, string? context, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
     {
-        var client = GetClient(pool);
+        var client = GetClient(pool, string.IsNullOrWhiteSpace(context) ? null : context);
         var namespaces = await ResolveNamespacesAsync(client, ns, ct);
         var deployments = await client.GetDeploymentsAsync(namespaces, ct);
         return Results.Ok(deployments);
@@ -101,6 +104,19 @@ public static class AksEndpoints
         var namespaces = await ResolveNamespacesAsync(client, ns, ct);
         var routes = await client.GetHttpRoutesAsync(namespaces, ct);
         return Results.Ok(routes);
+    }
+
+    /// <summary>
+    /// Handler body for the CronJob trigger endpoint, extracted so it's unit testable against a fake
+    /// pool/client. Returns the created Job names so the UI can surface them in its success toast —
+    /// the generated name is what the operator then looks for on the Jobs tab.
+    /// </summary>
+    internal static async Task<IResult> TriggerCronJobAsync(string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    {
+        var client = GetClient(pool);
+        var namespaces = await ResolveNamespacesAsync(client, ns, ct);
+        var jobNames = await Task.WhenAll(namespaces.Select(n => client.TriggerCronJobAsync(n, name, ct)));
+        return Results.Ok(new { jobNames });
     }
 
     /// <summary>Handler body for the connection-test endpoint, extracted so the error-sanitization
@@ -184,6 +200,19 @@ public static class AksEndpoints
         return Results.Ok(new { connected = true, context = request.Context });
     }
 
+    /// <summary>
+    /// Handler body for the namespaces list endpoint, extracted so it's unit testable against a
+    /// fake pool. An explicit <paramref name="context"/> resolves a client for that kubeconfig
+    /// context — monitoring rules can be pinned to a different cluster than the profile's
+    /// configured one — while omitting it falls back to the configured context as before.
+    /// </summary>
+    internal static async Task<IResult> GetNamespacesAsync(string? context, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct)
+    {
+        var client = GetClient(pool, string.IsNullOrWhiteSpace(context) ? null : context);
+        var namespaces = await client.GetNamespacesAsync(ct);
+        return Results.Ok(namespaces);
+    }
+
     public static void MapAksEndpoints(this WebApplication app)
     {
         // ── Connection / context ─────────────────────────────────────────────────
@@ -194,12 +223,7 @@ public static class AksEndpoints
 
         app.MapPost("/api/aks/context", SetContextAsync);
 
-        app.MapGet("/api/aks/namespaces", async (ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
-        {
-            var client = GetClient(pool);
-            var namespaces = await client.GetNamespacesAsync(ct);
-            return Results.Ok(namespaces);
-        });
+        app.MapGet("/api/aks/namespaces", GetNamespacesAsync);
 
         // ── Workloads ──────────────────────────────────────────────────────────
 
@@ -445,6 +469,8 @@ public static class AksEndpoints
             await Task.WhenAll(namespaces.Select(n => client.SuspendCronJobAsync(n, name, dto.Suspend, ct)));
             return Results.Ok();
         });
+
+        app.MapPost("/api/aks/{ns}/cronjobs/{name}/trigger", TriggerCronJobAsync);
 
         app.MapGet("/api/aks/{ns}/jobs", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {

@@ -3,14 +3,14 @@
 ## What Is Supported
 
 - Single-configuration editing for:
-  - Environment-scoped favorite resources, including named favorites and backward-compatible Service Bus pin data
-  - Azure DevOps organization and PAT credential-key settings
-  - Observability provider settings
-  - AKS kubeconfig/context defaults
-  - Incident Timeline workload mappings for App Insights, Service Bus, and Azure DevOps evidence
-  - Redis cache entries
-  - Storage (Azure Blob) account config
-  - User-curated workspace topology (Map tab): resources across AKS, Service Bus, Redis, SQL, and Storage linked by declared relationships; persisted as `AppConfig.Topology` and injected into every agent turn's system prompt (see `functionalities/agent.md`)
+    - Environment-scoped favorite resources, including named favorites and backward-compatible Service Bus pin data
+    - Azure DevOps organization and PAT credential-key settings
+    - Observability provider settings
+    - AKS kubeconfig/context defaults
+    - Incident Timeline workload mappings for App Insights, Service Bus, and Azure DevOps evidence
+    - Redis cache entries
+    - Storage (Azure Blob) account config
+    - User-curated workspace maps (Map tab): multiple named maps (`AppConfig.Maps`), each holding resources across AKS, Service Bus, Redis, SQL, and Storage linked by declared relationships — one map per project, so unrelated topologies don't bleed into each other. Maps are injected into every agent turn's system prompt (see `functionalities/agent.md`); legacy profiles carrying a single `AppConfig.Topology` migrate into a named map on load. AKS nodes can pin a kubeconfig context (`KubeconfigContext`) and are addable via a context → namespace → deployment picker.
 - Local recent-resource history persisted separately in `ui-state.json`
 - Shell appearance preferences persisted separately in `user-settings.json`
 - The appearance section exposes `Studio Ledger` as the curated dark default plus the supported light palettes, and legacy dark-theme aliases normalize to `Studio Ledger` when loaded.
