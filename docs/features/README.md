@@ -11,12 +11,7 @@ Plan files are the shared intent record: any tool or later session reads them to
   `docs/pitfalls/` or `docs/architecture/`, delete the plan file, and remove its
   line from this catalog. Git history preserves the full record.
 
-- `aks-multi-context-alerting/` — per-rule kubeconfig context pinning for AKS alert sources.
-- `agent-workspace-awareness/` — screen-state snapshots for the agent (pull-via-tool) + multi-step proactive investigation depth.
-- `api-client-fixes/` — secret-store variable resolution and bounded faker dates.
-- `service-bus-ux-overhaul/` — batch resend with regenerated MessageIds, composer as resizable side panel, templates manager, toolbar/overview declutter.
-
-- `aks-storage-ux-improvements.md` — Autoscaling tab (HPA + KEDA incl. ScaledJobs), CronJob schedule editor + next run, storage file shares, local-timezone display clarity.
+- `codebase-quality-program.md` — phased deep-scan megaplan: hygiene, architecture, per-feature deep dives, Dashboard AI cockpit.
 
 ## Plan file contract
 
