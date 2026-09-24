@@ -126,7 +126,7 @@ Seed findings found during recon:
 
 - **Phase 0** (2026-09-24): `dotnet build SwebKit.slnx` clean (0 warn/0 err);
   `dotnet test` 2260/2260 (Core 1074, Sidecar 542, Agents 258, K8s 159, Azure 152,
-  Sql 46, DevOps 29); vitest 534/534; `vite build` clean; Playwright: _running_
+  Sql 46, DevOps 29); vitest 534/534; `vite build` clean; Playwright 375/375
 
 ## Findings Log
 
