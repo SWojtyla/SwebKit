@@ -50,6 +50,8 @@ public sealed class AcpSessionEvent
 public sealed class AcpAgentHost : IAsyncDisposable
 {
     private const int ProtocolVersion = 1;
+    private static readonly string Version =
+        typeof(AcpAgentHost).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
     private readonly UserSettingsRepository _settings;
     private readonly ICredentialStore _credentials;
@@ -119,7 +121,7 @@ public sealed class AcpAgentHost : IAsyncDisposable
                 // Deliberately empty: fs/*, terminal/* and elicitation are all off, so the agent
                 // may only chat and use the MCP tools it's handed in session/new.
                 clientCapabilities = new { },
-                clientInfo = new { name = "swebkit", title = "SwebKit", version = "0.2.0" },
+                clientInfo = new { name = "swebkit", title = "SwebKit", version = Version },
             }, ct);
 
             _capabilities = ParseCapabilities(init);
@@ -302,7 +304,7 @@ public sealed class AcpAgentHost : IAsyncDisposable
             {
                 protocolVersion = ProtocolVersion,
                 clientCapabilities = new { },
-                clientInfo = new { name = "swebkit", title = "SwebKit", version = "0.2.0" },
+                clientInfo = new { name = "swebkit", title = "SwebKit", version = Version },
             }, ct);
 
             var caps = ParseCapabilities(init);
