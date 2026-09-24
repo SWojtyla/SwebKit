@@ -31,6 +31,7 @@ public sealed class DemoStorageClient : IStorageClient
     private readonly Dictionary<string, string> _blobContents;
     private readonly Dictionary<string, Dictionary<string, string>> _blobMetadata;
     private readonly Dictionary<string, List<DeletedBlobItem>> _deletedBlobsByContainer;
+    private readonly Dictionary<string, List<StorageShareEntryItem>> _shareEntries;
 
     public DemoStorageClient()
     {
@@ -172,6 +173,29 @@ public sealed class DemoStorageClient : IStorageClient
             ],
             ["fixtures"] =
             [],
+        };
+
+        var shareNow = DateTimeOffset.UtcNow;
+        _shareEntries = new Dictionary<string, List<StorageShareEntryItem>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["team-shared"] =
+            [
+                new("docs", true, null, shareNow.AddDays(-30)),
+                new("docs/onboarding.md", false, 8_432, shareNow.AddDays(-5)),
+                new("docs/architecture.drawio", false, 188_211, shareNow.AddDays(-12)),
+                new("media", true, null, shareNow.AddDays(-60)),
+                new("media/logo.svg", false, 4_112, shareNow.AddDays(-60)),
+                new("media/hero.png", false, 2_311_409, shareNow.AddDays(-21)),
+                new("readme.md", false, 1_204, shareNow.AddDays(-2)),
+                new("appsettings.json", false, 634, shareNow.AddDays(-1)),
+            ],
+            ["build-artifacts"] =
+            [
+                new("swebit-2.4.0", true, null, shareNow.AddDays(-10)),
+                new("swebit-2.4.0/swebit.msi", false, 48_112_340, shareNow.AddDays(-10)),
+                new("swebit-2.4.0/checksums.txt", false, 512, shareNow.AddDays(-10)),
+                new("latest.json", false, 226, shareNow.AddDays(-1)),
+            ],
         };
     }
 
@@ -465,6 +489,81 @@ public sealed class DemoStorageClient : IStorageClient
         return Task.FromResult<IReadOnlyList<DeletedBlobItem>>(
             list.Where(b => b.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList());
     }
+
+    // ── Azure Files (file shares) ─────────────────────────────────────────────
+
+    public Task<IReadOnlyList<StorageShareItem>> ListFileSharesAsync(CancellationToken ct = default)
+    {
+        IReadOnlyList<StorageShareItem> shares = _shareEntries.Keys
+            .Select(name => new StorageShareItem(name, QuotaGiB: 100, AccessTier: "TransactionOptimized", LastModified: DateTimeOffset.UtcNow.AddDays(-30)))
+            .ToList();
+        return Task.FromResult(shares);
+    }
+
+    public Task<StorageShareEntryPage> ListShareEntriesAsync(
+        string shareName, string directoryPath, string? continuationToken = null, int pageSize = 100, CancellationToken ct = default)
+    {
+        if (!_shareEntries.TryGetValue(shareName, out var entries))
+            return Task.FromResult(new StorageShareEntryPage([], null));
+
+        var prefix = string.IsNullOrEmpty(directoryPath) ? string.Empty : directoryPath.TrimEnd('/') + "/";
+        var items = entries
+            .Where(e => e.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                        && e.Name.Length > prefix.Length
+                        && !e.Name[prefix.Length..].Contains('/'))
+            .ToList();
+        return Task.FromResult(new StorageShareEntryPage(items, null));
+    }
+
+    public Task<ShareFileProperties> GetShareFilePropertiesAsync(string shareName, string filePath, CancellationToken ct = default)
+    {
+        var entry = _shareEntries.TryGetValue(shareName, out var list)
+            ? list.FirstOrDefault(e => e.Name.Equals(filePath, StringComparison.OrdinalIgnoreCase) && !e.IsDirectory)
+            : null;
+        if (entry is null)
+            return Task.FromException<ShareFileProperties>(new InvalidOperationException($"File '{filePath}' was not found in share '{shareName}'."));
+
+        return Task.FromResult(new ShareFileProperties(
+            filePath, entry.SizeBytes ?? 0, GuessShareContentType(filePath), entry.LastModified, "\"demo-etag\"",
+            new Dictionary<string, string> { ["demo"] = "true" }));
+    }
+
+    public async Task<ShareFileContent> GetShareFileContentAsync(
+        string shareName, string filePath, int maxBytes = 524_288, CancellationToken ct = default)
+    {
+        var props = await GetShareFilePropertiesAsync(shareName, filePath, ct);
+        if (!IsTextFile(props.ContentType))
+            return new ShareFileContent(shareName, filePath, string.Empty, props.ContentType, props.SizeBytes, false, true);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# Demo content for {filePath}");
+        sb.AppendLine($"# Share: {shareName}");
+        sb.AppendLine($"# Size: {props.SizeBytes:N0} bytes");
+        sb.AppendLine();
+        for (int i = 1; i <= 20; i++)
+            sb.AppendLine($"Line {i} of demo file content.");
+        return new ShareFileContent(shareName, filePath, sb.ToString(), props.ContentType, props.SizeBytes, false, false);
+    }
+
+    public Task<string> GetShareFileSasUrlAsync(string shareName, string filePath, TimeSpan expiry, CancellationToken ct = default)
+        => Task.FromResult($"https://devstore.file.core.windows.net/{Uri.EscapeDataString(shareName)}/{filePath}?sv=demo&se={DateTimeOffset.UtcNow.Add(expiry):O}&sp=r");
+
+    private static bool IsTextFile(string? contentType)
+        => string.IsNullOrEmpty(contentType)
+           || contentType.StartsWith("text/", StringComparison.Ordinal)
+           || contentType is "application/json" or "application/xml";
+
+    private static string GuessShareContentType(string filePath)
+        => Path.GetExtension(filePath).ToLowerInvariant() switch
+        {
+            ".json" => "application/json",
+            ".xml" => "application/xml",
+            ".csv" => "text/csv",
+            ".md" or ".txt" or ".log" => "text/plain",
+            ".svg" => "image/svg+xml",
+            ".png" => "image/png",
+            _ => "application/octet-stream",
+        };
 
     private static async Task WriteAsync(
         Stream destination,

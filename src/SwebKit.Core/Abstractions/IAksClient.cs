@@ -37,6 +37,14 @@ public interface IAksClient
         => Task.FromResult<IReadOnlyList<GatewayClassInfo>>([]);
     Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lists Envoy Gateway (<c>gateway.envoyproxy.io</c>) resources of one kind
+    /// (<paramref name="plural"/>, e.g. <c>backendtrafficpolicies</c>). Returns an empty list when
+    /// the Envoy Gateway CRDs are not installed on the cluster.
+    /// </summary>
+    Task<IReadOnlyList<EnvoyResourceInfo>> GetEnvoyResourcesAsync(string ns, string plural, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<EnvoyResourceInfo>>([]);
     Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default);
     Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default);
@@ -139,6 +147,28 @@ public interface IAksClient
         => Task.FromException(
             new NotSupportedException("This AKS client does not support deleting HPAs."));
 
+    // ── KEDA ScaledJobs ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Lists KEDA <c>ScaledJob</c>s. Returns an empty list when the KEDA CRDs are not
+    /// installed — a cluster without KEDA legitimately has no scaled jobs.
+    /// </summary>
+    Task<IReadOnlyList<ScaledJobInfo>> GetScaledJobsAsync(string ns, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ScaledJobInfo>>([]);
+
+    /// <summary>Pauses/resumes a ScaledJob via the <c>autoscaling.keda.sh/paused</c> annotation.</summary>
+    Task SetScaledJobScalingEnabledAsync(string ns, string scaledJobName, bool enabled, CancellationToken ct = default)
+        => Task.FromException(
+            new NotSupportedException("This AKS client does not support toggling KEDA ScaledJobs."));
+
+    Task ScaleScaledJobAsync(string ns, string scaledJobName, int minReplicas, int maxReplicas, CancellationToken ct = default)
+        => Task.FromException(
+            new NotSupportedException("This AKS client does not support scaling KEDA ScaledJobs."));
+
+    Task DeleteScaledJobAsync(string ns, string scaledJobName, CancellationToken ct = default)
+        => Task.FromException(
+            new NotSupportedException("This AKS client does not support deleting KEDA ScaledJobs."));
+
     // ── Jobs and CronJobs ───────────────────────────────────────────────────────
     Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<JobInfo>> GetJobsAsync(string ns, CancellationToken ct = default)
@@ -156,6 +186,12 @@ public interface IAksClient
     Task SuspendCronJobAsync(string ns, string cronJobName, bool suspend, CancellationToken ct = default)
         => Task.FromException(
             new NotSupportedException("This AKS client does not support suspending CronJobs."));
+
+    /// <summary>Patches <c>spec.schedule</c> on a CronJob. Kubernetes rejects an invalid
+    /// cron expression server-side — the resulting error should reach the caller.</summary>
+    Task SetCronJobScheduleAsync(string ns, string cronJobName, string schedule, CancellationToken ct = default)
+        => Task.FromException(
+            new NotSupportedException("This AKS client does not support editing CronJob schedules."));
 
     Task SetJobParallelismAsync(string ns, string jobName, int parallelism, CancellationToken ct = default)
         => Task.FromException(
@@ -186,6 +222,10 @@ public interface IAksClient
     async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
         => await FanOutNamespacesAsync(namespaces, GetHttpRoutesAsync, ct).ConfigureAwait(false);
 
+    async Task<IReadOnlyList<EnvoyResourceInfo>> GetEnvoyResourcesAsync(IReadOnlyList<string> namespaces, string plural, CancellationToken ct = default)
+        => (await Task.WhenAll(namespaces.Select(ns => GetEnvoyResourcesAsync(ns, plural, ct))).ConfigureAwait(false))
+            .SelectMany(batch => batch).ToList();
+
     async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
         => await FanOutNamespacesAsync(namespaces, GetCronJobsAsync, ct).ConfigureAwait(false);
 
@@ -194,6 +234,9 @@ public interface IAksClient
 
     async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
         => await FanOutNamespacesAsync(namespaces, GetHpasAsync, ct).ConfigureAwait(false);
+
+    async Task<IReadOnlyList<ScaledJobInfo>> GetScaledJobsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+        => await FanOutNamespacesAsync(namespaces, GetScaledJobsAsync, ct).ConfigureAwait(false);
 
     async Task<IReadOnlyList<ConfigMapInfo>> GetConfigMapsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
         => await FanOutNamespacesAsync(namespaces, GetConfigMapsAsync, ct).ConfigureAwait(false);

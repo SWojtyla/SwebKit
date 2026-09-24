@@ -92,6 +92,51 @@ public interface IStorageClient
 
     /// <summary>Lists soft-deleted blobs in a container that are still within retention.</summary>
     Task<IReadOnlyList<DeletedBlobItem>> ListDeletedBlobsAsync(string containerName, string? prefix = null, CancellationToken ct = default);
+
+    // ── Azure Files (file shares) ────────────────────────────────────────────
+    // Defaulted to NotSupported so in-memory/test doubles only implement what they need.
+
+    /// <summary>Returns all file shares visible to the configured credential.</summary>
+    Task<IReadOnlyList<StorageShareItem>> ListFileSharesAsync(CancellationToken ct = default)
+        => Task.FromException<IReadOnlyList<StorageShareItem>>(
+            new NotSupportedException("This storage client does not support file shares."));
+
+    /// <summary>
+    /// Returns one page of files and directories inside a share.
+    /// directoryPath = "" for the share root.
+    /// </summary>
+    Task<StorageShareEntryPage> ListShareEntriesAsync(
+        string shareName,
+        string directoryPath,
+        string? continuationToken = null,
+        int pageSize = 100,
+        CancellationToken ct = default)
+        => Task.FromException<StorageShareEntryPage>(
+            new NotSupportedException("This storage client does not support file shares."));
+
+    /// <summary>Returns properties for a single file inside a share.</summary>
+    Task<ShareFileProperties> GetShareFilePropertiesAsync(
+        string shareName, string filePath, CancellationToken ct = default)
+        => Task.FromException<ShareFileProperties>(
+            new NotSupportedException("This storage client does not support file shares."));
+
+    /// <summary>
+    /// Reads share-file content as UTF-8 text up to maxBytes — same contract as
+    /// <see cref="GetBlobContentAsync"/>: WasTruncated when capped, IsBinary (empty
+    /// Content) when the file isn't a text type.
+    /// </summary>
+    Task<ShareFileContent> GetShareFileContentAsync(
+        string shareName, string filePath, int maxBytes = 524_288, CancellationToken ct = default)
+        => Task.FromException<ShareFileContent>(
+            new NotSupportedException("This storage client does not support file shares."));
+
+    /// <summary>
+    /// Generates a service SAS URI for a share file. Requires shared key access.
+    /// </summary>
+    Task<string> GetShareFileSasUrlAsync(
+        string shareName, string filePath, TimeSpan expiry, CancellationToken ct = default)
+        => Task.FromException<string>(
+            new NotSupportedException("This storage client does not support file shares."));
 }
 
 public interface IStorageClientFactory

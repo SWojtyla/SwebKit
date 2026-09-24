@@ -808,6 +808,27 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 SerializeCustomObjectYaml(await ReadGatewayApiCustomObjectAsync(ns, "httproutes", name, ct).ConfigureAwait(false))).ConfigureAwait(false);
         }
 
+        if (kind.Equals("scaledjob", StringComparison.OrdinalIgnoreCase))
+        {
+            return await WithAuthRetryAsync(async () =>
+                SerializeCustomObjectYaml(await _client.CustomObjects.GetNamespacedCustomObjectAsync(
+                    KedaApiGroup, KedaApiVersions[0], ns, KedaScaledJobsPlural, name, cancellationToken: ct).ConfigureAwait(false))).ConfigureAwait(false);
+        }
+
+        // Envoy Gateway kinds — the UI can send either the plural ("backendtrafficpolicies")
+        // or the kind name ("BackendTrafficPolicy").
+        var envoyPlural = EnvoyGatewayKinds.PluralToKind.ContainsKey(kind.ToLowerInvariant())
+            ? kind.ToLowerInvariant()
+            : EnvoyGatewayKinds.PluralToKind
+                .Where(pair => pair.Value.Equals(kind, StringComparison.OrdinalIgnoreCase))
+                .Select(pair => pair.Key)
+                .FirstOrDefault();
+        if (envoyPlural is not null)
+        {
+            return await WithAuthRetryAsync(async () =>
+                SerializeCustomObjectYaml(await ReadEnvoyCustomObjectAsync(ns, envoyPlural, name, ct).ConfigureAwait(false))).ConfigureAwait(false);
+        }
+
         return await WithAuthRetryAsync(async () =>
         {
             object resource = kind.ToLowerInvariant() switch

@@ -3,6 +3,8 @@
  * they're unit-testable without rendering.
  */
 
+import { formatLocalDateTime } from "@/lib/datetime";
+
 /** Badge classes for the model-assessed investigation severity (low/medium/high) —
  * deliberately a different vocabulary from the rule severity palette
  * (Warning/Critical) used by alert rows, so the two can't be confused. */
@@ -26,5 +28,5 @@ export function insightSeverityLabel(severity?: string | null): string {
 
 export function formatInsightTime(iso: string): string {
     const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+    return Number.isNaN(d.getTime()) ? iso : formatLocalDateTime(d);
 }

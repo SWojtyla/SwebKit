@@ -22,6 +22,7 @@ import {
     Beaker,
     Keyboard,
     Waves,
+    Clock,
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
@@ -57,6 +58,11 @@ import {
 import { initSidecarBaseUrl } from "@/lib/api";
 import { useNotification } from "./NotificationSystem";
 import { ActivityIndicator } from "@/components/shared/ActivityIndicator";
+import {
+    localTimeZoneAbbrev,
+    localTimeZoneName,
+    localUtcOffsetLabel,
+} from "@/lib/datetime";
 
 const navItems = [
     { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -640,6 +646,14 @@ export function AppLayout() {
                             Demo Mode
                         </span>
                     )}
+                    <span
+                        className="flex items-center gap-1"
+                        title={`All times shown in local time: ${localTimeZoneName()} (${localUtcOffsetLabel()})`}
+                        data-testid="status-bar-timezone"
+                    >
+                        <Clock className="h-3 w-3" />
+                        {localTimeZoneAbbrev()}
+                    </span>
                     <span className="ml-auto">
                         {theme === "dark"
                             ? "Dark"

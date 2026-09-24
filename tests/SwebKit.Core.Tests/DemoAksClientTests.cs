@@ -559,6 +559,142 @@ public class DemoAksClientTests
         Assert.DoesNotContain(after, h => h.Name == keda.Name);
     }
 
+    // ── KEDA ScaledJobs ──
+
+    [Fact]
+    public async Task GetScaledJobsAsync_ReturnsSeededScaledJobs()
+    {
+        var jobs = await _client.GetScaledJobsAsync("default");
+
+        Assert.NotEmpty(jobs);
+        Assert.All(jobs, j =>
+        {
+            Assert.Equal("default", j.Namespace);
+            Assert.False(j.IsPaused);
+            Assert.NotEmpty(j.Triggers);
+        });
+    }
+
+    [Fact]
+    public async Task SetScaledJobScalingEnabledAsync_TogglesPausedAcrossReads()
+    {
+        var job = (await _client.GetScaledJobsAsync("default")).First();
+
+        await _client.SetScaledJobScalingEnabledAsync("default", job.Name, enabled: false);
+        Assert.True((await _client.GetScaledJobsAsync("default")).First(j => j.Name == job.Name).IsPaused);
+
+        await _client.SetScaledJobScalingEnabledAsync("default", job.Name, enabled: true);
+        Assert.False((await _client.GetScaledJobsAsync("default")).First(j => j.Name == job.Name).IsPaused);
+    }
+
+    [Fact]
+    public async Task ScaleScaledJobAsync_UpdatesBoundsAcrossReads()
+    {
+        var job = (await _client.GetScaledJobsAsync("default")).First();
+
+        await _client.ScaleScaledJobAsync("default", job.Name, 1, 7);
+
+        var reread = (await _client.GetScaledJobsAsync("default")).First(j => j.Name == job.Name);
+        Assert.Equal(1, reread.MinReplicas);
+        Assert.Equal(7, reread.MaxReplicas);
+    }
+
+    [Fact]
+    public async Task DeleteScaledJobAsync_RemovesJobFromSubsequentLists()
+    {
+        var before = (await _client.GetScaledJobsAsync("default")).ToList();
+        var target = before.First();
+
+        await _client.DeleteScaledJobAsync("default", target.Name);
+
+        var after = (await _client.GetScaledJobsAsync("default")).ToList();
+        Assert.DoesNotContain(after, j => j.Name == target.Name);
+        Assert.Equal(before.Count - 1, after.Count);
+    }
+
+    // ── CronJob schedule ──
+
+    [Fact]
+    public async Task GetCronJobsAsync_IncludesScheduleAndTimeZone()
+    {
+        var cronJobs = await _client.GetCronJobsAsync("default");
+
+        Assert.All(cronJobs, cj => Assert.False(string.IsNullOrWhiteSpace(cj.Schedule)));
+        Assert.Contains(cronJobs, cj => cj.TimeZone is not null);
+    }
+
+    [Fact]
+    public async Task SetCronJobScheduleAsync_PersistsAcrossReads()
+    {
+        await _client.SetCronJobScheduleAsync("default", "report-generator", "*/10 * * * *");
+
+        var cj = (await _client.GetCronJobsAsync("default")).First(c => c.Name == "report-generator");
+        Assert.Equal("*/10 * * * *", cj.Schedule);
+    }
+
+    [Fact]
+    public async Task SetCronJobScheduleAsync_RejectsEmptySchedule()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _client.SetCronJobScheduleAsync("default", "report-generator", "  "));
+    }
+
+    [Fact]
+    public async Task GetResourceYamlAsync_ScaledJob_ReturnsKedaYaml()
+    {
+        var yaml = await _client.GetResourceYamlAsync("default", "scaledjob", "nightly-reindex");
+
+        Assert.Contains("kind: ScaledJob", yaml);
+        Assert.Contains("keda.sh/v1alpha1", yaml);
+    }
+
+    // ── Envoy Gateway ──
+
+    [Theory]
+    [InlineData("backendtrafficpolicies", "BackendTrafficPolicy")]
+    [InlineData("securitypolicies", "SecurityPolicy")]
+    [InlineData("backends", "Backend")]
+    [InlineData("envoyproxies", "EnvoyProxy")]
+    public async Task GetEnvoyResourcesAsync_ReturnsSeededResources(string plural, string expectedKind)
+    {
+        var resources = await _client.GetEnvoyResourcesAsync("ecommerce", plural);
+
+        Assert.NotEmpty(resources);
+        Assert.All(resources, r =>
+        {
+            Assert.Equal(expectedKind, r.Kind);
+            Assert.False(string.IsNullOrWhiteSpace(r.Name));
+            Assert.NotEmpty(r.Highlights);
+        });
+    }
+
+    [Fact]
+    public async Task GetEnvoyResourcesAsync_UnknownPlural_ReturnsEmpty()
+    {
+        Assert.Empty(await _client.GetEnvoyResourcesAsync("ecommerce", "notarealkind"));
+    }
+
+    [Fact]
+    public async Task GetHttpRoutesAsync_RoutesCarryRulesAndParentStatuses()
+    {
+        var routes = await _client.GetHttpRoutesAsync("ecommerce");
+
+        var route = routes.First(r => r.Name == "orders-api-route");
+        Assert.NotEmpty(route.Rules);
+        Assert.NotEmpty(route.ParentStatuses);
+        Assert.All(route.Rules, r => Assert.NotEmpty(r.BackendRefs));
+    }
+
+    [Fact]
+    public async Task GetResourceYamlAsync_EnvoyKind_ReturnsEnvoyYaml()
+    {
+        var yaml = await _client.GetResourceYamlAsync("ecommerce", "backendtrafficpolicies", "orders-api-limits");
+
+        Assert.Contains("kind: BackendTrafficPolicy", yaml);
+        Assert.Contains("gateway.envoyproxy.io", yaml);
+        Assert.Contains("maxConnections", yaml);
+    }
+
     [Fact]
     public async Task StreamDeploymentLogsAsync_EmitsLinesWithPodName()
     {

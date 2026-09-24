@@ -988,6 +988,8 @@ public partial class KubernetesAksClient
                 Hostnames = GetHttpRouteHostnames(item),
                 ParentRefs = GetHttpRouteParentRefs(item, routeNamespace),
                 BackendRefs = GetHttpRouteBackendRefs(item, routeNamespace),
+                Rules = GetHttpRouteRules(item, routeNamespace),
+                ParentStatuses = GetHttpRouteParentStatuses(item, routeNamespace),
                 Labels = GetMetadataLabels(item)
             });
         }
@@ -1203,6 +1205,212 @@ public partial class KubernetesAksClient
             return failingCondition;
 
         return "Pending";
+    }
+
+    /// <summary>
+    /// Flattens <c>spec.rules[]</c> into display strings: match summary, filter types, backend
+    /// refs (with weights) and request/backend timeouts. Unknown spec shapes degrade to an empty
+    /// list — the table just shows fewer details.
+    /// </summary>
+    private static List<HttpRouteRuleInfo> GetHttpRouteRules(JsonElement item, string routeNamespace)
+    {
+        if (!TryGetProperty(item, "spec", out var spec)
+            || !TryGetProperty(spec, "rules", out var rules)
+            || rules.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var results = new List<HttpRouteRuleInfo>();
+        foreach (var rule in rules.EnumerateArray())
+        {
+            var info = new HttpRouteRuleInfo
+            {
+                Matches = GetHttpRouteRuleMatches(rule),
+                Filters = GetHttpRouteRuleFilters(rule, routeNamespace),
+                BackendRefs = GetHttpRouteRuleBackendRefs(rule, routeNamespace)
+            };
+
+            if (TryGetProperty(rule, "timeouts", out var timeouts) && timeouts.ValueKind == JsonValueKind.Object)
+            {
+                info.RequestTimeout = GetStringProperty(timeouts, "request");
+                info.BackendRequestTimeout = GetStringProperty(timeouts, "backendRequest");
+            }
+
+            results.Add(info);
+        }
+
+        return results;
+    }
+
+    private static List<string> GetHttpRouteRuleMatches(JsonElement rule)
+    {
+        if (!TryGetProperty(rule, "matches", out var matches) || matches.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var results = new List<string>();
+        foreach (var match in matches.EnumerateArray())
+        {
+            var parts = new List<string>();
+            if (TryGetProperty(match, "path", out var path) && path.ValueKind == JsonValueKind.Object)
+            {
+                var pathType = GetStringProperty(path, "type") ?? "PathPrefix";
+                var pathValue = GetStringProperty(path, "value") ?? "/";
+                parts.Add($"{pathType} {pathValue}");
+            }
+
+            var method = GetStringProperty(match, "method");
+            if (!string.IsNullOrWhiteSpace(method))
+                parts.Add(method);
+
+            if (TryGetProperty(match, "headers", out var headers) && headers.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var header in headers.EnumerateArray())
+                {
+                    var headerName = GetStringProperty(header, "name");
+                    var headerValue = GetStringProperty(header, "value");
+                    if (!string.IsNullOrWhiteSpace(headerName))
+                        parts.Add($"header {headerName}={headerValue}");
+                }
+            }
+
+            if (TryGetProperty(match, "queryParams", out var queryParams) && queryParams.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var queryParam in queryParams.EnumerateArray())
+                {
+                    var paramName = GetStringProperty(queryParam, "name");
+                    var paramValue = GetStringProperty(queryParam, "value");
+                    if (!string.IsNullOrWhiteSpace(paramName))
+                        parts.Add($"?{paramName}={paramValue}");
+                }
+            }
+
+            results.Add(parts.Count > 0 ? string.Join(" ", parts) : "any request");
+        }
+
+        return results;
+    }
+
+    private static List<string> GetHttpRouteRuleFilters(JsonElement rule, string routeNamespace)
+    {
+        if (!TryGetProperty(rule, "filters", out var filters) || filters.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var results = new List<string>();
+        foreach (var filter in filters.EnumerateArray())
+        {
+            var type = GetStringProperty(filter, "type");
+            if (string.IsNullOrWhiteSpace(type))
+                continue;
+
+            results.Add(type switch
+            {
+                "RequestRedirect" when TryGetProperty(filter, "requestRedirect", out var redirect)
+                    => $"RequestRedirect → {GetStringProperty(redirect, "scheme") ?? "redirect"}"
+                       + (TryGetIntProperty(redirect, "statusCode") is { } code ? $" ({code})" : string.Empty),
+                "URLRewrite" when TryGetProperty(filter, "urlRewrite", out var rewrite)
+                    => "URLRewrite" + FormatRewriteDetail(rewrite),
+                "RequestMirror" when TryGetProperty(filter, "requestMirror", out var mirror)
+                       && TryGetProperty(mirror, "backendRef", out var mirrorBackend)
+                    => $"RequestMirror → {FormatBackendRef(mirrorBackend, routeNamespace)}",
+                "ExtensionRef" when TryGetProperty(filter, "extensionRef", out var extensionRef)
+                    => $"ExtensionRef → {FormatEnvoyRef(extensionRef, routeNamespace)}",
+                _ => type
+            });
+        }
+
+        return results;
+    }
+
+    private static string FormatRewriteDetail(JsonElement rewrite)
+    {
+        var hostname = GetStringProperty(rewrite, "hostname");
+        var details = new List<string>();
+        if (!string.IsNullOrWhiteSpace(hostname))
+            details.Add($"host {hostname}");
+
+        if (TryGetProperty(rewrite, "path", out var path))
+        {
+            if (TryGetProperty(path, "replacePrefixMatch", out var prefix))
+                details.Add($"prefix → {prefix.GetString()}");
+            else if (TryGetProperty(path, "replaceFullPath", out var fullPath))
+                details.Add($"path → {fullPath.GetString()}");
+        }
+
+        return details.Count > 0 ? $" ({string.Join(", ", details)})" : string.Empty;
+    }
+
+    private static List<string> GetHttpRouteRuleBackendRefs(JsonElement rule, string routeNamespace)
+    {
+        if (!TryGetProperty(rule, "backendRefs", out var backendRefs) || backendRefs.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var results = new List<string>();
+        foreach (var backend in backendRefs.EnumerateArray())
+        {
+            var formatted = FormatBackendRef(backend, routeNamespace);
+            if (string.IsNullOrWhiteSpace(formatted))
+                continue;
+
+            results.Add(TryGetIntProperty(backend, "weight") is { } weight && weight != 1
+                ? $"{formatted} w={weight}"
+                : formatted);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Per-parent attachment status (<c>status.parents[]</c>): the first failing condition wins,
+    /// otherwise the first True condition, matching <see cref="GetHttpRouteStatus"/>'s aggregate.
+    /// </summary>
+    private static List<HttpRouteParentStatus> GetHttpRouteParentStatuses(JsonElement item, string routeNamespace)
+    {
+        if (!TryGetProperty(item, "status", out var status)
+            || !TryGetProperty(status, "parents", out var parents)
+            || parents.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var results = new List<HttpRouteParentStatus>();
+        foreach (var parent in parents.EnumerateArray())
+        {
+            var parentRef = TryGetProperty(parent, "parentRef", out var parentRefEl)
+                ? FormatParentRef(parentRefEl, routeNamespace)
+                : string.Empty;
+            if (string.IsNullOrWhiteSpace(parentRef))
+                continue;
+
+            var parentStatus = new HttpRouteParentStatus { ParentRef = parentRef };
+            if (TryGetProperty(parent, "conditions", out var conditions) && conditions.ValueKind == JsonValueKind.Array)
+            {
+                string? firstTrue = null;
+                var decided = false;
+                foreach (var condition in conditions.EnumerateArray())
+                {
+                    var conditionType = GetStringProperty(condition, "type");
+                    var conditionStatus = GetStringProperty(condition, "status");
+                    if (string.Equals(conditionStatus, "True", StringComparison.OrdinalIgnoreCase))
+                    {
+                        firstTrue ??= conditionType;
+                        continue;
+                    }
+
+                    parentStatus.Status = conditionType ?? "Pending";
+                    parentStatus.Reason = GetStringProperty(condition, "reason");
+                    decided = true;
+                    break;
+                }
+
+                if (!decided && firstTrue is not null)
+                    parentStatus.Status = firstTrue;
+            }
+
+            results.Add(parentStatus);
+        }
+
+        return results;
     }
 
     private static bool HasTopLevelCondition(JsonElement item, string type)

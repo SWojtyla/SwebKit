@@ -210,6 +210,99 @@ public static class StorageEndpoints
         // ── Undelete blob ──────────────────────────────────────────────────────
 
         app.MapPost("/api/storage/{accountId}/containers/{container}/blobs/undelete", UndeleteBlobAsync);
+
+        // ── File shares ────────────────────────────────────────────────────────
+        // File paths always travel in the query string — they contain '/' and would
+        // otherwise need double-escaping through route parameters.
+
+        app.MapGet("/api/storage/{accountId}/shares", async (
+            string accountId,
+            ProfileRepository profile,
+            IStorageConnectionPool pool,
+            DemoModeService demo,
+            CancellationToken ct) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
+
+            var client = CreateClient(config, pool, demo);
+            var shares = await client.ListFileSharesAsync(ct);
+            return Results.Ok(shares);
+        });
+
+        app.MapGet("/api/storage/{accountId}/shares/{share}/entries", async (
+            string accountId,
+            string share,
+            string? directoryPath,
+            string? continuationToken,
+            int? pageSize,
+            ProfileRepository profile,
+            IStorageConnectionPool pool,
+            DemoModeService demo,
+            CancellationToken ct) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
+
+            var client = CreateClient(config, pool, demo);
+            var page = await client.ListShareEntriesAsync(share, directoryPath ?? "", continuationToken, pageSize ?? 100, ct);
+            return Results.Ok(page);
+        });
+
+        app.MapGet("/api/storage/{accountId}/shares/{share}/files/properties", async (
+            string accountId,
+            string share,
+            string path,
+            ProfileRepository profile,
+            IStorageConnectionPool pool,
+            DemoModeService demo,
+            CancellationToken ct) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
+            if (string.IsNullOrWhiteSpace(path)) return ApiErrors.BadRequest("path is required");
+
+            var client = CreateClient(config, pool, demo);
+            var props = await client.GetShareFilePropertiesAsync(share, path, ct);
+            return Results.Ok(props);
+        });
+
+        app.MapGet("/api/storage/{accountId}/shares/{share}/files/content", async (
+            string accountId,
+            string share,
+            string path,
+            ProfileRepository profile,
+            IStorageConnectionPool pool,
+            DemoModeService demo,
+            CancellationToken ct) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
+            if (string.IsNullOrWhiteSpace(path)) return ApiErrors.BadRequest("path is required");
+
+            var client = CreateClient(config, pool, demo);
+            var content = await client.GetShareFileContentAsync(share, path, ct: ct);
+            return Results.Ok(content);
+        });
+
+        app.MapGet("/api/storage/{accountId}/shares/{share}/files/sas", async (
+            string accountId,
+            string share,
+            string path,
+            int expiryMinutes,
+            ProfileRepository profile,
+            IStorageConnectionPool pool,
+            DemoModeService demo,
+            CancellationToken ct) =>
+        {
+            var config = ResolveStorage(accountId, profile, demo);
+            if (config is null) return ApiErrors.NotFound("Storage account not found");
+            if (string.IsNullOrWhiteSpace(path)) return ApiErrors.BadRequest("path is required");
+
+            var client = CreateClient(config, pool, demo);
+            var sasUrl = await client.GetShareFileSasUrlAsync(share, path, TimeSpan.FromMinutes(expiryMinutes), ct);
+            return Results.Ok(new { sasUrl });
+        });
     }
 
     // ── Extracted handlers (unit-testable without a WebApplicationFactory) ────────────

@@ -379,7 +379,7 @@ public static class ServiceBusEndpoints
     internal static async Task<IResult> PurgeMessagesAsync(
         string nsId,
         string entityPath,
-        bool deadLetter,
+        PurgeRequest req,
         ProfileRepository profile,
         IServiceBusConnectionPool pool,
         DemoModeService demo,
@@ -390,7 +390,7 @@ public static class ServiceBusEndpoints
         if (ns is null) return ApiErrors.NotFound("Namespace not found");
 
         var client = pool.GetOrCreate(ns);
-        var count = await client.PurgeMessagesAsync(entityPath, deadLetter, ct);
+        var count = await client.PurgeMessagesAsync(entityPath, req.DeadLetter, ct);
         return Results.Ok(new { purged = count });
     }
 
@@ -471,6 +471,12 @@ public static class ServiceBusEndpoints
         public string[] SequenceNumbers { get; set; } = [];
         public string? TargetEntityPath { get; set; }
         public RemapRules? RemapRules { get; set; }
+    }
+
+    public sealed class PurgeRequest
+    {
+        /// <summary>When true every message in the entity's dead-letter sub-queue is removed.</summary>
+        public bool DeadLetter { get; set; }
     }
 
     public sealed class ResendRequest

@@ -16,7 +16,7 @@ Plan files are the shared intent record: any tool or later session reads them to
 - `api-client-fixes/` — secret-store variable resolution and bounded faker dates.
 - `service-bus-ux-overhaul/` — batch resend with regenerated MessageIds, composer as resizable side panel, templates manager, toolbar/overview declutter.
 
-_(none)_
+- `aks-storage-ux-improvements.md` — Autoscaling tab (HPA + KEDA incl. ScaledJobs), CronJob schedule editor + next run, storage file shares, local-timezone display clarity.
 
 ## Plan file contract
 

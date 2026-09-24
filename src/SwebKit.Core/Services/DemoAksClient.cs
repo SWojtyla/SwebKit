@@ -17,12 +17,17 @@ public class DemoAksClient : IAksClient
     private readonly Lock _jobLock = new();
     private readonly Dictionary<string, List<JobInfo>> _createdJobsByNamespace = new(StringComparer.Ordinal);
     private readonly Dictionary<string, bool> _cronJobSuspendOverrides = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _cronJobScheduleOverrides = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _jobParallelismOverrides = new(StringComparer.Ordinal);
     // Keys ("{ns}/{hpaName}") whose autoscaling the operator has disabled this session.
     private readonly HashSet<string> _disabledHpaKeys = new(StringComparer.Ordinal);
     // Keys ("{ns}/{hpaName}") -> (min, max) overrides applied this session.
     private readonly Dictionary<string, (int Min, int Max)> _hpaReplicaOverrides = new(StringComparer.Ordinal);
     private readonly HashSet<string> _deletedHpas = new(StringComparer.Ordinal);
+    // KEDA ScaledJob session state — same keying as the HPA overrides.
+    private readonly HashSet<string> _pausedScaledJobs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (int Min, int Max)> _scaledJobReplicaOverrides = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _deletedScaledJobs = new(StringComparer.Ordinal);
     private readonly Lock _scalingLock = new();
     private int _jobSequence;
 
@@ -757,6 +762,26 @@ public class DemoAksClient : IAksClient
                 Hostnames = ["api.ecommerce.example.com"],
                 ParentRefs = ["public-gateway#https-api"],
                 BackendRefs = ["order-api:80"],
+                Rules =
+                [
+                    new HttpRouteRuleInfo
+                    {
+                        Matches = ["PathPrefix /orders GET"],
+                        Filters = ["RequestHeaderModifier", "ExtensionRef → HTTPRouteFilter/strip-api-prefix"],
+                        BackendRefs = ["order-api:80 w=90", "order-api-canary:80 w=10"],
+                        BackendRequestTimeout = "15s"
+                    },
+                    new HttpRouteRuleInfo
+                    {
+                        Matches = ["PathPrefix /health"],
+                        BackendRefs = ["order-api:80"],
+                        RequestTimeout = "5s"
+                    }
+                ],
+                ParentStatuses =
+                [
+                    new HttpRouteParentStatus { ParentRef = "public-gateway#https-api", Status = "Accepted" }
+                ],
                 Labels = new Dictionary<string, string>
                 {
                     ["app.kubernetes.io/name"] = "order-api"
@@ -770,6 +795,19 @@ public class DemoAksClient : IAksClient
                 Hostnames = ["admin.ecommerce.example.com"],
                 ParentRefs = ["public-gateway#https-admin"],
                 BackendRefs = ["admin-dashboard:8080"],
+                Rules =
+                [
+                    new HttpRouteRuleInfo
+                    {
+                        Matches = ["PathPrefix /"],
+                        Filters = ["RequestRedirect → https (301)"],
+                        BackendRefs = ["admin-dashboard:8080"]
+                    }
+                ],
+                ParentStatuses =
+                [
+                    new HttpRouteParentStatus { ParentRef = "public-gateway#https-admin", Status = "Accepted" }
+                ],
                 Labels = new Dictionary<string, string>
                 {
                     ["app.kubernetes.io/name"] = "admin-dashboard"
@@ -783,6 +821,19 @@ public class DemoAksClient : IAksClient
                 Hostnames = ["metrics.internal.example.com"],
                 ParentRefs = ["internal-gateway#http-metrics"],
                 BackendRefs = ["prometheus-server:9090"],
+                Rules =
+                [
+                    new HttpRouteRuleInfo
+                    {
+                        Matches = ["PathPrefix /metrics"],
+                        BackendRefs = ["prometheus-server:9090"]
+                    }
+                ],
+                ParentStatuses =
+                [
+                    new HttpRouteParentStatus { ParentRef = "internal-gateway#http-metrics", Status = "Accepted" },
+                    new HttpRouteParentStatus { ParentRef = "internal-gateway#http-metrics", Status = "ResolvedRefs", Reason = "BackendNotFound" }
+                ],
                 Labels = new Dictionary<string, string>
                 {
                     ["app.kubernetes.io/name"] = "prometheus-server"
@@ -1072,6 +1123,42 @@ public class DemoAksClient : IAksClient
 
         if (kind.Equals("CronJob", StringComparison.OrdinalIgnoreCase))
             return Task.FromResult(BuildCronJobYaml(ns, name));
+
+        if (kind.Equals("ScaledJob", StringComparison.OrdinalIgnoreCase))
+        {
+            var scaledJobYaml = $"""
+                apiVersion: keda.sh/v1alpha1
+                kind: ScaledJob
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                spec:
+                  jobTargetRef:
+                    parallelism: 1
+                    completions: 1
+                    template:
+                      spec:
+                        containers:
+                        - name: {name}
+                          image: acr.azurecr.io/{name}:latest
+                        restartPolicy: Never
+                  minReplicaCount: 0
+                  maxReplicaCount: 5
+                  triggers:
+                  - type: cron
+                    metadata:
+                      timezone: UTC
+                      start: 0 2 * * *
+                      end: 0 4 * * *
+                      desiredReplicas: "2"
+                """;
+            return Task.FromResult(scaledJobYaml);
+        }
+
+        if (TryResolveDemoEnvoyKind(kind) is { } envoyKind)
+        {
+            return Task.FromResult(BuildDemoEnvoyYaml(envoyKind, ns, name));
+        }
 
         if (kind.Equals("Pod", StringComparison.OrdinalIgnoreCase))
         {
@@ -1822,6 +1909,8 @@ public class DemoAksClient : IAksClient
                 var key = $"{ns}/{cronJobs[i].Name}";
                 if (_cronJobSuspendOverrides.TryGetValue(key, out var suspended))
                     cronJobs[i].Suspend = suspended;
+                if (_cronJobScheduleOverrides.TryGetValue(key, out var schedule))
+                    cronJobs[i].Schedule = schedule;
             }
         }
         return cronJobs;
@@ -1909,6 +1998,328 @@ public class DemoAksClient : IAksClient
             _cronJobSuspendOverrides[$"{ns}/{cronJobName}"] = suspend;
     }
 
+    public async Task SetCronJobScheduleAsync(string ns, string cronJobName, string schedule, CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(schedule))
+            throw new InvalidOperationException("Schedule cannot be empty.");
+        lock (_jobLock)
+            _cronJobScheduleOverrides[$"{ns}/{cronJobName}"] = schedule.Trim();
+    }
+
+    // ── KEDA ScaledJobs ───────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<ScaledJobInfo>> GetScaledJobsAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct).ConfigureAwait(false);
+        var jobs = new List<ScaledJobInfo>
+        {
+            new()
+            {
+                Name = "nightly-reindex", Namespace = ns,
+                MinReplicas = 0, MaxReplicas = 3,
+                Triggers = ["cron"]
+            },
+            new()
+            {
+                Name = "queue-drain-worker", Namespace = ns,
+                MinReplicas = 0, MaxReplicas = 10,
+                Triggers = ["azure-queue"]
+            }
+        };
+
+        lock (_scalingLock)
+        {
+            for (var i = jobs.Count - 1; i >= 0; i--)
+            {
+                var key = $"{ns}/{jobs[i].Name}";
+                if (_deletedScaledJobs.Contains(key))
+                {
+                    jobs.RemoveAt(i);
+                    continue;
+                }
+                jobs[i].IsPaused = _pausedScaledJobs.Contains(key);
+                if (_scaledJobReplicaOverrides.TryGetValue(key, out var bounds))
+                {
+                    jobs[i].MinReplicas = bounds.Min;
+                    jobs[i].MaxReplicas = bounds.Max;
+                }
+            }
+        }
+        return jobs;
+    }
+
+    public Task SetScaledJobScalingEnabledAsync(string ns, string scaledJobName, bool enabled, CancellationToken ct = default)
+    {
+        var key = $"{ns}/{scaledJobName}";
+        lock (_scalingLock)
+        {
+            if (enabled)
+                _pausedScaledJobs.Remove(key);
+            else
+                _pausedScaledJobs.Add(key);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task ScaleScaledJobAsync(string ns, string scaledJobName, int minReplicas, int maxReplicas, CancellationToken ct = default)
+    {
+        lock (_scalingLock)
+            _scaledJobReplicaOverrides[$"{ns}/{scaledJobName}"] = (minReplicas, maxReplicas);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteScaledJobAsync(string ns, string scaledJobName, CancellationToken ct = default)
+    {
+        lock (_scalingLock)
+            _deletedScaledJobs.Add($"{ns}/{scaledJobName}");
+        return Task.CompletedTask;
+    }
+
+    // ── Envoy Gateway resources ───────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<EnvoyResourceInfo>> GetEnvoyResourcesAsync(string ns, string plural, CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct).ConfigureAwait(false);
+        return BuildDemoEnvoyResources(ns, plural);
+    }
+
+    /// <summary>Plural or kind name → proper Kind name for the Envoy Gateway resources demo data covers.</summary>
+    private static string? TryResolveDemoEnvoyKind(string kind)
+    {
+        return kind.ToLowerInvariant() switch
+        {
+            "backends" or "backend" => "Backend",
+            "backendtrafficpolicies" or "backendtrafficpolicy" => "BackendTrafficPolicy",
+            "clienttrafficpolicies" or "clienttrafficpolicy" => "ClientTrafficPolicy",
+            "envoyextensionpolicies" or "envoyextensionpolicy" => "EnvoyExtensionPolicy",
+            "envoypatchpolicies" or "envoypatchpolicy" => "EnvoyPatchPolicy",
+            "envoyproxies" or "envoyproxy" => "EnvoyProxy",
+            "httproutefilters" or "httproutefilter" => "HTTPRouteFilter",
+            "securitypolicies" or "securitypolicy" => "SecurityPolicy",
+            _ => null
+        };
+    }
+
+    private static string BuildDemoEnvoyYaml(string kind, string ns, string name)
+    {
+        var spec = kind switch
+        {
+            "BackendTrafficPolicy" => """
+                    targetRefs:
+                    - group: gateway.networking.k8s.io
+                        kind: HTTPRoute
+                        name: orders-api-route
+                    circuitBreaker:
+                        maxConnections: 1024
+                        maxPendingRequests: 512
+                    timeout:
+                        http:
+                            requestTimeout: 15s
+                    rateLimit:
+                        type: Global
+                """,
+            "SecurityPolicy" => """
+                    targetRefs:
+                    - group: gateway.networking.k8s.io
+                        kind: HTTPRoute
+                        name: orders-api-route
+                    jwt:
+                        providers:
+                        - name: primary
+                            issuer: https://login.ecommerce.example.com/
+                    authorization:
+                        defaultAction: Allow
+                        rules:
+                        - action: Allow
+                            name: authenticated
+                """,
+            "ClientTrafficPolicy" => """
+                    targetRefs:
+                    - group: gateway.networking.k8s.io
+                        kind: Gateway
+                        name: public-gateway
+                    tls:
+                        minVersion: "1.2"
+                    connection:
+                        bufferLimit: 32Ki
+                """,
+            "Backend" => """
+                    type: DynamicResolver
+                    endpoints:
+                    - fqdn:
+                            hostname: search.ecommerce.example.com
+                            port: 443
+                """,
+            "EnvoyProxy" => """
+                    provider:
+                        type: Kubernetes
+                """,
+            "HTTPRouteFilter" => """
+                    urlRewrite:
+                        path:
+                            type: ReplacePrefixMatch
+                            replacePrefixMatch: /
+                """,
+            "EnvoyPatchPolicy" => """
+                    targetRef:
+                        group: gateway.networking.k8s.io
+                        kind: Gateway
+                        name: public-gateway
+                    type: JSONPatch
+                    jsonPatches:
+                    - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+                        name: default/envoy-gateway/http
+                """,
+            _ => """
+                    targetRefs:
+                    - group: gateway.networking.k8s.io
+                        kind: Gateway
+                        name: public-gateway
+                    extProc:
+                    - name: access-logger
+                """
+        };
+
+        return $"""
+            apiVersion: gateway.envoyproxy.io/v1alpha1
+            kind: {kind}
+            metadata:
+                name: {name}
+                namespace: {ns}
+            spec:
+            {spec}
+            status:
+                conditions:
+                - type: Accepted
+                    status: "True"
+            """;
+    }
+
+    private static IReadOnlyList<EnvoyResourceInfo> BuildDemoEnvoyResources(string ns, string plural)
+    {
+        return plural switch
+        {
+            "backendtrafficpolicies" =>
+            [
+                new EnvoyResourceInfo
+                {
+                    Kind = "BackendTrafficPolicy", Name = "orders-api-limits", Namespace = ns,
+                    TargetRefs = ["HTTPRoute/orders-api-route"],
+                    Highlights =
+                    [
+                        new() { Label = "Status", Value = "Accepted" },
+                        new() { Label = "Max connections", Value = "1024" },
+                        new() { Label = "Max pending", Value = "512" },
+                        new() { Label = "Request timeout", Value = "15s" },
+                        new() { Label = "Rate limit", Value = "Global (2 rules)" },
+                        new() { Label = "Load balancer", Value = "LeastRequest" }
+                    ],
+                    Labels = new Dictionary<string, string> { ["app.kubernetes.io/name"] = "order-api" }
+                },
+                new EnvoyResourceInfo
+                {
+                    Kind = "BackendTrafficPolicy", Name = "admin-circuit-breaker", Namespace = ns,
+                    TargetRefs = ["HTTPRoute/admin-ui-route"],
+                    Highlights =
+                    [
+                        new() { Label = "Status", Value = "Accepted" },
+                        new() { Label = "Max connections", Value = "256" },
+                        new() { Label = "Retries", Value = "3" },
+                        new() { Label = "Retry timeout", Value = "2s" },
+                        new() { Label = "Health check", Value = "active + passive" }
+                    ]
+                }
+            ],
+            "clienttrafficpolicies" =>
+            [
+                new EnvoyResourceInfo
+                {
+                    Kind = "ClientTrafficPolicy", Name = "public-gateway-tls", Namespace = ns,
+                    TargetRefs = ["Gateway/public-gateway"],
+                    Highlights =
+                    [
+                        new() { Label = "Status", Value = "Accepted" },
+                        new() { Label = "TLS min version", Value = "1.2" },
+                        new() { Label = "Buffer limit", Value = "32Ki" },
+                        new() { Label = "HTTP/2", Value = "yes" }
+                    ]
+                }
+            ],
+            "securitypolicies" =>
+            [
+                new EnvoyResourceInfo
+                {
+                    Kind = "SecurityPolicy", Name = "orders-api-auth", Namespace = ns,
+                    TargetRefs = ["HTTPRoute/orders-api-route"],
+                    Highlights =
+                    [
+                        new() { Label = "Status", Value = "Accepted" },
+                        new() { Label = "JWT (1)", Value = "https://login.ecommerce.example.com/" },
+                        new() { Label = "Authorization", Value = "Allow (3 rules)" },
+                        new() { Label = "CORS", Value = "2 origins" }
+                    ]
+                }
+            ],
+            "backends" =>
+            [
+                new EnvoyResourceInfo
+                {
+                    Kind = "Backend", Name = "external-search", Namespace = ns,
+                    Highlights =
+                    [
+                        new() { Label = "Type", Value = "DynamicResolver" },
+                        new() { Label = "Endpoints (1)", Value = "search.ecommerce.example.com:443" }
+                    ]
+                }
+            ],
+            "envoypatchpolicies" =>
+            [
+                new EnvoyResourceInfo
+                {
+                    Kind = "EnvoyPatchPolicy", Name = "gateway-tuning", Namespace = ns,
+                    TargetRefs = ["Gateway/public-gateway"],
+                    Highlights =
+                    [
+                        new() { Label = "Status", Value = "Accepted" },
+                        new() { Label = "Type", Value = "JSONPatch" },
+                        new() { Label = "Patches", Value = "2" }
+                    ]
+                }
+            ],
+            "envoyextensionpolicies" =>
+            [
+                new EnvoyResourceInfo
+                {
+                    Kind = "EnvoyExtensionPolicy", Name = "access-logger", Namespace = ns,
+                    TargetRefs = ["Gateway/public-gateway"],
+                    Highlights =
+                    [
+                        new() { Label = "Status", Value = "Accepted" },
+                        new() { Label = "Ext proc", Value = "1" }
+                    ]
+                }
+            ],
+            "envoyproxies" =>
+            [
+                new EnvoyResourceInfo
+                {
+                    Kind = "EnvoyProxy", Name = "envoy-gateway-config", Namespace = string.Empty,
+                    Highlights = [new() { Label = "Provider", Value = "Kubernetes" }]
+                }
+            ],
+            "httproutefilters" =>
+            [
+                new EnvoyResourceInfo
+                {
+                    Kind = "HTTPRouteFilter", Name = "strip-api-prefix", Namespace = ns,
+                    Highlights = [new() { Label = "URL rewrite", Value = "yes" }]
+                }
+            ],
+            _ => []
+        };
+    }
+
     public async Task SetJobParallelismAsync(string ns, string jobName, int parallelism, CancellationToken ct = default)
     {
         await Task.Delay(100, ct).ConfigureAwait(false);
@@ -1939,7 +2350,7 @@ public class DemoAksClient : IAksClient
             new CronJobInfo
             {
                 Name = "cache-warmer", Namespace = ns,
-                Schedule = "0 */6 * * *", Suspend = false, ActiveCount = 1,
+                Schedule = "0 */6 * * *", TimeZone = "Europe/Brussels", Suspend = false, ActiveCount = 1,
                 LastScheduleTime = now.AddMinutes(-20),
                 LastSuccessfulTime = now.AddHours(-6),
                 Labels = CreateBatchLabels(null, "cache-warmer")

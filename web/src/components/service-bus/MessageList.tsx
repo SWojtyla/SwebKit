@@ -23,6 +23,7 @@ import { invalidateServiceBusQueries } from "@/lib/hooks";
 import { apiSend } from "@/lib/api";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
+import { formatLocalTime } from "@/lib/datetime";
 import { buildZip } from "@/lib/zip";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
@@ -130,7 +131,7 @@ const COLUMN_DEFS: ColumnDef[] = [
     {
         key: "enqueuedAt",
         label: "Enqueued",
-        render: (m) => new Date(m.enqueuedAt).toLocaleTimeString(),
+        render: (m) => formatLocalTime(m.enqueuedAt),
     },
     {
         key: "sequenceNumber",

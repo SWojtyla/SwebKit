@@ -20,7 +20,8 @@ import { JobsTab } from "./JobsTab";
 import { ConfigMapsTab } from "./ConfigMapsTab";
 import { IngressesTab } from "./IngressesTab";
 import { HttpRoutesTab } from "./HttpRoutesTab";
-import { HpaTab } from "./HpaTab";
+import { EnvoyTab } from "./EnvoyTab";
+import { AutoscalingTab } from "./AutoscalingTab";
 import { GatewayClassesTab } from "./GatewayClassesTab";
 import { GatewaysTab } from "./GatewaysTab";
 import { PodDetailPanel } from "./PodDetailPanel";
@@ -30,6 +31,7 @@ import { PortForwardPanel } from "./PortForwardPanel";
 import { AnalysisPanel } from "./AnalysisPanel";
 import { SecretDetailPanel } from "./SecretDetailPanel";
 import { ConfigMapDetailPanel } from "./ConfigMapDetailPanel";
+import { HttpRouteDetailPanel } from "./HttpRouteDetailPanel";
 import { MultiPodLogView } from "./MultiPodLogView";
 import { ContextMenu } from "./ContextMenu";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
@@ -59,31 +61,42 @@ function AksPageContent() {
 
     // Screen-state snapshot (agent-workspace-awareness M1): what the user sees on this page —
     // bounded to the fields the agent needs; read at publish time so it stays current.
-    useScreenStateProvider("aks-page", "Aks", () => ({
-        context: ws.currentContext,
-        namespaces: ws.selectedNamespaces,
-        activeTab: ws.activeTab,
-        podCount: ws.allPods?.length ?? 0,
-        pods: (ws.allPods ?? []).slice(0, 30).map((p) => ({
-            namespace: p.namespace,
-            name: p.name,
-            phase: p.phase,
-            ready: p.ready,
-            restarts: p.restartCount,
-            lastRestartReason: p.lastRestartReason,
-        })),
-        podOverflow: Math.max(0, (ws.allPods?.length ?? 0) - 30),
-        selectedPod: ws.selectedPod
-            ? {
-                  namespace: ws.selectedPod.namespace,
-                  name: ws.selectedPod.name,
-                  phase: ws.selectedPod.phase,
-                  ready: ws.selectedPod.ready,
-                  restarts: ws.selectedPod.restartCount,
-                  lastRestartReason: ws.selectedPod.lastRestartReason,
-              }
-            : null,
-    }), [ws.currentContext, ws.selectedNamespaces, ws.activeTab, ws.allPods, ws.selectedPod]);
+    useScreenStateProvider(
+        "aks-page",
+        "Aks",
+        () => ({
+            context: ws.currentContext,
+            namespaces: ws.selectedNamespaces,
+            activeTab: ws.activeTab,
+            podCount: ws.allPods?.length ?? 0,
+            pods: (ws.allPods ?? []).slice(0, 30).map((p) => ({
+                namespace: p.namespace,
+                name: p.name,
+                phase: p.phase,
+                ready: p.ready,
+                restarts: p.restartCount,
+                lastRestartReason: p.lastRestartReason,
+            })),
+            podOverflow: Math.max(0, (ws.allPods?.length ?? 0) - 30),
+            selectedPod: ws.selectedPod
+                ? {
+                      namespace: ws.selectedPod.namespace,
+                      name: ws.selectedPod.name,
+                      phase: ws.selectedPod.phase,
+                      ready: ws.selectedPod.ready,
+                      restarts: ws.selectedPod.restartCount,
+                      lastRestartReason: ws.selectedPod.lastRestartReason,
+                  }
+                : null,
+        }),
+        [
+            ws.currentContext,
+            ws.selectedNamespaces,
+            ws.activeTab,
+            ws.allPods,
+            ws.selectedPod,
+        ],
+    );
 
     return (
         <div className="flex h-full flex-col" data-testid="aks-page">
@@ -156,7 +169,11 @@ function AksPageContent() {
                                 ws.setAutoRefresh(e.target.checked)
                             }
                             disabled={!ws.namespaceToken}
-                            title={!ws.namespaceToken ? "Namespace is still loading" : undefined}
+                            title={
+                                !ws.namespaceToken
+                                    ? "Namespace is still loading"
+                                    : undefined
+                            }
                             data-testid="aks-auto-refresh-checkbox"
                         />
                         <span>Auto</span>
@@ -167,7 +184,13 @@ function AksPageContent() {
                             ws.setRefreshInterval(Number(e.target.value))
                         }
                         disabled={!ws.autoRefresh || !ws.namespaceToken}
-                        title={!ws.namespaceToken ? "Namespace is still loading" : !ws.autoRefresh ? "Enable Auto to pick an interval" : undefined}
+                        title={
+                            !ws.namespaceToken
+                                ? "Namespace is still loading"
+                                : !ws.autoRefresh
+                                  ? "Enable Auto to pick an interval"
+                                  : undefined
+                        }
                         className="rounded-md border bg-card px-2 py-1 text-xs disabled:opacity-40"
                         aria-label="Auto-refresh interval"
                         data-testid="aks-refresh-interval"
@@ -188,7 +211,11 @@ function AksPageContent() {
                     <button
                         onClick={ws.handleManualRefresh}
                         disabled={!ws.namespaceToken}
-                        title={!ws.namespaceToken ? "Namespace is still loading" : "Refresh the resources in view"}
+                        title={
+                            !ws.namespaceToken
+                                ? "Namespace is still loading"
+                                : "Refresh the resources in view"
+                        }
                         className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                         data-testid="aks-refresh-btn"
                     >
@@ -206,7 +233,13 @@ function AksPageContent() {
                             ws.openMultiPodLogs(pods);
                         }}
                         disabled={!ws.namespaceToken || ws.podsFetching}
-                        title={!ws.namespaceToken ? "Namespace is still loading" : ws.podsFetching ? "Pods are still loading" : "Stream logs from all pods at once"}
+                        title={
+                            !ws.namespaceToken
+                                ? "Namespace is still loading"
+                                : ws.podsFetching
+                                  ? "Pods are still loading"
+                                  : "Stream logs from all pods at once"
+                        }
                         className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                         data-testid="aks-multi-pod-logs"
                     >
@@ -342,7 +375,9 @@ function AksPageContent() {
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 Switching to {ws.pendingContext ?? "…"}
                             </div>
-                        ) : ws.profileLoaded && !ws.currentContext && !ws.isDemoMode ? (
+                        ) : ws.profileLoaded &&
+                          !ws.currentContext &&
+                          !ws.isDemoMode ? (
                             <EmptyState
                                 icon={Ship}
                                 title="No AKS cluster configured"
@@ -410,6 +445,12 @@ function AksPageContent() {
                                         isMulti={ws.isMultiNamespace}
                                     />
                                 )}
+                                {ws.activeTab === "envoy" && (
+                                    <EnvoyTab
+                                        ns={ws.namespaceToken}
+                                        isMulti={ws.isMultiNamespace}
+                                    />
+                                )}
                                 {ws.activeTab === "gatewayclasses" && (
                                     <GatewayClassesTab />
                                 )}
@@ -444,7 +485,7 @@ function AksPageContent() {
                                     />
                                 )}
                                 {ws.activeTab === "hpa" && (
-                                    <HpaTab
+                                    <AutoscalingTab
                                         ns={ws.namespaceToken}
                                         isMulti={ws.isMultiNamespace}
                                     />
@@ -590,6 +631,27 @@ function AksPageContent() {
                         <ConfigMapDetailPanel
                             configMap={ws.selectedConfigMap}
                             onClose={() => ws.setSelectedConfigMap(null)}
+                        />
+                    </ResizablePanel>
+                )}
+                {ws.selectedHttpRoute && (
+                    <ResizablePanel
+                        storageKey="aks-httproute-detail"
+                        defaultWidth={560}
+                        minWidth={320}
+                        maxWidth={1200}
+                        showHeader={false}
+                    >
+                        <HttpRouteDetailPanel
+                            route={ws.selectedHttpRoute}
+                            onClose={() => ws.setSelectedHttpRoute(null)}
+                            onViewYaml={() =>
+                                ws.openYaml(
+                                    "httproute",
+                                    ws.selectedHttpRoute!.name,
+                                    ws.selectedHttpRoute!.namespace,
+                                )
+                            }
                         />
                     </ResizablePanel>
                 )}

@@ -616,6 +616,52 @@ export async function triggerCronJob(
     );
 }
 
+export async function setCronJobSchedule(
+    ns: string,
+    name: string,
+    schedule: string,
+): Promise<void> {
+    return apiSend(
+        `/api/aks/${encodeURIComponent(ns)}/cronjobs/${encodeURIComponent(name)}/schedule`,
+        "POST",
+        { schedule },
+    );
+}
+
+// ── KEDA ScaledJobs ─────────────────────────────────────────────────────────
+
+export async function scaleScaledJob(
+    ns: string,
+    name: string,
+    minReplicas: number,
+    maxReplicas: number,
+): Promise<void> {
+    return apiSend(
+        `/api/aks/${encodeURIComponent(ns)}/scaledjobs/${encodeURIComponent(name)}/scale`,
+        "POST",
+        { minReplicas, maxReplicas },
+    );
+}
+
+export async function deleteScaledJob(ns: string, name: string): Promise<void> {
+    return apiSend(
+        `/api/aks/${encodeURIComponent(ns)}/scaledjobs/${encodeURIComponent(name)}`,
+        "DELETE",
+    );
+}
+
+export async function setScaledJobScalingEnabled(
+    ns: string,
+    name: string,
+    enabled: boolean,
+): Promise<void> {
+    return apiSend(
+        `/api/aks/${encodeURIComponent(ns)}/scaledjobs/${encodeURIComponent(name)}/scaling-enabled`,
+        "POST",
+        { enabled },
+    );
+}
+
 export async function getHelmReleaseNotes(
     ns: string,
     release: string,

@@ -39,6 +39,7 @@ import type {
     SecretInfo,
     ConfigMapInfo,
     HelmReleaseInfo,
+    HttpRouteInfo,
     KubeContextInfo,
 } from "@/lib/types";
 
@@ -59,10 +60,13 @@ export const networkTabs = [
     { id: "gatewayclasses", label: "GatewayClasses" },
     { id: "gateways", label: "Gateways" },
     { id: "httproutes", label: "HTTPRoutes" },
+    { id: "envoy", label: "Envoy" },
 ] as const;
 
 export const extraTabs = [
-    { id: "hpa", label: "HPA" },
+    // The URL id stays "hpa" so existing deep links keep working; the tab now
+    // covers all autoscaling (plain HPAs, KEDA ScaledObjects and ScaledJobs).
+    { id: "hpa", label: "Autoscaling" },
     { id: "events", label: "Events" },
     { id: "portforward", label: "Port-Forward" },
     { id: "analysis", label: "Analysis" },
@@ -169,6 +173,7 @@ export interface AksWorkspaceContextValue {
     helmRelease: HelmReleaseInfo | null;
     selectedSecret: SecretInfo | null;
     selectedConfigMap: ConfigMapInfo | null;
+    selectedHttpRoute: HttpRouteInfo | null;
     shellPod: PodInfo | null;
     askAiPod: PodInfo | null;
     /** Kubeconfig path from the active profile, passed to native commands (pod shell, port-forward). */
@@ -194,6 +199,7 @@ export interface AksWorkspaceContextValue {
     setHelmRelease: (rel: HelmReleaseInfo | null) => void;
     setSelectedSecret: (secret: SecretInfo | null) => void;
     setSelectedConfigMap: (configMap: ConfigMapInfo | null) => void;
+    setSelectedHttpRoute: (route: HttpRouteInfo | null) => void;
     setShellPod: (pod: PodInfo | null) => void;
     setAskAiPod: (pod: PodInfo | null) => void;
     setPodKey: (
@@ -289,6 +295,8 @@ export function AksWorkspaceProvider({
     );
     const [selectedConfigMap, setSelectedConfigMap] =
         useState<ConfigMapInfo | null>(null);
+    const [selectedHttpRoute, setSelectedHttpRoute] =
+        useState<HttpRouteInfo | null>(null);
     const [shellPod, setShellPod] = useState<PodInfo | null>(null);
     const [askAiPod, setAskAiPod] = useState<PodInfo | null>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(
@@ -362,6 +370,7 @@ export function AksWorkspaceProvider({
             });
             setSelectedSecret(null);
             setSelectedConfigMap(null);
+            setSelectedHttpRoute(null);
             // `shellPod` deliberately survives a tab switch: it renders as a bottom-docked
             // terminal, not a tab-scoped detail panel, so bouncing between Pods and Services
             // must not kill a live session. It's still cleared on a cluster context change
@@ -608,6 +617,7 @@ export function AksWorkspaceProvider({
             });
             setSelectedSecret(null);
             setSelectedConfigMap(null);
+            setSelectedHttpRoute(null);
             // A pod shell or "Ask AI about this pod" targeting the previous cluster must never be left
             // running/silently reconnected under the new context for a pod of the same name.
             setShellPod(null);
@@ -725,6 +735,7 @@ export function AksWorkspaceProvider({
             helmRelease ||
             selectedSecret ||
             selectedConfigMap ||
+            selectedHttpRoute ||
             askAiPod ||
             containerDetail ||
             showMultiPodLogs,
@@ -802,6 +813,7 @@ export function AksWorkspaceProvider({
             setPodKey(pod, { clearOthers: true });
             setSelectedSecret(null);
             setSelectedConfigMap(null);
+            setSelectedHttpRoute(null);
         },
         [setPodKey],
     );
@@ -818,6 +830,7 @@ export function AksWorkspaceProvider({
             });
             setSelectedSecret(null);
             setSelectedConfigMap(null);
+            setSelectedHttpRoute(null);
         },
         [updateParams],
     );
@@ -834,6 +847,7 @@ export function AksWorkspaceProvider({
             });
             setSelectedSecret(null);
             setSelectedConfigMap(null);
+            setSelectedHttpRoute(null);
         },
         [updateParams],
     );
@@ -852,6 +866,7 @@ export function AksWorkspaceProvider({
             });
             setSelectedSecret(null);
             setSelectedConfigMap(null);
+            setSelectedHttpRoute(null);
         },
         [namespaceToken, updateParams],
     );
@@ -872,6 +887,7 @@ export function AksWorkspaceProvider({
             });
             setSelectedSecret(null);
             setSelectedConfigMap(null);
+            setSelectedHttpRoute(null);
         },
         [updateParams],
     );
@@ -915,6 +931,7 @@ export function AksWorkspaceProvider({
             helmRelease,
             selectedSecret,
             selectedConfigMap,
+            selectedHttpRoute,
             shellPod,
             askAiPod,
             kubeconfigPath: profile?.config.aksConfig?.kubeconfigPath ?? null,
@@ -937,6 +954,7 @@ export function AksWorkspaceProvider({
             setHelmRelease,
             setSelectedSecret,
             setSelectedConfigMap,
+            setSelectedHttpRoute,
             setShellPod,
             setAskAiPod,
             setPodKey,
@@ -982,6 +1000,7 @@ export function AksWorkspaceProvider({
             helmRelease,
             selectedSecret,
             selectedConfigMap,
+            selectedHttpRoute,
             shellPod,
             askAiPod,
             profile?.config.aksConfig?.kubeconfigPath,
@@ -1004,6 +1023,7 @@ export function AksWorkspaceProvider({
             setHelmRelease,
             setSelectedSecret,
             setSelectedConfigMap,
+            setSelectedHttpRoute,
             setShellPod,
             setAskAiPod,
             setPodKey,

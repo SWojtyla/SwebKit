@@ -1179,6 +1179,273 @@ users:
         Assert.Null(KubernetesAksClient.GetKedaScaledObjectName(new V1ObjectMeta()));
     }
 
+    // ── ParseScaledJobs() ──
+    // The CustomObjects API returns an untyped object; ParseScaledJobs is the single
+    // mapping point between that JSON and ScaledJobInfo rows (name, paused annotation,
+    // replica bounds, trigger types).
+
+    private static JsonElement ScaledJobListJson(string json) =>
+        JsonDocument.Parse(json).RootElement;
+
+    [Fact]
+    public void ParseScaledJobs_MapsSpecAndMetadata()
+    {
+        var raw = ScaledJobListJson("""
+            {
+              "items": [
+                {
+                  "metadata": {
+                    "name": "queue-drain",
+                    "namespace": "payments",
+                    "annotations": { "autoscaling.keda.sh/paused": "true" }
+                  },
+                  "spec": {
+                    "minReplicaCount": 0,
+                    "maxReplicaCount": 10,
+                    "triggers": [ { "type": "azure-queue" }, { "type": "cron" } ]
+                  }
+                }
+              ]
+            }
+            """);
+
+        var jobs = KubernetesAksClient.ParseScaledJobs("payments", raw);
+
+        var job = Assert.Single(jobs);
+        Assert.Equal("queue-drain", job.Name);
+        Assert.Equal("payments", job.Namespace);
+        Assert.True(job.IsPaused);
+        Assert.Equal(0, job.MinReplicas);
+        Assert.Equal(10, job.MaxReplicas);
+        Assert.Equal(["azure-queue", "cron"], job.Triggers);
+    }
+
+    [Fact]
+    public void ParseScaledJobs_DefaultsNamespaceFromListContext()
+    {
+        var raw = ScaledJobListJson("""
+            { "items": [ { "metadata": { "name": "nightly" }, "spec": {} } ] }
+            """);
+
+        var job = Assert.Single(KubernetesAksClient.ParseScaledJobs("default", raw));
+
+        Assert.Equal("default", job.Namespace);
+        Assert.False(job.IsPaused);
+        Assert.Empty(job.Triggers);
+    }
+
+    [Fact]
+    public void ParseScaledJobs_SkipsItemsWithoutAName()
+    {
+        var raw = ScaledJobListJson("""
+            {
+              "items": [
+                { "metadata": { "namespace": "default" }, "spec": {} },
+                { "metadata": { "name": "good" }, "spec": {} }
+              ]
+            }
+            """);
+
+        var job = Assert.Single(KubernetesAksClient.ParseScaledJobs("default", raw));
+        Assert.Equal("good", job.Name);
+    }
+
+    [Fact]
+    public void ParseScaledJobs_ReturnsEmpty_ForNullOrMissingItems()
+    {
+        Assert.Empty(KubernetesAksClient.ParseScaledJobs("default", null));
+        Assert.Empty(KubernetesAksClient.ParseScaledJobs("default", ScaledJobListJson("{}")));
+        Assert.Empty(KubernetesAksClient.ParseScaledJobs("default", ScaledJobListJson("""{"items": []}""")));
+    }
+
+    // ── MapEnvoyResources() ──
+    // The Envoy Gateway CRDs are untyped CustomObjects too; MapEnvoyResources is the single
+    // mapping point that turns spec JSON into targetRefs + per-kind highlights.
+
+    private static JsonElement EnvoyListJson(string json) =>
+        JsonDocument.Parse(json).RootElement;
+
+    [Fact]
+    public void MapEnvoyResources_MapsBackendTrafficPolicyHighlights()
+    {
+        var raw = EnvoyListJson("""
+            {
+              "items": [
+                {
+                  "metadata": { "name": "orders-limits", "namespace": "ecommerce" },
+                  "spec": {
+                    "targetRefs": [
+                      { "group": "gateway.networking.k8s.io", "kind": "HTTPRoute", "name": "orders-api-route" }
+                    ],
+                    "circuitBreaker": { "maxConnections": 1024, "maxPendingRequests": 512 },
+                    "timeout": { "http": { "requestTimeout": "15s" } },
+                    "loadBalancer": { "type": "LeastRequest" }
+                  },
+                  "status": { "conditions": [ { "type": "Accepted", "status": "True" } ] }
+                }
+              ]
+            }
+            """);
+
+        var resources = KubernetesAksClient.MapEnvoyResources(raw, "BackendTrafficPolicy", "default");
+
+        var resource = Assert.Single(resources);
+        Assert.Equal("BackendTrafficPolicy", resource.Kind);
+        Assert.Equal("orders-limits", resource.Name);
+        Assert.Equal("ecommerce", resource.Namespace);
+        Assert.Equal("HTTPRoute/orders-api-route", Assert.Single(resource.TargetRefs));
+
+        var highlights = resource.Highlights.ToDictionary(h => h.Label, h => h.Value);
+        Assert.Equal("Accepted", highlights["Status"]);
+        Assert.Equal("1024", highlights["Max connections"]);
+        Assert.Equal("512", highlights["Max pending"]);
+        Assert.Equal("15s", highlights["Request timeout"]);
+        Assert.Equal("LeastRequest", highlights["Load balancer"]);
+    }
+
+    [Fact]
+    public void MapEnvoyResources_MapsSecurityPolicyHighlights()
+    {
+        var raw = EnvoyListJson("""
+            {
+              "items": [
+                {
+                  "metadata": { "name": "orders-auth" },
+                  "spec": {
+                    "targetRef": { "kind": "HTTPRoute", "name": "orders-api-route" },
+                    "jwt": { "providers": [ { "issuer": "https://login.example.com/" } ] },
+                    "authorization": { "defaultAction": "Allow", "rules": [ {}, {}, {} ] },
+                    "cors": { "allowOrigins": [ "https://a.example.com", "https://b.example.com" ] }
+                  }
+                }
+              ]
+            }
+            """);
+
+        var resource = Assert.Single(KubernetesAksClient.MapEnvoyResources(raw, "SecurityPolicy", "payments"));
+
+        Assert.Equal("payments", resource.Namespace); // falls back to the list namespace
+        Assert.Equal("HTTPRoute/orders-api-route", Assert.Single(resource.TargetRefs)); // singular targetRef too
+        var highlights = resource.Highlights.ToDictionary(h => h.Label, h => h.Value);
+        Assert.Equal("https://login.example.com/", highlights["JWT (1)"]);
+        Assert.Equal("Allow (3 rules)", highlights["Authorization"]);
+        Assert.Equal("2 origins", highlights["CORS"]);
+    }
+
+    [Fact]
+    public void MapEnvoyResources_MapsBackendEndpoints()
+    {
+        var raw = EnvoyListJson("""
+            {
+              "items": [
+                {
+                  "metadata": { "name": "external-search" },
+                  "spec": {
+                    "type": "DynamicResolver",
+                    "endpoints": [
+                      { "fqdn": { "hostname": "search.example.com", "port": 443 } },
+                      { "ip": { "address": "10.0.0.5", "port": 8080 } }
+                    ]
+                  }
+                }
+              ]
+            }
+            """);
+
+        var resource = Assert.Single(KubernetesAksClient.MapEnvoyResources(raw, "Backend", "default"));
+
+        var highlights = resource.Highlights.ToDictionary(h => h.Label, h => h.Value);
+        Assert.Equal("DynamicResolver", highlights["Type"]);
+        Assert.Equal("search.example.com:443, 10.0.0.5:8080", highlights["Endpoints (2)"]);
+    }
+
+    [Fact]
+    public void MapEnvoyResources_MissingSpecFieldsProduceNoHighlights()
+    {
+        var raw = EnvoyListJson("""
+            { "items": [ { "metadata": { "name": "bare" }, "spec": {} } ] }
+            """);
+
+        var resource = Assert.Single(KubernetesAksClient.MapEnvoyResources(raw, "BackendTrafficPolicy", "default"));
+
+        Assert.Empty(resource.TargetRefs);
+        Assert.Empty(resource.Highlights);
+    }
+
+    [Fact]
+    public void MapEnvoyResources_ReturnsEmpty_ForMissingItems()
+    {
+        Assert.Empty(KubernetesAksClient.MapEnvoyResources(EnvoyListJson("{}"), "Backend", "default"));
+        Assert.Empty(KubernetesAksClient.MapEnvoyResources(EnvoyListJson("""{"items": []}"""), "Backend", "default"));
+    }
+
+    [Fact]
+    public void MapHttpRoutes_MapsRulesAndParentStatuses()
+    {
+        const string json = """
+            {
+                "items": [
+                    {
+                        "metadata": { "name": "orders-api-route", "namespace": "ecommerce" },
+                        "spec": {
+                            "rules": [
+                                {
+                                    "matches": [
+                                        {
+                                            "path": { "type": "PathPrefix", "value": "/orders" },
+                                            "method": "GET",
+                                            "headers": [ { "name": "x-version", "value": "2" } ]
+                                        }
+                                    ],
+                                    "filters": [
+                                        { "type": "RequestHeaderModifier" },
+                                        { "type": "RequestRedirect", "requestRedirect": { "scheme": "https", "statusCode": 301 } }
+                                    ],
+                                    "backendRefs": [
+                                        { "name": "order-api", "port": 80, "weight": 90 },
+                                        { "name": "order-api-canary", "port": 80, "weight": 10 }
+                                    ],
+                                    "timeouts": { "request": "30s", "backendRequest": "15s" }
+                                }
+                            ]
+                        },
+                        "status": {
+                            "parents": [
+                                {
+                                    "parentRef": { "name": "public-gateway", "sectionName": "https-api" },
+                                    "conditions": [
+                                        { "type": "Accepted", "status": "True" },
+                                        { "type": "ResolvedRefs", "status": "False", "reason": "BackendNotFound" }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+            """;
+
+        using var doc = JsonDocument.Parse(json);
+        var method = typeof(KubernetesAksClient).GetMethod("MapHttpRoutes", BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+
+        var result = Assert.IsAssignableFrom<IReadOnlyList<HttpRouteInfo>>(method!.Invoke(null, [doc.RootElement, "default"]));
+        var route = Assert.Single(result);
+
+        var rule = Assert.Single(route.Rules);
+        Assert.Equal("PathPrefix /orders GET header x-version=2", Assert.Single(rule.Matches));
+        Assert.Equal(["RequestHeaderModifier", "RequestRedirect → https (301)"], rule.Filters);
+        Assert.Equal(["order-api:80 w=90", "order-api-canary:80 w=10"], rule.BackendRefs);
+        Assert.Equal("30s", rule.RequestTimeout);
+        Assert.Equal("15s", rule.BackendRequestTimeout);
+
+        var parent = Assert.Single(route.ParentStatuses);
+        Assert.Equal("public-gateway#https-api", parent.ParentRef);
+        Assert.Equal("ResolvedRefs", parent.Status); // first failing condition wins
+        Assert.Equal("BackendNotFound", parent.Reason);
+    }
+
     private sealed class TempKubeconfig(DirectoryInfo directory, string path) : IDisposable
     {
         public string Path { get; } = path;
