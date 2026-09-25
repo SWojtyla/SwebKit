@@ -47,7 +47,7 @@ export const mainTabs = [
   { id: "ops", label: "Ops" },
   { id: "pubsub", label: "Pub/Sub" },
 ] as const;
-export type TabId = (typeof mainTabs)[number]["id"];
+type TabId = (typeof mainTabs)[number]["id"];
 
 export type NamespaceNode = {
   name: string;
@@ -99,7 +99,7 @@ export type FlatRedisRow =
   | { kind: "namespace"; node: NamespaceNode; depth: number }
   | { kind: "key"; key: string; node: NamespaceNode; depth: number };
 
-export function flattenNamespaceTree(
+function flattenNamespaceTree(
   nodes: NamespaceNode[],
   expandedNamespaces: Set<string>,
   depth = 0,

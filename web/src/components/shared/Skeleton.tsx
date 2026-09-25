@@ -3,7 +3,7 @@ interface SkeletonProps {
 }
 
 /** A single shimmering placeholder block. Compose with layout classes to match the content it replaces. */
-export function Skeleton({ className = "" }: SkeletonProps) {
+function Skeleton({ className = "" }: SkeletonProps) {
   return <div className={`animate-pulse rounded bg-muted ${className}`} data-testid="skeleton" />;
 }
 

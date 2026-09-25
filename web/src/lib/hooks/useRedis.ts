@@ -160,22 +160,6 @@ export function useRedisHashFields(cacheId: string | null, key: string | null, k
   });
 }
 
-export function useRedisListItems(cacheId: string | null, key: string | null, keyType: string | null) {
-  return useQuery({
-    queryKey: ["redis", cacheId, "keys", key, "list"],
-    queryFn: ({ signal }) => apiFetch<string[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/list`, { signal }),
-    enabled: !!cacheId && !!key && keyType === "list",
-  });
-}
-
-export function useRedisSetMembers(cacheId: string | null, key: string | null, keyType: string | null) {
-  return useQuery({
-    queryKey: ["redis", cacheId, "keys", key, "set"],
-    queryFn: ({ signal }) => apiFetch<string[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/set`, { signal }),
-    enabled: !!cacheId && !!key && keyType === "set",
-  });
-}
-
 export function useRedisSortedSetMembers(cacheId: string | null, key: string | null, keyType: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "keys", key, "zset"],

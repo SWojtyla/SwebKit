@@ -605,19 +605,6 @@ public static class AksEndpoints
 
         // ── Pod Logs ───────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/pods/{podName}/logs", async (string ns, string podName, string? container, int tail, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
-        {
-            var client = GetClient(pool);
-            var opts = new LogStreamOptions { TailLines = tail, Follow = false };
-            var lines = new List<string>(tail > 0 ? tail : 100);
-            await foreach (var line in client.StreamPodLogsAsync(ns, podName, container ?? "", opts, ct))
-            {
-                lines.Add(line);
-                if (tail > 0 && lines.Count >= tail) break;
-            }
-            return Results.Text(string.Join('\n', lines), "text/plain");
-        });
-
         // Every bool/int parameter here has a default: a required primitive with none (the
         // shape `previousContainer` had) fails ASP.NET's minimal-API model binding outright
         // with a 400 the instant it's omitted from the query string — before any application

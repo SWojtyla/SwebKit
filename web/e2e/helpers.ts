@@ -11,7 +11,7 @@ const sidecarUrl = `http://127.0.0.1:${sidecarPort}`;
  * the DOM until the container is scrolled toward it — `scrollIntoViewIfNeeded()` can't help here
  * because there's nothing to scroll to yet.
  */
-export async function scrollVirtualListIntoView(
+async function scrollVirtualListIntoView(
   page: Page,
   containerTestId: string,
   targetTestId: string,
@@ -137,17 +137,6 @@ export async function setDemoMode(page: Page, enabled: boolean) {
       { timeout: 10000 },
     );
   }
-}
-
-/**
- * Waits for the AKS namespace selector to be populated with "default" and
- * then selects it. The selector is a hidden native `<select>`, so this waits
- * for the option to exist before calling `selectOption`.
- */
-export async function selectAksDefaultNamespace(page: Page) {
-  const select = page.getByTestId("aks-namespace-select");
-  await expect(select.locator("option", { hasText: "default" })).toBeAttached({ timeout: 15000 });
-  await select.selectOption({ label: "default" });
 }
 
 /**

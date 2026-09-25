@@ -72,7 +72,7 @@ export const extraTabs = [
     { id: "analysis", label: "Analysis" },
 ] as const;
 
-export const allTabs = [...directTabs, ...networkTabs, ...extraTabs] as const;
+const allTabs = [...directTabs, ...networkTabs, ...extraTabs] as const;
 export type TabId = (typeof allTabs)[number]["id"];
 
 export const networkTabIds = new Set<string>(networkTabs.map((t) => t.id));
@@ -710,7 +710,7 @@ export function AksWorkspaceProvider({
                 .map(([k, v]) => `${k}=${v}`)
                 .join(",");
             return apiFetch<PodInfo[]>(
-                `/api/aks/${namespace}/pods?labelSelector=${labelSelector}`,
+                `/api/aks/${namespace}/pods?labelSelector=${encodeURIComponent(labelSelector)}`,
             );
         },
         [],

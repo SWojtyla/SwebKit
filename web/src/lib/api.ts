@@ -361,7 +361,7 @@ export async function getMonitoringHistory(
 
 /** One concrete config fix the investigation produced — a minimal corrected snippet
  * (YAML fragment, env var, connection string...) with a one-line explanation. */
-export interface ProposedFix {
+interface ProposedFix {
     explanation: string;
     language: string;
     snippet: string;
@@ -450,44 +450,6 @@ export async function getRedisCaches(
 }
 
 // ── Redis mutations ────────────────────────────────────────────────────────────
-
-export async function setRedisHashField(
-    cacheId: string,
-    key: string,
-    field: string,
-    value: string,
-): Promise<void> {
-    await apiSend(
-        `/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/hash/field`,
-        "POST",
-        { field, value },
-    );
-}
-
-export async function deleteRedisHashField(
-    cacheId: string,
-    key: string,
-    field: string,
-): Promise<void> {
-    await apiSend(
-        `/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/hash/field/delete`,
-        "POST",
-        { field },
-    );
-}
-
-export async function updateRedisSortedSetScore(
-    cacheId: string,
-    key: string,
-    member: string,
-    score: number,
-): Promise<void> {
-    await apiSend(
-        `/api/redis/${cacheId}/keys/${encodeURIComponent(key)}/zset/score`,
-        "POST",
-        { member, score },
-    );
-}
 
 export async function exportRedisKeys(
     cacheId: string,
@@ -681,45 +643,6 @@ export async function getHelmReleaseManifest(
     return apiFetch<{ manifest: string }>(
         `/api/aks/${encodeURIComponent(ns)}/helm-releases/${encodeURIComponent(release)}/manifest`,
         { signal },
-    );
-}
-
-export async function getAksResourceYaml(
-    ns: string,
-    kind: string,
-    name: string,
-): Promise<string> {
-    const response = await fetch(
-        `${SIDECAR_BASE_URL}/api/aks/${encodeURIComponent(ns)}/yaml/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`,
-    );
-    if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `Failed to load YAML for ${kind}/${name}`);
-    }
-    return response.text();
-}
-
-export async function applyAksResourceYaml(
-    ns: string,
-    kind: string,
-    name: string,
-    yaml: string,
-): Promise<void> {
-    return apiSend<void>(
-        `/api/aks/${encodeURIComponent(ns)}/yaml/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`,
-        "POST",
-        { yaml },
-    );
-}
-
-export async function validateAksResourceYaml(
-    ns: string,
-    yaml: string,
-): Promise<{ error?: string }> {
-    return apiSend<{ error?: string }>(
-        `/api/aks/${encodeURIComponent(ns)}/yaml/validate`,
-        "POST",
-        { yaml },
     );
 }
 

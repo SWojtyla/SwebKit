@@ -139,6 +139,13 @@ Seed findings found during recon:
   Sql 46 — lower totals reflect ~30 deleted dead-code test files);
   `tsc -b` clean; vitest 534/534; `vite build` clean; ESLint 0 errors / 105
   warnings (logged above); Playwright 375/375
+- **Phase 2** (2026-09-25): `dotnet build SwebKit.slnx` clean; `dotnet test`
+  1941/1941; `tsc -b` clean; vitest 534/534; `vite build` clean; ESLint 0
+  errors / 102 warnings (three cleared by the dead-export cleanup); Playwright
+  375/375. Knip dead-export sweep applied across `web/src` + `web/e2e` —
+  2 dead store files, 13 dead functions/hooks, ~20 internal-only `export`s
+  dropped. `labelSelector` is now `encodeURIComponent`'d in both pod-query
+  call sites.
 
 ## Findings Log
 
@@ -252,6 +259,127 @@ Original scan list preserved below for the record:
 - `react-refresh/only-export-components` ×31 — fast-refresh hygiene, cosmetic.
 - `react-hooks/static-components` ×7, `incompatible-library` ×4, `immutability` ×4,
   `preserve-manual-memoization` ×3, `exhaustive-deps` ×3, `purity` ×2.
+
+### Phase 2 — feature deep dives
+
+#### AKS (8.8k web + ~6.5k `KubernetesAksClient` partials + 715-LOC endpoint file)
+
+**Fixed inline:** deleted `GET /api/aks/{ns}/pods/{name}/logs` (non-stream) — zero
+callers; every log view goes through `/logs/stream` SSE, and the endpoint still
+carried the required-`int tail` binding trap the stream variant had fixed.
+
+**Findings:**
+
+- **`AksWorkspaceContext` god-context defeats memoization** — one context value
+  carries ~70 fields including high-churn entries (`isAksFetching`,
+  `lastRefreshedAt`, `contextMenu`, `pendingConfirm`). Every consumer re-renders
+  on each 10s auto-refresh settle, and every `useMemo`/`useCallback` dep'd on
+  `ws` (most of them, e.g. `AutoscalingTab`'s tables) recomputes — so the
+  careful memoization + `ResourceTable`'s `memo()` are largely inert.
+  **Proposal (flagged):** split into stable-action context, selection context,
+  and churn context (`lastRefreshedAt`/`isAksFetching`/menus) so panels don't
+  re-render per refresh tick.
+- **Unused DI params** — `ProfileRepository`/`DemoModeService` are injected into
+  ~30 AKS handlers that never use them (kept by force of habit); same pattern
+  repeats across endpoint files. Mechanical cleanup, deferred — touches all
+  endpoint tests' call sites for cosmetic gain.
+- **Tab duplication** — `HpaTable`/`ScaledJobsTable` are near-identical
+  (confirm-flow + menu-builder + columns boilerplate); the same shape repeats
+  across ~15 tabs. A shared "resource actions table" abstraction is a Phase 2+
+  candidate, not now.
+- `DemoAksClient.cs` 2868 LOC — demo data, acceptable but the largest single
+  file in Core; a per-domain split (`DemoAksClient.Pods.cs` etc.) would help.
+- Positive: `useAks.ts` is exemplary — context-scoped query keys, mutation
+  notifications via `useNotifyMutation`, staleTime on slow calls. Endpoint file
+  documents prior bugs well. K8s client catches are all purposeful; signal
+  sources + version caches are correctly instance-scoped.
+
+#### API Client (8.6k web + 276-LOC endpoint file + ~841 LOC Core services)
+
+**Findings — healthy, no action:**
+
+- `ApiClientPageContext` (1134) is the largest god-context but is unusually
+  well-structured: preview-tab semantics, serialized `useUpdateCollections`
+  scope + `concurrencyToken` conflict handling, transient `credentialSecret`
+  scrubbed before persistence. The split flag still applies (churn fields like
+  `tabStates`/`confirmDialog`/`nameDialog` re-render everything) but this one
+  earns its complexity more than the others.
+- Endpoints are thin and honest (explicit "no catch here" note where the global
+  handler does a better job); credential endpoints mask secrets and never echo
+  raw values.
+- ESLint: 23 warnings in feature scope — 21 `react-refresh/only-export-components`
+  + 1 `react-hooks/refs` (`BodyCodeEditor`'s `onChangeRef.current = onChange` in
+  render — the standard latest-callback pattern, worth an `useEffectEvent` swap
+  when that file is next touched).
+- Good coverage: `HttpRequestExecutor*`, `VariableService`, `PostRequestCapture`,
+  collection repo/import/export all have dedicated test files.
+
+#### Service Bus (6.3k web + 495-LOC endpoint file + 872-LOC `AzureServiceBusClient`)
+
+**Findings — healthy, no action:**
+
+- Post-overhaul the feature is in good shape: peek count is clamped server-side
+  (`MaxPeekCount = 250`, the huge-queue 500 fix), extracted handlers are unit
+  tested for exactly-once mutation, `entitySegment()` encoding is documented,
+  `invalidateServiceBusQueries` centralizes key-prefix discipline.
+- `useServiceBus.ts` is the best-documented hook file in the repo (per-query
+  staleTime rationale, cache-read `placeholderData` for entity stats).
+- Minor API asymmetry, cosmetic only: `/complete` + `/deadletter` take `long[]`
+  bodies while `/dlq/complete`, `/resubmit`, `/resend` wrap `string[]` in a
+  request record. Both sides already agree — harmonizing would be churn.
+- `MessageList.tsx` (1566) is the feature's monolith — filter bar, saved
+  filters, column toggle, chunked bulk ops and virtualized grid in one
+  component — but internally factored and heavily commented. A
+  `MessageListToolbar`/row-renderer split is a Phase 3 candidate, not a bug.
+- ESLint in scope: 11 warnings (component-in-render warnings in `EntityTree`,
+  1 ref-in-render, 1 setState-in-effect) — already counted in the repo total.
+
+#### Settings / Storage / Redis / Monitoring / Agent / SQL / Layout
+
+A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
+
+- Deleted dead Zustand stores `stores/connection.ts` + `stores/selection.ts`
+  (created, never imported — superseded by the per-feature page contexts).
+- Deleted dead `api.ts` wrappers the hooks bypass: `setRedisHashField`,
+  `deleteRedisHashField`, `updateRedisSortedSetScore`, `getAksResourceYaml`,
+  `applyAksResourceYaml`, `validateAksResourceYaml` (hooks call the same
+  endpoints via `apiSend`/`apiFetch` directly).
+- Deleted dead hooks: `usePinnedResources`, `useRedisListItems`,
+  `useRedisSetMembers` (non-paginated variants superseded by the paginated
+  ones), `useSbBatchSend`, `useSbResendMessages`, `useSbDeadLetterMessages`
+  (the chunked-bulk path calls `apiSend` directly so progress reporting stays
+  per-chunk).
+- Deleted dead `tauri-bridge` wrappers: `readClipboard`, `pickFile`,
+  `confirmDialog`, `alertDialog`, `writeFile`, `listDir`, `listSecrets` (the
+  Rust commands stay registered — harmless, and web fallbacks aren't needed).
+- Deleted dead e2e helper `selectAksDefaultNamespace`.
+- Dropped `export` from ~20 internal-only symbols (operator tables, filter
+  helpers, tree utils, scenario builders, `AKS_KEY_PREFIX`, `KEYBOARD_SHORTCUTS`,
+  `allTabs`, `Skeleton`, etc.) so knip's next pass reports real orphans only.
+- `filterLogic.ts` re-exported `requiresPropertyName` while `AdvancedFilterPanel`
+  imported it from `filterTypes` directly — dead re-export removed.
+- Knip false positive kept: `cross-env` is used by `playwright.config.ts`'s
+  webServer command.
+
+**Findings:**
+
+- **The god-context pattern is systemic, not AKS-only** — `StoragePageContext`
+  (~100 fields, memoized), `RedisPageContext` (~85 fields, **not memoized at
+  all** — the value object is rebuilt every render), `ApiClientPageContext`
+  (~75 fields), `AksWorkspaceContext` (~70 fields). Redis is the worst case:
+  unmemoized + `lastRefreshedAt`/`isFetching` inside means every consumer
+  re-renders on every auto-refresh tick. The fix proposal is one item covering
+  all four: split into selection/actions/churn contexts (or adopt a store +
+  selectors) per page.
+- No TODO/FIXME/HACK anywhere in `src-sidecar/`, `web/src/`, or `src/` —
+  hygiene is enforced.
+- Empty catches found are all process/file cleanup (`AcpJsonRpcPeer`,
+  `AppDataFileStore`) — intentional.
+- Endpoint files stay thin and well-organized; SQL endpoints cap row counts
+  (`HardMaxRows=5000`), JSONPath bodies are bounded (8 MB), secrets are masked
+  before returning. Service Bus count clamp, connection-test sanitizing, and
+  demo-id stripping in `ConfigEndpoints.SaveProfileAsync` are all already
+  correct.
 
 **Remaining flagged items (deferred to Phase 2 / later):**
 

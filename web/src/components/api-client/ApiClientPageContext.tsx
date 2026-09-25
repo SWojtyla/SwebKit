@@ -235,7 +235,7 @@ function appendHistory(state: TabState | undefined, response: ApiClientExecution
   return [{ id: nextId, response, timestamp: Date.now() }, ...existing].slice(0, HISTORY_LIMIT);
 }
 
-export interface NameDialogState {
+interface NameDialogState {
   title: string;
   label: string;
   defaultValue: string;
@@ -243,7 +243,7 @@ export interface NameDialogState {
   onConfirm: (name: string) => void;
 }
 
-export interface ConfirmDialogState {
+interface ConfirmDialogState {
   message: string;
   onConfirm: () => void;
   /**

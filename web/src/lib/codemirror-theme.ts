@@ -13,7 +13,7 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 
-export const swebkitHighlightStyle = HighlightStyle.define([
+const swebkitHighlightStyle = HighlightStyle.define([
   // JSON object keys arrive as propertyName; XML/HTML attribute values as string.
   { tag: t.propertyName, color: "var(--cm-key)", fontWeight: "600" },
   { tag: [t.string, t.special(t.string)], color: "var(--cm-string)" },
@@ -32,7 +32,7 @@ export const swebkitHighlightStyle = HighlightStyle.define([
  * surrounding pane's `bg-card` / `bg-background` shows through and the editor
  * never fights the theme.
  */
-export const swebkitEditorTheme = EditorView.theme({
+const swebkitEditorTheme = EditorView.theme({
   "&": {
     height: "100%",
     fontSize: "0.8125rem",

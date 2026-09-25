@@ -294,62 +294,6 @@ export function useSbScheduleMessage() {
     });
 }
 
-export function useSbBatchSend() {
-    const qc = useQueryClient();
-    const { notify } = useNotification();
-    return useMutation({
-        mutationFn: (vars: {
-            nsId: string;
-            entityPath: string;
-            messages: SbMessage[];
-        }) =>
-            apiSend<{ sent: number }>(
-                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/batch-send`,
-                "POST",
-                vars.messages,
-            ),
-        onSuccess: (_data, vars) => {
-            invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
-        },
-        onError: (error) =>
-            notify("error", "Couldn't send batch", String(error)),
-    });
-}
-
-/**
- * Resend-to-origin: the sidecar forwards each selected message to the queue it failed
- * in — resolved server-side from the `NServiceBus.FailedQ` application property,
- * falling back to the viewed entity — with a fresh MessageId, then removes the
- * original. Move semantics, so a resend never leaves a duplicate behind. `deadLetter`
- * reads from the entity's DLQ instead of its active list, mirroring which list the
- * selection came from.
- */
-export function useSbResendMessages() {
-    const qc = useQueryClient();
-    const { notify } = useNotification();
-    return useMutation({
-        mutationFn: (vars: {
-            nsId: string;
-            entityPath: string;
-            sequenceNumbers: string[];
-            deadLetter: boolean;
-        }) =>
-            apiSend<{ resent: number }>(
-                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/resend`,
-                "POST",
-                {
-                    sequenceNumbers: vars.sequenceNumbers,
-                    deadLetter: vars.deadLetter,
-                },
-            ),
-        onSuccess: (_data, vars) => {
-            invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
-        },
-        onError: (error) =>
-            notify("error", "Couldn't resend messages", String(error)),
-    });
-}
-
 export function useSbScheduledMessages(
     nsId: string | null,
     entityPath: string | null,
@@ -447,33 +391,6 @@ export function useSbCompleteMessages() {
         },
         onError: (error) =>
             notify("error", "Couldn't complete messages", String(error)),
-    });
-}
-
-/**
- * Move-to-dead-letter: the sidecar dead-letters each selected active message on the
- * broker — a real broker dead-letter (PeekLock `DeadLetterMessageAsync`), not a
- * send-and-delete, so the message lands in the entity's DLQ with a recorded reason.
- */
-export function useSbDeadLetterMessages() {
-    const qc = useQueryClient();
-    const { notify } = useNotification();
-    return useMutation({
-        mutationFn: (vars: {
-            nsId: string;
-            entityPath: string;
-            sequenceNumbers: number[];
-        }) =>
-            apiSend<{ deadLettered: number }>(
-                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/deadletter`,
-                "POST",
-                vars.sequenceNumbers,
-            ),
-        onSuccess: (_data, vars) => {
-            invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
-        },
-        onError: (error) =>
-            notify("error", "Couldn't dead-letter messages", String(error)),
     });
 }
 

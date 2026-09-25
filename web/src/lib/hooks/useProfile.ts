@@ -56,14 +56,6 @@ export function useUpdateProfile() {
   });
 }
 
-export function usePinnedResources() {
-  const { data: profile, ...query } = useProfile();
-  return {
-    ...query,
-    data: profile?.config.favoriteResources ?? [],
-  };
-}
-
 export function useTogglePinnedResource() {
   const qc = useQueryClient();
   const { notify } = useNotification();

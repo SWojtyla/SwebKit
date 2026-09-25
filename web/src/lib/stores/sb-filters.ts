@@ -26,7 +26,7 @@ export function loadSavedFilters(nsId: string, entityPath: string): SbSavedFilte
   }
 }
 
-export function saveSavedFilters(nsId: string, entityPath: string, filters: SbSavedFilter[]): void {
+function saveSavedFilters(nsId: string, entityPath: string, filters: SbSavedFilter[]): void {
   try {
     localStorage.setItem(getKey(nsId, entityPath), JSON.stringify(filters));
   } catch {
