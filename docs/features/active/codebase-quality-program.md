@@ -433,9 +433,12 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   Storage 7, ApiClient 2).
 - `web/src/lib/types.ts` (1516) — flat bag of ~159 types mirroring sidecar contracts;
   per-domain split is cosmetic, low priority.
-- `web/src/lib/api.ts` (796) — transport (`apiFetch`/`apiSend`/`apiUpload`/
-  `streamAgentChat`) mixed with ~60 domain endpoint functions; worth splitting into
-  `lib/api/<domain>.ts` when touched — not urgent.
+- ~~`web/src/lib/api.ts` (796)~~ — **split done**: `lib/api/` directory —
+  `transport.ts` (base-url init, `apiFetch`/`apiSend`/`apiUpload`,
+  `streamAgentChat`, `postScreenState`), `monitoring.ts`, `redis.ts`,
+  `settings.ts`, `aks.ts`, `apiClient.ts`; `index.ts` re-exports everything
+  so all 43 `lib/api` import sites are unchanged. `SIDECAR_BASE_URL`'s live
+  binding survives `export *`.
 - `docs/architecture/functionalities/*.md` — several remain MAUI-era in detail
   (`SwebKit.App` razor paths, Blazor flows); dead-feature references stripped this
   phase, full rewrites land with each Phase 2 deep dive.
