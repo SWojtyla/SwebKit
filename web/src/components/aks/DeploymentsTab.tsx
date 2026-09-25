@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { useAksDeployments, useAksRestartDeployment, useAksScaleDeployment } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksActions } from "./shared/aks-workspace-context";
+import { resourceMenuItems } from "./shared/resource-actions";
 import { ScaleDialog } from "./ScaleDialog";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { DeploymentInfo } from "@/lib/types";
@@ -39,27 +40,28 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
     });
   }, [ws, restartMutation]);
 
-  const buildMenu = useCallback((dep: DeploymentInfo): ContextMenuItem[] => [
-    { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(dep.name) },
-    { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("deployment", dep.name, dep.namespace) },
-    { label: "Edit YAML", icon: "✎", onClick: () => ws.openYaml("deployment", dep.name, dep.namespace) },
-    { label: "View Logs", icon: "☰", onClick: async () => {
-      const pods = await ws.resolvePodsForSelector(dep.namespace, dep.selectorLabels);
-      if (pods.length > 0) ws.openLogs(pods[0]);
-    } },
-    { label: "Logs for all pods", icon: "¦", onClick: async () => {
-      const pods = await ws.resolvePodsForSelector(dep.namespace, dep.selectorLabels);
-      ws.openMultiPodLogs(pods);
-    } },
-    { label: "Container Details", icon: "⚙", onClick: async () => {
-      const pods = await ws.resolvePodsForSelector(dep.namespace, dep.selectorLabels);
-      if (pods.length > 0) ws.openContainerDetails(pods[0].name, pods[0].namespace);
-    } },
-    { label: "Analyze network", icon: "📶", onClick: () => ws.navigateToAnalysis() },
-    { label: "", separator: true, onClick: () => {} },
-    { label: "Restart Deployment", icon: "↻", onClick: () => restart(dep) },
-    { label: "Scale...", icon: "⇳", onClick: () => setScaleTarget(dep) },
-  ], [ws, restart]);
+  const buildMenu = useCallback((dep: DeploymentInfo): ContextMenuItem[] =>
+    resourceMenuItems(ws, dep, "deployment", {
+      middle: [
+        { label: "Edit YAML", icon: "✎", onClick: () => ws.openYaml("deployment", dep.name, dep.namespace) },
+        { label: "View Logs", icon: "☰", onClick: async () => {
+          const pods = await ws.resolvePodsForSelector(dep.namespace, dep.selectorLabels);
+          if (pods.length > 0) ws.openLogs(pods[0]);
+        } },
+        { label: "Logs for all pods", icon: "¦", onClick: async () => {
+          const pods = await ws.resolvePodsForSelector(dep.namespace, dep.selectorLabels);
+          ws.openMultiPodLogs(pods);
+        } },
+        { label: "Container Details", icon: "⚙", onClick: async () => {
+          const pods = await ws.resolvePodsForSelector(dep.namespace, dep.selectorLabels);
+          if (pods.length > 0) ws.openContainerDetails(pods[0].name, pods[0].namespace);
+        } },
+        { label: "Analyze network", icon: "📶", onClick: () => ws.navigateToAnalysis() },
+        { label: "", separator: true, onClick: () => {} },
+        { label: "Restart Deployment", icon: "↻", onClick: () => restart(dep) },
+        { label: "Scale...", icon: "⇳", onClick: () => setScaleTarget(dep) },
+      ],
+    }), [ws, restart]);
 
   const handleRowContextMenu = useCallback(
     (e: MouseEvent<HTMLTableRowElement>, dep: DeploymentInfo) => ws.showContextMenu(e, buildMenu(dep)),
