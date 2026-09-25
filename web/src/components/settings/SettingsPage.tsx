@@ -70,6 +70,7 @@ export function SettingsPage() {
     useEffect(() => {
         const state = location.state as { tab?: string } | null;
         if (state?.tab && TAB_IDS.has(state.tab)) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
             setActiveTab(state.tab as TabId);
             navigate(location.pathname, { replace: true, state: null });
         }

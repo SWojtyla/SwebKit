@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Dialog } from "@/components/shared/Dialog";
@@ -65,9 +65,11 @@ export function AlertRuleDialog({
 }) {
     const [draft, setDraft] = useState<MonitoringAlertRule>(rule ?? empty());
 
-    useEffect(() => {
+    const [prevRule, setPrevRule] = useState(rule);
+    if (prevRule !== rule) {
+        setPrevRule(rule);
         setDraft(rule ?? empty());
-    }, [rule]);
+    }
 
     const isAks = draft.source.startsWith("Aks");
     const selectedAksContext = draft.aksPodParams?.kubeconfigContext ?? "";

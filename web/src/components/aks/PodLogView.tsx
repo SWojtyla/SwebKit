@@ -39,7 +39,13 @@ function streamParams(range: LogRange, container: string, tail: number, follow: 
 }
 
 export function PodLogView({ ns, podName, containers = [], onClose }: PodLogViewProps) {
-  const [container, setContainer] = useState(containers[0] ?? "");
+  const [containerOverride, setContainer] = useState(containers[0] ?? "");
+  // Effective container: the user's pick while it's still in the pod's container list,
+  // else the first available — the fallback the old sync effect applied, now derived.
+  const container =
+    containerOverride && containers.includes(containerOverride)
+      ? containerOverride
+      : (containers[0] ?? "");
   const [range, setRange] = useState<LogRange>("5m");
   const [isLive, setIsLive] = useState(true);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -69,12 +75,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
     saveViewPreference(TIMESTAMP_PREF_KEY, mode);
   };
 
-  // Keep the selected container in sync with the pod's available containers.
-  useEffect(() => {
-    if (containers.length > 0 && (!container || !containers.includes(container))) {
-      setContainer(containers[0]);
-    }
-  }, [containers, container]);
+  // (Container fallback is derived at declaration — no sync effect needed.)
 
   const stopStream = useCallback(() => {
     if (eventSourceRef.current) {
@@ -126,6 +127,7 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
   // Restart when the stream signature changes. Closing the source in the cleanup is what
   // stops a stream delivering into an unmounted component.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- stream lifecycle: startStream is an external subscription, setState inside it is the mechanism
     if (ns && podName) startStream();
     return () => stopStream();
     // eslint-disable-next-line react-hooks/exhaustive-deps

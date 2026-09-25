@@ -498,6 +498,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     const collection = collections.find((c) => c.id === state.collectionId);
     const node = collection ? findRequestNode(collection.nodes, state.nodeId) : null;
     if (node?.type === "Request" && node.request) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
       setSelectedCollectionId(state.collectionId);
       setSelectedNodeId(state.nodeId);
       openTab(node, state.collectionId);

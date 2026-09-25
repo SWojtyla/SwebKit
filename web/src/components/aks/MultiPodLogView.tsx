@@ -48,9 +48,11 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
   // is memoised off the URL param upstream, so this re-syncs only when the set itself
   // genuinely changes, not on every render.
   const [selectedPods, setSelectedPods] = useState<string[]>(pods);
-  useEffect(() => {
+  const [prevPods, setPrevPods] = useState(pods);
+  if (prevPods !== pods) {
+    setPrevPods(pods);
     setSelectedPods(pods);
-  }, [pods]);
+  }
 
   const [container, setContainer] = useState("");
   const [range, setRange] = useState<LogRange>("5m");

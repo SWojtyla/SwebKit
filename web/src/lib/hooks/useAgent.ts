@@ -118,6 +118,7 @@ export function usePendingActionsFeed() {
   const [feed, setFeed] = useState<PendingActionFeedItem[]>([]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reconciles local feed with each poll result; Date.now() can't run during render
     setFeed((prev) => reconcilePendingActionsFeed(prev, query.data, Date.now()));
     // new Date.now() every render would defeat the reconciliation instead of only running it once
     // per actual poll result.

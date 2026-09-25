@@ -301,16 +301,40 @@ Original scan list preserved below for the record:
   transitive false positives in `ApiClientPageContext`'s memoized value
   (event-time mirror reads embedded in a render object) carry scoped
   `eslint-disable` comments documenting intent.
-- `react-hooks/set-state-in-effect` ×31 — cascading-render pattern; most are
-  intentional reset-on-key-change idioms, triage per feature.
-- `react-refresh/only-export-components` ×31 — fast-refresh hygiene, cosmetic.
+- ~~`react-hooks/set-state-in-effect` ×31~~ — **cleared**: ~14 reset-on-prop
+  sites converted to React's blessed "adjust state during render" pattern
+  (`usePaletteNavigation`, `MultiPodLogView`, `NamespaceSelector`,
+  `PortForwardPanel`, `GitPanel` draft, `ResponseBodyViewer`,
+  `ResponseViewer`, `AlertRuleDialog`, `CollectionVariableEditor`,
+  `RedisPageContext` key-switch, `StoragePageContext` location/blob resets,
+  `SearchableSelect`, `ActivityIndicator` busy-edge, `GitDiffPane` target
+  reset) — one fewer render pass than the effect version, and no stale
+  frame. `JsonPathPicker`'s `validJson` folded into the existing `parsed`
+  `useMemo`; `PodLogView`'s container sync is now derived state. ~10
+  genuine external-sync effects (stream lifecycle, `location.state`
+  deep-links, fetch-edge transitions, async loads, `Date.now()` data
+  reconciliation) carry scoped `eslint-disable` comments explaining why the
+  effect is the correct mechanism.
+- ~~`react-hooks/immutability` ×2~~ / ~~`purity` ×2~~ — **cleared**: ref-guard
+  writes carry scoped disables; `Date.now()`-in-render replaced by a shared
+  `useNow` hook (`LastRefreshed` + `ScheduledMessages`, which also fixes a
+  real staleness bug — scheduled rows never flipped to "Enqueued" while the
+  overlay was open).
+- `react-refresh/only-export-components` ×45 — fast-refresh hygiene, cosmetic
+  (grew as scoped contexts/hooks were extracted — expected).
 - ~~`react-hooks/static-components` ×7~~ — **fixed**: all seven were nested
   component definitions in Service Bus `EntityTree.tsx` (`CountBadge` inside
   `EntityStatsBadges`, `SortArrow` inside `EntityTree`). Both hoisted to
   module level taking props instead of closing over parent state — every
   re-render previously remounted them and reset their DOM/state.
-- `react-hooks/incompatible-library` ×4, `immutability` ×4,
-  `preserve-manual-memoization` ×3, `exhaustive-deps` ×3, `purity` ×2.
+- `react-hooks/incompatible-library` ×4, `preserve-manual-memoization` ×3 —
+  React-Compiler-only informational warnings; the compiler is not enabled
+  in this build, so they report optimizations that don't apply. Left as
+  warnings (they'd matter if the compiler is ever adopted).
+
+**Lint end state: 0 errors / 52 warnings**, all in the three cosmetic /
+informational classes above — every actionable react-hooks category is now
+at zero.
 
 ### Phase 2 — feature deep dives
 

@@ -435,20 +435,29 @@ export function StoragePageProvider({
 
     // Pagination is fetch-position state, not navigation state: it resets whenever
     // the browsed location changes (including via back/forward, which bypasses the
-    // select handlers that used to clear it manually).
-    useEffect(() => {
+    // select handlers that used to clear it manually). Adjusted during render so a
+    // new location never paints one frame of the previous location's page.
+    const [prevLocation, setPrevLocation] = useState({ resolvedAccountId, selectedContainer, currentPrefix });
+    if (
+        prevLocation.resolvedAccountId !== resolvedAccountId ||
+        prevLocation.selectedContainer !== selectedContainer ||
+        prevLocation.currentPrefix !== currentPrefix
+    ) {
+        setPrevLocation({ resolvedAccountId, selectedContainer, currentPrefix });
         setContinuationToken(null);
         setAllItems([]);
-    }, [resolvedAccountId, selectedContainer, currentPrefix]);
+    }
 
     // Same for the version-detail panel — a blob arriving via URL/back-forward
     // must not inherit the previous blob's compare/restore state.
-    useEffect(() => {
+    const [prevSelectedBlob, setPrevSelectedBlob] = useState(selectedBlob);
+    if (prevSelectedBlob !== selectedBlob) {
+        setPrevSelectedBlob(selectedBlob);
         setVersionBaseId(null);
         setVersionCompareId(null);
         setVersionCompareRequested(false);
         setVersionRestoreId(null);
-    }, [selectedBlob]);
+    }
 
     const blobs = useStorageBlobs(
         resolvedAccountId,
@@ -696,6 +705,7 @@ export function StoragePageProvider({
         if (filteredItems.length > 0) return;
         if (blobs.isFetching) return;
         if (!blobs.data?.continuationToken) return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-driven auto-pagination; advancing the query is the point of the effect
         handleLoadMore();
     }, [
         blobFilter,

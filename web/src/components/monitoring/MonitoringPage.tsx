@@ -102,9 +102,11 @@ export function MonitoringPage() {
         if (state?.ruleId) {
             const rule = rules.find((r) => r.id === state.ruleId);
             if (rule) {
+                /* eslint-disable react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway */
                 setActiveTab("rules");
                 setEditingRule(rule);
                 setShowEditor(true);
+                /* eslint-enable react-hooks/set-state-in-effect */
                 navigate(location.pathname, { replace: true, state: null });
             }
         }

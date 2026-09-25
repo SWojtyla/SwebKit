@@ -180,6 +180,7 @@ export function ServiceBusPage() {
 
   useEffect(() => {
     if (peekData) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors fetched data into a locally-mutable window (loadMore appends to it); Date.now() can't run during render
       setMessageWindow(peekData);
       setLastSeq(maxSequenceNumber(peekData));
       setLastBatchLength(peekData.length);

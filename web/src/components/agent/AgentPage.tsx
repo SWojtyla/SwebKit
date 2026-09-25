@@ -44,6 +44,7 @@ export function AgentPage() {
   useEffect(() => {
     const scenario = searchParams.get("scenario");
     if (scenario && lastAssistantContent.includes(scenario)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot URL-param deep-link consumption; the paired setSearchParams must live in an effect anyway
       setShowVisuals(true);
       if (searchParams.has("scenario")) {
         const next = new URLSearchParams(searchParams);

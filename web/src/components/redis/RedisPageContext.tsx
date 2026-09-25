@@ -371,6 +371,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   useEffect(() => {
     const state = location.state as { cacheId?: string } | null;
     if (state?.cacheId && caches.some((c) => c.id === state.cacheId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
       setActiveCacheId(state.cacheId);
       navigate(location.pathname, { replace: true, state: null });
     }
@@ -506,7 +507,11 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     wasFetchingRef.current = isFetching;
   }, [isFetching]);
 
-  useEffect(() => {
+  // Key-switch clears in-progress field edits — during render so the new key's
+  // detail never paints with the previous key's edit buffers.
+  const [prevSelectedKey, setPrevSelectedKey] = useState(selectedKey);
+  if (prevSelectedKey !== selectedKey) {
+    setPrevSelectedKey(selectedKey);
     setHashAdding(false);
     setNewHashField("");
     setNewHashValue("");
@@ -515,7 +520,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     setHashEditValue("");
     setZsetEditingMember(null);
     setZsetEditScore("");
-  }, [selectedKey]);
+  }
 
   // Shared by the Search button and the Prefix/Ops drill-through links below. Setting `pattern`
   // directly (rather than `setSearchInput` followed by a separate call reading `searchInput`)
@@ -597,11 +602,13 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     if (scanResult.isFetching || !scanResult.data) return;
 
     if (scanResult.data.isComplete) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- terminating a fetch-driven pagination loop; this IS synchronization with the query layer
       setLoadAllActive(false);
       return;
     }
 
     if (lastAdvancedCursorRef.current === scanResult.data.cursor) return;
+    // eslint-disable-next-line react-hooks/immutability -- effect-time write to a useRef guard; refs are the sanctioned mutable channel
     lastAdvancedCursorRef.current = scanResult.data.cursor;
     handleLoadMore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -867,6 +874,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
       setAllKeys([]);
       setSelectedKey(null);
       setSelectedKeys(new Set());
+      // eslint-disable-next-line react-hooks/immutability -- event-time write to a useRef guard; refs are the sanctioned mutable channel
       lastAdvancedCursorRef.current = null;
       setExpandedNamespaces(new Set());
       restorePattern(cacheId);

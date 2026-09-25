@@ -15,17 +15,6 @@ export function JsonPathPicker({ initialBody, initialPath, onSelect, onClose }: 
   const [body, setBody] = useState(initialBody ?? "{}");
   const [path, setPath] = useState(initialPath ?? "");
   const [preview, setPreview] = useState<{ value: string | null; error: string | null } | null>(null);
-  const [validJson, setValidJson] = useState(true);
-
-  useEffect(() => {
-    try {
-      JSON.parse(body);
-      setValidJson(true);
-    } catch {
-      setValidJson(false);
-    }
-  }, [body]);
-
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -34,11 +23,11 @@ export function JsonPathPicker({ initialBody, initialPath, onSelect, onClose }: 
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const parsed = useMemo(() => {
+  const { parsed, validJson } = useMemo(() => {
     try {
-      return JSON.parse(body) as unknown;
+      return { parsed: JSON.parse(body) as unknown, validJson: true };
     } catch {
-      return null;
+      return { parsed: null, validJson: false };
     }
   }, [body]);
 

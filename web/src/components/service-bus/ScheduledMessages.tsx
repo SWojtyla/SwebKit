@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X, Clock, Trash2, RefreshCw } from "lucide-react";
-import { useSbScheduledMessages, useSbCancelScheduled } from "@/lib/hooks";
+import { useSbScheduledMessages, useSbCancelScheduled, useNow } from "@/lib/hooks";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import type { ScheduledMessageEntry } from "@/lib/types";
 import { formatLocalDateTime } from "@/lib/datetime";
@@ -31,7 +31,9 @@ export function ScheduledMessages({ nsId, entityPath, onClose }: Props) {
                 new Date(b.scheduledEnqueueTime).getTime(),
         );
 
-    const now = Date.now();
+    // Ticks so a row crossing its enqueue time flips to "Enqueued" (and loses its cancel
+    // button) while the overlay is open, rather than freezing at first render.
+    const now = useNow(1000, (entries?.length ?? 0) > 0);
 
     return (
         <div

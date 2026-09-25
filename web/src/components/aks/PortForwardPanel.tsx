@@ -44,12 +44,15 @@ export function PortForwardPanel({
     }, []);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- async initial load into local state; fetching is the point of the effect
         refresh();
     }, [refresh]);
 
-    useEffect(() => {
+    const [prevSelectedPod, setPrevSelectedPod] = useState(selectedPod);
+    if (prevSelectedPod !== selectedPod) {
+        setPrevSelectedPod(selectedPod);
         if (selectedPod) setPod(selectedPod);
-    }, [selectedPod]);
+    }
 
     const handleStart = async () => {
         setLoading(true);

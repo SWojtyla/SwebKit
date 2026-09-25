@@ -153,6 +153,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
       });
     } else if (auth.credentialKey) {
       // Legacy: the collections.json value itself is the secret.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync fallback of a credential-load effect whose primary path is async (keyvault fetch)
       setAuthSecretInput(auth.credentialKey);
     } else {
       setAuthSecretInput(auth.credentialSecret ?? "");

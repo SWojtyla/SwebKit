@@ -10,11 +10,16 @@ export function usePaletteNavigation(itemCount: number, resetKey: unknown) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // Reset during render rather than in an effect — a post-commit reset renders one frame
+  // with the stale highlight before snapping back. `resetKey` callers pass primitives
+  // (the query string), so `!==` is a safe change check.
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey);
     setSelectedIndex(0);
     // itemCount intentionally excluded: this should reset on the *cause* of a list
     // change (e.g. query text), not merely because the count happens to differ.
-  }, [resetKey]);
+  }
 
   useEffect(() => {
     const container = scrollRef.current;

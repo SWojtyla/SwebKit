@@ -111,9 +111,13 @@ export function SearchableSelect<T extends SearchableSelectItem = SearchableSele
     return sortItems ? sortItems(sorted) : sorted;
   }, [filtered, value, currentFirst, sortItems, open]);
 
-  useEffect(() => {
+  // Highlight resets to the first row when the query or open state changes —
+  // during render so a fresh list never paints a stale highlight for one frame.
+  const [prevNav, setPrevNav] = useState({ search, open });
+  if (prevNav.search !== search || prevNav.open !== open) {
+    setPrevNav({ search, open });
     setHighlight(0);
-  }, [search, open]);
+  }
 
   const close = () => {
     setOpen(false);
