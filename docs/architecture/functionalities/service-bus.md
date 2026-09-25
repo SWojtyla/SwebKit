@@ -2,103 +2,117 @@
 
 ## What Is Supported
 
-- Add/remove global Service Bus namespaces in the UI.
-- Connect namespaces from stored credentials.
-- Restore cached namespace connection snapshots immediately, then reconnect each connectable namespace independently in the background.
-- Browse queues, topics, and subscriptions with status surfaced as Active/Disabled.
-- Entity rows surface message amount metrics plus pin/unpin only; operational actions are handled outside the row.
-- Open Active, Open DLQ, and Enable/Disable actions from the selected-entity action bar (Active/DLQ are not applicable to topics).
-- Peek active and dead-letter messages.
-- Delete a single selected active message from `MessageListView`.
-- Build advanced multi-field filters (Application Property, Enqueued Time, Delivery Count, Sequence Number) with explicit operators and logical AND composition.
-- Toggle filters globally on/off and advanced rules on/off without losing configured criteria.
-- Save and restore message filters per scope, including text filter, advanced rules, and enabled-state toggles.
-- Delete filtered messages from active or DLQ mode with preview/confirmation and post-operation refresh.
-- Export filtered messages as JSON from `MessageListView`.
-- Purge all messages in the current mode (active or DLQ).
-- Configure visible built-in message-list columns from a column chooser.
-- Add and remove custom message-list columns backed by `ApplicationProperties` keys.
-- Persist message-list row density and column preferences per namespace/entity/mode scope, including reset-to-default.
-- Expand loaded message windows with `Load More` in active and DLQ list modes for large result sets.
-- Compose, replay, edit, and schedule messages.
-- Send-like actions opened from a subscription workspace normalize the target to the parent topic, because subscriptions are receive-only paths.
-- Manage message templates from composer workflows (create/save, search, apply, rename, duplicate, edit, delete).
-- Cancel scheduled messages and view scheduled message history.
-- Resubmit dead-letter messages to original or target entity, processing the full requested sequence set across receive batches.
-- Resend selected messages back to their original queue — resolved per message from `NServiceBus.FailedQ`, falling back to the viewed entity — with a fresh Message ID, then remove the original (move semantics; works on the active list and the DLQ).
-- Move selected active messages to the entity's dead-letter queue via the broker's own dead-letter settlement (`DeadLetterMessageAsync` with a `SwebKit.ManualTransfer` reason) — not a copy-and-delete.
-- Complete dead-letter messages with the same exhaustive sequence matching.
-- Use production-safe confirmation dialogs for destructive actions.
-- Favorite Service Bus resources through the shared operator workspace model, with the Service Bus page, dashboard pins, command palette, and top-bar workspace hub all reading the same canonical favorite snapshots.
-- Save and restore Service Bus workspace state, including the active entity or scheduled tab, the open tab set, and namespace-pane collapse state, using route-first restore after namespace reconnect.
+- Configure multiple namespaces in Settings using connection strings or Entra-based authentication.
+- Test namespace connectivity without returning raw SDK/credential details to the browser.
+- Browse queues, topics, and subscriptions with message counts. Subscription queries run only when a topic is expanded; topic rows carry collapsed DLQ rollups.
+- Restore the last selected namespace/entity and keep namespace, entity, active/DLQ mode, and message selection in the URL for deep links and browser history.
+- Show a namespace overview before an entity is selected.
+- Peek active and dead-letter messages with an expanding message window and `Load more` support.
+- Search and filter loaded messages by text, application property, enqueued time, delivery count, sequence number, and pinned session ID.
+- Save scoped filter profiles, select visible built-in/application-property columns, and persist row density/auto-refresh preferences.
+- Inspect body, properties, headers, and DLQ details in a resizable message detail pane.
+- Compose, replay, edit, schedule, and batch-send messages.
+- Manage reusable message templates: create, apply, rename, duplicate, edit, and delete.
+- View and cancel locally tracked scheduled messages.
+- Complete active or dead-letter messages, manually dead-letter active messages, purge a mode, resubmit DLQ messages, and resend selected active/DLQ messages.
+- Batch replay messages from pasted JSON with preview and confirmation.
+- Open the entity command palette and the contextual agent for the selected Service Bus scope.
+- Run entirely against realistic demo clients when demo mode is active.
 
-## Core Runtime Flow
+## Resend Semantics
 
-1. `ServiceBusPage` reads configured namespaces from `AppStateService` and asks `IServiceBusNamespaceBootstrapper` to build the initial page state from configuration, cached connection snapshots, and demo-mode state.
-2. Each namespace that should reconnect resolves credentials and attempts connection through `IServiceBusNamespaceBootstrapper.ConnectAsync`, so the page only owns row state and per-namespace progress updates.
-3. `EntityTree` loads queues/topics/subscriptions, surfaces entity status, and invokes enable/disable operations.
-4. `MessageListView` applies text + advanced filtering rules in-memory over loaded messages, persists/reapplies saved filter profiles, applies per-scope column and row-density preferences, supports expanding windows via `Load More`, and calls `IServiceBusClient` operations for delete selected, delete filtered, JSON export, and purge.
-5. `DlqView` continues to support existing DLQ resubmit/complete workflows and shares filtered-delete capability through `MessageListView` when in DLQ mode. `AzureServiceBusClient` routes DLQ complete and resubmit through `MessageSequenceProcessor`, which keeps receiving until the requested sequence set is exhausted, releases non-target messages predictably, and fails explicitly if the broker is drained before all requested sequence numbers are found. The same processor backs resend: `ResendMessagesAsync` receives the requested sequence set under PeekLock (active list or DLQ per `deadLetter`), forwards a clone with a fresh Message ID to each message's `NServiceBus.FailedQ` target (falling back to the source entity) through per-target senders, and completes the original once the copy is sent.
-6. `MessageComposer` can save templates to profile-backed app state and apply templates selected from `TemplatePicker` before send/replay/schedule actions.
-7. `TemplatePicker` supports in-dialog search and inline validation for invalid template rename/edit inputs, then persists template mutations through `AppStateService`.
-8. Destructive mutations are gated by `ConfirmDialog`, and post-mutation refresh is handled via list reload plus refresh-token wiring for DLQ flows.
-9. `ServiceBusPage` publishes semantic workspace snapshots for the active tab and tab set; shell-level recent/favorite reopen flows navigate first and then rehydrate the page state.
+Resend is move-like, not copy-only:
+
+1. Receive each requested sequence under PeekLock from the active entity or its DLQ.
+2. Resolve the destination from `NServiceBus.FailedQ`, falling back to the viewed entity; MSMQ-era `@machine` suffixes are stripped.
+3. Clone the message with a newly generated message ID.
+4. Send the clone to the resolved target.
+5. Complete the original only after the send succeeds.
+
+`MessageSequenceProcessor` continues receiving across broker batches until the requested sequence set is exhausted. Missing sequences produce an explicit failure rather than a partial-success response. Manual move-to-DLQ uses broker settlement (`DeadLetterMessageAsync`) rather than copy-and-delete.
+
+## Runtime Flow
+
+```text
+/service-bus
+  → ServiceBusPage
+      → useProfile → configured namespaces
+      → URL state: ns / entity / entityName / view / msg / seq
+      → EntityTree
+          → useSbQueues / useSbTopics
+          → expanded TopicRow → useSbSubscriptions
+      → selected entity
+          → useSbEntityStats
+          → useSbPeekMessages or useSbPeekDlq
+          → local expanding messageWindow
+          → MessageList + MessageDetail
+      → compose/batch/scheduled/template overlays
+      → mutation hook
+          → sidecar /api/servicebus/{nsId}/...
+          → IServiceBusConnectionPool
+          → IServiceBusClient (Azure or demo)
+          → targeted React Query invalidation
+```
+
+`ServiceBusPage` owns page navigation and overlays. `MessageList` owns loaded-list filtering, selection, bulk progress, column preferences, and auto-refresh. React Query owns remote topology, counts, peek windows, and mutation state.
+
+## Query and Endpoint Behavior
+
+- Topology (`queues`, `topics`, `subscriptions`) uses a five-minute stale window; deployments change topology less frequently than message counts.
+- Entity stats use a shorter stale window and seed from already-loaded topology counts where possible.
+- Peek failures retry once instead of holding the page in a minutes-long loading state across repeated Azure SDK timeouts.
+- Entity paths are encoded as one route segment; this is required for subscription paths such as `topic/subscriptions/name`.
+- `invalidateServiceBusQueries` centralizes the exact topology/message/stats/scheduled query keys after mutations.
+- The sidecar resolves namespace IDs against `ProfileRepository`/demo state and obtains pooled clients from `IServiceBusConnectionPool`.
+- Connection-test failures return a sanitized diagnostic; raw Azure SDK exception messages are logged server-side only.
+
+## Persistence
+
+- Namespace configuration and templates are profile-backed through `ProfileRepository`.
+- Last namespace/entity selection and message-list preferences are browser-local stores under `web/src/lib/stores/`.
+- Drill-down state is URL-backed so reload, back/forward, and copied links retain the current workspace.
+- Scheduled-message history is persisted by `ScheduledMessageRepository`; it is metadata for messages scheduled through SwebKit, not an exhaustive broker-side schedule index.
 
 ## Main Code Locations
 
-- `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`
-- `src/SwebKit.App/Services/ServiceBusNamespaceBootstrapper.cs`
-- `src/SwebKit.App/Components/ServiceBus/EntityTree.razor`
-- `src/SwebKit.App/Components/ServiceBus/MessageListView.razor`
-- `src/SwebKit.App/Components/ServiceBus/MessageComposer.razor`
-- `src/SwebKit.App/Components/ServiceBus/DlqView.razor`
-- `src/SwebKit.App/Components/ServiceBus/ScheduledMessages.razor`
-- `src/SwebKit.App/Components/Shared/ConfirmDialog.razor`
+- `web/src/components/service-bus/ServiceBusPage.tsx` — page state, URL restoration, overlays, refresh
+- `web/src/components/service-bus/EntityTree.tsx` — queue/topic/subscription browser and counts
+- `web/src/components/service-bus/NamespaceOverview.tsx` — namespace summary
+- `web/src/components/service-bus/MessageList.tsx` — filters, columns, selection, bulk operations
+- `web/src/components/service-bus/MessageDetail.tsx` — message inspection/actions
+- `web/src/components/service-bus/MessageComposer.tsx` — send/replay/edit/schedule workspace
+- `web/src/components/service-bus/BatchSendPanel.tsx` / `BatchReplayPanel.tsx`
+- `web/src/components/service-bus/TemplateManager.tsx` / `TemplatePicker.tsx`
+- `web/src/components/service-bus/ScheduledMessages.tsx`
+- `web/src/components/service-bus/bulkOps.ts` / `resendHelpers.ts` / `filterLogic.ts`
+- `web/src/lib/hooks/useServiceBus.ts` — queries, mutations, invalidation
+- `web/src/lib/stores/sb-selection.ts` / `sb-preferences.ts`
+- `src-sidecar/Endpoints/ServiceBusEndpoints.cs` — HTTP contract
+- `src-sidecar/Services/SidecarServiceBusConnectionPool.cs` — pooled client lifetime
 - `src/SwebKit.Core/Abstractions/IServiceBusClient.cs`
-- `src/SwebKit.Core/Abstractions/IServiceBusNamespaceBootstrapper.cs`
 - `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`
 - `src/SwebKit.Azure/ServiceBus/MessageSequenceProcessor.cs`
 - `src/SwebKit.Core/Configuration/ScheduledMessageRepository.cs`
 
-## Important Notes
+## Important Constraints
 
-- `AzureServiceBusClient` supports both connection-string and AAD-style setup paths.
-- Scoped entity path connection strings are handled to surface only reachable entities.
-- Entity status toggles are exposed through `SetQueueEnabledAsync`, `SetTopicEnabledAsync`, and `SetSubscriptionEnabledAsync`.
-- Active single-message delete uses `CompleteMessagesAsync(entityPath, sequenceNumbers)` from `MessageListView`.
-- Purge-all uses `PurgeMessagesAsync(entityPath, deadLetter)` for both active and DLQ modes.
-- Existing DLQ resubmit/complete paths now share `MessageSequenceProcessor` so selected sequence numbers are processed across batches instead of only the first receive window; resend and move-to-dead-letter (`DeadLetterMessagesAsync`, PeekLock `DeadLetterMessageAsync` on the active entity) use it for the active list too.
-- Resend targets the queue each message failed in — `NServiceBus.FailedQ`, with any MSMQ-era `@machine` suffix stripped — and removes the original after the copy is sent, so resending an NServiceBus error queue behaves like a ServiceInsight/ServicePulse retry and never leaves duplicates.
-- Messages bound from a JSON body reach `MapToSdk` with `JsonElement` application-property values; `NormalizePropertyValue` unwraps them to AMQP primitives because raw `JsonElement` is not broker-serializable (the previous opaque 500 on resend/replay).
-- If any requested sequence numbers are still missing after the dead-letter receiver is drained, the operation fails explicitly with the missing sequence numbers.
-- Pagination/load-more is implemented as an expanding peek window (request count grows by the configured page size) so existing `IServiceBusClient` contracts remain unchanged.
-- `MessageListView` surfaces window state (`loaded/total` and next target) and disables load-more when the loaded window reaches the known entity total.
-- Refreshes (auto-refresh, mutation reloads, explicit refresh token updates) continue with the active window size to preserve filter and selection continuity.
-- Template interactions are profile-backed through `ProfileRepository` and exposed via `AppStateService.MessageTemplates`.
-- Template picker invalid-input safeguards include blank/duplicate name checks and duplicate property-key validation during template edits.
-- Filtered delete routing is mode-aware:
-    - active mode uses `CompleteMessagesAsync(entityPath, sequenceNumbers)`
-    - DLQ mode uses `CompleteDeadLetterAsync(entityPath, sequenceNumbers)`
-- Filtered export for parity Wave 2 is JSON-only; CSV export is intentionally deferred.
-- Production protections rely on the current production-marked configuration and are enforced by `ConfirmDialog` at UI interaction level.
-- Service Bus UI uses a collapsible entity panel and a responsive message detail drawer (push on wide screens, overlay on narrow).
-- Entity names in the entity list wrap to full visibility (no single-line truncation/horizontal-scroll pattern).
-- Topic rows retain expand/collapse behavior; queue/subscription operational actions are centralized in the selected-entity action bar.
-- Favorite and unfavorite changes update immediately in the entity list, and the dashboard pinned panel plus shell workspace surfaces reflect the same canonical Service Bus resource list.
-- `ServiceBusPage` keeps legacy `ServiceBusEntityLinks` synchronized for compatibility, but the canonical shell-level contract is now `FavoriteResources` plus page-owned semantic restore state.
-- Message list row density and column profiles are persisted in `UiStateRepository` per `{namespaceId}:{entityPath}:{mode}` scope and can be reset to defaults from the column chooser.
-- Namespace pane collapsed/expanded state is now persisted in `UiStateRepository`, so it survives the same atomic app-data save and backup recovery path as the rest of the local UI state.
-- Named favorites and recent-resource reopen flows restore route-first, then rebuild tabs from semantic tab-state payloads after the namespace reconnect fan-out completes.
-- Demo namespaces and cached reconnect semantics are composed through `IServiceBusNamespaceBootstrapper`; `ServiceBusPage` preserves the visible namespace list and per-row progress while the background reconnect fan-out runs.
-- Local scheduled-message metadata now persists through the same atomic write and `.bak` recovery path used by the other app-data repositories, so a partial write does not wipe the scheduled-message history list.
-- Service Bus settings remain reachable from shell navigation and unconfigured-state CTAs; the main route header no longer reserves space for a one-off Settings button.
+- Subscriptions are receive-only; send-like UI actions normalize the target to the parent topic.
+- Do not persist demo namespace IDs as real configuration. `ConfigEndpoints.SaveProfileAsync` strips demo overlays before saving.
+- JSON-bound application-property values arrive as `JsonElement`; the Azure client must normalize them to AMQP-supported primitives.
+- Preserve selection/filter continuity when refreshing or expanding the message window.
+- Every destructive or move-like action requires an explicit confirmation in production-facing UI.
+- Never expose connection strings or raw SDK exception text through endpoint responses.
 
 ## Validation Pointers
 
-- `tests/SwebKit.App.Tests/ServiceBusPageTests.cs`
-- `tests/SwebKit.App.Tests/MessageComposerTests.cs`
-- `tests/SwebKit.App.Tests/TemplatePickerTests.cs`
-- `tests/SwebKit.Core.Tests/ServiceBusNamespaceTests.cs`
-- `tests/SwebKit.Core.Tests/ScheduledMessageRepositoryTests.cs`
+- `web/e2e/service-bus.spec.ts` — complete UI workflow coverage
+- `web/e2e/service-bus-url-state.spec.ts` — deep links and history
+- `web/src/components/service-bus/filterLogic.test.ts`
+- `web/src/components/service-bus/bulkOps.test.ts`
+- `web/src/components/service-bus/resendHelpers.test.ts`
+- `web/src/lib/hooks/useServiceBus.test.ts`
+- `tests/SwebKit.Sidecar.Tests/ServiceBusEndpointsMutationTests.cs`
+- `tests/SwebKit.Sidecar.Tests/SidecarServiceBusConnectionPoolTests.cs`
 - `tests/SwebKit.Azure.Tests/ServiceBus/MessageSequenceProcessorTests.cs`
 - `tests/SwebKit.Azure.Tests/ServiceBus/ResendTests.cs`
+- `tests/SwebKit.Core.Tests/ServiceBusNamespaceTests.cs`

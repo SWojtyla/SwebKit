@@ -1,82 +1,159 @@
 # Settings and Configuration
 
-## What Is Supported
+## Scope
 
-- Single-configuration editing for:
-    - Environment-scoped favorite resources, including named favorites and backward-compatible Service Bus pin data
-    - Observability provider settings
-    - AKS kubeconfig/context defaults
-    - Redis cache entries
-    - Storage (Azure Blob) account config
-    - User-curated workspace maps (Map tab): multiple named maps (`AppConfig.Maps`), each holding resources across AKS, Service Bus, Redis, SQL, and Storage linked by declared relationships — one map per project, so unrelated topologies don't bleed into each other. Maps are injected into every agent turn's system prompt (see `functionalities/agent.md`); legacy profiles carrying a single `AppConfig.Topology` migrate into a named map on load. AKS nodes can pin a kubeconfig context (`KubeconfigContext`) and are addable via a context → namespace → deployment picker.
-- Local recent-resource history persisted separately in `ui-state.json`
-- Shell appearance preferences persisted separately in `user-settings.json`
-- The appearance section exposes `Studio Ledger` as the curated dark default plus the supported light palettes, and legacy dark-theme aliases normalize to `Studio Ledger` when loaded.
-- Settings shell exposes a dedicated Workspace section for full export/import and configuration readiness instead of showing those global controls above every section-specific form.
-- Save settings back to the persisted app profile when profile persistence is healthy.
-- Full configuration bundle export/import for the complete persisted operator state: `profiles.json`, `ui-state.json`, `user-settings.json`, and `scheduled-messages.json`.
-- Backup-aware startup recovery for `profiles.json`, `ui-state.json`, and `user-settings.json` when the primary file is missing or unreadable.
-- Inline save feedback, including explicit in-memory-only messaging when profile persistence is blocked after a failed load.
-- Non-fatal startup warning banner when `profiles.json` fails to load.
-- Non-fatal startup recovery banner when `profiles.json` is restored from the last known good backup.
-- Dashboard readiness summary and setup checklist that deep-link into the owning Settings sections when setup or repair work is still needed, limited to actionable capability areas instead of already-healthy ones.
-- Settings page includes a dedicated Workspace section for whole-workspace transfer plus a readiness overview, while section-specific readiness detail remains scoped to the owning settings area.
-- Diagnostics section for structured file logging: enable/disable toggle, minimum log level (Information/Debug/Trace/Warning), "Open logs folder", and "Export logs as .zip" for attaching to a bug report. Preference is stored in `user-settings.json` alongside appearance settings.
+The React Settings page at `/settings` edits the active SwebKit profile, local user preferences, workspace maps, and diagnostics behavior through the ASP.NET sidecar. It is split into these tabs:
 
-## Core Runtime Flow
+- General
+- Service Bus
+- AKS
+- Redis
+- SQL
+- Storage
+- AI Agent
+- Map
+- Diagnostics
+- Appearance
 
-1. `AppStateService.InitializeAsync()` calls `ProfileRepository.LoadAsync()`, which tries the primary `profiles.json` first and then falls back to a sibling `.bak` file before reporting a fatal load failure.
-2. `MainLayout` renders immediately, then shows either a non-fatal warning banner if profile loading failed or a recovery banner if startup restored the last known good backup.
-3. Settings page reads `AppState.Config` (the global `AppConfig`) from `AppStateService`.
-4. `ConfigurationProbeService` runs explicit, read-only, time-budgeted live checks against the existing AKS, Service Bus, Redis, Storage, and Observability seams, then caches the results for the current session.
-6. Accordion forms mutate the config objects directly on `AppConfig`.
-7. `ProfileRepository` normalizes `FavoriteResources` and migrates legacy `SavedWorkspaces`, Service Bus links, and favorite entities into the named-favorite model during load.
-9. `UiStateRepository` persists local recent-resource history and page-level UI flags separately from the environment-scoped profile and uses the same backup-aware recovery path as profile persistence.
-10. `UserSettingsRepository` persists shell appearance preferences such as theme selection in `user-settings.json`, with the same atomic write and backup recovery behavior as the other app-data repositories. `MainLayout` normalizes legacy dark-theme aliases to the chosen `Studio Ledger` default when those values are loaded.
-11. Save calls `AppState.SaveConfigAsync()` to persist `profiles.json`. Writes go through an atomic temp-file replace and refresh a `.bak` copy after every successful save. If both the primary profile file and its backup failed to load during startup, the call returns `false`, the file on disk is left untouched, and the UI surfaces `ProfilePersistenceBlockedMessage`. Saving also invalidates cached live-check results so the next readiness view cannot show stale verification.
-12. Full-bundle export/import flows through `ConfigurationBundleService`, which snapshots all persisted stores into a versioned JSON bundle and can explicitly recover profile persistence by writing imported profile data back to disk even after a prior failed-load blocked normal profile saves.
-13. The full-bundle transfer affordance and workspace readiness live in the dedicated Workspace settings section so domain forms remain focused on their own configuration.
+Command-palette navigation can open a specific tab through one-shot React Router `location.state`. When demo mode is active, connection tabs show that their real connection fields are inert until demo mode is disabled.
+
+## Configuration Domains
+
+### Profile data
+
+`ProfileRepository` persists environment/workspace configuration exposed by `GET/PUT /api/config/profiles`, including:
+
+- Service Bus namespaces;
+- AKS kubeconfig/default context and namespace;
+- Redis caches and active cache;
+- SQL connections and active connection;
+- Storage accounts;
+- agent profiles and active profile;
+- Azure Key Vault references;
+- favorite resources; and
+- named workspace maps and declared relationships.
+
+Feature settings use `useProfile` plus updater-style `useUpdateProfile` mutations. `DraftInput` keeps typing local and commits on blur/unmount so ordinary field editing does not PUT the entire profile on every keystroke.
+
+### User settings
+
+`GET/PUT /api/config/user-settings` stores machine-local behavior such as:
+
+- theme/appearance;
+- API Client TLS verification, request tabs, and auto-save;
+- startup connection warm-up;
+- last-workspace restoration; and
+- diagnostics/logging preferences.
+
+These settings are separate from the profile because they describe this installation rather than a shared environment.
+
+### API Client stores
+
+The same config endpoint module also exposes dedicated environment and collection stores. They are managed by the API Client rather than the Settings tabs, but full export/import includes them.
+
+### Workspace maps
+
+The Map tab edits multiple named `AppConfig.Maps`. A map contains resources from AKS, Service Bus, Redis, SQL, and Storage plus user-declared relationships. Operators can:
+
+- add discovered or manual resources;
+- pin AKS context/namespace/deployment metadata;
+- inspect and relabel nodes;
+- add/remove relationships;
+- accept or dismiss suggested relationships; and
+- switch between list and shared `TopologyGraph` views.
+
+Maps feed both the dashboard topology and the agent's bounded workspace-map prompt/tool context. Legacy single-topology profile data migrates during profile loading.
+
+## Readiness and Connection Tests
+
+The current React implementation distinguishes two concepts:
+
+- **Configured** — required local fields/entities exist. `useSettingsReadiness` drives the status dots beside Service Bus, AKS, Redis, SQL, and Storage tabs and the General getting-started checklist.
+- **Connected** — an explicit test endpoint succeeds. Each connection form owns a `Test connection` action and displays its sanitized result.
+
+There is no live `ConfigurationProbeService` or global readiness dashboard in the current stack. Connection tests are user-triggered and route through feature endpoints/pools. This avoids background probes during settings rendering and keeps failures scoped to the relevant form.
+
+SQL test/discovery actions use the currently typed ad-hoc values rather than a potentially stale saved client. Other connection edits invalidate the affected pooled clients when the profile is saved.
+
+## Save and Pool Invalidation Flow
+
+```text
+Settings component
+  → useUpdateProfile(updater)
+  → PUT /api/config/profiles
+  → ConfigEndpoints.SaveProfileAsync
+      → strip demo overlay entities
+      → ProfileRepository.ReplaceProfileData + SaveAsync
+      → invalidate affected connection pools
+      → React Query profile refresh
+```
+
+`SaveProfileAsync` invalidates all Storage and Service Bus clients, selectively evicts changed Redis/SQL entries, and evicts affected monitoring clients for AKS/Service Bus/Redis connection changes. Selection-only changes such as Redis `ActiveCacheId` do not drain healthy pools.
+
+The GET endpoint clones profile data before applying demo overlays. The PUT endpoint removes known demo IDs before persistence so toggling demo mode cannot poison real configuration.
+
+## Export and Import
+
+General Settings can export or import the versioned configuration bundle through:
+
+- `GET /api/config/export`
+- `POST /api/config/import`
+
+Import requires confirmation because it replaces profiles, API collections/environments, and user settings. The UI advises a restart after import so all consumers reload the replaced stores.
+
+The bundle is intentionally broader than `AppConfig`; it represents persisted operator state managed by `ConfigurationBundleService`.
+
+## Diagnostics and Appearance
+
+- Diagnostics settings control structured file logging and expose Tauri-backed open-folder/export-log actions.
+- Appearance settings apply the selected theme to the document and persist it through user settings.
+- The Tauri shell owns window/tray lifecycle; the deleted MAUI shell is not involved.
 
 ## Main Code Locations
 
-- `src/SwebKit.App/Components/Layout/MainLayout.razor`
-- `src/SwebKit.App/Components/Pages/DashboardPage.razor`
-- `src/SwebKit.App/Components/Pages/SettingsPage.razor`
-- `src/SwebKit.App/Components/Shared/ConfigurationReadinessDashboard.razor`
-- `src/SwebKit.App/Components/Shared/ConfigurationReadinessAreaCard.razor`
-- `src/SwebKit.App/Services/ConfigurationProbeService.cs`
-- `src/SwebKit.App/Components/Pages/ServiceBusConfigForm.razor`
-- `src/SwebKit.App/Components/Pages/ObservabilityConfigForm.razor`
-- `src/SwebKit.App/Components/Pages/AksConfigForm.razor`
-- `src/SwebKit.App/Components/Pages/RedisConfigForm.razor`
-- `src/SwebKit.App/Components/Pages/StorageConfigForm.razor`
-- `src/SwebKit.App/Services/OperatorWorkspaceService.cs`
+- `web/src/components/settings/SettingsPage.tsx` — tab shell, readiness dots, demo banner
+- `web/src/components/settings/GeneralSettings.tsx` — checklist, API Client/startup preferences, Key Vaults, bundle transfer
+- `web/src/components/settings/ServiceBusSettings.tsx`
+- `web/src/components/settings/AksSettings.tsx`
+- `web/src/components/settings/RedisSettings.tsx`
+- `web/src/components/settings/SqlSettings.tsx`
+- `web/src/components/settings/StorageSettings.tsx`
+- `web/src/components/settings/AgentSettings.tsx`
+- `web/src/components/settings/WorkspaceMapSettings.tsx`
+- `web/src/components/settings/WorkspaceMapAddPicker.tsx`
+- `web/src/components/settings/WorkspaceMapInspector.tsx`
+- `web/src/components/settings/DiagnosticsSettings.tsx`
+- `web/src/components/settings/AppearanceSettings.tsx`
+- `web/src/components/settings/DraftInput.tsx`
+- `web/src/lib/hooks/useProfile.ts` — profile/user settings/readiness/export-import hooks
+- `src-sidecar/Endpoints/ConfigEndpoints.cs` — profile, user settings, collection, environment, bundle endpoints
 - `src/SwebKit.Core/Configuration/ProfileRepository.cs`
-- `src/SwebKit.Core/Configuration/UiStateRepository.cs`
 - `src/SwebKit.Core/Configuration/UserSettingsRepository.cs`
-- `src/SwebKit.Core/Configuration/ScheduledMessageRepository.cs`
-- `src/SwebKit.App/Components/Pages/DiagnosticsSettingsForm.razor`
-- `src/SwebKit.Core/Diagnostics/LoggingSettings.cs`
-- `src/SwebKit.Core/Models/ConfigurationBundleModels.cs`
 - `src/SwebKit.Core/Services/ConfigurationBundleService.cs`
 - `src/SwebKit.Core/Domain/WorkspaceModels.cs`
+- `src-tauri/src/` — desktop shell, tray, and native diagnostics commands
 
-## Important Notes
+## Security and Reliability Constraints
 
-- Settings are project-level data stored in one persisted app configuration.
-- Readiness uses a deliberate `Configured` vs `Ready` distinction: shell-facing local prerequisites can be present without the app claiming that live runtime identity or connectivity has already been verified.
-- Live readiness checks are explicit rather than automatic. Results are read-only, time-budgeted, and cached only for the current session.
-- Favorite resources, including named favorites, are environment-scoped profile data; recent resources and page-level UI flags remain local-machine UI state.
-- Shell appearance settings such as theme selection are local-machine preferences in `user-settings.json`; legacy dark-theme aliases normalize to the curated `Studio Ledger` default during load.
-- Secrets are expected in credential store and not in profile JSON.
-- `ProfileRepository` blocks persistence only when both the primary file and backup fail to load; otherwise startup recovers from the last known good `.bak` copy and keeps normal saves enabled.
-- `ProfileRepository`, `UiStateRepository`, and `UserSettingsRepository` all keep a sibling `.bak` file for the last known good payload and refresh it after successful saves.
-- Bundle import/export is intentionally broader than `AppState.Config`; it includes shell-local UI state, user preferences, and scheduled Service Bus messages alongside environment-scoped profile configuration.
-- Legacy Service Bus pin data remains compatibility-only. `OperatorWorkspaceService` keeps it synchronized with the canonical favorite-resource model used by shell surfaces and the dashboard.
-- AKS monitoring persistence (`MonitoringEnabled`, `MonitoredNamespaces`) remains in existing AKS config and is not altered by window hide/restore transitions.
-- On Windows, Minimize and Close now route to system tray by default; explicit Exit from tray menu is required for full app termination. This behavior is currently fixed (not user-toggleable in Settings).
+- Store secret values in Windows Credential Store or Azure Key Vault; profile JSON should contain opaque keys/references, not secrets.
+- Never persist demo entities from GET overlays.
+- Connection-test responses must be sanitized; detailed exceptions belong in sidecar logs.
+- Profile updates must evict clients whose connection-affecting fields changed.
+- Keep machine-local user preferences separate from environment/profile configuration.
+- Bundle import is destructive replacement and must remain confirmation-gated.
+- Workspace maps are bounded before insertion into agent prompts so large topologies cannot consume the context window.
 
 ## Validation Pointers
 
+- `web/e2e/settings.spec.ts` — tabs, connection forms, maps, tests, appearance, confirmations
+- `web/e2e/page-restore.spec.ts` — not-configured CTAs into Settings
+- `web/e2e/workspace-resume.spec.ts` — startup preferences
+- `web/src/components/settings/profile-list-utils.test.ts`
+- `web/src/components/settings/workspace-map-utils.test.ts`
+- `web/src/components/settings/agent-settings.test.ts`
+- `tests/SwebKit.Sidecar.Tests/ConfigEndpointsTests.cs`
+- `tests/SwebKit.Sidecar.Tests/ConfigCollectionsCredentialSecretTests.cs`
 - `tests/SwebKit.Core.Tests/AppStateServiceProfileLoadTests.cs`
 - `tests/SwebKit.Core.Tests/ConfigurationBundleServiceTests.cs`
+- `tests/SwebKit.Core.Tests/UserSettingsRepositoryTests.cs`
+- `tests/SwebKit.Core.Tests/WorkspaceProfileMigrationTests.cs`

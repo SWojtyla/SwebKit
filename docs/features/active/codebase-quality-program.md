@@ -488,9 +488,11 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   `settings.ts`, `aks.ts`, `apiClient.ts`; `index.ts` re-exports everything
   so all 43 `lib/api` import sites are unchanged. `SIDECAR_BASE_URL`'s live
   binding survives `export *`.
-- `docs/architecture/functionalities/*.md` — several remain MAUI-era in detail
-  (`SwebKit.App` razor paths, Blazor flows); dead-feature references stripped this
-  phase, full rewrites land with each Phase 2 deep dive.
+- `docs/architecture/functionalities/*.md` — current-stack rewrites complete for
+  Dashboard, Service Bus, and Settings/Configuration (React components, hooks,
+  sidecar endpoints, persistence, and current validation paths). AKS, Agent,
+  Observability, and the remaining API Client MAUI-auth reference still need
+  the same treatment.
 - `git.rs` (1.3k) — command table + parsing in one file; split candidate if the
   git surface grows.
 - Config-readiness/probe feature (`ConfigurationHealthService`/`ConfigurationProbeService`)
