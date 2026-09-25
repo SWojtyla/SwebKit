@@ -117,10 +117,32 @@ Seed findings found during recon:
 
 ### Phase 3 — Dashboard AI cockpit (design-gated)
 
-- [ ] Design proposal presented for approval before implementation — cockpit
+- [x] Design proposal presented for approval before implementation — cockpit
   ingredients from the prior review: proactive-insights feed with Investigate,
   workspace topology graph (cytoscape), pinned agent conversation, NL command bar;
-  keep health tiles/pins
+  keep health tiles/pins. Approved direction: **full AI cockpit**.
+- [x] Implemented: `DashboardPage.tsx` (799 LOC monolith) split into focused
+  components — `CockpitCommandBar`, `AgentStatusStrip`, `ServiceGrid`,
+  `WatchTiles`, `CockpitTopology`, `InsightsFeed`, `PinnedShortcuts`, plus the
+  `useServiceHealth` aggregator.
+- [x] Command bar queues a prompt via `useAgentPanelStore.queuePrompt` and docks
+  the global agent panel open — the panel (single `useAgentChatStream` owner)
+  sends it, instead of navigating to `/agent` and injecting a bare user message.
+- [x] Consolidated the triplicated service presentation (health tiles + resource
+  rows + tool cards) into one `ServiceGrid`: per-service card with live
+  connectivity, **every** configured entity with its own status dot (no more
+  silent `[0]` sampling), and an inline pin button.
+- [x] Real Investigate: deep-links to `/monitoring?tab=reports&report=<id>`
+  (deterministic `proactive-{ruleId}-{firedAtMs}` id) where the genuine
+  report → chat handoff lives; the fabricated fake-assistant-reply injection is
+  gone.
+- [x] Workspace maps render as the real `TopologyGraph` (cytoscape) with
+  per-area colors, map picker, and node-click → feature-page navigation.
+- [x] Pins relabeled "Pinned shortcuts"; pending-approvals banner now docks the
+  agent panel instead of navigating away; agent peek shows the latest assistant
+  reply inline.
+- [x] New `lib/stores/agent-panel.ts` store (open/queuePrompt) shared between
+  AppLayout and the dashboard.
 
 ## Test plan
 
@@ -146,6 +168,10 @@ Seed findings found during recon:
   2 dead store files, 13 dead functions/hooks, ~20 internal-only `export`s
   dropped. `labelSelector` is now `encodeURIComponent`'d in both pod-query
   call sites.
+- **Phase 3** (2026-09-25): frontend-only change — `tsc` clean; vitest 534/534;
+  `vite build` clean; ESLint 0 errors / 101 warnings; Playwright 375/375
+  (dashboard + global-agent-panel + monitoring specs cover the reworked
+  cockpit). No .NET or Rust changes.
 
 ## Findings Log
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
+import { useAgentPanelStore } from "@/lib/stores/agent-panel";
 import { useAcpPermissions, usePendingActionsFeed } from "@/lib/hooks/useAgent";
 import { AgentMarkdown } from "./AgentMarkdown";
 import { AgentVisualizationPanel, parseVisualBlocks } from "./AgentVisualizationPanel";
@@ -53,6 +54,18 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
     return "";
   }, [messages]);
   const visualCount = useMemo(() => parseVisualBlocks(lastAssistantContent).length, [lastAssistantContent]);
+
+  // Hand-off channel: another surface (e.g. the dashboard command bar) queues a
+  // prompt via useAgentPanelStore.queuePrompt and this panel — the single owner of
+  // the stream — sends it. Waiting for isStreaming=false keeps a queued prompt
+  // from colliding with a turn already in flight.
+  const queuedPrompt = useAgentPanelStore((s) => s.queuedPrompt);
+  const clearQueuedPrompt = useAgentPanelStore((s) => s.clearQueuedPrompt);
+  useEffect(() => {
+    if (!queuedPrompt || isStreaming) return;
+    clearQueuedPrompt();
+    send(queuedPrompt);
+  }, [queuedPrompt, isStreaming, send, clearQueuedPrompt]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;

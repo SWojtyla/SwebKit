@@ -49,6 +49,7 @@ import {
 import { notifyScreenRouteChanged } from "@/lib/stores/screen-state";
 import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
 import { useSettingsStore, isTheme } from "@/lib/stores/settings";
+import { useAgentPanelStore } from "@/lib/stores/agent-panel";
 import { useMonitoringStream } from "@/lib/hooks/useMonitoring";
 import {
     onSidecarLifecycleEvent,
@@ -81,7 +82,11 @@ export function AppLayout() {
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
     const [navCollapsed, setNavCollapsed] = useState(false);
-    const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+    // Shared store, not local state: the dashboard command bar (and anything else)
+    // can dock the panel open without owning this component's internals.
+    const agentPanelOpen = useAgentPanelStore((s) => s.open);
+    const setAgentPanelOpen = useAgentPanelStore((s) => s.setOpen);
+    const toggleAgentPanel = useAgentPanelStore((s) => s.toggle);
     const navigate = useNavigate();
     const location = useLocation();
     const onAgentPage = location.pathname === "/agent";
@@ -91,7 +96,7 @@ export function AppLayout() {
     // twice, so the panel auto-closes whenever the user navigates to the dedicated page instead.
     useEffect(() => {
         if (onAgentPage) setAgentPanelOpen(false);
-    }, [onAgentPage]);
+    }, [onAgentPage, setAgentPanelOpen]);
 
     // Screen-state route trigger (agent-workspace-awareness M1): provider-less pages still get
     // a route+title snapshot published on navigation; provider pages republish their own.
@@ -412,7 +417,7 @@ export function AppLayout() {
                 // the packaged app's WebView2 shell is the same Chromium engine, so it would hit the same
                 // wall for real users, not just in tests.
                 e.preventDefault();
-                setAgentPanelOpen((prev) => (onAgentPage ? prev : !prev));
+                if (!onAgentPage) toggleAgentPanel();
             } else if (
                 ((e.key === "?" && e.shiftKey) ||
                     (e.key === "/" && e.shiftKey)) &&
@@ -423,7 +428,7 @@ export function AppLayout() {
                 setShortcutsOpen(true);
             }
         },
-        [navigate, onAgentPage],
+        [navigate, onAgentPage, toggleAgentPanel],
     );
 
     useEffect(() => {
@@ -543,9 +548,7 @@ export function AppLayout() {
                         </button>
                         {!onAgentPage && (
                             <button
-                                onClick={() =>
-                                    setAgentPanelOpen((prev) => !prev)
-                                }
+                                onClick={toggleAgentPanel}
                                 className={`rounded-lg border p-2 transition-all hover:bg-accent hover:text-foreground ${agentPanelOpen ? "border-primary text-primary" : "text-muted-foreground"}`}
                                 data-testid="global-agent-panel-toggle"
                                 title="AI Agent (Ctrl+Shift+L)"
