@@ -191,11 +191,15 @@ Seed findings found during recon:
   warnings cleared via `.ts` extraction modules (see Findings); unused
   `ProfileRepository`/`DemoModeService` injections removed from ~40 AKS
   handlers; shared AKS row-action scaffolding extracted
-  (`resource-actions.tsx`). Post-sweep state: `tsc` clean; vitest 534/534;
-  `vite build` clean; ESLint **0 errors / 5 warnings** (all React-Compiler
-  informational — the compiler is not enabled); Playwright 182/182 on the
-  four touched feature pages plus 18/18 AKS specs; sidecar build clean,
-  matching tests pass. Monitoring SSE fan-out and Redis credential
+  (`resource-actions.tsx`); `MessageList.tsx` column definitions/density
+  constants extracted to `service-bus/message-columns.ts` (-146 LOC from a
+  1566-LOC file — the remaining bulk is a single JSX return where deeper
+  splits would need heavy prop-drilling; recorded below). Post-sweep state:
+  `tsc` clean; vitest 534/534; `vite build` clean; ESLint **0 errors /
+  5 warnings** (all React-Compiler informational — the compiler is not
+  enabled); Playwright 182/182 on the four touched feature pages plus
+  18/18 AKS and 35/35 Service Bus specs; sidecar build clean, matching
+  tests pass. Monitoring SSE fan-out and Redis credential
   migration remain documented deferrals — the stream already multiplexes
   four frame kinds over one envelope, and the credential move needs a
   versioned profile migration plus a sidecar-side secret resolution path
@@ -587,6 +591,11 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   current documents, not implementation guidance.
 - `git.rs` (1.3k) — command table + parsing in one file; split candidate if the
   git surface grows.
+- `MessageList.tsx` (~1420 after column extraction) — the ~860-line JSX return
+  is still monolithic; toolbar/filter-panel/row subsections share dozens of
+  locals, so a proper split wants a small internal context or grouped prop
+  objects rather than raw prop-drilling. Defer until the next Service Bus
+  feature touches this file.
 - Config-readiness/probe feature (`ConfigurationHealthService`/`ConfigurationProbeService`)
   existed only in the deleted MAUI app. The Settings deep dive confirmed the current
   product deliberately separates configured-state dots from explicit per-connection
