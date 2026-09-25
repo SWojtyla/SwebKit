@@ -1,5 +1,5 @@
 import { formatBytes } from "@/lib/format-bytes";
-import { useRedisPageContext } from "../RedisPageContext";
+import { useRedisQueries } from "../RedisPageContext";
 
 function InfoCard({ label, value, testId }: { label: string; value: string; testId: string }) {
   return (
@@ -11,7 +11,7 @@ function InfoCard({ label, value, testId }: { label: string; value: string; test
 }
 
 export function ServerInfoTab() {
-  const { serverInfo } = useRedisPageContext();
+  const { serverInfo } = useRedisQueries();
 
   return (
     <div className="flex-1 overflow-auto p-6" data-testid="redis-server-info">

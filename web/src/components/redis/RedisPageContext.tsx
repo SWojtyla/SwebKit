@@ -36,6 +36,14 @@ import {
   useUpdateSearchParams,
 } from "@/lib/hooks";
 import { loadViewPreference, saveViewPreference } from "@/lib/stores/panel-preferences";
+import {
+  useInfiniteQueryFacade,
+  useMutationFacade,
+  useQueryFacade,
+  type InfiniteQueryFacade,
+  type MutationFacade,
+  type QueryFacade,
+} from "@/lib/queryFacade";
 import type { RedisCacheEntry } from "@/lib/types";
 
 export const mainTabs = [
@@ -156,17 +164,55 @@ interface PendingConfirm {
   confirmLabel?: string;
 }
 
-export interface RedisPageContextValue {
+/**
+ * The page state is split into six contexts grouped by churn rate, so a change in one
+ * bucket only re-renders the components that actually display it. Before the split a
+ * single ~85-field context meant every keystroke in a detail-panel editor re-rendered
+ * the whole virtualized key tree, and every auto-refresh tick re-rendered everything.
+ *
+ * Queries travel as facades (lib/queryFacade): `useQuery`/`useMutation` hand back a
+ * fresh result object each render, so raw results would defeat every `useMemo` below.
+ */
+export interface RedisConnectionValue {
   caches: RedisCacheEntry[];
   activeCacheId: string | null;
   resolvedCacheId: string | null;
   handleCacheChange: (cacheId: string) => void;
+}
 
+export interface RedisNavValue {
   selectedKey: string | null;
   setSelectedKey: (key: string | null) => void;
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
+}
 
+export interface RedisQueriesValue {
+  serverInfo: QueryFacade<ReturnType<typeof useRedisServerInfo>>;
+  scanResult: QueryFacade<ReturnType<typeof useRedisScanKeys>>;
+  keyInfo: QueryFacade<ReturnType<typeof useRedisKeyInfo>>;
+  keyValue: QueryFacade<ReturnType<typeof useRedisKeyValue>>;
+  hashFields: QueryFacade<ReturnType<typeof useRedisHashFields>>;
+  listItemsQuery: InfiniteQueryFacade<ReturnType<typeof useRedisListItemsPaginated>>;
+  listItems: string[];
+  setMembersQuery: InfiniteQueryFacade<ReturnType<typeof useRedisSetMembersPaginated>>;
+  setMembers: string[];
+  sortedSetMembers: QueryFacade<ReturnType<typeof useRedisSortedSetMembers>>;
+  slowLog: QueryFacade<ReturnType<typeof useRedisSlowLog>>;
+  health: QueryFacade<ReturnType<typeof useRedisKeyspaceHealth>>;
+  prefixMemory: QueryFacade<ReturnType<typeof useRedisPrefixMemory>>;
+
+  deleteKey: MutationFacade<ReturnType<typeof useRedisDeleteKey>>;
+  renameKey: MutationFacade<ReturnType<typeof useRedisRenameKey>>;
+  setTtl: MutationFacade<ReturnType<typeof useRedisSetTtl>>;
+  setValue: MutationFacade<ReturnType<typeof useRedisSetValue>>;
+  exportKeys: MutationFacade<ReturnType<typeof useRedisExportKeys>>;
+  setHashField: MutationFacade<ReturnType<typeof useRedisSetHashField>>;
+  deleteHashField: MutationFacade<ReturnType<typeof useRedisDeleteHashField>>;
+  updateZsetScore: MutationFacade<ReturnType<typeof useRedisUpdateSortedSetScore>>;
+}
+
+export interface RedisBrowserValue {
   pattern: string;
   searchInput: string;
   setSearchInput: (v: string) => void;
@@ -191,6 +237,24 @@ export interface RedisPageContextValue {
   flatRedisRows: FlatRedisRow[];
   redisTreeRef: React.MutableRefObject<HTMLDivElement | null>;
 
+  selectedKeys: Set<string>;
+  setSelectedKeys: (v: Set<string>) => void;
+  toggleKeySelection: (key: string) => void;
+  /** True when every currently loaded key is selected — drives the header checkbox. */
+  allLoadedSelected: boolean;
+  /** True when some but not all loaded keys are selected — drives the indeterminate state. */
+  someLoadedSelected: boolean;
+  /** "Select all loaded" toggle: selects every loaded key, or clears the selection when all are. */
+  toggleSelectAllLoaded: () => void;
+  /** Keys per namespace path, precomputed once per tree so rows don't each re-walk their subtree. */
+  subtreeKeysByPath: Map<string, string[]>;
+  /** Namespace-row checkbox toggle: selects or clears the node's whole subtree. */
+  toggleSubtreeSelection: (node: NamespaceNode) => void;
+  handleBatchDelete: () => void;
+  handleExportSelected: () => Promise<void>;
+}
+
+export interface RedisEditorValue {
   renaming: boolean;
   setRenaming: (v: boolean) => void;
   renameValue: string;
@@ -210,36 +274,6 @@ export interface RedisPageContextValue {
   handleSetTtl: (key: string) => void;
   handleRemoveTtl: (key: string) => void;
   requestRemoveTtl: (key: string) => void;
-
-  selectedKeys: Set<string>;
-  setSelectedKeys: (v: Set<string>) => void;
-  toggleKeySelection: (key: string) => void;
-  /** True when every currently loaded key is selected — drives the header checkbox. */
-  allLoadedSelected: boolean;
-  /** True when some but not all loaded keys are selected — drives the indeterminate state. */
-  someLoadedSelected: boolean;
-  /** "Select all loaded" toggle: selects every loaded key, or clears the selection when all are. */
-  toggleSelectAllLoaded: () => void;
-  /** Keys per namespace path, precomputed once per tree so rows don't each re-walk their subtree. */
-  subtreeKeysByPath: Map<string, string[]>;
-  /** Namespace-row checkbox toggle: selects or clears the node's whole subtree. */
-  toggleSubtreeSelection: (node: NamespaceNode) => void;
-  handleBatchDelete: () => void;
-  handleExportSelected: () => Promise<void>;
-
-  autoRefresh: boolean;
-  setAutoRefresh: (v: boolean) => void;
-  refreshInterval: number;
-  setRefreshInterval: (v: number) => void;
-  handleManualRefresh: () => void;
-  /** `Date.now()` of the last completed Redis fetch, or null before the first one — feeds the
-   * shared `LastRefreshed` indicator. */
-  lastRefreshedAt: number | null;
-  /** True while any Redis query is in flight. */
-  isFetching: boolean;
-
-  pendingConfirm: PendingConfirm | null;
-  setPendingConfirm: (v: PendingConfirm | null) => void;
 
   hashAdding: boolean;
   setHashAdding: (v: boolean) => void;
@@ -266,37 +300,53 @@ export interface RedisPageContextValue {
   handleCopyKey: (key: string) => void;
   requestDeleteKey: (key: string) => void;
   handleDeleteKey: (key: string) => void;
-
-  serverInfo: ReturnType<typeof useRedisServerInfo>;
-  scanResult: ReturnType<typeof useRedisScanKeys>;
-  keyInfo: ReturnType<typeof useRedisKeyInfo>;
-  keyValue: ReturnType<typeof useRedisKeyValue>;
-  hashFields: ReturnType<typeof useRedisHashFields>;
-  listItemsQuery: ReturnType<typeof useRedisListItemsPaginated>;
-  listItems: string[];
-  setMembersQuery: ReturnType<typeof useRedisSetMembersPaginated>;
-  setMembers: string[];
-  sortedSetMembers: ReturnType<typeof useRedisSortedSetMembers>;
-  slowLog: ReturnType<typeof useRedisSlowLog>;
-  health: ReturnType<typeof useRedisKeyspaceHealth>;
-  prefixMemory: ReturnType<typeof useRedisPrefixMemory>;
-
-  deleteKey: ReturnType<typeof useRedisDeleteKey>;
-  renameKey: ReturnType<typeof useRedisRenameKey>;
-  setTtl: ReturnType<typeof useRedisSetTtl>;
-  setValue: ReturnType<typeof useRedisSetValue>;
-  exportKeys: ReturnType<typeof useRedisExportKeys>;
-  setHashField: ReturnType<typeof useRedisSetHashField>;
-  deleteHashField: ReturnType<typeof useRedisDeleteHashField>;
-  updateZsetScore: ReturnType<typeof useRedisUpdateSortedSetScore>;
 }
 
-const RedisPageContext = createContext<RedisPageContextValue | null>(null);
+export interface RedisOpsValue {
+  autoRefresh: boolean;
+  setAutoRefresh: (v: boolean) => void;
+  refreshInterval: number;
+  setRefreshInterval: (v: number) => void;
+  handleManualRefresh: () => void;
+  /** `Date.now()` of the last completed Redis fetch, or null before the first one — feeds the
+   * shared `LastRefreshed` indicator. */
+  lastRefreshedAt: number | null;
+  /** True while any Redis query is in flight. */
+  isFetching: boolean;
 
-export function useRedisPageContext(): RedisPageContextValue {
-  const ctx = useContext(RedisPageContext);
-  if (!ctx) throw new Error("useRedisPageContext must be used within RedisPageProvider");
+  pendingConfirm: PendingConfirm | null;
+  setPendingConfirm: (v: PendingConfirm | null) => void;
+}
+
+const RedisConnectionContext = createContext<RedisConnectionValue | null>(null);
+const RedisNavContext = createContext<RedisNavValue | null>(null);
+const RedisQueriesContext = createContext<RedisQueriesValue | null>(null);
+const RedisBrowserContext = createContext<RedisBrowserValue | null>(null);
+const RedisEditorContext = createContext<RedisEditorValue | null>(null);
+const RedisOpsContext = createContext<RedisOpsValue | null>(null);
+
+function useRequired<T>(ctx: T | null, name: string): T {
+  if (ctx === null) throw new Error(`${name} must be used within RedisPageProvider`);
   return ctx;
+}
+
+export function useRedisConnection(): RedisConnectionValue {
+  return useRequired(useContext(RedisConnectionContext), "useRedisConnection");
+}
+export function useRedisNav(): RedisNavValue {
+  return useRequired(useContext(RedisNavContext), "useRedisNav");
+}
+export function useRedisQueries(): RedisQueriesValue {
+  return useRequired(useContext(RedisQueriesContext), "useRedisQueries");
+}
+export function useRedisBrowser(): RedisBrowserValue {
+  return useRequired(useContext(RedisBrowserContext), "useRedisBrowser");
+}
+export function useRedisEditor(): RedisEditorValue {
+  return useRequired(useContext(RedisEditorContext), "useRedisEditor");
+}
+export function useRedisOps(): RedisOpsValue {
+  return useRequired(useContext(RedisOpsContext), "useRedisOps");
 }
 
 export function RedisPageProvider({ children }: { children: ReactNode }): JSX.Element {
@@ -389,10 +439,45 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const setHashField = useRedisSetHashField(resolvedCacheId);
   const deleteHashField = useRedisDeleteHashField(resolvedCacheId);
   const updateZsetScore = useRedisUpdateSortedSetScore(resolvedCacheId);
+  // `mutate`/`mutateAsync` are referentially stable across renders, so handlers can
+  // depend on them without churning identity every provider render (the mutation
+  // *object* is fresh each render and would defeat the context-value memos).
+  const { mutate: deleteKeyMutate } = deleteKey;
+  const { mutate: renameKeyMutate } = renameKey;
+  const { mutate: setTtlMutate } = setTtl;
+  const { mutate: setValueMutate } = setValue;
+  const { mutateAsync: exportKeysMutateAsync } = exportKeys;
+  const { mutate: setHashFieldMutate } = setHashField;
+  const { mutate: deleteHashFieldMutate } = deleteHashField;
+  const { mutate: updateZsetScoreMutate } = updateZsetScore;
+  const { mutate: updateProfileMutate } = updateProfile;
   const slowLog = useRedisSlowLog(resolvedCacheId);
 
-  const listItems = listItemsQuery.data?.pages.flat() ?? [];
-  const setMembers = setMembersQuery.data?.pages.flatMap((p) => p.members) ?? [];
+  const listItems = useMemo(() => listItemsQuery.data?.pages.flat() ?? [], [listItemsQuery.data]);
+  const setMembers = useMemo(
+    () => setMembersQuery.data?.pages.flatMap((p) => p.members) ?? [],
+    [setMembersQuery.data],
+  );
+
+  // Facades stabilize what consumers see: raw TanStack results get a fresh identity
+  // every render, so the Queries context would re-render everyone on any keystroke.
+  const serverInfoFacade = useQueryFacade(serverInfo);
+  const scanResultFacade = useQueryFacade(scanResult);
+  const keyInfoFacade = useQueryFacade(keyInfo);
+  const keyValueFacade = useQueryFacade(keyValue);
+  const hashFieldsFacade = useQueryFacade(hashFields);
+  const listItemsQueryFacade = useInfiniteQueryFacade(listItemsQuery);
+  const setMembersQueryFacade = useInfiniteQueryFacade(setMembersQuery);
+  const sortedSetMembersFacade = useQueryFacade(sortedSetMembers);
+  const slowLogFacade = useQueryFacade(slowLog);
+  const deleteKeyFacade = useMutationFacade(deleteKey);
+  const renameKeyFacade = useMutationFacade(renameKey);
+  const setTtlFacade = useMutationFacade(setTtl);
+  const setValueFacade = useMutationFacade(setValue);
+  const exportKeysFacade = useMutationFacade(exportKeys);
+  const setHashFieldFacade = useMutationFacade(setHashField);
+  const deleteHashFieldFacade = useMutationFacade(deleteHashField);
+  const updateZsetScoreFacade = useMutationFacade(updateZsetScore);
 
   const handleManualRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["redis"] });
@@ -469,7 +554,10 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     restorePattern(resolvedCacheId);
   }, [resolvedCacheId, restorePattern]);
 
-  const handleSearch = () => applySearchPattern(searchInput);
+  const handleSearch = useCallback(
+    () => applySearchPattern(searchInput),
+    [applySearchPattern, searchInput],
+  );
 
   // Drill-through target for the Prefix/Ops panels, mirroring Keyspace's existing
   // onOpenKey-then-switch-tab pattern.
@@ -481,18 +569,18 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     [applySearchPattern, separator, setActiveTab],
   );
 
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     if (scanResult.data && !scanResult.data.isComplete) {
       setAllKeys((prev) => [...prev, ...scanResult.data!.keys]);
       setCursor(scanResult.data.cursor);
     }
-  };
+  }, [scanResult.data]);
 
-  const handleLoadAll = () => {
+  const handleLoadAll = useCallback(() => {
     if (scanResult.data && !scanResult.data.isComplete) {
       setLoadAllActive(true);
     }
-  };
+  }, [scanResult.data]);
 
   // "Load all" walks the cursor one page at a time. It used to key off `scanResult.data` identity,
   // which went `undefined` the moment `handleLoadMore` changed the cursor (and therefore the query
@@ -528,12 +616,16 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   // one of them, so leaving these enabled on `displayKeys.length > 0` meant that simply browsing the
   // Keys tab fired both sweeps on every scan page and every "Load more" — thousands of Redis commands
   // for two panels nobody was looking at.
-  const health = useRedisKeyspaceHealth(resolvedCacheId, displayKeys, separator, {
-    enabled: activeTab === "keyspace",
-  });
-  const prefixMemory = useRedisPrefixMemory(resolvedCacheId, displayKeys, separator, {
-    enabled: activeTab === "prefix",
-  });
+  const health = useQueryFacade(
+    useRedisKeyspaceHealth(resolvedCacheId, displayKeys, separator, {
+      enabled: activeTab === "keyspace",
+    }),
+  );
+  const prefixMemory = useQueryFacade(
+    useRedisPrefixMemory(resolvedCacheId, displayKeys, separator, {
+      enabled: activeTab === "prefix",
+    }),
+  );
 
   const namespaceTree = useMemo(
     () => buildNamespaceTree(displayKeys, separator),
@@ -545,139 +637,175 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     [namespaceTree, expandedNamespaces],
   );
 
-  const toggleNamespace = (path: string) => {
+  const toggleNamespace = useCallback((path: string) => {
     setExpandedNamespaces((prev) => {
       const next = new Set(prev);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
     });
-  };
+  }, []);
 
-  const collapseAllNamespaces = () => setExpandedNamespaces(new Set());
-  const expandAllNamespaces = () => setExpandedNamespaces(collectAllNamespacePaths(namespaceTree));
+  const collapseAllNamespaces = useCallback(() => setExpandedNamespaces(new Set()), []);
+  const expandAllNamespaces = useCallback(
+    () => setExpandedNamespaces(collectAllNamespacePaths(namespaceTree)),
+    [namespaceTree],
+  );
 
-  const handleDeleteKey = (key: string) => {
-    deleteKey.mutate(key, {
-      onSuccess: () => {
-        setSelectedKey(null);
-        setCursor(0);
-        setAllKeys([]);
-      },
-    });
-  };
-
-  const handleRenameKey = (oldKey: string) => {
-    if (!renameValue.trim() || renameValue === oldKey) {
-      setRenaming(false);
-      return;
-    }
-    renameKey.mutate({ key: oldKey, newKey: renameValue.trim() }, {
-      onSuccess: () => {
-        setSelectedKey(renameValue.trim());
-        setRenaming(false);
-        setCursor(0);
-        setAllKeys([]);
-      },
-    });
-  };
-
-  const handleCopyKey = (key: string) => {
-    navigator.clipboard.writeText(key);
-  };
-
-  const handleSetTtl = (key: string) => {
-    setTtl.mutate({ key, ttlSeconds }, {
-      onSuccess: () => setShowTtlEditor(false),
-    });
-  };
-
-  const handleRemoveTtl = (key: string) => {
-    setTtl.mutate({ key, removeTtl: true }, {
-      onSuccess: () => setShowTtlEditor(false),
-    });
-  };
-
-  const requestRemoveTtl = (key: string) => {
-    setPendingConfirm({
-      message: `Remove TTL from "${key}"? It will no longer expire automatically.`,
-      onConfirm: () => handleRemoveTtl(key),
-      confirmLabel: "Remove TTL",
-    });
-  };
-
-  const handleSaveStringValue = (key: string) => {
-    setValue.mutate({ key, value: stringValue }, {
-      onSuccess: () => setEditingValue(false),
-    });
-  };
-
-  const requestDeleteKey = (key: string) => {
-    setPendingConfirm({
-      message: `Delete key "${key}"?`,
-      onConfirm: () => handleDeleteKey(key),
-    });
-  };
-
-  const handleAddHashField = (key: string) => {
-    const field = newHashField.trim();
-    if (!field) return;
-    setHashField.mutate({ key, field, value: newHashValue }, {
-      onSuccess: () => {
-        setHashAdding(false);
-        setNewHashField("");
-        setNewHashValue("");
-      },
-    });
-  };
-
-  const handleSaveHashField = (key: string, originalField: string) => {
-    const field = hashEditFieldName.trim();
-    if (!field) return;
-    if (field === originalField) {
-      setHashField.mutate({ key, field, value: hashEditValue }, {
-        onSuccess: () => setHashEditingField(null),
-      });
-    } else {
-      setHashField.mutate({ key, field, value: hashEditValue }, {
+  const handleDeleteKey = useCallback(
+    (key: string) => {
+      deleteKeyMutate(key, {
         onSuccess: () => {
-          deleteHashField.mutate({ key, field: originalField }, {
-            onSuccess: () => setHashEditingField(null),
-          });
+          setSelectedKey(null);
+          setCursor(0);
+          setAllKeys([]);
         },
       });
-    }
-  };
+    },
+    [deleteKeyMutate],
+  );
 
-  const requestDeleteHashField = (key: string, field: string) => {
-    setPendingConfirm({
-      message: `Delete field "${field}"?`,
-      onConfirm: () => deleteHashField.mutate({ key, field }),
-    });
-  };
+  const handleRenameKey = useCallback(
+    (oldKey: string) => {
+      if (!renameValue.trim() || renameValue === oldKey) {
+        setRenaming(false);
+        return;
+      }
+      renameKeyMutate({ key: oldKey, newKey: renameValue.trim() }, {
+        onSuccess: () => {
+          setSelectedKey(renameValue.trim());
+          setRenaming(false);
+          setCursor(0);
+          setAllKeys([]);
+        },
+      });
+    },
+    [renameValue, renameKeyMutate],
+  );
 
-  const handleSaveZsetScore = (key: string, member: string) => {
-    const score = parseFloat(zsetEditScore);
-    if (Number.isNaN(score)) return;
-    updateZsetScore.mutate({ key, member, score }, {
-      onSuccess: () => setZsetEditingMember(null),
-    });
-  };
+  const handleCopyKey = useCallback((key: string) => {
+    navigator.clipboard.writeText(key);
+  }, []);
 
-  const handleBatchDelete = () => {
+  const handleSetTtl = useCallback(
+    (key: string) => {
+      setTtlMutate({ key, ttlSeconds }, {
+        onSuccess: () => setShowTtlEditor(false),
+      });
+    },
+    [ttlSeconds, setTtlMutate],
+  );
+
+  const handleRemoveTtl = useCallback(
+    (key: string) => {
+      setTtlMutate({ key, removeTtl: true }, {
+        onSuccess: () => setShowTtlEditor(false),
+      });
+    },
+    [setTtlMutate],
+  );
+
+  const requestRemoveTtl = useCallback(
+    (key: string) => {
+      setPendingConfirm({
+        message: `Remove TTL from "${key}"? It will no longer expire automatically.`,
+        onConfirm: () => handleRemoveTtl(key),
+        confirmLabel: "Remove TTL",
+      });
+    },
+    [handleRemoveTtl],
+  );
+
+  const handleSaveStringValue = useCallback(
+    (key: string) => {
+      setValueMutate({ key, value: stringValue }, {
+        onSuccess: () => setEditingValue(false),
+      });
+    },
+    [stringValue, setValueMutate],
+  );
+
+  const requestDeleteKey = useCallback(
+    (key: string) => {
+      setPendingConfirm({
+        message: `Delete key "${key}"?`,
+        onConfirm: () => handleDeleteKey(key),
+      });
+    },
+    [handleDeleteKey],
+  );
+
+  const handleAddHashField = useCallback(
+    (key: string) => {
+      const field = newHashField.trim();
+      if (!field) return;
+      setHashFieldMutate({ key, field, value: newHashValue }, {
+        onSuccess: () => {
+          setHashAdding(false);
+          setNewHashField("");
+          setNewHashValue("");
+        },
+      });
+    },
+    [newHashField, newHashValue, setHashFieldMutate],
+  );
+
+  const handleSaveHashField = useCallback(
+    (key: string, originalField: string) => {
+      const field = hashEditFieldName.trim();
+      if (!field) return;
+      if (field === originalField) {
+        setHashFieldMutate({ key, field, value: hashEditValue }, {
+          onSuccess: () => setHashEditingField(null),
+        });
+      } else {
+        setHashFieldMutate({ key, field, value: hashEditValue }, {
+          onSuccess: () => {
+            deleteHashFieldMutate({ key, field: originalField }, {
+              onSuccess: () => setHashEditingField(null),
+            });
+          },
+        });
+      }
+    },
+    [hashEditFieldName, hashEditValue, setHashFieldMutate, deleteHashFieldMutate],
+  );
+
+  const requestDeleteHashField = useCallback(
+    (key: string, field: string) => {
+      setPendingConfirm({
+        message: `Delete field "${field}"?`,
+        onConfirm: () => deleteHashFieldMutate({ key, field }),
+      });
+    },
+    [deleteHashFieldMutate],
+  );
+
+  const handleSaveZsetScore = useCallback(
+    (key: string, member: string) => {
+      const score = parseFloat(zsetEditScore);
+      if (Number.isNaN(score)) return;
+      updateZsetScoreMutate({ key, member, score }, {
+        onSuccess: () => setZsetEditingMember(null),
+      });
+    },
+    [zsetEditScore, updateZsetScoreMutate],
+  );
+
+  const handleBatchDelete = useCallback(() => {
     setPendingConfirm({
       message: `Delete ${selectedKeys.size} key${selectedKeys.size === 1 ? "" : "s"}?`,
       onConfirm: () => {
-        selectedKeys.forEach((key) => deleteKey.mutate(key));
+        selectedKeys.forEach((key) => deleteKeyMutate(key));
         setSelectedKeys(new Set());
         setCursor(0);
         setAllKeys([]);
       },
     });
-  };
+  }, [selectedKeys, deleteKeyMutate]);
 
-  const handleExportSelected = async () => {
-    const exportData = await exportKeys.mutateAsync(Array.from(selectedKeys));
+  const handleExportSelected = useCallback(async () => {
+    const exportData = await exportKeysMutateAsync(Array.from(selectedKeys));
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -685,16 +813,16 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     a.download = "redis-keys-export.json";
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [selectedKeys, exportKeysMutateAsync]);
 
-  const toggleKeySelection = (key: string) => {
+  const toggleKeySelection = useCallback((key: string) => {
     setSelectedKeys((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
-  };
+  }, []);
 
   // MAUI toolbar parity: the header checkbox tri-states over the *loaded* key set — checked when
   // all loaded keys are selected, indeterminate for a subset — and toggling it either selects the
@@ -702,8 +830,10 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const allLoadedSelected = displayKeys.length > 0 && displayKeys.every((k) => selectedKeys.has(k));
   const someLoadedSelected =
     !allLoadedSelected && displayKeys.some((k) => selectedKeys.has(k));
-  const toggleSelectAllLoaded = () =>
-    setSelectedKeys(allLoadedSelected ? new Set() : new Set(displayKeys));
+  const toggleSelectAllLoaded = useCallback(
+    () => setSelectedKeys(allLoadedSelected ? new Set() : new Set(displayKeys)),
+    [allLoadedSelected, displayKeys],
+  );
 
   // Keys per namespace path, computed once per tree — a row computing its own subtree would
   // re-walk it on every virtualizer re-render (i.e. every scroll frame).
@@ -717,165 +847,275 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     return map;
   }, [namespaceTree]);
 
-  const toggleSubtreeSelection = (node: NamespaceNode) => {
-    const keys = subtreeKeysByPath.get(node.path) ?? collectSubtreeKeys(node);
-    setSelectedKeys((prev) => {
-      const next = new Set(prev);
-      if (keys.every((k) => prev.has(k))) keys.forEach((k) => next.delete(k));
-      else keys.forEach((k) => next.add(k));
-      return next;
-    });
-  };
+  const toggleSubtreeSelection = useCallback(
+    (node: NamespaceNode) => {
+      const keys = subtreeKeysByPath.get(node.path) ?? collectSubtreeKeys(node);
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        if (keys.every((k) => prev.has(k))) keys.forEach((k) => next.delete(k));
+        else keys.forEach((k) => next.add(k));
+        return next;
+      });
+    },
+    [subtreeKeysByPath],
+  );
 
-  const handleCacheChange = (cacheId: string) => {
-    setActiveCacheId(cacheId);
-    setCursor(0);
-    setAllKeys([]);
-    setSelectedKey(null);
-    setSelectedKeys(new Set());
-    lastAdvancedCursorRef.current = null;
-    setExpandedNamespaces(new Set());
-    restorePattern(cacheId);
-    // The browser's selected cache IS the "active" cache: persisted so the page restores it next
-    // visit, and because the agent's Redis tools fall back to it (RedisToolContext). The profile
-    // PUT evicts only connection-changed caches, so healthy pooled connections survive the save.
-    updateProfile.mutate((prev) =>
-      prev.config.redisConfig
-        ? {
-            ...prev,
-            config: {
-              ...prev.config,
-              redisConfig: { ...prev.config.redisConfig, activeCacheId: cacheId },
-            },
-          }
-        : prev,
-    );
-  };
+  const handleCacheChange = useCallback(
+    (cacheId: string) => {
+      setActiveCacheId(cacheId);
+      setCursor(0);
+      setAllKeys([]);
+      setSelectedKey(null);
+      setSelectedKeys(new Set());
+      lastAdvancedCursorRef.current = null;
+      setExpandedNamespaces(new Set());
+      restorePattern(cacheId);
+      // The browser's selected cache IS the "active" cache: persisted so the page restores it next
+      // visit, and because the agent's Redis tools fall back to it (RedisToolContext). The profile
+      // PUT evicts only connection-changed caches, so healthy pooled connections survive the save.
+      updateProfileMutate((prev) =>
+        prev.config.redisConfig
+          ? {
+              ...prev,
+              config: {
+                ...prev.config,
+                redisConfig: { ...prev.config.redisConfig, activeCacheId: cacheId },
+              },
+            }
+          : prev,
+      );
+    },
+    [restorePattern, updateProfileMutate],
+  );
 
-  const value: RedisPageContextValue = {
-    caches,
-    activeCacheId,
-    resolvedCacheId,
-    handleCacheChange,
+  const connectionValue: RedisConnectionValue = useMemo(
+    () => ({ caches, activeCacheId, resolvedCacheId, handleCacheChange }),
+    [caches, activeCacheId, resolvedCacheId, handleCacheChange],
+  );
 
-    selectedKey,
-    setSelectedKey,
-    activeTab,
-    setActiveTab,
+  const navValue: RedisNavValue = useMemo(
+    () => ({ selectedKey, setSelectedKey, activeTab, setActiveTab }),
+    [selectedKey, activeTab, setActiveTab],
+  );
 
-    pattern,
-    searchInput,
-    setSearchInput,
-    cursor,
-    handleSearch,
-    handleLoadMore,
-    handleLoadAll,
-    loadAllActive,
-    openPrefixInKeys,
+  const queriesValue: RedisQueriesValue = useMemo(
+    () => ({
+      serverInfo: serverInfoFacade,
+      scanResult: scanResultFacade,
+      keyInfo: keyInfoFacade,
+      keyValue: keyValueFacade,
+      hashFields: hashFieldsFacade,
+      listItemsQuery: listItemsQueryFacade,
+      listItems,
+      setMembersQuery: setMembersQueryFacade,
+      setMembers,
+      sortedSetMembers: sortedSetMembersFacade,
+      slowLog: slowLogFacade,
+      health,
+      prefixMemory,
+      deleteKey: deleteKeyFacade,
+      renameKey: renameKeyFacade,
+      setTtl: setTtlFacade,
+      setValue: setValueFacade,
+      exportKeys: exportKeysFacade,
+      setHashField: setHashFieldFacade,
+      deleteHashField: deleteHashFieldFacade,
+      updateZsetScore: updateZsetScoreFacade,
+    }),
+    [
+      serverInfoFacade,
+      scanResultFacade,
+      keyInfoFacade,
+      keyValueFacade,
+      hashFieldsFacade,
+      listItemsQueryFacade,
+      listItems,
+      setMembersQueryFacade,
+      setMembers,
+      sortedSetMembersFacade,
+      slowLogFacade,
+      health,
+      prefixMemory,
+      deleteKeyFacade,
+      renameKeyFacade,
+      setTtlFacade,
+      setValueFacade,
+      exportKeysFacade,
+      setHashFieldFacade,
+      deleteHashFieldFacade,
+      updateZsetScoreFacade,
+    ],
+  );
 
-    separator,
-    setSeparator,
-    expandedNamespaces,
-    toggleNamespace,
-    collapseAllNamespaces,
-    expandAllNamespaces,
+  const browserValue: RedisBrowserValue = useMemo(
+    () => ({
+      pattern,
+      searchInput,
+      setSearchInput,
+      cursor,
+      handleSearch,
+      handleLoadMore,
+      handleLoadAll,
+      loadAllActive,
+      openPrefixInKeys,
+      separator,
+      setSeparator,
+      expandedNamespaces,
+      toggleNamespace,
+      collapseAllNamespaces,
+      expandAllNamespaces,
+      displayKeys,
+      namespaceTree,
+      flatRedisRows,
+      redisTreeRef,
+      selectedKeys,
+      setSelectedKeys,
+      toggleKeySelection,
+      allLoadedSelected,
+      someLoadedSelected,
+      toggleSelectAllLoaded,
+      subtreeKeysByPath,
+      toggleSubtreeSelection,
+      handleBatchDelete,
+      handleExportSelected,
+    }),
+    [
+      pattern,
+      searchInput,
+      cursor,
+      handleSearch,
+      handleLoadMore,
+      handleLoadAll,
+      loadAllActive,
+      openPrefixInKeys,
+      separator,
+      expandedNamespaces,
+      toggleNamespace,
+      collapseAllNamespaces,
+      expandAllNamespaces,
+      displayKeys,
+      namespaceTree,
+      flatRedisRows,
+      selectedKeys,
+      toggleKeySelection,
+      allLoadedSelected,
+      someLoadedSelected,
+      toggleSelectAllLoaded,
+      subtreeKeysByPath,
+      toggleSubtreeSelection,
+      handleBatchDelete,
+      handleExportSelected,
+    ],
+  );
 
-    displayKeys,
-    namespaceTree,
-    flatRedisRows,
-    redisTreeRef,
+  const editorValue: RedisEditorValue = useMemo(
+    () => ({
+      renaming,
+      setRenaming,
+      renameValue,
+      setRenameValue,
+      handleRenameKey,
+      editingValue,
+      setEditingValue,
+      stringValue,
+      setStringValue,
+      handleSaveStringValue,
+      showTtlEditor,
+      setShowTtlEditor,
+      ttlSeconds,
+      setTtlSeconds,
+      handleSetTtl,
+      handleRemoveTtl,
+      requestRemoveTtl,
+      hashAdding,
+      setHashAdding,
+      newHashField,
+      setNewHashField,
+      newHashValue,
+      setNewHashValue,
+      hashEditingField,
+      setHashEditingField,
+      hashEditFieldName,
+      setHashEditFieldName,
+      hashEditValue,
+      setHashEditValue,
+      handleAddHashField,
+      handleSaveHashField,
+      requestDeleteHashField,
+      zsetEditingMember,
+      setZsetEditingMember,
+      zsetEditScore,
+      setZsetEditScore,
+      handleSaveZsetScore,
+      handleCopyKey,
+      requestDeleteKey,
+      handleDeleteKey,
+    }),
+    [
+      renaming,
+      renameValue,
+      handleRenameKey,
+      editingValue,
+      stringValue,
+      handleSaveStringValue,
+      showTtlEditor,
+      ttlSeconds,
+      handleSetTtl,
+      handleRemoveTtl,
+      requestRemoveTtl,
+      hashAdding,
+      newHashField,
+      newHashValue,
+      hashEditingField,
+      hashEditFieldName,
+      hashEditValue,
+      handleAddHashField,
+      handleSaveHashField,
+      requestDeleteHashField,
+      zsetEditingMember,
+      zsetEditScore,
+      handleSaveZsetScore,
+      handleCopyKey,
+      requestDeleteKey,
+      handleDeleteKey,
+    ],
+  );
 
-    renaming,
-    setRenaming,
-    renameValue,
-    setRenameValue,
-    handleRenameKey,
+  const opsValue: RedisOpsValue = useMemo(
+    () => ({
+      autoRefresh,
+      setAutoRefresh,
+      refreshInterval,
+      setRefreshInterval,
+      handleManualRefresh,
+      lastRefreshedAt,
+      isFetching,
+      pendingConfirm,
+      setPendingConfirm,
+    }),
+    [
+      autoRefresh,
+      refreshInterval,
+      handleManualRefresh,
+      lastRefreshedAt,
+      isFetching,
+      pendingConfirm,
+    ],
+  );
 
-    editingValue,
-    setEditingValue,
-    stringValue,
-    setStringValue,
-    handleSaveStringValue,
-
-    showTtlEditor,
-    setShowTtlEditor,
-    ttlSeconds,
-    setTtlSeconds,
-    handleSetTtl,
-    handleRemoveTtl,
-    requestRemoveTtl,
-
-    selectedKeys,
-    setSelectedKeys,
-    toggleKeySelection,
-    allLoadedSelected,
-    someLoadedSelected,
-    toggleSelectAllLoaded,
-    subtreeKeysByPath,
-    toggleSubtreeSelection,
-    handleBatchDelete,
-    handleExportSelected,
-
-    autoRefresh,
-    setAutoRefresh,
-    refreshInterval,
-    setRefreshInterval,
-    handleManualRefresh,
-    lastRefreshedAt,
-    isFetching,
-
-    pendingConfirm,
-    setPendingConfirm,
-
-    hashAdding,
-    setHashAdding,
-    newHashField,
-    setNewHashField,
-    newHashValue,
-    setNewHashValue,
-    hashEditingField,
-    setHashEditingField,
-    hashEditFieldName,
-    setHashEditFieldName,
-    hashEditValue,
-    setHashEditValue,
-    handleAddHashField,
-    handleSaveHashField,
-    requestDeleteHashField,
-
-    zsetEditingMember,
-    setZsetEditingMember,
-    zsetEditScore,
-    setZsetEditScore,
-    handleSaveZsetScore,
-
-    handleCopyKey,
-    requestDeleteKey,
-    handleDeleteKey,
-
-    serverInfo,
-    scanResult,
-    keyInfo,
-    keyValue,
-    hashFields,
-    listItemsQuery,
-    listItems,
-    setMembersQuery,
-    setMembers,
-    sortedSetMembers,
-    slowLog,
-    health,
-    prefixMemory,
-
-    deleteKey,
-    renameKey,
-    setTtl,
-    setValue,
-    exportKeys,
-    setHashField,
-    deleteHashField,
-    updateZsetScore,
-  };
-
-  return <RedisPageContext.Provider value={value}>{children}</RedisPageContext.Provider>;
+  return (
+    <RedisConnectionContext.Provider value={connectionValue}>
+      <RedisNavContext.Provider value={navValue}>
+        <RedisQueriesContext.Provider value={queriesValue}>
+          <RedisBrowserContext.Provider value={browserValue}>
+            <RedisEditorContext.Provider value={editorValue}>
+              <RedisOpsContext.Provider value={opsValue}>
+                {children}
+              </RedisOpsContext.Provider>
+            </RedisEditorContext.Provider>
+          </RedisBrowserContext.Provider>
+        </RedisQueriesContext.Provider>
+      </RedisNavContext.Provider>
+    </RedisConnectionContext.Provider>
+  );
 }

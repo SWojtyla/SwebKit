@@ -1,8 +1,8 @@
 import { PubSubPanel } from "../PubSubPanel";
-import { useRedisPageContext } from "../RedisPageContext";
+import { useRedisConnection } from "../RedisPageContext";
 
 export function PubSubTab() {
-  const { resolvedCacheId } = useRedisPageContext();
+  const { resolvedCacheId } = useRedisConnection();
 
   return (
     <div className="flex-1 overflow-auto p-6" data-testid="redis-pubsub">

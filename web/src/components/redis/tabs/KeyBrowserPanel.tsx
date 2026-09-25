@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder } from "lucide-react";
-import { useRedisPageContext, redisRowKey, type FlatRedisRow } from "../RedisPageContext";
+import {
+  useRedisBrowser,
+  useRedisConnection,
+  useRedisNav,
+  useRedisQueries,
+  redisRowKey,
+  type FlatRedisRow,
+} from "../RedisPageContext";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRedisKeyInfoBatch } from "@/lib/hooks";
 import { QueryState } from "@/components/shared/QueryState";
@@ -21,7 +28,12 @@ function IndentGuides({ depth }: { depth: number }) {
 }
 
 export function KeyBrowserPanel() {
-  const ctx = useRedisPageContext();
+  const ctx = {
+    ...useRedisConnection(),
+    ...useRedisNav(),
+    ...useRedisQueries(),
+    ...useRedisBrowser(),
+  };
 
   // Owned here rather than in the page context: `useVirtualizer` returns a stable
   // instance whose internals mutate on scroll, so a memoized context value holding it

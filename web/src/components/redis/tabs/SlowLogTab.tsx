@@ -1,9 +1,9 @@
 import { formatDuration } from "@/lib/redis-format";
 import { formatLocalTime } from "@/lib/datetime";
-import { useRedisPageContext } from "../RedisPageContext";
+import { useRedisQueries } from "../RedisPageContext";
 
 export function SlowLogTab() {
-    const { slowLog } = useRedisPageContext();
+    const { slowLog } = useRedisQueries();
 
     return (
         <div className="flex-1 overflow-auto p-6" data-testid="redis-slowlog">
@@ -26,7 +26,7 @@ function SlowLogBody({
     data,
 }: {
     data: NonNullable<
-        ReturnType<typeof useRedisPageContext>["slowLog"]["data"]
+        ReturnType<typeof useRedisQueries>["slowLog"]["data"]
     >;
 }) {
     const entries = data.entries ?? [];

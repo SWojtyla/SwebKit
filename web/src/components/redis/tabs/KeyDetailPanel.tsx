@@ -2,7 +2,12 @@ import { useState } from "react";
 import { Copy, Pencil, Check, X, Clock, Trash2, Plus, Sparkles } from "lucide-react";
 import { formatTtl, parseTtl, getTtlColorClass } from "@/lib/redis-format";
 import { formatBytes } from "@/lib/format-bytes";
-import { useRedisPageContext } from "../RedisPageContext";
+import {
+  useRedisConnection,
+  useRedisEditor,
+  useRedisNav,
+  useRedisQueries,
+} from "../RedisPageContext";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { useScreenStateProvider } from "@/lib/stores/screen-state";
 
@@ -35,7 +40,12 @@ function TtlBar({ ttl }: { ttl: string | null }) {
 }
 
 export function KeyDetailPanel() {
-  const ctx = useRedisPageContext();
+  const ctx = {
+    ...useRedisConnection(),
+    ...useRedisNav(),
+    ...useRedisQueries(),
+    ...useRedisEditor(),
+  };
   const [askAiOpen, setAskAiOpen] = useState(false);
 
   // Screen-state snapshot (agent-workspace-awareness M1) — bounded previews only; returns null

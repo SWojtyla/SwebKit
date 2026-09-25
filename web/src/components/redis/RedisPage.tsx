@@ -3,7 +3,14 @@ import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useNavigate } from "react-router";
 import { Clock, RefreshCw } from "lucide-react";
-import { RedisPageProvider, useRedisPageContext, mainTabs } from "./RedisPageContext";
+import {
+  RedisPageProvider,
+  useRedisConnection,
+  useRedisNav,
+  useRedisOps,
+  useRedisQueries,
+  mainTabs,
+} from "./RedisPageContext";
 import { KeysTab } from "./tabs/KeysTab";
 import { ServerInfoTab } from "./tabs/ServerInfoTab";
 import { SlowLogTab } from "./tabs/SlowLogTab";
@@ -22,11 +29,10 @@ export function RedisPage() {
 
 function RedisPageContent() {
   const navigate = useNavigate();
+  const { caches, resolvedCacheId, handleCacheChange } = useRedisConnection();
+  const { activeTab, setActiveTab } = useRedisNav();
+  const { serverInfo } = useRedisQueries();
   const {
-    caches,
-    resolvedCacheId,
-    handleCacheChange,
-    serverInfo,
     autoRefresh,
     setAutoRefresh,
     refreshInterval,
@@ -34,11 +40,9 @@ function RedisPageContent() {
     handleManualRefresh,
     lastRefreshedAt,
     isFetching,
-    activeTab,
-    setActiveTab,
     pendingConfirm,
     setPendingConfirm,
-  } = useRedisPageContext();
+  } = useRedisOps();
 
   if (!resolvedCacheId) {
     return (

@@ -390,13 +390,13 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
 **Findings:**
 
 - **The god-context pattern is systemic, not AKS-only** — `StoragePageContext`
-  (~100 fields, memoized), `RedisPageContext` (~85 fields, **not memoized at
-  all** — the value object is rebuilt every render), `ApiClientPageContext`
-  (~75 fields), `AksWorkspaceContext` (~70 fields). Redis is the worst case:
-  unmemoized + `lastRefreshedAt`/`isFetching` inside means every consumer
-  re-renders on every auto-refresh tick. The fix proposal is one item covering
-  all four: split into selection/actions/churn contexts (or adopt a store +
-  selectors) per page.
+  (~100 fields, memoized), `ApiClientPageContext` (~75 fields),
+  `AksWorkspaceContext` (~70 fields), and **`RedisPageContext` (~85 fields) —
+  split done**: six churn-separated contexts (Connection/Nav/Queries/Browser/
+  Editor/Ops), every handler `useCallback`'d, and query/mutation objects travel
+  through stable facades (`web/src/lib/queryFacade.ts`) so unrelated renders
+  don't invalidate consumers. This is now the proven pattern to roll out to the
+  remaining three contexts.
 - No TODO/FIXME/HACK anywhere in `src-sidecar/`, `web/src/`, or `src/` —
   hygiene is enforced.
 - Empty catches found are all process/file cleanup (`AcpJsonRpcPeer`,
@@ -409,8 +409,9 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
 
 **Remaining flagged items (deferred to Phase 2 / later):**
 
-- `*PageContext.tsx` god-contexts: Storage 1202, ApiClient 1134, Aks 1049, Redis 881 —
-  split proposal lands with each feature's Phase 2 deep dive.
+- `*PageContext.tsx` god-contexts: Storage 1202, ApiClient 1134, Aks 1049 remain —
+  apply the Redis split pattern (per-churn contexts + `lib/queryFacade` facades +
+  `useCallback` handlers).
 - `web/src/lib/types.ts` (1516) — flat bag of ~159 types mirroring sidecar contracts;
   per-domain split is cosmetic, low priority.
 - `web/src/lib/api.ts` (796) — transport (`apiFetch`/`apiSend`/`apiUpload`/
