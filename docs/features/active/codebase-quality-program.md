@@ -1,6 +1,6 @@
 # Codebase Quality Program — megaplan
 
-`State: In Progress`
+`State: Done`
 
 ## Goal
 
@@ -108,7 +108,7 @@ Seed findings found during recon:
 
 ### Phase 2 — Feature deep dives (biggest first)
 
-- [ ] `aks` (8.8k) → `api-client` (8.6k) → `service-bus` (6.8k) → `settings` (5k) →
+- [x] `aks` (8.8k) → `api-client` (8.6k) → `service-bus` (6.8k) → `settings` (5k) →
   `storage` (3.6k) → `redis` (2.7k) → `monitoring` (2.4k) → `agent` (2.4k) → `sql` (2k) →
   `layout`+`ui` (2.2k combined)
 - Per feature: all components + hooks + matching sidecar endpoints + lib code; clean
@@ -177,9 +177,16 @@ Seed findings found during recon:
   lazy-init for the contextual-agent ref; 4 documented scoped disables for
   transitive event-read flags in `ApiClientPageContext`) — commit
   `6f1ebb6`. All 7 `react-hooks/static-components` warnings fixed by
-  hoisting nested components out of `EntityTree.tsx`. Lint now **0 errors /
-  86 warnings**; vitest 534/534; service-bus e2e 35/35; full Playwright
-  375/375 re-confirmed after the refs pass.
+  hoisting nested components out of `EntityTree.tsx`.
+  **Final Phase 2 acceptance (2026-09-25):** `dotnet build SwebKit.slnx`
+  clean (0 warnings / 0 errors); `dotnet test SwebKit.slnx --no-build`
+  **1943/1943** (Core 786, Sidecar 544, Agents 258, K8s 158, Azure 151,
+  SQL 46); `tsc -b` clean; vitest **534/534**; `vite build` clean; ESLint
+  **0 errors / 50 warnings** (45 Fast Refresh hygiene, 4 TanStack Virtual
+  compiler-incompatible notices, 1 compiler-only manual-memo notice);
+  Playwright **379/379**. Aikido MCP full scan could not run because no
+  Aikido MCP server is installed in this environment; setup remains an
+  external verification prerequisite.
 - **Phase 3** (2026-09-25): frontend-only change — `tsc` clean; vitest 534/534;
   `vite build` clean; ESLint 0 errors / 101 warnings; Playwright 375/375
   (dashboard + global-agent-panel + monitoring specs cover the reworked
@@ -531,7 +538,7 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   demo-id stripping in `ConfigEndpoints.SaveProfileAsync` are all already
   correct.
 
-**Remaining flagged items (deferred to Phase 2 / later):**
+**Accepted follow-ups (not blockers for this program):**
 
 - ~~`*PageContext.tsx` god-contexts~~ — all four split done (Redis 6, AKS 6,
   Storage 7, ApiClient 2).
@@ -556,5 +563,6 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
 - `git.rs` (1.3k) — command table + parsing in one file; split candidate if the
   git surface grows.
 - Config-readiness/probe feature (`ConfigurationHealthService`/`ConfigurationProbeService`)
-  existed only in the deleted MAUI app — noted as a parity gap to consider when the
-  Settings deep dive lands in Phase 2, not a bug.
+  existed only in the deleted MAUI app. The Settings deep dive confirmed the current
+  product deliberately separates configured-state dots from explicit per-connection
+  tests; recreating automatic global probes is not required for parity.
