@@ -3,7 +3,8 @@ import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversati
 import { useAgentPanelStore } from "@/lib/stores/agent-panel";
 import { useAcpPermissions, usePendingActionsFeed } from "@/lib/hooks/useAgent";
 import { AgentMarkdown } from "./AgentMarkdown";
-import { AgentVisualizationPanel, parseVisualBlocks } from "./AgentVisualizationPanel";
+import { AgentVisualizationPanel } from "./AgentVisualizationPanel";
+import { parseVisualBlocks } from "./visual-blocks";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { PendingActionCard, PendingActionExpiredNotice } from "./PendingActionCard";
 import { AcpPermissionCard } from "./AcpPermissionCard";

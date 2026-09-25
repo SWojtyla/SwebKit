@@ -3,14 +3,14 @@ import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useNavigate } from "react-router";
 import { Clock, RefreshCw } from "lucide-react";
+import { RedisPageProvider } from "./RedisPageContext";
 import {
-  RedisPageProvider,
   useRedisConnection,
   useRedisNav,
   useRedisOps,
   useRedisQueries,
   mainTabs,
-} from "./RedisPageContext";
+} from "./redis-context";
 import { KeysTab } from "./tabs/KeysTab";
 import { ServerInfoTab } from "./tabs/ServerInfoTab";
 import { SlowLogTab } from "./tabs/SlowLogTab";

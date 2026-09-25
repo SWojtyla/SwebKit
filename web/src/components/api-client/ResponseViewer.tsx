@@ -18,7 +18,8 @@ import type {
 } from "@/lib/types";
 import { formatBytes, formatElapsed } from "@/lib/api-client-format";
 import { formatLocalTime } from "@/lib/datetime";
-import { statusTone, toneChipStyle, CountBadge } from "./method-badge";
+import { CountBadge } from "./method-badge";
+import { statusTone, toneChipStyle } from "./method-meta";
 import { selectBodyLanguage, downloadExtension } from "@/lib/response-body";
 import {
     loadViewPreference,

@@ -15,7 +15,7 @@ import {
   loadGitRepoState, saveGitRepoState, addRepo, removeRepo, setApiSubpath, selectedRepo,
   type GitRepoState,
 } from "@/lib/stores/git-repo-preferences";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { NameDialog, ConfirmDialog } from "./Dialogs";
 import { GitFileList } from "./GitFileList";
 import { GitDiffPane } from "./GitDiffPane";

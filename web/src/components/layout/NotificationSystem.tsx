@@ -1,4 +1,4 @@
-import { useState, createContext, useContext, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import {
     X,
@@ -10,50 +10,12 @@ import {
     Trash2,
 } from "lucide-react";
 import { formatLocalTime } from "@/lib/datetime";
-
-type NotificationType = "success" | "error" | "info";
-
-interface NotificationAction {
-    label: string;
-    onClick: () => void;
-}
-
-interface NotificationItem {
-    id: string;
-    type: NotificationType;
-    title: string;
-    body?: string;
-    timestamp: number;
-    /** Optional recovery action rendered as a button on the toast (e.g. "Undo"). Never persisted to history. */
-    action?: NotificationAction;
-    /** Route to navigate to when the history entry is clicked (e.g. "/monitoring" for a fired alert). */
-    link?: string;
-}
-
-interface NotificationContextValue {
-    notify: (
-        type: NotificationType,
-        title: string,
-        body?: string,
-        action?: NotificationAction,
-        link?: string,
-    ) => void;
-    notifications: NotificationItem[];
-    dismiss: (id: string) => void;
-}
-
-const NotificationContext = createContext<NotificationContextValue | null>(
-    null,
-);
-
-export function useNotification() {
-    const ctx = useContext(NotificationContext);
-    if (!ctx)
-        throw new Error(
-            "useNotification must be used within NotificationProvider",
-        );
-    return ctx;
-}
+import {
+    NotificationContext,
+    type NotificationAction,
+    type NotificationItem,
+    type NotificationType,
+} from "./notification-context";
 
 interface HistoryItem extends NotificationItem {
     read: boolean;

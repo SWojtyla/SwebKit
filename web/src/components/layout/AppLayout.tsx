@@ -51,7 +51,7 @@ import {
     showNotification,
 } from "@/lib/tauri-bridge";
 import { initSidecarBaseUrl } from "@/lib/api";
-import { useNotification } from "./NotificationSystem";
+import { useNotification } from "./notification-context";
 import { ActivityIndicator } from "@/components/shared/ActivityIndicator";
 import { useServiceHealth } from "@/components/dashboard/useServiceHealth";
 import {

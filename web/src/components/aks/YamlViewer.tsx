@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { X, FileText, Pencil, Save, Eye, Loader2, Check, AlertCircle } from "lucide-react";
 import { useAksResourceYaml, useAksApplyYaml, useAksValidateYaml } from "@/lib/hooks";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { highlightYaml } from "@/lib/yamlHighlight";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { filterGeneratedAnnotations } from "@/lib/yaml-noise";

@@ -3,13 +3,13 @@ import { RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { QueryState } from "@/components/shared/QueryState";
+import { StoragePageProvider } from "./StoragePageContext";
 import {
-    StoragePageProvider,
     useStorageAccount,
     useStorageNav,
     useStorageQueries,
     useStorageShare,
-} from "./StoragePageContext";
+} from "./storage-context";
 import { BlobBrowserPanel } from "./BlobBrowserPanel";
 import { BlobDetailPanel } from "./BlobDetailPanel";
 import { BlobRecoveryPanel } from "./BlobRecoveryPanel";

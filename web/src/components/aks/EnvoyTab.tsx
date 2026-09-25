@@ -1,7 +1,7 @@
 import { useCallback, useState, type MouseEvent } from "react";
 import { useAksEnvoyResources } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksActions } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { EnvoyResourceInfo } from "@/lib/types";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describePendingActionOrigin, formatExpiryCountdown } from "./PendingActionCard";
+import { describePendingActionOrigin, formatExpiryCountdown } from "./pending-actions";
 
 describe("describePendingActionOrigin", () => {
   it("maps each known AgentActionType to its proposing feature area", () => {

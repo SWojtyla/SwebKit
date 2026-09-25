@@ -1,5 +1,5 @@
 import { PrefixMemoryPanel } from "../AdvancedPanels";
-import { useRedisBrowser, useRedisQueries } from "../RedisPageContext";
+import { useRedisBrowser, useRedisQueries } from "../redis-context";
 
 export function PrefixTab() {
   const { prefixMemory } = useRedisQueries();

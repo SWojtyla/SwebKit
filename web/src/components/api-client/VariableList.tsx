@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Wand2 } from "lucide-react";
 import { GeneratorConfig } from "./GeneratorConfig";
 import { previewCredential, previewKeyVaultSecret, saveCredential, deleteCredential } from "@/lib/api";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import type { VariableGeneratorDefinition, KeyVaultEntry } from "@/lib/types";
 
 export type VariableMode = "plain" | "generated" | "credential" | "keyvault";

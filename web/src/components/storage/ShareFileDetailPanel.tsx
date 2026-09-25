@@ -4,7 +4,7 @@ import {
     useStorageActions,
     useStorageQueries,
     useStorageShare,
-} from "./StoragePageContext";
+} from "./storage-context";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatLocalDateTime } from "@/lib/datetime";
 import { tryPrettifyJson } from "@/lib/pretty-json";

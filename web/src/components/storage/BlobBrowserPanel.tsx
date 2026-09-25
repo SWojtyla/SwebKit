@@ -13,7 +13,7 @@ import {
     useStorageBrowser,
     useStorageNav,
     useStorageQueries,
-} from "./StoragePageContext";
+} from "./storage-context";
 import { useDropzone } from "react-dropzone";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatLocalDateTime } from "@/lib/datetime";

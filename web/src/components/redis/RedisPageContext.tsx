@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -41,129 +39,32 @@ import {
   useInfiniteQueryFacade,
   useMutationFacade,
   useQueryFacade,
-  type InfiniteQueryFacade,
-  type MutationFacade,
-  type QueryFacade,
 } from "@/lib/queryFacade";
-import type { RedisCacheEntry } from "@/lib/types";
 
-export const mainTabs = [
-  { id: "keys", label: "Keys" },
-  { id: "info", label: "Server Info" },
-  { id: "slowlog", label: "Slow Log" },
-  { id: "keyspace", label: "Keyspace" },
-  { id: "prefix", label: "Prefixes" },
-  { id: "ops", label: "Ops" },
-  { id: "pubsub", label: "Pub/Sub" },
-] as const;
-type TabId = (typeof mainTabs)[number]["id"];
-
-export type NamespaceNode = {
-  name: string;
-  path: string;
-  children: Map<string, NamespaceNode>;
-  keys: string[];
-  keyCount: number;
-};
-
-export function buildNamespaceTree(keys: string[], separator: string): NamespaceNode[] {
-  const roots = new Map<string, NamespaceNode>();
-
-  for (const key of keys) {
-    const parts = key.split(separator);
-
-    if (parts.length < 2) {
-      let fallback = roots.get("(no prefix)");
-      if (!fallback) {
-        fallback = { name: "(no prefix)", path: "(no prefix)", children: new Map(), keys: [], keyCount: 0 };
-        roots.set("(no prefix)", fallback);
-      }
-      fallback.keys.push(key);
-      fallback.keyCount += 1;
-      continue;
-    }
-
-    const namespaceParts = parts.slice(0, -1);
-    let nodes = roots;
-    let path = "";
-    namespaceParts.forEach((name, index) => {
-      path = index === 0 ? name : `${path}${separator}${name}`;
-      let node = nodes.get(name);
-      if (!node) {
-        node = { name, path, children: new Map(), keys: [], keyCount: 0 };
-        nodes.set(name, node);
-      }
-      node.keyCount += 1;
-      nodes = node.children;
-      if (index === namespaceParts.length - 1) {
-        node.keys.push(key);
-      }
-    });
-  }
-
-  return [...roots.values()];
-}
-
-export type FlatRedisRow =
-  | { kind: "namespace"; node: NamespaceNode; depth: number }
-  | { kind: "key"; key: string; node: NamespaceNode; depth: number };
-
-function flattenNamespaceTree(
-  nodes: NamespaceNode[],
-  expandedNamespaces: Set<string>,
-  depth = 0,
-): FlatRedisRow[] {
-  const rows: FlatRedisRow[] = [];
-  for (const node of nodes) {
-    rows.push({ kind: "namespace", node, depth });
-    if (expandedNamespaces.has(node.path)) {
-      rows.push(...flattenNamespaceTree([...node.children.values()], expandedNamespaces, depth + 1));
-      for (const key of node.keys) {
-        rows.push({ kind: "key", key, node, depth });
-      }
-    }
-  }
-  return rows;
-}
-
-export function redisRowKey(row: FlatRedisRow): string {
-  return row.kind === "namespace" ? `ns:${row.node.path}` : `key:${row.key}`;
-}
-
-/**
- * Every namespace path in the tree, recursively. Used by "Expand all" — the deliberate,
- * user-triggered counterpart to "Collapse all".
- */
-export function collectAllNamespacePaths(nodes: NamespaceNode[]): Set<string> {
-  const paths = new Set<string>();
-  const walk = (list: NamespaceNode[]) => {
-    for (const node of list) {
-      paths.add(node.path);
-      walk([...node.children.values()]);
-    }
-  };
-  walk(nodes);
-  return paths;
-}
-
-/**
- * Every key in a namespace's subtree — its own keys plus all descendants'. Used by the
- * namespace-row selection checkbox, which selects or clears the whole subtree in one click
- * (same behavior as the MAUI browser's namespace checkboxes).
- */
-export function collectSubtreeKeys(node: NamespaceNode): string[] {
-  const keys = [...node.keys];
-  for (const child of node.children.values()) keys.push(...collectSubtreeKeys(child));
-  return keys;
-}
-
-interface PendingConfirm {
-  message: string;
-  onConfirm: () => void;
-  /** Defaults to "Delete" — most `pendingConfirm` actions are deletions, but a non-deleting one
-   * (e.g. Remove TTL) should say what it actually does instead of borrowing that label. */
-  confirmLabel?: string;
-}
+import {
+  buildNamespaceTree,
+  collectAllNamespacePaths,
+  collectSubtreeKeys,
+  flattenNamespaceTree,
+  type NamespaceNode,
+} from "./redis-namespace-tree";
+import {
+  mainTabs,
+  RedisBrowserContext,
+  RedisConnectionContext,
+  RedisEditorContext,
+  RedisNavContext,
+  RedisOpsContext,
+  RedisQueriesContext,
+  type PendingConfirm,
+  type RedisBrowserValue,
+  type RedisConnectionValue,
+  type RedisEditorValue,
+  type RedisNavValue,
+  type RedisOpsValue,
+  type RedisQueriesValue,
+  type TabId,
+} from "./redis-context";
 
 /**
  * The page state is split into six contexts grouped by churn rate, so a change in one
@@ -174,182 +75,6 @@ interface PendingConfirm {
  * Queries travel as facades (lib/queryFacade): `useQuery`/`useMutation` hand back a
  * fresh result object each render, so raw results would defeat every `useMemo` below.
  */
-export interface RedisConnectionValue {
-  caches: RedisCacheEntry[];
-  activeCacheId: string | null;
-  resolvedCacheId: string | null;
-  handleCacheChange: (cacheId: string) => void;
-}
-
-export interface RedisNavValue {
-  selectedKey: string | null;
-  setSelectedKey: (key: string | null) => void;
-  activeTab: TabId;
-  setActiveTab: (tab: TabId) => void;
-}
-
-export interface RedisQueriesValue {
-  serverInfo: QueryFacade<ReturnType<typeof useRedisServerInfo>>;
-  scanResult: QueryFacade<ReturnType<typeof useRedisScanKeys>>;
-  keyInfo: QueryFacade<ReturnType<typeof useRedisKeyInfo>>;
-  keyValue: QueryFacade<ReturnType<typeof useRedisKeyValue>>;
-  hashFields: QueryFacade<ReturnType<typeof useRedisHashFields>>;
-  listItemsQuery: InfiniteQueryFacade<ReturnType<typeof useRedisListItemsPaginated>>;
-  listItems: string[];
-  setMembersQuery: InfiniteQueryFacade<ReturnType<typeof useRedisSetMembersPaginated>>;
-  setMembers: string[];
-  sortedSetMembers: QueryFacade<ReturnType<typeof useRedisSortedSetMembers>>;
-  slowLog: QueryFacade<ReturnType<typeof useRedisSlowLog>>;
-  health: QueryFacade<ReturnType<typeof useRedisKeyspaceHealth>>;
-  prefixMemory: QueryFacade<ReturnType<typeof useRedisPrefixMemory>>;
-
-  deleteKey: MutationFacade<ReturnType<typeof useRedisDeleteKey>>;
-  renameKey: MutationFacade<ReturnType<typeof useRedisRenameKey>>;
-  setTtl: MutationFacade<ReturnType<typeof useRedisSetTtl>>;
-  setValue: MutationFacade<ReturnType<typeof useRedisSetValue>>;
-  exportKeys: MutationFacade<ReturnType<typeof useRedisExportKeys>>;
-  setHashField: MutationFacade<ReturnType<typeof useRedisSetHashField>>;
-  deleteHashField: MutationFacade<ReturnType<typeof useRedisDeleteHashField>>;
-  updateZsetScore: MutationFacade<ReturnType<typeof useRedisUpdateSortedSetScore>>;
-}
-
-export interface RedisBrowserValue {
-  pattern: string;
-  searchInput: string;
-  setSearchInput: (v: string) => void;
-  cursor: number;
-  handleSearch: () => void;
-  handleLoadMore: () => void;
-  handleLoadAll: () => void;
-  loadAllActive: boolean;
-  /** Sets a new search pattern (updating both the input and the applied pattern) and switches
-   * to the Keys tab — the drill-through target used by Prefix/Ops panels. */
-  openPrefixInKeys: (prefix: string) => void;
-
-  separator: string;
-  setSeparator: (v: string) => void;
-  expandedNamespaces: Set<string>;
-  toggleNamespace: (path: string) => void;
-  collapseAllNamespaces: () => void;
-  expandAllNamespaces: () => void;
-
-  displayKeys: string[];
-  namespaceTree: NamespaceNode[];
-  flatRedisRows: FlatRedisRow[];
-  redisTreeRef: React.MutableRefObject<HTMLDivElement | null>;
-
-  selectedKeys: Set<string>;
-  setSelectedKeys: (v: Set<string>) => void;
-  toggleKeySelection: (key: string) => void;
-  /** True when every currently loaded key is selected — drives the header checkbox. */
-  allLoadedSelected: boolean;
-  /** True when some but not all loaded keys are selected — drives the indeterminate state. */
-  someLoadedSelected: boolean;
-  /** "Select all loaded" toggle: selects every loaded key, or clears the selection when all are. */
-  toggleSelectAllLoaded: () => void;
-  /** Keys per namespace path, precomputed once per tree so rows don't each re-walk their subtree. */
-  subtreeKeysByPath: Map<string, string[]>;
-  /** Namespace-row checkbox toggle: selects or clears the node's whole subtree. */
-  toggleSubtreeSelection: (node: NamespaceNode) => void;
-  handleBatchDelete: () => void;
-  handleExportSelected: () => Promise<void>;
-}
-
-export interface RedisEditorValue {
-  renaming: boolean;
-  setRenaming: (v: boolean) => void;
-  renameValue: string;
-  setRenameValue: (v: string) => void;
-  handleRenameKey: (oldKey: string) => void;
-
-  editingValue: boolean;
-  setEditingValue: (v: boolean) => void;
-  stringValue: string;
-  setStringValue: (v: string) => void;
-  handleSaveStringValue: (key: string) => void;
-
-  showTtlEditor: boolean;
-  setShowTtlEditor: (v: boolean) => void;
-  ttlSeconds: number;
-  setTtlSeconds: (v: number) => void;
-  handleSetTtl: (key: string) => void;
-  handleRemoveTtl: (key: string) => void;
-  requestRemoveTtl: (key: string) => void;
-
-  hashAdding: boolean;
-  setHashAdding: (v: boolean) => void;
-  newHashField: string;
-  setNewHashField: (v: string) => void;
-  newHashValue: string;
-  setNewHashValue: (v: string) => void;
-  hashEditingField: string | null;
-  setHashEditingField: (v: string | null) => void;
-  hashEditFieldName: string;
-  setHashEditFieldName: (v: string) => void;
-  hashEditValue: string;
-  setHashEditValue: (v: string) => void;
-  handleAddHashField: (key: string) => void;
-  handleSaveHashField: (key: string, originalField: string) => void;
-  requestDeleteHashField: (key: string, field: string) => void;
-
-  zsetEditingMember: string | null;
-  setZsetEditingMember: (v: string | null) => void;
-  zsetEditScore: string;
-  setZsetEditScore: (v: string) => void;
-  handleSaveZsetScore: (key: string, member: string) => void;
-
-  handleCopyKey: (key: string) => void;
-  requestDeleteKey: (key: string) => void;
-  handleDeleteKey: (key: string) => void;
-}
-
-export interface RedisOpsValue {
-  autoRefresh: boolean;
-  setAutoRefresh: (v: boolean) => void;
-  refreshInterval: number;
-  setRefreshInterval: (v: number) => void;
-  handleManualRefresh: () => void;
-  /** `Date.now()` of the last completed Redis fetch, or null before the first one — feeds the
-   * shared `LastRefreshed` indicator. */
-  lastRefreshedAt: number | null;
-  /** True while any Redis query is in flight. */
-  isFetching: boolean;
-
-  pendingConfirm: PendingConfirm | null;
-  setPendingConfirm: (v: PendingConfirm | null) => void;
-}
-
-const RedisConnectionContext = createContext<RedisConnectionValue | null>(null);
-const RedisNavContext = createContext<RedisNavValue | null>(null);
-const RedisQueriesContext = createContext<RedisQueriesValue | null>(null);
-const RedisBrowserContext = createContext<RedisBrowserValue | null>(null);
-const RedisEditorContext = createContext<RedisEditorValue | null>(null);
-const RedisOpsContext = createContext<RedisOpsValue | null>(null);
-
-function useRequired<T>(ctx: T | null, name: string): T {
-  if (ctx === null) throw new Error(`${name} must be used within RedisPageProvider`);
-  return ctx;
-}
-
-export function useRedisConnection(): RedisConnectionValue {
-  return useRequired(useContext(RedisConnectionContext), "useRedisConnection");
-}
-export function useRedisNav(): RedisNavValue {
-  return useRequired(useContext(RedisNavContext), "useRedisNav");
-}
-export function useRedisQueries(): RedisQueriesValue {
-  return useRequired(useContext(RedisQueriesContext), "useRedisQueries");
-}
-export function useRedisBrowser(): RedisBrowserValue {
-  return useRequired(useContext(RedisBrowserContext), "useRedisBrowser");
-}
-export function useRedisEditor(): RedisEditorValue {
-  return useRequired(useContext(RedisEditorContext), "useRedisEditor");
-}
-export function useRedisOps(): RedisOpsValue {
-  return useRequired(useContext(RedisOpsContext), "useRedisOps");
-}
-
 export function RedisPageProvider({ children }: { children: ReactNode }): JSX.Element {
   const { data: profile } = useProfile();
   const updateProfile = useUpdateProfile();

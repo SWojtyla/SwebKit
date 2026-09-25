@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { useAksDeployments, useAksRestartDeployment, useAksScaleDeployment } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksActions } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/aks-workspace-context";
 import { ScaleDialog } from "./ScaleDialog";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { DeploymentInfo } from "@/lib/types";

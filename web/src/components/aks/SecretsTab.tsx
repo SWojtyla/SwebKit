@@ -1,7 +1,7 @@
 import { useCallback, useMemo, type MouseEvent } from "react";
 import { useAksSecrets } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksActions, useAksNav } from "./shared/AksWorkspaceContext";
+import { useAksActions, useAksNav } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { SecretInfo } from "@/lib/types";
 

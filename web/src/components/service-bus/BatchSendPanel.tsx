@@ -3,7 +3,7 @@ import { X, Upload, Send } from "lucide-react";
 import { invalidateServiceBusQueries } from "@/lib/hooks";
 import { apiSend } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import type { SbEntityInfo, SbMessage, ServiceBusNamespace } from "@/lib/types";
 import { EntityPathInput } from "./EntityPathInput";
 import { runInChunks } from "./bulkOps";

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Send, Calendar, FileText, Save, RotateCcw } from "lucide-react";
 import { useSbSendMessage, useSbScheduleMessage, useSbSaveTemplate } from "@/lib/hooks";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate, ServiceBusNamespace } from "@/lib/types";
 import { TemplatePicker } from "./TemplatePicker";
 import { EntityPathInput } from "./EntityPathInput";

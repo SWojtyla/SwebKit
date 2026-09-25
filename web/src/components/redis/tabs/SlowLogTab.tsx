@@ -1,6 +1,6 @@
 import { formatDuration } from "@/lib/redis-format";
 import { formatLocalTime } from "@/lib/datetime";
-import { useRedisQueries } from "../RedisPageContext";
+import { useRedisQueries } from "../redis-context";
 
 export function SlowLogTab() {
     const { slowLog } = useRedisQueries();

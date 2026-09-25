@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEnvVars, serializeEnvVars } from "./AgentSettings";
+import { parseEnvVars, serializeEnvVars } from "./env-vars";
 
 describe("parseEnvVars", () => {
  it("parses KEY=VALUE lines", () => {

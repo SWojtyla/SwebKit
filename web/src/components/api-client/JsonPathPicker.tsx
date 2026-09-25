@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Search, Check } from "lucide-react";
 import { evaluateJsonPath } from "@/lib/api";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 
 interface JsonPathPickerProps {
   initialBody?: string;

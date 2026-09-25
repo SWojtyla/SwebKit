@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Upload, FolderTree, FileJson, X, CheckCircle, AlertCircle } from "lucide-react";
 import { useImportCollection, useDemoMode } from "@/lib/hooks";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { pickFileWithContent, pickDirectory, stringToBase64 } from "@/lib/tauri-bridge";
 import type { CollectionImportResult } from "@/lib/types";
 

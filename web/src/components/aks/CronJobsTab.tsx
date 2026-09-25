@@ -6,7 +6,7 @@ import {
     useAksSetCronJobSchedule,
 } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksActions } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/aks-workspace-context";
 import { CronJobScheduleDialog } from "./CronJobScheduleDialog";
 import { nextCronRun } from "@/lib/cron";
 import { formatLocalDateTime } from "@/lib/datetime";

@@ -1,5 +1,6 @@
 import { Globe, Folder, Settings2, GitBranch, AlertTriangle } from "lucide-react";
-import { ApiClientPageProvider, useApiClientPageContext, useApiClientTabs } from "./ApiClientPageContext";
+import { ApiClientPageProvider } from "./ApiClientPageContext";
+import { useApiClientPageContext, useApiClientTabs } from "./api-client-context";
 import { CollectionTree } from "./CollectionTree";
 import { RequestEditor } from "./RequestEditor";
 import { ResponseViewer } from "./ResponseViewer";

@@ -16,7 +16,7 @@ import {
     useStorageDetail,
     useStorageNav,
     useStorageQueries,
-} from "./StoragePageContext";
+} from "./storage-context";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { useScreenStateProvider } from "@/lib/stores/screen-state";
 import { tryPrettifyJson } from "@/lib/pretty-json";

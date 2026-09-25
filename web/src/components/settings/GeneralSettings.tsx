@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { CheckCircle2, Circle, Download, Upload } from "lucide-react";
 import { useProfile, useUpdateProfile, useUserSettings, useUpdateUserSettings, useExportSettings, useImportSettings, useSettingsReadiness } from "@/lib/hooks";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 

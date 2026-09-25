@@ -5,13 +5,12 @@ import {
   useRedisConnection,
   useRedisNav,
   useRedisQueries,
-  redisRowKey,
-  type FlatRedisRow,
-} from "../RedisPageContext";
+} from "../redis-context";
+import { redisRowKey, type FlatRedisRow } from "../redis-namespace-tree";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRedisKeyInfoBatch } from "@/lib/hooks";
 import { QueryState } from "@/components/shared/QueryState";
-import { typeColors } from "./KeyDetailPanel";
+import { typeColors } from "../type-colors";
 import { formatTtl } from "@/lib/redis-format";
 
 // Vertical guide rules connecting a row to its ancestors, VSCode-file-tree style — the thing

@@ -1,5 +1,5 @@
+import { AksWorkspaceProvider } from "./shared/AksWorkspaceContext";
 import {
-    AksWorkspaceProvider,
     useAksCluster,
     useAksNav,
     useAksQueries,
@@ -11,7 +11,7 @@ import {
     networkTabs,
     extraTabs,
     networkTabIds,
-} from "./shared/AksWorkspaceContext";
+} from "./shared/aks-workspace-context";
 import { useScreenStateProvider } from "../../lib/stores/screen-state";
 import { DeploymentsTab } from "./DeploymentsTab";
 import { PodsTab } from "./PodsTab";

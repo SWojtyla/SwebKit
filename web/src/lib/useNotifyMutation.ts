@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient, type UseMutationResult } from "@tanstack/react-query";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 
 export interface NotifyMutationOptions<TData, TVariables> {
   mutationFn: (vars: TVariables) => Promise<TData>;

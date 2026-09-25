@@ -6,7 +6,7 @@ import {
     useStorageActions,
     useStorageNav,
     useStorageQueries,
-} from "./StoragePageContext";
+} from "./storage-context";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatLocalDateTime } from "@/lib/datetime";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";

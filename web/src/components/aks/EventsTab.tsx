@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { useAksEvents } from "@/lib/hooks";
-import { useAksNav, type TabId } from "./shared/AksWorkspaceContext";
+import { useAksNav, type TabId } from "./shared/aks-workspace-context";
 import { formatLocalTime } from "@/lib/datetime";
 
 /** Kubernetes `involvedObject.kind` -> the AKS tab that shows that resource, for click-through.

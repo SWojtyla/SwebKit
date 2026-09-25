@@ -1,5 +1,5 @@
 import { formatBytes } from "@/lib/format-bytes";
-import { useRedisQueries } from "../RedisPageContext";
+import { useRedisQueries } from "../redis-context";
 
 function InfoCard({ label, value, testId }: { label: string; value: string; testId: string }) {
   return (

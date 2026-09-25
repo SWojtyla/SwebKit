@@ -8,7 +8,8 @@ import { substituteVariables, previewVariables, isLikelySecret } from "@/lib/var
 import { unresolvedVariableNames } from "@/lib/variableHighlight";
 import { authSubstitutedText } from "@/lib/auth-variables";
 import { saveSecret, getSecret, deleteSecret } from "@/lib/tauri-bridge";
-import { METHOD_META, methodMeta, toneTextStyle, CountBadge } from "./method-badge";
+import { CountBadge } from "./method-badge";
+import { METHOD_META, methodMeta, toneTextStyle } from "./method-meta";
 import { GraphQlPanel } from "./GraphQlPanel";
 import { VariableInput } from "./VariableInput";
 import { WebSocketPanel } from "./WebSocketPanel";

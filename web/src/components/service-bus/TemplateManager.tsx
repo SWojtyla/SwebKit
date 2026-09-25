@@ -15,7 +15,7 @@ import {
     useSbSaveTemplate,
 } from "@/lib/hooks";
 import { tryReindentJson } from "@/lib/pretty-json";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { Dialog } from "@/components/shared/Dialog";
 import type { SbMessageTemplate } from "@/lib/types";

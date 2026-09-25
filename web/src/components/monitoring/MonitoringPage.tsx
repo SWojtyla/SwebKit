@@ -26,7 +26,7 @@ import {
     useProactiveInsightsFeed,
     useUpdateSearchParams,
 } from "../../lib/hooks";
-import { useNotification } from "../layout/NotificationSystem";
+import { useNotification } from "../layout/notification-context";
 import { useScreenStateProvider } from "../../lib/stores/screen-state";
 import { ContextualAssistant } from "../agent/ContextualAssistant";
 import { AlertRuleGroups } from "./AlertRuleGroups";

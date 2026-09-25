@@ -1,5 +1,5 @@
 import { KeyspaceHealthPanel } from "../AdvancedPanels";
-import { useRedisBrowser, useRedisNav, useRedisQueries } from "../RedisPageContext";
+import { useRedisBrowser, useRedisNav, useRedisQueries } from "../redis-context";
 
 export function KeyspaceTab() {
   const ctx = { ...useRedisNav(), ...useRedisQueries(), ...useRedisBrowser() };

@@ -1,5 +1,5 @@
 import { OpsInsightsPanel } from "../AdvancedPanels";
-import { useRedisNav, useRedisQueries } from "../RedisPageContext";
+import { useRedisNav, useRedisQueries } from "../redis-context";
 
 export function OpsTab() {
   const { setSelectedKey, setActiveTab } = useRedisNav();

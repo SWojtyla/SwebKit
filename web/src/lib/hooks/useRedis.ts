@@ -8,7 +8,7 @@ import {
   analyzeRedisKeyspace,
   getRedisPrefixMemory,
 } from "../api";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import type {
   RedisKeyScanResult,
   RedisKeyInfo,

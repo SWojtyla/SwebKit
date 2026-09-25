@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent } from "react";
 import { useAksServices } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksActions } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { ServiceInfo } from "@/lib/types";
 

@@ -3,7 +3,7 @@ import { File, Folder } from "lucide-react";
 import {
     useStorageQueries,
     useStorageShare,
-} from "./StoragePageContext";
+} from "./storage-context";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatLocalDateTime } from "@/lib/datetime";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";

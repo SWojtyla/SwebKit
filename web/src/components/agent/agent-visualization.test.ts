@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseVisualBlocks } from "./AgentVisualizationPanel";
+import { parseVisualBlocks } from "./visual-blocks";
 
 const topology = JSON.stringify({
   type: "topology",

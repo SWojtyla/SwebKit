@@ -1,5 +1,5 @@
 import { PubSubPanel } from "../PubSubPanel";
-import { useRedisConnection } from "../RedisPageContext";
+import { useRedisConnection } from "../redis-context";
 
 export function PubSubTab() {
   const { resolvedCacheId } = useRedisConnection();

@@ -10,7 +10,7 @@ import {
     useAksSetScaledJobScalingEnabled,
 } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksActions } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/aks-workspace-context";
 import { Dialog } from "@/components/shared/Dialog";
 import { MoreHorizontal, X } from "lucide-react";
 import type { ContextMenuItem } from "./ContextMenu";

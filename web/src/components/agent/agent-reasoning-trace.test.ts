@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countFailedSteps, describeReasoningToggleLabel } from "./AgentReasoningTrace";
+import { countFailedSteps, describeReasoningToggleLabel } from "./reasoning-trace";
 import type { AgentChatStep } from "@/lib/types";
 
 const call = (toolName: string): AgentChatStep => ({ type: "tool_call", toolName, summary: `Calling ${toolName}` });

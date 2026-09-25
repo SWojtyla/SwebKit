@@ -25,7 +25,7 @@ import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { formatLocalTime } from "@/lib/datetime";
 import { buildZip } from "@/lib/zip";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import {

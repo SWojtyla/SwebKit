@@ -12,7 +12,7 @@ import {
 } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { EntityTree } from "./EntityTree";
