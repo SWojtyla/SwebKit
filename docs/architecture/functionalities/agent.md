@@ -2,7 +2,7 @@
 
 ## Overview
 
-The SwebKit Agent is an AI copilot that provides intelligent assistance for DevOps operations. It integrates Mistral AI's language model capabilities with SwebKit's existing services to help users diagnose and understand their Kubernetes clusters, Azure DevOps pipelines, Redis instances, Azure Service Bus queues, and observability data.
+The SwebKit Agent is an AI copilot that provides intelligent assistance for platform operations. It integrates LLM capabilities with SwebKit's existing services to help users diagnose and understand their Kubernetes clusters, Redis instances, Azure Service Bus queues, and observability data.
 
 ## Core Components
 
@@ -235,9 +235,9 @@ builder.Services.AddSingleton<DemoAksClient>();
 ## System Prompt Template
 
 ```
-You are SwebKit Assistant, an AI copilot embedded in SwebKit — a DevOps operations desktop
+You are SwebKit Assistant, an AI copilot embedded in SwebKit — a platform operations desktop
 application for platform engineers. You help users diagnose and understand their Kubernetes
-clusters, Azure DevOps pipelines, Redis instances, Azure Service Bus queues, and
+clusters, Redis instances, Azure Service Bus queues, and
 observability data.
 
 Current workspace context:

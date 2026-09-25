@@ -5,7 +5,7 @@
 - Initial route at `/` and `/dashboard` for the MAUI Blazor Hybrid shell.
 - The dashboard acts as the replacement home page, not just a widget canvas embedded in the shell.
 - Calm, minimal design (dashboard-redesign): a compact header row (view title, saved-view switcher, refresh, customize) sits above a single full-width board. The command-center overview strip, KPI ribbon, and right-side insight dock were removed in favor of typography-first tiles and generous whitespace.
-- Health-summary KPIs for Service Bus dead letters, AKS unhealthy pods, Redis near-expiry keys, and Azure DevOps pending approvals render as four quiet `1x1` tiles directly on the board (no separate ribbon). Severity color (warn/error) appears only on non-zero counts; a healthy zero renders quiet with an "All clear" check cue.
+- Health-summary KPIs for Service Bus dead letters, AKS unhealthy pods, and Redis near-expiry keys render as quiet `1x1` tiles directly on the board (no separate ribbon); agent pending approvals surface as a banner. Severity color (warn/error) appears only on non-zero counts; a healthy zero renders quiet with an "All clear" check cue.
 - Pod health monitor summary when monitoring is active or recent alerts exist.
 - Session activity feed populated from `ActivityEvent` messages on the app event bus.
 - Favorites panel populated from the shared `OperatorWorkspaceService` favorite-resource model.
@@ -33,7 +33,7 @@
 6. Custom tile instances use a known template prefix, for example `service-bus.entity-watch:<instance>`, so multiple resource-specific tiles can persist while still validating against the registry.
 7. Remaining board tiles are sorted into operational groups before rendering so KPI, context, and activity surfaces keep a stable hierarchy.
 8. Area and attention filters can narrow the rendered widget set; unsupported saved-view filters are ignored rather than breaking tiles that do not understand them.
-9. `LoadHealthDataAsync` refreshes the Service Bus, AKS, Redis, and Pipelines health summaries plus custom Service Bus entity and AKS namespace watch tiles in parallel behind a semaphore guard. AKS custom tiles can pin an explicit kube context; tiles without one fall back to the configured/current context.
+9. `LoadHealthDataAsync` refreshes the Service Bus, AKS, and Redis health summaries plus custom Service Bus entity and AKS namespace watch tiles in parallel behind a semaphore guard. AKS custom tiles can pin an explicit kube context; tiles without one fall back to the configured/current context.
 10. The page caches a derived render snapshot for the active view, visible tiles, workspace lists, and tile editor rows so normal renders do not recompute the entire dashboard shell every time Blazor redraws the page.
 11. Runtime updates split into two lanes: shell updates invalidate the cached snapshot only when view/workspace/layout state changes, while tile refreshes queue a lighter rerender.
 12. Shared dashboard child components own KPI metric-tile and watch-tile rendering; `DashboardPage` (decomposed into concern-scoped partials in Wave A) stays focused on orchestration, preferences, and refresh coordination.

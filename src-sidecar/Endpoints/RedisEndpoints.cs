@@ -1,3 +1,4 @@
+using SwebKit.Sidecar.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;

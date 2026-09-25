@@ -5,7 +5,7 @@
     <Project Path="src/SwebKit.Core/SwebKit.Core.csproj" />
     <Project Path="src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj" />
     <Project Path="src/SwebKit.Redis/SwebKit.Redis.csproj" />
-    <Project Path="src/SwebKit.DevOps/SwebKit.DevOps.csproj" />
+
     <Project Path="src/SwebKit.Observability/SwebKit.Observability.csproj" />
     <Project Path="src/SwebKit.Sql/SwebKit.Sql.csproj" />
     <Project Path="src-sidecar/SwebKit.Sidecar.csproj" />
@@ -14,7 +14,7 @@
     <Project Path="tests/SwebKit.Agents.Tests/SwebKit.Agents.Tests.csproj" />
     <Project Path="tests/SwebKit.Azure.Tests/SwebKit.Azure.Tests.csproj" />
     <Project Path="tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj" />
-    <Project Path="tests/SwebKit.DevOps.Tests/SwebKit.DevOps.Tests.csproj" />
+
     <Project Path="tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj" />
     <Project Path="tests/SwebKit.Sidecar.Tests/SwebKit.Sidecar.Tests.csproj" />
     <Project Path="tests/SwebKit.Sql.Tests/SwebKit.Sql.Tests.csproj" />

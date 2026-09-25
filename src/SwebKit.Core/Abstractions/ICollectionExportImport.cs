@@ -3,29 +3,6 @@ using SwebKit.Core.Domain;
 namespace SwebKit.Core.Abstractions;
 
 /// <summary>
-/// Exports a collection (and optionally its environments) to a string in a specific format.
-/// </summary>
-public interface ICollectionExporter
-{
-    /// <summary>File extension for this format, e.g. <c>".json"</c> or <c>".zip"</c>.</summary>
-    string FileExtension { get; }
-
-    /// <summary>Human-readable format name shown in the UI, e.g. <c>"SwebKit JSON"</c>.</summary>
-    string FormatName { get; }
-
-    /// <summary>
-    /// Exports the collection.
-    /// When <paramref name="environments"/> is non-empty, those environments should be
-    /// included in the output where the format supports it.
-    /// Returns the exported payload as a byte array.
-    /// </summary>
-    Task<byte[]> ExportAsync(
-        ApiCollection collection,
-        IReadOnlyList<ApiEnvironment> environments,
-        CancellationToken cancellationToken = default);
-}
-
-/// <summary>
 /// Imports one or more collections from a byte payload.
 /// </summary>
 public interface ICollectionImporter

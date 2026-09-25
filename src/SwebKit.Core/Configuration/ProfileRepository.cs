@@ -155,7 +155,6 @@ public class ProfileRepository
     private static void NormalizeConfig(AppConfig config, IReadOnlyList<ServiceBusNamespace> namespaces)
     {
         config.Name ??= "Default";
-        config.IncidentTimeline ??= new IncidentTimelineConfig();
         config.ServiceBusEntityLinks ??= [];
         config.StorageAccounts ??= [];
         config.FavoriteEntities ??= [];

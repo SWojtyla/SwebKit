@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
+using SwebKit.Sidecar.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;

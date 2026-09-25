@@ -8,38 +8,6 @@ using SwebKit.Core.Serialization;
 namespace SwebKit.Core.Services;
 
 /// <summary>
-/// Exports a collection to SwebKit's own versioned JSON format.
-/// This is the lossless format — every field is preserved on round-trip.
-/// </summary>
-public sealed class SwebKitCollectionExporter : ICollectionExporter
-{
-    private static readonly JsonSerializerOptions Options = new(SwebKitJsonOptions.Indented)
-    {
-        Converters = { new JsonStringEnumConverter() },
-    };
-
-    public string FileExtension => ".sweb.json";
-    public string FormatName => "SwebKit JSON";
-
-    public Task<byte[]> ExportAsync(
-        ApiCollection collection,
-        IReadOnlyList<ApiEnvironment> environments,
-        CancellationToken cancellationToken = default)
-    {
-        var bundle = new SwebKitCollectionBundle
-        {
-            SchemaVersion = 1,
-            ExportedAt = DateTimeOffset.UtcNow,
-            Collection = collection,
-            Environments = environments.ToList(),
-        };
-
-        var json = JsonSerializer.Serialize(bundle, Options);
-        return Task.FromResult(Encoding.UTF8.GetBytes(json));
-    }
-}
-
-/// <summary>
 /// Imports a SwebKit-format collection bundle.
 /// </summary>
 public sealed class SwebKitCollectionImporter : ICollectionImporter

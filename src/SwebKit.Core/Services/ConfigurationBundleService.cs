@@ -15,7 +15,6 @@ public sealed class ConfigurationBundleService
     private readonly ProfileRepository _profiles;
     private readonly UiStateRepository _uiState;
     private readonly UserSettingsRepository _userSettings;
-    private readonly ReleaseRepository _releases;
     private readonly ScheduledMessageRepository _scheduledMessages;
     private readonly AppStateService _appState;
     private readonly CollectionRepository _collections;
@@ -25,7 +24,6 @@ public sealed class ConfigurationBundleService
         ProfileRepository profiles,
         UiStateRepository uiState,
         UserSettingsRepository userSettings,
-        ReleaseRepository releases,
         ScheduledMessageRepository scheduledMessages,
         AppStateService appState,
         CollectionRepository collections,
@@ -34,7 +32,6 @@ public sealed class ConfigurationBundleService
         _profiles = profiles;
         _uiState = uiState;
         _userSettings = userSettings;
-        _releases = releases;
         _scheduledMessages = scheduledMessages;
         _appState = appState;
         _collections = collections;
@@ -50,7 +47,6 @@ public sealed class ConfigurationBundleService
             Profiles = Clone(_profiles.GetProfileData()) ?? new(),
             UiState = Clone(_uiState.GetState()) ?? new(),
             UserSettings = Clone(_userSettings.Settings) ?? new(),
-            Releases = Clone(_releases.GetStoreData()) ?? new(),
             ScheduledMessages = Clone(_scheduledMessages.GetEntries().ToList()) ?? [],
             CollectionsData = Clone(new SwebKit.Core.Domain.CollectionsStore
             {
@@ -81,7 +77,6 @@ public sealed class ConfigurationBundleService
         bundle.Profiles ??= new();
         bundle.UiState ??= new();
         bundle.UserSettings ??= new();
-        bundle.Releases ??= new();
         bundle.ScheduledMessages ??= [];
         return bundle;
     }
@@ -91,7 +86,6 @@ public sealed class ConfigurationBundleService
         await _profiles.ImportAsync(bundle.Profiles ?? new()).ConfigureAwait(false);
         await _uiState.ImportAsync(bundle.UiState ?? new()).ConfigureAwait(false);
         await _userSettings.ImportAsync(bundle.UserSettings ?? new()).ConfigureAwait(false);
-        await _releases.ImportAsync(bundle.Releases ?? new()).ConfigureAwait(false);
         await _scheduledMessages.ImportAsync(bundle.ScheduledMessages ?? []).ConfigureAwait(false);
 
         // API client data — only restore when present (backward-compatible)

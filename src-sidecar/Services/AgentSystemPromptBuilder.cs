@@ -60,10 +60,6 @@ public sealed class AgentSystemPromptBuilder
         if (config.StorageAccounts.Count > 0)
             contextParts.Add($"Storage: {config.StorageAccounts.Count} account(s)");
 
-        // DevOps
-        if (config.DevOpsConfig is not null && !string.IsNullOrWhiteSpace(config.DevOpsConfig.Organization))
-            contextParts.Add($"DevOps: {config.DevOpsConfig.Organization}");
-
         // Observability
         if (config.ObservabilityConfig is not null && !string.IsNullOrWhiteSpace(config.ObservabilityConfig.SelectedResourceId))
             contextParts.Add($"Observability: {config.ObservabilityConfig.SelectedResourceName ?? config.ObservabilityConfig.SelectedResourceId}");
@@ -98,9 +94,9 @@ public sealed class AgentSystemPromptBuilder
             : "## Response format\n- Be concise and technical. Prefer bullet points and tables over prose.\n- If you are unsure, say so rather than guessing.\n\n";
 
         return $"""
-            You are SwebKit Assistant, an AI copilot embedded in SwebKit — a DevOps operations desktop
+            You are SwebKit Assistant, an AI copilot embedded in SwebKit — an operations desktop
             application for platform engineers. You help users diagnose and understand their Kubernetes
-            clusters, Azure DevOps pipelines, Redis instances, Azure Service Bus queues, Storage accounts,
+            clusters, Redis instances, Azure Service Bus queues, Storage accounts, SQL databases,
             and observability data.
             {currentFocus}
             ## Current workspace context

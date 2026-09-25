@@ -16,10 +16,9 @@ public sealed class ConfigurationBundleServiceTests
         var profiles = new ProfileRepository();
         var uiState = new UiStateRepository();
         var userSettings = new UserSettingsRepository();
-        var releases = new ReleaseRepository();
         var scheduled = new ScheduledMessageRepository();
         var appState = new AppStateService(profiles, uiState, new AppEventBus(NullLogger<AppEventBus>.Instance));
-        var bundleService = new ConfigurationBundleService(profiles, uiState, userSettings, releases, scheduled, appState, new CollectionRepository(), new EnvironmentRepository());
+        var bundleService = new ConfigurationBundleService(profiles, uiState, userSettings, scheduled, appState, new CollectionRepository(), new EnvironmentRepository());
 
         profiles.ReplaceProfileData(new ProfileData
         {
@@ -69,20 +68,6 @@ public sealed class ConfigurationBundleServiceTests
         });
         await userSettings.SaveAsync();
 
-        await releases.ImportAsync(new ReleaseStoreData
-        {
-            Releases =
-            [
-                new ReleaseRecord
-                {
-                    Id = Guid.NewGuid(),
-                    Name = "Release 42",
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    Status = ReleaseStatus.InProgress
-                }
-            ]
-        });
-
         await scheduled.ImportAsync(
         [
             new ScheduledMessageEntry
@@ -102,14 +87,12 @@ public sealed class ConfigurationBundleServiceTests
         var importedProfiles = new ProfileRepository();
         var importedUiState = new UiStateRepository();
         var importedUserSettings = new UserSettingsRepository();
-        var importedReleases = new ReleaseRepository();
         var importedScheduled = new ScheduledMessageRepository();
         var importedAppState = new AppStateService(importedProfiles, importedUiState, new AppEventBus(NullLogger<AppEventBus>.Instance));
         var importedBundleService = new ConfigurationBundleService(
             importedProfiles,
             importedUiState,
             importedUserSettings,
-            importedReleases,
             importedScheduled,
             importedAppState,
             new CollectionRepository(),
@@ -123,13 +106,11 @@ public sealed class ConfigurationBundleServiceTests
         Assert.True(importedUiState.State.UseDemoData);
         Assert.Equal("Studio Ledger", importedUserSettings.Settings.Theme);
         Assert.False(importedUserSettings.Settings.WarmupConnectionsOnStartup);
-        Assert.Single(importedReleases.AllReleases);
         Assert.Single(importedScheduled.All);
         Assert.True(importedAppState.UseDemoData);
         Assert.True(File.Exists(AppDataPaths.ProfilesJson));
         Assert.True(File.Exists(AppDataPaths.UiStateJson));
         Assert.True(File.Exists(AppDataPaths.UserSettingsJson));
-        Assert.True(File.Exists(AppDataPaths.ReleasesJson));
         Assert.True(File.Exists(AppDataPaths.ScheduledMessagesJson));
     }
 
@@ -141,10 +122,9 @@ public sealed class ConfigurationBundleServiceTests
         var profiles = new ProfileRepository();
         var uiState = new UiStateRepository();
         var userSettings = new UserSettingsRepository();
-        var releases = new ReleaseRepository();
         var scheduled = new ScheduledMessageRepository();
         var appState = new AppStateService(profiles, uiState, new AppEventBus(NullLogger<AppEventBus>.Instance));
-        var bundleService = new ConfigurationBundleService(profiles, uiState, userSettings, releases, scheduled, appState, new CollectionRepository(), new EnvironmentRepository());
+        var bundleService = new ConfigurationBundleService(profiles, uiState, userSettings, scheduled, appState, new CollectionRepository(), new EnvironmentRepository());
 
         var ex = Assert.Throws<InvalidOperationException>(() => bundleService.Deserialize("""
             {

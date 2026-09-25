@@ -17,7 +17,6 @@ export interface AppConfig {
     redisConfig: RedisConfig | null;
     sqlConfig: SqlConfig | null;
     storageAccounts: StorageConfig[];
-    devOpsConfig: DevOpsConfig | null;
     observabilityConfig: ObservabilityConfig | null;
     favoriteEntities: FavoriteEntity[];
     favoriteResources: FavoriteResource[];
@@ -301,12 +300,6 @@ export interface StorageConfig {
     allowMutations: boolean;
 }
 
-export interface DevOpsConfig {
-    organizationUrl: string;
-    project: string;
-    credentialKey: string;
-}
-
 /**
  * Mirrors `SwebKit.Core.Domain.ObservabilityConfig` — only the two fields the agent-tool-only
  * integration actually needs (which Application Insights resource to query) are surfaced in the
@@ -314,7 +307,7 @@ export interface DevOpsConfig {
  * the Observability *browsing* page that was dropped from this rewrite, so there's nothing here to
  * bind to. Auth is ambient `DefaultAzureCredential` (Azure CLI/VS login) — there's deliberately no
  * `credentialKey` field; Observability doesn't use the OS credential store the way Redis/Service
- * Bus/DevOps do.
+ * Bus do.
  */
 export interface ObservabilityConfig {
     selectedResourceId: string | null;

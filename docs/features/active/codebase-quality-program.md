@@ -83,21 +83,28 @@ Seed findings found during recon:
 
 ### Phase 1 — Global architecture
 
-- [ ] **`docs/architecture/` rewrite** — `architecture.md`, `codebase-guide.md`, and
-  most `functionalities/*.md` still describe the MAUI app's file paths as the live
-  implementation. Rewrite against `web/` + `src-sidecar/` (found in Phase 0 sweep).
+- [x] **`docs/architecture/` rewrite** — `architecture.md`, `codebase-guide.md`,
+  `design.md`, `index.md` rewritten against `web/` + `src-tauri/` + `src-sidecar/`.
+  `functionalities/releases.md` + `incident-timeline.md` deleted with the island;
+  dead-feature references surgically stripped from the other `functionalities/*.md`
+  (full per-feature rewrites still scheduled during their Phase 2 deep dives —
+  several remain MAUI-era in detail).
 
-- [ ] Sidecar: `Program.cs` DI wiring audit (lifetime/pooling per
-  `docs/pitfalls/azure-sdk.md`), endpoint organization, error-handling consistency,
-  config/profile store boundaries
-- [ ] Shared libs: `SwebKit.Core` 28.6k — demo clients may deserve their own
-  folder/assembly; verify `SwebKit.DevOps` residual usage; `LinkedCollectionFileService.cs` 1.4k
-- [ ] Web: `*PageContext.tsx` god-context pattern (evaluate split — flag proposal);
-  `lib/types.ts` monolith (per-domain files?); `api.ts` layering; zustand vs React
-  Query vs context consistency
-- [ ] Bundle/perf: `manualChunks` for mermaid/cytoscape/codemirror; route-level lazy
-  loading check; re-render hotspots; query `staleTime`/`gcTime` sanity
-- [ ] Rust shell: `unwrap()` audit, `git.rs` 1.3k structure
+- [x] Sidecar: `Program.cs` DI audit — clean: grouped registrations, singleton
+  connection pools per feature, secret-safe global exception handler, per-feature
+  `Map*Endpoints`. Fixed stale `MauiProgram.cs` comments; moved `DemoModeService`
+  `Endpoints/` → `Services/` (namespace now `SwebKit.Sidecar.Services`).
+- [x] Shared libs: `SwebKit.DevOps` island + ~6k LOC of unwired Core services/
+  abstractions/models deleted (approved, see Findings). `Core/Services/` still
+  mixes demo clients with live services — split proposal deferred to Phase 2.
+- [x] Web: god-contexts + `types.ts` + `api.ts` audited — findings logged, splits
+  flagged for Phase 2 (per-feature). Mixed state model (Zustand stores + 4 page
+  contexts + React Query) noted as convention drift, not a bug.
+- [x] Bundle/perf: routes lazy, `manualChunks` splits react/query/icons, heavy libs
+  (mermaid/cytoscape/codemirror) dynamic-imported — bundle healthy, no action.
+- [x] Rust shell: `unwrap()` audit — production `unwrap`/`expect` sites in
+  `native.rs`/`pod_shell.rs`/`sidecar.rs` are mutex/child-process idioms
+  (acceptable); `git.rs` unwraps are test-only. `git.rs` 1.3k split → Phase 2.
 
 ### Phase 2 — Feature deep dives (biggest first)
 
@@ -127,6 +134,11 @@ Seed findings found during recon:
 - **Phase 0** (2026-09-24): `dotnet build SwebKit.slnx` clean (0 warn/0 err);
   `dotnet test` 2260/2260 (Core 1074, Sidecar 542, Agents 258, K8s 159, Azure 152,
   Sql 46, DevOps 29); vitest 534/534; `vite build` clean; Playwright 375/375
+- **Phase 1** (2026-09-25): `dotnet build SwebKit.slnx` clean (0 warn/0 err);
+  `dotnet test` 1941/1941 (Core 786, Sidecar 542, Agents 258, K8s 158, Azure 151,
+  Sql 46 — lower totals reflect ~30 deleted dead-code test files);
+  `tsc -b` clean; vitest 534/534; `vite build` clean; ESLint 0 errors / 105
+  warnings (logged above); Playwright 375/375
 
 ## Findings Log
 
@@ -148,3 +160,113 @@ Seed findings found during recon:
   paths — historical design doc, left as-is.
 - Per-csproj unused `PackageReference` audit: shallow pass only (props-level cleanup
   done); a per-project audit is worth a Phase 1 look.
+
+### Phase 1 (2026-09-25)
+
+**Dead-code island — deleted after user approval (~7k LOC production + ~30 test files):**
+
+Removed: `src/SwebKit.DevOps/` + `tests/SwebKit.DevOps.Tests/` entirely; incident-
+timeline/deployment-assurance island (`IncidentTimelineService`,
+`IncidentInvestigationSeedResolver`, `IncidentMappingProposalGenerator`,
+`IncidentSnapshotExporter`, `PipelineFailureClassifier`, `RuntimeDriftService`,
+`DeploymentValidationService`, `ApprovalAgingPolicy`, `ObservabilityExplainerService`,
+plus per-lib adapters `AksTimelineSignalSource`, `AppInsightsTimelineSignalSource`,
+`ServiceBusEvidenceSignalSource`, `DevOpsReleaseTimelineSignalSource`); dead plumbing
+(`ConfigurationHealthService` 705 LOC, `TaskQueueService`, `ConnectionStateService`,
+`PortForwardSessionService`, `TtlFormatter`, `RedisScanPageAccumulator`,
+`RedisOpsInsightsAggregator`, `RequestBodyFormatter`, `VariablePreviewService`,
+`WebSocketClientService`, `GraphQlSchemaService`, `GraphQlSubscriptionService`,
+`BrunoSyncService`, `BrunoCollectionExporter`, `RedisImportParser`,
+`RedisConnectionImportParser`, `ReleaseRepository`, `NotificationModels`,
+`ToastNotificationResult`); dead abstractions (`IDevOpsClient*`, `IIncidentTimeline*`,
+`IAksWarmupCache`, `IRedisWarmupCache`, `IServiceBusWarmupCache`,
+`INotificationService`, `IWindowsNotificationService`, `IToastDiagnosticService`,
+`IOAuth2TokenManager`, `ICollectionExporter`, `IGraphQl*`, `IWebSocketClientService`,
+`IConfigurationHealthService`, `IConnectionStateService`, `IPortForwardSessionService`,
+`IRequestBodyFormatter`, `IServiceBusNamespaceBootstrapper`, `ITaskQueue`,
+`IVariablePreviewService`, `IIncident*`, `IObservabilityExplainerService`,
+`IPodHealthMonitorService`); `DevOpsConfig`, `IncidentTimelineConfig`,
+`AppConfig.DevOps`/`IncidentTimeline` fields, `devOpsConfig` in `web` types,
+`AppDataPaths.ReleasesJson`, devops/incident buckets in `LogFeatureBucketResolver`,
+release fields in the config-bundle model, DevOps refs in `build.yml` + `slnx`,
+agent system-prompt copy + context-builder fields.
+
+**Restored — looked dead but are live (kept):** `NoopKeyVaultSecretResolver`
+(tests' null-object), the *importer* halves of `PostmanCollectionExportImport` /
+`SwebKitCollectionExportImport` + `ICollectionImporter` (API-client import flow),
+`PortForwardSession` model (live AKS type — distinct from the deleted service),
+`DemoModeService` and all `Demo*Client`s.
+
+Original scan list preserved below for the record:
+
+**Dead-code island — ~7k LOC of unwired production code kept alive only by tests:**
+
+- `src/SwebKit.DevOps/` entire project (DevOpsClient, DevOpsClientFactory,
+  DevOpsReleaseTimelineSignalSource, AdoApiModels, DevOpsAuthHandler ~1.2k) +
+  `tests/SwebKit.DevOps.Tests` — zero refs in sidecar DI/endpoints, zero in `web/`
+  (`devOpsConfig` unused in UI). `IDevOpsClient`/`IDevOpsClientFactory`/`DemoDevOpsClient`
+  in Core are only referenced by the dead island itself.
+- Incident-timeline feature island in `SwebKit.Core/Services`:
+  `IncidentTimelineService`, `IncidentInvestigationSeedResolver`,
+  `IncidentMappingProposalGenerator`, `IncidentSnapshotExporter`,
+  `PipelineFailureClassifier`, `RuntimeDriftService`, `DeploymentValidationService`,
+  `ApprovalAgingPolicy`, `ObservabilityExplainerService` — zero refs outside tests.
+  `docs/architecture/functionalities/{releases,incident-timeline}.md` document them.
+- Dead plumbing/utilities in `SwebKit.Core/Services`: `ConfigurationHealthService`
+  (705 lines — never DI-registered, nothing consumes `IConfigurationHealthService`),
+  `TaskQueueService`, `ConnectionStateService`, `PortForwardSessionService`
+  (port-forward lives in `src-tauri/src/native.rs` now), `TtlFormatter`,
+  `RedisScanPageAccumulator`, `RedisOpsInsightsAggregator`, `RequestBodyFormatter`,
+  `VariablePreviewService`, `WebSocketClientService` + `GraphQlSchemaService` +
+  `GraphQlSubscriptionService` (API-client WS is frontend-native), `BrunoSyncService`,
+  `BrunoCollectionExporter`, `PostmanCollectionExportImport`,
+  `SwebKitCollectionExportImport` + `ICollectionExportImport` (export is done in web
+  via `zip.ts`/download helpers), `RedisImportParser`, `RedisConnectionImportParser`,
+  `NoopKeyVaultSecretResolver`.
+- Dead abstractions: `IAksWarmupCache`, `IRedisWarmupCache`, `IServiceBusWarmupCache`
+  (MAUI-era warm-up; now `useWorkspaceWarmup` + TanStack prefetch),
+  `INotificationService`, `IWindowsNotificationService`, `IToastDiagnosticService`,
+  `ToastNotificationResult` (Windows toast — superseded), `IOAuth2TokenManager`.
+- Leftover on-disk `bin/obj` from Phase-0-deleted projects removed (4 dirs, ~3.8k files
+  — gitignored so invisible to `git status`, pure disk waste).
+
+**Healthy / no action needed:**
+
+- `Program.cs` is well-organized: grouped DI, singleton connection pools per feature,
+  thoughtful global exception handler with secret-safe messages, per-feature
+  `Map*Endpoints`. Only stale `MauiProgram.cs` comments (now fixed).
+- Routes are `React.lazy` + `Suspense`; `manualChunks` splits react/query/icons and
+  mermaid/cytoscape/codemirror are dynamic-import chunks — bundle is in decent shape.
+- `git.rs` unwrap()s are all `#[cfg(test)]`; `native.rs`/`pod_shell.rs` use
+  `Mutex::lock().unwrap()` — idiomatic. Rust shell OK.
+- `AppInsightsDiscoveryService` **is** wired (Program.cs line ~175 +
+  `ObservabilityEndpoints`) — the prior review's "unwired" note is stale.
+
+**ESLint debt (0 errors, 105 warnings — candidates for Phase 2 per-feature fixes):**
+
+- `react-hooks/refs` ×23 — refs written/read during render (`useMonitoring`,
+  `useContextualAgent`, `screen-state.ts`, …): real render-phase violations;
+  `useEffectEvent`/effect pattern fixes belong to each feature's deep dive.
+- `react-hooks/set-state-in-effect` ×31 — cascading-render pattern; most are
+  intentional reset-on-key-change idioms, triage per feature.
+- `react-refresh/only-export-components` ×31 — fast-refresh hygiene, cosmetic.
+- `react-hooks/static-components` ×7, `incompatible-library` ×4, `immutability` ×4,
+  `preserve-manual-memoization` ×3, `exhaustive-deps` ×3, `purity` ×2.
+
+**Remaining flagged items (deferred to Phase 2 / later):**
+
+- `*PageContext.tsx` god-contexts: Storage 1202, ApiClient 1134, Aks 1049, Redis 881 —
+  split proposal lands with each feature's Phase 2 deep dive.
+- `web/src/lib/types.ts` (1516) — flat bag of ~159 types mirroring sidecar contracts;
+  per-domain split is cosmetic, low priority.
+- `web/src/lib/api.ts` (796) — transport (`apiFetch`/`apiSend`/`apiUpload`/
+  `streamAgentChat`) mixed with ~60 domain endpoint functions; worth splitting into
+  `lib/api/<domain>.ts` when touched — not urgent.
+- `docs/architecture/functionalities/*.md` — several remain MAUI-era in detail
+  (`SwebKit.App` razor paths, Blazor flows); dead-feature references stripped this
+  phase, full rewrites land with each Phase 2 deep dive.
+- `git.rs` (1.3k) — command table + parsing in one file; split candidate if the
+  git surface grows.
+- Config-readiness/probe feature (`ConfigurationHealthService`/`ConfigurationProbeService`)
+  existed only in the deleted MAUI app — noted as a parity gap to consider when the
+  Settings deep dive lands in Phase 2, not a bug.

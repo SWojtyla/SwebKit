@@ -1,3 +1,4 @@
+using SwebKit.Sidecar.Services;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;

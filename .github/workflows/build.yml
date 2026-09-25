@@ -39,13 +39,11 @@ jobs:
               - 'src/SwebKit.Kubernetes/**'
               - 'src/SwebKit.Redis/**'
               - 'src/SwebKit.Sql/**'
-              - 'src/SwebKit.DevOps/**'
               - 'src/SwebKit.Observability/**'
               - 'src/SwebKit.Agents/**'
               - 'tests/SwebKit.Core.Tests/**'
               - 'tests/SwebKit.Azure.Tests/**'
               - 'tests/SwebKit.Kubernetes.Tests/**'
-              - 'tests/SwebKit.DevOps.Tests/**'
               - 'tests/SwebKit.Agents.Tests/**'
               - 'tests/SwebKit.Sql.Tests/**'
               - 'Directory.Packages.props'
@@ -77,7 +75,6 @@ jobs:
           dotnet build src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj
           dotnet build src/SwebKit.Redis/SwebKit.Redis.csproj
           dotnet build src/SwebKit.Sql/SwebKit.Sql.csproj
-          dotnet build src/SwebKit.DevOps/SwebKit.DevOps.csproj
           dotnet build src/SwebKit.Observability/SwebKit.Observability.csproj
           dotnet build src/SwebKit.Agents/SwebKit.Agents.csproj
 
@@ -89,9 +86,6 @@ jobs:
 
       - name: Test Kubernetes
         run: dotnet test tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj --verbosity normal
-
-      - name: Test DevOps
-        run: dotnet test tests/SwebKit.DevOps.Tests/SwebKit.DevOps.Tests.csproj --verbosity normal
 
       - name: Test Agents
         run: dotnet test tests/SwebKit.Agents.Tests/SwebKit.Agents.Tests.csproj --verbosity normal

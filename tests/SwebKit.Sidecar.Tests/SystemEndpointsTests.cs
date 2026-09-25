@@ -1,3 +1,4 @@
+using SwebKit.Sidecar.Services;
 using Microsoft.AspNetCore.Http;
 using SwebKit.Core.Services;
 using SwebKit.Sidecar.Endpoints;

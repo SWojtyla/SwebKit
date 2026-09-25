@@ -7,7 +7,7 @@ One-page orientation. Read this first for any non-trivial task; follow the links
 - **Desktop shell**: Tauri (Rust) — `src-tauri/`
 - **Frontend**: React 19 + TypeScript + Vite — `web/` (TanStack Query, Tailwind, CodeMirror)
 - **Backend**: ASP.NET minimal-API sidecar — `src-sidecar/` (REST under `/api/*`, spawned by the shell)
-- **Shared .NET libs**: `src/SwebKit.*` (Core, Azure, Kubernetes, Redis, Sql, Agents, DevOps, Observability)
+- **Shared .NET libs**: `src/SwebKit.*` (Core, Azure, Kubernetes, Redis, Sql, Agents, Observability)
 - **Tests**: `tests/SwebKit.<Area>.Tests` (xUnit) · `web/src/**/*.test.ts` (vitest) · `web/e2e/` (Playwright, demo mode)
 
 ## Directory map

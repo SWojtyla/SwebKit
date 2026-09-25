@@ -1,3 +1,4 @@
+using SwebKit.Sidecar.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
@@ -91,14 +92,13 @@ public class ConfigEndpointsTests
         profiles = new ProfileRepository();
         var uiState = new UiStateRepository();
         var userSettings = new UserSettingsRepository();
-        var releases = new ReleaseRepository();
         var scheduledMessages = new ScheduledMessageRepository();
         var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
         var appState = new AppStateService(profiles, uiState, events);
         collections = new CollectionRepository();
         var environments = new EnvironmentRepository();
 
-        return new ConfigurationBundleService(profiles, uiState, userSettings, releases, scheduledMessages, appState, collections, environments);
+        return new ConfigurationBundleService(profiles, uiState, userSettings, scheduledMessages, appState, collections, environments);
     }
 
     private static DefaultHttpContext BuildImportHttpContext(string json)

@@ -2,11 +2,10 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
 
-namespace SwebKit.Sidecar.Endpoints;
+namespace SwebKit.Sidecar.Services;
 
 /// <summary>
-/// Provides demo Service Bus namespaces and clients when demo mode is enabled.
-/// Mirrors the old MAUI app's ServiceBusNamespaceBootstrapper.BuildDemoStates().
+/// Provides demo resources and clients when demo mode is enabled.
 /// </summary>
 public sealed class DemoModeService : IDisposable
 {

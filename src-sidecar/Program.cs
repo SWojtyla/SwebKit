@@ -29,10 +29,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Allow override via --urls or ASPNETCORE_URLS (used by Tauri and Playwright tests).
 builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5199");
 
-// Structured file logging + crash handlers — wired as early as possible, mirroring
-// MauiProgram.cs's startup order, so no other startup work can throw/log before this is in
-// place. In a windowless release build the sidecar previously had nowhere for its logs to go
-// (default console logging is discarded), leaving a production crash with no diagnostic trail.
+// Structured file logging + crash handlers — wired as early as possible so no other
+// startup work can throw/log before this is in place. In a windowless release build the
+// sidecar previously had nowhere for its logs to go (default console logging is discarded),
+// leaving a production crash with no diagnostic trail.
 var userSettingsRepository = new UserSettingsRepository();
 var fileLoggerProvider = AppBootstrap.ConfigureCrashHandlers(userSettingsRepository);
 builder.Logging.AddProvider(fileLoggerProvider);
@@ -41,7 +41,7 @@ builder.Logging.AddProvider(fileLoggerProvider);
 // silently blocks entries the user explicitly enabled, and no log files are ever created.
 builder.Logging.AddFilter<FileLoggerProvider>(_ => true);
 
-// Register core configuration repositories (same as MauiProgram.cs)
+// Register core configuration repositories
 builder.Services.AddSingleton<ProfileRepository>();
 builder.Services.AddSingleton<EnvironmentRepository>();
 builder.Services.AddSingleton<CollectionRepository>();
@@ -49,7 +49,7 @@ builder.Services.AddSingleton<CollectionRepository>();
 // settings via PUT /api/config/user-settings takes effect without a restart.
 builder.Services.AddSingleton(userSettingsRepository);
 builder.Services.AddSingleton<UiStateRepository>();
-builder.Services.AddSingleton<ReleaseRepository>();
+
 builder.Services.AddSingleton<SwebKit.Core.Services.AppStateService>();
 builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAppEventBus, SwebKit.Core.Services.AppEventBus>();
 builder.Services.AddSingleton<ConfigurationBundleService>();
@@ -238,8 +238,8 @@ builder.Services.AddSingleton<SidecarAgentChatService>();
 // Agent action confirm-before-execute flow (ai-augmented-app technical-plan.md Module 3). Wired
 // here as infrastructure even though nothing in the sidecar can propose an action yet — the API
 // Client propose tools (ApiClientTools.cs) land in Module 4, now that this exists for them to
-// target. IApiClientAgentService needs the same linked-collection chain the MAUI app uses
-// (SwebKitServiceCollectionExtensions.Agents.cs); LinkedCollectionRootRepository's LoadAsync() is
+// target. IApiClientAgentService needs the linked-collection chain;
+// LinkedCollectionRootRepository's LoadAsync() is
 // deliberately not called at sidecar startup below (linked collections aren't a sidecar feature
 // yet), so it stays empty and ApiClientAgentService correctly sees local collections only.
 builder.Services.AddSingleton<SwebKit.Core.Services.LinkedGitService>();

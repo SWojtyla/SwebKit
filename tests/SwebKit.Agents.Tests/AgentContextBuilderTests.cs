@@ -60,19 +60,17 @@ public class AgentContextBuilderTests
     }
 
     [Fact]
-    public void BuildContext_WithObservabilityAndDevOpsAndStorage_IncludesAll()
+    public void BuildContext_WithObservabilityAndStorage_IncludesAll()
     {
         var appState = TestSupport.CreateAppState(c =>
         {
             c.ObservabilityConfig = new ObservabilityConfig { SelectedResourceId = "res", SelectedResourceName = "AppInsightsProd" };
-            c.DevOpsConfig = new DevOpsConfig { Organization = "contoso" };
             c.StorageAccounts.Add(new StorageConfig());
         });
 
         var context = Build().BuildContext(appState);
 
         Assert.Contains("Observability: AppInsightsProd", context);
-        Assert.Contains("DevOps: contoso", context);
         Assert.Contains("Storage: configured", context);
     }
 
@@ -123,7 +121,6 @@ public class AgentContextBuilderTests
             KubeconfigPath = "/cfg",
             ServiceBusNamespace = "orders",
             RedisConfigured = true,
-            DevOpsOrganization = "contoso",
         };
 
         var text = ctx.ToString();
@@ -131,7 +128,6 @@ public class AgentContextBuilderTests
         Assert.Contains("Kubernetes context: prod | kubeconfig: /cfg", text);
         Assert.Contains("Service Bus: orders", text);
         Assert.Contains("Redis: configured", text);
-        Assert.Contains("DevOps: contoso", text);
         Assert.DoesNotContain("Observability", text);
         Assert.DoesNotContain("Storage", text);
     }

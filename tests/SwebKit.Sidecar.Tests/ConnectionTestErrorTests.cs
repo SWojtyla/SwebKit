@@ -1,3 +1,4 @@
+using SwebKit.Sidecar.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using SwebKit.Core.Configuration;
