@@ -187,6 +187,20 @@ Seed findings found during recon:
   Playwright **379/379**. Aikido MCP full scan could not run because no
   Aikido MCP server is installed in this environment; setup remains an
   external verification prerequisite.
+- **Follow-up sweep (2026-09-25, later):** all 45 `only-export-components`
+  warnings cleared via `.ts` extraction modules (see Findings); unused
+  `ProfileRepository`/`DemoModeService` injections removed from ~40 AKS
+  handlers; shared AKS row-action scaffolding extracted
+  (`resource-actions.tsx`). Post-sweep state: `tsc` clean; vitest 534/534;
+  `vite build` clean; ESLint **0 errors / 5 warnings** (all React-Compiler
+  informational — the compiler is not enabled); Playwright 182/182 on the
+  four touched feature pages plus 18/18 AKS specs; sidecar build clean,
+  matching tests pass. Monitoring SSE fan-out and Redis credential
+  migration remain documented deferrals — the stream already multiplexes
+  four frame kinds over one envelope, and the credential move needs a
+  versioned profile migration plus a sidecar-side secret resolution path
+  (the keychain vault is Tauri-owned; the sidecar cannot read `sw-secret:`
+  keys today — frontend resolves and forwards them).
 - **Phase 3** (2026-09-25): frontend-only change — `tsc` clean; vitest 534/534;
   `vite build` clean; ESLint 0 errors / 101 warnings; Playwright 375/375
   (dashboard + global-agent-panel + monitoring specs cover the reworked
@@ -327,8 +341,14 @@ Original scan list preserved below for the record:
   `useNow` hook (`LastRefreshed` + `ScheduledMessages`, which also fixes a
   real staleness bug — scheduled rows never flipped to "Enqueued" while the
   overlay was open).
-- `react-refresh/only-export-components` ×45 — fast-refresh hygiene, cosmetic
-  (grew as scoped contexts/hooks were extracted — expected).
+- ~~`react-refresh/only-export-components` ×45~~ — **cleared**: contexts, hooks,
+  and pure helpers extracted to sibling `.ts` modules (`redis-context.ts`,
+  `redis-namespace-tree.ts`, `aks-workspace-context.ts`, `storage-context.ts`,
+  `api-client-context.ts`, `notification-context.ts`, `visual-blocks.ts`,
+  `reasoning-trace.ts`, `pending-actions.ts`, `method-meta.ts`, `env-vars.ts`,
+  `type-colors.ts`); provider `.tsx` files now export components only, so Fast
+  Refresh preserves component state. Two duplicated local `useNow` copies were
+  replaced by the shared hook along the way.
 - ~~`react-hooks/static-components` ×7~~ — **fixed**: all seven were nested
   component definitions in Service Bus `EntityTree.tsx` (`CountBadge` inside
   `EntityStatsBadges`, `SortArrow` inside `EntityTree`). Both hoisted to
@@ -363,14 +383,19 @@ carried the required-`int tail` binding trap the stream variant had fixed.
   mutation object and reads the previous namespace from the live URL.
   `useAksPods` stays raw inside `useAksQueries` (data-arrival churn is real
   there); `ResourceTable`'s `memo()` is now effective.
-- **Unused DI params** — `ProfileRepository`/`DemoModeService` are injected into
-  ~30 AKS handlers that never use them (kept by force of habit); same pattern
-  repeats across endpoint files. Mechanical cleanup, deferred — touches all
-  endpoint tests' call sites for cosmetic gain.
-- **Tab duplication** — `HpaTable`/`ScaledJobsTable` are near-identical
-  (confirm-flow + menu-builder + columns boilerplate); the same shape repeats
-  across ~15 tabs. A shared "resource actions table" abstraction is a Phase 2+
-  candidate, not now.
+- ~~**Unused DI params**~~ — **cleaned**: `ProfileRepository`/`DemoModeService`
+  were injected into ~40 AKS handlers without being used (leftover from before
+  demo-mode resolution moved behind `IMonitoringConnectionPool`). Removed;
+  handlers that genuinely resolve a profile are untouched. Other endpoint files
+  did not carry the pattern.
+- ~~**Tab duplication**~~ — **partially addressed**: `HpaTable`/`ScaledJobsTable`'s
+  duplicated confirm→mutate wrappers, context-menu skeleton (Copy name / View
+  YAML / … / Delete), and actions column now live in
+  `aks/shared/resource-actions.tsx` (`confirmMutation`, `resourceMenuItems`,
+  `actionsColumn`); `DeploymentsTab`'s menu prefix uses the same helper. Each
+  table still owns its columns, confirm copy, and mutations — the ~15-tab shape
+  shares the actions shell but genuinely differs in columns and menu content,
+  so a full table abstraction is not pursued.
 - ~~`DemoAksClient.cs` 2868 LOC~~ — **split done**: `partial` class spread over
   eight per-domain files — core (namespaces/contexts/connection test, 38),
   `Workloads` (deployments/pods/events/statefulsets/metrics/pod ops, 478),
