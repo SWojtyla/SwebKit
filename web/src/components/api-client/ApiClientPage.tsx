@@ -1,5 +1,5 @@
 import { Globe, Folder, Settings2, GitBranch, AlertTriangle } from "lucide-react";
-import { ApiClientPageProvider, useApiClientPageContext } from "./ApiClientPageContext";
+import { ApiClientPageProvider, useApiClientPageContext, useApiClientTabs } from "./ApiClientPageContext";
 import { CollectionTree } from "./CollectionTree";
 import { RequestEditor } from "./RequestEditor";
 import { ResponseViewer } from "./ResponseViewer";
@@ -204,44 +204,12 @@ function ApiClientPageContent() {
           {/* No `border-r` here — RequestEditor already carries one, and the
               resizer provides the visual divider. */}
           <div className="flex h-full w-full flex-col">
-            <RequestTabStrip
-              tabs={ctx.tabs}
-              activeTabId={ctx.activeTabId}
-              onSelectTab={ctx.setActiveTabId}
-              onCloseTab={ctx.closeTab}
-              onCloseOtherTabs={ctx.closeOtherTabs}
-              onCloseAllTabs={ctx.closeAllTabs}
-              onPromoteTab={ctx.promoteTab}
-            />
-            {ctx.activeTabId && ctx.tabStates[ctx.activeTabId] ? (
-              <RequestEditor
-                request={ctx.tabStates[ctx.activeTabId].draft}
-                onChange={(req) => ctx.updateTabDraft(ctx.activeTabId!, req)}
-                onSend={ctx.handleSend}
-                onSave={ctx.handleSave}
-                sending={ctx.tabStates[ctx.activeTabId].sending}
-                variableScope={ctx.variableScope}
-                environments={ctx.environments}
-                captureWarnings={ctx.tabStates[ctx.activeTabId]?.response?.captureWarnings ?? []}
-              />
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-                <span data-testid="api-client-empty-editor">
-                  Select or create a request to start editing.
-                </span>
-              </div>
-            )}
+            <TabStripPane />
+            <ActiveEditorPane />
           </div>
 
           <div className="flex h-full w-full flex-col overflow-hidden">
-            <ResponseViewer
-              response={ctx.activeTabId ? ctx.tabStates[ctx.activeTabId]?.response ?? null : null}
-              sending={ctx.activeTabId ? ctx.tabStates[ctx.activeTabId]?.sending ?? false : false}
-              request={ctx.activeTabId ? ctx.tabStates[ctx.activeTabId]?.draft ?? null : null}
-              history={ctx.activeTabId ? ctx.tabStates[ctx.activeTabId]?.history ?? [] : []}
-              onSaveExample={ctx.handleSaveExample}
-              variableScope={ctx.variableScope}
-            />
+            <ActiveResponsePane />
           </div>
         </ResizablePanels>
       </div>
@@ -296,5 +264,67 @@ function ApiClientPageContent() {
         <GitDrawer onClose={() => ctx.setShowGitPanel(false)} />
       )}
     </div>
+  );
+}
+
+// Tab-pane wrappers are the only consumers of `useApiClientTabs`: per-keystroke
+// `updateTabDraft` churn re-renders just these three panes, not the page, tree,
+// toolbar or dialogs above. The wrapped components stay prop-driven.
+
+function TabStripPane() {
+  const tabs = useApiClientTabs();
+  return (
+    <RequestTabStrip
+      tabs={tabs.tabs}
+      activeTabId={tabs.activeTabId}
+      onSelectTab={tabs.setActiveTabId}
+      onCloseTab={tabs.closeTab}
+      onCloseOtherTabs={tabs.closeOtherTabs}
+      onCloseAllTabs={tabs.closeAllTabs}
+      onPromoteTab={tabs.promoteTab}
+    />
+  );
+}
+
+function ActiveEditorPane() {
+  const ctx = useApiClientPageContext();
+  const tabs = useApiClientTabs();
+  const tabState = tabs.activeTabId ? tabs.tabStates[tabs.activeTabId] : undefined;
+  if (!tabs.activeTabId || !tabState) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+        <span data-testid="api-client-empty-editor">
+          Select or create a request to start editing.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <RequestEditor
+      request={tabState.draft}
+      onChange={(req) => tabs.updateTabDraft(tabs.activeTabId!, req)}
+      onSend={tabs.handleSend}
+      onSave={tabs.handleSave}
+      sending={tabState.sending}
+      variableScope={ctx.variableScope}
+      environments={ctx.environments}
+      captureWarnings={tabState.response?.captureWarnings ?? []}
+    />
+  );
+}
+
+function ActiveResponsePane() {
+  const ctx = useApiClientPageContext();
+  const tabs = useApiClientTabs();
+  const tabState = tabs.activeTabId ? tabs.tabStates[tabs.activeTabId] : undefined;
+  return (
+    <ResponseViewer
+      response={tabState?.response ?? null}
+      sending={tabState?.sending ?? false}
+      request={tabState?.draft ?? null}
+      history={tabState?.history ?? []}
+      onSaveExample={tabs.handleSaveExample}
+      variableScope={ctx.variableScope}
+    />
   );
 }

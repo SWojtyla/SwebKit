@@ -325,12 +325,20 @@ carried the required-`int tail` binding trap the stream variant had fixed.
 
 **Findings — healthy, no action:**
 
-- `ApiClientPageContext` (1134) is the largest god-context but is unusually
-  well-structured: preview-tab semantics, serialized `useUpdateCollections`
-  scope + `concurrencyToken` conflict handling, transient `credentialSecret`
-  scrubbed before persistence. The split flag still applies (churn fields like
-  `tabStates`/`confirmDialog`/`nameDialog` re-render everything) but this one
-  earns its complexity more than the others.
+- `ApiClientPageContext` — **split done (2-way)**: per-keystroke tab state
+  (`tabs`/`tabStates`/`activeTabId` + tab ops + save/send/saveExample) moved to
+  `ApiClientTabsContext`; `ApiClientPageContext` keeps everything else and is
+  now `useMemo`'d (it wasn't before). The page no longer subscribes to tab
+  state — three thin pane wrappers in `ApiClientPage.tsx`
+  (`TabStripPane`/`ActiveEditorPane`/`ActiveResponsePane`) consume
+  `useApiClientTabs` and pass props, so components stay prop-driven. Handlers
+  that read tab state (`openTab`, `handleDeleteNode`, conflict trio,
+  `saveActiveTab`, `handleSend`) read via `tabsRef`/`tabStatesRef`/
+  `activeTabIdRef` mirrors instead of closing over the values, keeping the
+  page-context value stable across editor keystrokes. Net: typing in the
+  request editor re-renders only the tab strip/editor/response panes — the
+  collection tree, toolbar, banners and dialogs no longer re-render per
+  keystroke.
 - Endpoints are thin and honest (explicit "no catch here" note where the global
   handler does a better job); credential endpoints mask secrets and never echo
   raw values.
@@ -390,15 +398,16 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
 
 **Findings:**
 
-- **The god-context pattern is systemic** — `StoragePageContext` (~100 fields,
-  memoized) and `ApiClientPageContext` (~75 fields) remain; **`RedisPageContext`
-  (~85 fields) and `AksWorkspaceContext` (~70 fields) are split done**: six
-  churn-separated contexts each, every handler `useCallback`'d, and (Redis)
-  query/mutation objects travel through stable facades
-  (`web/src/lib/queryFacade.ts`) so unrelated renders don't invalidate
-  consumers. AKS proved the lightweight variant: raw query objects are
-  acceptable when the context's only query is genuinely data-churn — facades
-  are only needed where status-field reads shouldn't invalidate consumers.
+- **The god-context pattern is resolved across all four page contexts** —
+  `RedisPageContext` (~85 fields → 6 contexts + `lib/queryFacade` facades),
+  `AksWorkspaceContext` (~70 → 6 contexts), `StoragePageContext` (~100 → 7
+  contexts + facades), `ApiClientPageContext` (~75 → 2 contexts; tabs churn
+  isolated behind `useApiClientTabs` + ref-mirrored handler reads). Pattern
+  notes for future contexts: facade query objects when status reads shouldn't
+  invalidate consumers; keep raw queries where the context is genuinely
+  data-churn (AKS pods); move hook-returned objects that are fresh per render
+  (`useDropzone`) into the consumer; use ref mirrors when a stable-context
+  handler must read high-churn state.
 - No TODO/FIXME/HACK anywhere in `src-sidecar/`, `web/src/`, or `src/` —
   hygiene is enforced.
 - Empty catches found are all process/file cleanup (`AcpJsonRpcPeer`,
@@ -411,9 +420,8 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
 
 **Remaining flagged items (deferred to Phase 2 / later):**
 
-- `*PageContext.tsx` god-contexts: Storage 1202, ApiClient 1134 remain —
-  apply the Redis/AKS split pattern (per-churn contexts + `lib/queryFacade`
-  facades + `useCallback` handlers).
+- ~~`*PageContext.tsx` god-contexts~~ — all four split done (Redis 6, AKS 6,
+  Storage 7, ApiClient 2).
 - `web/src/lib/types.ts` (1516) — flat bag of ~159 types mirroring sidecar contracts;
   per-domain split is cosmetic, low priority.
 - `web/src/lib/api.ts` (796) — transport (`apiFetch`/`apiSend`/`apiUpload`/
