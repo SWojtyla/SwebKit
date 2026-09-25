@@ -77,6 +77,8 @@ public sealed class ProactiveInvestigationRunner
         resource or external dependency is simply down). When it is — a bad hostname, a wrong env
         var, a malformed connection string, a wrong image tag — always include the corrected value
         itself, not just a description of what to change.
+        For every workspace resource you inspected beyond the alerting one, include an evidence
+        entry saying whether it is implicated in or ruled out of the root cause.
         No prose, no markdown fences — the JSON object only.
         """;
 
@@ -111,6 +113,8 @@ public sealed class ProactiveInvestigationRunner
         resource or external dependency is simply down). When it is — a bad hostname, a wrong env
         var, a malformed connection string, a wrong image tag — always include the corrected value
         itself, not just a description of what to change.
+        For every workspace resource you inspected beyond the alerting one, include an evidence
+        entry saying whether it is implicated in or ruled out of the root cause.
         No prose, no markdown fences — the JSON object only.
         """;
 
@@ -219,7 +223,19 @@ public sealed class ProactiveInvestigationRunner
             ? result.ToolsUsed
             : steps.Where(s => s.Type == "tool_call" && s.ToolName is not null).Select(s => s.ToolName!).Distinct().ToList();
 
-        var text = result.Text.Trim();
+        return ParseStructuredOutput(result.Text, toolsUsed, result.HitMaxRounds);
+    }
+
+    /// <summary>Parses the model's JSON-object output into a <see cref="ProactiveInvestigationResult"/>.
+    /// Internal (not private) because <see cref="ProactiveInsightService"/>'s single-shot fallback
+    /// asks the model for the same contract — it just drafts it from a precomputed probe instead
+    /// of a live tool loop, so the parsed fields flow into the same report shape either way.
+    /// A model that returns non-JSON prose still yields a usable result: the raw text becomes the
+    /// hypothesis (truncated) with empty structured fields.</summary>
+    internal ProactiveInvestigationResult ParseStructuredOutput(
+        string text, IReadOnlyList<string> toolsUsed, bool hitMaxRounds)
+    {
+        text = text.Trim();
         var json = ExtractFirstJsonObject(text);
         if (json is null)
         {
@@ -231,7 +247,7 @@ public sealed class ProactiveInvestigationRunner
                 ProposedFix: null,
                 RawText: text,
                 ToolsUsed: toolsUsed,
-                HitMaxRounds: result.HitMaxRounds);
+                HitMaxRounds: hitMaxRounds);
         }
 
         try
@@ -250,7 +266,7 @@ public sealed class ProactiveInvestigationRunner
                 ProposedFix: ReadProposedFix(root),
                 RawText: text,
                 ToolsUsed: toolsUsed,
-                HitMaxRounds: result.HitMaxRounds);
+                HitMaxRounds: hitMaxRounds);
         }
         catch (JsonException ex)
         {
@@ -263,7 +279,7 @@ public sealed class ProactiveInvestigationRunner
                 ProposedFix: null,
                 RawText: text,
                 ToolsUsed: toolsUsed,
-                HitMaxRounds: result.HitMaxRounds);
+                HitMaxRounds: hitMaxRounds);
         }
     }
 

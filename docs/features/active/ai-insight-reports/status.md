@@ -7,9 +7,10 @@
 - `src/SwebKit.Core/Models/MonitoringModels.cs` — `ProactiveInsightReport`, `ProposedFix` models.
 - `src/SwebKit.Core/Configuration/AppDataPaths.cs` — `MonitoringInsightsJson` path.
 - `src/SwebKit.Core/Abstractions/IProactiveInsightReportRepository.cs` + `Configuration/ProactiveInsightReportRepository.cs` — JSON-file persistence, newest-first, capped at 100.
-- `src-sidecar/Services/ProactiveInvestigationRunner.cs` — `proposed_fix` in the output contract + parsing; tightened instructions.
+- `src-sidecar/Services/ProactiveInvestigationRunner.cs` — `proposed_fix` in the output contract + parsing; tightened instructions. Later: `ParseStructuredOutput` shared with the fallback path; instructions ask for an implicated/ruled-out evidence entry per inspected resource.
 - `src-sidecar/Services/AgentSystemPromptBuilder.cs` — `forBackgroundInvestigation` variant.
-- `src-sidecar/Services/ProactiveInsightService.cs` — persists each report; formats the seeded session as markdown; `EnsureSession` re-seeds from the persisted report.
+- `src-sidecar/Services/ProactiveInsightService.cs` — persists each report; formats the seeded session as markdown; `EnsureSession` re-seeds from the persisted report. Later: firing-episode dedup (`_openFiringEpisodes`, cleared on Ok evaluation, released on failure) and a structured fallback draft (replaces the one-sentence summary — same JSON contract as the runner). Later still: `_inFlight` task tracking + `DrainAsync` so tests can't leak a report write into the real appdata root.
+- `src/SwebKit.Core/Configuration/ProactiveInsightReportRepository.cs` — durability hardening: static `SemaphoreSlim` serializes read-modify-write; writes use a strict load that aborts on any real failure instead of overwriting the store with the degraded empty view (reads still degrade gracefully).
 - `src-sidecar/Services/SidecarAgentChatService.cs` — seed accepts pre-formatted content; `GetSessionMessages` transcript accessor.
 - `src-sidecar/Program.cs` — `IProactiveInsightReportRepository` DI registration.
 - `src-sidecar/Endpoints/MonitoringEndpoints.cs` — insights list/delete/open-chat endpoints.
@@ -28,11 +29,12 @@
 All executed and green:
 
 - `dotnet build` (src-sidecar): 0 warnings, 0 errors.
-- `dotnet test` SwebKit.Sidecar.Tests: **526/526 passed** — new coverage for report
-  persistence, `EnsureSession` re-seed, `proposed_fix` parsing (object/null/bare-string),
-  and the background prompt variant.
-- `dotnet test` SwebKit.Core.Tests: **1050/1050 passed** — new
-  `ProactiveInsightReportRepositoryTests` (round-trip, newest-first, upsert, cap, delete).
+- `dotnet test` SwebKit.Sidecar.Tests: **546/546 passed** — incl. firing-episode dedup,
+  structured fallback report, and `DrainAsync` test-teardown hardening.
+- `dotnet test` SwebKit.Core.Tests: **1076/1077 passed** — incl. corrupt-store write-safety
+  tests (`Upsert`/`Delete` throw and leave the file untouched; `GetAll` degrades to empty +
+  `.unreadable` snapshot). One unrelated flake in `LinkedCollectionRootTests` — passes in
+  isolation.
 - `npm run build` (web): tsc + vite clean.
 - `npm run test:unit` (web): **502/502 passed** — incl. `aiReportFormat.test.ts`.
 - `npx playwright test e2e/monitoring.spec.ts`: **33/33 passed** — 6 new AI Reports

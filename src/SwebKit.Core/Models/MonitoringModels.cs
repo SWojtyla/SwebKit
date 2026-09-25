@@ -119,7 +119,7 @@ public sealed class ProactiveInsightReport
     /// <summary>One-sentence root-cause hypothesis — also the insight card's summary.</summary>
     public string Hypothesis { get; set; } = string.Empty;
     /// <summary>Model-assessed severity ("low" | "medium" | "high"), distinct from the rule's own
-    /// <see cref="AlertSeverity"/>. Null on the legacy single-shot fallback path.</summary>
+    /// <see cref="AlertSeverity"/>. Null only when the model didn't assess one (non-JSON output).</summary>
     public string? Severity { get; set; }
     public List<string> Evidence { get; set; } = [];
     public List<string> SuggestedNextSteps { get; set; } = [];
