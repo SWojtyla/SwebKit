@@ -289,14 +289,9 @@ public static class RedisEndpoints
             IRedisConnectionPool pool,
             DemoModeService demo,
             CancellationToken ct) =>
-        {
-            var cache = ResolveCache(cacheId, profile, demo);
-            if (cache is null) return ApiErrors.NotFound("Cache not found");
+            await DeleteKeysAsync(cacheId, new DeleteKeysRequest { Keys = [key] }, profile, pool, demo, ct));
 
-            var client = await pool.GetOrCreateAsync(cache, ct);
-            await client.DeleteKeysAsync([key], ct);
-            return Results.Ok();
-        });
+        app.MapPost("/api/redis/{cacheId}/keys/delete", DeleteKeysAsync);
 
         app.MapPost("/api/redis/{cacheId}/keys/{key}/ttl", SetTtlAsync);
 
@@ -389,6 +384,26 @@ public static class RedisEndpoints
     }
 
     // ── Extracted mutation handlers (unit-testable without a WebApplicationFactory) ────────────
+
+    internal static async Task<IResult> DeleteKeysAsync(
+        string cacheId,
+        DeleteKeysRequest req,
+        ProfileRepository profile,
+        IRedisConnectionPool pool,
+        DemoModeService demo,
+        CancellationToken ct)
+    {
+        var keys = req.Keys.Where(key => !string.IsNullOrWhiteSpace(key)).Distinct().ToArray();
+        if (keys.Length == 0) return ApiErrors.BadRequest("At least one key is required");
+        if (keys.Length > 500) return ApiErrors.BadRequest("A maximum of 500 keys can be deleted per request");
+
+        var cache = ResolveCache(cacheId, profile, demo);
+        if (cache is null) return ApiErrors.NotFound("Cache not found");
+
+        var client = await pool.GetOrCreateAsync(cache, ct);
+        await client.DeleteKeysAsync(keys, ct);
+        return Results.Ok();
+    }
 
     /// <summary>Handler body for the hash-field-set mutation endpoint.</summary>
     internal static async Task<IResult> SetHashFieldAsync(
@@ -542,6 +557,11 @@ public static class RedisEndpoints
     }
 
     public sealed class ExportKeysRequest
+    {
+        public IReadOnlyList<string> Keys { get; set; } = [];
+    }
+
+    public sealed class DeleteKeysRequest
     {
         public IReadOnlyList<string> Keys { get; set; } = [];
     }

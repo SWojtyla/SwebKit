@@ -27,6 +27,7 @@ internal sealed class FaultInjectingRedisClient : IRedisClient
     public Exception? ThrowOnRenameKey { get; set; }
     public Exception? ThrowOnSetTtl { get; set; }
     public Exception? ThrowOnRemoveTtl { get; set; }
+    public List<IReadOnlyList<string>> DeletedKeyBatches { get; } = [];
 
     public Task<bool> TestConnectionAsync(CancellationToken ct = default) => _inner.TestConnectionAsync(ct);
     public Task<KeyScanResult> ScanKeysAsync(string pattern = "*", long cursor = 0, int pageSize = 100, CancellationToken ct = default) => _inner.ScanKeysAsync(pattern, cursor, pageSize, ct);
@@ -42,7 +43,11 @@ internal sealed class FaultInjectingRedisClient : IRedisClient
     public Task SetHashFieldAsync(string key, string field, string value, CancellationToken ct = default) =>
         ThrowOnSetHashField is not null ? Task.FromException(ThrowOnSetHashField) : _inner.SetHashFieldAsync(key, field, value, ct);
 
-    public Task DeleteKeysAsync(IReadOnlyList<string> keys, CancellationToken ct = default) => _inner.DeleteKeysAsync(keys, ct);
+    public Task DeleteKeysAsync(IReadOnlyList<string> keys, CancellationToken ct = default)
+    {
+        DeletedKeyBatches.Add(keys);
+        return _inner.DeleteKeysAsync(keys, ct);
+    }
     public Task<RedisImportResult> ImportAsync(IReadOnlyList<RedisImportEntry> entries, bool overwriteExisting = true, CancellationToken ct = default) => _inner.ImportAsync(entries, overwriteExisting, ct);
     public Task<TimeSpan?> GetTtlAsync(string key, CancellationToken ct = default) => _inner.GetTtlAsync(key, ct);
 
@@ -112,6 +117,38 @@ public class RedisEndpointsMutationTests
         if (client is not null)
             factory.Client = client;
         return (profile, demo, factory);
+    }
+
+    [Fact]
+    public async Task DeleteKeysAsync_DeletesDistinctNonEmptyKeysInOneClientCall()
+    {
+        var client = new FaultInjectingRedisClient(new DemoRedisClient());
+        var (profile, demo, factory) = Build(client);
+        var req = new RedisEndpoints.DeleteKeysRequest
+        {
+            Keys = ["session:abc123", "", "session:abc123", "cache:products:featured"]
+        };
+
+        var result = await RedisEndpoints.DeleteKeysAsync(CacheId, req, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsType<Ok>(result);
+        var batch = Assert.Single(client.DeletedKeyBatches);
+        Assert.Equal(["session:abc123", "cache:products:featured"], batch);
+    }
+
+    [Fact]
+    public async Task DeleteKeysAsync_RejectsMoreThanFiveHundredKeysWithoutTouchingClient()
+    {
+        var (profile, demo, factory) = Build();
+        var req = new RedisEndpoints.DeleteKeysRequest
+        {
+            Keys = Enumerable.Range(0, 501).Select(i => $"key:{i}").ToArray()
+        };
+
+        var result = await RedisEndpoints.DeleteKeysAsync(CacheId, req, profile, factory, demo, CancellationToken.None);
+
+        Assert.Equal(400, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        Assert.Empty(factory.Calls);
     }
 
     // â”€â”€ Hash field set â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -27,6 +27,7 @@ import {
   useRedisUpdateSortedSetScore,
   useRedisSlowLog,
   useRedisDeleteKey,
+  useRedisDeleteKeys,
   useRedisRenameKey,
   useRedisSetTtl,
   useRedisSetValue,
@@ -433,6 +434,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const setMembersQuery = useRedisSetMembersPaginated(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null, setPageSize);
   const sortedSetMembers = useRedisSortedSetMembers(resolvedCacheId, selectedKey, keyInfo.data?.type ?? null);
   const deleteKey = useRedisDeleteKey(resolvedCacheId);
+  const deleteKeys = useRedisDeleteKeys(resolvedCacheId);
   const renameKey = useRedisRenameKey(resolvedCacheId);
   const setTtl = useRedisSetTtl(resolvedCacheId);
   const setValue = useRedisSetValue(resolvedCacheId);
@@ -444,6 +446,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   // depend on them without churning identity every provider render (the mutation
   // *object* is fresh each render and would defeat the context-value memos).
   const { mutate: deleteKeyMutate } = deleteKey;
+  const { mutate: deleteKeysMutate } = deleteKeys;
   const { mutate: renameKeyMutate } = renameKey;
   const { mutate: setTtlMutate } = setTtl;
   const { mutate: setValueMutate } = setValue;
@@ -800,16 +803,20 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   );
 
   const handleBatchDelete = useCallback(() => {
+    const keys = Array.from(selectedKeys);
     setPendingConfirm({
-      message: `Delete ${selectedKeys.size} key${selectedKeys.size === 1 ? "" : "s"}?`,
+      message: `Delete ${keys.length} key${keys.length === 1 ? "" : "s"}?`,
       onConfirm: () => {
-        selectedKeys.forEach((key) => deleteKeyMutate(key));
-        setSelectedKeys(new Set());
-        setCursor(0);
-        setAllKeys([]);
+        deleteKeysMutate(keys, {
+          onSuccess: () => {
+            setSelectedKeys(new Set());
+            setCursor(0);
+            setAllKeys([]);
+          },
+        });
       },
     });
-  }, [selectedKeys, deleteKeyMutate]);
+  }, [selectedKeys, deleteKeysMutate]);
 
   const handleExportSelected = useCallback(async () => {
     const exportData = await exportKeysMutateAsync(Array.from(selectedKeys));

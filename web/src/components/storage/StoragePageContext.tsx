@@ -553,6 +553,9 @@ export function StoragePageProvider({
                 container: null,
                 prefix: null,
                 blob: null,
+                share: null,
+                dir: null,
+                file: null,
             });
         },
         [updateParams],
@@ -626,13 +629,14 @@ export function StoragePageProvider({
         );
     }, [shareEntries.data?.items, shareFilter]);
 
+    const shareSasUrl = shareFileSasUrl.data?.sasUrl;
     const handleCopyShareSasUrl = useCallback(() => {
-        if (shareFileSasUrl.data?.sasUrl) {
-            navigator.clipboard.writeText(shareFileSasUrl.data.sasUrl);
+        if (shareSasUrl) {
+            navigator.clipboard.writeText(shareSasUrl);
             setCopiedUrl(true);
             setTimeout(() => setCopiedUrl(false), 2000);
         }
-    }, [shareFileSasUrl.data?.sasUrl]);
+    }, [shareSasUrl]);
 
     const handleNavigatePrefix = useCallback(
         (prefix: string) => {
@@ -727,13 +731,14 @@ export function StoragePageProvider({
         [activeAccount?.accountName, selectedContainer],
     );
 
+    const blobSasUrl = sasUrl.data?.sasUrl;
     const handleCopySasUrl = useCallback(() => {
-        if (sasUrl.data?.sasUrl) {
-            navigator.clipboard.writeText(sasUrl.data.sasUrl);
+        if (blobSasUrl) {
+            navigator.clipboard.writeText(blobSasUrl);
             setCopiedUrl(true);
             setTimeout(() => setCopiedUrl(false), 2000);
         }
-    }, [sasUrl.data?.sasUrl]);
+    }, [blobSasUrl]);
 
     // Goes through `apiFetch` rather than a bare relative `fetch`: the sidecar listens on
     // its own OS-assigned port, so "/api/..." resolved against the Tauri asset server and

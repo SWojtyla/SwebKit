@@ -474,6 +474,21 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   strings (including passwords) are persisted in `profiles.json`. Migrating
   existing profiles to credential-store references requires a versioned model /
   migration and is not safe as an inline Settings-only change.
+- **Storage account switch fixed for File Shares** — `handleSelectAccount`
+  cleared container/prefix/blob URL state but left `share`/`dir`/`file` from the
+  previous account, causing the new account to query a stale share path. All
+  mutually exclusive browse state now clears; account-switch e2e covers both
+  Blob and File Share paths.
+- **Storage SAS callbacks made compiler-safe** — both copy callbacks depended on
+  nested `query.data?.sasUrl` while reading the full query result in the closure,
+  producing two manual-memoization mismatch warnings. Primitive URLs are now
+  extracted before the callbacks; both warnings are gone.
+- **Redis bulk delete collapsed to bounded batches** — the UI previously fired
+  one HTTP mutation and one full Redis-query invalidation per selected key. A
+  new sidecar batch endpoint deduplicates/validates at most 500 keys per call;
+  the hook chunks larger selections and invalidates once after all chunks.
+  Selection clears only after success. Endpoint tests cover dedupe and the cap;
+  Playwright verifies one request for a two-key delete.
 - **The god-context pattern is resolved across all four page contexts** —
   `RedisPageContext` (~85 fields → 6 contexts + `lib/queryFacade` facades),
   `AksWorkspaceContext` (~70 → 6 contexts), `StoragePageContext` (~100 → 7

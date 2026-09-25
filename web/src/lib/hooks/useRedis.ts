@@ -196,6 +196,22 @@ export function useRedisDeleteKey(cacheId: string | null) {
   });
 }
 
+export function useRedisDeleteKeys(cacheId: string | null) {
+  const qc = useQueryClient();
+  const { notify } = useNotification();
+  return useMutation({
+    mutationFn: async (keys: string[]) => {
+      for (let offset = 0; offset < keys.length; offset += 500) {
+        await apiSend(`/api/redis/${cacheId}/keys/delete`, "POST", { keys: keys.slice(offset, offset + 500) });
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["redis", cacheId] });
+    },
+    onError: (error) => notify("error", "Couldn't delete keys", String(error)),
+  });
+}
+
 export function useRedisSetTtl(cacheId: string | null) {
   const qc = useQueryClient();
   const { notify } = useNotification();
