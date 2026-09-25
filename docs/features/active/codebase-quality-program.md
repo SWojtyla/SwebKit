@@ -171,6 +171,15 @@ Seed findings found during recon:
   dropped. `labelSelector` is now `encodeURIComponent`'d in both pod-query
   call sites. All four `*PageContext` god-contexts split (commits `a691d9d`
   Redis, `2d3fdaa` AKS, `e1de291` Storage, `d5c0d6b` ApiClient).
+  Follow-on lint-clearance pass (same branch): all 29 `react-hooks/refs`
+  warnings resolved (`useEffectEvent` for effect-invoked callbacks,
+  `useEffect`-synced mirrors for event-read latest values, `useState`
+  lazy-init for the contextual-agent ref; 4 documented scoped disables for
+  transitive event-read flags in `ApiClientPageContext`) — commit
+  `6f1ebb6`. All 7 `react-hooks/static-components` warnings fixed by
+  hoisting nested components out of `EntityTree.tsx`. Lint now **0 errors /
+  86 warnings**; vitest 534/534; service-bus e2e 35/35; full Playwright
+  375/375 re-confirmed after the refs pass.
 - **Phase 3** (2026-09-25): frontend-only change — `tsc` clean; vitest 534/534;
   `vite build` clean; ESLint 0 errors / 101 warnings; Playwright 375/375
   (dashboard + global-agent-panel + monitoring specs cover the reworked
@@ -295,7 +304,12 @@ Original scan list preserved below for the record:
 - `react-hooks/set-state-in-effect` ×31 — cascading-render pattern; most are
   intentional reset-on-key-change idioms, triage per feature.
 - `react-refresh/only-export-components` ×31 — fast-refresh hygiene, cosmetic.
-- `react-hooks/static-components` ×7, `incompatible-library` ×4, `immutability` ×4,
+- ~~`react-hooks/static-components` ×7~~ — **fixed**: all seven were nested
+  component definitions in Service Bus `EntityTree.tsx` (`CountBadge` inside
+  `EntityStatsBadges`, `SortArrow` inside `EntityTree`). Both hoisted to
+  module level taking props instead of closing over parent state — every
+  re-render previously remounted them and reset their DOM/state.
+- `react-hooks/incompatible-library` ×4, `immutability` ×4,
   `preserve-manual-memoization` ×3, `exhaustive-deps` ×3, `purity` ×2.
 
 ### Phase 2 — feature deep dives
