@@ -222,6 +222,30 @@ test.describe("Settings", () => {
         ).toHaveValue("sb-demo.servicebus.windows.net");
     });
 
+    test("Escape cancels an uncommitted settings draft", async ({ page }) => {
+        await page.goto("/settings");
+        await page.getByTestId("settings-tab-service-bus").click();
+        await page.getByRole("button", { name: "Add Namespace" }).click();
+        await page.locator('[data-testid^="sb-item-"]').last().click();
+
+        let saves = 0;
+        await page.route("**/api/config/profiles", async (route) => {
+            if (route.request().method() === "PUT") saves += 1;
+            await route.fallback();
+        });
+
+        const fqdn = page
+            .getByPlaceholder(
+                "e.g. sb-dev-shared-sb-weu.servicebus.windows.net",
+            )
+            .last();
+        await fqdn.fill("should-not-save.servicebus.windows.net");
+        await fqdn.press("Escape");
+
+        await expect(fqdn).toHaveValue("");
+        expect(saves).toBe(0);
+    });
+
     test("agent profile base URL persists across reload", async ({ page }) => {
         // Batch 8.4 migrated this field to DraftInput (commit on blur/Enter), matching every
         // other settings section — so the edit must be committed with a blur before reloading.

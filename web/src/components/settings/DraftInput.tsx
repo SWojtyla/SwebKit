@@ -29,6 +29,7 @@ export function DraftInput({ value, onCommit, onDraftChange, onKeyDown, ...rest 
   // the values from the render it was created in, which would be stale by then.
   const draftRef = useRef(draft);
   const onCommitRef = useRef(onCommit);
+  const skipNextBlurRef = useRef(false);
   useEffect(() => {
     draftRef.current = draft;
     onCommitRef.current = onCommit;
@@ -74,13 +75,21 @@ export function DraftInput({ value, onCommit, onDraftChange, onKeyDown, ...rest 
         setDraft(e.target.value);
         onDraftChange?.(e.target.value);
       }}
-      onBlur={commit}
+      onBlur={() => {
+        if (skipNextBlurRef.current) {
+          skipNextBlurRef.current = false;
+          return;
+        }
+        commit();
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           commit();
           // Blur too, so Enter and click-away feel the same and the value is visibly settled.
           (e.target as HTMLInputElement).blur();
         } else if (e.key === "Escape") {
+          skipNextBlurRef.current = true;
+          draftRef.current = committedRef.current;
           setDraft(committedRef.current);
           (e.target as HTMLInputElement).blur();
         }

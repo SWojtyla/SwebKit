@@ -131,7 +131,6 @@ export function ServiceGrid({
             },
         };
         togglePinned.mutate({
-            profile,
             resource: favorite,
             pinned: !isPinned(service.key),
         });

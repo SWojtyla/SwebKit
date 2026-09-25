@@ -460,6 +460,20 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   from its checklist. SQL is now part of the shared readiness contract, and
   `GeneralSettings` consumes that shared result instead of recomputing a second
   list that can drift again. Regression coverage checks both surfaces.
+- **Profile pin/save race fixed** — `useTogglePinnedResource` PUT a whole profile
+  captured by `ServiceGrid`'s render and did not join `useUpdateProfile`'s
+  serialized mutation scope. Pinning while a Settings/map save was queued could
+  overwrite that newer edit. It now reads the latest cached profile inside the
+  shared `profile` mutation scope and writes the accepted result back directly.
+- **DraftInput Escape bug fixed** — Escape reset local display state then blurred;
+  the synchronous blur handler still closed over and committed the pre-reset
+  draft, so an apparent cancel saved the edit. Escape now suppresses that blur
+  commit; Playwright covers the no-PUT behavior.
+- **Redis credential storage remains a structural security finding** — unlike
+  Service Bus/Storage credential-key indirection, non-Entra Redis connection
+  strings (including passwords) are persisted in `profiles.json`. Migrating
+  existing profiles to credential-store references requires a versioned model /
+  migration and is not safe as an inline Settings-only change.
 - **The god-context pattern is resolved across all four page contexts** —
   `RedisPageContext` (~85 fields → 6 contexts + `lib/queryFacade` facades),
   `AksWorkspaceContext` (~70 → 6 contexts), `StoragePageContext` (~100 → 7

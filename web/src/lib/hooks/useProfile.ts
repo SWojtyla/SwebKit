@@ -59,26 +59,35 @@ export function useUpdateProfile() {
 export function useTogglePinnedResource() {
   const qc = useQueryClient();
   const { notify } = useNotification();
-  return useMutation({
-    mutationFn: (vars: { profile: ProfileData; resource: FavoriteResource; pinned: boolean }) => {
+  return useMutation<ProfileData, Error, { resource: FavoriteResource; pinned: boolean }>({
+    scope: { id: "profile" },
+    mutationFn: async (vars) => {
+      const profile = qc.getQueryData<ProfileData>(["profile"]);
+      if (!profile) throw new Error("Profile is not loaded");
+
       const favorites = vars.pinned
         ? [
-            ...vars.profile.config.favoriteResources.filter(
+            ...profile.config.favoriteResources.filter(
               (favorite) => favorite.snapshot.resource.key !== vars.resource.snapshot.resource.key,
             ),
             vars.resource,
           ]
-        : vars.profile.config.favoriteResources.filter(
+        : profile.config.favoriteResources.filter(
             (favorite) => favorite.snapshot.resource.key !== vars.resource.snapshot.resource.key,
           );
+      const data = {
+        ...profile,
+        config: { ...profile.config, favoriteResources: favorites },
+      };
 
-      return apiSend("/api/config/profiles", "PUT", {
-        ...vars.profile,
-        config: { ...vars.profile.config, favoriteResources: favorites },
-      });
+      await apiSend("/api/config/profiles", "PUT", data);
+      return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
-    onError: (error) => notify("error", "Couldn't update pinned resources", String(error)),
+    onSuccess: (data) => qc.setQueryData(["profile"], data),
+    onError: (error) => {
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      notify("error", "Couldn't update pinned resources", String(error));
+    },
   });
 }
 
