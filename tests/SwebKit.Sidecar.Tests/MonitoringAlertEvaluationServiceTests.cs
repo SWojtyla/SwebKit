@@ -11,7 +11,7 @@ namespace SwebKit.Sidecar.Tests;
 /// <summary>Controllable signal source: returns a fixed status and records evaluation calls.</summary>
 internal sealed class FakeSignalSource : IAlertSignalSource
 {
-    private readonly AlertSignalStatus _status;
+    private AlertSignalStatus _status;
     public int CallCount { get; private set; }
     public bool WasCalled => CallCount > 0;
 
@@ -20,6 +20,10 @@ internal sealed class FakeSignalSource : IAlertSignalSource
         Source = source;
         _status = status;
     }
+
+    /// <summary>Lets a test flip the outcome mid-run (e.g. Firing → Ok → Firing) to simulate an
+    /// alert recovering and firing a second incident.</summary>
+    public AlertSignalStatus Status { get => _status; set => _status = value; }
 
     public AlertRuleSource Source { get; }
 

@@ -113,4 +113,14 @@ services.AddHttpClient("MyClient")
 
 ---
 
+## CS-11 — A write that proceeds on a degraded load wipes the store
+
+**Symptom:** Persisted records (e.g. `monitoring-insights.json` AI reports) vanished from a healthy installation — no delete was issued and the file on disk was valid-looking but contained only unrelated/foreign entries.
+
+**Cause:** Two compounding defects. (1) The repository's read path degraded _every_ load failure to an empty list, and `UpsertAsync`/`DeleteAsync` reused that same degraded view for their read-modify-write — a transient sharing violation (AV scan, a mid-`File.Replace` read, another writer's temp file) made the store "look empty", and the next save overwrote every record with just the new item. (2) `SWEBKIT_APPDATA_ROOT` is a process-wide env var read per call: a fire-and-forget `Task.Run` that outlived the test sandbox's `Dispose` resolved the real `%APPDATA%` root and wrote test fixtures into the user's file — and vice versa, a concurrent real-app write could hit the sandbox.
+
+**Fix:** `ProactiveInsightReportRepository` now (a) serializes load+save under a static `SemaphoreSlim`, and (b) uses a **strict load for writes** — empty only when the file is genuinely absent; any real failure aborts the write and leaves the file untouched (the graceful empty-list fallback stays a read-path concern). `ProactiveInsightService` tracks in-flight investigations so tests can `DrainAsync()` before the sandbox restores the env var — any test that triggers background file work must wait for a _terminal_ state (Ready/Failed/Skipped), never a mid-flight signal like a tool-call count. Same degraded-view hazard exists in every repository built on `AppDataFileStore` — apply the same split when touching them.
+
+---
+
 _See also: [azure-sdk.md](azure-sdk.md)_

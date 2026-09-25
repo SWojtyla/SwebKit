@@ -408,6 +408,8 @@ public class ProactiveInsightServiceTests
 
         var statuses = new List<ProactiveInsightStatusEvent>();
         insights.InsightStatus += e => statuses.Add(e);
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
 
         await engine.RunEvaluationOnceAsync(); // fires both AlertFired synchronously in one pass
 
@@ -420,7 +422,10 @@ public class ProactiveInsightServiceTests
         Assert.Contains(statuses, s => s.Stage == ProactiveInsightStage.Skipped && s.Reason!.Contains("already in flight"));
 
         gate.SetResult(); // release the blocked call so it doesn't leak past this test
-        await WaitUntilAsync(() => modelClient.CompleteRequests.Count >= 1);
+        // InsightReady is raised only after the report's file write completes — waiting on it
+        // keeps the AppDataSandbox teardown from racing an in-flight persistence.
+        await WaitUntilAsync(() => ready is not null, timeoutMs: 5000);
+        await insights.DrainAsync();
     }
 
     // ── ai-insight-reports — persistence + session re-seed ──────────────────
@@ -478,7 +483,7 @@ public class ProactiveInsightServiceTests
 
         await engine.RunEvaluationOnceAsync();
         await WaitUntilAsync(() => failed.Count > 0);
-        await Task.Delay(50);
+        await insights.DrainAsync();
 
         Assert.Empty(await reportRepo.GetAllAsync());
     }
@@ -518,5 +523,142 @@ public class ProactiveInsightServiceTests
         // Idempotent: calling again against the now-live session must not double-seed.
         var again = insights.EnsureSession(report);
         Assert.Equal(2, again.Count);
+    }
+
+    // ── firing-episode dedup ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task AlertFired_SameEpisodeRefire_SkipsTheDuplicateInvestigation()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, profiles, _, registry, _, reportRepo) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+        var rule = AksRule("prod");
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+        var statuses = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => statuses.Add(e);
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => ready is not null, timeoutMs: 5000);
+        await Task.Delay(100); // let the investigation task release the global busy flag
+
+        // The rule is still Firing and the episode stays open — a refire (cooldown cleared via
+        // reload, same as a lapsed cooldown in production) must not spawn a second investigation.
+        await engine.ReloadRulesAsync();
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(
+            () => statuses.Any(s => s.Stage == ProactiveInsightStage.Skipped && s.Reason!.Contains("hasn't recovered")),
+            timeoutMs: 5000);
+        await insights.DrainAsync(); // no in-flight write may outlive the sandbox's Dispose
+
+        Assert.Single(registry.Calls);
+        Assert.Single(await reportRepo.GetAllAsync());
+    }
+
+    [Fact]
+    public async Task AlertFired_EpisodeEndsOnOkEvaluation_NextIncidentInvestigatesAgain()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var source = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
+        var (insights, engine, ruleRepo, profiles, _, registry, _, _) = Build(AgentCapability.ToolCalling, source);
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+        var rule = AksRule("prod");
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var readyCount = 0;
+        insights.InsightReady += _ => readyCount++;
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => readyCount >= 1, timeoutMs: 5000);
+
+        // The alert recovers — the Ok evaluation closes the firing episode.
+        source.Status = AlertSignalStatus.Ok;
+        await engine.ReloadRulesAsync();
+        await engine.RunEvaluationOnceAsync();
+
+        // A later firing is a new incident and must investigate normally.
+        source.Status = AlertSignalStatus.Firing;
+        await engine.ReloadRulesAsync();
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => readyCount >= 2, timeoutMs: 5000);
+        await insights.DrainAsync();
+
+        Assert.Equal(2, registry.Calls.Count);
+    }
+
+    [Fact]
+    public async Task AlertFired_FailedInvestigation_ReleasesTheEpisode_SoTheNextFiringRetries()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var ruleRepo = new AlertRuleRepository();
+        var reportRepo = new ProactiveInsightReportRepository();
+        var profiles = new ProfileRepository();
+        var signalSource = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
+        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+        var registry = new FakeToolRegistryForProactiveInsight();
+        var modelClient = new ContextBudgetModelClient { OnComplete = _ => throw new InvalidOperationException("summarizer unreachable") };
+        var settings = SettingsWithCapability(AgentCapability.ToolCalling);
+        var chatService = new SidecarAgentChatService(modelClient, new AgentToolRegistry([]), profiles, settings, new DemoModeService());
+        var runner = new ProactiveInvestigationRunner(
+            modelClient, registry, profiles, new DemoModeService(), NullLogger<ProactiveInvestigationRunner>.Instance);
+        var insights = new ProactiveInsightService(engine, ruleRepo, reportRepo, profiles, registry, modelClient, settings, chatService, runner, NullLogger<ProactiveInsightService>.Instance);
+
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+        var rule = AksRule("prod");
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var failed = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => { if (e.Stage == ProactiveInsightStage.Failed) failed.Add(e); };
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => failed.Count >= 1, timeoutMs: 5000);
+
+        // The failed run must not suppress the next firing — a permanent outage that never
+        // produces one successful report shouldn't go silent forever.
+        await engine.ReloadRulesAsync();
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => failed.Count >= 2, timeoutMs: 5000);
+        await insights.DrainAsync();
+
+        Assert.Equal(2, registry.Calls.Count);
+    }
+
+    // ── structured fallback report ──────────────────────────────────────────
+
+    [Fact]
+    public async Task AlertFired_FallbackPath_StructuredDraftFillsTheReportFields()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, profiles, _, _, modelClient, reportRepo) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        // The fallback prompt now demands the same JSON contract the runner emits.
+        modelClient.OnComplete = _ => """
+            {"hypothesis":"Key Vault DNS typo crashes the pod","evidence":["logs show name-resolution failure","related Redis DEV WAAF is healthy — ruled out"],"severity":"high","suggested_next_steps":["fix the vault URL"],"proposed_fix":{"explanation":"correct the TLD","language":"yaml","snippet":"vaultUrl: https://kv.vault.azure.net/"}}
+            """;
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+        var rule = AksRule("prod");
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => ready is not null);
+        await WaitUntilAsync(async () => await reportRepo.GetByIdAsync(ready!.SessionId) is not null);
+
+        var report = await reportRepo.GetByIdAsync(ready!.SessionId);
+        Assert.NotNull(report);
+        Assert.Equal("Key Vault DNS typo crashes the pod", report!.Hypothesis);
+        Assert.Equal("high", report.Severity);
+        Assert.Equal(2, report.Evidence.Count);
+        Assert.Equal("fix the vault URL", Assert.Single(report.SuggestedNextSteps));
+        Assert.Equal("yaml", report.ProposedFix!.Language);
+        Assert.Contains("investigate_workspace_issue", report.ToolsUsed);
     }
 }

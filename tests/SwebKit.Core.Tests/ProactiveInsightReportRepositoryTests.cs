@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Models;
 
@@ -116,5 +117,47 @@ public class ProactiveInsightReportRepositoryTests
         var all = await repo.GetAllAsync();
         Assert.Single(all);
         Assert.Equal("keep", all[0].Id);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_CorruptStoreFile_DegradesToEmpty_AndPreservesASnapshot()
+    {
+        using var _ = new AppDataSandbox();
+        AppDataPaths.EnsureDirectoryExists();
+        await File.WriteAllTextAsync(AppDataPaths.MonitoringInsightsJson, "{ not valid json");
+
+        var repo = new ProactiveInsightReportRepository();
+
+        Assert.Empty(await repo.GetAllAsync());
+        Assert.True(AppDataFileStore.Exists(
+            AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.MonitoringInsightsJson)));
+    }
+
+    [Fact]
+    public async Task UpsertAsync_ThrowsAndLeavesTheFileUntouched_WhenTheStoreCannotBeLoaded()
+    {
+        using var _ = new AppDataSandbox();
+        AppDataPaths.EnsureDirectoryExists();
+        await File.WriteAllTextAsync(AppDataPaths.MonitoringInsightsJson, "{ not valid json");
+
+        var repo = new ProactiveInsightReportRepository();
+
+        // A write must never proceed on the degraded empty view — it would overwrite every
+        // persisted report with just the new item.
+        await Assert.ThrowsAnyAsync<JsonException>(() => repo.UpsertAsync(Report("new")));
+        Assert.Equal("{ not valid json", await File.ReadAllTextAsync(AppDataPaths.MonitoringInsightsJson));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ThrowsAndLeavesTheFileUntouched_WhenTheStoreCannotBeLoaded()
+    {
+        using var _ = new AppDataSandbox();
+        AppDataPaths.EnsureDirectoryExists();
+        await File.WriteAllTextAsync(AppDataPaths.MonitoringInsightsJson, "{ not valid json");
+
+        var repo = new ProactiveInsightReportRepository();
+
+        await Assert.ThrowsAnyAsync<JsonException>(() => repo.DeleteAsync("any"));
+        Assert.Equal("{ not valid json", await File.ReadAllTextAsync(AppDataPaths.MonitoringInsightsJson));
     }
 }

@@ -3,6 +3,7 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Files.Shares;
 using Azure.Storage.Sas;
 using ShareFileDownloadOptions = Azure.Storage.Files.Shares.Models.ShareFileDownloadOptions;
+using ShareTokenIntent = Azure.Storage.Files.Shares.Models.ShareTokenIntent;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
@@ -43,7 +44,11 @@ public class AzureStorageClient : IStorageClient
                 AzureCredentialFactory.CreateDefault());
             _shareService = new ShareServiceClient(
                 new Uri($"https://{config.AccountName}.file.core.windows.net"),
-                AzureCredentialFactory.CreateDefault());
+                AzureCredentialFactory.CreateDefault(),
+                // OAuth-authorized file data-plane requests must declare x-ms-file-request-intent;
+                // without it every share entry/property/content call fails 400
+                // MissingRequiredHeader (share listing is service-level and doesn't need it).
+                new ShareClientOptions { ShareTokenIntent = ShareTokenIntent.Backup });
         }
         else
         {
