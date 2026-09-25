@@ -501,6 +501,16 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   would let dashboard insight cards include reports completed before dashboard
   mount. This is not safe as an inline hook tweak because all three consumers
   need distinct replay/dismissal semantics.
+- **SQL browse state is now table-scoped** — `BrowsePanel` retained page,
+  filter-column/text, and ordering state when the selected table changed. A
+  column valid on table A could be sent against table B, or a later page could
+  render a false empty state. The panel is now keyed by connection/database/
+  table identity; Playwright verifies filters reset on table switch.
+- **Layout health now covers every configured entity** — the shell status bar
+  probed only the first Service Bus namespace, Redis cache, SQL connection, and
+  Storage account, then presented that sample as the whole area's status. It
+  now shares `useServiceHealth` with the dashboard, including `Degraded` when
+  only part of an area is reachable and cache-sharing all per-entity probes.
 - **The god-context pattern is resolved across all four page contexts** —
   `RedisPageContext` (~85 fields → 6 contexts + `lib/queryFacade` facades),
   `AksWorkspaceContext` (~70 → 6 contexts), `StoragePageContext` (~100 → 7

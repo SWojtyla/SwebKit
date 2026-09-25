@@ -29,14 +29,8 @@ import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
 import { GlobalAgentPanel } from "@/components/agent/GlobalAgentPanel";
 import { DemoTour } from "./DemoTour";
 import {
-    useAksTestConnection,
     useDemoMode,
     useHealth,
-    useProfile,
-    useRedisServerInfo,
-    useSbTestConnection,
-    useSqlTestConnection,
-    useStorageContainers,
     useToggleDemoMode,
     useUserSettings,
     useUpdateUserSettings,
@@ -59,6 +53,7 @@ import {
 import { initSidecarBaseUrl } from "@/lib/api";
 import { useNotification } from "./NotificationSystem";
 import { ActivityIndicator } from "@/components/shared/ActivityIndicator";
+import { useServiceHealth } from "@/components/dashboard/useServiceHealth";
 import {
     localTimeZoneAbbrev,
     localTimeZoneName,
@@ -105,21 +100,8 @@ export function AppLayout() {
     }, [location.pathname]);
 
     const { data: health } = useHealth();
-    const { data: profile } = useProfile();
     const { data: demoData } = useDemoMode();
-    const sbHealth = useSbTestConnection(
-        profile?.serviceBusNamespaces[0]?.id ?? null,
-    );
-    const aksHealth = useAksTestConnection();
-    const redisHealth = useRedisServerInfo(
-        profile?.config.redisConfig?.caches[0]?.id ?? null,
-    );
-    const sqlHealth = useSqlTestConnection(
-        profile?.config.sqlConfig?.connections[0]?.id ?? null,
-    );
-    const storageHealth = useStorageContainers(
-        profile?.config.storageAccounts[0]?.id ?? null,
-    );
+    const serviceHealth = useServiceHealth();
     const toggleDemoMode = useToggleDemoMode();
     const { theme, toggleTheme, setTheme } = useSettingsStore();
     const { data: userSettings } = useUserSettings();
@@ -346,49 +328,16 @@ export function AppLayout() {
 
     const contextTitle =
         navItems.find((n) => n.to === location.pathname)?.label ?? "SwebKit";
-    const areaHealth = [
-        {
-            id: "service-bus",
-            label: "Service Bus",
-            configured:
-                isDemoMode || (profile?.serviceBusNamespaces.length ?? 0) > 0,
-            query: sbHealth,
-            connected: sbHealth.data?.connected ?? false,
-        },
-        {
-            id: "aks",
-            label: "AKS",
-            configured: isDemoMode || profile?.config.aksConfig != null,
-            query: aksHealth,
-            connected: aksHealth.data?.connected ?? false,
-        },
-        {
-            id: "redis",
-            label: "Redis",
-            configured:
-                isDemoMode ||
-                (profile?.config.redisConfig?.caches.length ?? 0) > 0,
-            query: redisHealth,
-            connected: redisHealth.data != null,
-        },
-        {
-            id: "sql",
-            label: "SQL",
-            configured:
-                isDemoMode ||
-                (profile?.config.sqlConfig?.connections.length ?? 0) > 0,
-            query: sqlHealth,
-            connected: sqlHealth.data?.connected ?? false,
-        },
-        {
-            id: "storage",
-            label: "Storage",
-            configured:
-                isDemoMode || (profile?.config.storageAccounts.length ?? 0) > 0,
-            query: storageHealth,
-            connected: storageHealth.data != null,
-        },
-    ];
+    const areaHealth = ([
+        { id: "service-bus", label: "Service Bus" },
+        { id: "aks", label: "AKS" },
+        { id: "redis", label: "Redis" },
+        { id: "sql", label: "SQL" },
+        { id: "storage", label: "Storage" },
+    ] as const).map((area) => ({
+        ...area,
+        state: serviceHealth[area.id]?.connectivity ?? "checking",
+    }));
 
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
@@ -602,20 +551,20 @@ export function AppLayout() {
                         data-testid="status-bar-area-health"
                     >
                         {areaHealth.map(
-                            ({ id, label, configured, query, connected }) => {
-                                const state = !configured
-                                    ? "Not configured"
-                                    : query.isPending
-                                      ? "Checking"
-                                      : query.isError || !connected
-                                        ? "Unavailable"
-                                        : "Connected";
+                            ({ id, label, state }) => {
+                                const stateLabel = {
+                                    "not-configured": "Not configured",
+                                    checking: "Checking",
+                                    connected: "Connected",
+                                    degraded: "Degraded",
+                                    unavailable: "Unavailable",
+                                }[state];
                                 const stateClass =
-                                    state === "Connected"
+                                    state === "connected"
                                         ? "fill-success text-success"
-                                        : state === "Checking"
+                                        : state === "checking" || state === "degraded"
                                           ? "fill-warning text-warning"
-                                          : state === "Not configured"
+                                          : state === "not-configured"
                                             ? "fill-muted-foreground text-muted-foreground"
                                             : "fill-destructive text-destructive";
 
@@ -624,8 +573,8 @@ export function AppLayout() {
                                         key={id}
                                         className="flex items-center gap-1"
                                         data-testid={`status-bar-health-${id}`}
-                                        aria-label={`${label}: ${state}`}
-                                        title={`${label}: ${state}`}
+                                        aria-label={`${label}: ${stateLabel}`}
+                                        title={`${label}: ${stateLabel}`}
                                     >
                                         <Circle
                                             className={`h-1.5 w-1.5 ${stateClass}`}

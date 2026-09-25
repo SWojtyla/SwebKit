@@ -402,6 +402,7 @@ export function SqlPage() {
                     )}
                     {activeTab === "browse" && (
                         <BrowsePanel
+                            key={`${resolvedConnectionId}|${effectiveDatabase ?? ""}|${selectedTable?.schema ?? ""}|${selectedTable?.name ?? ""}`}
                             connectionId={resolvedConnectionId}
                             database={effectiveDatabase}
                             schema={schema.data}

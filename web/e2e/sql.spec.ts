@@ -88,6 +88,20 @@ test.describe("SQL", () => {
         );
     });
 
+    test("switching tables resets table-specific browse state", async ({ page }) => {
+        await page.goto("/sql");
+        await page.getByTestId("sql-schema-dbo").click();
+        await page.getByTestId("sql-object-dbo.orders").click();
+
+        await page.getByTestId("sql-browse-filter-column").selectOption("status");
+        await page.getByTestId("sql-browse-filter-text").fill("processing");
+        await page.getByTestId("sql-object-dbo.customers").click();
+
+        await expect(page.getByTestId("sql-browse-title")).toContainText("customers");
+        await expect(page.getByTestId("sql-browse-filter-column")).toHaveValue("");
+        await expect(page.getByTestId("sql-browse-filter-text")).toHaveCount(0);
+    });
+
     test("saves a query and shows it in the saved list", async ({ page }) => {
         await page.goto("/sql");
 
