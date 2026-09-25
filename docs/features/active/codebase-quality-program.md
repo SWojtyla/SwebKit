@@ -489,6 +489,18 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   the hook chunks larger selections and invalidates once after all chunks.
   Selection clears only after success. Endpoint tests cover dedupe and the cap;
   Playwright verifies one request for a two-key delete.
+- **Agent stream ownership race fixed** — `useAgentChatStream.send` replaced its
+  abort ref without cancelling an existing turn, while either turn's `finally`
+  could mark the hook idle during the other stream. A new send now aborts its
+  predecessor, only the current controller can clear streaming state, and
+  unmount aborts outstanding work.
+- **Monitoring stream fan-out is a deferred architecture finding** — `AppLayout`,
+  `DashboardPage`, and `MonitoringPage` each open their own EventSource, so the
+  dashboard has three sidecar SSE connections and other pages keep two. A
+  single shell-owned event store/provider would avoid duplicate transports and
+  would let dashboard insight cards include reports completed before dashboard
+  mount. This is not safe as an inline hook tweak because all three consumers
+  need distinct replay/dismissal semantics.
 - **The god-context pattern is resolved across all four page contexts** —
   `RedisPageContext` (~85 fields → 6 contexts + `lib/queryFacade` facades),
   `AksWorkspaceContext` (~70 → 6 contexts), `StoragePageContext` (~100 → 7

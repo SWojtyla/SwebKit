@@ -260,6 +260,7 @@ export function useAgentChatStream(sessionId?: string) {
 
   const send = useCallback(
     (message: string, options?: StreamSendOptions) => {
+      abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
       setIsStreaming(true);
@@ -305,7 +306,10 @@ export function useAgentChatStream(sessionId?: string) {
             if (!settled) reject(err instanceof Error ? err : new Error(String(err)));
           })
           .finally(() => {
-            setIsStreaming(false);
+            if (abortRef.current === controller) {
+              abortRef.current = null;
+              setIsStreaming(false);
+            }
             qc.invalidateQueries({ queryKey: ["agent", "status", sessionKey(sessionId)] });
           });
       });
@@ -316,6 +320,8 @@ export function useAgentChatStream(sessionId?: string) {
   const cancel = useCallback(() => {
     abortRef.current?.abort();
   }, []);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   return { send, isStreaming, cancel };
 }
