@@ -454,6 +454,12 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
 
 **Findings:**
 
+- **Settings readiness drift fixed** — `SettingsPage` declared SQL as a readiness
+  tab but `SettingsReadinessArea` and `useSettingsReadiness` omitted it, so the
+  SQL tab never rendered a configured/not-configured dot and General omitted SQL
+  from its checklist. SQL is now part of the shared readiness contract, and
+  `GeneralSettings` consumes that shared result instead of recomputing a second
+  list that can drift again. Regression coverage checks both surfaces.
 - **The god-context pattern is resolved across all four page contexts** —
   `RedisPageContext` (~85 fields → 6 contexts + `lib/queryFacade` facades),
   `AksWorkspaceContext` (~70 → 6 contexts), `StoragePageContext` (~100 → 7

@@ -214,7 +214,7 @@ export function useObservabilityResources() {
 // ── Settings readiness ───────────────────────────────────────────────────────
 
 /** One entry per settings tab that has a "configured or not" concept worth signaling. */
-export type SettingsReadinessArea = "aks" | "service-bus" | "redis" | "storage";
+export type SettingsReadinessArea = "aks" | "service-bus" | "redis" | "sql" | "storage";
 
 export type SettingsReadiness = Record<SettingsReadinessArea, boolean>;
 
@@ -235,6 +235,7 @@ export function useSettingsReadiness(): SettingsReadiness | null {
     aks: isDemo || !!profile.config.aksConfig,
     "service-bus": profile.serviceBusNamespaces.length > 0,
     redis: (profile.config.redisConfig?.caches.length ?? 0) > 0,
+    sql: (profile.config.sqlConfig?.connections.length ?? 0) > 0,
     storage: profile.config.storageAccounts.length > 0,
   };
 }

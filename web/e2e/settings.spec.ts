@@ -894,11 +894,12 @@ test.describe("Settings", () => {
         page,
     }) => {
         await page.goto("/settings");
-        for (const id of ["aks", "service-bus", "redis", "storage"]) {
+        for (const id of ["aks", "service-bus", "redis", "sql", "storage"]) {
             await expect(
                 page.getByTestId(`settings-tab-readiness-${id}`),
             ).toBeVisible();
         }
+        await expect(page.getByTestId("getting-started-sql")).toBeVisible();
         // General/Agent/Map/Diagnostics/Appearance have no "configured" concept and show no dot.
         await expect(
             page.getByTestId("settings-tab-readiness-general"),

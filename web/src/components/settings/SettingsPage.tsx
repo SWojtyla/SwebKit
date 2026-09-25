@@ -47,7 +47,7 @@ const DEMO_AFFECTED_TABS: ReadonlySet<TabId> = new Set([
 
 // The tabs `useSettingsReadiness` has an opinion about — one entry per area with a real
 // "configured or not" concept. `TabId` and `SettingsReadinessArea` happen to share the same
-// string values for these four, which is what makes the direct index below type-check.
+// string values for these five, which is what makes the direct index below type-check.
 const READINESS_TABS: ReadonlySet<TabId> = new Set([
     "service-bus",
     "aks",

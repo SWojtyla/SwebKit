@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { CheckCircle2, Circle, Download, Upload } from "lucide-react";
-import { useProfile, useUpdateProfile, useUserSettings, useUpdateUserSettings, useExportSettings, useImportSettings, useDemoMode } from "@/lib/hooks";
+import { useProfile, useUpdateProfile, useUserSettings, useUpdateUserSettings, useExportSettings, useImportSettings, useSettingsReadiness } from "@/lib/hooks";
 import { useNotification } from "@/components/layout/NotificationSystem";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
@@ -8,8 +8,7 @@ import { ConfirmBar } from "@/components/shared/ConfirmBar";
 export function GeneralSettings() {
   const { data: settings, isLoading } = useUserSettings();
   const { data: profile } = useProfile();
-  const { data: demoMode } = useDemoMode();
-  const isDemo = demoMode?.isDemoMode ?? false;
+  const readinessState = useSettingsReadiness();
   const updateProfile = useUpdateProfile();
   const updateSettings = useUpdateUserSettings();
   const exportSettings = useExportSettings();
@@ -37,10 +36,11 @@ export function GeneralSettings() {
   }
 
   const readiness = [
-    { id: "aks", label: "Connect an AKS cluster", ready: isDemo || !!profile?.config.aksConfig },
-    { id: "service-bus", label: "Connect a Service Bus namespace", ready: (profile?.serviceBusNamespaces.length ?? 0) > 0 },
-    { id: "redis", label: "Connect a Redis cache", ready: (profile?.config.redisConfig?.caches.length ?? 0) > 0 },
-    { id: "storage", label: "Connect a Storage account", ready: (profile?.config.storageAccounts.length ?? 0) > 0 },
+    { id: "aks", label: "Connect an AKS cluster", ready: readinessState?.aks ?? false },
+    { id: "service-bus", label: "Connect a Service Bus namespace", ready: readinessState?.["service-bus"] ?? false },
+    { id: "redis", label: "Connect a Redis cache", ready: readinessState?.redis ?? false },
+    { id: "sql", label: "Connect a SQL database", ready: readinessState?.sql ?? false },
+    { id: "storage", label: "Connect a Storage account", ready: readinessState?.storage ?? false },
   ];
 
   return (
