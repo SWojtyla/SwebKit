@@ -3,13 +3,15 @@
 ## Unit tests
 
 - `tests/SwebKit.Core.Tests/ProactiveInsightReportRepositoryTests.cs`
-  - empty when file missing; add → round-trip; newest-first ordering; 100-report cap trims oldest; delete; upsert-by-id.
+    - empty when file missing; add → round-trip; newest-first ordering; 100-report cap trims oldest; delete; upsert-by-id.
+    - corrupt store: `GetAll` degrades to empty + preserves a `.unreadable` snapshot; `Upsert`/`Delete` throw and leave the file byte-for-byte untouched (a write never proceeds on the degraded empty view).
 - `tests/SwebKit.Sidecar.Tests/ProactiveInvestigationRunnerTests.cs`
-  - `proposed_fix` object parsed into the result; absent/null → null; malformed → tolerated.
+    - `proposed_fix` object parsed into the result; absent/null → null; malformed → tolerated.
 - `tests/SwebKit.Sidecar.Tests/AgentSystemPromptBuilderTests.cs`
-  - background variant omits interactive response-format guidance and the "switch to Ask & do" line.
+    - background variant omits interactive response-format guidance and the "switch to Ask & do" line.
 - `tests/SwebKit.Sidecar.Tests/ProactiveInsightServiceTests.cs`
-  - completed investigation persists a report retrievable by id; open-chat re-seeds an evicted session and returns its history.
+    - completed investigation persists a report retrievable by id; open-chat re-seeds an evicted session and returns its history.
+    - same-episode refire → Skipped with reason, no second tool call, no second report; Ok evaluation closes the episode → next firing investigates again; failed investigation releases the episode → next firing retries; fallback path populates severity/evidence/next-steps/proposed-fix/tools-used.
 
 ## Web
 

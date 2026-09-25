@@ -169,4 +169,30 @@ assigning, never trust the declared `object` type.
 
 ---
 
+## AZ-9 — AAD-authenticated Azure Files calls need `x-ms-file-request-intent`
+
+**Symptom:** File shares list fine (`GET .../shares` works) but browsing a share — entries,
+file properties, content, SAS — fails with a generic 500. The log shows
+`Azure.RequestFailedException: 400 MissingRequiredHeader — HeaderName: x-ms-file-request-intent`.
+
+**Cause:** When `ShareServiceClient` is built with a token credential (the `UseAad` path),
+every Azure Files **data-plane** request must carry `x-ms-file-request-intent` — the SDK only
+sends it when told the caller's intent. Service-level calls like `GetSharesAsync` don't need
+the header, which is why the failure presents as "shares list, files don't".
+
+**Fix:** Declare the intent on the options at construction — `Backup` is the only value the
+service currently accepts:
+
+```csharp
+new ShareServiceClient(uri, AzureCredentialFactory.CreateDefault(),
+    new ShareClientOptions { ShareTokenIntent = ShareTokenIntent.Backup });
+```
+
+Only applies to the token-credential path — connection-string auth doesn't send OAuth tokens
+and needs no intent. After the header is set, AAD file calls can still 403 if the identity
+lacks a file-data RBAC role (e.g. `Storage File Data Privileged Reader`) — that's a different
+failure, with its own `AuthorizationPermissionMismatch` message.
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [dotnet-csharp.md](dotnet-csharp.md) · [api-client.md](api-client.md)_

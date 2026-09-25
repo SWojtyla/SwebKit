@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using SwebKit.Agents;
@@ -42,7 +43,8 @@ public sealed record ProactiveInsightStatusEvent(
 /// topology, kicks off a fire-and-forget background investigation via
 /// <see cref="ProactiveInvestigationRunner"/> — a bounded model-driven loop (agent-workspace-
 /// awareness Module 2). If the runner can't produce a result it falls back to the original
-/// single-shot <c>investigate_workspace_issue</c> call + one-line summary. Never blocks alert evaluation: <see cref="OnAlertFired"/> only schedules a
+/// single-shot <c>investigate_workspace_issue</c> probe, with the model drafting the same
+/// structured report from the probe output. Never blocks alert evaluation: <see cref="OnAlertFired"/> only schedules a
 /// <see cref="Task.Run(Func{Task})"/> and returns immediately, and the whole thing fails silently
 /// (logged, not thrown) if anything goes wrong — a broken proactive-insight pipeline must never take
 /// the alert engine down with it.
@@ -54,6 +56,14 @@ public sealed record ProactiveInsightStatusEvent(
 /// burst of simultaneous LLM calls. Extras are dropped (not queued) — the simpler of the two options
 /// the plan allowed, since a queued backlog of stale investigations for an incident that's already
 /// evolved past them isn't obviously more useful than just waiting for the next one.
+///
+/// Firing-episode dedup: one investigation per incident, not per firing. A rule whose cooldown
+/// lapses while the underlying condition still holds re-fires the alert — without dedup that
+/// re-runs the whole investigation and files a duplicate report on every cooldown expiry for as
+/// long as the outage lasts. An episode marker is claimed when an investigation commits and is
+/// released when the rule next evaluates <see cref="AlertSignalStatus.Ok"/> (Error/Skipped
+/// evaluations don't prove recovery, so they leave the episode open). A failed investigation
+/// releases the episode too, so the next firing retries rather than staying suppressed.
 /// </summary>
 public sealed class ProactiveInsightService
 {
@@ -67,6 +77,16 @@ public sealed class ProactiveInsightService
     private readonly ProactiveInvestigationRunner _investigationRunner;
     private readonly ILogger<ProactiveInsightService> _logger;
     private int _busy;
+    /// <summary>Rule ids with an open firing episode — an investigation already covered this
+    /// incident and the rule hasn't evaluated Ok since. In-memory is deliberate: an app restart
+    /// mid-incident re-investigating once is harmless.</summary>
+    private readonly ConcurrentDictionary<string, byte> _openFiringEpisodes = new();
+    /// <summary>Tracks the fire-and-forget investigations so tests (and an orderly shutdown)
+    /// can await a drain instead of racing a task that may still be writing a report after the
+    /// caller moved on — a write landing after the test sandbox restores the real appdata root
+    /// leaks straight into the user's store.</summary>
+    private readonly ConcurrentDictionary<long, Task> _inFlight = new();
+    private long _nextFlightId;
 
     public event Action<ProactiveInsightReadyEvent>? InsightReady;
 
@@ -99,6 +119,16 @@ public sealed class ProactiveInsightService
         _logger = logger;
 
         engine.AlertFired += OnAlertFired;
+        engine.EvaluationCompleted += OnEvaluationCompleted;
+    }
+
+    /// <summary>Closes a rule's firing episode when it evaluates cleanly again — only
+    /// <see cref="AlertSignalStatus.Ok"/> counts as recovered; Error/Skipped evaluations carry
+    /// no information about the underlying condition and must not reopen dedup.</summary>
+    private void OnEvaluationCompleted(AlertEvaluatedEvent evt)
+    {
+        if (evt.Status == AlertSignalStatus.Ok)
+            _openFiringEpisodes.TryRemove(evt.RuleId, out _);
     }
 
     private void OnAlertFired(AlertFiredEvent evt)
@@ -106,8 +136,19 @@ public sealed class ProactiveInsightService
         // Fire-and-forget on purpose: AlertFired is invoked synchronously from inside the
         // evaluation loop (see MonitoringAlertEvaluationService), so awaiting here would delay
         // every other rule's evaluation behind an LLM round trip.
-        _ = Task.Run(() => HandleAlertFiredAsync(evt));
+        var id = Interlocked.Increment(ref _nextFlightId);
+        var task = Task.Run(() => HandleAlertFiredAsync(evt));
+        _inFlight[id] = task;
+        _ = task.ContinueWith(
+            completed => _inFlight.TryRemove(id, out _),
+            CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
+
+    /// <summary>Awaits every investigation currently in flight — a test seam: a sandboxed test
+    /// that disposes its appdata override while a report write is still pending lets that write
+    /// land in the real store. Internal (not public API surface) because callers other than
+    /// tests have no business awaiting this.</summary>
+    internal Task DrainAsync() => Task.WhenAll(_inFlight.Values);
 
     private void RaiseStatus(AlertFiredEvent evt, ProactiveInsightStage stage, string? reason = null)
     {
@@ -173,12 +214,24 @@ public sealed class ProactiveInsightService
                 ?? (start.Value.Area == WorkspaceResourceArea.Aks ? config.AksConfig?.KubeconfigContext : null);
             var match = WorkspaceMapLookup.FindNode(config.EffectiveMaps(), start.Value.Area, start.Value.Hint, effectiveContext);
 
+            // Episode dedup — claim before Started so every later firing of the same unresolved
+            // incident skips here instead of paying for a duplicate investigation + report.
+            if (!_openFiringEpisodes.TryAdd(evt.RuleId, 0))
+            {
+                _logger.LogInformation(
+                    "Skipped proactive insight for rule {RuleId} ({RuleName}) — an earlier firing of this episode was already investigated and the alert hasn't recovered.",
+                    evt.RuleId, evt.RuleName);
+                RaiseStatus(evt, ProactiveInsightStage.Skipped, "an earlier firing of this alert was already investigated and it hasn't recovered yet");
+                return;
+            }
+
             RaiseStatus(evt, ProactiveInsightStage.Started);
 
             // agent-workspace-awareness Module 2: prefer the bounded model-driven investigation
             // (the model picks its own read-only evidence path across the workspace). When it
             // can't produce a result — budget exceeded, empty response — fall back to the Module 4
-            // single-shot topology walk + one-line summary so an alert still yields an insight.
+            // single-shot topology probe + model-drafted structured report so an alert still yields
+            // an insight.
             ProactiveInvestigationResult? result = null;
             try
             {
@@ -228,12 +281,24 @@ public sealed class ProactiveInsightService
                     }),
                     CancellationToken.None);
 
-                summary = await SummarizeAsync(evt, reportJson) ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(summary))
+                // Same structured contract the runner emits — the model drafts it from the
+                // precomputed probe JSON instead of a live tool loop, so a fallback report fills
+                // the same dashboard sections instead of rendering a bare one-liner.
+                var fallback = await DraftFallbackReportAsync(evt, reportJson);
+                if (fallback is null)
                 {
-                    RaiseStatus(evt, ProactiveInsightStage.Failed, "the investigation produced no summary");
-                    return; // summarization failed — a missing insight is fine, a garbled one is not
+                    _openFiringEpisodes.TryRemove(evt.RuleId, out _); // let the next firing retry
+                    RaiseStatus(evt, ProactiveInsightStage.Failed, "the investigation produced no usable result");
+                    return; // drafting failed — a missing insight is fine, a garbled one is not
                 }
+
+                summary = fallback.Hypothesis;
+                evidence = fallback.Evidence;
+                report.Severity = fallback.Severity;
+                report.Evidence = [.. fallback.Evidence];
+                report.SuggestedNextSteps = [.. fallback.SuggestedNextSteps];
+                report.ProposedFix = fallback.ProposedFix;
+                report.ToolsUsed = [.. fallback.ToolsUsed];
             }
 
             var sessionId = $"proactive-{evt.RuleId}-{evt.FiredAt.ToUnixTimeMilliseconds()}";
@@ -259,6 +324,7 @@ public sealed class ProactiveInsightService
         }
         catch (Exception ex)
         {
+            _openFiringEpisodes.TryRemove(evt.RuleId, out _); // a failed run must not suppress retries
             _logger.LogWarning(ex, "Proactive insight investigation failed for rule {RuleId} ({RuleName})", evt.RuleId, evt.RuleName);
             RaiseStatus(evt, ProactiveInsightStage.Failed, ex.Message);
         }
@@ -268,20 +334,54 @@ public sealed class ProactiveInsightService
         }
     }
 
-    private async Task<string?> SummarizeAsync(AlertFiredEvent evt, string reportJson)
+    /// <summary>Single-shot fallback path's output contract — the same shape
+    /// <see cref="ProactiveInvestigationRunner"/> demands, but the model drafts it from the
+    /// precomputed <c>investigate_workspace_issue</c> probe (its only evidence) instead of
+    /// running its own tool loop. This is why the prompt can't just ask for a hypothesis
+    /// sentence: without the structured fields the report renders as an empty card.</summary>
+    private const string FallbackReportPrompt = """
+        You produce the structured investigation report for a fired monitoring alert, based on a
+        precomputed JSON probe of the affected resource and its related workspace resources.
+        The probe is the only evidence you have — ground every claim in its fields, name the
+        resource each finding comes from, and do not invent data.
+
+        Respond with ONLY a JSON object in this exact shape:
+        {
+          "hypothesis": "one-sentence root-cause hypothesis",
+          "evidence": ["self-contained factual findings taken from the probe, with concrete numbers and identifiers"],
+          "severity": "low" | "medium" | "high",
+          "suggested_next_steps": ["concrete actions the user could take, most actionable first"],
+          "proposed_fix": {
+            "explanation": "one line describing the change",
+            "language": "yaml" | "json" | "env" | "text",
+            "snippet": "the minimal corrected configuration, ready to apply"
+          }
+        }
+        Set "proposed_fix" to null when the probe doesn't point to a concrete misconfiguration.
+        For each related resource in the probe, include an evidence entry saying whether it is
+        implicated in or ruled out of the root cause.
+        No prose, no markdown fences — the JSON object only.
+        """;
+
+    /// <summary>Drafts the structured report from the single-shot probe output. Returns null when
+    /// the model call fails or yields nothing usable — the caller treats that as a Failed
+    /// investigation and releases the firing episode so the next firing retries.</summary>
+    private async Task<ProactiveInvestigationResult?> DraftFallbackReportAsync(AlertFiredEvent evt, string reportJson)
     {
         try
         {
             var request = new AgentModelRequest
             {
-                SystemPrompt = "You produce a single short sentence (under 30 words) hypothesizing why a "
-                    + "monitoring alert might be related to other workspace resources, based on a JSON "
-                    + "investigation report. Do not add any preamble, formatting, or commentary — output "
-                    + "only the one sentence.",
+                SystemPrompt = FallbackReportPrompt,
                 UserMessage = $"Alert '{evt.RuleName}' fired: {evt.Message}\n\nInvestigation report:\n{reportJson}",
             };
             var response = await _modelClient.CompleteAsync(request, CancellationToken.None);
-            return response.Content;
+            if (string.IsNullOrWhiteSpace(response.Content))
+                return null;
+
+            var parsed = _investigationRunner.ParseStructuredOutput(
+                response.Content, toolsUsed: ["investigate_workspace_issue"], hitMaxRounds: false);
+            return string.IsNullOrWhiteSpace(parsed.Hypothesis) ? null : parsed;
         }
         catch (Exception)
         {

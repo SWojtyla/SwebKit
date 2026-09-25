@@ -34,6 +34,11 @@ report anywhere.
 - Seeded chat session renders the report as readable markdown (sections + fenced code block)
   instead of `summary + raw JSON dump`.
 - `ProactiveInsightCard` primary action becomes "View report" → deep-links to the new tab.
+- Firing-episode dedup: one investigation per unresolved incident per rule — a refire while the
+  alert hasn't recovered is Skipped (with a reason) instead of filing a duplicate report; the
+  episode closes when the rule next evaluates Ok.
+- Single-shot fallback drafts the same structured JSON contract from the probe output, so a
+  fallback report fills the same dashboard sections instead of rendering a bare one-liner.
 
 ## Non-goals
 
