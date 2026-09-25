@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { useAksStatefulSets, useAksRestartStatefulSet, useAksScaleStatefulSet } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/AksWorkspaceContext";
 import { ScaleDialog } from "./ScaleDialog";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { StatefulSetInfo } from "@/lib/types";
@@ -23,7 +23,7 @@ const columns: Column<StatefulSetInfo>[] = [
 
 export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
   const { data: statefulsets, isLoading, error } = useAksStatefulSets(ns);
-  const ws = useAksWorkspace();
+  const ws = useAksActions();
   const restartSts = useAksRestartStatefulSet();
   const scaleSts = useAksScaleStatefulSet();
 

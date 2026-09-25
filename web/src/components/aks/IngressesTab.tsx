@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent } from "react";
 import { useAksIngresses, useAksDeleteIngress } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { IngressInfo } from "@/lib/types";
 
@@ -23,7 +23,7 @@ const columns: Column<IngressInfo>[] = [
 
 export function IngressesTab({ ns, isMulti }: IngressesTabProps) {
   const { data: ingresses, isLoading, error } = useAksIngresses(ns);
-  const ws = useAksWorkspace();
+  const ws = useAksActions();
   const deleteIngress = useAksDeleteIngress();
 
   const buildMenu = useCallback((ing: IngressInfo): ContextMenuItem[] => {

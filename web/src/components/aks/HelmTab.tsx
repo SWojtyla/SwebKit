@@ -1,7 +1,7 @@
-import { useCallback, type MouseEvent } from "react";
+import { useCallback, useMemo, type MouseEvent } from "react";
 import { useAksHelmReleases } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions, useAksNav } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { HelmReleaseInfo } from "@/lib/types";
 import { formatLocalDateTime } from "@/lib/datetime";
@@ -61,7 +61,9 @@ const columns: Column<HelmReleaseInfo>[] = [
 
 export function HelmTab({ ns, isMulti }: HelmTabProps) {
     const { data: releases, isLoading, error } = useAksHelmReleases(ns);
-    const ws = useAksWorkspace();
+    const nav = useAksNav();
+    const actions = useAksActions();
+    const ws = useMemo(() => ({ ...nav, ...actions }), [nav, actions]);
 
     // No "Rollback" entry here: it's a real, working action already, in HelmDetailPanel (opened by
     // History/Values below) — this menu previously duplicated it as a dead, permanently-disabled

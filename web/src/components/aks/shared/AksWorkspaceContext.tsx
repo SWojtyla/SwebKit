@@ -137,15 +137,15 @@ interface PendingConfirm {
     onConfirm: () => void;
 }
 
-export interface AksWorkspaceContextValue {
-    activeTab: TabId;
-    setActiveTab: (tab: TabId) => void;
-    networkMenuOpen: boolean;
-    setNetworkMenuOpen: (open: boolean | ((v: boolean) => boolean)) => void;
-    selectedNamespaces: string[];
-    setSelectedNamespaces: (namespaces: string[]) => void;
-    namespaceToken: string | null;
-    isMultiNamespace: boolean;
+/**
+ * Workspace state is split into six contexts grouped by churn rate, so a change in
+ * one bucket only re-renders the components that actually consume it. Before the
+ * split a single ~70-field context meant every 10s auto-refresh tick re-rendered
+ * all 15 resource tabs, and every context-menu open re-rendered the whole page.
+ * Most tabs consume only `useAksActions` — stable callbacks that essentially never
+ * change identity.
+ */
+export interface AksClusterValue {
     namespaces: string[] | undefined;
     nsLoading: boolean;
     /**
@@ -157,7 +157,6 @@ export interface AksWorkspaceContextValue {
     contextLoading: boolean;
     /** Context being switched to while the POST is in flight, for "Switching to X…" labels. */
     pendingContext: string | null;
-    isAksFetching: boolean;
     contexts: KubeContextInfo[] | undefined;
     currentContext: string | null;
     /** True once the profile query has resolved — gates the first-run "not configured" state. */
@@ -165,9 +164,20 @@ export interface AksWorkspaceContextValue {
     isDemoMode: boolean;
     testResult: { connected: boolean; error?: string } | undefined;
     handleContextChange: (context: string, defaultNamespace?: string) => void;
-    allPods: PodInfo[] | undefined;
-    podsFetching: boolean;
-    refetchPods: () => Promise<{ data: PodInfo[] | undefined }>;
+    /** Kubeconfig path from the active profile, passed to native commands (pod shell, port-forward). */
+    kubeconfigPath: string | null;
+    isProduction: boolean;
+}
+
+export interface AksNavValue {
+    activeTab: TabId;
+    setActiveTab: (tab: TabId) => void;
+    networkMenuOpen: boolean;
+    setNetworkMenuOpen: (open: boolean | ((v: boolean) => boolean)) => void;
+    selectedNamespaces: string[];
+    setSelectedNamespaces: (namespaces: string[]) => void;
+    namespaceToken: string | null;
+    isMultiNamespace: boolean;
     selectedPod: PodInfo | null;
     yamlResource: { kind: string; namespace: string; name: string } | null;
     helmRelease: HelmReleaseInfo | null;
@@ -176,26 +186,10 @@ export interface AksWorkspaceContextValue {
     selectedHttpRoute: HttpRouteInfo | null;
     shellPod: PodInfo | null;
     askAiPod: PodInfo | null;
-    /** Kubeconfig path from the active profile, passed to native commands (pod shell, port-forward). */
-    kubeconfigPath: string | null;
     containerDetail: { podName: string; namespace: string } | null;
     multiPodNames: string[];
     multiPodNamespace: string | null;
     showMultiPodLogs: boolean;
-    autoRefresh: boolean;
-    setAutoRefresh: (v: boolean) => void;
-    refreshInterval: number;
-    setRefreshInterval: (v: number) => void;
-    /** `Date.now()` of the last completed refresh, or null before the first one. */
-    lastRefreshedAt: number | null;
-    /** True when auto-refresh is enabled but held because a detail panel is open. */
-    autoRefreshPaused: boolean;
-    copyToClipboard: (text: string) => void;
-    openYaml: (kind: string, name: string, namespace: string) => void;
-    openLogs: (pod: PodInfo) => void;
-    openMultiPodLogs: (pods: PodInfo[]) => void;
-    closeMultiPodLogs: () => void;
-    openContainerDetails: (podName: string, namespace: string) => void;
     setHelmRelease: (rel: HelmReleaseInfo | null) => void;
     setSelectedSecret: (secret: SecretInfo | null) => void;
     setSelectedConfigMap: (configMap: ConfigMapInfo | null) => void;
@@ -212,6 +206,41 @@ export interface AksWorkspaceContextValue {
     setContainerDetail: (
         detail: { podName: string; namespace: string } | null,
     ) => void;
+}
+
+export interface AksQueriesValue {
+    allPods: PodInfo[] | undefined;
+    podsFetching: boolean;
+    refetchPods: () => Promise<{ data: PodInfo[] | undefined }>;
+}
+
+export interface AksOpsValue {
+    autoRefresh: boolean;
+    setAutoRefresh: (v: boolean) => void;
+    refreshInterval: number;
+    setRefreshInterval: (v: number) => void;
+    /** `Date.now()` of the last completed refresh, or null before the first one. */
+    lastRefreshedAt: number | null;
+    /** True when auto-refresh is enabled but held because a detail panel is open. */
+    autoRefreshPaused: boolean;
+    isAksFetching: boolean;
+    handleManualRefresh: () => void;
+}
+
+export interface AksOverlaysValue {
+    pendingConfirm: PendingConfirm | null;
+    setPendingConfirm: (v: PendingConfirm | null) => void;
+    contextMenu: ContextMenuState | null;
+    setContextMenu: (v: ContextMenuState | null) => void;
+}
+
+export interface AksActionsValue {
+    copyToClipboard: (text: string) => void;
+    openYaml: (kind: string, name: string, namespace: string) => void;
+    openLogs: (pod: PodInfo) => void;
+    openMultiPodLogs: (pods: PodInfo[]) => void;
+    closeMultiPodLogs: () => void;
+    openContainerDetails: (podName: string, namespace: string) => void;
     requestConfirm: (opts: {
         message: string;
         resourceName: string;
@@ -224,13 +253,15 @@ export interface AksWorkspaceContextValue {
     navigateToAnalysis: () => void;
     openPortForward: (pod: PodInfo) => void;
     showContextMenu: (e: MouseEvent, items: ContextMenuItem[]) => void;
-    handleManualRefresh: () => void;
-    pendingConfirm: PendingConfirm | null;
-    setPendingConfirm: (v: PendingConfirm | null) => void;
-    contextMenu: ContextMenuState | null;
-    setContextMenu: (v: ContextMenuState | null) => void;
-    isProduction: boolean;
 }
+
+/** @deprecated Use the per-churn hooks (useAksCluster/Nav/Queries/Ops/Overlays/Actions). */
+export type AksWorkspaceContextValue = AksClusterValue &
+    AksNavValue &
+    AksQueriesValue &
+    AksOpsValue &
+    AksOverlaysValue &
+    AksActionsValue;
 
 const AUTO_REFRESH_PREF = "aks-auto-refresh";
 const REFRESH_INTERVAL_PREF = "aks-refresh-interval";
@@ -245,17 +276,36 @@ function selectedNsPrefKey(context: string): string {
 /** Selectable auto-refresh cadences, in seconds. */
 export const aksRefreshIntervals = [5, 10, 30, 60] as const;
 
-const AksWorkspaceContext = createContext<AksWorkspaceContextValue | null>(
-    null,
-);
+const AksClusterContext = createContext<AksClusterValue | null>(null);
+const AksNavContext = createContext<AksNavValue | null>(null);
+const AksQueriesContext = createContext<AksQueriesValue | null>(null);
+const AksOpsContext = createContext<AksOpsValue | null>(null);
+const AksOverlaysContext = createContext<AksOverlaysValue | null>(null);
+const AksActionsContext = createContext<AksActionsValue | null>(null);
 
-export function useAksWorkspace(): AksWorkspaceContextValue {
-    const ctx = useContext(AksWorkspaceContext);
-    if (!ctx)
-        throw new Error(
-            "useAksWorkspace must be used within AksWorkspaceProvider",
-        );
+function useRequired<T>(ctx: T | null, name: string): T {
+    if (ctx === null)
+        throw new Error(`${name} must be used within AksWorkspaceProvider`);
     return ctx;
+}
+
+export function useAksCluster(): AksClusterValue {
+    return useRequired(useContext(AksClusterContext), "useAksCluster");
+}
+export function useAksNav(): AksNavValue {
+    return useRequired(useContext(AksNavContext), "useAksNav");
+}
+export function useAksQueries(): AksQueriesValue {
+    return useRequired(useContext(AksQueriesContext), "useAksQueries");
+}
+export function useAksOps(): AksOpsValue {
+    return useRequired(useContext(AksOpsContext), "useAksOps");
+}
+export function useAksOverlays(): AksOverlaysValue {
+    return useRequired(useContext(AksOverlaysContext), "useAksOverlays");
+}
+export function useAksActions(): AksActionsValue {
+    return useRequired(useContext(AksActionsContext), "useAksActions");
 }
 
 export function AksWorkspaceProvider({
@@ -323,9 +373,13 @@ export function AksWorkspaceProvider({
     const { data: demoMode } = useDemoMode();
     const isDemoMode = demoMode?.isDemoMode ?? false;
     const setContextMutation = useAksSetContext();
+    // `mutate`/`variables` are referentially stable; the mutation object itself is
+    // fresh every render and would churn `handleContextChange`'s identity.
+    const { mutate: setContextMutate, variables: setContextVariables } =
+        setContextMutation;
     const contextLoading = setContextMutation.isPending;
     const pendingContext = contextLoading
-        ? (setContextMutation.variables?.context ?? null)
+        ? (setContextVariables?.context ?? null)
         : null;
     const profileLoaded = profile !== undefined;
     const isAksFetching =
@@ -605,7 +659,12 @@ export function AksWorkspaceProvider({
                     : defaultNamespace
                       ? [defaultNamespace]
                       : [];
-            const previousNs = searchParams.get("ns");
+            // Read from the live URL, not the render-time searchParams snapshot —
+            // the same reason useUpdateSearchParams exists. Keeping this dep-free
+            // stops handleContextChange churning identity on every URL change.
+            const previousNs = new URLSearchParams(window.location.search).get(
+                "ns",
+            );
             updateParams({
                 ns: encodeNamespaces(restored),
                 pod: null,
@@ -624,7 +683,7 @@ export function AksWorkspaceProvider({
             setAskAiPod(null);
             // "Updated 3s ago" would otherwise keep describing the previous cluster's data.
             setLastRefreshedAt(null);
-            setContextMutation.mutate(
+            setContextMutate(
                 { context, defaultNamespace },
                 {
                     onSuccess: (data) => {
@@ -664,8 +723,7 @@ export function AksWorkspaceProvider({
         },
         [
             currentContextName,
-            searchParams,
-            setContextMutation,
+            setContextMutate,
             updateParams,
             notify,
         ],
@@ -900,7 +958,44 @@ export function AksWorkspaceProvider({
         [],
     );
 
-    const value: AksWorkspaceContextValue = useMemo(
+    const kubeconfigContext =
+        profile?.config.aksConfig?.kubeconfigContext ?? null;
+    const kubeconfigPath = profile?.config.aksConfig?.kubeconfigPath ?? null;
+
+    const clusterValue: AksClusterValue = useMemo(
+        () => ({
+            namespaces,
+            nsLoading,
+            nsError,
+            contextLoading,
+            pendingContext,
+            contexts,
+            currentContext: kubeconfigContext,
+            profileLoaded,
+            isDemoMode,
+            testResult,
+            handleContextChange,
+            kubeconfigPath,
+            isProduction,
+        }),
+        [
+            namespaces,
+            nsLoading,
+            nsError,
+            contextLoading,
+            pendingContext,
+            contexts,
+            kubeconfigContext,
+            profileLoaded,
+            isDemoMode,
+            testResult,
+            handleContextChange,
+            kubeconfigPath,
+            isProduction,
+        ],
+    );
+
+    const navValue: AksNavValue = useMemo(
         () => ({
             activeTab,
             setActiveTab,
@@ -910,22 +1005,6 @@ export function AksWorkspaceProvider({
             setSelectedNamespaces,
             namespaceToken,
             isMultiNamespace,
-            namespaces,
-            nsLoading,
-            nsError,
-            contextLoading,
-            pendingContext,
-            isAksFetching,
-            contexts,
-            currentContext:
-                profile?.config.aksConfig?.kubeconfigContext ?? null,
-            profileLoaded,
-            isDemoMode,
-            testResult,
-            handleContextChange,
-            allPods,
-            podsFetching,
-            refetchPods,
             selectedPod,
             yamlResource,
             helmRelease,
@@ -934,23 +1013,10 @@ export function AksWorkspaceProvider({
             selectedHttpRoute,
             shellPod,
             askAiPod,
-            kubeconfigPath: profile?.config.aksConfig?.kubeconfigPath ?? null,
             containerDetail,
             multiPodNames,
             multiPodNamespace,
             showMultiPodLogs,
-            autoRefresh,
-            setAutoRefresh,
-            refreshInterval,
-            setRefreshInterval,
-            lastRefreshedAt,
-            autoRefreshPaused,
-            copyToClipboard,
-            openYaml,
-            openLogs,
-            openMultiPodLogs,
-            closeMultiPodLogs,
-            openContainerDetails,
             setHelmRelease,
             setSelectedSecret,
             setSelectedConfigMap,
@@ -960,17 +1026,6 @@ export function AksWorkspaceProvider({
             setPodKey,
             setYamlResource,
             setContainerDetail,
-            requestConfirm,
-            resolvePodsForSelector,
-            navigateToAnalysis,
-            openPortForward,
-            showContextMenu,
-            handleManualRefresh,
-            pendingConfirm,
-            setPendingConfirm,
-            contextMenu,
-            setContextMenu,
-            isProduction,
         }),
         [
             activeTab,
@@ -980,21 +1035,6 @@ export function AksWorkspaceProvider({
             setSelectedNamespaces,
             namespaceToken,
             isMultiNamespace,
-            namespaces,
-            nsLoading,
-            nsError,
-            contextLoading,
-            pendingContext,
-            isAksFetching,
-            contexts,
-            profile?.config.aksConfig?.kubeconfigContext,
-            profileLoaded,
-            isDemoMode,
-            testResult,
-            handleContextChange,
-            allPods,
-            podsFetching,
-            refetchPods,
             selectedPod,
             yamlResource,
             helmRelease,
@@ -1003,47 +1043,97 @@ export function AksWorkspaceProvider({
             selectedHttpRoute,
             shellPod,
             askAiPod,
-            profile?.config.aksConfig?.kubeconfigPath,
             containerDetail,
             multiPodNames,
             multiPodNamespace,
             showMultiPodLogs,
+            setHelmRelease,
+            setPodKey,
+            setYamlResource,
+            setContainerDetail,
+        ],
+    );
+
+    const queriesValue: AksQueriesValue = useMemo(
+        () => ({ allPods, podsFetching, refetchPods }),
+        [allPods, podsFetching, refetchPods],
+    );
+
+    const opsValue: AksOpsValue = useMemo(
+        () => ({
             autoRefresh,
             setAutoRefresh,
             refreshInterval,
             setRefreshInterval,
             lastRefreshedAt,
             autoRefreshPaused,
+            isAksFetching,
+            handleManualRefresh,
+        }),
+        [
+            autoRefresh,
+            setAutoRefresh,
+            refreshInterval,
+            setRefreshInterval,
+            lastRefreshedAt,
+            autoRefreshPaused,
+            isAksFetching,
+            handleManualRefresh,
+        ],
+    );
+
+    const overlaysValue: AksOverlaysValue = useMemo(
+        () => ({
+            pendingConfirm,
+            setPendingConfirm,
+            contextMenu,
+            setContextMenu,
+        }),
+        [pendingConfirm, contextMenu],
+    );
+
+    const actionsValue: AksActionsValue = useMemo(
+        () => ({
             copyToClipboard,
             openYaml,
             openLogs,
             openMultiPodLogs,
             closeMultiPodLogs,
             openContainerDetails,
-            setHelmRelease,
-            setSelectedSecret,
-            setSelectedConfigMap,
-            setSelectedHttpRoute,
-            setShellPod,
-            setAskAiPod,
-            setPodKey,
-            setYamlResource,
-            setContainerDetail,
             requestConfirm,
             resolvePodsForSelector,
             navigateToAnalysis,
             openPortForward,
             showContextMenu,
-            handleManualRefresh,
-            pendingConfirm,
-            contextMenu,
-            isProduction,
+        }),
+        [
+            copyToClipboard,
+            openYaml,
+            openLogs,
+            openMultiPodLogs,
+            closeMultiPodLogs,
+            openContainerDetails,
+            requestConfirm,
+            resolvePodsForSelector,
+            navigateToAnalysis,
+            openPortForward,
+            showContextMenu,
         ],
     );
 
     return (
-        <AksWorkspaceContext.Provider value={value}>
-            {children}
-        </AksWorkspaceContext.Provider>
+        <AksClusterContext.Provider value={clusterValue}>
+            <AksNavContext.Provider value={navValue}>
+                <AksQueriesContext.Provider value={queriesValue}>
+                    <AksOpsContext.Provider value={opsValue}>
+                        <AksOverlaysContext.Provider value={overlaysValue}>
+                            <AksActionsContext.Provider value={actionsValue}>
+                                {children}
+                            </AksActionsContext.Provider>
+                        </AksOverlaysContext.Provider>
+                    </AksOpsContext.Provider>
+                </AksQueriesContext.Provider>
+            </AksNavContext.Provider>
+        </AksClusterContext.Provider>
     );
 }

@@ -296,15 +296,16 @@ carried the required-`int tail` binding trap the stream variant had fixed.
 
 **Findings:**
 
-- **`AksWorkspaceContext` god-context defeats memoization** — one context value
-  carries ~70 fields including high-churn entries (`isAksFetching`,
-  `lastRefreshedAt`, `contextMenu`, `pendingConfirm`). Every consumer re-renders
-  on each 10s auto-refresh settle, and every `useMemo`/`useCallback` dep'd on
-  `ws` (most of them, e.g. `AutoscalingTab`'s tables) recomputes — so the
-  careful memoization + `ResourceTable`'s `memo()` are largely inert.
-  **Proposal (flagged):** split into stable-action context, selection context,
-  and churn context (`lastRefreshedAt`/`isAksFetching`/menus) so panels don't
-  re-render per refresh tick.
+- ~~**`AksWorkspaceContext` god-context defeats memoization**~~ — **split done**:
+  six churn-scoped contexts (Cluster/Nav/Queries/Ops/Overlays/Actions). 10 of
+  the 15 tab consumers subscribe only to `useAksActions` (stable callbacks) and
+  no longer re-render on each 10s auto-refresh settle or on namespace/pod
+  selection changes; overlay and ops churn is confined to `AksPage`. The 5
+  mixed consumers (ConfigMaps/Helm/HttpRoutes/Pods/Secrets) memoize a Nav +
+  Actions merge. `handleContextChange` was also decoupled from the fresh
+  mutation object and reads the previous namespace from the live URL.
+  `useAksPods` stays raw inside `useAksQueries` (data-arrival churn is real
+  there); `ResourceTable`'s `memo()` is now effective.
 - **Unused DI params** — `ProfileRepository`/`DemoModeService` are injected into
   ~30 AKS handlers that never use them (kept by force of habit); same pattern
   repeats across endpoint files. Mechanical cleanup, deferred — touches all
@@ -389,14 +390,15 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
 
 **Findings:**
 
-- **The god-context pattern is systemic, not AKS-only** — `StoragePageContext`
-  (~100 fields, memoized), `ApiClientPageContext` (~75 fields),
-  `AksWorkspaceContext` (~70 fields), and **`RedisPageContext` (~85 fields) —
-  split done**: six churn-separated contexts (Connection/Nav/Queries/Browser/
-  Editor/Ops), every handler `useCallback`'d, and query/mutation objects travel
-  through stable facades (`web/src/lib/queryFacade.ts`) so unrelated renders
-  don't invalidate consumers. This is now the proven pattern to roll out to the
-  remaining three contexts.
+- **The god-context pattern is systemic** — `StoragePageContext` (~100 fields,
+  memoized) and `ApiClientPageContext` (~75 fields) remain; **`RedisPageContext`
+  (~85 fields) and `AksWorkspaceContext` (~70 fields) are split done**: six
+  churn-separated contexts each, every handler `useCallback`'d, and (Redis)
+  query/mutation objects travel through stable facades
+  (`web/src/lib/queryFacade.ts`) so unrelated renders don't invalidate
+  consumers. AKS proved the lightweight variant: raw query objects are
+  acceptable when the context's only query is genuinely data-churn — facades
+  are only needed where status-field reads shouldn't invalidate consumers.
 - No TODO/FIXME/HACK anywhere in `src-sidecar/`, `web/src/`, or `src/` —
   hygiene is enforced.
 - Empty catches found are all process/file cleanup (`AcpJsonRpcPeer`,
@@ -409,9 +411,9 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
 
 **Remaining flagged items (deferred to Phase 2 / later):**
 
-- `*PageContext.tsx` god-contexts: Storage 1202, ApiClient 1134, Aks 1049 remain —
-  apply the Redis split pattern (per-churn contexts + `lib/queryFacade` facades +
-  `useCallback` handlers).
+- `*PageContext.tsx` god-contexts: Storage 1202, ApiClient 1134 remain —
+  apply the Redis/AKS split pattern (per-churn contexts + `lib/queryFacade`
+  facades + `useCallback` handlers).
 - `web/src/lib/types.ts` (1516) — flat bag of ~159 types mirroring sidecar contracts;
   per-domain split is cosmetic, low priority.
 - `web/src/lib/api.ts` (796) — transport (`apiFetch`/`apiSend`/`apiUpload`/

@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent } from "react";
 import { useAksGatewayClasses } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { GatewayClassInfo } from "@/lib/types";
 
@@ -24,7 +24,7 @@ const columns: Column<GatewayClassInfo>[] = [
 
 export function GatewayClassesTab() {
   const { data: classes, isLoading, error } = useAksGatewayClasses();
-  const ws = useAksWorkspace();
+  const ws = useAksActions();
 
   const buildMenu = useCallback((gc: GatewayClassInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(gc.name) },

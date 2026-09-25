@@ -1,6 +1,11 @@
 import {
     AksWorkspaceProvider,
-    useAksWorkspace,
+    useAksCluster,
+    useAksNav,
+    useAksQueries,
+    useAksOps,
+    useAksOverlays,
+    useAksActions,
     aksRefreshIntervals,
     directTabs,
     networkTabs,
@@ -55,7 +60,14 @@ export function AksPage() {
 }
 
 function AksPageContent() {
-    const ws = useAksWorkspace();
+    const ws = {
+        ...useAksCluster(),
+        ...useAksNav(),
+        ...useAksQueries(),
+        ...useAksOps(),
+        ...useAksOverlays(),
+        ...useAksActions(),
+    };
     const navigate = useNavigate();
     const isNetworkTabActive = networkTabIds.has(ws.activeTab);
 

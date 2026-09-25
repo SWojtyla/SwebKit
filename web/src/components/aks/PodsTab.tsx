@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import { useAksPods, useAksDeletePod, useAksPodMetrics } from "@/lib/hooks";
 import { showNotification } from "@/lib/tauri-bridge";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions, useAksNav } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { PodInfo, PodMetricInfo } from "@/lib/types";
 
@@ -83,7 +83,9 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
   const { data: metrics } = useAksPodMetrics(ns);
   const [hideCompleted, setHideCompleted] = useState(true);
   const deleteMutation = useAksDeletePod();
-  const ws = useAksWorkspace();
+  const nav = useAksNav();
+  const actions = useAksActions();
+  const ws = useMemo(() => ({ ...nav, ...actions }), [nav, actions]);
   const prevStatusesRef = useRef<Map<string, string>>(new Map());
   const prevNsRef = useRef(ns);
 

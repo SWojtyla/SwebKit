@@ -1,7 +1,7 @@
-import { useCallback, type MouseEvent } from "react";
+import { useCallback, useMemo, type MouseEvent } from "react";
 import { useAksHttpRoutes, useAksDeleteHttpRoute } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions, useAksNav } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { HttpRouteInfo } from "@/lib/types";
 
@@ -98,7 +98,9 @@ const columns: Column<HttpRouteInfo>[] = [
 
 export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
     const { data: routes, isLoading, error } = useAksHttpRoutes(ns);
-    const ws = useAksWorkspace();
+    const nav = useAksNav();
+  const actions = useAksActions();
+  const ws = useMemo(() => ({ ...nav, ...actions }), [nav, actions]);
     const deleteHttpRoute = useAksDeleteHttpRoute();
 
     const buildMenu = useCallback(

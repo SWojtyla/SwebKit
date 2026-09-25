@@ -6,7 +6,7 @@ import {
     useAksSetCronJobSchedule,
 } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/AksWorkspaceContext";
 import { CronJobScheduleDialog } from "./CronJobScheduleDialog";
 import { nextCronRun } from "@/lib/cron";
 import { formatLocalDateTime } from "@/lib/datetime";
@@ -20,7 +20,7 @@ interface CronJobsTabProps {
 
 export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
     const { data: cronjobs, isLoading, error } = useAksCronJobs(ns);
-    const ws = useAksWorkspace();
+    const ws = useAksActions();
     const suspendMutation = useAksSuspendCronJob();
     const triggerMutation = useAksTriggerCronJob();
     const scheduleMutation = useAksSetCronJobSchedule();

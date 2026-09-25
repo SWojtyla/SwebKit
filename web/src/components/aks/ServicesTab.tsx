@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent } from "react";
 import { useAksServices } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { ServiceInfo } from "@/lib/types";
 
@@ -27,7 +27,7 @@ const columns: Column<ServiceInfo>[] = [
 
 export function ServicesTab({ ns, isMulti }: ServicesTabProps) {
   const { data: services, isLoading, error } = useAksServices(ns);
-  const ws = useAksWorkspace();
+  const ws = useAksActions();
 
   const buildMenu = useCallback((svc: ServiceInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(svc.name) },

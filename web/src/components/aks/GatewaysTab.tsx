@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent } from "react";
 import { useAksGateways } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/AksWorkspaceContext";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { GatewayInfo } from "@/lib/types";
 
@@ -33,7 +33,7 @@ const columns: Column<GatewayInfo>[] = [
 
 export function GatewaysTab({ ns, isMulti }: GatewaysTabProps) {
   const { data: gateways, isLoading, error } = useAksGateways(ns);
-  const ws = useAksWorkspace();
+  const ws = useAksActions();
 
   const buildMenu = useCallback((gw: GatewayInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(gw.name) },

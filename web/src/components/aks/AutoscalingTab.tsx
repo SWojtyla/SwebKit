@@ -10,7 +10,7 @@ import {
     useAksSetScaledJobScalingEnabled,
 } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/AksWorkspaceContext";
 import { Dialog } from "@/components/shared/Dialog";
 import { MoreHorizontal, X } from "lucide-react";
 import type { ContextMenuItem } from "./ContextMenu";
@@ -64,7 +64,7 @@ function HpaTable({
     error: unknown;
     isMulti?: boolean;
 }) {
-    const ws = useAksWorkspace();
+    const ws = useAksActions();
     const scaleMutation = useAksScaleHpa();
     const deleteMutation = useAksDeleteHpa();
     const toggleMutation = useAksSetHpaScalingEnabled();
@@ -351,7 +351,7 @@ function ScaledJobsTable({
     error: unknown;
     isMulti?: boolean;
 }) {
-    const ws = useAksWorkspace();
+    const ws = useAksActions();
     const scaleMutation = useAksScaleScaledJob();
     const deleteMutation = useAksDeleteScaledJob();
     const toggleMutation = useAksSetScaledJobScalingEnabled();
