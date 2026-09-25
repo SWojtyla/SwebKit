@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { useUndeleteBlob } from "@/lib/hooks";
-import { useStoragePageContext } from "./StoragePageContext";
+import {
+    useStorageAccount,
+    useStorageActions,
+    useStorageNav,
+    useStorageQueries,
+} from "./StoragePageContext";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatLocalDateTime } from "@/lib/datetime";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
@@ -14,7 +19,14 @@ interface DeletedBlob {
 }
 
 export function BlobRecoveryPanel() {
-    const ctx = useStoragePageContext();
+    const account = useStorageAccount();
+    const nav = useStorageNav();
+    const queries = useStorageQueries();
+    const actions = useStorageActions();
+    const ctx = useMemo(
+        () => ({ ...account, ...nav, ...queries, ...actions }),
+        [account, nav, queries, actions],
+    );
     const accountId = ctx.resolvedAccountId;
     const container = ctx.selectedContainer;
     const allowMutations = ctx.allowMutations;

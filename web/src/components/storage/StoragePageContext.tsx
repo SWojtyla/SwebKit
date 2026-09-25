@@ -10,7 +10,6 @@ import {
     type JSX,
 } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
-import { useDropzone } from "react-dropzone";
 import {
     useProfile,
     useStorageContainers,
@@ -36,6 +35,12 @@ import {
     loadViewPreference,
     saveViewPreference,
 } from "@/lib/stores/panel-preferences";
+import {
+    useMutationFacade,
+    useQueryFacade,
+    type MutationFacade,
+    type QueryFacade,
+} from "@/lib/queryFacade";
 import type {
     BlobProperties,
     StorageBlobContent,
@@ -54,29 +59,72 @@ import {
 } from "@/lib/storage-blob-sort";
 import { useNotification } from "@/components/layout/NotificationSystem";
 
-export interface StoragePageContextValue {
+// The page state is split into per-churn contexts: a storage-account switch
+// re-renders account consumers only, URL navigation re-renders nav consumers
+// only, and the detail panel's copy/metadata/upload state can't churn the
+// virtualized blob list. Query/mutation results travel through `queryFacade`
+// so their fresh-per-render object identity can't defeat the memos.
+
+export interface StorageAccountContextValue {
     accounts: StorageConfig[];
     activeAccountId: string | null;
     resolvedAccountId: string | null;
     activeAccount: StorageConfig | undefined;
     allowMutations: boolean;
     handleSelectAccount: (id: string) => void;
+}
 
+export interface StorageNavContextValue {
     blobListRef: React.MutableRefObject<HTMLDivElement | null>;
     selectedContainer: string | null;
     handleSelectContainer: (name: string) => void;
-
     currentPrefix: string;
     prefixHistory: string[];
     handleNavigatePrefix: (prefix: string) => void;
     handleBreadcrumb: (index: number) => void;
-
     selectedBlob: string | null;
     handleSelectBlob: (name: string) => void;
+    storageViewMode: "browser" | "recovery";
+    setStorageViewMode: (v: "browser" | "recovery") => void;
+}
 
+export interface StorageShareContextValue {
+    selectedShare: string | null;
+    shareDir: string;
+    shareDirHistory: string[];
+    selectedShareFile: string | null;
+    shareFilter: string;
+    setShareFilter: (v: string) => void;
+    filteredShareEntries: StorageShareEntryItem[];
+    handleSelectShare: (name: string) => void;
+    handleNavigateShareDir: (dir: string) => void;
+    handleShareBreadcrumb: (index: number) => void;
+    handleSelectShareFile: (path: string) => void;
+}
+
+export interface StorageQueriesContextValue {
+    containers: QueryFacade<ReturnType<typeof useStorageContainers>>;
+    blobs: QueryFacade<ReturnType<typeof useStorageBlobs>>;
+    blobProps: QueryFacade<ReturnType<typeof useBlobProperties>>;
+    blobContent: QueryFacade<ReturnType<typeof useBlobContent>>;
+    sasUrl: QueryFacade<ReturnType<typeof useBlobSasUrl>>;
+    blobVersions: QueryFacade<ReturnType<typeof useBlobVersions>>;
+    versionComparison: QueryFacade<ReturnType<typeof useBlobVersionComparison>>;
+    deletedBlobs: QueryFacade<ReturnType<typeof useDeletedBlobs>>;
+    fileShares: QueryFacade<ReturnType<typeof useStorageFileShares>>;
+    shareEntries: QueryFacade<ReturnType<typeof useShareEntries>>;
+    shareFileProps: QueryFacade<ReturnType<typeof useShareFileProperties>>;
+    shareFileContent: QueryFacade<ReturnType<typeof useShareFileContent>>;
+    shareFileSasUrl: QueryFacade<ReturnType<typeof useShareFileSasUrl>>;
+    uploadBlob: MutationFacade<ReturnType<typeof useUploadBlob>>;
+    copyBlob: MutationFacade<ReturnType<typeof useCopyBlob>>;
+    restoreBlobVersion: MutationFacade<ReturnType<typeof useRestoreBlobVersion>>;
+    setBlobMetadata: MutationFacade<ReturnType<typeof useSetBlobMetadata>>;
+}
+
+export interface StorageBrowserContextValue {
     continuationToken: string | null;
     handleLoadMore: () => void;
-
     blobFilter: string;
     setBlobFilter: (v: string) => void;
     blobSortKey: StorageBlobSortKey;
@@ -85,33 +133,11 @@ export interface StoragePageContextValue {
     setBlobSortDir: (v: StorageBlobSortDir) => void;
     displayItems: StorageBlobItem[];
     filteredItems: StorageBlobItem[];
-
     multiSelectMode: boolean;
     setMultiSelectMode: (v: boolean) => void;
     selectedBlobs: Set<string>;
     setSelectedBlobs: (v: Set<string>) => void;
     toggleBlobSelection: (name: string) => void;
-
-    copiedUrl: boolean;
-    handleCopyUrl: (blobName: string) => void;
-    handleCopySasUrl: () => void;
-    handleDownloadBlob: (blobName: string) => Promise<void>;
-    handleBatchDownloadBlobs: (blobNames: string[]) => Promise<void>;
-
-    metadataEditing: boolean;
-    setMetadataEditing: (v: boolean) => void;
-    metadataDraft: Record<string, string>;
-    setMetadataDraft: React.Dispatch<
-        React.SetStateAction<Record<string, string>>
-    >;
-
-    storageViewMode: "browser" | "recovery";
-    setStorageViewMode: (v: "browser" | "recovery") => void;
-    blobDetailTab: "properties" | "versions" | "content";
-    setBlobDetailTab: (v: "properties" | "versions" | "content") => void;
-
-    showSasUrl: boolean;
-    setShowSasUrl: (v: boolean) => void;
 
     showUpload: boolean;
     setShowUpload: (v: boolean) => void;
@@ -121,7 +147,7 @@ export interface StoragePageContextValue {
     setUploadFile: (v: File | null) => void;
     uploadProgress: number;
     setUploadProgress: (v: number) => void;
-    uploadDropzone: ReturnType<typeof useDropzone>;
+    handleUploadDrop: (files: File[]) => void;
     handleUploadConfirm: () => void;
     uploadCheckingOverwrite: boolean;
     uploadOverwriteConfirm: { blobName: string; file: File } | null;
@@ -129,7 +155,20 @@ export interface StoragePageContextValue {
         v: { blobName: string; file: File } | null,
     ) => void;
     handleUploadOverwriteConfirm: () => void;
-    checkBlobExists: (blobName: string) => Promise<boolean>;
+}
+
+export interface StorageDetailContextValue {
+    metadataEditing: boolean;
+    setMetadataEditing: (v: boolean) => void;
+    metadataDraft: Record<string, string>;
+    setMetadataDraft: React.Dispatch<
+        React.SetStateAction<Record<string, string>>
+    >;
+    handleMetadataSave: () => void;
+    blobDetailTab: "properties" | "versions" | "content";
+    setBlobDetailTab: (v: "properties" | "versions" | "content") => void;
+    showSasUrl: boolean;
+    setShowSasUrl: (v: boolean) => void;
 
     showCopyDialog: boolean;
     setShowCopyDialog: (v: boolean) => void;
@@ -155,52 +194,65 @@ export interface StoragePageContextValue {
     versionRestoreId: string | null;
     setVersionRestoreId: (v: string | null) => void;
     handleVersionRestoreConfirm: () => void;
-    handleMetadataSave: () => void;
-
-    // ── File shares ─────────────────────────────────────────────────────────
-    selectedShare: string | null;
-    shareDir: string;
-    shareDirHistory: string[];
-    selectedShareFile: string | null;
-    shareFilter: string;
-    setShareFilter: (v: string) => void;
-    filteredShareEntries: StorageShareEntryItem[];
-    handleSelectShare: (name: string) => void;
-    handleNavigateShareDir: (dir: string) => void;
-    handleShareBreadcrumb: (index: number) => void;
-    handleSelectShareFile: (path: string) => void;
-    handleCopyShareSasUrl: () => void;
-
-    fileShares: ReturnType<typeof useStorageFileShares>;
-    shareEntries: ReturnType<typeof useShareEntries>;
-    shareFileProps: ReturnType<typeof useShareFileProperties>;
-    shareFileContent: ReturnType<typeof useShareFileContent>;
-    shareFileSasUrl: ReturnType<typeof useShareFileSasUrl>;
-
-    containers: ReturnType<typeof useStorageContainers>;
-    blobs: ReturnType<typeof useStorageBlobs>;
-    blobProps: ReturnType<typeof useBlobProperties>;
-    blobContent: ReturnType<typeof useBlobContent>;
-    sasUrl: ReturnType<typeof useBlobSasUrl>;
-    blobVersions: ReturnType<typeof useBlobVersions>;
-    versionComparison: ReturnType<typeof useBlobVersionComparison>;
-    deletedBlobs: ReturnType<typeof useDeletedBlobs>;
-
-    uploadBlob: ReturnType<typeof useUploadBlob>;
-    copyBlob: ReturnType<typeof useCopyBlob>;
-    restoreBlobVersion: ReturnType<typeof useRestoreBlobVersion>;
-    setBlobMetadata: ReturnType<typeof useSetBlobMetadata>;
 }
 
-const StoragePageContext = createContext<StoragePageContextValue | null>(null);
+export interface StorageActionsContextValue {
+    copiedUrl: boolean;
+    handleCopyUrl: (blobName: string) => void;
+    handleCopySasUrl: () => void;
+    handleCopyShareSasUrl: () => void;
+    handleDownloadBlob: (blobName: string) => Promise<void>;
+    handleBatchDownloadBlobs: (blobNames: string[]) => Promise<void>;
+    checkBlobExists: (blobName: string) => Promise<boolean>;
+}
 
-export function useStoragePageContext(): StoragePageContextValue {
-    const ctx = useContext(StoragePageContext);
+const StorageAccountContext =
+    createContext<StorageAccountContextValue | null>(null);
+const StorageNavContext = createContext<StorageNavContextValue | null>(null);
+const StorageShareContext = createContext<StorageShareContextValue | null>(
+    null,
+);
+const StorageQueriesContext =
+    createContext<StorageQueriesContextValue | null>(null);
+const StorageBrowserContext =
+    createContext<StorageBrowserContextValue | null>(null);
+const StorageDetailContext =
+    createContext<StorageDetailContextValue | null>(null);
+const StorageActionsContext =
+    createContext<StorageActionsContextValue | null>(null);
+
+function useScoped<T>(ctx: T | null, name: string): T {
     if (!ctx)
-        throw new Error(
-            "useStoragePageContext must be used within StoragePageProvider",
-        );
+        throw new Error(`${name} must be used within StoragePageProvider`);
     return ctx;
+}
+
+export function useStorageAccount(): StorageAccountContextValue {
+    return useScoped(useContext(StorageAccountContext), "useStorageAccount");
+}
+
+export function useStorageNav(): StorageNavContextValue {
+    return useScoped(useContext(StorageNavContext), "useStorageNav");
+}
+
+export function useStorageShare(): StorageShareContextValue {
+    return useScoped(useContext(StorageShareContext), "useStorageShare");
+}
+
+export function useStorageQueries(): StorageQueriesContextValue {
+    return useScoped(useContext(StorageQueriesContext), "useStorageQueries");
+}
+
+export function useStorageBrowser(): StorageBrowserContextValue {
+    return useScoped(useContext(StorageBrowserContext), "useStorageBrowser");
+}
+
+export function useStorageDetail(): StorageDetailContextValue {
+    return useScoped(useContext(StorageDetailContext), "useStorageDetail");
+}
+
+export function useStorageActions(): StorageActionsContextValue {
+    return useScoped(useContext(StorageActionsContext), "useStorageActions");
 }
 
 export function StoragePageProvider({
@@ -445,6 +497,12 @@ export function StoragePageProvider({
         selectedContainer,
         selectedBlob,
     );
+    // The mutation objects are fresh each render; the `mutate` functions on them
+    // are referentially stable. Callbacks dep on the functions, not the objects.
+    const { mutate: uploadMutate } = uploadBlob;
+    const { mutate: copyMutate } = copyBlob;
+    const { mutate: restoreVersionMutate } = restoreBlobVersion;
+    const { mutate: setMetadataMutate } = setBlobMetadata;
     const deletedBlobs = useDeletedBlobs(resolvedAccountId, selectedContainer);
     const fileShares = useStorageFileShares(resolvedAccountId);
     const shareEntries = useShareEntries(
@@ -468,17 +526,16 @@ export function StoragePageProvider({
         selectedShareFile,
         60,
     );
-    const uploadDropzone = useDropzone({
-        onDrop: (files: File[]) => {
-            const file = files[0];
-            if (!file) return;
-            setUploadFile(file);
-            setUploadBlobName(file.name);
-            setUploadProgress(0);
-        },
-        multiple: false,
-        disabled: !allowMutations,
-    });
+    // `useDropzone` itself lives in BlobBrowserPanel — its result is a fresh
+    // object every render, which would defeat every context memo it travelled
+    // through. The drop side-effect stays here as a stable callback.
+    const handleUploadDrop = useCallback((files: File[]) => {
+        const file = files[0];
+        if (!file) return;
+        setUploadFile(file);
+        setUploadBlobName(file.name);
+        setUploadProgress(0);
+    }, []);
 
     const handleSelectAccount = useCallback(
         (id: string) => {
@@ -797,7 +854,7 @@ export function StoragePageProvider({
 
     const performUpload = useCallback(
         (blobName: string, file: File) => {
-            uploadBlob.mutate(
+            uploadMutate(
                 { blobName, file, onProgress: setUploadProgress },
                 {
                     onSuccess: () => {
@@ -812,7 +869,7 @@ export function StoragePageProvider({
                 },
             );
         },
-        [uploadBlob, notify],
+        [uploadMutate, notify],
     );
 
     // Upload previously overwrote an existing blob of the same name with no warning at all,
@@ -845,21 +902,21 @@ export function StoragePageProvider({
     }, [uploadOverwriteConfirm, performUpload]);
 
     const handleMetadataSave = useCallback(() => {
-        setBlobMetadata.mutate(metadataDraft, {
+        setMetadataMutate(metadataDraft, {
             onSuccess: () => {
                 notify("success", "Metadata saved");
                 setMetadataEditing(false);
             },
             onError: (e) => notify("error", "Metadata save failed", String(e)),
         });
-    }, [setBlobMetadata, metadataDraft, notify]);
+    }, [setMetadataMutate, metadataDraft, notify]);
 
     const handleCopyConfirm = useCallback(() => {
         if (copyOverwrite) {
             setCopyConfirming(true);
             return;
         }
-        copyBlob.mutate(
+        copyMutate(
             {
                 sourceContainer: selectedContainer!,
                 sourceBlob: selectedBlob!,
@@ -888,7 +945,7 @@ export function StoragePageProvider({
         );
     }, [
         copyOverwrite,
-        copyBlob,
+        copyMutate,
         selectedContainer,
         selectedBlob,
         copyDestContainer,
@@ -897,7 +954,7 @@ export function StoragePageProvider({
     ]);
 
     const handleCopyOverwriteConfirm = useCallback(() => {
-        copyBlob.mutate(
+        copyMutate(
             {
                 sourceContainer: selectedContainer!,
                 sourceBlob: selectedBlob!,
@@ -926,7 +983,7 @@ export function StoragePageProvider({
             },
         );
     }, [
-        copyBlob,
+        copyMutate,
         selectedContainer,
         selectedBlob,
         copyDestContainer,
@@ -936,16 +993,36 @@ export function StoragePageProvider({
 
     const handleVersionRestoreConfirm = useCallback(() => {
         if (!versionRestoreId) return;
-        restoreBlobVersion.mutate(versionRestoreId, {
+        restoreVersionMutate(versionRestoreId, {
             onSuccess: () => {
                 notify("success", "Version restored", versionRestoreId);
                 setVersionRestoreId(null);
             },
             onError: (e) => notify("error", "Restore failed", String(e)),
         });
-    }, [versionRestoreId, restoreBlobVersion, notify]);
+    }, [versionRestoreId, restoreVersionMutate, notify]);
 
-    const value: StoragePageContextValue = useMemo(
+    // Query/mutation objects are fresh every render — facades expose stable
+    // identities so the queries context only notifies on real data changes.
+    const containersF = useQueryFacade(containers);
+    const blobsF = useQueryFacade(blobs);
+    const blobPropsF = useQueryFacade(blobProps);
+    const blobContentF = useQueryFacade(blobContent);
+    const sasUrlF = useQueryFacade(sasUrl);
+    const blobVersionsF = useQueryFacade(blobVersions);
+    const versionComparisonF = useQueryFacade(versionComparison);
+    const deletedBlobsF = useQueryFacade(deletedBlobs);
+    const fileSharesF = useQueryFacade(fileShares);
+    const shareEntriesF = useQueryFacade(shareEntries);
+    const shareFilePropsF = useQueryFacade(shareFileProps);
+    const shareFileContentF = useQueryFacade(shareFileContent);
+    const shareFileSasUrlF = useQueryFacade(shareFileSasUrl);
+    const uploadBlobF = useMutationFacade(uploadBlob);
+    const copyBlobF = useMutationFacade(copyBlob);
+    const restoreBlobVersionF = useMutationFacade(restoreBlobVersion);
+    const setBlobMetadataF = useMutationFacade(setBlobMetadata);
+
+    const accountValue: StorageAccountContextValue = useMemo(
         () => ({
             accounts,
             activeAccountId,
@@ -953,98 +1030,47 @@ export function StoragePageProvider({
             activeAccount,
             allowMutations,
             handleSelectAccount,
+        }),
+        [
+            accounts,
+            activeAccountId,
+            resolvedAccountId,
+            activeAccount,
+            allowMutations,
+            handleSelectAccount,
+        ],
+    );
 
+    const navValue: StorageNavContextValue = useMemo(
+        () => ({
             blobListRef,
             selectedContainer,
             handleSelectContainer,
-
             currentPrefix,
             prefixHistory,
             handleNavigatePrefix,
             handleBreadcrumb,
-
             selectedBlob,
             handleSelectBlob,
-
-            continuationToken,
-            handleLoadMore,
-
-            blobFilter,
-            setBlobFilter,
-            blobSortKey,
-            setBlobSortKey,
-            blobSortDir,
-            setBlobSortDir,
-            displayItems,
-            filteredItems,
-
-            multiSelectMode,
-            setMultiSelectMode,
-            selectedBlobs,
-            setSelectedBlobs,
-            toggleBlobSelection,
-
-            copiedUrl,
-            handleCopyUrl,
-            handleCopySasUrl,
-            handleDownloadBlob,
-            handleBatchDownloadBlobs,
-
-            metadataEditing,
-            setMetadataEditing,
-            metadataDraft,
-            setMetadataDraft,
-            handleMetadataSave,
-
             storageViewMode,
             setStorageViewMode,
-            blobDetailTab,
-            setBlobDetailTab,
+        }),
+        [
+            selectedContainer,
+            handleSelectContainer,
+            currentPrefix,
+            prefixHistory,
+            handleNavigatePrefix,
+            handleBreadcrumb,
+            selectedBlob,
+            handleSelectBlob,
+            storageViewMode,
+            setStorageViewMode,
+        ],
+    );
 
-            showSasUrl,
-            setShowSasUrl,
-
-            showUpload,
-            setShowUpload,
-            uploadBlobName,
-            setUploadBlobName,
-            uploadFile,
-            setUploadFile,
-            uploadProgress,
-            setUploadProgress,
-            uploadDropzone,
-            handleUploadConfirm,
-            uploadCheckingOverwrite,
-            uploadOverwriteConfirm,
-            setUploadOverwriteConfirm,
-            handleUploadOverwriteConfirm,
-            checkBlobExists,
-
-            showCopyDialog,
-            setShowCopyDialog,
-            copyDestContainer,
-            setCopyDestContainer,
-            copyDestBlob,
-            setCopyDestBlob,
-            copyOverwrite,
-            setCopyOverwrite,
-            copyConfirming,
-            setCopyConfirming,
-            copyStatus,
-            setCopyStatus,
-            handleCopyConfirm,
-            handleCopyOverwriteConfirm,
-
-            versionBaseId,
-            setVersionBaseId,
-            versionCompareId,
-            setVersionCompareId,
-            versionCompareRequested,
-            setVersionCompareRequested,
-            versionRestoreId,
-            setVersionRestoreId,
-            handleVersionRestoreConfirm,
-
+    const shareValue: StorageShareContextValue = useMemo(
+        () => ({
             selectedShare,
             shareDir,
             shareDirHistory,
@@ -1056,44 +1082,64 @@ export function StoragePageProvider({
             handleNavigateShareDir,
             handleShareBreadcrumb,
             handleSelectShareFile,
-            handleCopyShareSasUrl,
-
-            fileShares,
-            shareEntries,
-            shareFileProps,
-            shareFileContent,
-            shareFileSasUrl,
-
-            containers,
-            blobs,
-            blobProps,
-            blobContent,
-            sasUrl,
-            blobVersions,
-            versionComparison,
-            deletedBlobs,
-
-            uploadBlob,
-            copyBlob,
-            restoreBlobVersion,
-            setBlobMetadata,
         }),
         [
-            accounts,
-            activeAccountId,
-            resolvedAccountId,
-            activeAccount,
-            allowMutations,
-            handleSelectAccount,
-            blobListRef,
-            selectedContainer,
-            handleSelectContainer,
-            currentPrefix,
-            prefixHistory,
-            handleNavigatePrefix,
-            handleBreadcrumb,
-            selectedBlob,
-            handleSelectBlob,
+            selectedShare,
+            shareDir,
+            shareDirHistory,
+            selectedShareFile,
+            shareFilter,
+            filteredShareEntries,
+            handleSelectShare,
+            handleNavigateShareDir,
+            handleShareBreadcrumb,
+            handleSelectShareFile,
+        ],
+    );
+
+    const queriesValue: StorageQueriesContextValue = useMemo(
+        () => ({
+            containers: containersF,
+            blobs: blobsF,
+            blobProps: blobPropsF,
+            blobContent: blobContentF,
+            sasUrl: sasUrlF,
+            blobVersions: blobVersionsF,
+            versionComparison: versionComparisonF,
+            deletedBlobs: deletedBlobsF,
+            fileShares: fileSharesF,
+            shareEntries: shareEntriesF,
+            shareFileProps: shareFilePropsF,
+            shareFileContent: shareFileContentF,
+            shareFileSasUrl: shareFileSasUrlF,
+            uploadBlob: uploadBlobF,
+            copyBlob: copyBlobF,
+            restoreBlobVersion: restoreBlobVersionF,
+            setBlobMetadata: setBlobMetadataF,
+        }),
+        [
+            containersF,
+            blobsF,
+            blobPropsF,
+            blobContentF,
+            sasUrlF,
+            blobVersionsF,
+            versionComparisonF,
+            deletedBlobsF,
+            fileSharesF,
+            shareEntriesF,
+            shareFilePropsF,
+            shareFileContentF,
+            shareFileSasUrlF,
+            uploadBlobF,
+            copyBlobF,
+            restoreBlobVersionF,
+            setBlobMetadataF,
+        ],
+    );
+
+    const browserValue: StorageBrowserContextValue = useMemo(
+        () => ({
             continuationToken,
             handleLoadMore,
             blobFilter,
@@ -1109,22 +1155,6 @@ export function StoragePageProvider({
             selectedBlobs,
             setSelectedBlobs,
             toggleBlobSelection,
-            copiedUrl,
-            handleCopyUrl,
-            handleCopySasUrl,
-            handleDownloadBlob,
-            handleBatchDownloadBlobs,
-            metadataEditing,
-            setMetadataEditing,
-            metadataDraft,
-            setMetadataDraft,
-            handleMetadataSave,
-            storageViewMode,
-            setStorageViewMode,
-            blobDetailTab,
-            setBlobDetailTab,
-            showSasUrl,
-            setShowSasUrl,
             showUpload,
             setShowUpload,
             uploadBlobName,
@@ -1133,13 +1163,47 @@ export function StoragePageProvider({
             setUploadFile,
             uploadProgress,
             setUploadProgress,
-            uploadDropzone,
+            handleUploadDrop,
             handleUploadConfirm,
             uploadCheckingOverwrite,
             uploadOverwriteConfirm,
             setUploadOverwriteConfirm,
             handleUploadOverwriteConfirm,
-            checkBlobExists,
+        }),
+        [
+            continuationToken,
+            handleLoadMore,
+            blobFilter,
+            blobSortKey,
+            blobSortDir,
+            displayItems,
+            filteredItems,
+            multiSelectMode,
+            selectedBlobs,
+            toggleBlobSelection,
+            showUpload,
+            uploadBlobName,
+            uploadFile,
+            uploadProgress,
+            handleUploadDrop,
+            handleUploadConfirm,
+            uploadCheckingOverwrite,
+            uploadOverwriteConfirm,
+            handleUploadOverwriteConfirm,
+        ],
+    );
+
+    const detailValue: StorageDetailContextValue = useMemo(
+        () => ({
+            metadataEditing,
+            setMetadataEditing,
+            metadataDraft,
+            setMetadataDraft,
+            handleMetadataSave,
+            blobDetailTab,
+            setBlobDetailTab,
+            showSasUrl,
+            setShowSasUrl,
             showCopyDialog,
             setShowCopyDialog,
             copyDestContainer,
@@ -1163,40 +1227,67 @@ export function StoragePageProvider({
             versionRestoreId,
             setVersionRestoreId,
             handleVersionRestoreConfirm,
-            selectedShare,
-            shareDir,
-            shareDirHistory,
-            selectedShareFile,
-            shareFilter,
-            filteredShareEntries,
-            handleSelectShare,
-            handleNavigateShareDir,
-            handleShareBreadcrumb,
-            handleSelectShareFile,
+        }),
+        [
+            metadataEditing,
+            metadataDraft,
+            handleMetadataSave,
+            blobDetailTab,
+            showSasUrl,
+            showCopyDialog,
+            copyDestContainer,
+            copyDestBlob,
+            copyOverwrite,
+            copyConfirming,
+            copyStatus,
+            handleCopyConfirm,
+            handleCopyOverwriteConfirm,
+            versionBaseId,
+            versionCompareId,
+            versionCompareRequested,
+            versionRestoreId,
+            handleVersionRestoreConfirm,
+        ],
+    );
+
+    const actionsValue: StorageActionsContextValue = useMemo(
+        () => ({
+            copiedUrl,
+            handleCopyUrl,
+            handleCopySasUrl,
             handleCopyShareSasUrl,
-            fileShares,
-            shareEntries,
-            shareFileProps,
-            shareFileContent,
-            shareFileSasUrl,
-            containers,
-            blobs,
-            blobProps,
-            blobContent,
-            sasUrl,
-            blobVersions,
-            versionComparison,
-            deletedBlobs,
-            uploadBlob,
-            copyBlob,
-            restoreBlobVersion,
-            setBlobMetadata,
+            handleDownloadBlob,
+            handleBatchDownloadBlobs,
+            checkBlobExists,
+        }),
+        [
+            copiedUrl,
+            handleCopyUrl,
+            handleCopySasUrl,
+            handleCopyShareSasUrl,
+            handleDownloadBlob,
+            handleBatchDownloadBlobs,
+            checkBlobExists,
         ],
     );
 
     return (
-        <StoragePageContext.Provider value={value}>
-            {children}
-        </StoragePageContext.Provider>
+        <StorageAccountContext.Provider value={accountValue}>
+            <StorageNavContext.Provider value={navValue}>
+                <StorageShareContext.Provider value={shareValue}>
+                    <StorageQueriesContext.Provider value={queriesValue}>
+                        <StorageBrowserContext.Provider value={browserValue}>
+                            <StorageDetailContext.Provider value={detailValue}>
+                                <StorageActionsContext.Provider
+                                    value={actionsValue}
+                                >
+                                    {children}
+                                </StorageActionsContext.Provider>
+                            </StorageDetailContext.Provider>
+                        </StorageBrowserContext.Provider>
+                    </StorageQueriesContext.Provider>
+                </StorageShareContext.Provider>
+            </StorageNavContext.Provider>
+        </StorageAccountContext.Provider>
     );
 }

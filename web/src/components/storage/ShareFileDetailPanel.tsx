@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import { Check, Link as LinkIcon } from "lucide-react";
-import { useStoragePageContext } from "./StoragePageContext";
+import {
+    useStorageActions,
+    useStorageQueries,
+    useStorageShare,
+} from "./StoragePageContext";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatLocalDateTime } from "@/lib/datetime";
 import { tryPrettifyJson } from "@/lib/pretty-json";
@@ -18,7 +22,13 @@ const CONTENT_PRETTY_PREF_KEY = "storage-share-content-pretty";
  * editing, recovery) that file shares don't support backend-side.
  */
 export function ShareFileDetailPanel() {
-    const ctx = useStoragePageContext();
+    const share = useStorageShare();
+    const queries = useStorageQueries();
+    const actions = useStorageActions();
+    const ctx = useMemo(
+        () => ({ ...share, ...queries, ...actions }),
+        [share, queries, actions],
+    );
     const [prettyPrinted, setPrettyPrinted] = useState<boolean>(() =>
         loadViewPreference<boolean>(CONTENT_PRETTY_PREF_KEY, true),
     );

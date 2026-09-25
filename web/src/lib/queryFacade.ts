@@ -14,7 +14,15 @@ import type { UseInfiniteQueryResult, UseQueryResult } from "@tanstack/react-que
  */
 export type QueryFacade<Q extends UseQueryResult<unknown, unknown>> = Pick<
   Q,
-  "data" | "error" | "status" | "isLoading" | "isFetching" | "isError" | "isSuccess" | "refetch"
+  | "data"
+  | "error"
+  | "status"
+  | "isLoading"
+  | "isFetching"
+  | "isError"
+  | "isSuccess"
+  | "refetch"
+  | "dataUpdatedAt"
 >;
 
 export type InfiniteQueryFacade<Q extends UseInfiniteQueryResult<unknown, unknown>> = Pick<
@@ -61,8 +69,19 @@ export function useQueryFacade<Q extends UseQueryResult<unknown, unknown>>(
       isError: q.isError,
       isSuccess: q.isSuccess,
       refetch: q.refetch,
+      dataUpdatedAt: q.dataUpdatedAt,
     }),
-    [q.data, q.error, q.status, q.isLoading, q.isFetching, q.isError, q.isSuccess, q.refetch],
+    [
+      q.data,
+      q.error,
+      q.status,
+      q.isLoading,
+      q.isFetching,
+      q.isError,
+      q.isSuccess,
+      q.refetch,
+      q.dataUpdatedAt,
+    ],
   );
 }
 

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
     Download,
     Upload,
@@ -6,7 +7,14 @@ import {
     ArrowUp,
     ArrowDown,
 } from "lucide-react";
-import { useStoragePageContext } from "./StoragePageContext";
+import {
+    useStorageAccount,
+    useStorageActions,
+    useStorageBrowser,
+    useStorageNav,
+    useStorageQueries,
+} from "./StoragePageContext";
+import { useDropzone } from "react-dropzone";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatLocalDateTime } from "@/lib/datetime";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -19,7 +27,22 @@ import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 
 export function BlobBrowserPanel() {
-    const ctx = useStoragePageContext();
+    const account = useStorageAccount();
+    const nav = useStorageNav();
+    const queries = useStorageQueries();
+    const browser = useStorageBrowser();
+    const actions = useStorageActions();
+    const ctx = useMemo(
+        () => ({ ...account, ...nav, ...queries, ...browser, ...actions }),
+        [account, nav, queries, browser, actions],
+    );
+    // useDropzone returns a fresh object each render — kept local rather than
+    // carried in a memoized context value.
+    const uploadDropzone = useDropzone({
+        onDrop: browser.handleUploadDrop,
+        multiple: false,
+        disabled: !account.allowMutations,
+    });
 
     // Owned here rather than in the page context: `useVirtualizer` returns a stable
     // instance whose internals mutate on scroll, so a memoized context value holding it
@@ -237,16 +260,16 @@ export function BlobBrowserPanel() {
                                 </h4>
                                 <div className="space-y-2">
                                     <div
-                                        {...ctx.uploadDropzone.getRootProps()}
+                                        {...uploadDropzone.getRootProps()}
                                         className={`cursor-pointer rounded border border-dashed px-3 py-4 text-center text-xs ${
-                                            ctx.uploadDropzone.isDragActive
+                                            uploadDropzone.isDragActive
                                                 ? "border-primary bg-primary/10"
                                                 : "hover:bg-accent"
                                         }`}
                                         data-testid="storage-upload-dropzone"
                                     >
                                         <input
-                                            {...ctx.uploadDropzone.getInputProps()}
+                                            {...uploadDropzone.getInputProps()}
                                             data-testid="storage-upload-file"
                                         />
                                         {ctx.uploadFile ? (
@@ -257,7 +280,7 @@ export function BlobBrowserPanel() {
                                                 )}
                                                 )
                                             </span>
-                                        ) : ctx.uploadDropzone.isDragActive ? (
+                                        ) : uploadDropzone.isDragActive ? (
                                             <span>Drop the file here</span>
                                         ) : (
                                             <span>

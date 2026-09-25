@@ -10,7 +10,13 @@ import {
     Sparkles,
 } from "lucide-react";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
-import { useStoragePageContext } from "./StoragePageContext";
+import {
+    useStorageAccount,
+    useStorageActions,
+    useStorageDetail,
+    useStorageNav,
+    useStorageQueries,
+} from "./StoragePageContext";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { useScreenStateProvider } from "@/lib/stores/screen-state";
 import { tryPrettifyJson } from "@/lib/pretty-json";
@@ -30,7 +36,15 @@ function formatDate(date: string | null | undefined): string {
 }
 
 export function BlobDetailPanel() {
-    const ctx = useStoragePageContext();
+    const account = useStorageAccount();
+    const nav = useStorageNav();
+    const queries = useStorageQueries();
+    const detail = useStorageDetail();
+    const actions = useStorageActions();
+    const ctx = useMemo(
+        () => ({ ...account, ...nav, ...queries, ...detail, ...actions }),
+        [account, nav, queries, detail, actions],
+    );
     const [askAiOpen, setAskAiOpen] = useState(false);
     // Pretty by default and remembered, matching the Service Bus message body viewer.
     const [prettyPrinted, setPrettyPrinted] = useState<boolean>(() =>
