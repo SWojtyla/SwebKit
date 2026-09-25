@@ -431,8 +431,10 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
 
 - ~~`*PageContext.tsx` god-contexts~~ — all four split done (Redis 6, AKS 6,
   Storage 7, ApiClient 2).
-- `web/src/lib/types.ts` (1516) — flat bag of ~159 types mirroring sidecar contracts;
-  per-domain split is cosmetic, low priority.
+- ~~`web/src/lib/types.ts` (1516)~~ — **split done**: `lib/types/` — 160 types
+  across `app`/`workspace`/`agent`/`apiClient`/`serviceBus`/`aks`/`redis`/
+  `storage`/`sql`/`observability`; cross-domain refs are explicit
+  `import type`s; `index.ts` barrel keeps all existing import paths.
 - ~~`web/src/lib/api.ts` (796)~~ — **split done**: `lib/api/` directory —
   `transport.ts` (base-url init, `apiFetch`/`apiSend`/`apiUpload`,
   `streamAgentChat`, `postScreenState`), `monitoring.ts`, `redis.ts`,
