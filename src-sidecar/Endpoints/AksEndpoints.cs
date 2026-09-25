@@ -269,7 +269,7 @@ public static class AksEndpoints
 
         app.MapGet("/api/aks/{ns}/pods", GetPodsAsync);
 
-        app.MapGet("/api/aks/{ns}/statefulsets", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/statefulsets", async (string ns, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -277,7 +277,7 @@ public static class AksEndpoints
             return Results.Ok(sts);
         });
 
-        app.MapGet("/api/aks/{ns}/services", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/services", async (string ns, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -285,7 +285,7 @@ public static class AksEndpoints
             return Results.Ok(services);
         });
 
-        app.MapGet("/api/aks/{ns}/ingresses", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/ingresses", async (string ns, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -293,7 +293,7 @@ public static class AksEndpoints
             return Results.Ok(ingresses);
         });
 
-        app.MapGet("/api/aks/{ns}/events", async (string ns, int? limit, string? involvedObject, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/events", async (string ns, int? limit, string? involvedObject, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -305,7 +305,7 @@ public static class AksEndpoints
 
         // ── Helm ───────────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/helm-releases", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/helm-releases", async (string ns, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -313,35 +313,35 @@ public static class AksEndpoints
             return Results.Ok(releases);
         });
 
-        app.MapGet("/api/aks/{ns}/helm-releases/{release}/history", async (string ns, string release, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/helm-releases/{release}/history", async (string ns, string release, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var history = await client.GetHelmReleaseHistoryAsync(ns, release, ct);
             return Results.Ok(history);
         });
 
-        app.MapGet("/api/aks/{ns}/helm-releases/{release}/values", async (string ns, string release, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/helm-releases/{release}/values", async (string ns, string release, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var values = await client.GetHelmReleaseValuesAsync(ns, release, ct);
             return Results.Ok(values);
         });
 
-        app.MapGet("/api/aks/{ns}/helm-releases/{release}/notes", async (string ns, string release, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/helm-releases/{release}/notes", async (string ns, string release, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var notes = await client.GetHelmReleaseNotesAsync(ns, release, ct);
             return Results.Ok(new { notes });
         });
 
-        app.MapGet("/api/aks/{ns}/helm-releases/{release}/manifest", async (string ns, string release, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/helm-releases/{release}/manifest", async (string ns, string release, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var manifest = await client.GetHelmReleaseManifestAsync(ns, release, ct);
             return Results.Ok(new { manifest });
         });
 
-        app.MapPost("/api/aks/{ns}/helm-releases/{release}/rollback", async (string ns, string release, int targetRevision, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/helm-releases/{release}/rollback", async (string ns, string release, int targetRevision, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             await client.RollbackHelmReleaseAsync(ns, release, targetRevision, ct);
@@ -350,7 +350,7 @@ public static class AksEndpoints
 
         // ── ConfigMaps & Secrets ───────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/configmaps", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/configmaps", async (string ns, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -370,14 +370,14 @@ public static class AksEndpoints
             }));
         });
 
-        app.MapGet("/api/aks/{ns}/configmaps/{name}/values", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/configmaps/{name}/values", async (string ns, string name, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var values = await client.GetConfigMapValuesAsync(ns, name, ct);
             return Results.Ok(values);
         });
 
-        app.MapGet("/api/aks/{ns}/secrets", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/secrets", async (string ns, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -388,7 +388,7 @@ public static class AksEndpoints
             return Results.Ok(secrets);
         });
 
-        app.MapGet("/api/aks/{ns}/secrets/{name}/values", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/secrets/{name}/values", async (string ns, string name, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var values = await client.GetSecretValuesAsync(ns, name, ct);
@@ -397,21 +397,21 @@ public static class AksEndpoints
 
         // ── YAML ───────────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/yaml/{kind}/{name}", async (string ns, string kind, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/yaml/{kind}/{name}", async (string ns, string kind, string name, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var yaml = await client.GetResourceYamlAsync(ns, kind, name, ct);
             return Results.Text(yaml, "text/yaml");
         });
 
-        app.MapPost("/api/aks/{ns}/yaml/{kind}/{name}", async (string ns, string kind, string name, YamlApplyRequest req, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/yaml/{kind}/{name}", async (string ns, string kind, string name, YamlApplyRequest req, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             await client.ApplyResourceYamlAsync(ns, kind, name, req.Yaml, ct);
             return Results.Ok();
         });
 
-        app.MapPost("/api/aks/{ns}/yaml/validate", async (string ns, YamlValidateRequest req, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/yaml/validate", async (string ns, YamlValidateRequest req, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var error = await client.ValidateResourceYamlAsync(ns, req.Yaml, ct);
@@ -420,42 +420,42 @@ public static class AksEndpoints
 
         // ── Actions ────────────────────────────────────────────────────────────
 
-        app.MapPost("/api/aks/{ns}/deployments/{name}/restart", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/deployments/{name}/restart", async (string ns, string name, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             await client.RestartDeploymentAsync(ns, name, ct);
             return Results.Ok();
         });
 
-        app.MapPost("/api/aks/{ns}/deployments/{name}/scale", async (string ns, string name, int replicas, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/deployments/{name}/scale", async (string ns, string name, int replicas, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             await client.ScaleDeploymentAsync(ns, name, replicas, ct);
             return Results.Ok();
         });
 
-        app.MapPost("/api/aks/{ns}/pods/{name}/delete", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/pods/{name}/delete", async (string ns, string name, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             await client.DeletePodAsync(ns, name, ct);
             return Results.Ok();
         });
 
-        app.MapPost("/api/aks/{ns}/statefulsets/{name}/restart", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/statefulsets/{name}/restart", async (string ns, string name, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             await client.RestartStatefulSetAsync(ns, name, ct);
             return Results.Ok();
         });
 
-        app.MapPost("/api/aks/{ns}/statefulsets/{name}/scale", async (string ns, string name, int replicas, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/statefulsets/{name}/scale", async (string ns, string name, int replicas, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             await client.ScaleStatefulSetAsync(ns, name, replicas, ct);
             return Results.Ok();
         });
 
-        app.MapDelete("/api/aks/{ns}/ingresses/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapDelete("/api/aks/{ns}/ingresses/{name}", async (string ns, string name, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             await client.DeleteIngressAsync(ns, name, ct);
@@ -466,7 +466,7 @@ public static class AksEndpoints
 
         app.MapGet("/api/aks/{ns}/hpas", GetHpasAsync);
 
-        app.MapPost("/api/aks/{ns}/hpas/{name}/scale", async (string ns, string name, ScaleHpaRequest dto, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/hpas/{name}/scale", async (string ns, string name, ScaleHpaRequest dto, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -474,7 +474,7 @@ public static class AksEndpoints
             return Results.Ok();
         });
 
-        app.MapDelete("/api/aks/{ns}/hpas/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapDelete("/api/aks/{ns}/hpas/{name}", async (string ns, string name, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -482,7 +482,7 @@ public static class AksEndpoints
             return Results.NoContent();
         });
 
-        app.MapPost("/api/aks/{ns}/hpas/{name}/scaling-enabled", async (string ns, string name, SetScalingEnabledRequest dto, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/hpas/{name}/scaling-enabled", async (string ns, string name, SetScalingEnabledRequest dto, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -492,7 +492,7 @@ public static class AksEndpoints
 
         // ── KEDA ScaledJobs ──────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/scaledjobs", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/scaledjobs", async (string ns, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -500,7 +500,7 @@ public static class AksEndpoints
             return Results.Ok(scaledJobs);
         });
 
-        app.MapPost("/api/aks/{ns}/scaledjobs/{name}/scaling-enabled", async (string ns, string name, SetScalingEnabledRequest dto, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/scaledjobs/{name}/scaling-enabled", async (string ns, string name, SetScalingEnabledRequest dto, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -508,7 +508,7 @@ public static class AksEndpoints
             return Results.Ok();
         });
 
-        app.MapPost("/api/aks/{ns}/scaledjobs/{name}/scale", async (string ns, string name, ScaleHpaRequest dto, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/scaledjobs/{name}/scale", async (string ns, string name, ScaleHpaRequest dto, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -516,7 +516,7 @@ public static class AksEndpoints
             return Results.Ok();
         });
 
-        app.MapDelete("/api/aks/{ns}/scaledjobs/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapDelete("/api/aks/{ns}/scaledjobs/{name}", async (string ns, string name, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -526,7 +526,7 @@ public static class AksEndpoints
 
         // ── Jobs & CronJobs ────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/cronjobs", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/cronjobs", async (string ns, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -534,7 +534,7 @@ public static class AksEndpoints
             return Results.Ok(cronJobs);
         });
 
-        app.MapPost("/api/aks/{ns}/cronjobs/{name}/suspend", async (string ns, string name, SuspendCronJobRequest dto, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapPost("/api/aks/{ns}/cronjobs/{name}/suspend", async (string ns, string name, SuspendCronJobRequest dto, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -546,7 +546,7 @@ public static class AksEndpoints
 
         app.MapPost("/api/aks/{ns}/cronjobs/{name}/schedule", SetCronJobScheduleAsync);
 
-        app.MapGet("/api/aks/{ns}/jobs", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/jobs", async (string ns, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -558,21 +558,21 @@ public static class AksEndpoints
 
         app.MapGet("/api/aks/{ns}/httproutes", GetHttpRoutesAsync);
 
-        app.MapDelete("/api/aks/{ns}/httproutes/{name}", async (string ns, string name, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapDelete("/api/aks/{ns}/httproutes/{name}", async (string ns, string name, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             await client.DeleteHttpRouteAsync(ns, name, ct);
             return Results.Ok();
         });
 
-        app.MapGet("/api/aks/gatewayclasses", async (ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/gatewayclasses", async (IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var classes = await client.GetGatewayClassesAsync(ct);
             return Results.Ok(classes);
         });
 
-        app.MapGet("/api/aks/{ns}/gateways", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/gateways", async (string ns, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -586,7 +586,7 @@ public static class AksEndpoints
 
         // ── Container details ──────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/pods/{podName}/containers", async (string ns, string podName, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/pods/{podName}/containers", async (string ns, string podName, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var containers = await client.GetContainerDetailsAsync(ns, podName, ct);
@@ -595,7 +595,7 @@ public static class AksEndpoints
 
         // ── Pod metrics ────────────────────────────────────────────────────────
 
-        app.MapGet("/api/aks/{ns}/pod-metrics", async (string ns, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, CancellationToken ct) =>
+        app.MapGet("/api/aks/{ns}/pod-metrics", async (string ns, IMonitoringConnectionPool pool, CancellationToken ct) =>
         {
             var client = GetClient(pool);
             var namespaces = await ResolveNamespacesAsync(client, ns, ct);
@@ -611,7 +611,7 @@ public static class AksEndpoints
         // code runs — which a caller that reasonably leaves out a flag it doesn't care about
         // will hit silently. That's exactly what broke every multi-pod log request: the
         // client never sent `previousContainer` at all.
-        app.MapGet("/api/aks/{ns}/pods/{podName}/logs/stream", (HttpContext ctx, string ns, string podName, string? container, ProfileRepository profile, DemoModeService demo, IMonitoringConnectionPool pool, ILogger<Program> logger, int tail = 0, bool follow = false, int? sinceSeconds = null, bool previousContainer = false, string? filter = null, bool timestamps = false, CancellationToken ct = default) =>
+        app.MapGet("/api/aks/{ns}/pods/{podName}/logs/stream", (HttpContext ctx, string ns, string podName, string? container, IMonitoringConnectionPool pool, ILogger<Program> logger, int tail = 0, bool follow = false, int? sinceSeconds = null, bool previousContainer = false, string? filter = null, bool timestamps = false, CancellationToken ct = default) =>
             StreamPodLogsAsync(
                 ctx,
                 GetClient(pool),
