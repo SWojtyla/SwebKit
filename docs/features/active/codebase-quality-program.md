@@ -488,11 +488,14 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   `settings.ts`, `aks.ts`, `apiClient.ts`; `index.ts` re-exports everything
   so all 43 `lib/api` import sites are unchanged. `SIDECAR_BASE_URL`'s live
   binding survives `export *`.
-- `docs/architecture/functionalities/*.md` — current-stack rewrites complete for
-  Dashboard, Service Bus, and Settings/Configuration (React components, hooks,
-  sidecar endpoints, persistence, and current validation paths). AKS, Agent,
-  Observability, and the remaining API Client MAUI-auth reference still need
-  the same treatment.
+- ~~`docs/architecture/functionalities/*.md` MAUI-era details~~ — **current-stack
+  rewrite complete**: Dashboard, Service Bus, Settings/Configuration, AKS,
+  Agent, Observability, Redis, and Storage now document the live React/Tauri/
+  sidecar flows and current validation paths. API Client's false MAUI
+  `WebAuthenticator` claim was corrected: the sidecar supports OAuth client
+  credentials; authorization-code/PKCE remains deferred. Remaining MAUI
+  mentions in this directory are explicit historical contrast in otherwise
+  current documents, not implementation guidance.
 - `git.rs` (1.3k) — command table + parsing in one file; split candidate if the
   git surface grows.
 - Config-readiness/probe feature (`ConfigurationHealthService`/`ConfigurationProbeService`)

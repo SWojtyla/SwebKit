@@ -1,67 +1,94 @@
-# Storage (Azure Blob)
+# Storage
 
 ## What Is Supported
 
-- Per-environment `StorageConfig`: account name, connection string credential ref, and AAD flag.
-- Browse all containers visible to the configured credential.
-- Navigate virtual folder hierarchies using the `/` delimiter and `BlobHierarchyItem` prefix traversal.
-- Breadcrumb path bar reflecting the current virtual folder depth.
-- Blob list grid: name, human-readable size, content-type, last modified, action buttons.
-- Full blob properties panel: metadata, tags, ETag, content-type, lease status, access tier, size.
-- Content-first blob inspector for text, JSON, XML, and message payload blobs; properties and versions remain secondary tabs.
-  - Structured preview workbench uses a docked sidebar on wide layouts, supports drag-resizing for the detail pane, persists the chosen width in UI state, and falls back to a stacked layout on narrower windows.
-  - JSON and XML payloads can be prettified from the preview toolbar, with a raw toggle for returning to the original blob text.
-  - Escaped JSON strings and HTML-encoded XML payloads are detected and unescaped before formatting, while still allowing a toggle back to the raw source.
-  - Size-gated: warn at 512 KB; hard cap at 2 MB with "Load anyway" escape.
-- Download blobs and blob versions to the user's Downloads folder with inline in-flight progress in the blob list and detail pane.
-- Copy blob direct URL to clipboard (no SAS expiry).
-- Copy SAS URL with 24-hour expiry generated client-side via the SDK.
-- Shared shell workspace snapshots for the selected account, container, and blob so recent/favorite items and named favorites can reopen Storage context.
-- Storage config form in Settings page (Account Name, Use AAD, Connection String Ref, Test Connection).
+The React Storage workspace supports multiple configured Azure Storage accounts with connection-string or Entra authentication:
 
-## Core Runtime Flow
+- browse Blob containers and virtual prefixes with URL-backed account/container/prefix/blob state;
+- paged blob listing, filtering, sorting, multi-select, and persistent split-pane widths;
+- content preview for text/JSON/XML with pretty/raw modes and size gates;
+- properties, metadata editing, tags, versions, compare, and restore;
+- upload by picker/dropzone with overwrite confirmation;
+- download one blob or selected blobs as ZIP;
+- copy direct URL, generate/copy SAS URL, and copy blobs between containers;
+- browse Azure File shares/directories and inspect/download files;
+- recovery view for deleted blobs with explicit restore confirmation; and
+- demo-mode data for all primary workflows.
 
-1. `StoragePage` reads `AppState.CurrentEnvironment?.Storage`.
-2. If null: shows "not configured" prompt with link to Settings.
-3. If set: constructs `AzureStorageClient(config, CredentialStore)` directly (no DI; same pattern as Redis/AKS).
-4. `StorageContainerTree` calls `ListContainersAsync` on first render; selection fires `SelectedContainerChanged`.
-5. `StorageBlobList` calls `ListBlobsAsync` with current prefix and pagination token; breadcrumb segments drive prefix navigation.
-6. Selecting a blob row renders `BlobDetailPane`, which calls `GetBlobPropertiesAsync` and `GetBlobContentAsync` concurrently, opens on the content tab, and keeps properties/versions in adjacent tabs.
-7. Single-file downloads in `StorageBlobList` and `BlobDetailPane` pass a byte-progress callback through `IStorageClient.DownloadBlobAsync`; the UI renders determinate progress when blob size is known and falls back to an indeterminate in-flight state otherwise.
-8. SAS URL generation via `GetBlobSasUrlAsync`; failures surfaced inline (not dialog) per UX decision.
-9. Account, container, and blob selection changes publish a semantic workspace snapshot; route-first restore reapplies that selection through `StoragePage`.
+Mutations are gated by each account's `allowMutations` setting. The old read-only-MVP limitation no longer applies.
+
+## Frontend Architecture
+
+`StoragePageContext` is split into seven scoped contexts:
+
+- account selection/configuration;
+- blob navigation;
+- file-share navigation;
+- query/mutation facades;
+- browser/filter/upload state;
+- detail/version/copy state; and
+- stable shared actions.
+
+`StoragePage` composes `BlobBrowserPanel`, `BlobDetailPanel`, `ShareBrowserPanel`, `ShareFileDetailPanel`, and `BlobRecoveryPanel`. Blob drill-down is URL-backed, so deep links and browser history restore account/container/prefix/blob context. Pagination and version-compare state reset during render when their location key changes, preventing one frame of stale data from the previous blob or prefix.
+
+TanStack query/mutation results exposed through context use `web/src/lib/queryFacade.ts` so unrelated local state changes do not invalidate every consumer. `useDropzone` lives in `BlobBrowserPanel`, where its fresh-per-render object cannot churn the provider.
+
+## Sidecar Flow
+
+```text
+/storage
+  → StoragePageProvider
+  → hooks in web/src/lib/hooks/useStorage.ts
+  → /api/storage/{accountId}/...
+  → IStorageConnectionPool
+  → AzureStorageClient or demo client
+  → Azure Blob / File Share SDK
+```
+
+The sidecar resolves account IDs from `ProfileRepository` and pools clients. Profile saves invalidate Storage clients so edited credentials/account names take effect immediately.
 
 ## Credential Modes
 
-| Mode                                 | Config                         | SDK client                                                  |
-| ------------------------------------ | ------------------------------ | ----------------------------------------------------------- |
-| AAD (`UseAad = true`)                | `AccountName` required         | `BlobServiceClient(Uri, DefaultAzureCredential)`            |
-| Connection string (`UseAad = false`) | `ConnectionStringRef` required | `BlobServiceClient(connectionString from ICredentialStore)` |
+| Mode | Required profile data | SDK construction |
+| --- | --- | --- |
+| Entra | account name | service URI + `DefaultAzureCredential` |
+| Connection string | credential-store reference | resolved connection string |
 
-SAS URL generation requires shared key access (`allowSharedKeyAccess = true`). If disallowed, `RequestFailedException` is caught and surfaced with an actionable inline message.
+Secrets remain in the credential store. SAS generation may fail when shared-key access is disabled; the UI surfaces the endpoint's actionable error.
+
+## Data and Safety Behavior
+
+- Blob pages carry continuation tokens; `Load more` appends results.
+- When a filter has no match but another continuation token exists, the provider can continue paging until it finds a match or reaches the end.
+- Binary detection occurs before text preview; large content is size-gated.
+- Metadata/version/copy/restore/upload/delete actions are confirmation- or mutation-toggle-gated as appropriate.
+- Direct blob URLs use the configured Azure account name, not SwebKit's internal account ID.
+- Downloads are initiated by the current UI surface; there is no cross-page transfer manager.
 
 ## Main Code Locations
 
-- `src/SwebKit.App/Components/Pages/StoragePage.razor`
-- `src/SwebKit.App/Components/Pages/StorageConfigForm.razor`
-- `src/SwebKit.App/Components/Storage/StorageContainerTree.razor`
-- `src/SwebKit.App/Components/Storage/StorageBlobList.razor`
-- `src/SwebKit.App/Components/Storage/BlobDetailPane.razor`
+- `web/src/components/storage/StoragePage.tsx`
+- `web/src/components/storage/StoragePageContext.tsx`
+- `web/src/components/storage/BlobBrowserPanel.tsx`
+- `web/src/components/storage/BlobDetailPanel.tsx`
+- `web/src/components/storage/BlobRecoveryPanel.tsx`
+- `web/src/components/storage/ShareBrowserPanel.tsx`
+- `web/src/components/storage/ShareFileDetailPanel.tsx`
+- `web/src/components/settings/StorageSettings.tsx`
+- `web/src/lib/hooks/useStorage.ts`
+- `src-sidecar/Endpoints/StorageEndpoints.cs`
+- `src-sidecar/Services/SidecarStorageConnectionPool.cs`
 - `src/SwebKit.Core/Abstractions/IStorageClient.cs`
 - `src/SwebKit.Core/Domain/StorageConfig.cs`
-- `src/SwebKit.Core/Domain/StorageModels.cs`
 - `src/SwebKit.Azure/Storage/AzureStorageClient.cs`
-
-## Important Notes
-
-- Read-only in MVP. Write operations (upload, delete) are out of scope and require an explicit per-environment mutations toggle when added.
-- Pagination: `ListBlobsAsync` returns one page (default 100 items) with a continuation token. "Load more" appends the next page in the UI.
-- Binary detection: `GetBlobContentAsync` checks content-type before issuing a byte-range read. Binary blobs return `IsBinary = true` without downloading content.
-- Tags require a separate `GetTagsAsync` call (not included in `GetPropertiesAsync`). Both calls are made concurrently via `Task.WhenAll`.
-- Download progress is local to the initiating surface; there is no background transfer manager or cross-page download queue.
-- Workspace restore is semantic and lightweight. Storage reopens the selected account/container/blob context rather than trying to preserve a live client object.
 
 ## Validation Pointers
 
-- `tests/SwebKit.Azure.Tests/AzureStorageClientTests.cs` — constructor-guard tests
-- `tests/SwebKit.Core.Tests/StorageConfigTests.cs` — JSON serialization round-trip tests
+- `web/e2e/storage.spec.ts`
+- `web/e2e/storage-deferred.spec.ts`
+- `web/e2e/storage-recovery.spec.ts`
+- `web/e2e/storage-account-switch.spec.ts`
+- `tests/SwebKit.Sidecar.Tests/StorageEndpointsMutationTests.cs`
+- `tests/SwebKit.Sidecar.Tests/SidecarStorageConnectionPoolTests.cs`
+- `tests/SwebKit.Azure.Tests/AzureStorageClientTests.cs`
+- `tests/SwebKit.Core.Tests/StorageConfigTests.cs`
