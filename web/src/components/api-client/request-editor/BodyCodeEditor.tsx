@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { EditorState, Compartment } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { json } from "@codemirror/lang-json";
@@ -28,8 +28,7 @@ export function BodyCodeEditor({ value, mode, onChange, scope }: BodyCodeEditorP
   const viewRef = useRef<EditorView | null>(null);
   const languageRef = useRef(new Compartment());
   const variablesRef = useRef(new Compartment());
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  const onChangeEvent = useEffectEvent(onChange);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -55,7 +54,7 @@ export function BodyCodeEditor({ value, mode, onChange, scope }: BodyCodeEditorP
           languageRef.current.of(bodyLanguage(mode)),
           variablesRef.current.of(variableHighlighting(scope)),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+            if (update.docChanged) onChangeEvent(update.state.doc.toString());
           }),
           // Replaces CodeMirror's light-only `defaultHighlightStyle`, whose dark
           // blues and reds were effectively invisible against the dark theme's

@@ -197,7 +197,9 @@ export function AgentVisualizationPanel({
   // the rest of the stream instead of silently snapping back to tab 0 (ux-interaction-consistency
   // unit 7.5).
   const blocksRef = useRef(blocks);
-  blocksRef.current = blocks;
+  useEffect(() => {
+    blocksRef.current = blocks;
+  }, [blocks]);
   const blockIds = blocks.map((block) => block.id).join("|");
 
   useEffect(() => {

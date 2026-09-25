@@ -426,11 +426,13 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   // depending on it — otherwise their identity, and the whole page-context
   // value, would churn on every editor keystroke.
   const tabsRef = useRef(tabs);
-  tabsRef.current = tabs;
   const tabStatesRef = useRef(tabStates);
-  tabStatesRef.current = tabStates;
   const activeTabIdRef = useRef(activeTabId);
-  activeTabIdRef.current = activeTabId;
+  useEffect(() => {
+    tabsRef.current = tabs;
+    tabStatesRef.current = tabStates;
+    activeTabIdRef.current = activeTabId;
+  });
 
   /**
    * `preview: true` (single-click tree navigation) reuses the one preview tab
@@ -1152,6 +1154,10 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     selectedNodeId,
     selectedCollectionId,
     selectedCollection,
+    // These handlers read the tab-state mirror refs at event time only — by
+    // design (see the refs comment above); the rule flags their transitive
+    // reachability from this render-built object.
+    // eslint-disable-next-line react-hooks/refs
     handleSelectNode,
 
     variableScope,
@@ -1166,8 +1172,11 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
 
     conflict,
     dismissConflict,
+    // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
     handleReloadConflict,
+    // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
     handleOverwriteConflict,
+    // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
     handleSaveAsCopy,
 
     legacySecretCount,

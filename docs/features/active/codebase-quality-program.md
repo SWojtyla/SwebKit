@@ -280,9 +280,18 @@ Original scan list preserved below for the record:
 
 **ESLint debt (0 errors, 105 warnings — candidates for Phase 2 per-feature fixes):**
 
-- `react-hooks/refs` ×23 — refs written/read during render (`useMonitoring`,
-  `useContextualAgent`, `screen-state.ts`, …): real render-phase violations;
-  `useEffectEvent`/effect pattern fixes belong to each feature's deep dive.
+- ~~`react-hooks/refs` ×23~~ — **cleared (was 29 after the context splits)**:
+  latest-callback mirrors became `useEffectEvent` where the call site is an
+  effect-registered listener (`useMonitoring` ×4 SSE callbacks,
+  `screen-state` provider, CodeMirror `onChange` in `BodyCodeEditor`/
+  `MessageBodyEditor`); latest-value mirrors moved into `useEffect`
+  (`RequestEditor`, `GitDrawer`, `DraftInput`, `ResizablePanels`,
+  `AgentVisualizationPanel`, `ApiClientPageContext`); `useContextualAgent`'s
+  lazy-init ref is now `useState`'s lazy initializer; `useLogBuffer`'s
+  circular `frozen` param takes the caller's `frozenRef` directly. Four
+  transitive false positives in `ApiClientPageContext`'s memoized value
+  (event-time mirror reads embedded in a render object) carry scoped
+  `eslint-disable` comments documenting intent.
 - `react-hooks/set-state-in-effect` ×31 — cascading-render pattern; most are
   intentional reset-on-key-change idioms, triage per feature.
 - `react-refresh/only-export-components` ×31 — fast-refresh hygiene, cosmetic.

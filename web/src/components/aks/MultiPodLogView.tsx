@@ -66,7 +66,7 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
   const streamKeyRef = useRef(`${ns}::${container}::${range}`);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const buffer = useLogBuffer({ maxBuffer: MAX_BUFFER, frozen: false });
+  const buffer = useLogBuffer({ maxBuffer: MAX_BUFFER });
   const { push, clear } = buffer;
 
   // Correlation is the point of this view, and arrival order does not give it: network

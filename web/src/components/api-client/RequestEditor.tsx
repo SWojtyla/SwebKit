@@ -45,9 +45,11 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSnapshotRef = useRef<HttpRequestEntry>(request);
   const onSaveRef = useRef(onSave);
-  onSaveRef.current = onSave;
   const persistSecretRef = useRef(persistSecret);
-  persistSecretRef.current = persistSecret;
+  useEffect(() => {
+    onSaveRef.current = onSave;
+    persistSecretRef.current = persistSecret;
+  });
 
   const handleSave = useCallback(async () => {
     if (secretSaveTimer.current) {

@@ -27,7 +27,9 @@ export function GitDrawer({ onClose }: GitDrawerProps) {
     clamp(Number(loadViewPreference<string>(WIDTH_PREF_KEY, String(DEFAULT_WIDTH))) || DEFAULT_WIDTH),
   );
   const widthRef = useRef(width);
-  widthRef.current = width;
+  useEffect(() => {
+    widthRef.current = width;
+  }, [width]);
   const draggingRef = useRef(false);
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { postScreenState } from "../api";
 
 /**
@@ -102,13 +102,12 @@ export function useScreenStateProvider(
   build: () => unknown,
   deps: readonly unknown[],
 ) {
-  const buildRef = useRef(build);
-  buildRef.current = build;
+  const buildEvent = useEffectEvent(build);
 
   useEffect(() => {
     providers.set(id, {
       fn: () => {
-        const snapshot = buildRef.current();
+        const snapshot = buildEvent();
         return snapshot == null ? null : { featureArea, snapshot };
       },
       order: ++orderCounter,

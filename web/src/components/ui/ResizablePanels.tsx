@@ -43,7 +43,9 @@ export function ResizablePanels({
 
   const [widths, setWidths] = useState<number[]>([]);
   const widthsRef = useRef(widths);
-  widthsRef.current = widths;
+  useEffect(() => {
+    widthsRef.current = widths;
+  }, [widths]);
 
   const activeRef = useRef<number | null>(null);
   const startXRef = useRef(0);

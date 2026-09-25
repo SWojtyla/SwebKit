@@ -56,9 +56,11 @@ export function PodLogView({ ns, podName, containers = [], onClose }: PodLogView
   // than silently sliding the window, but the window is derived from the buffer — so the
   // frozen flag is mirrored through a ref to break the cycle.
   const frozenRef = useRef(false);
-  const buffer = useLogBuffer({ maxBuffer: MAX_BUFFER, frozen: frozenRef.current });
+  const buffer = useLogBuffer({ maxBuffer: MAX_BUFFER, frozenRef });
   const win = useLogWindow(buffer.entries, VISIBLE);
-  frozenRef.current = win.frozen;
+  useEffect(() => {
+    frozenRef.current = win.frozen;
+  }, [win.frozen]);
 
   const { push, clear, resetPending } = buffer;
 
