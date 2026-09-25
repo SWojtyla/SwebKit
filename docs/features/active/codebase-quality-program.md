@@ -163,11 +163,14 @@ Seed findings found during recon:
   warnings (logged above); Playwright 375/375
 - **Phase 2** (2026-09-25): `dotnet build SwebKit.slnx` clean; `dotnet test`
   1941/1941; `tsc -b` clean; vitest 534/534; `vite build` clean; ESLint 0
-  errors / 102 warnings (three cleared by the dead-export cleanup); Playwright
-  375/375. Knip dead-export sweep applied across `web/src` + `web/e2e` —
+  errors / 125 warnings (rose as new scoped-context hook exports +
+  ref-mirrors landed in the same warning categories logged above);
+  Playwright 375/375 re-confirmed after all four context splits.
+  Knip dead-export sweep applied across `web/src` + `web/e2e` —
   2 dead store files, 13 dead functions/hooks, ~20 internal-only `export`s
   dropped. `labelSelector` is now `encodeURIComponent`'d in both pod-query
-  call sites.
+  call sites. All four `*PageContext` god-contexts split (commits `a691d9d`
+  Redis, `2d3fdaa` AKS, `e1de291` Storage, `d5c0d6b` ApiClient).
 - **Phase 3** (2026-09-25): frontend-only change — `tsc` clean; vitest 534/534;
   `vite build` clean; ESLint 0 errors / 101 warnings; Playwright 375/375
   (dashboard + global-agent-panel + monitoring specs cover the reworked
