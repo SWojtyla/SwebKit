@@ -317,8 +317,14 @@ carried the required-`int tail` binding trap the stream variant had fixed.
   (confirm-flow + menu-builder + columns boilerplate); the same shape repeats
   across ~15 tabs. A shared "resource actions table" abstraction is a Phase 2+
   candidate, not now.
-- `DemoAksClient.cs` 2868 LOC — demo data, acceptable but the largest single
-  file in Core; a per-domain split (`DemoAksClient.Pods.cs` etc.) would help.
+- ~~`DemoAksClient.cs` 2868 LOC~~ — **split done**: `partial` class spread over
+  eight per-domain files — core (namespaces/contexts/connection test, 38),
+  `Workloads` (deployments/pods/events/statefulsets/metrics/pod ops, 478),
+  `Networking` (ingress/services/netpol/gateway-api/envoy, 839), `Helm` (139),
+  `Batch` (jobs/cronjobs/hpas/scaledjobs + session state, 650),
+  `Configuration` (configmaps/secrets/quotas/pdbs, 220), `Yaml` (resource
+  yaml + overrides, 393), `Logs` (log streaming, 165). Test subclass fakes
+  override `virtual` members — unaffected.
 - Positive: `useAks.ts` is exemplary — context-scoped query keys, mutation
   notifications via `useNotifyMutation`, staleTime on slow calls. Endpoint file
   documents prior bugs well. K8s client catches are all purposeful; signal
