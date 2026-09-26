@@ -189,6 +189,7 @@ builder.Services.AddSingleton<IAgentTool, ListPodsTool>();
 builder.Services.AddSingleton<IAgentTool, GetPodLogsTool>();
 builder.Services.AddSingleton<IAgentTool, GetPodEventsTool>();
 builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
+builder.Services.AddSingleton<IAgentTool, ResolvePodEnvTool>();
 builder.Services.AddSingleton<IAgentTool, GetAksResourceYamlTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApplyAksYamlTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();

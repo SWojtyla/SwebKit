@@ -40,10 +40,10 @@ Architecture background: `docs/architecture/ai-and-mcp.md`.
 
 ### Phase 1b — Harness quality (minimal-tool-call answers)
 
-- [ ] Audit read tools for projection shape; add purpose-shaped projections where raw dumps leak through.
-- [ ] Composite tool(s) for the recurring env-var/config recipe (pod → workload YAML → configmap/secret → resolved value).
-- [ ] Tool description pass: cheaper-alternative + when-not-to-use hints.
-- [ ] In-turn memoization of identical read calls (keyed by name+args hash, turn-scoped).
+- [x] Projection audit: read tools were already bounded (SB messages clamp+project, SQL 50 rows, pod-log tail, blob paging); the one gap was `list_pods` — now capped at 200 rows, unhealthy-first ordering, `truncated` flag.
+- [x] Composite tool: `resolve_pod_env` — pod spec `env`/`envFrom` resolved end-to-end (configMapKeyRef → inline values, secretKeyRef → masked, fieldRef → noted), one call instead of pod-YAML + N manifest fetches; referenced objects fetched once per call; `pod_name`/`namespace` default to the UI selection.
+- [x] Description pass: `list_pods` (prefer `get_pod_status`/`investigate_pod_issue`), `get_resource_yaml` (prefer `resolve_pod_env` for env questions), `get_queue_messages` (prefer stats/health for counts).
+- [x] In-turn memoization: `BuildStepTrackingToolExecutor` caches `ToolKind.Read` results keyed by name+args for the turn's executor lifetime; mutations and errors never cached; ACP bridge deliberately not memoized (no turn boundary).
 
 ### Phase 2 — Standalone MCP
 

@@ -296,12 +296,45 @@ public partial class DemoAksClient
                   labels:
                     app: {name.Split('-').FirstOrDefault() ?? name}
                     pod-template-hash: {name.Split('-').LastOrDefault() ?? "abc123"}
+                  ownerReferences:
+                  - apiVersion: apps/v1
+                    kind: ReplicaSet
+                    name: {(name.Contains('-') ? name[..name.LastIndexOf('-')] : name)}
+                    controller: true
                 spec:
                   containers:
                   - name: {name}
                     image: acr.azurecr.io/{name}:1.8.3
                     ports:
                     - containerPort: 8080
+                    env:
+                    - name: ASPNETCORE_ENVIRONMENT
+                      value: Production
+                    - name: FEATURE__SEARCH
+                      valueFrom:
+                        configMapKeyRef:
+                          name: app-settings
+                          key: Feature__SearchEnabled
+                    - name: OTEL__ENDPOINT
+                      valueFrom:
+                        configMapKeyRef:
+                          name: tracing-config
+                          key: Otel__Endpoint
+                    - name: DB__CONNECTIONSTRING
+                      valueFrom:
+                        secretKeyRef:
+                          name: db-credentials
+                          key: connection-string
+                    - name: POD_IP
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: status.podIP
+                    envFrom:
+                    - configMapRef:
+                        name: app-settings
+                      prefix: CFG_
+                    - secretRef:
+                        name: order-api-secret
                     resources:
                       requests:
                         cpu: 100m

@@ -84,7 +84,11 @@ public sealed class AgentToolCallOrchestrator
 
     /// <summary>Wraps the raw tool registry call with step recording — same "tool_call"/"tool_result"
     /// pair shape the legacy MAUI-side <c>AgentChatService.SendAsync</c> already uses, reused rather
-    /// than inventing a new trace format (workspace-intelligence Module 6).</summary>
+    /// than inventing a new trace format (workspace-intelligence Module 6). Read-kind tool results are
+    /// memoized for the lifetime of the returned executor (one turn): models re-issuing an identical
+    /// call — a common retry/stutter pattern — get the cached JSON instead of a second cluster/API
+    /// round-trip. Mutations and error results are never cached; the ACP bridge has no turn boundary
+    /// and deliberately does not memoize.</summary>
     public Func<string, JsonElement, CancellationToken, Task<string>>? BuildStepTrackingToolExecutor(
         IReadOnlyList<ToolDefinition> tools, List<AgentChatStep> steps,
         IReadOnlyDictionary<string, string>? selection = null)
@@ -92,10 +96,16 @@ public sealed class AgentToolCallOrchestrator
         if (tools.Count == 0)
             return null;
 
+        var readMemo = new Dictionary<string, string>(StringComparer.Ordinal);
+
         return async (toolName, args, toolCt) =>
         {
             var toolSw = Stopwatch.StartNew();
             var toolDef = tools.FirstOrDefault(t => t.Name == toolName);
+            var memoKey = toolDef?.Kind == ToolKind.Read
+                ? toolName + "\n" + args.GetRawText()
+                : null;
+
             steps.Add(new AgentChatStep
             {
                 Type = "tool_call",
@@ -104,6 +114,18 @@ public sealed class AgentToolCallOrchestrator
                     ? $"Preparing {toolName} (mutation)"
                     : $"Calling {toolName}",
             });
+
+            if (memoKey is not null && readMemo.TryGetValue(memoKey, out var memoized))
+            {
+                steps.Add(new AgentChatStep
+                {
+                    Type = "tool_result",
+                    ToolName = toolName,
+                    Summary = "(cached — identical call this turn)",
+                    Elapsed = toolSw.Elapsed,
+                });
+                return memoized;
+            }
 
             using var executionContext = AgentExecutionContext.Push(selection);
             var result = await _toolRegistry.ExecuteAsync(toolName, args, toolCt);
@@ -117,6 +139,9 @@ public sealed class AgentToolCallOrchestrator
                 Elapsed = toolSw.Elapsed,
                 IsFailure = IsErrorResult(result),
             });
+
+            if (memoKey is not null && !IsErrorResult(result))
+                readMemo[memoKey] = result;
 
             return result;
         };
