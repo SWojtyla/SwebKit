@@ -153,6 +153,45 @@ test.describe("Agent", () => {
     await expect(page.getByTestId("pending-action-action-2")).not.toBeVisible();
   });
 
+  test("external MCP tool call renders as a pending action and confirms once", async ({ page }) => {
+    // agent-mcp-evolution Phase 2b: a non-readOnly external tool call surfaces as an
+    // ExternalMcpCall pending action — same card as propose_* tools, origin mapped to the
+    // external server, one click to confirm (Low risk — destructiveHint would map to High).
+    const pendingAction = {
+      id: "action-mcp",
+      type: "ExternalMcpCall",
+      summary: "Run 'restart_gateway' on external MCP server 'azure'",
+      target: "azure/restart_gateway",
+      risk: "Low",
+      preview: "{\"region\":\"westeurope\"}",
+      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    };
+    let confirmed = false;
+    await page.route("**/api/agent/pending-approvals", async (route) => {
+      await route.fulfill({ json: confirmed ? [] : [pendingAction] });
+    });
+    await page.route("**/api/agent/pending-approvals/action-mcp/confirm", async (route) => {
+      confirmed = true;
+      await route.fulfill({
+        json: { isSuccess: true, errorMessage: null, resultSummary: "Gateway restarted" },
+      });
+    });
+
+    await page.goto("/agent");
+
+    await expect(page.getByTestId("pending-action-action-mcp")).toBeVisible();
+    await expect(page.getByTestId("pending-action-summary-action-mcp")).toHaveText(
+      "Run 'restart_gateway' on external MCP server 'azure'",
+    );
+    await expect(page.getByTestId("pending-action-origin-action-mcp")).toHaveText(
+      "Proposed from: External MCP · azure/restart_gateway",
+    );
+
+    await page.getByTestId("pending-action-confirm-action-mcp").click();
+
+    await expect(page.getByTestId("pending-action-result-action-mcp")).toHaveText("Gateway restarted");
+  });
+
   test("assistant replies render markdown, not literal syntax characters", async ({ page }) => {
     await mockAgentChatStreamDone(page, {
       text: "Here's what I found:\n\n- **pod-a** is `Running`\n- pod-b is `CrashLoopBackOff`\n\n```\nkubectl logs pod-b\n```",
