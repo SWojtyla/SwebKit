@@ -1,6 +1,6 @@
 # Agent MCP Evolution
 
-**State:** `In Progress`
+**State:** `Review`
 
 ## Goal
 
@@ -55,7 +55,7 @@ Architecture background: `docs/architecture/ai-and-mcp.md`.
 
 - [x] `ExternalMcpToolSource` (sidecar): `ExtraMcpServers` → cached `McpClient` per server config → `readOnlyHint` tools exposed as `mcp_{server}_{tool}` `ToolDefinition`s (`FeatureArea.External`, appended post-area-filter = area-exempt). Routing via `externalExecutors` in the step-tracking executor — registry untouched, per-turn memoization applies.
 - [x] Safety: unannotated/mutating external tools skipped (absent `readOnlyHint` ≠ read-only; no permission gate exists in-process — mutations stay an ACP-only, approval-gated feature). Dead servers skipped per-turn, never break the chat, retried next turn.
-- [ ] Selection semantics: external tools don't consume `sel=`/`AgentExecutionContext` — documented; no action possible (foreign servers don't know our selection model).
+- [x] Selection semantics: external tools don't consume `sel=`/`AgentExecutionContext` — documented; no action possible (foreign servers don't know our selection model).
 
 ## Test plan
 
@@ -66,7 +66,12 @@ Architecture background: `docs/architecture/ai-and-mcp.md`.
 
 ## Validation results
 
-_Not started._
+- .NET: **2023/2023** (Sidecar 590 · Agents 268 · Core 810 · Azure 151 · K8s 158 · Sql 46)
+- Frontend: **545/545** vitest · tsc/vite/eslint clean
+- e2e: settings external-MCP round-trip + auto-approval flip green
+- Branch: `feat/agent-mcp-evolution` (rebased on main post-PR #106)
+
+_Deferred by design:_ Phase 3 (native observability expansion) is a product decision, not a blocker; mutation-capable external tools for non-ACP profiles would need a confirmation pipeline — revisit only if asked.
 
 ## Decisions
 
