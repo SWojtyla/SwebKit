@@ -168,7 +168,8 @@ session/new.mcpServers = [
 ]
 
 non-ACP providers ──▶ ExternalMcpToolSource ◀── Phase 2b: proxy external MCPs
-(LM Studio/Mistral)   (mcp_ prefixed defs)     readOnly-only, post-filter
+(LM Studio/Mistral)   (mcp_ prefixed defs)     reads direct · mutations via
+                                               pending-action confirm
 ```
 
 ### Phase 1 — External MCP passthrough ✅ shipped
@@ -234,5 +235,8 @@ Caveats: external tools don't consume `sel=`/`AgentExecutionContext` (foreign se
 | MCP bridge | `src-sidecar/Services/Acp/SwebKitToolsMcpBridge.cs` (`Program.cs: MapMcp`) |
 | ACP host/peer/launch | `src-sidecar/Services/Acp/AcpAgentHost.cs`, `AcpJsonRpcPeer.cs`, `AcpProcessLauncher.cs` |
 | Permissions | `src-sidecar/Services/Acp/AcpPermissionStore.cs`, `OutOfScopeCallTracker.cs` |
+| External MCP client adapter | `src-sidecar/Services/ExternalMcpToolSource.cs` (proxy + proposals) |
+| External mutation executor | `src-sidecar/Services/ExternalMcpActionExecutor.cs` (`ExternalMcpCall` confirm path) |
+| Pending-action pipeline | `src/SwebKit.Agents/IAgentActionCoordinator.cs`, `AgentActionApplier.cs` |
 | Profile model | `src/SwebKit.Core/Domain/AgentProfile.cs` |
 | Frontend | `web/src/lib/hooks/useAgent.ts`, `web/src/components/agent/` |

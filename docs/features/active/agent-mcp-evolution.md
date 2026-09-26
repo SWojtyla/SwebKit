@@ -16,7 +16,7 @@ Architecture background: `docs/architecture/ai-and-mcp.md`.
 ## Scope
 
 - `AgentProfile` gains an `ExtraMcpServers` list (name + url/command transport); `AcpAgentHost.EnsureSessionAsync` appends them to `session/new → mcpServers` after the `swebkit` entry.
-- Settings UI: per-profile MCP server editor; visible capability summary on the chat surface.
+- Settings UI: per-profile MCP server editor. (A capability summary on the chat surface was scoped but not built — deferred.)
 - Tool-quality pass: composite `resolve_workload_config`-style tools where multi-step flows recur; description improvements ("when NOT to use"); in-turn memoization of identical read calls.
 - Standalone MCP: documented config snippets for common clients + a read-only allowlist mode for the bridge.
 
@@ -25,7 +25,7 @@ Architecture background: `docs/architecture/ai-and-mcp.md`.
 - ACP `fs/*`/`terminal` client capabilities — remain off (reserved profile flags stay inert).
 - A *new* native App Insights integration — `query_logs`/`get_metrics` already cover KQL+metrics; user-confirmed out of scope while Azure MCP passthrough covers breadth.
 - Auth for non-loopback MCP clients — loopback desktop only in these phases.
-- Exposing `propose_*`/mutation tools on the standalone profile.
+- Exposing `propose_*`/mutation tools on the standalone profile *by default* — `?mode=full` is the documented opt-in; proposals still require UI confirmation.
 
 ## Phases
 
@@ -68,7 +68,7 @@ Architecture background: `docs/architecture/ai-and-mcp.md`.
 
 ## Validation results
 
-- .NET: **2023/2023** (Sidecar 590 · Agents 268 · Core 810 · Azure 151 · K8s 158 · Sql 46)
+- .NET: **2027/2027** (Sidecar 594 · Agents 268 · Core 810 · Azure 151 · K8s 158 · Sql 46)
 - Frontend: **545/545** vitest · tsc/vite/eslint clean
 - e2e: settings external-MCP round-trip + auto-approval flip green
 - Branch: `feat/agent-mcp-evolution` (rebased on main post-PR #106)
@@ -78,6 +78,6 @@ _User decision (2026-05):_ **Phase 3 native observability expansion is not neede
 ## Decisions
 
 - **Passthrough before native integrations.** External MCPs give breadth (Azure MCP covers App Insights/Log Analytics and far more) with no domain code; native tools are reserved for what becomes a *product* feature needing our scoping/projection/confirmation semantics.
-- **External tools gated at the provider layer.** They don't know `propose_*`; `RequireToolApproval` becomes the default safety when extras exist.
+- **External tools gated at the provider layer for ACP** (`session/request_permission`; Settings auto-enables it when extras exist) **and via `ExternalMcpCall` pending actions in-process** — non-`readOnlyHint` tools propose instead of executing, confirmed through the standard pending-approvals pipeline.
 - **Composite tools are the "smartness" lever** — deterministic server-side fan-out beats teaching the model multi-step recipes; measure by tool calls per answer, not answer latency.
 - **The bridge IS the standalone MCP** — we harden/document an endpoint that already exists rather than building a parallel server.

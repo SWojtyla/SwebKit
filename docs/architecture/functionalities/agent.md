@@ -85,7 +85,9 @@ session/cancel → provider cancellation
 
 The external agent owns its transcript and internal loop. SwebKit exposes permitted domain tools through `SwebKitToolsMcpBridge`, a stateless streamable-HTTP MCP endpoint. The bridge URL includes the orchestrator's per-request allowlist; an empty allowlist exposes no tools.
 
-Profiles may also attach **external MCP servers** (`AgentProfile.ExtraMcpServers`, http or stdio) — forwarded to the agent in the same `session/new` alongside the SwebKit entry. Calls to them bypass the propose/confirm pipeline, so `RequireToolApproval` is their only gate (the settings UI enables it by default on first attach). Wire details in `docs/architecture/ai-and-mcp.md`.
+Profiles may also attach **external MCP servers** (`AgentProfile.ExtraMcpServers`, http or stdio). For ACP profiles they're forwarded to the agent in `session/new` alongside the SwebKit entry — those calls bypass our domain pipeline, so `RequireToolApproval` is their gate (the settings UI enables it by default on first attach). For non-ACP profiles, `ExternalMcpToolSource` proxies them in-process as `mcp_{server}_{tool}` tools: `readOnlyHint` tools execute directly, everything else becomes an `ExternalMcpCall` pending action that only reaches the remote server after UI confirmation.
+
+The bridge is also usable **standalone** — external MCP clients (e.g. Claude Desktop) can attach to `http://127.0.0.1:{port}/mcp/swebkit-tools` while the sidecar runs; without `?tools=` it exposes read tools only (`?mode=full` opts into `propose_*`, still UI-confirmed). Wire details in `docs/architecture/ai-and-mcp.md`.
 
 SwebKit does not advertise filesystem or terminal ACP client capabilities. Calls to unsupported client methods receive JSON-RPC method-not-found.
 
