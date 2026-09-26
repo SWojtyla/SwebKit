@@ -183,6 +183,7 @@ public sealed class DemoStorageClient : IStorageClient
                 new("docs", true, null, shareNow.AddDays(-30)),
                 new("docs/onboarding.md", false, 8_432, shareNow.AddDays(-5)),
                 new("docs/architecture.drawio", false, 188_211, shareNow.AddDays(-12)),
+                new("docs/service-config.xml", false, 2_048, shareNow.AddDays(-3)),
                 new("media", true, null, shareNow.AddDays(-60)),
                 new("media/logo.svg", false, 4_112, shareNow.AddDays(-60)),
                 new("media/hero.png", false, 2_311_409, shareNow.AddDays(-21)),
@@ -534,6 +535,16 @@ public sealed class DemoStorageClient : IStorageClient
         var props = await GetShareFilePropertiesAsync(shareName, filePath, ct);
         if (!IsTextFile(props.ContentType))
             return new ShareFileContent(shareName, filePath, string.Empty, props.ContentType, props.SizeBytes, false, true);
+
+        // XML files get a real minified payload so the preview's format/indent handling is
+        // exercised the way a produced export would be — other text files keep the canned text.
+        if (filePath.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+        {
+            const string xml = """
+                <?xml version="1.0" encoding="utf-8"?><service name="swebkit" version="2.4.0"><endpoints><endpoint name="orders" url="https://demo.swebkit.dev/orders" timeoutMs="5000"/><endpoint name="billing" url="https://demo.swebkit.dev/billing" timeoutMs="3000"/></endpoints><features><feature key="dark-mode" enabled="true"/><feature key="beta-channel" enabled="false"/></features></service>
+                """;
+            return new ShareFileContent(shareName, filePath, xml, props.ContentType, props.SizeBytes, false, false);
+        }
 
         var sb = new StringBuilder();
         sb.AppendLine($"# Demo content for {filePath}");

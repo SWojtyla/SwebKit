@@ -6,23 +6,6 @@ public static class RedisValueHelpers
 {
     private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
 
-    public static string MaskConnectionString(string? connectionString)
-    {
-        if (string.IsNullOrWhiteSpace(connectionString))
-            return string.Empty;
-
-        var parts = connectionString.Split(',', StringSplitOptions.TrimEntries);
-        for (var i = 0; i < parts.Length; i++)
-        {
-            if (!parts[i].StartsWith("password=", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            parts[i] = "password=***";
-        }
-
-        return string.Join(',', parts);
-    }
-
     public static string TruncateValue(string? value, int maxLength = 10_240)
     {
         if (string.IsNullOrEmpty(value) || maxLength <= 0 || value.Length <= maxLength)

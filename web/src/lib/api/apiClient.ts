@@ -1,4 +1,4 @@
-import { apiSend } from "./transport";
+import { apiFetch, apiSend } from "./transport";
 import type { CollectionImportResult } from "../types";
 
 export interface KeyVaultPreviewResult {
@@ -45,6 +45,46 @@ export async function previewCredential(
         "/api/api-client/preview-credential",
         "POST",
         { key },
+    );
+}
+
+// ── OAuth 2.0 authorization-code + PKCE (loopback flow) ──────────────────────
+
+export interface OAuth2AuthorizeRequest {
+    authUrl: string;
+    tokenUrl: string;
+    clientId: string;
+    /** Credential-store key resolving to the client secret — confidential clients only. */
+    credentialKey?: string | null;
+    scopes?: string | null;
+}
+
+export interface OAuth2AuthorizeResult {
+    transactionId: string;
+    authorizeUrl: string;
+}
+
+export interface OAuth2FlowResult {
+    status: "pending" | "done" | "error" | "expired";
+    credentialKey: string | null;
+    error: string | null;
+}
+
+export async function startOAuth2Authorize(
+    req: OAuth2AuthorizeRequest,
+): Promise<OAuth2AuthorizeResult> {
+    return apiSend<OAuth2AuthorizeResult>(
+        "/api/api-client/oauth/authorize",
+        "POST",
+        req,
+    );
+}
+
+export async function getOAuth2Result(
+    transactionId: string,
+): Promise<OAuth2FlowResult> {
+    return apiFetch<OAuth2FlowResult>(
+        `/api/api-client/oauth/result/${transactionId}`,
     );
 }
 

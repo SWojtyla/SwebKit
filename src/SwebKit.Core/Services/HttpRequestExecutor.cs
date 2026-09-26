@@ -38,8 +38,9 @@ public sealed class HttpRequestExecutor(
             .BuildScopeAsync(collection.Variables, [globalEnvironment, activeEnvironment], cancellationToken)
             .ConfigureAwait(false);
 
-        // Build the URL (with query params merged in)
-        var url = UrlBuilder.Build(request, scope, substitution);
+        // Build the URL (with query params merged in). Edge whitespace — a paste artifact in
+        // the URL field or inside a substituted variable's value — is never valid in a URI.
+        var url = UrlBuilder.Build(request, scope, substitution).Trim();
 
         IReadOnlyList<string> unresolvedWarnings = [];
         IReadOnlyList<string> authWarnings = [];

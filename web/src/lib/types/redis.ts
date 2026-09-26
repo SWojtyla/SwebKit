@@ -7,6 +7,11 @@ export interface RedisConfig {
 export interface RedisCacheEntry {
     id: string;
     displayName: string;
+    /** Key into the OS credential store holding the connection string — the secret itself
+     * is never persisted to the profile. */
+    credentialKey: string;
+    /** Legacy plaintext connection string — still present in profiles written before the
+     * credential migration ran; new saves leave it empty. */
     connectionString: string;
     database: number;
     useAad: boolean;

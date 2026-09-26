@@ -86,6 +86,40 @@ test.describe("Storage", () => {
         );
     });
 
+    test("prettifies a minified XML share file and fills the pane height", async ({
+        page,
+    }) => {
+        await page.goto("/storage");
+        await page.getByTestId("storage-share-team-shared").click();
+        await page.getByTestId("share-item-docs").click();
+        await page.getByTestId("share-item-docs/service-config.xml").click();
+
+        const content = page.getByTestId("share-file-content");
+
+        // Pretty is the default: the stored single-line XML arrives indented.
+        await expect(
+            page.getByTestId("share-file-pretty-toggle"),
+        ).toBeVisible();
+        await expect
+            .poll(() => content.textContent())
+            .toContain('<endpoints>\n');
+
+        // Raw restores the stored minified line verbatim.
+        await page.getByTestId("share-file-pretty-toggle").click();
+        await expect
+            .poll(() => content.textContent())
+            .toContain('<service name="swebkit" version="2.4.0"><endpoints>');
+
+        // The preview fills the pane instead of squatting in a 384px box — a large
+        // file's scroll area should reach near the bottom of the detail pane.
+        await page.getByTestId("share-file-pretty-toggle").click();
+        const pre = await content.boundingBox();
+        const pane = await page
+            .getByTestId("share-file-detail")
+            .boundingBox();
+        expect(pre!.y + pre!.height).toBeGreaterThan(pane!.y + pane!.height - 60);
+    });
+
     test("shows blob detail with properties and content", async ({ page }) => {
         await page.goto("/storage");
 

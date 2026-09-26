@@ -20,6 +20,7 @@ import {
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { useScreenStateProvider } from "@/lib/stores/screen-state";
 import { tryPrettifyJson } from "@/lib/pretty-json";
+import { tryPrettifyXml } from "@/lib/pretty-xml";
 import { tokenizeBody } from "@/lib/bodyHighlight";
 import { HIGHLIGHT_MAX_BYTES } from "@/lib/response-body";
 import { formatBytes } from "@/lib/format-bytes";
@@ -52,21 +53,25 @@ export function BlobDetailPanel() {
     );
 
     const rawContent = ctx.blobContent.data?.content ?? "";
-    const prettyContent = useMemo(
-        () => tryPrettifyJson(rawContent),
-        [rawContent],
-    );
+    // JSON first, XML second — blob payloads are commonly minified in either.
+    const detected = useMemo(() => {
+        const json = tryPrettifyJson(rawContent);
+        if (json !== null) return { language: "json" as const, pretty: json };
+        const xml = tryPrettifyXml(rawContent);
+        if (xml !== null) return { language: "xml" as const, pretty: xml };
+        return null;
+    }, [rawContent]);
     const displayedContent =
-        prettyPrinted && prettyContent !== null ? prettyContent : rawContent;
-    // Highlight whenever the payload is JSON (raw or prettified) — but not above the
-    // shared body-highlight size cap, where tokenizing is not worth the cost.
+        prettyPrinted && detected !== null ? detected.pretty : rawContent;
+    // Highlight whenever the payload type was recognised (raw or prettified) — but not
+    // above the shared body-highlight size cap, where tokenizing is not worth the cost.
     const contentTokens = useMemo(
         () =>
-            prettyContent !== null &&
+            detected !== null &&
             displayedContent.length <= HIGHLIGHT_MAX_BYTES
-                ? tokenizeBody(displayedContent, "json")
+                ? tokenizeBody(displayedContent, detected.language)
                 : null,
-        [displayedContent, prettyContent],
+        [displayedContent, detected],
     );
 
     const togglePretty = (next: boolean) => {
@@ -864,7 +869,7 @@ export function BlobDetailPanel() {
                                                 </div>
                                             ) : (
                                                 <>
-                                                    {prettyContent !== null && (
+                                                    {detected !== null && (
                                                         <div className="mb-2 flex items-center gap-1 text-xs">
                                                             <button
                                                                 onClick={() =>

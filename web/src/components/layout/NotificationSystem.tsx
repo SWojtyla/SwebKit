@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import {
     X,
@@ -21,6 +21,27 @@ interface HistoryItem extends NotificationItem {
     read: boolean;
 }
 
+// Module-level factory: impure builtins (Date.now, randomUUID) belong outside the
+// component so the render-purity analyzer doesn't flag them — notify only ever runs
+// from event handlers anyway.
+function createNotification(
+    type: NotificationType,
+    title: string,
+    body?: string,
+    action?: NotificationAction,
+    link?: string,
+): NotificationItem {
+    return {
+        id: crypto.randomUUID(),
+        type,
+        title,
+        body,
+        timestamp: Date.now(),
+        action,
+        link,
+    };
+}
+
 export function NotificationProvider({ children }: { children: ReactNode }) {
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [showHistory, setShowHistory] = useState(false);
@@ -29,15 +50,22 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     const unreadCount = history.filter((n) => !n.read).length;
 
+    // Active toasts by id, so `dismiss` can move an item to history without reading
+    // state inside another setState updater — StrictMode double-invokes updaters,
+    // which used to push the same toast into the bell's history twice.
+    const activeItems = useRef(new Map<string, NotificationItem>());
+
     const dismiss = (id: string) => {
-        setNotifications((prev) => {
-            const item = prev.find((n) => n.id === id);
-            if (item)
-                setHistory((h) =>
-                    [{ ...item, read: false }, ...h].slice(0, 50),
-                );
-            return prev.filter((n) => n.id !== id);
-        });
+        // The delete also makes dismiss idempotent: a manual close racing the
+        // auto-expire timer can't record the entry twice.
+        const item = activeItems.current.get(id);
+        if (item) {
+            activeItems.current.delete(id);
+            setHistory((h) =>
+                [{ ...item, read: false }, ...h].slice(0, 50),
+            );
+        }
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
     };
 
     const notify = (
@@ -47,16 +75,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         action?: NotificationAction,
         link?: string,
     ) => {
-        const id = crypto.randomUUID();
-        const item: NotificationItem = {
-            id,
-            type,
-            title,
-            body,
-            timestamp: Date.now(),
-            action,
-            link,
-        };
+        const item = createNotification(type, title, body, action, link);
+        const id = item.id;
+        activeItems.current.set(id, item);
         setNotifications((prev) => [...prev, item]);
         setTimeout(() => dismiss(id), 5000);
     };

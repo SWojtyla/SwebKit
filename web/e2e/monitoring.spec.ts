@@ -314,9 +314,14 @@ test.describe("Monitoring", () => {
 
         await page.getByTestId("notification-bell").click();
         await expect(page.getByTestId("notification-history")).toBeVisible();
+        // Exactly one entry — a side effect inside a setState updater used to
+        // double-record the expired toast under StrictMode.
         await expect(
-            page.getByTestId("notification-unread-dot").first(),
-        ).toBeVisible();
+            page.locator("[data-testid^='notification-item-']"),
+        ).toHaveCount(1);
+        await expect(
+            page.getByTestId("notification-unread-dot"),
+        ).toHaveCount(1);
 
         await page.getByTestId("notification-mark-all-read").click();
         await expect(page.getByTestId("notification-unread-badge")).toHaveCount(

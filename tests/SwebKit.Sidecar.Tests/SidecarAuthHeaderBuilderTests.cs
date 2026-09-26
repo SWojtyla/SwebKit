@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Http;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
@@ -61,8 +62,17 @@ public class SidecarAuthHeaderBuilderTests
         var handler = new FakeHttpMessageHandler();
         var factory = new FakeHttpClientFactory(handler);
         var substitution = new VariableSubstitutionService(store, new NoopKeyVaultSecretResolver());
-        return (new SidecarAuthHeaderBuilder(store, factory, substitution), store, handler);
+        var flow = new OAuth2PkceFlowService(store, factory);
+        return (new SidecarAuthHeaderBuilder(store, factory, substitution, flow), store, handler);
     }
+
+    private static string TokenRecordJson(string accessToken, string? refreshToken, DateTimeOffset expiresAtUtc) =>
+        JsonSerializer.Serialize(new
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            ExpiresAtUtc = expiresAtUtc,
+        });
 
     private static HttpRequestMessage NewRequest(string url = "https://api.example.com/orders") =>
         new(HttpMethod.Get, url);
@@ -623,5 +633,79 @@ public class SidecarAuthHeaderBuilderTests
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal("token-a", reqA.Headers.Authorization!.Parameter);
         Assert.Equal("token-b", reqB.Headers.Authorization!.Parameter);
+    }
+
+    // ── OAuth2 authorization-code (PKCE) — stored token records ──
+
+    private static AuthConfig AuthCodeAuth(string tokenKey) => new()
+    {
+        Type = AuthType.OAuth2,
+        OAuth2GrantType = OAuth2GrantType.AuthorizationCode,
+        OAuth2TokenUrl = "https://auth.example.com/token",
+        OAuth2ClientId = "pkce-client",
+        OAuth2TokenCredentialKey = tokenKey,
+    };
+
+    [Fact]
+    public async Task ApplyAsync_OAuth2AuthCode_ValidStoredToken_SetsBearer()
+    {
+        var (builder, store, handler) = Build();
+        store.Save("tok", TokenRecordJson("live-access", "rt-1", DateTimeOffset.UtcNow.AddMinutes(30)));
+
+        var request = NewRequest();
+        var warnings = await builder.ApplyAsync(request, AuthCodeAuth("tok"));
+
+        Assert.Equal("Bearer", request.Headers.Authorization!.Scheme);
+        Assert.Equal("live-access", request.Headers.Authorization.Parameter);
+        Assert.Empty(warnings);
+        Assert.Empty(handler.Requests); // no token call needed for a live token
+    }
+
+    [Fact]
+    public async Task ApplyAsync_OAuth2AuthCode_ExpiredToken_RefreshesInPlace()
+    {
+        var (builder, store, handler) = Build();
+        store.Save("tok", TokenRecordJson("stale-access", "rt-1", DateTimeOffset.UtcNow.AddMinutes(-5)));
+        handler.EnqueueJson("""{"access_token":"fresh-access","refresh_token":"rt-2","expires_in":3600}""");
+
+        var request = NewRequest();
+        var warnings = await builder.ApplyAsync(request, AuthCodeAuth("tok"));
+
+        Assert.Equal("fresh-access", request.Headers.Authorization!.Parameter);
+        Assert.Empty(warnings);
+
+        // The refresh posted the right grant, and the stored record rotated to the new tokens.
+        Assert.Single(handler.Requests);
+        Assert.Contains("grant_type=refresh_token", handler.RequestBodies[0]);
+        Assert.Contains("refresh_token=rt-1", handler.RequestBodies[0]);
+        var stored = JsonDocument.Parse(store.Get("tok")!).RootElement;
+        Assert.Equal("fresh-access", stored.GetProperty("AccessToken").GetString());
+        Assert.Equal("rt-2", stored.GetProperty("RefreshToken").GetString());
+    }
+
+    [Fact]
+    public async Task ApplyAsync_OAuth2AuthCode_ExpiredNoRefreshToken_Warns()
+    {
+        var (builder, store, handler) = Build();
+        store.Save("tok", TokenRecordJson("dead-access", null, DateTimeOffset.UtcNow.AddMinutes(-5)));
+
+        var request = NewRequest();
+        var warnings = await builder.ApplyAsync(request, AuthCodeAuth("tok"));
+
+        Assert.Null(request.Headers.Authorization);
+        Assert.Contains(warnings, w => w.Contains("sign in", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_OAuth2AuthCode_NoStoredRecord_Warns()
+    {
+        var (builder, _, _) = Build();
+
+        var request = NewRequest();
+        var warnings = await builder.ApplyAsync(request, AuthCodeAuth("never-stored"));
+
+        Assert.Null(request.Headers.Authorization);
+        Assert.Contains(warnings, w => w.Contains("no sign-in", StringComparison.OrdinalIgnoreCase));
     }
 }

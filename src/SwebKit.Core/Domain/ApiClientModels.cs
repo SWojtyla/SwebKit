@@ -312,6 +312,10 @@ public sealed class AuthConfig
     public string? OAuth2AuthUrl { get; set; }
     /// <summary>OAuth 2 scopes (space-separated).</summary>
     public string? OAuth2Scopes { get; set; }
+    /// <summary>Authorization-code flow only: reference into <see cref="Abstractions.ICredentialStore"/>
+    /// holding the signed-in token record (JSON: access token, refresh token, expiry). The record is
+    /// produced by the sidecar's loopback PKCE flow — never persisted inline in collections.json.</summary>
+    public string? OAuth2TokenCredentialKey { get; set; }
 }
 
 public enum AuthType

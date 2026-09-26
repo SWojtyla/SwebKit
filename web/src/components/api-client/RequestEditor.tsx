@@ -170,8 +170,10 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   async function persistSecret() {
     const key = auth.credentialKey;
     if (!key || !isGeneratedCredentialKey(key)) return;
-    const value = authSecretRef.current;
-    if (value.trim() === "") {
+    // Trimmed at write only — echoing the trim back mid-typing would eat a space the
+    // user may still be building on. The blur handler settles the box to match.
+    const value = authSecretRef.current.trim();
+    if (value === "") {
       await deleteSecret(key);
       updateAuth({ credentialKey: null, credentialSecret: null });
       setAuthSecretInput("");
@@ -197,6 +199,10 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
       clearTimeout(secretSaveTimer.current);
       secretSaveTimer.current = null;
     }
+    // Leaving the field settles it — the box now shows exactly what was stored.
+    const trimmed = authSecretRef.current.trim();
+    authSecretRef.current = trimmed;
+    setAuthSecretInput(trimmed);
     void persistSecret();
   };
 

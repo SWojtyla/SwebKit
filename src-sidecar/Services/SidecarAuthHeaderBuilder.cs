@@ -22,7 +22,8 @@ namespace SwebKit.Sidecar.Services;
 public sealed class SidecarAuthHeaderBuilder(
     ICredentialStore credentialStore,
     IHttpClientFactory httpClientFactory,
-    IVariableSubstitutionService substitution) : IAuthHeaderBuilder
+    IVariableSubstitutionService substitution,
+    OAuth2PkceFlowService pkceFlow) : IAuthHeaderBuilder
 {
     /// <summary>
     /// Client-credentials access tokens are cached until shortly before their
@@ -138,7 +139,47 @@ public sealed class SidecarAuthHeaderBuilder(
         {
             await ApplyOAuth2ClientCredentialsAsync(message, auth, scope, warnings, cancellationToken).ConfigureAwait(false);
         }
-        // Authorization code / PKCE is not implemented for the sidecar MVP.
+        else if (auth.OAuth2GrantType == OAuth2GrantType.AuthorizationCode)
+        {
+            await ApplyOAuth2AuthorizationCodeAsync(message, auth, warnings, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Authorization-code + PKCE: the token record lives in the credential store under
+    /// <see cref="AuthConfig.OAuth2TokenCredentialKey"/> (written by the loopback flow). An expired
+    /// access token is refreshed in place; a missing record means the user never completed sign-in.
+    /// </summary>
+    private async Task ApplyOAuth2AuthorizationCodeAsync(
+        HttpRequestMessage message,
+        AuthConfig auth,
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        var record = pkceFlow.LoadTokenRecord(auth.OAuth2TokenCredentialKey);
+        if (record is null)
+        {
+            warnings.Add("OAuth2 authorization-code auth is configured but no sign-in has completed — the request was sent without an Authorization header.");
+            return;
+        }
+
+        if (record.ExpiresAtUtc - ExpirySkew <= DateTimeOffset.UtcNow &&
+            !string.IsNullOrWhiteSpace(auth.OAuth2TokenCredentialKey))
+        {
+            var refreshed = await pkceFlow.RefreshAsync(
+                auth.OAuth2TokenCredentialKey,
+                new OAuth2PkceFlowService.AuthConfigLike(auth.OAuth2TokenUrl, auth.OAuth2ClientId, auth.CredentialKey),
+                cancellationToken).ConfigureAwait(false);
+            if (refreshed is not null)
+                record = refreshed;
+            else if (record.ExpiresAtUtc <= DateTimeOffset.UtcNow)
+            {
+                warnings.Add("The stored OAuth2 access token expired and could not be refreshed — sign in again from the Auth tab.");
+                return;
+            }
+        }
+
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", record.AccessToken);
     }
 
     private async Task ApplyOAuth2ClientCredentialsAsync(

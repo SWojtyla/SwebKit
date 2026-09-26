@@ -74,9 +74,9 @@ public class RedisConfig
                 if (string.IsNullOrWhiteSpace(entry.CacheName))
                     throw new InvalidOperationException($"{nameof(RedisCacheEntry)}.{nameof(RedisCacheEntry.CacheName)} is required for cache '{entry.DisplayName}' when {nameof(RedisCacheEntry.UseAad)} is true.");
             }
-            else if (string.IsNullOrWhiteSpace(entry.ConnectionString))
+            else if (string.IsNullOrWhiteSpace(entry.ConnectionString) && string.IsNullOrWhiteSpace(entry.CredentialKey))
             {
-                throw new InvalidOperationException($"{nameof(RedisCacheEntry)}.{nameof(RedisCacheEntry.ConnectionString)} is required for cache '{entry.DisplayName}'.");
+                throw new InvalidOperationException($"{nameof(RedisCacheEntry)}.{nameof(RedisCacheEntry.CredentialKey)} or a legacy {nameof(RedisCacheEntry.ConnectionString)} is required for cache '{entry.DisplayName}'.");
             }
         }
     }
@@ -89,7 +89,17 @@ public class RedisCacheEntry
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
     public string DisplayName { get; set; } = "Cache";
+
+    /// <summary>Key used to retrieve the connection string from <see cref="Abstractions.ICredentialStore"/>.
+    /// The secret itself is never persisted to profiles.json — only this reference is.</summary>
+    public string CredentialKey { get; set; } = string.Empty;
+
+    /// <summary>Legacy plaintext connection string. Still deserialized so older profiles keep
+    /// working until the credential migration moves the value into the OS credential store
+    /// (see <c>RedisCredentialMigration</c>); new writes should leave this empty and set
+    /// <see cref="CredentialKey"/> instead.</summary>
     public string ConnectionString { get; set; } = string.Empty;
+
     public int Database { get; set; }
 
     /// <summary>When true, connects via Entra ID using <see cref="CacheName"/> instead of <see cref="ConnectionString"/>.</summary>

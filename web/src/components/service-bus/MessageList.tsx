@@ -1,32 +1,13 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import {
-    Search,
-    Filter,
-    X,
-    Columns,
-    Pin,
-    Plus,
-    RotateCw,
-    Check,
-    AlertCircle,
-    ArrowUpRight,
-    Ban,
-    Bookmark,
-    CopyPlus,
-    Download,
-    Loader2,
-    RefreshCw,
-} from "lucide-react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 import { invalidateServiceBusQueries } from "@/lib/hooks";
 import { apiSend } from "@/lib/api";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
 import { useNotification } from "@/components/layout/notification-context";
-import { ConfirmBar } from "@/components/shared/ConfirmBar";
-import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import {
     messageToDownloadObject,
     safeFileName,
@@ -35,15 +16,11 @@ import {
 import { resendTargetText, sendableEntityPath } from "./resendHelpers";
 import { runInChunks } from "./bulkOps";
 import { applyFilters, hasActiveFilters } from "./filterLogic";
-import { AdvancedFilterPanel } from "./AdvancedFilterPanel";
 import type { AdvancedFilterRule } from "./filterTypes";
 import { isRuleConfigured, createFilterRule } from "./filterTypes";
 import {
     loadSbPreferences,
     saveSbPreferences,
-    PEEK_COUNT_OPTIONS,
-    AUTO_REFRESH_OPTIONS,
-    ALL_BUILTIN_COLUMNS,
     type SbListPreferences,
     type RowDensity,
 } from "@/lib/stores/sb-preferences";
@@ -53,6 +30,25 @@ import {
     deleteSavedFilter,
     type SbSavedFilter,
 } from "@/lib/stores/sb-filters";
+import {
+    MessageListToolbar,
+    ColumnTogglePanel,
+    SessionPinFilter,
+    AdvancedFilterSection,
+} from "./MessageListToolbar";
+import {
+    BulkActionBar,
+    BulkConfirmBar,
+    type PendingBulkConfirm,
+    type BulkProgress,
+} from "./MessageListBulkBar";
+import {
+    MessageTableEmpty,
+    MessageTableHeader,
+    MessageRow,
+    MessageListFooter,
+    type MessageGridContext,
+} from "./MessageListTable";
 
 interface Props {
     nsId: string | null;
@@ -82,7 +78,6 @@ import {
     CUSTOM_COLUMN_WIDTH,
     NSB_COLUMN_DEFS,
     ROW_HEIGHT_ESTIMATE,
-    densityClass,
 } from "./message-columns";
 
 export function MessageList({
@@ -203,20 +198,11 @@ export function MessageList({
     // directly rather than the mutation hooks: per-chunk onSuccess would
     // invalidate (and refetch) the entity queries once per chunk, so the loop
     // invalidates once when the whole run ends.
-    const [pendingBulkConfirm, setPendingBulkConfirm] = useState<
-        | { kind: "complete"; seqNumbers: number[] }
-        | { kind: "resubmit"; seqNumbers: number[] }
-        | { kind: "deadletter"; seqNumbers: number[] }
-        | { kind: "resend"; messages: SbMessage[] }
-        | null
-    >(null);
+    const [pendingBulkConfirm, setPendingBulkConfirm] =
+        useState<PendingBulkConfirm | null>(null);
     // Non-null while a chunked bulk run is in flight — drives the progress
     // indicator and disables the action buttons for the run's duration.
-    const [bulkProgress, setBulkProgress] = useState<{
-        label: string;
-        done: number;
-        total: number;
-    } | null>(null);
+    const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null);
 
     const handleBulkComplete = useCallback(() => {
         if (!nsId || !entity || selectedMsgs.size === 0) return;
@@ -504,6 +490,15 @@ export function MessageList({
             : []),
     ].join(" ");
 
+    const grid: MessageGridContext = {
+        gridTemplateColumns,
+        activeColumnDefs,
+        customColumns: prefs.customColumns,
+        nsbMode,
+        rowDensity: prefs.rowDensity,
+        viewMode,
+    };
+
     const rowVirtualizer = useVirtualizer({
         count: filteredMessages.length,
         getScrollElement: () => listRef.current,
@@ -568,615 +563,123 @@ export function MessageList({
             className="flex h-full flex-col"
             data-testid="message-list-container"
         >
-            {/* Filter bar with peek count, auto-refresh, density */}
-            <div className="flex items-center gap-1.5 border-b px-2 py-1.5">
-                <div className="relative flex-1">
-                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                        type="text"
-                        data-testid="message-text-filter"
-                        value={textFilter}
-                        onChange={(e) => setTextFilter(e.target.value)}
-                        placeholder="Search messages..."
-                        className="w-full rounded-md border bg-card py-1.5 pl-8 pr-7 text-xs"
-                    />
-                    {textFilter && (
-                        <button
-                            onClick={() => setTextFilter("")}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            title="Clear search"
-                        >
-                            <X className="h-3.5 w-3.5" />
-                        </button>
-                    )}
-                </div>
-
-                {/* Saved filters */}
-                <div className="relative">
-                    <button
-                        data-testid="saved-filters-toggle"
-                        onClick={() => setShowSavedFilters(!showSavedFilters)}
-                        disabled={savedFilters.length === 0 && !canSaveFilter}
-                        title="Saved filters"
-                        className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
-                    >
-                        <Bookmark className="h-3.5 w-3.5" />
-                        Saved
-                    </button>
-                    {showSavedFilters && (
-                        <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-md border bg-card p-2 shadow-lg">
-                            {savedFilters.length === 0 ? (
-                                <div className="text-xs text-muted-foreground">
-                                    No saved filters
-                                </div>
-                            ) : (
-                                <div className="space-y-1">
-                                    {savedFilters.map((f) => (
-                                        <div
-                                            key={f.name}
-                                            className="flex items-center justify-between gap-1"
-                                        >
-                                            <button
-                                                className="flex-1 rounded px-1 py-0.5 text-left text-xs hover:bg-accent"
-                                                onClick={() => {
-                                                    setTextFilter(f.text);
-                                                    setFiltersEnabled(
-                                                        f.filtersEnabled,
-                                                    );
-                                                    setAdvancedEnabled(
-                                                        f.advancedEnabled,
-                                                    );
-                                                    setAdvancedRules(
-                                                        f.advancedRules,
-                                                    );
-                                                    setPinnedSessionId(
-                                                        f.pinnedSessionId,
-                                                    );
-                                                    setShowSavedFilters(false);
-                                                }}
-                                            >
-                                                {f.name}
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    if (!nsId || !entity)
-                                                        return;
-                                                    const updated =
-                                                        deleteSavedFilter(
-                                                            nsId,
-                                                            entity.entityPath,
-                                                            f.name,
-                                                        );
-                                                    setSavedFilters(updated);
-                                                }}
-                                                className="text-muted-foreground hover:text-foreground"
-                                                title="Delete saved filter"
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                            {showSaveFilterInput ? (
-                                <div className="mt-2 flex items-center gap-1">
-                                    <input
-                                        type="text"
-                                        value={saveFilterName}
-                                        onChange={(e) =>
-                                            setSaveFilterName(e.target.value)
-                                        }
-                                        onKeyDown={(e) =>
-                                            e.key === "Enter" &&
-                                            handleSaveFilter()
-                                        }
-                                        placeholder="Filter name..."
-                                        className="flex-1 rounded border bg-card px-2 py-1 text-xs"
-                                        autoFocus
-                                    />
-                                    <button
-                                        onClick={handleSaveFilter}
-                                        disabled={!saveFilterName.trim()}
-                                        title={
-                                            !saveFilterName.trim()
-                                                ? "Name the filter first"
-                                                : undefined
-                                        }
-                                        className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                                    >
-                                        Save
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setShowSaveFilterInput(false);
-                                            setSaveFilterName("");
-                                        }}
-                                        className="rounded border px-2 py-1 text-xs hover:bg-accent"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            ) : (
-                                canSaveFilter && (
-                                    <button
-                                        onClick={() =>
-                                            setShowSaveFilterInput(true)
-                                        }
-                                        className="mt-2 w-full rounded border px-2 py-1 text-xs hover:bg-accent"
-                                    >
-                                        Save current filter
-                                    </button>
-                                )
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                {/* Peek count selector */}
-                <select
-                    data-testid="peek-count-select"
-                    value={prefs.peekCount}
-                    onChange={(e) =>
-                        setPrefs((p) => ({
-                            ...p,
-                            peekCount: Number(e.target.value),
-                        }))
-                    }
-                    className="rounded-md border bg-card px-1.5 py-1.5 text-xs"
-                    title="Peek count"
-                >
-                    {PEEK_COUNT_OPTIONS.map((c) => (
-                        <option key={c} value={c}>
-                            {c}
-                        </option>
-                    ))}
-                </select>
-
-                {/* Auto-refresh selector */}
-                <select
-                    data-testid="auto-refresh-select"
-                    value={prefs.autoRefreshInterval}
-                    onChange={(e) =>
-                        setPrefs((p) => ({
-                            ...p,
-                            autoRefreshInterval: Number(e.target.value),
-                        }))
-                    }
-                    className="rounded-md border bg-card px-1.5 py-1.5 text-xs"
-                    title="Auto-refresh"
-                >
-                    {AUTO_REFRESH_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                        </option>
-                    ))}
-                </select>
-
-                {/* Row density selector */}
-                <select
-                    data-testid="row-density-select"
-                    value={prefs.rowDensity}
-                    onChange={(e) =>
-                        setPrefs((p) => ({
-                            ...p,
-                            rowDensity: e.target.value as RowDensity,
-                        }))
-                    }
-                    className="rounded-md border bg-card px-1.5 py-1.5 text-xs"
-                    title="Row density"
-                >
-                    <option value="compact">Compact</option>
-                    <option value="default">Default</option>
-                    <option value="comfort">Comfort</option>
-                </select>
-
-                <button
-                    data-testid="toggle-filters-enabled"
-                    onClick={() => setFiltersEnabled(!filtersEnabled)}
-                    title="Toggle all filters"
-                    className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${
-                        filtersEnabled
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-accent"
-                    }`}
-                >
-                    {filtersEnabled ? "Filters: On" : "Filters: Off"}
-                </button>
-                <button
-                    data-testid="toggle-advanced-filter"
-                    onClick={() => setAdvancedEnabled((prev) => !prev)}
-                    disabled={!filtersEnabled}
-                    title="Advanced filters"
-                    className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${
-                        advancedEnabled && filtersEnabled
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-accent disabled:opacity-50"
-                    }`}
-                >
-                    <Filter className="h-3.5 w-3.5" />
-                    {/* Only meaningful once Advanced is actually on — otherwise a rule count from a
-              previous session (or one the user just turned Advanced off to ignore) reads as
-              "these rules are filtering your messages right now" when they aren't. */}
-                    {advancedEnabled && activeRuleCount > 0 && (
-                        <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
-                            {activeRuleCount}
-                        </span>
-                    )}
-                    <span className="hidden sm:inline">
-                        {advancedEnabled ? "Advanced: On" : "Advanced: Off"}
-                    </span>
-                </button>
-                {hasActiveFilters(
+            <MessageListToolbar
+                textFilter={textFilter}
+                onTextFilterChange={setTextFilter}
+                savedFilters={savedFilters}
+                showSavedFilters={showSavedFilters}
+                canSaveFilter={canSaveFilter}
+                showSaveFilterInput={showSaveFilterInput}
+                saveFilterName={saveFilterName}
+                onToggleSavedFilters={() =>
+                    setShowSavedFilters(!showSavedFilters)
+                }
+                onShowSaveFilterInput={setShowSaveFilterInput}
+                onSaveFilterNameChange={setSaveFilterName}
+                onApplySavedFilter={(f) => {
+                    setTextFilter(f.text);
+                    setFiltersEnabled(f.filtersEnabled);
+                    setAdvancedEnabled(f.advancedEnabled);
+                    setAdvancedRules(f.advancedRules);
+                    setPinnedSessionId(f.pinnedSessionId);
+                    setShowSavedFilters(false);
+                }}
+                onDeleteSavedFilter={(f) => {
+                    if (!nsId || !entity) return;
+                    setSavedFilters(
+                        deleteSavedFilter(nsId, entity.entityPath, f.name),
+                    );
+                }}
+                onSaveFilter={handleSaveFilter}
+                prefs={prefs}
+                onPrefsChange={setPrefs}
+                nsbMode={nsbMode}
+                filtersEnabled={filtersEnabled}
+                onToggleFiltersEnabled={() =>
+                    setFiltersEnabled(!filtersEnabled)
+                }
+                advancedEnabled={advancedEnabled}
+                onToggleAdvanced={() => setAdvancedEnabled((prev) => !prev)}
+                activeRuleCount={activeRuleCount}
+                anyFiltersActive={hasActiveFilters(
                     textFilter,
                     pinnedSessionId,
                     advancedRules,
-                ) && (
-                    <button
-                        data-testid="clear-all-filters"
-                        onClick={clearAllFilters}
-                        title="Clear all filters — text search, pinned session, and advanced rules"
-                        className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent"
-                    >
-                        <X className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">
-                            Clear all filters
-                        </span>
-                    </button>
                 )}
-                {advancedEnabled && (
-                    <button
-                        data-testid="add-rule"
-                        onClick={() =>
-                            setAdvancedRules((rules) => [
-                                ...rules,
-                                createFilterRule(),
-                            ])
-                        }
-                        title="Add advanced filter rule"
-                        className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent"
-                    >
-                        <Plus className="h-3.5 w-3.5" /> Rule
-                    </button>
-                )}
-                <button
-                    data-testid="toggle-column-visibility"
-                    onClick={() => setShowColumnToggle(!showColumnToggle)}
-                    title="Column visibility"
-                    className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${
-                        showColumnToggle
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-accent"
-                    }`}
-                >
-                    <Columns className="h-3.5 w-3.5" />
-                </button>
-                <button
-                    data-testid="message-download-zip"
-                    onClick={handleDownloadZip}
-                    disabled={filteredMessages.length === 0 || isLoadingMore}
-                    title="Download selected or filtered messages as ZIP"
-                    className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent disabled:opacity-50"
-                >
-                    <Download className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">ZIP</span>
-                </button>
-                <button
-                    data-testid="toggle-nsb-mode"
-                    onClick={() =>
-                        setPrefs((p) => ({ ...p, nsbMode: !nsbMode }))
-                    }
-                    title="Toggle NServiceBus view — shows endpoint, message type, conversation ID"
-                    className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${
-                        nsbMode
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-accent"
-                    }`}
-                >
-                    NSB
-                </button>
-            </div>
+                onClearAllFilters={clearAllFilters}
+                onAddRule={() =>
+                    setAdvancedRules((rules) => [...rules, createFilterRule()])
+                }
+                showColumnToggle={showColumnToggle}
+                onToggleColumnPanel={() =>
+                    setShowColumnToggle(!showColumnToggle)
+                }
+                onDownloadZip={handleDownloadZip}
+                downloadDisabled={
+                    filteredMessages.length === 0 || isLoadingMore
+                }
+            />
 
-            {/* Column toggle dropdown with custom columns */}
             {showColumnToggle && (
-                <div
-                    className="border-b bg-muted/20 px-3 py-2"
-                    data-testid="column-toggle-dropdown"
-                >
-                    <div className="mb-2 text-xs font-medium text-muted-foreground">
-                        Built-in columns
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        {ALL_BUILTIN_COLUMNS.map((col) => (
-                            <label
-                                key={col}
-                                className="flex items-center gap-1 text-xs"
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={visibleColumns.has(col)}
-                                    onChange={() => toggleBuiltInColumn(col)}
-                                    data-testid={`column-toggle-${col}`}
-                                />
-                                {col}
-                            </label>
-                        ))}
-                    </div>
-                    {prefs.customColumns.length > 0 && (
-                        <>
-                            <div className="mb-1 mt-2 text-xs font-medium text-muted-foreground">
-                                Custom property columns
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                {prefs.customColumns.map((col) => (
-                                    <span
-                                        key={col}
-                                        className="flex items-center gap-1 rounded bg-accent px-1.5 py-0.5 text-xs"
-                                    >
-                                        {col}
-                                        <button
-                                            onClick={() =>
-                                                removeCustomColumn(col)
-                                            }
-                                            className="text-muted-foreground hover:text-foreground"
-                                        >
-                                            <X className="h-3 w-3" />
-                                        </button>
-                                    </span>
-                                ))}
-                            </div>
-                        </>
-                    )}
-                    {suggestedColumns.length > 0 && (
-                        <>
-                            <div className="mb-1 mt-2 text-xs font-medium text-muted-foreground">
-                                Suggested from data
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                                {suggestedColumns.map((col) => (
-                                    <button
-                                        key={col}
-                                        onClick={() =>
-                                            setPrefs((p) => ({
-                                                ...p,
-                                                customColumns: [
-                                                    ...p.customColumns,
-                                                    col,
-                                                ],
-                                            }))
-                                        }
-                                        className="flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-xs hover:bg-accent"
-                                        data-testid={`suggest-column-${col}`}
-                                    >
-                                        <Plus className="h-2.5 w-2.5" /> {col}
-                                    </button>
-                                ))}
-                            </div>
-                        </>
-                    )}
-                    <div className="mt-2 flex items-center gap-1">
-                        <input
-                            type="text"
-                            value={customColumnInput}
-                            onChange={(e) =>
-                                setCustomColumnInput(e.target.value)
-                            }
-                            onKeyDown={(e) =>
-                                e.key === "Enter" && addCustomColumn()
-                            }
-                            placeholder="Add custom property column..."
-                            className="flex-1 rounded border bg-card px-2 py-1 text-xs"
-                            data-testid="custom-column-input"
-                        />
-                        <button
-                            onClick={addCustomColumn}
-                            className="rounded border px-2 py-1 text-xs hover:bg-accent"
-                            data-testid="add-custom-column"
-                        >
-                            Add
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Session pinning filter */}
-            <div className="flex items-center gap-1.5 border-b px-2 py-1">
-                <Pin className="h-3.5 w-3.5 text-muted-foreground" />
-                <input
-                    type="text"
-                    data-testid="session-pin-filter"
-                    value={pinnedSessionId ?? ""}
-                    onChange={(e) => setPinnedSessionId(e.target.value || null)}
-                    placeholder="Filter by Session ID..."
-                    className="flex-1 rounded-md border bg-card px-2 py-1 text-xs"
+                <ColumnTogglePanel
+                    prefs={prefs}
+                    onPrefsChange={setPrefs}
+                    visibleColumns={visibleColumns}
+                    suggestedColumns={suggestedColumns}
+                    customColumnInput={customColumnInput}
+                    onCustomColumnInputChange={setCustomColumnInput}
+                    onAddCustomColumn={addCustomColumn}
+                    onRemoveCustomColumn={removeCustomColumn}
+                    onToggleBuiltInColumn={toggleBuiltInColumn}
                 />
-                {pinnedSessionId && (
-                    <button
-                        onClick={() => setPinnedSessionId(null)}
-                        className="text-muted-foreground hover:text-foreground"
-                        data-testid="session-pin-clear"
-                    >
-                        <X className="h-3.5 w-3.5" />
-                    </button>
-                )}
-            </div>
-
-            {/* Advanced filter panel */}
-            {advancedEnabled && (
-                <>
-                    <div className="flex items-center justify-between border-b bg-muted/20 px-2 py-1">
-                        <span className="text-xs font-medium">
-                            Advanced filters
-                        </span>
-                        {advancedRules.length > 0 && (
-                            <button
-                                onClick={() => setAdvancedRules([])}
-                                className="text-xs text-muted-foreground hover:text-foreground"
-                            >
-                                Clear all
-                            </button>
-                        )}
-                    </div>
-                    <AdvancedFilterPanel
-                        rules={advancedRules}
-                        onChange={setAdvancedRules}
-                    />
-                </>
             )}
 
-            {/* Bulk action bar */}
+            <SessionPinFilter
+                pinnedSessionId={pinnedSessionId}
+                onChange={setPinnedSessionId}
+            />
+
+            {advancedEnabled && (
+                <AdvancedFilterSection
+                    rules={advancedRules}
+                    onChange={setAdvancedRules}
+                />
+            )}
+
             {selectedMsgs.size > 0 && (
-                <div
-                    className="flex items-center gap-2 border-b bg-primary/10 px-3 py-1.5"
-                    data-testid="bulk-action-bar"
-                >
-                    {bulkProgress ? (
-                        <span
-                            className="flex items-center gap-1.5 text-xs font-medium"
-                            data-testid="bulk-progress"
-                        >
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            {bulkProgress.label} {bulkProgress.done}/
-                            {bulkProgress.total}
-                        </span>
-                    ) : (
-                        <span className="text-xs font-medium">
-                            {selectedMsgs.size} selected
-                        </span>
-                    )}
-                    {bulkProgress && (
-                        <div
-                            className="h-1.5 w-24 overflow-hidden rounded bg-muted"
-                            data-testid="bulk-progress-bar"
-                        >
-                            <div
-                                className="h-full bg-primary transition-all"
-                                style={{
-                                    width: `${(bulkProgress.done / Math.max(1, bulkProgress.total)) * 100}%`,
-                                }}
-                            />
-                        </div>
-                    )}
-                    <button
-                        onClick={toggleSelectAll}
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                        data-testid="bulk-select-all"
-                    >
-                        {selectedMsgs.size === filteredMessages.length
-                            ? "Deselect all"
-                            : "Select all"}
-                    </button>
-                    <div className="ml-auto flex items-center gap-1.5">
-                        {/* Resend moves each selected message back to the queue it failed
-                in (NServiceBus.FailedQ) — works on active messages (e.g. an
-                NServiceBus error queue) and on the DLQ. */}
-                        <button
-                            onClick={handleBulkResend}
-                            disabled={bulkProgress !== null}
-                            title={
-                                bulkProgress !== null
-                                    ? "Resending…"
-                                    : "Send each selected message back to the queue it originally failed in (NServiceBus.FailedQ — or this entity if unset), then remove it here"
-                            }
-                            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                            data-testid="bulk-resend"
-                        >
-                            <CopyPlus className="h-3 w-3" /> Resend to origin
-                        </button>
-                        {viewMode === "dlq" && entity && (
-                            <button
-                                onClick={handleBulkResubmit}
-                                disabled={bulkProgress !== null}
-                                title={
-                                    bulkProgress !== null
-                                        ? "Resubmitting…"
-                                        : `Send each selected message back to ${sendableEntityPath(entity)} — the entity this dead-letter queue belongs to — then remove it from the DLQ`
-                                }
-                                className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                                data-testid="bulk-resubmit"
-                            >
-                                <ArrowUpRight className="h-3 w-3" /> Resubmit to{" "}
-                                {sendableEntityPath(entity)}
-                            </button>
-                        )}
-                        {viewMode === "active" && (
-                            <button
-                                onClick={handleBulkDeadLetter}
-                                disabled={bulkProgress !== null}
-                                title={
-                                    bulkProgress !== null
-                                        ? "Dead-lettering…"
-                                        : "Move each selected message into this entity's dead-letter queue — a broker move, not a copy (a dead-letter reason is recorded)"
-                                }
-                                className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                                data-testid="bulk-deadletter"
-                            >
-                                <Ban className="h-3 w-3" /> Move to DLQ
-                            </button>
-                        )}
-                        <button
-                            onClick={handleBulkComplete}
-                            disabled={bulkProgress !== null}
-                            title={
-                                bulkProgress !== null
-                                    ? "Completing…"
-                                    : `Settle each selected message — permanently removed from ${viewMode === "dlq" ? "the dead-letter queue" : "the queue"}, no redelivery`
-                            }
-                            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                            data-testid="bulk-complete"
-                        >
-                            <Check className="h-3 w-3" /> Complete
-                        </button>
-                        <button
-                            onClick={() => setSelectedMsgs(new Set())}
-                            className="rounded border px-2 py-1 text-xs hover:bg-accent"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                </div>
+                <BulkActionBar
+                    selectedCount={selectedMsgs.size}
+                    filteredCount={filteredMessages.length}
+                    bulkProgress={bulkProgress}
+                    viewMode={viewMode}
+                    entity={entity}
+                    onToggleSelectAll={toggleSelectAll}
+                    onResend={handleBulkResend}
+                    onResubmit={handleBulkResubmit}
+                    onDeadLetter={handleBulkDeadLetter}
+                    onComplete={handleBulkComplete}
+                    onClearSelection={() => setSelectedMsgs(new Set())}
+                />
             )}
 
             {pendingBulkConfirm && (
-                <ConfirmBar
-                    message={
-                        pendingBulkConfirm.kind === "complete"
-                            ? `Complete ${pendingBulkConfirm.seqNumbers.length} message(s)? They are settled and permanently removed — no redelivery.`
-                            : pendingBulkConfirm.kind === "resubmit"
-                              ? `Resubmit ${pendingBulkConfirm.seqNumbers.length} message(s) back to ${entity ? sendableEntityPath(entity) : "the source entity"}? Each copy gets a new Message ID and the original leaves the dead-letter queue once sent.`
-                              : pendingBulkConfirm.kind === "deadletter"
-                                ? `Move ${pendingBulkConfirm.seqNumbers.length} message(s) to the dead-letter queue of ${entity?.entityPath ?? "this entity"}?`
-                                : `Resend ${pendingBulkConfirm.messages.length} message(s) to ${resendTargetText(pendingBulkConfirm.messages, entity?.entityPath ?? "")}? Originals are removed once each copy is sent — every copy gets a new Message ID.`
-                    }
-                    confirmLabel={
-                        pendingBulkConfirm.kind === "complete"
-                            ? "Complete"
-                            : pendingBulkConfirm.kind === "resubmit"
-                              ? "Resubmit"
-                              : pendingBulkConfirm.kind === "deadletter"
-                                ? "Dead-letter"
-                                : "Resend"
-                    }
+                <BulkConfirmBar
+                    pending={pendingBulkConfirm}
+                    entity={entity}
                     onConfirm={runPendingBulkConfirm}
                     onCancel={() => setPendingBulkConfirm(null)}
-                    testId="bulk-action-confirm"
                 />
             )}
 
             {/* Message list — a real data table (columns, not a stacked card per
-          message), matching the MAUI grid's dense spreadsheet layout */}
+          message), matching the MAUI grid's dense spreadsheet layout. The scroll
+          container + virtualizer stay here because both own refs/effects; the
+          header and row bodies live in MessageListTable.tsx. */}
             {filteredMessages.length === 0 ? (
-                <div
-                    className="flex h-full items-center justify-center text-sm text-muted-foreground"
-                    data-testid={
-                        messages.length === 0
-                            ? "message-list-no-messages"
-                            : "message-list-no-matches"
-                    }
-                >
-                    {messages.length === 0
-                        ? `No ${viewMode === "dlq" ? "dead-lettered" : "active"} messages`
-                        : "No messages match the current filters"}
-                </div>
+                <MessageTableEmpty
+                    sourceEmpty={messages.length === 0}
+                    viewMode={viewMode}
+                />
             ) : (
                 <div
                     ref={listRef}
@@ -1185,56 +688,14 @@ export function MessageList({
                     role="table"
                     aria-label="Messages"
                 >
-                    <div
-                        className="sticky top-0 z-10 grid border-b bg-card"
-                        style={{ gridTemplateColumns }}
-                        role="row"
-                    >
-                        <div
-                            className="flex items-center px-2 py-1.5"
-                            role="columnheader"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={
-                                    selectedMsgs.size > 0 &&
-                                    selectedMsgs.size ===
-                                        filteredMessages.length
-                                }
-                                onChange={toggleSelectAll}
-                                data-testid="message-select-all-checkbox"
-                            />
-                        </div>
-                        {activeColumnDefs.map((col) => (
-                            <div
-                                key={col.key}
-                                className="flex items-center whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground"
-                                role="columnheader"
-                            >
-                                {col.label}
-                            </div>
-                        ))}
-                        {prefs.customColumns.map((col) => (
-                            <div
-                                key={col}
-                                className="flex items-center whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground"
-                                role="columnheader"
-                            >
-                                {col}
-                            </div>
-                        ))}
-                        {nsbMode &&
-                            NSB_COLUMN_DEFS.map((col) => (
-                                <div
-                                    key={col.key}
-                                    className="flex items-center whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground"
-                                    role="columnheader"
-                                >
-                                    {col.label}
-                                </div>
-                            ))}
-                    </div>
-
+                    <MessageTableHeader
+                        grid={grid}
+                        allSelected={
+                            selectedMsgs.size > 0 &&
+                            selectedMsgs.size === filteredMessages.length
+                        }
+                        onToggleSelectAll={toggleSelectAll}
+                    />
                     <div
                         style={{
                             height: `${rowVirtualizer.getTotalSize()}px`,
@@ -1247,11 +708,6 @@ export function MessageList({
                         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                             const msg = filteredMessages[virtualRow.index];
                             const msgKey = sbMessageKey(msg);
-                            const isSelected = selectedMsgs.has(msgKey);
-                            const isActive =
-                                selectedMessage?.messageId === msg.messageId &&
-                                selectedMessage?.sequenceNumber ===
-                                    msg.sequenceNumber;
                             return (
                                 <div
                                     key={virtualRow.key}
@@ -1266,94 +722,19 @@ export function MessageList({
                                         transform: `translateY(${virtualRow.start}px)`,
                                     }}
                                 >
-                                    <div
-                                        data-testid={`message-item-${msg.sequenceNumber}`}
-                                        onClick={() => onSelectMessage(msg)}
-                                        role="row"
-                                        className={`grid cursor-pointer border-b hover:bg-accent ${isActive ? "bg-accent" : ""}`}
-                                        style={{ gridTemplateColumns }}
-                                    >
-                                        <div
-                                            className={`flex items-center px-2 ${densityClass[prefs.rowDensity]}`}
-                                            onClick={(e) => e.stopPropagation()}
-                                            role="cell"
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={isSelected}
-                                                onChange={() =>
-                                                    toggleSelect(msg)
-                                                }
-                                                data-testid={`message-checkbox-${msg.sequenceNumber}`}
-                                            />
-                                        </div>
-                                        {activeColumnDefs.map((col) => {
-                                            const value = col.render(msg);
-                                            const isDelivery =
-                                                col.key === "deliveryCount";
-                                            const isDlqReason =
-                                                col.key === "deadLetterReason";
-                                            return (
-                                                <div
-                                                    key={col.key}
-                                                    title={value}
-                                                    role="cell"
-                                                    className={`flex min-w-0 items-center truncate px-2 ${densityClass[prefs.rowDensity]} ${col.className ?? ""} ${
-                                                        isDelivery &&
-                                                        viewMode === "dlq" &&
-                                                        msg.deliveryCount > 0
-                                                            ? "text-destructive"
-                                                            : ""
-                                                    } ${isDlqReason ? "text-destructive" : ""}`}
-                                                >
-                                                    {isDlqReason &&
-                                                        msg.deadLetterReason && (
-                                                            <AlertCircle className="mr-1 inline h-3 w-3 shrink-0" />
-                                                        )}
-                                                    <span className="truncate">
-                                                        {value}
-                                                    </span>
-                                                </div>
-                                            );
-                                        })}
-                                        {prefs.customColumns.map((col) => {
-                                            const val =
-                                                msg.applicationProperties[col];
-                                            const display =
-                                                val === undefined ||
-                                                val === null
-                                                    ? "-"
-                                                    : String(val);
-                                            return (
-                                                <div
-                                                    key={col}
-                                                    title={display}
-                                                    role="cell"
-                                                    className={`flex min-w-0 items-center truncate px-2 text-muted-foreground ${densityClass[prefs.rowDensity]}`}
-                                                >
-                                                    <span className="truncate">
-                                                        {display}
-                                                    </span>
-                                                </div>
-                                            );
-                                        })}
-                                        {nsbMode &&
-                                            NSB_COLUMN_DEFS.map((col) => {
-                                                const value = col.render(msg);
-                                                return (
-                                                    <div
-                                                        key={col.key}
-                                                        title={value}
-                                                        role="cell"
-                                                        className={`flex min-w-0 items-center truncate px-2 text-muted-foreground ${densityClass[prefs.rowDensity]} ${col.className ?? ""}`}
-                                                    >
-                                                        <span className="truncate">
-                                                            {value}
-                                                        </span>
-                                                    </div>
-                                                );
-                                            })}
-                                    </div>
+                                    <MessageRow
+                                        msg={msg}
+                                        grid={grid}
+                                        isSelected={selectedMsgs.has(msgKey)}
+                                        isActive={
+                                            selectedMessage?.messageId ===
+                                                msg.messageId &&
+                                            selectedMessage?.sequenceNumber ===
+                                                msg.sequenceNumber
+                                        }
+                                        onSelect={onSelectMessage}
+                                        onToggleSelect={toggleSelect}
+                                    />
                                 </div>
                             );
                         })}
@@ -1366,64 +747,18 @@ export function MessageList({
                 </div>
             )}
 
-            {/* Filter result count */}
-            <div className="flex items-center justify-between border-t px-3 py-1 text-xs text-muted-foreground">
-                <span data-testid="message-filter-count">
-                    {totalAvailable != null
-                        ? `Showing ${filteredMessages.length} of ${totalAvailable} message(s)`
-                        : `Showing ${filteredMessages.length} message(s)`}
-                    {isLoadingMore && (
-                        <Loader2 className="ml-2 inline h-3 w-3 animate-spin" />
-                    )}
-                </span>
-                <button
-                    data-testid="load-more-button"
-                    onClick={onLoadMore}
-                    disabled={!canLoadMore || isLoadingMore}
-                    title={
-                        isLoadingMore
-                            ? "Loading…"
-                            : !canLoadMore
-                              ? "All messages are loaded"
-                              : undefined
-                    }
-                    className="rounded border px-2 py-0.5 text-xs hover:bg-accent disabled:opacity-50"
-                >
-                    {isLoadingMore
-                        ? "Loading…"
-                        : canLoadMore
-                          ? `Load more (+${prefs.peekCount})`
-                          : "All loaded"}
-                </button>
-                {/* Manual refresh + freshness indicator — previously only visible via the spinning
-            auto-refresh indicator below, which doesn't exist at all when auto-refresh is off
-            (the default), leaving no way to tell a stale view from a fresh one. */}
-                <button
-                    onClick={onRefresh}
-                    disabled={isFetching}
-                    title="Refresh messages"
-                    data-testid="message-list-refresh"
-                    className="ml-2 flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent disabled:opacity-50"
-                >
-                    <RefreshCw
-                        className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`}
-                    />
-                </button>
-                <LastRefreshed
-                    at={lastRefreshedAt}
-                    isFetching={isFetching}
-                    testId="message-list-last-refreshed"
-                />
-                {prefs.autoRefreshInterval > 0 && (
-                    <span
-                        className="ml-2 flex items-center gap-1 text-success"
-                        data-testid="auto-refresh-indicator"
-                    >
-                        <RotateCw className="h-3 w-3 animate-spin" />{" "}
-                        {prefs.autoRefreshInterval}s
-                    </span>
-                )}
-            </div>
+            <MessageListFooter
+                filteredCount={filteredMessages.length}
+                totalAvailable={totalAvailable}
+                isLoadingMore={isLoadingMore}
+                canLoadMore={canLoadMore}
+                onLoadMore={onLoadMore}
+                peekCount={prefs.peekCount}
+                onRefresh={onRefresh}
+                isFetching={isFetching}
+                lastRefreshedAt={lastRefreshedAt}
+                autoRefreshInterval={prefs.autoRefreshInterval}
+            />
         </div>
     );
 }

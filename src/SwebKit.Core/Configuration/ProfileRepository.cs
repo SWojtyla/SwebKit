@@ -56,6 +56,9 @@ public class ProfileRepository
             return false;
         }
 
+        // Stored config never carries edge whitespace: endpoints mutate the live graph,
+        // so this is the single chokepoint covering every writer.
+        ConfigStringTrimmer.Trim(_data);
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_data, Options);
         await AppDataFileStore.SaveAsync(AppDataPaths.ProfilesJson, json).ConfigureAwait(false);
@@ -133,13 +136,17 @@ public class ProfileRepository
         var config = ResolveConfig(data);
         NormalizeConfig(config, data.ServiceBusNamespaces ?? []);
 
-        return new ProfileData
+        var normalized = new ProfileData
         {
             Config = config,
             ServiceBusNamespaces = data.ServiceBusNamespaces ?? [],
             MessageTemplates = data.MessageTemplates ?? [],
             SchemaVersion = 3,
         };
+        // Trim on load too: a hand-edited profiles.json is cleaned before use, so a
+        // connection test against in-memory config doesn't see the stray whitespace.
+        ConfigStringTrimmer.Trim(normalized);
+        return normalized;
     }
 
     private static ProfileData NormalizeProfileData(ProfileData data)
@@ -149,6 +156,7 @@ public class ProfileRepository
         data.ServiceBusNamespaces ??= [];
         data.MessageTemplates ??= [];
         data.SchemaVersion = Math.Max(data.SchemaVersion, 3);
+        ConfigStringTrimmer.Trim(data);
         return data;
     }
 
