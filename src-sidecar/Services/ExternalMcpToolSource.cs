@@ -20,12 +20,17 @@ namespace SwebKit.Sidecar.Services;
 /// external servers attach directly in <c>session/new</c> (<see cref="Acp.AcpAgentHost"/>).
 /// </summary>
 /// <remarks>
-/// Safety posture (v1): only tools the server annotates with <c>readOnlyHint</c> are exposed —
-/// an absent annotation is not a promise, and our in-process path has no permission-request gate
-/// the way ACP turns have <c>session/request_permission</c>. Users who want mutation-capable
-/// external tools use an ACP agent, where the approval card gates every call. Filtered tools are
-/// logged by name so the skip is never silent. Exposed tools are <see cref="ToolKind.Read"/>, so
-/// they flow through the existing ask-mode filter and per-turn memoization for free.
+/// Safety posture: <c>readOnlyHint</c> tools execute directly as <see cref="ToolKind.Read"/> (they
+/// flow through the ask-mode filter and per-turn memoization for free). Everything else — absent
+/// annotation included, since an absent hint is not a promise — becomes a <see cref="ToolKind.Mutate"/>
+/// tool whose execution does NOT touch the remote server: it registers a
+/// <see cref="PendingAgentAction"/> and returns the same <c>pending_confirmation</c> payload the
+/// native <c>propose_*</c> tools produce. Confirm goes through the existing
+/// <c>/api/agent/pending-approvals/{id}/confirm</c> endpoint, dispatched by
+/// <see cref="AgentActionApplier"/> to <see cref="ExternalMcpActionExecutor"/>, which is the only
+/// place a mutating external call actually fires. So the in-process path gets the same
+/// confirm-before-execute gate ACP users get from <c>session/request_permission</c> — and
+/// <c>ask</c> mode never sees these tools at all (Mutate is filtered out upstream).
 /// </remarks>
 public sealed class ExternalMcpToolSource : IAsyncDisposable
 {
@@ -36,27 +41,32 @@ public sealed class ExternalMcpToolSource : IAsyncDisposable
     private const int MaxExposedNameLength = 64;
 
     private readonly ILogger<ExternalMcpToolSource> _logger;
+    private readonly IAgentActionCoordinator _coordinator;
     private readonly Func<AgentMcpServer, CancellationToken, Task<IMcpServerConnection>> _connect;
     private readonly ConcurrentDictionary<string, Lazy<Task<IMcpServerConnection?>>> _connections = new();
 
-    public ExternalMcpToolSource(ILogger<ExternalMcpToolSource> logger)
-        : this(logger, null)
+    public ExternalMcpToolSource(ILogger<ExternalMcpToolSource> logger, IAgentActionCoordinator coordinator)
+        : this(logger, coordinator, null)
     {
     }
 
     /// <summary>Test seam — <paramref name="connect"/> replaces real transport construction.</summary>
     internal ExternalMcpToolSource(
         ILogger<ExternalMcpToolSource> logger,
+        IAgentActionCoordinator coordinator,
         Func<AgentMcpServer, CancellationToken, Task<IMcpServerConnection>>? connect)
     {
         _logger = logger;
+        _coordinator = coordinator;
         _connect = connect ?? CreateConnectionAsync;
     }
 
     /// <summary>External tools for this profile's enabled servers. Resolves (and caches) a
-    /// connection per enabled entry, lists its tools, and keeps only <c>readOnlyHint</c> reads.
-    /// Unreachable/misconfigured servers are skipped with a warning — a dead server must never
-    /// take the whole chat turn down.</summary>
+    /// connection per enabled entry, lists its tools, and maps each: <c>readOnlyHint</c> tools
+    /// become direct <see cref="ToolKind.Read"/> calls; everything else becomes a
+    /// <see cref="ToolKind.Mutate"/> whose "execution" is a pending-action proposal — the remote
+    /// call only fires after the user confirms it in the UI. Unreachable/misconfigured servers are
+    /// skipped with a warning — a dead server must never take the whole chat turn down.</summary>
     public async Task<IReadOnlyList<ExternalMcpToolBinding>> GetToolsAsync(
         AgentProfile profile, CancellationToken ct)
     {
@@ -69,7 +79,8 @@ public sealed class ExternalMcpToolSource : IAsyncDisposable
 
         foreach (var server in servers)
         {
-            var connection = await ConnectionForAsync(server, ct);
+            var serverConfigJson = JsonSerializer.Serialize(server);
+            var connection = await ConnectionForAsync(server, serverConfigJson, ct);
             if (connection is null)
                 continue;
 
@@ -86,36 +97,109 @@ public sealed class ExternalMcpToolSource : IAsyncDisposable
 
             foreach (var remote in remoteTools)
             {
-                if (!remote.ReadOnly)
-                {
-                    _logger.LogInformation(
-                        "External MCP tool '{Tool}' on '{Server}' skipped — not annotated readOnlyHint",
-                        remote.Name, server.Name);
-                    continue;
-                }
+                var exposedName = ExposedName(server.Name, remote.Name, usedNames);
+                var risk = remote.Destructive ? ToolRisk.High : ToolRisk.Low;
 
-                bindings.Add(new ExternalMcpToolBinding(
-                    Definition: new ToolDefinition
-                    {
-                        Name = ExposedName(server.Name, remote.Name, usedNames),
-                        Description = $"[external:{server.Name}] {remote.Description ?? remote.Name}",
-                        ParametersSchema = remote.InputSchema,
-                        Kind = ToolKind.Read,
-                        FeatureArea = FeatureArea.External,
-                    },
-                    Execute: (args, toolCt) => CallRemoteAsync(connection, server.Name, remote.Name, args, toolCt)));
+                if (remote.ReadOnly)
+                {
+                    bindings.Add(new ExternalMcpToolBinding(
+                        Definition: new ToolDefinition
+                        {
+                            Name = exposedName,
+                            Description = $"[external:{server.Name}] {remote.Description ?? remote.Name}",
+                            ParametersSchema = remote.InputSchema,
+                            Kind = ToolKind.Read,
+                            FeatureArea = FeatureArea.External,
+                        },
+                        Execute: (args, toolCt) => CallRemoteAsync(connection, server.Name, remote.Name, args, toolCt)));
+                }
+                else
+                {
+                    // Not annotated read-only — could mutate. Expose as a proposal tool: "calling"
+                    // it registers a pending action; the real remote call happens in
+                    // ExecuteConfirmedAsync after the user confirms in the UI.
+                    bindings.Add(new ExternalMcpToolBinding(
+                        Definition: new ToolDefinition
+                        {
+                            Name = exposedName,
+                            Description = $"[external:{server.Name}] {remote.Description ?? remote.Name} " +
+                                "Calling this tool proposes the action — the user must confirm before the external server is invoked.",
+                            ParametersSchema = remote.InputSchema,
+                            Kind = ToolKind.Mutate,
+                            Risk = risk,
+                            FeatureArea = FeatureArea.External,
+                        },
+                        Execute: (args, _) => Task.FromResult(
+                            ProposeRemoteAsync(server, serverConfigJson, remote, args, risk))));
+                }
             }
         }
 
         return bindings;
     }
 
+    /// <summary>Registers the pending action for a mutating external call — mirrors the
+    /// <c>propose_*</c> payload shape so the model reads it the same way, and so the confirm card
+    /// carries everything <see cref="ExecuteConfirmedAsync"/> needs to re-dial and fire.</summary>
+    private string ProposeRemoteAsync(
+        AgentMcpServer server, string serverConfigJson, RemoteMcpTool remote, JsonElement args, ToolRisk risk)
+    {
+        var actionId = Guid.NewGuid().ToString("N");
+        var argsJson = args.ValueKind == JsonValueKind.Object ? args.GetRawText() : "{}";
+        var action = new PendingAgentAction
+        {
+            Id = actionId,
+            Type = AgentActionType.ExternalMcpCall,
+            Summary = $"Run '{remote.Name}' on external MCP server '{server.Name}'",
+            Target = $"{server.Name}/{remote.Name}",
+            Risk = risk == ToolRisk.High ? AgentActionRisk.High : AgentActionRisk.Low,
+            Preview = argsJson.Length > 4000 ? argsJson[..4000] + "\n… (truncated)" : argsJson,
+            ExpectedFingerprint = null,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                serverConfigJson,
+                tool = remote.Name,
+                args = argsJson,
+            }),
+        };
+        _coordinator.RegisterAction(action);
+        return JsonSerializer.Serialize(new
+        {
+            action_id = actionId,
+            status = "pending_confirmation",
+            summary = action.Summary,
+            preview = action.Preview,
+            risk = action.Risk.ToString(),
+            expires_at = action.ExpiresAt.ToString("yyyy-MM-dd HH:mm UTC"),
+            message = "External tool call proposed. User must confirm before the remote server is invoked.",
+        });
+    }
+
+    /// <summary>The confirm-side half of a mutating external call — invoked by
+    /// <see cref="ExternalMcpActionExecutor"/> with the payload stashed at proposal time. Reuses
+    /// the connection cache: editing the server config between proposal and confirm produces a
+    /// fresh connection (the serialized config is the key), so confirmed calls always go to the
+    /// server as configured NOW.</summary>
+    internal async Task<string> ExecuteConfirmedAsync(
+        string serverConfigJson, string remoteName, JsonElement args, CancellationToken ct)
+    {
+        var server = JsonSerializer.Deserialize<AgentMcpServer>(serverConfigJson)
+            ?? throw new InvalidOperationException("Stored MCP server config is unreadable.");
+
+        var connection = await ConnectionForAsync(server, serverConfigJson, ct)
+            ?? throw new InvalidOperationException(
+                $"External MCP server '{server.Name}' is not reachable — cannot execute the confirmed call.");
+
+        return await CallRemoteAsync(connection, server.Name, remoteName, args, ct);
+    }
+
     /// <summary>Connection cache keyed by the serialized server config — editing an entry produces
     /// a new key, so reconfiguration naturally spawns a fresh connection and the stale one is
     /// evicted. Failures are removed so the next turn retries rather than caching a dead server.</summary>
-    private async Task<IMcpServerConnection?> ConnectionForAsync(AgentMcpServer server, CancellationToken ct)
+    private async Task<IMcpServerConnection?> ConnectionForAsync(
+        AgentMcpServer server, string serverConfigJson, CancellationToken ct)
     {
-        var key = JsonSerializer.Serialize(server);
+        var key = serverConfigJson;
         var lazy = _connections.GetOrAdd(key, _ => new Lazy<Task<IMcpServerConnection?>>(
             () => ConnectOrNullAsync(server), LazyThreadSafetyMode.ExecutionAndPublication));
 
@@ -273,7 +357,7 @@ public sealed record ExternalMcpToolBinding(
 
 /// <summary>A remote tool as the adapter consumes it — decoupled from SDK types for testability.</summary>
 internal sealed record RemoteMcpTool(
-    string Name, string? Description, JsonElement InputSchema, bool ReadOnly);
+    string Name, string? Description, JsonElement InputSchema, bool ReadOnly, bool Destructive);
 
 /// <summary>Live connection to one external MCP server. Production implementation wraps
 /// <see cref="McpClient"/>; tests substitute fakes via the internal ctor.</summary>
@@ -296,7 +380,8 @@ internal sealed class McpClientConnection(McpClient client) : IMcpServerConnecti
                 t.Name,
                 t.ProtocolTool.Description,
                 t.ProtocolTool.InputSchema,
-                t.ProtocolTool.Annotations?.ReadOnlyHint == true))
+                t.ProtocolTool.Annotations?.ReadOnlyHint == true,
+                t.ProtocolTool.Annotations?.DestructiveHint == true))
             .ToList();
     }
 

@@ -200,11 +200,13 @@ Both get the read-only surface; append `?mode=full` to the URL for the full regi
 - No per-turn memoization on this path (no turn boundary exists) — identical calls re-execute.
 - Proposal tools under `?mode=full` register pending actions that surface in the SwebKit UI — confirm/deny still happens there.
 
-### Phase 2b — MCP client adapter ✅ shipped (read-only)
+### Phase 2b — MCP client adapter ✅ shipped
 
-`ExternalMcpToolSource` resolves a non-ACP profile's `ExtraMcpServers` into proxied `ToolDefinition`s: one cached `McpClient` per server config (stdio subprocesses spawn once, not per turn; keys are the serialized config so edits reconnect), `readOnlyHint` tools only, exposed as `mcp_{server}_{tool}` names appended **after** the per-area filter (area-exempt like Observability). Execution routes through the step-tracking executor's `externalExecutors` map — same steps, same per-turn read memoization.
+`ExternalMcpToolSource` resolves a non-ACP profile's `ExtraMcpServers` into proxied `ToolDefinition`s: one cached `McpClient` per server config (stdio subprocesses spawn once, not per turn; keys are the serialized config so edits reconnect), exposed as `mcp_{server}_{tool}` names appended **after** the per-area filter (area-exempt like Observability). Execution routes through the step-tracking executor's `externalExecutors` map — same steps, same per-turn read memoization.
 
-Safety posture: an **absent `readOnlyHint` is not a promise**, and the in-process path has no permission-request gate — so mutating/unannotated external tools are skipped (logged by name) rather than guessed at. Mutation-capable external tools are an ACP-only feature, where `session/request_permission` gates every call. Caveats: external tools don't consume `sel=`/`AgentExecutionContext` (foreign servers don't know our selection model); proactive investigations don't attach them; no per-call approval exists in-process.
+**Mutation pipeline:** `readOnlyHint` tools execute directly. Everything else — an absent hint is not a promise — becomes a `ToolKind.Mutate` tool whose "execution" registers a `PendingAgentAction` (`AgentActionType.ExternalMcpCall`, payload = serialized server config + remote tool + args) and returns the standard `pending_confirmation` payload, so the model sees exactly what a `propose_*` tool returns. Confirm flows through the existing `/api/agent/pending-approvals/{id}/confirm` endpoint → `AgentActionApplier` → `ExternalMcpActionExecutor`, the only place a mutating remote call fires. `destructiveHint` maps to High risk on the card. In `ask` mode these tools are invisible (Mutate gate), so in-process external mutations are structurally impossible without `ask_and_do` + an explicit user click — the same gate ACP users get from `session/request_permission`.
+
+Caveats: external tools don't consume `sel=`/`AgentExecutionContext` (foreign servers don't know our selection model); proactive investigations don't attach them.
 
 ### Phase 3 — Native App Insights: already partly done
 
@@ -217,7 +219,7 @@ Safety posture: an **absent `readOnlyHint` is not a promise**, and the in-proces
 - Empty allowlist ⇒ zero tools; allowlist baked per session, not per request.
 - Standalone MCP access (no `?tools=`) is **read-only by default**; `propose_*` tools need explicit `?mode=full`, and proposals still require UI confirmation.
 - `ask` mode and proactive investigations are structurally read-only.
-- External MCP servers are user-configured; their tools are outside our propose/confirm safety — hence approval-gating guidance above.
+- External MCP servers are user-configured. ACP path: approval-gated via `session/request_permission` (Settings auto-enables it on first attach). In-process path: `readOnlyHint` tools run directly; anything else only *proposes* — `ExternalMcpCall` pending actions need an explicit UI confirm before the remote server is invoked.
 
 ## File map
 

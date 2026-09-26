@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Protocol;
+using SwebKit.Agents;
 using SwebKit.Agents.Tools;
 using SwebKit.Core.Domain;
 using SwebKit.Sidecar.Services;
@@ -63,16 +64,23 @@ public sealed class ExternalMcpToolSourceTests
         Url = "http://localhost:9999/mcp",
     };
 
-    private static RemoteMcpTool Tool(string name, bool readOnly = true, string? description = null) =>
-        new(name, description ?? $"Does {name}", JsonDocument.Parse("{\"type\":\"object\"}").RootElement, readOnly);
+    private static RemoteMcpTool Tool(string name, bool readOnly = true, string? description = null, bool destructive = false) =>
+        new(name, description ?? $"Does {name}", JsonDocument.Parse("{\"type\":\"object\"}").RootElement, readOnly, destructive);
+
+    private static ExternalMcpToolSource Source(
+        IMcpServerConnection connection,
+        Func<AgentMcpServer, CancellationToken, Task<IMcpServerConnection>>? connect = null,
+        IAgentActionCoordinator? coordinator = null) =>
+        new(
+            NullLogger<ExternalMcpToolSource>.Instance,
+            coordinator ?? new AgentActionCoordinator(),
+            connect ?? ((_, _) => Task.FromResult(connection)));
 
     [Fact]
     public async Task GetTools_exposes_readOnly_tools_with_prefixed_sanitized_names()
     {
         var connection = new FakeConnection();
-        var source = new ExternalMcpToolSource(
-            NullLogger<ExternalMcpToolSource>.Instance,
-            (_, _) => Task.FromResult<IMcpServerConnection>(connection));
+        var source = Source(connection);
         connection.Tools.Add(Tool("list-subscriptions", description: "Lists subs"));
         connection.Tools.Add(Tool("delete resource!")); // unsafe name → sanitized
 
@@ -87,19 +95,73 @@ public sealed class ExternalMcpToolSourceTests
     }
 
     [Fact]
-    public async Task GetTools_skips_tools_without_readOnly_annotation()
+    public async Task GetTools_unannotated_tools_become_mutate_proposals_not_direct_calls()
     {
         var connection = new FakeConnection();
-        var source = new ExternalMcpToolSource(
-            NullLogger<ExternalMcpToolSource>.Instance,
-            (_, _) => Task.FromResult<IMcpServerConnection>(connection));
+        var coordinator = new AgentActionCoordinator();
+        var source = Source(connection, coordinator: coordinator);
         connection.Tools.Add(Tool("list_things", readOnly: true));
         connection.Tools.Add(Tool("apply_manifest", readOnly: false));
+        connection.Tools.Add(Tool("delete_everything", readOnly: false, destructive: true));
 
         var bindings = await source.GetToolsAsync(ProfileWith(HttpServer()), CancellationToken.None);
 
-        Assert.Single(bindings);
-        Assert.Equal("mcp_azure_list_things", bindings[0].Definition.Name);
+        Assert.Equal(3, bindings.Count);
+        Assert.Equal(ToolKind.Read, bindings[0].Definition.Kind);
+        Assert.Equal(ToolKind.Mutate, bindings[1].Definition.Kind);
+        Assert.Equal(ToolRisk.Low, bindings[1].Definition.Risk);
+        Assert.Equal(ToolKind.Mutate, bindings[2].Definition.Kind);
+        Assert.Equal(ToolRisk.High, bindings[2].Definition.Risk); // destructiveHint → High
+        Assert.Contains("must confirm", bindings[1].Definition.Description);
+    }
+
+    [Fact]
+    public async Task Mutate_binding_proposes_without_touching_the_remote_server()
+    {
+        var connection = new FakeConnection();
+        var coordinator = new AgentActionCoordinator();
+        var source = Source(connection, coordinator: coordinator);
+        connection.Tools.Add(Tool("apply_manifest", readOnly: false));
+        var bindings = await source.GetToolsAsync(ProfileWith(HttpServer()), CancellationToken.None);
+
+        var args = JsonDocument.Parse("{\"file\":\"deploy.yaml\"}").RootElement;
+        var result = await bindings[0].Execute(args, CancellationToken.None);
+
+        // Nothing was called remotely — a pending action was registered instead.
+        Assert.Null(connection.LastCalledTool);
+        var payload = JsonDocument.Parse(result).RootElement;
+        Assert.Equal("pending_confirmation", payload.GetProperty("status").GetString());
+        var actionId = payload.GetProperty("action_id").GetString()!;
+        var pending = coordinator.GetAction(actionId);
+        Assert.NotNull(pending);
+        Assert.Equal(AgentActionType.ExternalMcpCall, pending.Type);
+        Assert.Equal("azure/apply_manifest", pending.Target);
+    }
+
+    [Fact]
+    public async Task ExecuteConfirmed_fires_the_remote_call_through_the_cached_connection()
+    {
+        var connection = new FakeConnection();
+        var coordinator = new AgentActionCoordinator();
+        var source = Source(connection, coordinator: coordinator);
+        connection.Tools.Add(Tool("apply_manifest", readOnly: false));
+        var bindings = await source.GetToolsAsync(ProfileWith(HttpServer()), CancellationToken.None);
+
+        var result = await bindings[0].Execute(
+            JsonDocument.Parse("{\"file\":\"deploy.yaml\"}").RootElement, CancellationToken.None);
+        var actionId = JsonDocument.Parse(result).RootElement.GetProperty("action_id").GetString()!;
+        var payload = coordinator.GetAction(actionId)!.Payload!.Value;
+
+        var outcome = await source.ExecuteConfirmedAsync(
+            payload.GetProperty("serverConfigJson").GetString()!,
+            payload.GetProperty("tool").GetString()!,
+            JsonDocument.Parse(payload.GetProperty("args").GetString()!).RootElement,
+            CancellationToken.None);
+
+        Assert.Equal("{\"ok\":true}", outcome);
+        Assert.Equal("apply_manifest", connection.LastCalledTool);
+        Assert.Equal("deploy.yaml",
+            Assert.IsType<JsonElement>(connection.LastArguments!["file"]).GetString());
     }
 
     [Fact]
@@ -108,6 +170,7 @@ public sealed class ExternalMcpToolSourceTests
         var connectCalls = 0;
         var source = new ExternalMcpToolSource(
             NullLogger<ExternalMcpToolSource>.Instance,
+            new AgentActionCoordinator(),
             (_, _) =>
             {
                 connectCalls++;
@@ -128,13 +191,11 @@ public sealed class ExternalMcpToolSourceTests
     {
         var connection = new FakeConnection();
         var connectCalls = 0;
-        var source = new ExternalMcpToolSource(
-            NullLogger<ExternalMcpToolSource>.Instance,
-            (_, _) =>
-            {
-                connectCalls++;
-                return Task.FromResult<IMcpServerConnection>(connection);
-            });
+        var source = Source(connection, (_, _) =>
+        {
+            connectCalls++;
+            return Task.FromResult<IMcpServerConnection>(connection);
+        });
         var profile = ProfileWith(HttpServer());
 
         await source.GetToolsAsync(profile, CancellationToken.None);
@@ -147,9 +208,7 @@ public sealed class ExternalMcpToolSourceTests
     public async Task Execute_proxies_arguments_and_returns_text_content()
     {
         var connection = new FakeConnection();
-        var source = new ExternalMcpToolSource(
-            NullLogger<ExternalMcpToolSource>.Instance,
-            (_, _) => Task.FromResult<IMcpServerConnection>(connection));
+        var source = Source(connection);
         connection.Tools.Add(Tool("list_things"));
         var bindings = await source.GetToolsAsync(ProfileWith(HttpServer()), CancellationToken.None);
 
@@ -173,9 +232,7 @@ public sealed class ExternalMcpToolSourceTests
                 IsError = true,
             },
         };
-        var source = new ExternalMcpToolSource(
-            NullLogger<ExternalMcpToolSource>.Instance,
-            (_, _) => Task.FromResult<IMcpServerConnection>(connection));
+        var source = Source(connection);
         connection.Tools.Add(Tool("list_things"));
         var bindings = await source.GetToolsAsync(ProfileWith(HttpServer()), CancellationToken.None);
 
@@ -198,9 +255,7 @@ public sealed class ExternalMcpToolSourceTests
                 IsError = false,
             },
         };
-        var source = new ExternalMcpToolSource(
-            NullLogger<ExternalMcpToolSource>.Instance,
-            (_, _) => Task.FromResult<IMcpServerConnection>(connection));
+        var source = Source(connection);
         connection.Tools.Add(Tool("list_things"));
         var bindings = await source.GetToolsAsync(ProfileWith(HttpServer()), CancellationToken.None);
 

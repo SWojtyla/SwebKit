@@ -23,7 +23,7 @@ Architecture background: `docs/architecture/ai-and-mcp.md`.
 ## Non-goals
 
 - ACP `fs/*`/`terminal` client capabilities — remain off (reserved profile flags stay inert).
-- A *new* native App Insights integration — `query_logs`/`get_metrics` already cover KQL+metrics; expansion is a separate product decision, tracked here only as "revisit if needed".
+- A *new* native App Insights integration — `query_logs`/`get_metrics` already cover KQL+metrics; user-confirmed out of scope while Azure MCP passthrough covers breadth.
 - Auth for non-loopback MCP clients — loopback desktop only in these phases.
 - Exposing `propose_*`/mutation tools on the standalone profile.
 
@@ -51,11 +51,13 @@ Architecture background: `docs/architecture/ai-and-mcp.md`.
 - [x] Docs + config snippets (Claude Desktop `claude_desktop_config.json`, Claude Code `claude mcp add`) — `docs/architecture/ai-and-mcp.md` §6.2a.
 - [x] Credential-resolution verified: tools execute sidecar-side via `ICredentialStore`, so direct MCP calls work while the sidecar runs (loopback-only bind — no auth layer needed; documented caveat).
 
-### Phase 2b — MCP client adapter (parity for local providers) ✅ read-only scope
+### Phase 2b — MCP client adapter (parity for local providers) ✅
 
-- [x] `ExternalMcpToolSource` (sidecar): `ExtraMcpServers` → cached `McpClient` per server config → `readOnlyHint` tools exposed as `mcp_{server}_{tool}` `ToolDefinition`s (`FeatureArea.External`, appended post-area-filter = area-exempt). Routing via `externalExecutors` in the step-tracking executor — registry untouched, per-turn memoization applies.
-- [x] Safety: unannotated/mutating external tools skipped (absent `readOnlyHint` ≠ read-only; no permission gate exists in-process — mutations stay an ACP-only, approval-gated feature). Dead servers skipped per-turn, never break the chat, retried next turn.
+- [x] `ExternalMcpToolSource` (sidecar): `ExtraMcpServers` → cached `McpClient` per server config → external tools exposed as `mcp_{server}_{tool}` `ToolDefinition`s (`FeatureArea.External`, appended post-area-filter = area-exempt). Routing via `externalExecutors` in the step-tracking executor — registry untouched, per-turn memoization applies.
+- [x] Mutation pipeline: `readOnlyHint` tools execute directly; everything else becomes a `ToolKind.Mutate` proposal — "calling" it registers an `ExternalMcpCall` pending action (payload = serialized server config + tool + args) confirmed via the existing pending-approvals endpoint; `ExternalMcpActionExecutor` is the only place a mutating remote call fires. `ask` mode never sees them (Mutate gate); `destructiveHint` → High risk.
+- [x] Dead servers skipped per-turn, never break the chat, retried next turn.
 - [x] Selection semantics: external tools don't consume `sel=`/`AgentExecutionContext` — documented; no action possible (foreign servers don't know our selection model).
+- [x] Wire-verified: `ExternalMcpToolSourceWireTests` hosts a real in-process MCP server and exercises handshake → list → classify → call end-to-end.
 
 ## Test plan
 
@@ -71,7 +73,7 @@ Architecture background: `docs/architecture/ai-and-mcp.md`.
 - e2e: settings external-MCP round-trip + auto-approval flip green
 - Branch: `feat/agent-mcp-evolution` (rebased on main post-PR #106)
 
-_Deferred by design:_ Phase 3 (native observability expansion) is a product decision, not a blocker; mutation-capable external tools for non-ACP profiles would need a confirmation pipeline — revisit only if asked.
+_User decision (2026-05):_ **Phase 3 native observability expansion is not needed** — native `query_logs`/`get_metrics` cover the in-context diagnosis case and Azure MCP passthrough covers breadth. Revisit only if App Insights ever becomes a dedicated UI surface. The mutation pipeline is no longer deferred — built in Phase 2b via `ExternalMcpCall` pending actions.
 
 ## Decisions
 

@@ -257,6 +257,7 @@ builder.Services.AddSingleton<IAgentActionExecutor, AksActionExecutor>();
 // Lives in the sidecar (not SwebKit.Agents) — applying an alert-rule action needs the
 // sidecar-hosted MonitoringAlertEvaluationService for the post-upsert reload.
 builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.MonitoringActionExecutor>();
+builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.ExternalMcpActionExecutor>();
 builder.Services.AddSingleton<AgentActionApplier>();
 
 // HTTP client used by the API client request executor

@@ -23,6 +23,8 @@ const FEATURE_AREA_BY_ACTION_TYPE: Record<string, string> = {
   CopyBlob: "Storage",
   ExecuteSql: "SQL",
   ApplyAksYaml: "AKS",
+  CreateAlertRule: "Monitoring",
+  ExternalMcpCall: "External MCP",
 };
 
 export function describePendingActionOrigin(action: Pick<PendingAction, "type" | "target">): string {

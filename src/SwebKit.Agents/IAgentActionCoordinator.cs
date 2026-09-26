@@ -22,6 +22,11 @@ public enum AgentActionType
     ExecuteSql,
     ApplyAksYaml,
     CreateAlertRule,
+
+    /// <summary>A mutating call to a user-configured external MCP server (agent-mcp-evolution
+    /// Phase 2b) — payload carries the serialized <c>AgentMcpServer</c> config, remote tool name,
+    /// and arguments; the executor re-dials the cached connection on confirm.</summary>
+    ExternalMcpCall,
 }
 
 /// <summary>

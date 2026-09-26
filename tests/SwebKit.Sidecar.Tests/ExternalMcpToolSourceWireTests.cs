@@ -34,7 +34,7 @@ public sealed class ExternalMcpToolSourceWireTests : IAsyncLifetime
         public static string ListRegions(string? filter = null) =>
             $"[\"westeurope\",\"eastus\"]|filter={filter}";
 
-        // Deliberately unannotated — the adapter must not expose it.
+        // Deliberately unannotated — the adapter must surface it as a Mutate proposal, not a direct call.
         [McpServerTool(Name = "delete_region")]
         public static string DeleteRegion() => "should never be callable";
     }
@@ -60,9 +60,9 @@ public sealed class ExternalMcpToolSourceWireTests : IAsyncLifetime
     public async Task DisposeAsync() => await _app.DisposeAsync();
 
     [Fact]
-    public async Task Real_http_wire_lists_only_readOnly_tools_and_executes_them()
+    public async Task Real_http_wire_classifies_annotations_and_executes_read_tools()
     {
-        await using var source = new ExternalMcpToolSource(NullLogger<ExternalMcpToolSource>.Instance);
+        await using var source = new ExternalMcpToolSource(NullLogger<ExternalMcpToolSource>.Instance, new SwebKit.Agents.AgentActionCoordinator());
         var profile = new AgentProfile
         {
             DisplayName = "local",
@@ -76,13 +76,15 @@ public sealed class ExternalMcpToolSourceWireTests : IAsyncLifetime
 
         var bindings = await source.GetToolsAsync(profile, CancellationToken.None);
 
-        // delete_region is unannotated → filtered out on the real wire too.
-        var binding = Assert.Single(bindings);
-        Assert.Equal("mcp_stub_list_regions", binding.Definition.Name);
-        Assert.Contains("Lists Azure regions", binding.Definition.Description);
+        // delete_region is unannotated → exposed as a Mutate proposal, never a direct call.
+        Assert.Equal(2, bindings.Count);
+        var readBinding = Assert.Single(bindings, b => b.Definition.Name == "mcp_stub_list_regions");
+        Assert.Equal(SwebKit.Agents.Tools.ToolKind.Read, readBinding.Definition.Kind);
+        var mutateBinding = Assert.Single(bindings, b => b.Definition.Name == "mcp_stub_delete_region");
+        Assert.Equal(SwebKit.Agents.Tools.ToolKind.Mutate, mutateBinding.Definition.Kind);
 
         var args = JsonDocument.Parse("{\"filter\":\"eu\"}").RootElement;
-        var result = await binding.Execute(args, CancellationToken.None);
+        var result = await readBinding.Execute(args, CancellationToken.None);
 
         Assert.Contains("westeurope", result);
         Assert.Contains("filter=eu", result);
@@ -91,7 +93,7 @@ public sealed class ExternalMcpToolSourceWireTests : IAsyncLifetime
     [Fact]
     public async Task Real_http_wire_unreachable_server_is_skipped_not_fatal()
     {
-        await using var source = new ExternalMcpToolSource(NullLogger<ExternalMcpToolSource>.Instance);
+        await using var source = new ExternalMcpToolSource(NullLogger<ExternalMcpToolSource>.Instance, new SwebKit.Agents.AgentActionCoordinator());
         var profile = new AgentProfile
         {
             DisplayName = "local",
@@ -103,6 +105,7 @@ public sealed class ExternalMcpToolSourceWireTests : IAsyncLifetime
 
         var bindings = await source.GetToolsAsync(profile, CancellationToken.None);
 
-        Assert.Single(bindings); // the live server still contributed its tool
+        Assert.Equal(2, bindings.Count); // the live server still contributed its tools
+        Assert.All(bindings, b => Assert.StartsWith("mcp_stub_", b.Definition.Name));
     }
 }
