@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import {
     X,
@@ -29,15 +29,22 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     const unreadCount = history.filter((n) => !n.read).length;
 
+    // Active toasts by id, so `dismiss` can move an item to history without reading
+    // state inside another setState updater — StrictMode double-invokes updaters,
+    // which used to push the same toast into the bell's history twice.
+    const activeItems = useRef(new Map<string, NotificationItem>());
+
     const dismiss = (id: string) => {
-        setNotifications((prev) => {
-            const item = prev.find((n) => n.id === id);
-            if (item)
-                setHistory((h) =>
-                    [{ ...item, read: false }, ...h].slice(0, 50),
-                );
-            return prev.filter((n) => n.id !== id);
-        });
+        // The delete also makes dismiss idempotent: a manual close racing the
+        // auto-expire timer can't record the entry twice.
+        const item = activeItems.current.get(id);
+        if (item) {
+            activeItems.current.delete(id);
+            setHistory((h) =>
+                [{ ...item, read: false }, ...h].slice(0, 50),
+            );
+        }
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
     };
 
     const notify = (
@@ -57,6 +64,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             action,
             link,
         };
+        activeItems.current.set(id, item);
         setNotifications((prev) => [...prev, item]);
         setTimeout(() => dismiss(id), 5000);
     };
