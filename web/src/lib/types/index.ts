@@ -1,5 +1,5 @@
 // TypeScript types matching the .NET sidecar domain models.
-// Split per domain — this barrel keeps `import ... from "lib/types"` working.
+// Split per domain — this barrel keeps `import ... from "@/lib/types"` working.
 export * from "./app";
 export * from "./workspace";
 export * from "./agent";
