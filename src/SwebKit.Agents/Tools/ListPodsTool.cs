@@ -20,12 +20,18 @@ public sealed class ListPodsTool : IAgentTool
         _appState = appState;
     }
 
+    /// <summary>Large namespaces can hold hundreds of pods — the full list would dominate the
+    /// model's context. The cap plus <c>truncated</c> flag keeps the answer bounded; a filtered
+    /// or single-pod question should use <c>label_selector</c>/<c>get_pod_status</c> instead.</summary>
+    private const int MaxPods = 200;
+
     public string Name => "list_pods";
 
     public string Description =>
-        "Lists all pods in a Kubernetes namespace. " +
-        "Optionally filter by label selector (e.g. 'app=myservice'). " +
-        "Returns pod name, phase, status, ready state, and restart count.";
+        "Lists pods in a Kubernetes namespace (name, phase, status, ready, restarts — capped at " +
+        $"{MaxPods} rows). Optionally filter by label selector (e.g. 'app=myservice'). " +
+        "Prefer get_pod_status when the pod name is known, and prefer investigate_pod_issue when " +
+        "the goal is diagnosing a specific pod rather than browsing the namespace.";
 
     public FeatureArea FeatureArea => FeatureArea.Aks;
 
@@ -65,19 +71,33 @@ public sealed class ListPodsTool : IAgentTool
 
         var pods = await client.GetPodsAsync(ns, labelSelector, ct);
 
-        var rows = pods.Select(p => new
-        {
-            name = p.Name,
-            phase = p.Phase,
-            status = p.Status,
-            ready = $"{p.ReadyContainers}/{p.TotalContainers}",
-            restarts = p.RestartCount,
-            age = p.StartTime.HasValue
-                ? FormatAge(DateTimeOffset.UtcNow - p.StartTime.Value)
-                : "unknown"
-        });
+        // Unhealthy pods first — "what's wrong in this namespace" is the common question, and
+        // truncation should lose the boring tail rather than the failing pods.
+        var rows = pods
+            .OrderByDescending(p => p.RestartCount)
+            .ThenBy(p => p.Phase == "Running" ? 1 : 0)
+            .ThenBy(p => p.Name, StringComparer.Ordinal)
+            .Take(MaxPods)
+            .Select(p => new
+            {
+                name = p.Name,
+                phase = p.Phase,
+                status = p.Status,
+                ready = $"{p.ReadyContainers}/{p.TotalContainers}",
+                restarts = p.RestartCount,
+                age = p.StartTime.HasValue
+                    ? FormatAge(DateTimeOffset.UtcNow - p.StartTime.Value)
+                    : "unknown"
+            })
+            .ToList();
 
-        return JsonSerializer.Serialize(new { namespace_name = ns, pod_count = pods.Count, pods = rows });
+        return JsonSerializer.Serialize(new
+        {
+            namespace_name = ns,
+            pod_count = pods.Count,
+            truncated = pods.Count > rows.Count,
+            pods = rows
+        });
     }
 
     private static string FormatAge(TimeSpan age) => age.TotalDays >= 1

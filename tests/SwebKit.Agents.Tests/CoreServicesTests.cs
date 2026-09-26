@@ -174,6 +174,69 @@ public class AgentToolRegistryTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ToolThrowsAuthorizationFailure_ReturnsStructuredAccessDenied()
+    {
+        var mock = new Mock<IAgentTool>();
+        mock.Setup(t => t.Name).Returns("peekQueue");
+        mock.Setup(t => t.Description).Returns("peek");
+        mock.Setup(t => t.FeatureArea).Returns(FeatureArea.ServiceBus);
+        mock.Setup(t => t.ParametersSchema).Returns(AgentToolSchema.Parse("{\"type\":\"object\",\"properties\":{}}"));
+        mock.Setup(t => t.ExecuteAsync(It.IsAny<JsonElement>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("forbidden", null, System.Net.HttpStatusCode.Forbidden));
+
+        var registry = new AgentToolRegistry([mock.Object]);
+        var args = JsonDocument.Parse("{}").RootElement;
+        var result = await registry.ExecuteAsync("peekQueue", args, CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(result);
+        var root = doc.RootElement;
+        Assert.Equal("access_denied", root.GetProperty("status").GetString());
+        Assert.Equal("service-bus.data", root.GetProperty("capability").GetString());
+        Assert.Equal("ServiceBus", root.GetProperty("featureArea").GetString());
+        Assert.Equal("Azure Service Bus Data Receiver", root.GetProperty("requiredAccess").GetString());
+        Assert.True(root.TryGetProperty("guidance", out _));
+        Assert.True(root.TryGetProperty("detail", out _));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ToolThrowsNonDenial_DoesNotGetAccessDeniedShape()
+    {
+        var mock = new Mock<IAgentTool>();
+        mock.Setup(t => t.Name).Returns("flaky");
+        mock.Setup(t => t.Description).Returns("flaky");
+        mock.Setup(t => t.FeatureArea).Returns(FeatureArea.ServiceBus);
+        mock.Setup(t => t.ParametersSchema).Returns(AgentToolSchema.Parse("{\"type\":\"object\",\"properties\":{}}"));
+        mock.Setup(t => t.ExecuteAsync(It.IsAny<JsonElement>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("request timed out"));
+
+        var registry = new AgentToolRegistry([mock.Object]);
+        var args = JsonDocument.Parse("{}").RootElement;
+        var result = await registry.ExecuteAsync("flaky", args, CancellationToken.None);
+
+        Assert.DoesNotContain("access_denied", result);
+        using var doc = JsonDocument.Parse(result);
+        Assert.True(doc.RootElement.TryGetProperty("error", out _));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ToolThrowsWithNewlineMessage_ProducesValidJson()
+    {
+        var mock = new Mock<IAgentTool>();
+        mock.Setup(t => t.Name).Returns("multiline");
+        mock.Setup(t => t.Description).Returns("multiline");
+        mock.Setup(t => t.ParametersSchema).Returns(AgentToolSchema.Parse("{\"type\":\"object\",\"properties\":{}}"));
+        mock.Setup(t => t.ExecuteAsync(It.IsAny<JsonElement>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("line one\nline \"two\""));
+
+        var registry = new AgentToolRegistry([mock.Object]);
+        var args = JsonDocument.Parse("{}").RootElement;
+        var result = await registry.ExecuteAsync("multiline", args, CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(result); // throws if the JSON escaping regressed
+        Assert.Equal("line one\nline \"two\"", doc.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
     public void GetDefinitions_IncludesDescriptionAndSchema()
     {
         var registry = new AgentToolRegistry([MakeTool("aTool").Object]);

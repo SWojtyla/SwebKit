@@ -55,16 +55,28 @@ public sealed class SwebKitToolsMcpBridge
 
     private HashSet<string>? AllowedSet() => ParseAllowedSet(AllowlistKey());
 
+    /// <summary><c>?mode=full</c> exposes the whole registry — including <c>propose_*</c> mutations —
+    /// to a standalone client. Deliberately opt-in: internal ACP sessions always carry an explicit
+    /// <c>?tools=</c> allowlist, so an absent one means an unmanaged client attached directly, and
+    /// those get read tools only by default.</summary>
+    private bool FullAccess() =>
+        string.Equals(_http.HttpContext?.Request.Query["mode"].FirstOrDefault(), "full", StringComparison.OrdinalIgnoreCase);
+
     private IReadOnlyDictionary<string, string>? Selection() =>
         ParseSelection(_http.HttpContext?.Request.Query["sel"] ?? []);
 
     public ValueTask<ListToolsResult> ListToolsAsync(RequestContext<ListToolsRequestParams> request, CancellationToken ct)
-        => ValueTask.FromResult(new ListToolsResult { Tools = ListTools(AllowedSet()) });
+        => ValueTask.FromResult(new ListToolsResult { Tools = ListTools(AllowedSet(), FullAccess()) });
 
-    /// <summary>Tools visible under this request's allowlist, mapped to MCP <see cref="Tool"/>s.</summary>
-    internal List<Tool> ListTools(HashSet<string>? allowed) =>
+    /// <summary>Tools visible under this request's allowlist, mapped to MCP <see cref="Tool"/>s.
+    /// <paramref name="allowed"/>: explicit <c>?tools=</c> set; null means "no allowlist" — the
+    /// standalone surface, where <paramref name="fullAccess"/> decides between read-only (default)
+    /// and everything (<c>?mode=full</c>).</summary>
+    internal List<Tool> ListTools(HashSet<string>? allowed, bool fullAccess = false) =>
         _toolRegistry.GetDefinitions()
-            .Where(t => allowed is null || allowed.Contains(t.Name))
+            .Where(t => allowed is not null
+                ? allowed.Contains(t.Name)
+                : fullAccess || t.Kind != ToolKind.Mutate)
             .Select(t => new Tool
             {
                 Name = t.Name,
@@ -79,7 +91,7 @@ public sealed class SwebKitToolsMcpBridge
         JsonElement args = request.Params?.Arguments is { } a
             ? JsonSerializer.SerializeToElement(a)
             : JsonDocument.Parse("{}").RootElement.Clone();
-        return CallToolAsync(name, args, AllowedSet(), AllowlistKey(), ct, Selection());
+        return CallToolAsync(name, args, AllowedSet(), AllowlistKey(), ct, Selection(), FullAccess());
     }
 
     /// <summary>Dispatch core, split from the MCP request shape for testability.</summary>
@@ -89,7 +101,8 @@ public sealed class SwebKitToolsMcpBridge
         HashSet<string>? allowed,
         string? allowlistKey,
         CancellationToken ct,
-        IReadOnlyDictionary<string, string>? selection = null)
+        IReadOnlyDictionary<string, string>? selection = null,
+        bool fullAccess = false)
     {
         var tool = _toolRegistry.GetDefinitions()
             .FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -115,6 +128,27 @@ public sealed class SwebKitToolsMcpBridge
                         area = tool.FeatureArea.ToString(),
                         message = $"Tool '{name}' belongs to a different area than this turn's scope. " +
                             "Tell the user to enable \"Search across my whole workspace\" to reach it.",
+                    }),
+                }],
+                IsError = true,
+            };
+        }
+
+        // Standalone surface (no ?tools= allowlist): read tools only unless ?mode=full was
+        // requested — a directly-attached MCP client must not be able to register pending
+        // mutation proposals by default.
+        if (allowed is null && !fullAccess && tool.Kind == ToolKind.Mutate)
+        {
+            return new CallToolResult
+            {
+                Content = [new TextContentBlock
+                {
+                    Text = JsonSerializer.Serialize(new
+                    {
+                        error = "tool_read_only",
+                        tool = name,
+                        message = $"Tool '{name}' proposes a mutation and is not exposed on the read-only endpoint. " +
+                            "Connect with ?mode=full, or apply the change through the SwebKit UI.",
                     }),
                 }],
                 IsError = true,

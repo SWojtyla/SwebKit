@@ -30,6 +30,7 @@ public sealed class SidecarAgentChatService
     private readonly AgentToolCallOrchestrator _toolOrchestrator;
     private readonly AgentContextBudgetPlanner _budgetPlanner;
     private readonly Acp.AcpAgentHost? _acpHost;
+    private readonly ExternalMcpToolSource? _mcpToolSource;
 
     /// <summary>History count for the global <c>/agent</c> page's session. Kept for existing call
     /// sites (<see cref="AgentEndpoints.GetStatus"/>); prefer <see cref="GetHistoryCount"/> for new
@@ -43,7 +44,8 @@ public sealed class SidecarAgentChatService
         AgentSystemPromptBuilder promptBuilder,
         AgentToolCallOrchestrator toolOrchestrator,
         AgentContextBudgetPlanner budgetPlanner,
-        Acp.AcpAgentHost? acpHost = null)
+        Acp.AcpAgentHost? acpHost = null,
+        ExternalMcpToolSource? mcpToolSource = null)
     {
         _modelClient = modelClient;
         _settings = settings;
@@ -52,6 +54,7 @@ public sealed class SidecarAgentChatService
         _toolOrchestrator = toolOrchestrator;
         _budgetPlanner = budgetPlanner;
         _acpHost = acpHost;
+        _mcpToolSource = mcpToolSource;
     }
 
     /// <summary>Composition-root convenience overload that builds the default collaborators from the
@@ -63,14 +66,16 @@ public sealed class SidecarAgentChatService
         IAgentToolRegistry toolRegistry,
         ProfileRepository profiles,
         UserSettingsRepository settings,
-        DemoModeService demo)
+        DemoModeService demo,
+        ExternalMcpToolSource? mcpToolSource = null)
         : this(
             modelClient,
             settings,
             new AgentSessionStore(),
             new AgentSystemPromptBuilder(profiles, demo),
             new AgentToolCallOrchestrator(toolRegistry),
-            new AgentContextBudgetPlanner(modelClient))
+            new AgentContextBudgetPlanner(modelClient),
+            mcpToolSource: mcpToolSource)
     {
     }
 
@@ -346,7 +351,24 @@ public sealed class SidecarAgentChatService
         var hasToolCalling = profile?.Provider == ProviderKind.Acp
             || (profile?.Capability ?? AgentCapability.Unknown) >= AgentCapability.ToolCalling;
         var systemPrompt = _promptBuilder.Build(context, normalizedMode, normalizedScope, hasToolCalling);
-        var tools = _toolOrchestrator.ResolveTools(hasToolCalling, normalizedMode, context, normalizedScope);
+        var tools = _toolOrchestrator.ResolveTools(hasToolCalling, normalizedMode, context, normalizedScope).ToList();
+
+        // agent-mcp-evolution Phase 2b: non-ACP profiles get their external MCP servers proxied
+        // through the in-process tool loop (ACP profiles get them directly in session/new instead).
+        // Appended post-ResolveTools = area-exempt like Observability; readOnly-only by design.
+        Dictionary<string, Func<JsonElement, CancellationToken, Task<string>>>? externalExecutors = null;
+        if (hasToolCalling
+            && _mcpToolSource is not null
+            && profile?.Provider != ProviderKind.Acp
+            && profile?.ExtraMcpServers.Any(s => s.Enabled) == true)
+        {
+            var bindings = await _mcpToolSource.GetToolsAsync(profile, ct);
+            if (bindings.Count > 0)
+            {
+                tools.AddRange(bindings.Select(b => b.Definition));
+                externalExecutors = bindings.ToDictionary(b => b.Definition.Name, b => b.Execute);
+            }
+        }
 
         // Record user message
         _sessions.Append(session, new AgentMessage { Role = "user", Content = userMessage });
@@ -365,7 +387,7 @@ public sealed class SidecarAgentChatService
         };
 
         var steps = new List<AgentChatStep>();
-        var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps, context?.Selection);
+        var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps, context?.Selection, externalExecutors);
 
         return new TurnSetup(session, request, steps, toolExecutor, summarized, sw);
     }

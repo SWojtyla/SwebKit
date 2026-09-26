@@ -189,6 +189,7 @@ builder.Services.AddSingleton<IAgentTool, ListPodsTool>();
 builder.Services.AddSingleton<IAgentTool, GetPodLogsTool>();
 builder.Services.AddSingleton<IAgentTool, GetPodEventsTool>();
 builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
+builder.Services.AddSingleton<IAgentTool, ResolvePodEnvTool>();
 builder.Services.AddSingleton<IAgentTool, GetAksResourceYamlTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApplyAksYamlTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
@@ -234,6 +235,7 @@ builder.Services.AddSingleton<IAgentTool, SwebKit.Sidecar.Services.GetAlertHisto
 builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 
 builder.Services.AddSingleton<SidecarAgentChatService>();
+builder.Services.AddSingleton<ExternalMcpToolSource>();
 
 // Agent action confirm-before-execute flow (ai-augmented-app technical-plan.md Module 3). Wired
 // here as infrastructure even though nothing in the sidecar can propose an action yet — the API
@@ -255,6 +257,7 @@ builder.Services.AddSingleton<IAgentActionExecutor, AksActionExecutor>();
 // Lives in the sidecar (not SwebKit.Agents) — applying an alert-rule action needs the
 // sidecar-hosted MonitoringAlertEvaluationService for the post-upsert reload.
 builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.MonitoringActionExecutor>();
+builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.ExternalMcpActionExecutor>();
 builder.Services.AddSingleton<AgentActionApplier>();
 
 // HTTP client used by the API client request executor

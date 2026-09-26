@@ -13,6 +13,7 @@ import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { ProfileListLayout } from "./ProfileListLayout";
 import type {
     AgentProfile,
+    AgentMcpServer,
     ProfileData,
     ObservabilityConfig,
     ObservabilityResource,
@@ -209,6 +210,7 @@ export function AgentSettings() {
                                     })
                                 }
                                 className="w-full rounded-md border bg-card px-2 py-1.5 text-sm"
+                                data-testid={`agent-profile-provider-${p.id}`}
                             >
                                 <option value="LmStudio">
                                     LM Studio (local)
@@ -424,6 +426,7 @@ export function AgentSettings() {
                             environmentVariables: {},
                             credentialEnvVar: "",
                             requireToolApproval: false,
+                            extraMcpServers: [],
                             enableFileSystem: false,
                             enableTerminal: false,
                         };
@@ -699,6 +702,22 @@ function AcpProfileFields({
                 onCommit={(env) => onUpdate({ environmentVariables: env })}
                 testId={`agent-profile-acp-env-${profileId}`}
             />
+            <McpServersEditor
+                value={profile.extraMcpServers}
+                onCommit={(servers) => {
+                    // First enabled extra ⇒ external tool calls are no longer gated by our
+                    // propose/confirm pipeline, so flip the approval default on. The checkbox
+                    // stays user-overridable below.
+                    const hadEnabled = profile.extraMcpServers.some((s) => s.enabled);
+                    const hasEnabled = servers.some((s) => s.enabled);
+                    onUpdate(
+                        !hadEnabled && hasEnabled
+                            ? { extraMcpServers: servers, requireToolApproval: true }
+                            : { extraMcpServers: servers },
+                    );
+                }}
+                testId={`agent-profile-acp-mcp-${profileId}`}
+            />
             <label className="flex items-center gap-2 text-sm">
                 <input
                     type="checkbox"
@@ -714,9 +733,190 @@ function AcpProfileFields({
                 Off by default — the agent's permission prompts are
                 auto-approved. SwebKit's own mutating tools still only create
                 proposals you confirm separately. Filesystem and terminal access
-                stay disabled either way.
+                stay disabled either way. It is switched on automatically the
+                first time you attach an external MCP server, since those tools
+                bypass the propose/confirm pipeline — you can still turn it
+                back off.
             </p>
         </>
+    );
+}
+
+/** Edits the profile's external MCP servers — descriptors forwarded to the agent at session/new.
+ * The agent spawns/connects them itself; SwebKit never proxies the traffic. */
+function McpServersEditor({
+    value,
+    onCommit,
+    testId,
+}: {
+    value: AgentMcpServer[];
+    onCommit: (servers: AgentMcpServer[]) => void;
+    testId: string;
+}) {
+    const patch = (id: string, p: Partial<AgentMcpServer>) =>
+        onCommit(value.map((s) => (s.id === id ? { ...s, ...p } : s)));
+
+    return (
+        <div className="space-y-2" data-testid={testId}>
+            <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                    External MCP servers
+                </span>
+                <button
+                    type="button"
+                    onClick={() =>
+                        onCommit([
+                            ...value,
+                            {
+                                id: crypto.randomUUID(),
+                                name: "",
+                                enabled: true,
+                                transport: "http",
+                                url: "",
+                                headers: {},
+                                command: "",
+                                arguments: "",
+                                environmentVariables: {},
+                            },
+                        ])
+                    }
+                    className="rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                    data-testid={`${testId}-add`}
+                >
+                    Add server
+                </button>
+            </div>
+            {value.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                    None — the agent only sees SwebKit's tools.
+                </p>
+            )}
+            {value.map((server) => (
+                <div
+                    key={server.id}
+                    className="space-y-1.5 rounded-md border p-2"
+                    data-testid={`${testId}-row-${server.id}`}
+                >
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            checked={server.enabled}
+                            onChange={(e) =>
+                                patch(server.id, { enabled: e.target.checked })
+                            }
+                            title="Enabled"
+                            data-testid={`${testId}-enabled-${server.id}`}
+                        />
+                        <DraftInput
+                            type="text"
+                            value={server.name}
+                            onCommit={(v) => patch(server.id, { name: v })}
+                            className="flex-1 rounded-md border bg-card px-2 py-1 text-sm"
+                            placeholder="Server name (e.g. azure)"
+                            data-testid={`${testId}-name-${server.id}`}
+                        />
+                        <select
+                            value={server.transport}
+                            onChange={(e) =>
+                                patch(server.id, {
+                                    transport: e.target.value as "http" | "stdio",
+                                })
+                            }
+                            className="rounded-md border bg-card px-2 py-1 text-sm"
+                            data-testid={`${testId}-transport-${server.id}`}
+                        >
+                            <option value="http">http</option>
+                            <option value="stdio">stdio</option>
+                        </select>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                onCommit(value.filter((s) => s.id !== server.id))
+                            }
+                            className="rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                            data-testid={`${testId}-remove-${server.id}`}
+                        >
+                            Remove
+                        </button>
+                    </div>
+                    {server.transport === "http" ? (
+                        <>
+                            <DraftInput
+                                type="text"
+                                value={server.url}
+                                onCommit={(v) => patch(server.id, { url: v })}
+                                className="w-full rounded-md border bg-card px-2 py-1 text-sm"
+                                placeholder="MCP endpoint URL (e.g. http://localhost:3000/mcp)"
+                                data-testid={`${testId}-url-${server.id}`}
+                            />
+                            <KeyValueEditor
+                                value={server.headers}
+                                onCommit={(headers) => patch(server.id, { headers })}
+                                placeholder={"Headers, one per line (no secrets):\nKey=Value"}
+                                testId={`${testId}-headers-${server.id}`}
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex gap-2">
+                                <DraftInput
+                                    type="text"
+                                    value={server.command}
+                                    onCommit={(v) => patch(server.id, { command: v })}
+                                    className="flex-1 rounded-md border bg-card px-2 py-1 text-sm"
+                                    placeholder="Command (e.g. npx)"
+                                    data-testid={`${testId}-command-${server.id}`}
+                                />
+                                <DraftInput
+                                    type="text"
+                                    value={server.arguments}
+                                    onCommit={(v) => patch(server.id, { arguments: v })}
+                                    className="flex-1 rounded-md border bg-card px-2 py-1 text-sm"
+                                    placeholder="Arguments"
+                                    data-testid={`${testId}-args-${server.id}`}
+                                />
+                            </div>
+                            <KeyValueEditor
+                                value={server.environmentVariables}
+                                onCommit={(environmentVariables) =>
+                                    patch(server.id, { environmentVariables })
+                                }
+                                placeholder={"Env vars, one per line:\nKEY=VALUE"}
+                                testId={`${testId}-env-${server.id}`}
+                            />
+                        </>
+                    )}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+/** Edits a Record<string,string> as KEY=VALUE lines — same format as EnvVarsEditor but single-line
+ * rows for the per-MCP-server headers/env fields. */
+function KeyValueEditor({
+    value,
+    onCommit,
+    placeholder,
+    testId,
+}: {
+    value: Record<string, string>;
+    onCommit: (env: Record<string, string>) => void;
+    placeholder: string;
+    testId: string;
+}) {
+    const [draft, setDraft] = useState(() => serializeEnvVars(value));
+
+    return (
+        <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => onCommit(parseEnvVars(draft))}
+            rows={1}
+            placeholder={placeholder}
+            className="w-full rounded-md border bg-card px-2 py-1 font-mono text-xs"
+            data-testid={testId}
+        />
     );
 }
 

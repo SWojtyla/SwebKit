@@ -101,14 +101,26 @@ public class SwebKitToolsMcpBridgeTests
     }
 
     [Fact]
-    public void ListTools_returns_everything_when_no_allowlist_applies()
+    public void ListTools_without_allowlist_exposes_read_tools_only()
     {
-        var bridge = Bridge(new FakeToolRegistry(Def("list_pods"), Def("list_namespaces")));
+        var bridge = Bridge(new FakeToolRegistry(
+            Def("list_pods"), Def("propose_restart", kind: ToolKind.Mutate)));
 
         var tools = bridge.ListTools(null);
 
-        Assert.Equal(["list_pods", "list_namespaces"], tools.Select(t => t.Name));
+        Assert.Equal(["list_pods"], tools.Select(t => t.Name));
         Assert.Equal(JsonValueKind.Object, tools[0].InputSchema.ValueKind);
+    }
+
+    [Fact]
+    public void ListTools_without_allowlist_and_fullAccess_returns_everything()
+    {
+        var bridge = Bridge(new FakeToolRegistry(
+            Def("list_pods"), Def("propose_restart", kind: ToolKind.Mutate)));
+
+        var tools = bridge.ListTools(null, fullAccess: true);
+
+        Assert.Equal(["list_pods", "propose_restart"], tools.Select(t => t.Name));
     }
 
     [Fact]
@@ -177,6 +189,34 @@ public class SwebKitToolsMcpBridgeTests
         Assert.Equal("tool_out_of_scope", payload.GetProperty("error").GetString());
         Assert.Equal("propose_delete", payload.GetProperty("tool").GetString());
         Assert.Contains("Search across my whole workspace", payload.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task CallTool_refuses_mutations_on_the_read_only_standalone_surface()
+    {
+        var registry = new FakeToolRegistry(Def("propose_delete", kind: ToolKind.Mutate));
+        var bridge = Bridge(registry);
+
+        var result = await bridge.CallToolAsync("propose_delete", default, null, null, CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Null(registry.LastCalledName);
+        var payload = JsonDocument.Parse(Assert.IsType<TextContentBlock>(result.Content[0]).Text).RootElement;
+        Assert.Equal("tool_read_only", payload.GetProperty("error").GetString());
+        Assert.Contains("?mode=full", payload.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task CallTool_fullAccess_dispatches_mutations_without_an_allowlist()
+    {
+        var registry = new FakeToolRegistry(Def("propose_delete", kind: ToolKind.Mutate)) { Result = "{\"ok\":true}" };
+        var bridge = Bridge(registry);
+
+        var result = await bridge.CallToolAsync("propose_delete", default, null, null, CancellationToken.None,
+            fullAccess: true);
+
+        Assert.False(result.IsError);
+        Assert.Equal("propose_delete", registry.LastCalledName);
     }
 
     [Fact]

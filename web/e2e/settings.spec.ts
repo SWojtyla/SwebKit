@@ -399,6 +399,75 @@ test.describe("Settings", () => {
         ).toHaveValue("My App Insights");
     });
 
+    test("ACP profile: external MCP servers persist across reload and first add turns on tool approval", async ({
+        page,
+    }) => {
+        const saveUserSettings = (method: string) =>
+            page.waitForResponse(
+                (r) =>
+                    r.request().method() === method &&
+                    r.url().includes("/api/config/user-settings"),
+            );
+
+        await page.goto("/settings");
+        await page.getByTestId("settings-tab-agent").click();
+        await Promise.all([
+            saveUserSettings("PUT"),
+            page.getByTestId("agent-add-profile").click(),
+        ]);
+        const profileId = await lastItemId(page, "agent");
+
+        // The MCP editor only mounts for ACP profiles.
+        await Promise.all([
+            saveUserSettings("PUT"),
+            page
+                .getByTestId(`agent-profile-provider-${profileId}`)
+                .selectOption("Acp"),
+        ]);
+        const editor = page.getByTestId(`agent-profile-acp-mcp-${profileId}`);
+        await expect(editor).toBeVisible();
+
+        // Approval starts off; adding the first enabled server flips the default on —
+        // external tools bypass the propose/confirm pipeline, so permission prompts are
+        // their only gate. Still user-overridable afterwards.
+        const approval = page.getByTestId(
+            `agent-profile-acp-approval-${profileId}`,
+        );
+        await expect(approval).not.toBeChecked();
+
+        await Promise.all([
+            saveUserSettings("PUT"),
+            editor.getByTestId(`agent-profile-acp-mcp-${profileId}-add`).click(),
+        ]);
+        const row = editor.locator('[data-testid*="-row-"]');
+        await expect(row).toHaveCount(1);
+        await expect(approval).toBeChecked();
+
+        const nameInput = row.getByPlaceholder("Server name (e.g. azure)");
+        await nameInput.fill("azure");
+        await Promise.all([saveUserSettings("PUT"), nameInput.blur()]);
+
+        const urlInput = row.getByPlaceholder(/MCP endpoint URL/);
+        await urlInput.fill("https://mcp.example.com/mcp");
+        await Promise.all([saveUserSettings("PUT"), urlInput.blur()]);
+
+        await page.reload();
+        await page.getByTestId("settings-tab-agent").click();
+        const reloadedRow = page
+            .getByTestId(`agent-profile-acp-mcp-${profileId}`)
+            .locator('[data-testid*="-row-"]');
+        await expect(reloadedRow).toHaveCount(1);
+        await expect(
+            reloadedRow.getByPlaceholder("Server name (e.g. azure)"),
+        ).toHaveValue("azure");
+        await expect(
+            reloadedRow.getByPlaceholder(/MCP endpoint URL/),
+        ).toHaveValue("https://mcp.example.com/mcp");
+        await expect(
+            page.getByTestId(`agent-profile-acp-approval-${profileId}`),
+        ).toBeChecked();
+    });
+
     test("Map tab: a manually-added resource and relationship persist across reload", async ({
         page,
     }) => {

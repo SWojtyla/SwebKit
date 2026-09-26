@@ -12,7 +12,10 @@ public sealed class GetAksResourceYamlTool(
     private const int MaxResultCharacters = 8000;
 
     public string Name => "get_resource_yaml";
-    public string Description => "Returns a Kubernetes resource manifest. Omit namespace to use the namespace selected in the UI.";
+    public string Description =>
+        "Returns a Kubernetes resource manifest. Omit namespace to use the namespace selected in " +
+        "the UI. For 'where does env var X come from' questions prefer resolve_pod_env — it resolves " +
+        "ConfigMap/Secret references in one call instead of you fetching each manifest.";
     public FeatureArea FeatureArea => FeatureArea.Aks;
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""

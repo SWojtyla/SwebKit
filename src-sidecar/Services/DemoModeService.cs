@@ -16,6 +16,9 @@ public sealed class DemoModeService : IDisposable
     public static readonly string DemoStorageId = "demo-storage";
     public const string DemoSqlConnectionId = "demo-sql";
     public const string DemoSqlConnectionId2 = "demo-sql-2";
+    /// <summary>A locked-down "prd" connection — SELECT/EXECUTE but no VIEW DEFINITION, so the
+    /// schema tree is empty while queries still work. Demonstrates the metadata-hidden state.</summary>
+    public const string DemoSqlConnectionIdRestricted = "demo-sql-prd";
 
     private DemoServiceBusClient _ordersClient = DemoServiceBusClient.OrdersDev();
     private DemoServiceBusClient _paymentsClient = DemoServiceBusClient.PaymentsDev();
@@ -39,6 +42,13 @@ public sealed class DemoModeService : IDisposable
         Server = "orders-prod-sql.database.windows.net",
         Database = "orders",
     }, variant: 1);
+    private readonly DemoSqlClient _sqlClientRestricted = new(new SqlConnectionEntry
+    {
+        Id = DemoSqlConnectionIdRestricted,
+        DisplayName = "orders-prd-sql (restricted)",
+        Server = "orders-prd-sql.database.windows.net",
+        Database = "orders",
+    }, variant: 2);
 
     private bool _isDemoMode;
 
@@ -120,16 +130,18 @@ public sealed class DemoModeService : IDisposable
     {
         DemoSqlConnectionId => _sqlClient.Connection,
         DemoSqlConnectionId2 => _sqlClient2.Connection,
+        DemoSqlConnectionIdRestricted => _sqlClientRestricted.Connection,
         _ => null,
     };
 
     public IReadOnlyList<SqlConnectionEntry> GetDemoSqlConnections() =>
-        [_sqlClient.Connection, _sqlClient2.Connection];
+        [_sqlClient.Connection, _sqlClient2.Connection, _sqlClientRestricted.Connection];
 
     public ISqlClient GetSqlClient(SqlConnectionEntry connection) => connection.Id switch
     {
         DemoSqlConnectionId => _sqlClient,
         DemoSqlConnectionId2 => _sqlClient2,
+        DemoSqlConnectionIdRestricted => _sqlClientRestricted,
         _ => _sqlClient,
     };
 

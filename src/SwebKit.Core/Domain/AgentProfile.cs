@@ -95,6 +95,11 @@ public sealed class AgentProfile
     /// agent permission prompts would be a redundant second click.</summary>
     public bool RequireToolApproval { get; set; }
 
+    /// <summary>External MCP servers handed to the agent alongside SwebKit's own tools at
+    /// <c>session/new → mcpServers</c>. These are not SwebKit tools: their calls bypass the
+    /// propose/confirm pipeline, so <see cref="RequireToolApproval"/> is the only gate they get.</summary>
+    public List<AgentMcpServer> ExtraMcpServers { get; set; } = [];
+
     /// <summary>Reserved: advertise ACP <c>fs/*</c> client capabilities so the agent can read and
     /// write files on this machine. Ships disabled — the capability is designed in but the
     /// server-side handlers are not implemented.</summary>
@@ -108,4 +113,44 @@ public sealed class AgentProfile
     /// (e.g. an existing <c>claude</c> login) — <see cref="CredentialKey"/> is optional there and
     /// only injects an env var when set.</summary>
     public bool RequiresApiKey => Provider is not ProviderKind.LmStudio and not ProviderKind.Acp;
+}
+
+/// <summary>
+/// One external MCP server an ACP profile attaches at <c>session/new</c> — the agent spawns or
+/// connects to it directly (SwebKit only forwards the descriptor, never proxies the traffic).
+/// Mirrors the two ACP transport shapes: <c>"http"</c> uses <see cref="Url"/>/<see cref="Headers"/>,
+/// <c>"stdio"</c> uses <see cref="Command"/>/<see cref="Arguments"/>/<see cref="EnvironmentVariables"/>.
+/// </summary>
+public sealed class AgentMcpServer
+{
+    /// <summary>Stable unique identifier (GUID string) — UI list keys and spec diffing.</summary>
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>MCP server name as advertised to the agent (must be unique within the session).</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Disabled entries stay in the profile but are not handed to the agent.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary><c>"http"</c> (remote MCP endpoint) or <c>"stdio"</c> (the agent spawns the server
+    /// itself). Anything else is ignored with a warning.</summary>
+    public string Transport { get; set; } = "http";
+
+    /// <summary>Remote MCP endpoint URL — <c>"http"</c> transport only.</summary>
+    public string? Url { get; set; }
+
+    /// <summary>HTTP headers sent with MCP requests — <c>"http"</c> transport only. Never store
+    /// secrets here; point the header at an env-var-bearing server or keep auth on the agent side.</summary>
+    public Dictionary<string, string> Headers { get; set; } = [];
+
+    /// <summary>Executable for <c>"stdio"</c> transport — spawned and managed by the agent, not by
+    /// SwebKit.</summary>
+    public string? Command { get; set; }
+
+    /// <summary>Arguments for <see cref="Command"/> as a single string, split with shell-style
+    /// quoting rules — <c>"stdio"</c> transport only.</summary>
+    public string? Arguments { get; set; }
+
+    /// <summary>Environment variables for the spawned server — <c>"stdio"</c> transport only.</summary>
+    public Dictionary<string, string> EnvironmentVariables { get; set; } = [];
 }

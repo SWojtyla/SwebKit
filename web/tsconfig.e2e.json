@@ -12,7 +12,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
     "types": ["node"]
   },
   "include": ["playwright.config.ts", "e2e/**/*.ts"]

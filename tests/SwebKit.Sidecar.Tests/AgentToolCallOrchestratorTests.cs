@@ -174,4 +174,68 @@ public class AgentToolCallOrchestratorTests
 
         Assert.Equal(new string('x', 80) + "…", summary);
     }
+
+    // ── Per-turn read memoization ──
+
+    private sealed class CountingTool(string name, ToolKind kind = ToolKind.Read) : IAgentTool
+    {
+        public int Calls { get; private set; }
+        public string Name => name;
+        public string Description => "counting fake";
+        public ToolKind Kind => kind;
+        public FeatureArea FeatureArea => FeatureArea.Aks;
+        public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""{"type":"object","properties":{}}""");
+        public Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
+        {
+            Calls++;
+            return Task.FromResult("""{"ok":true}""");
+        }
+    }
+
+    [Fact]
+    public async Task StepTrackingToolExecutor_IdenticalReadCalls_MemoizeWithinTheTurn()
+    {
+        var tool = new CountingTool("read_aks");
+        var orchestrator = new AgentToolCallOrchestrator(new AgentToolRegistry([tool]));
+        var tools = orchestrator.ResolveTools(true, "ask_and_do", null, "workspace");
+        var steps = new List<AgentChatStep>();
+        var executor = orchestrator.BuildStepTrackingToolExecutor(tools, steps)!;
+
+        var args = JsonDocument.Parse("""{"ns":"team-a"}""").RootElement;
+        var first = await executor("read_aks", args, CancellationToken.None);
+        var second = await executor("read_aks", args, CancellationToken.None);
+
+        Assert.Equal(1, tool.Calls);
+        Assert.Equal(first, second);
+        Assert.Equal("(cached — identical call this turn)", steps[^1].Summary);
+    }
+
+    [Fact]
+    public async Task StepTrackingToolExecutor_DifferentArgs_AreNotMemoized()
+    {
+        var tool = new CountingTool("read_aks");
+        var orchestrator = new AgentToolCallOrchestrator(new AgentToolRegistry([tool]));
+        var tools = orchestrator.ResolveTools(true, "ask_and_do", null, "workspace");
+        var executor = orchestrator.BuildStepTrackingToolExecutor(tools, [])!;
+
+        await executor("read_aks", JsonDocument.Parse("""{"ns":"a"}""").RootElement, CancellationToken.None);
+        await executor("read_aks", JsonDocument.Parse("""{"ns":"b"}""").RootElement, CancellationToken.None);
+
+        Assert.Equal(2, tool.Calls);
+    }
+
+    [Fact]
+    public async Task StepTrackingToolExecutor_MutationsAreNeverMemoized()
+    {
+        var tool = new CountingTool("mutate_aks", ToolKind.Mutate);
+        var orchestrator = new AgentToolCallOrchestrator(new AgentToolRegistry([tool]));
+        var tools = orchestrator.ResolveTools(true, "ask_and_do", null, "workspace");
+        var executor = orchestrator.BuildStepTrackingToolExecutor(tools, [])!;
+
+        var args = JsonDocument.Parse("{}").RootElement;
+        await executor("mutate_aks", args, CancellationToken.None);
+        await executor("mutate_aks", args, CancellationToken.None);
+
+        Assert.Equal(2, tool.Calls);
+    }
 }

@@ -12,6 +12,8 @@ Plan files are the shared intent record: any tool or later session reads them to
   line from this catalog. Git history preserves the full record.
 
 - `codebase-quality-program.md` — phased deep-scan megaplan: hygiene, architecture, per-feature deep dives, Dashboard AI cockpit.
+- `agent-mcp-evolution.md` — external MCP passthrough for ACP profiles, harness tool-quality pass (composite tools, memoization, projection caps), standalone MCP exposure of the SwebKit tools bridge (read-only default), and an MCP client adapter proxying external tools into non-ACP profiles with a confirm-before-execute pipeline.
+- `access-denial-awareness.md` — phase 1: structured `access_denied` agent tool results with least-privilege remedies, SQL hidden-metadata detection via `sys.fn_my_permissions`, restricted demo connection.
 
 ## Plan file contract
 

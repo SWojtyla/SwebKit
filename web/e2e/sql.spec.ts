@@ -1,9 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { setDemoMode } from "./helpers";
 
-// Demo mode serves two SQL connections ("orders-dev-sql" / "orders-prod-sql") with canned
-// data: 8 customers, 20 orders, 6 products, 12 invoices — and intentional drift between the
-// two variants so the compare tab has something to show.
+// Demo mode serves three SQL connections ("orders-dev-sql" / "orders-prod-sql" / the restricted
+// "orders-prd-sql") with canned data: 8 customers, 20 orders, 6 products, 12 invoices — and
+// intentional drift between the first two variants so the compare tab has something to show.
+// The third simulates a locked-down PRD login: SELECT/EXECUTE but no VIEW DEFINITION.
 test.describe("SQL", () => {
     test.beforeEach(async ({ page }) => {
         await setDemoMode(page, true);
@@ -21,7 +22,7 @@ test.describe("SQL", () => {
         await expect(page.getByTestId("sql-page")).toBeVisible();
         await expect(
             page.getByTestId("sql-connection-select").locator("option"),
-        ).toHaveCount(2);
+        ).toHaveCount(3);
         await expect(page.getByTestId("sql-readonly-badge")).toBeVisible();
 
         // Schema tree populates from the demo client — objects render once a group expands.
@@ -157,5 +158,23 @@ test.describe("SQL", () => {
         await expect(
             page.getByTestId("sql-compare-schema-result"),
         ).toContainText("products");
+    });
+
+    test("restricted connection shows the hidden-schema state, not an empty tree", async ({
+        page,
+    }) => {
+        await page.goto("/sql");
+        await page
+            .getByTestId("sql-connection-select")
+            .selectOption("demo-sql-prd");
+
+        // The catalog reads empty but the identity holds SELECT/EXECUTE — the UI must say
+        // "hidden by permissions", never the misleading "no objects" empty state.
+        await expect(page.getByTestId("sql-schema-hidden")).toBeVisible();
+        await expect(page.getByTestId("sql-schema-hidden")).toContainText(
+            /VIEW DEFINITION|db_datareader/,
+        );
+        await expect(page.getByTestId("sql-schema-empty")).toHaveCount(0);
+        await expect(page.getByTestId("sql-schema-tree")).toHaveCount(0);
     });
 });

@@ -23,7 +23,9 @@ public sealed class GetQueueMessagesTool : IAgentTool
 
     public string Description =>
         "Retrieves messages from a Service Bus queue, including dead-letter messages. " +
-        "Omit namespace to use the namespace selected in the UI.";
+        "Omit namespace to use the namespace selected in the UI. For backlog/health questions " +
+        "prefer get_queue_stats or analyze_queue_health first — they answer counts without " +
+        "pulling message bodies into context.";
 
     public FeatureArea FeatureArea => FeatureArea.ServiceBus;
 

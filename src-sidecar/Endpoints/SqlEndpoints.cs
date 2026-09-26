@@ -159,6 +159,17 @@ public static class SqlEndpoints
 
         var client = await pool.GetOrCreateAsync(connection, ct);
         var schema = await client.GetSchemaAsync(database, ct);
+        // Self-reported effective permissions need no catalog rights — this is how a locked-down
+        // "query-but-don't-browse" environment (hidden metadata, typical PRD) gets told apart
+        // from a genuinely empty database instead of showing a dead schema tree.
+        try
+        {
+            schema.ApplyPermissionAnalysis(await client.GetMyPermissionsAsync(database, ct));
+        }
+        catch
+        {
+            // Probe failure leaves the flag off — the UI falls back to the generic empty state.
+        }
         return Results.Ok(schema);
     }
 
@@ -373,9 +384,11 @@ public static class SqlEndpoints
         if (demo.IsDemoMode)
             return demo.GetDemoSqlConnection(connectionId);
 
-        // "demo-sql"/"demo-sql-2" are reserved ids — a save made while demo mode was on can
-        // persist the overlay into the profile, and that copy must never resolve to a real client.
-        if (connectionId is DemoModeService.DemoSqlConnectionId or DemoModeService.DemoSqlConnectionId2)
+        // "demo-sql*"" ids are reserved — a save made while demo mode was on can persist the
+        // overlay into the profile, and that copy must never resolve to a real client.
+        if (connectionId is DemoModeService.DemoSqlConnectionId
+            or DemoModeService.DemoSqlConnectionId2
+            or DemoModeService.DemoSqlConnectionIdRestricted)
             return null;
 
         var config = profile.GetProfileData().Config.SqlConfig;
