@@ -199,6 +199,22 @@ public sealed class SqlDatabaseClient : ISqlClient
         return model;
     }
 
+    public async Task<IReadOnlyList<string>> GetMyPermissionsAsync(string? database, CancellationToken ct = default)
+    {
+        // sys.fn_my_permissions returns the *caller's* effective permissions — it needs no
+        // catalog rights of its own, which is exactly what makes it usable in locked-down
+        // environments where VIEW DEFINITION is denied and sys.objects looks empty.
+        await using var conn = CreateConnection(database);
+        await conn.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new SqlCommand(
+            "SELECT DISTINCT permission_name FROM sys.fn_my_permissions(NULL, N'DATABASE') ORDER BY permission_name", conn);
+        var permissions = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            permissions.Add(reader.GetString(0));
+        return permissions;
+    }
+
     public async Task<SqlQueryResult> ExecuteQueryAsync(string sql, string? database, int maxRows, bool allowWrites, CancellationToken ct = default)
     {
         if (!allowWrites)

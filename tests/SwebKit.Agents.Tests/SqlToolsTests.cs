@@ -43,6 +43,7 @@ internal sealed class FakeSqlClientForTools : ISqlClient
     public Task<SqlSchemaCompareResult> CompareSchemaAsync(ISqlClient target, string? sourceDatabase, string? targetDatabase, CancellationToken ct = default) =>
         _inner.CompareSchemaAsync(target, sourceDatabase, targetDatabase, ct);
     public Task<SqlHealthReport> CheckHealthAsync(string? database, CancellationToken ct = default) => _inner.CheckHealthAsync(database, ct);
+    public Task<IReadOnlyList<string>> GetMyPermissionsAsync(string? database, CancellationToken ct = default) => _inner.GetMyPermissionsAsync(database, ct);
 }
 
 internal sealed class FakeSqlClientFactoryForTools : ISqlClientFactory

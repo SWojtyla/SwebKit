@@ -52,6 +52,31 @@ public sealed class SqlSchemaModel
 {
     public string? Database { get; set; }
     public List<SqlSchemaGroup> Schemas { get; set; } = [];
+
+    /// <summary>
+    /// The caller's effective database permissions (from <c>sys.fn_my_permissions</c>) —
+    /// populated by the endpoint, empty when the probe couldn't run.
+    /// </summary>
+    public List<string> EffectivePermissions { get; set; } = [];
+
+    /// <summary>
+    /// True when catalog metadata is almost certainly hidden by policy: the tree came back
+    /// empty while the identity holds query rights (SELECT/EXECUTE) but no VIEW DEFINITION.
+    /// Locked-down environments grant access per-object this way — the user can query what
+    /// they know by name but can't browse. Drives the "schema hidden" empty state rather
+    /// than the misleading "no objects" one.
+    /// </summary>
+    public bool MetadataHidden { get; set; }
+
+    /// <summary>Applies <see cref="MetadataHidden"/> analysis from a permission probe.</summary>
+    public void ApplyPermissionAnalysis(IReadOnlyList<string> permissions)
+    {
+        EffectivePermissions = [.. permissions];
+        MetadataHidden = Schemas.Count == 0
+            && permissions.Count > 0
+            && !permissions.Any(p => string.Equals(p, "VIEW DEFINITION", StringComparison.OrdinalIgnoreCase))
+            && permissions.Any(p => p is "SELECT" or "EXECUTE" or "INSERT" or "UPDATE" or "DELETE" or "CONTROL");
+    }
 }
 
 /// <summary>A result column of an executed query.</summary>

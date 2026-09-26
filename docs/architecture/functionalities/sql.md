@@ -24,8 +24,13 @@
 - Workspace integration: `WorkspaceResourceArea.Sql` topology nodes, relationship suggestions
   matching SQL server FQDNs in pod env vars/ConfigMaps/logs, `investigate_workspace_issue`
   health dispatch, `/sql?connection=&table=` deep links.
-- Demo mode: two demo connections (`demo-sql`, `demo-sql-2`) with intentional schema/data drift
-  for compare demonstrations.
+- Hidden-metadata awareness: the schema endpoint also queries `sys.fn_my_permissions` — when
+  the catalog reads empty but the identity holds SELECT/EXECUTE without VIEW DEFINITION,
+  `MetadataHidden` is set and the UI shows a "schema hidden by permissions" state (with the
+  grant to request) instead of the misleading empty-database state.
+- Demo mode: three demo connections — `demo-sql`/`demo-sql-2` with intentional schema/data
+  drift for compare demonstrations, plus `demo-sql-prd` (restricted: SELECT/EXECUTE, no
+  VIEW DEFINITION) to exercise the hidden-schema state.
 
 ## Credential / Auth Model
 

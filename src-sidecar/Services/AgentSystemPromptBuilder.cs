@@ -84,6 +84,10 @@ public sealed class AgentSystemPromptBuilder
                 can change the workspace.
               - If a tool returns an error, record it in "evidence" and try a different source
                 rather than retrying the same call in a loop.
+              - A tool result with "status": "access_denied" means the signed-in identity lacks
+                that permission — do not retry it. Collect each one and close the report with an
+                "Access gaps" section naming the requiredAccess role for each, so the user knows
+                exactly what to request.
               """
             : BuildToolPolicySection(hasToolCalling, normalizedMode);
 
@@ -263,6 +267,9 @@ public sealed class AgentSystemPromptBuilder
                 - Every mutating tool only proposes a pending action — it never changes anything by itself.
                   The user must explicitly confirm before anything is applied.
                 - If a tool returns an error, explain what it means and suggest a resolution.
+                - A tool result with "status": "access_denied" means the signed-in identity lacks
+                  that permission — do not retry it; report it as an access gap naming the
+                  requiredAccess role, and keep investigating with what you can reach.
                 - Do not expose internal JSON schemas or tool names in your replies.
                 """;
         }
@@ -274,6 +281,9 @@ public sealed class AgentSystemPromptBuilder
               no matter what is asked. If the user wants to change something, tell them to switch to
               Ask & do mode.
             - If a tool returns an error, explain what it means and suggest a resolution.
+            - A tool result with "status": "access_denied" means the signed-in identity lacks
+              that permission — do not retry it; report it as an access gap naming the
+              requiredAccess role, and keep investigating with what you can reach.
             - Do not expose internal JSON schemas or tool names in your replies.
             """;
     }

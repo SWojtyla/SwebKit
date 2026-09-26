@@ -24,6 +24,14 @@ public interface ISqlClient : IAsyncDisposable
     Task<SqlSchemaModel> GetSchemaAsync(string? database, CancellationToken ct = default);
 
     /// <summary>
+    /// The caller's own effective database permissions (<c>sys.fn_my_permissions(NULL, 'DATABASE')</c>).
+    /// Any login can query its own row — this is what lets us distinguish "empty database" from
+    /// "metadata hidden by policy" in locked-down environments without needing catalog rights.
+    /// Returns an empty list when the probe can't run.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetMyPermissionsAsync(string? database, CancellationToken ct = default);
+
+    /// <summary>
     /// Executes <paramref name="sql"/> and returns up to <paramref name="maxRows"/> rows.
     /// When <paramref name="allowWrites"/> is false the statement batch is classified first and
     /// any mutating statement throws <see cref="SqlWriteGuardException"/> before anything executes.

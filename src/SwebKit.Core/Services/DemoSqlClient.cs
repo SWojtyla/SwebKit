@@ -9,6 +9,9 @@ namespace SwebKit.Core.Services;
 /// (dbo.customers / dbo.orders / dbo.products / sales.invoices) with deterministic rows.
 /// Variant 1 (the second demo connection) carries a slightly different catalog and data so the
 /// schema/data compare panels show a real diff in demo mode.
+/// Variant 2 (the "prd" connection) simulates a locked-down environment: the schema catalog
+/// reads empty and <see cref="GetMyPermissionsAsync"/> reports SELECT/EXECUTE without
+/// VIEW DEFINITION — while queries still work, matching a real "metadata hidden" grant.
 /// </summary>
 public sealed class DemoSqlClient : ISqlClient
 {
@@ -22,7 +25,15 @@ public sealed class DemoSqlClient : ISqlClient
 
     public SqlConnectionEntry Connection { get; }
 
+    /// <summary>Variant 2 models a PRD login: data-plane rights, no catalog visibility.</summary>
+    private bool MetadataHidden => _variant == 2;
+
     public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
+
+    public Task<IReadOnlyList<string>> GetMyPermissionsAsync(string? database, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<string>>(MetadataHidden
+            ? ["EXECUTE", "SELECT"]
+            : ["CONTROL", "DELETE", "EXECUTE", "INSERT", "SELECT", "UPDATE", "VIEW DEFINITION"]);
 
     public Task<IReadOnlyList<SqlDatabaseInfo>> ListDatabasesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<SqlDatabaseInfo>>(
@@ -34,6 +45,8 @@ public sealed class DemoSqlClient : ISqlClient
     public Task<SqlSchemaModel> GetSchemaAsync(string? database, CancellationToken ct = default)
     {
         var model = new SqlSchemaModel { Database = database ?? "orders" };
+        if (MetadataHidden)
+            return Task.FromResult(model); // what sys.objects returns with no VIEW DEFINITION
         var dbo = new SqlSchemaGroup { Name = "dbo" };
         var sales = new SqlSchemaGroup { Name = "sales" };
 

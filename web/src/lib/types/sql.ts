@@ -56,6 +56,11 @@ export interface SqlSchemaGroup {
 export interface SqlSchemaModel {
     database: string | null;
     schemas: SqlSchemaGroup[];
+    /** The caller's effective database permissions from sys.fn_my_permissions (empty when the probe couldn't run). */
+    effectivePermissions?: string[];
+    /** True when the catalog came back empty while the identity holds query rights but no
+     *  VIEW DEFINITION — metadata is hidden by policy, not because the database is empty. */
+    metadataHidden?: boolean;
 }
 
 export interface SqlResultColumn {

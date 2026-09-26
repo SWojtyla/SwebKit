@@ -36,6 +36,22 @@ export function SchemaTree({ schema, isLoading, error, selected, onSelect }: Sch
     );
   }
   if (!schema || schema.schemas.length === 0) {
+    if (schema?.metadataHidden) {
+      // Locked-down environment: the identity can query but can't see catalog metadata —
+      // distinct from "empty database" so the user knows browsing isn't broken, just denied.
+      const held = (schema.effectivePermissions ?? []).filter(
+        (p) => p !== "VIEW DEFINITION",
+      );
+      return (
+        <EmptyState
+          title="Schema hidden by permissions"
+          description={`Your identity can query objects it has rights to but can't browse catalog metadata. ${
+            held.length > 0 ? `You hold: ${held.join(", ")}. ` : ""
+          }Ask a DBA for VIEW DEFINITION or db_datareader to enable browsing.`}
+          testId="sql-schema-hidden"
+        />
+      );
+    }
     return <EmptyState title="No schema objects" description="This database has no user tables or views." testId="sql-schema-empty" />;
   }
 

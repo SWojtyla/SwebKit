@@ -29,6 +29,28 @@ internal sealed class FakeSqlConnectionPool : ISqlConnectionPool
     public void InvalidateAll() { }
 }
 
+/// <summary>Wraps a DemoSqlClient but fails the self-permission probe — mirrors a locked-down
+/// server where even sys.fn_my_permissions is blocked.</summary>
+internal sealed class FailingPermissionsSqlClient(ISqlClient inner) : ISqlClient
+{
+    public SqlConnectionEntry Connection => inner.Connection;
+    public Task<bool> TestConnectionAsync(CancellationToken ct = default) => inner.TestConnectionAsync(ct);
+    public Task<IReadOnlyList<string>> GetMyPermissionsAsync(string? database, CancellationToken ct = default) =>
+        throw new InvalidOperationException("permission probe denied");
+    public Task<IReadOnlyList<SqlDatabaseInfo>> ListDatabasesAsync(CancellationToken ct = default) => inner.ListDatabasesAsync(ct);
+    public Task<SqlSchemaModel> GetSchemaAsync(string? database, CancellationToken ct = default) => inner.GetSchemaAsync(database, ct);
+    public Task<SqlQueryResult> ExecuteQueryAsync(string sql, string? database, int maxRows, bool allowWrites, CancellationToken ct = default) =>
+        inner.ExecuteQueryAsync(sql, database, maxRows, allowWrites, ct);
+    public Task<SqlQueryResult> GetTableRowsAsync(string schemaName, string tableName, string? database, string? filterColumn, string? filterText, string? orderByColumn, bool descending, int skip, int take, CancellationToken ct = default) =>
+        inner.GetTableRowsAsync(schemaName, tableName, database, filterColumn, filterText, orderByColumn, descending, skip, take, ct);
+    public Task<SqlDataCompareResult> CompareDataAsync(ISqlClient target, string schemaName, string tableName, IReadOnlyList<string> keyColumns, string? sourceDatabase, string? targetDatabase, int maxDiffRows, CancellationToken ct = default) =>
+        inner.CompareDataAsync(target, schemaName, tableName, keyColumns, sourceDatabase, targetDatabase, maxDiffRows, ct);
+    public Task<SqlSchemaCompareResult> CompareSchemaAsync(ISqlClient target, string? sourceDatabase, string? targetDatabase, CancellationToken ct = default) =>
+        inner.CompareSchemaAsync(target, sourceDatabase, targetDatabase, ct);
+    public Task<SqlHealthReport> CheckHealthAsync(string? database, CancellationToken ct = default) => inner.CheckHealthAsync(database, ct);
+    public ValueTask DisposeAsync() => inner.DisposeAsync();
+}
+
 /// <summary>Yields a fixed set of discovered servers.</summary>
 internal sealed class FakeSqlDiscovery(params SqlDiscoveredServer[] servers) : ISqlResourceDiscovery
 {
@@ -110,6 +132,63 @@ public class SqlEndpointsTests : IDisposable
         // Demo resolution goes through the pool — which hands back demo clients in demo mode.
         Assert.Single(pool.Calls);
         Assert.Equal(DemoModeService.DemoSqlConnectionId, pool.Calls[0].Id);
+    }
+
+    [Fact]
+    public async Task GetSchema_FullAccessConnection_NotMetadataHidden()
+    {
+        var (profile, demo, pool, _) = Build();
+
+        var result = await SqlEndpoints.GetSchemaAsync(ConnectionId, null, profile, pool, demo, CancellationToken.None);
+
+        var ok = Assert.IsType<Ok<SqlSchemaModel>>(result);
+        Assert.False(ok.Value!.MetadataHidden);
+        Assert.Contains("VIEW DEFINITION", ok.Value.EffectivePermissions);
+        Assert.NotEmpty(ok.Value.Schemas);
+    }
+
+    [Fact]
+    public async Task GetSchema_RestrictedDemoConnection_ReportsMetadataHidden()
+    {
+        var (profile, demo, pool, _) = Build(demoMode: true);
+        pool.ClientFactory = demo.GetSqlClient;
+
+        var result = await SqlEndpoints.GetSchemaAsync(
+            DemoModeService.DemoSqlConnectionIdRestricted, null, profile, pool, demo, CancellationToken.None);
+
+        var ok = Assert.IsType<Ok<SqlSchemaModel>>(result);
+        Assert.Empty(ok.Value!.Schemas);           // what sys.objects returns without VIEW DEFINITION
+        Assert.True(ok.Value.MetadataHidden);       // but SELECT/EXECUTE grants exist → hidden, not empty
+        Assert.Contains("SELECT", ok.Value.EffectivePermissions);
+        Assert.DoesNotContain("VIEW DEFINITION", ok.Value.EffectivePermissions);
+    }
+
+    [Fact]
+    public async Task GetSchema_RestrictedDemoId_OutsideDemoMode_ReturnsNotFound()
+    {
+        var (profile, demo, pool, _) = Build();
+        profile.Config.SqlConfig!.Connections.Add(
+            new SqlConnectionEntry { Id = DemoModeService.DemoSqlConnectionIdRestricted, Server = "poisoned" });
+
+        var result = await SqlEndpoints.GetSchemaAsync(
+            DemoModeService.DemoSqlConnectionIdRestricted, null, profile, pool, demo, CancellationToken.None);
+
+        Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Empty(pool.Calls);
+    }
+
+    [Fact]
+    public async Task GetSchema_PermissionProbeFails_StillReturnsSchemaWithoutFlag()
+    {
+        var (profile, demo, pool, _) = Build();
+        pool.Client = new FailingPermissionsSqlClient(pool.Client);
+
+        var result = await SqlEndpoints.GetSchemaAsync(ConnectionId, null, profile, pool, demo, CancellationToken.None);
+
+        var ok = Assert.IsType<Ok<SqlSchemaModel>>(result);
+        Assert.False(ok.Value!.MetadataHidden);
+        Assert.Empty(ok.Value.EffectivePermissions);
+        Assert.NotEmpty(ok.Value.Schemas);
     }
 
     // ── Query execution ────────────────────────────────────────────────────────

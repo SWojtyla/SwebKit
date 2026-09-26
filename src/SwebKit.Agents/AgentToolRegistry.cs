@@ -1,5 +1,7 @@
 using System.Text.Json;
 using SwebKit.Agents.Tools;
+using SwebKit.Core.Security;
+using SwebKit.Core.Serialization;
 
 namespace SwebKit.Agents;
 
@@ -43,7 +45,22 @@ public sealed class AgentToolRegistry : IAgentToolRegistry
         }
         catch (Exception ex)
         {
-            return $"{{\"error\": \"{ex.Message.Replace("\"", "\\\"")}\"}}";
+            // Authorization failures get a structured result the model can aggregate into an
+            // access-gap report — in locked-down environments (typical PRD) the identity often
+            // has rights on only some resources, and "request X on Y" is the actionable answer.
+            if (AccessAdvisor.TryCreateDenial(ex, tool.FeatureArea.ToString(), out var denial))
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    status = "access_denied",
+                    capability = denial.Capability,
+                    featureArea = denial.FeatureArea,
+                    requiredAccess = denial.RequiredAccess,
+                    guidance = denial.Guidance,
+                    detail = denial.Detail,
+                }, SwebKitJsonOptions.Default);
+            }
+            return JsonSerializer.Serialize(new { error = ex.Message }, SwebKitJsonOptions.Default);
         }
     }
 }
