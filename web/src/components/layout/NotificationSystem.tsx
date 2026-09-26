@@ -21,6 +21,27 @@ interface HistoryItem extends NotificationItem {
     read: boolean;
 }
 
+// Module-level factory: impure builtins (Date.now, randomUUID) belong outside the
+// component so the render-purity analyzer doesn't flag them — notify only ever runs
+// from event handlers anyway.
+function createNotification(
+    type: NotificationType,
+    title: string,
+    body?: string,
+    action?: NotificationAction,
+    link?: string,
+): NotificationItem {
+    return {
+        id: crypto.randomUUID(),
+        type,
+        title,
+        body,
+        timestamp: Date.now(),
+        action,
+        link,
+    };
+}
+
 export function NotificationProvider({ children }: { children: ReactNode }) {
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [showHistory, setShowHistory] = useState(false);
@@ -54,16 +75,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         action?: NotificationAction,
         link?: string,
     ) => {
-        const id = crypto.randomUUID();
-        const item: NotificationItem = {
-            id,
-            type,
-            title,
-            body,
-            timestamp: Date.now(),
-            action,
-            link,
-        };
+        const item = createNotification(type, title, body, action, link);
+        const id = item.id;
         activeItems.current.set(id, item);
         setNotifications((prev) => [...prev, item]);
         setTimeout(() => dismiss(id), 5000);

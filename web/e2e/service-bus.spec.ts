@@ -1026,4 +1026,46 @@ test.describe("Service Bus", () => {
             /border-primary/,
         );
     });
+
+    test("entity tree is resizable and the width survives a reload", async ({
+        page,
+    }) => {
+        await page.goto("/service-bus");
+        // Dragged widths persist under panel-widths:*, so start from defaults.
+        await page.evaluate(() =>
+            window.localStorage.removeItem("panel-widths:service-bus-panels"),
+        );
+        await page.reload();
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+
+        const panel = page.getByTestId("panel-0");
+        const resizer = page.getByTestId("resizer-0");
+        await panel.waitFor();
+        const before = (await panel.boundingBox())!.width;
+
+        const box = (await resizer.boundingBox())!;
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(
+            box.x + box.width / 2 + 140,
+            box.y + box.height / 2,
+            { steps: 10 },
+        );
+        await page.mouse.up();
+
+        const widened = (await panel.boundingBox())!.width;
+        expect(widened).toBeGreaterThan(before + 100);
+
+        // The entity tree still works at the dragged width, and the choice sticks.
+        await expect(
+            page.getByTestId("entity-tree-queue-order-created"),
+        ).toBeVisible();
+        await page.reload();
+        await panel.waitFor();
+        expect((await panel.boundingBox())!.width).toBeGreaterThan(
+            before + 100,
+        );
+    });
 });

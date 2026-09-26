@@ -15,6 +15,7 @@ import { apiFetch } from "@/lib/api";
 import { useNotification } from "@/components/layout/notification-context";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
+import { ResizablePanels } from "@/components/ui/ResizablePanels";
 import { EntityTree } from "./EntityTree";
 import { MessageList } from "./MessageList";
 import { MessageDetail } from "./MessageDetail";
@@ -314,6 +315,139 @@ export function ServiceBusPage() {
 
   const selectedNs = namespaces.find((ns) => ns.id === selectedNsId);
 
+  // Message-list column — rendered inside the resizable pair when the entity tree is
+  // shown, or as the sole column when it's collapsed. Kept as one fragment so both
+  // layouts share the breadcrumb/view tabs/purge/message-list markup verbatim.
+  const listColumn = (
+    <>
+      {selectedEntity && (
+        <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs" data-testid="sb-breadcrumb">
+          <button
+            type="button"
+            onClick={() => setSelectedEntity(null)}
+            className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            title="Return to entity overview"
+          >
+            <ChevronLeft className="h-3 w-3" /> Overview
+          </button>
+          <span className="text-muted-foreground">/</span>
+          <span className="truncate text-muted-foreground" title={selectedNs?.alias ?? selectedNsId ?? ""}>
+            {selectedNs?.alias ?? selectedNsId}
+          </span>
+          <span className="text-muted-foreground">/</span>
+          <span className="truncate font-medium" title={selectedEntity.name}>
+            {selectedEntity.name}
+          </span>
+          <button
+            type="button"
+            onClick={() => setAskAiOpen(true)}
+            className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            title="Ask AI about this entity"
+            data-testid="sb-ask-ai-btn"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+      {askAiOpen && selectedEntity && (
+        <ContextualAssistant
+          featureArea="ServiceBus"
+          title={`entity ${selectedEntity.name}`}
+          selection={{
+            entityPath: selectedEntity.entityPath,
+            ...(selectedNsId ? { nsId: selectedNsId } : {}),
+          }}
+          onClose={() => setAskAiOpen(false)}
+        />
+      )}
+      {selectedEntity && (
+        <div className="flex items-center border-b">
+          <button
+            data-testid="sb-view-active"
+            onClick={() => setViewMode("active")}
+            className={`flex-1 px-3 py-2 text-sm font-medium ${
+              viewMode === "active"
+                ? "border-b-2 border-primary text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Active {selectedEntity.stats && `(${selectedEntity.stats.activeMessageCount})`}
+          </button>
+          <button
+            data-testid="sb-view-dlq"
+            onClick={() => setViewMode("dlq")}
+            className={`flex-1 px-3 py-2 text-sm font-medium ${
+              viewMode === "dlq"
+                ? "border-b-2 border-primary text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            DLQ {selectedEntity.stats && `(${selectedEntity.stats.deadLetterMessageCount})`}
+          </button>
+          {/* Entity-level scope — purges every message in the current view, not one message.
+              Lives in this toolbar rather than in the per-message action row (MessageDetail)
+              so its all-messages blast radius isn't visually confused with the per-message
+              Complete/Resubmit buttons next to it there. */}
+          <button
+            data-testid="sb-purge-all-button"
+            onClick={() => setShowPurgeConfirm(true)}
+            disabled={purgeMutation.isPending}
+            className="shrink-0 border-l px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+            title={`Purge all ${viewMode === "dlq" ? "dead-lettered" : "active"} messages in this entity — cannot be undone`}
+          >
+            Purge All
+          </button>
+        </div>
+      )}
+      {showPurgeConfirm && selectedEntity && (
+        <ConfirmBar
+          message={
+            <>
+              Purge all {viewMode === "dlq" ? "dead-lettered" : "active"} messages from{" "}
+              <strong>{selectedEntity.entityPath}</strong>? This cannot be undone.
+            </>
+          }
+          confirmLabel="Purge"
+          confirmDisabled={purgeMutation.isPending}
+          onConfirm={onPurgeAll}
+          onCancel={() => setShowPurgeConfirm(false)}
+          testId="purge-confirm"
+          confirmTestId="purge-confirm-yes"
+          cancelTestId="purge-confirm-cancel"
+        />
+      )}
+      {selectedEntity ? (
+        <MessageList
+          nsId={selectedNsId}
+          entity={selectedEntity}
+          viewMode={viewMode}
+          messages={messageWindow}
+          isLoading={viewMode === "active" ? activeMessagesQuery.isLoading : dlqMessagesQuery.isLoading}
+          isError={viewMode === "active" ? activeMessagesQuery.isError : dlqMessagesQuery.isError}
+          error={viewMode === "active" ? activeMessagesQuery.error : dlqMessagesQuery.error}
+          isFetching={viewMode === "active" ? activeMessagesQuery.isFetching : dlqMessagesQuery.isFetching}
+          onRefresh={() => (viewMode === "active" ? activeMessagesQuery.refetch() : dlqMessagesQuery.refetch())}
+          lastRefreshedAt={lastRefreshedAt}
+          isLoadingMore={isLoadingMore}
+          canLoadMore={canLoadMore}
+          totalAvailable={totalAvailable}
+          selectedMessage={selectedMessage}
+          onSelectMessage={selectMessage}
+          onLoadMore={loadMore}
+        />
+      ) : (
+        <NamespaceOverview
+          nsId={selectedNsId}
+          namespaces={namespaces}
+          onSelectEntity={(e, mode) => {
+            setSelectedEntity(e);
+            if (mode) setViewMode(mode);
+          }}
+        />
+      )}
+    </>
+  );
+
   return (
     <div className="flex h-full flex-col" data-testid="service-bus-page">
       {/* Namespace selector + compose button */}
@@ -455,157 +589,47 @@ export function ServiceBusPage() {
 
       {/* Main content: entity tree | message list | detail */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Entity tree */}
+        {/* Entity tree — resizable against the message list (Storage/API Client share
+            ResizablePanels); the collapsed "Entities" strip keeps the old hide affordance. */}
         {showEntityTree ? (
-          <div className="w-64 overflow-auto border-r">
-            <EntityTree
-              nsId={selectedNsId}
-              selectedEntity={selectedEntity}
-              onSelectEntity={(entity, mode) => {
-                setSelectedEntity(entity);
-                if (mode) setViewMode(mode);
-              }}
-            />
-          </div>
-        ) : (
-          <button
-            data-testid="show-entity-tree"
-            onClick={() => setShowEntityTree(true)}
-            className="flex items-center border-r bg-card px-1.5 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            title="Show entity tree"
+          <ResizablePanels
+            initialWidths={[256, "1fr"]}
+            minWidths={[180, 320]}
+            storageKey="service-bus-panels"
+            panelLabels={["entities", "messages"]}
+            className="min-w-0 flex-1"
           >
-            Entities
-          </button>
+            {[
+              <div key="entities" className="h-full overflow-auto border-r">
+                <EntityTree
+                  nsId={selectedNsId}
+                  selectedEntity={selectedEntity}
+                  onSelectEntity={(entity, mode) => {
+                    setSelectedEntity(entity);
+                    if (mode) setViewMode(mode);
+                  }}
+                />
+              </div>,
+              <div key="messages" className="flex h-full min-w-0 flex-col overflow-hidden border-r">
+                {listColumn}
+              </div>,
+            ]}
+          </ResizablePanels>
+        ) : (
+          <>
+            <button
+              data-testid="show-entity-tree"
+              onClick={() => setShowEntityTree(true)}
+              className="flex items-center border-r bg-card px-1.5 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              title="Show entity tree"
+            >
+              Entities
+            </button>
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-r">
+              {listColumn}
+            </div>
+          </>
         )}
-
-        {/* Message list */}
-        <div className="flex flex-1 flex-col overflow-hidden border-r">
-          {selectedEntity && (
-            <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs" data-testid="sb-breadcrumb">
-              <button
-                type="button"
-                onClick={() => setSelectedEntity(null)}
-                className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
-                title="Return to entity overview"
-              >
-                <ChevronLeft className="h-3 w-3" /> Overview
-              </button>
-              <span className="text-muted-foreground">/</span>
-              <span className="truncate text-muted-foreground" title={selectedNs?.alias ?? selectedNsId ?? ""}>
-                {selectedNs?.alias ?? selectedNsId}
-              </span>
-              <span className="text-muted-foreground">/</span>
-              <span className="truncate font-medium" title={selectedEntity.name}>
-                {selectedEntity.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => setAskAiOpen(true)}
-                className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground"
-                title="Ask AI about this entity"
-                data-testid="sb-ask-ai-btn"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-          {askAiOpen && selectedEntity && (
-            <ContextualAssistant
-              featureArea="ServiceBus"
-              title={`entity ${selectedEntity.name}`}
-              selection={{
-                entityPath: selectedEntity.entityPath,
-                ...(selectedNsId ? { nsId: selectedNsId } : {}),
-              }}
-              onClose={() => setAskAiOpen(false)}
-            />
-          )}
-          {selectedEntity && (
-            <div className="flex items-center border-b">
-              <button
-                data-testid="sb-view-active"
-                onClick={() => setViewMode("active")}
-                className={`flex-1 px-3 py-2 text-sm font-medium ${
-                  viewMode === "active"
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Active {selectedEntity.stats && `(${selectedEntity.stats.activeMessageCount})`}
-              </button>
-              <button
-                data-testid="sb-view-dlq"
-                onClick={() => setViewMode("dlq")}
-                className={`flex-1 px-3 py-2 text-sm font-medium ${
-                  viewMode === "dlq"
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                DLQ {selectedEntity.stats && `(${selectedEntity.stats.deadLetterMessageCount})`}
-              </button>
-              {/* Entity-level scope — purges every message in the current view, not one message.
-                  Lives in this toolbar rather than in the per-message action row (MessageDetail)
-                  so its all-messages blast radius isn't visually confused with the per-message
-                  Complete/Resubmit buttons next to it there. */}
-              <button
-                data-testid="sb-purge-all-button"
-                onClick={() => setShowPurgeConfirm(true)}
-                disabled={purgeMutation.isPending}
-                className="shrink-0 border-l px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
-                title={`Purge all ${viewMode === "dlq" ? "dead-lettered" : "active"} messages in this entity — cannot be undone`}
-              >
-                Purge All
-              </button>
-            </div>
-          )}
-          {showPurgeConfirm && selectedEntity && (
-            <ConfirmBar
-              message={
-                <>
-                  Purge all {viewMode === "dlq" ? "dead-lettered" : "active"} messages from{" "}
-                  <strong>{selectedEntity.entityPath}</strong>? This cannot be undone.
-                </>
-              }
-              confirmLabel="Purge"
-              confirmDisabled={purgeMutation.isPending}
-              onConfirm={onPurgeAll}
-              onCancel={() => setShowPurgeConfirm(false)}
-              testId="purge-confirm"
-              confirmTestId="purge-confirm-yes"
-              cancelTestId="purge-confirm-cancel"
-            />
-          )}
-          {selectedEntity ? (
-            <MessageList
-              nsId={selectedNsId}
-              entity={selectedEntity}
-              viewMode={viewMode}
-              messages={messageWindow}
-              isLoading={viewMode === "active" ? activeMessagesQuery.isLoading : dlqMessagesQuery.isLoading}
-              isError={viewMode === "active" ? activeMessagesQuery.isError : dlqMessagesQuery.isError}
-              error={viewMode === "active" ? activeMessagesQuery.error : dlqMessagesQuery.error}
-              isFetching={viewMode === "active" ? activeMessagesQuery.isFetching : dlqMessagesQuery.isFetching}
-              onRefresh={() => (viewMode === "active" ? activeMessagesQuery.refetch() : dlqMessagesQuery.refetch())}
-              lastRefreshedAt={lastRefreshedAt}
-              isLoadingMore={isLoadingMore}
-              canLoadMore={canLoadMore}
-              totalAvailable={totalAvailable}
-              selectedMessage={selectedMessage}
-              onSelectMessage={selectMessage}
-              onLoadMore={loadMore}
-            />
-          ) : (
-            <NamespaceOverview
-              nsId={selectedNsId}
-              namespaces={namespaces}
-              onSelectEntity={(e, mode) => {
-                setSelectedEntity(e);
-                if (mode) setViewMode(mode);
-              }}
-            />
-          )}
-        </div>
 
         {/* Detail pane */}
         {selectedMessage && (
