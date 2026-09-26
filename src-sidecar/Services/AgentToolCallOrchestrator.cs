@@ -89,9 +89,13 @@ public sealed class AgentToolCallOrchestrator
     /// call — a common retry/stutter pattern — get the cached JSON instead of a second cluster/API
     /// round-trip. Mutations and error results are never cached; the ACP bridge has no turn boundary
     /// and deliberately does not memoize.</summary>
+    /// <param name="externalExecutors">name → executor for tools not in the registry — proxied
+    /// external-MCP tools for non-ACP profiles (agent-mcp-evolution Phase 2b). Their names carry
+    /// the <c>mcp_</c> prefix, so they can never collide with a registry tool.</param>
     public Func<string, JsonElement, CancellationToken, Task<string>>? BuildStepTrackingToolExecutor(
         IReadOnlyList<ToolDefinition> tools, List<AgentChatStep> steps,
-        IReadOnlyDictionary<string, string>? selection = null)
+        IReadOnlyDictionary<string, string>? selection = null,
+        IReadOnlyDictionary<string, Func<JsonElement, CancellationToken, Task<string>>>? externalExecutors = null)
     {
         if (tools.Count == 0)
             return null;
@@ -128,7 +132,9 @@ public sealed class AgentToolCallOrchestrator
             }
 
             using var executionContext = AgentExecutionContext.Push(selection);
-            var result = await _toolRegistry.ExecuteAsync(toolName, args, toolCt);
+            var result = externalExecutors is not null && externalExecutors.TryGetValue(toolName, out var external)
+                ? await external(args, toolCt)
+                : await _toolRegistry.ExecuteAsync(toolName, args, toolCt);
             toolSw.Stop();
 
             steps.Add(new AgentChatStep

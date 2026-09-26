@@ -47,14 +47,15 @@ Architecture background: `docs/architecture/ai-and-mcp.md`.
 
 ### Phase 2 — Standalone MCP
 
-- [ ] Read-only bridge mode (explicit allowlist profile, no `propose_*`).
-- [ ] Docs + config snippets (Claude Desktop, Claude Code, etc.).
-- [ ] Verify credential-resolution paths hold under direct MCP calls (sidecar must be running; document it).
+- [x] Read-only bridge mode: absent `?tools=` ⇒ read tools only (`propose_*` hidden + `tool_read_only` error on call); `?mode=full` opt-in for the full surface. Internal ACP sessions are unaffected — they always pass an explicit allowlist.
+- [x] Docs + config snippets (Claude Desktop `claude_desktop_config.json`, Claude Code `claude mcp add`) — `docs/architecture/ai-and-mcp.md` §6.2a.
+- [x] Credential-resolution verified: tools execute sidecar-side via `ICredentialStore`, so direct MCP calls work while the sidecar runs (loopback-only bind — no auth layer needed; documented caveat).
 
-### Phase 2b — MCP client adapter (parity for local providers)
+### Phase 2b — MCP client adapter (parity for local providers) ✅ read-only scope
 
-- [ ] `IAgentTool` shim that proxies calls to an external MCP server; registered per-profile.
-- [ ] Same allowlist/selection semantics as native tools.
+- [x] `ExternalMcpToolSource` (sidecar): `ExtraMcpServers` → cached `McpClient` per server config → `readOnlyHint` tools exposed as `mcp_{server}_{tool}` `ToolDefinition`s (`FeatureArea.External`, appended post-area-filter = area-exempt). Routing via `externalExecutors` in the step-tracking executor — registry untouched, per-turn memoization applies.
+- [x] Safety: unannotated/mutating external tools skipped (absent `readOnlyHint` ≠ read-only; no permission gate exists in-process — mutations stay an ACP-only, approval-gated feature). Dead servers skipped per-turn, never break the chat, retried next turn.
+- [ ] Selection semantics: external tools don't consume `sel=`/`AgentExecutionContext` — documented; no action possible (foreign servers don't know our selection model).
 
 ## Test plan
 

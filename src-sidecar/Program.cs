@@ -235,6 +235,7 @@ builder.Services.AddSingleton<IAgentTool, SwebKit.Sidecar.Services.GetAlertHisto
 builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 
 builder.Services.AddSingleton<SidecarAgentChatService>();
+builder.Services.AddSingleton<ExternalMcpToolSource>();
 
 // Agent action confirm-before-execute flow (ai-augmented-app technical-plan.md Module 3). Wired
 // here as infrastructure even though nothing in the sidecar can propose an action yet — the API

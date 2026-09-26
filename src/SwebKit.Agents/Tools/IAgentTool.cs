@@ -51,6 +51,13 @@ public enum FeatureArea
     /// when a turn explicitly requests <c>scope: "workspace"</c> (or from the global <c>/agent</c>
     /// page, which has no area filter to begin with). See <c>SidecarAgentChatService.ResolveTools</c>.</summary>
     Workspace,
+
+    /// <summary>Tools proxied from user-configured external MCP servers (agent-mcp-evolution
+    /// Phase 2b) — never registered in DI; <c>ExternalMcpToolSource</c> builds these definitions
+    /// dynamically and the chat service appends them AFTER the per-area filter runs, so they are
+    /// effectively area-exempt like Observability. Only <see cref="ToolKind.Read"/> external tools
+    /// exist, so ask-mode filtering treats them like any other read.</summary>
+    External,
 }
 
 public interface IAgentTool

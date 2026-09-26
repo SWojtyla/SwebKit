@@ -85,14 +85,18 @@ Same gate produces both the definition list for OpenAI-compatible models **and**
 http://localhost:{port}/mcp/swebkit-tools?tools=list_pods,get_pod_logs,…&sel=aksPod=kube-system/coredns-abc&sel=cluster=prod
 ```
 
-- `?tools=` — the resolved allowlist for this turn's mode/area/scope. Absent ⇒ unfiltered (only used for standalone exposure); empty ⇒ no tools.
+- `?tools=` — the resolved allowlist for this turn's mode/area/scope. Absent ⇒ **standalone surface: read-only tools only** (internal ACP sessions always carry an explicit allowlist, so an absent one means an unmanaged client attached directly); empty ⇒ no tools.
+- `?mode=full` — opt-in escape hatch for standalone clients: exposes the whole registry including `propose_*` mutations. Only meaningful without `?tools=`.
 - `?sel=` — key/value pairs pushed into `AgentExecutionContext` on every call, so tools can default to *the resource the user is looking at* without the model passing identifiers.
 
 Call flow:
 
 ```text
 MCP tools/call (name, arguments)
-  → allowlist check ── not allowed ──▶ {"error":"tool_out_of_scope", tool, area, message}
+  → ?tools= allowlist check ── not allowed ──▶ {"error":"tool_out_of_scope", tool, area, message}
+  → standalone check (no ?tools=, no ?mode=full, ToolKind.Mutate)
+      ── blocked ──▶ {"error":"tool_read_only", tool, message}
+  → AgentExecutionContext.Push(sel)
   → AgentExecutionContext.Push(sel)
   → registry.ExecuteAsync → IAgentTool → domain service → JSON result
 ```
@@ -153,8 +157,9 @@ What the harness does *before/around* the model so it doesn't have to:
 
 ```text
                         ┌─────────────────────────────┐
-   external agents ───▶ │  /mcp/swebkit-tools (bridge)│ ◀── Phase 2: standalone use
-   (Claude Desktop etc) │  already a public MCP URL   │     (docs, read-only profile)
+   external agents ───▶ │  /mcp/swebkit-tools (bridge)│ ◀── Phase 2a: standalone use
+   (Claude Desktop etc) │  read-only default,         │     (docs, ?mode=full opt-in)
+                        │  ?mode=full opt-in          │
                         └─────────────────────────────┘
 session/new.mcpServers = [
   swebkit (ours),
@@ -162,21 +167,44 @@ session/new.mcpServers = [
   github-mcp, …              (per-profile config, App Insights breadth "for free")
 ]
 
-non-ACP providers ──▶ MCP client adapter ◀── Phase 2: proxy external MCPs
-(LM Studio/Mistral)   (IAgentTool shim)      into the registry for parity
+non-ACP providers ──▶ ExternalMcpToolSource ◀── Phase 2b: proxy external MCPs
+(LM Studio/Mistral)   (mcp_ prefixed defs)     readOnly-only, post-filter
 ```
 
 ### Phase 1 — External MCP passthrough ✅ shipped
 
 Profile-configured `ExtraMcpServers` are appended to `session/new → mcpServers` as described above — e.g. Microsoft's Azure MCP covers the App Insights/Log Analytics breadth beyond our native `query_logs`/`get_metrics`. Caveats: permission requests are the only gate external tools get (Settings auto-enables `requireToolApproval` on first attach); MCP namespacing prevents collisions; external servers only exist for ACP profiles.
 
-### Phase 2a — Standalone MCP exposure (small)
+### Phase 2a — Standalone MCP exposure ✅ shipped
 
-The bridge already answers any MCP client — pointing Claude Desktop at the URL works today when the sidecar runs. Productizing = docs/config snippet + a dedicated read-only allowlist profile (never the mutation surface) + decide on auth for non-loopback.
+The bridge is a real MCP server on the sidecar's HTTP port — any client that speaks streamable HTTP can attach while the app runs. Because the sidecar binds **loopback only** (`127.0.0.1:5199` dev; ephemeral port under Tauri), no external auth layer is needed; a non-loopback deployment would have to rethink this.
 
-### Phase 2b — MCP client adapter (medium)
+**Safety default:** without `?tools=` the endpoint advertises and executes **read-only tools only** — `propose_*` mutations are hidden from `tools/list` and blocked with `{"error":"tool_read_only", …}` on call. `?mode=full` opts into the complete surface for clients where registering pending proposals (which still need UI confirmation) is desired. With `?tools=` present, allowlist semantics take over and `mode` is ignored.
 
-A shim implementing `IAgentTool` that forwards calls to an external MCP server — gives non-ACP providers (local models) the same external capabilities through our allowlist/projection semantics.
+**Claude Desktop** — `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "swebkit": { "url": "http://127.0.0.1:5199/mcp/swebkit-tools" }
+  }
+}
+```
+
+**Claude Code** — `claude mcp add --transport http swebkit http://127.0.0.1:5199/mcp/swebkit-tools`
+
+Both get the read-only surface; append `?mode=full` to the URL for the full registry. Requirements and caveats:
+
+- The **sidecar must be running** (app open, or `dotnet run` in `src-sidecar/`) — credentials resolve through its `ICredentialStore`, so tools work headlessly while it lives.
+- No `?sel=` ⇒ tools fall back to configured defaults rather than UI selection.
+- No per-turn memoization on this path (no turn boundary exists) — identical calls re-execute.
+- Proposal tools under `?mode=full` register pending actions that surface in the SwebKit UI — confirm/deny still happens there.
+
+### Phase 2b — MCP client adapter ✅ shipped (read-only)
+
+`ExternalMcpToolSource` resolves a non-ACP profile's `ExtraMcpServers` into proxied `ToolDefinition`s: one cached `McpClient` per server config (stdio subprocesses spawn once, not per turn; keys are the serialized config so edits reconnect), `readOnlyHint` tools only, exposed as `mcp_{server}_{tool}` names appended **after** the per-area filter (area-exempt like Observability). Execution routes through the step-tracking executor's `externalExecutors` map — same steps, same per-turn read memoization.
+
+Safety posture: an **absent `readOnlyHint` is not a promise**, and the in-process path has no permission-request gate — so mutating/unannotated external tools are skipped (logged by name) rather than guessed at. Mutation-capable external tools are an ACP-only feature, where `session/request_permission` gates every call. Caveats: external tools don't consume `sel=`/`AgentExecutionContext` (foreign servers don't know our selection model); proactive investigations don't attach them; no per-call approval exists in-process.
 
 ### Phase 3 — Native App Insights: already partly done
 
@@ -187,6 +215,7 @@ A shim implementing `IAgentTool` that forwards calls to an external MCP server �
 - Credentials stored as **keys**, resolved via `ICredentialStore` — never in prompts, tool args, screen state, or stream events.
 - `clientCapabilities: {}` — ACP agents get **no** filesystem/terminal/elicitation from us.
 - Empty allowlist ⇒ zero tools; allowlist baked per session, not per request.
+- Standalone MCP access (no `?tools=`) is **read-only by default**; `propose_*` tools need explicit `?mode=full`, and proposals still require UI confirmation.
 - `ask` mode and proactive investigations are structurally read-only.
 - External MCP servers are user-configured; their tools are outside our propose/confirm safety — hence approval-gating guidance above.
 
