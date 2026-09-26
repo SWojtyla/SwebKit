@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { EditorState, Compartment } from "@codemirror/state";
 import {
     defaultKeymap,
@@ -67,8 +67,7 @@ export function MessageBodyEditor({
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const languageRef = useRef(new Compartment());
-    const onChangeRef = useRef(onChange);
-    onChangeRef.current = onChange;
+    const onChangeEvent = useEffectEvent(onChange);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -96,7 +95,7 @@ export function MessageBodyEditor({
                     languageRef.current.of(bodyLanguage(contentType, value)),
                     EditorView.updateListener.of((update) => {
                         if (update.docChanged)
-                            onChangeRef.current(update.state.doc.toString());
+                            onChangeEvent(update.state.doc.toString());
                     }),
                     // Replaces CodeMirror's light-only defaultHighlightStyle — its palette is
                     // effectively invisible against the dark theme background.

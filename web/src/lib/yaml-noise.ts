@@ -1,4 +1,4 @@
-export const GENERATED_KUBERNETES_ANNOTATIONS = new Set([
+const GENERATED_KUBERNETES_ANNOTATIONS = new Set([
   "kubectl.kubernetes.io/last-applied-configuration",
   "deployment.kubernetes.io/revision",
   "meta.helm.sh/release-name",

@@ -1,3 +1,4 @@
+using SwebKit.Sidecar.Services;
 using System.Reflection;
 using SwebKit.Core.Services;
 

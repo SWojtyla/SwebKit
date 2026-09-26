@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
     Copy,
     Check,
@@ -18,7 +18,8 @@ import type {
 } from "@/lib/types";
 import { formatBytes, formatElapsed } from "@/lib/api-client-format";
 import { formatLocalTime } from "@/lib/datetime";
-import { statusTone, toneChipStyle, CountBadge } from "./method-badge";
+import { CountBadge } from "./method-badge";
+import { statusTone, toneChipStyle } from "./method-meta";
 import { selectBodyLanguage, downloadExtension } from "@/lib/response-body";
 import {
     loadViewPreference,
@@ -104,15 +105,19 @@ export function ResponseViewer({
 
     const savedExamples: ResponseExample[] = request?.responseExamples ?? [];
 
-    useEffect(() => {
-        // Deliberately does not reset `prettyPrinted`: it is a persisted view
-        // preference, not per-response state, and resetting it here is what made the
-        // Pretty toggle feel like it never stuck.
+    // Deliberately does not reset `prettyPrinted`: it is a persisted view
+    // preference, not per-response state, and resetting it here is what made the
+    // Pretty toggle feel like it never stuck. The per-response state below resets
+    // during render instead of post-commit, so a new response never paints with
+    // the previous response's panels open.
+    const [prevResponse, setPrevResponse] = useState(response);
+    if (prevResponse !== response) {
+        setPrevResponse(response);
         setCopied(false);
         setShowCurl(false);
         setRevealCurlSecrets(false);
         setViewingExampleId(null);
-    }, [response]);
+    }
 
     const setPretty = (next: boolean) => {
         setPrettyPrinted(next);

@@ -1,7 +1,7 @@
-import { useCallback, type MouseEvent } from "react";
+import { useCallback, useMemo, type MouseEvent } from "react";
 import { useAksSecrets } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions, useAksNav } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { SecretInfo } from "@/lib/types";
 
@@ -24,7 +24,9 @@ const columns: Column<SecretInfo>[] = [
 
 export function SecretsTab({ ns, isMulti }: SecretsTabProps) {
   const { data: secrets, isLoading, error } = useAksSecrets(ns);
-  const ws = useAksWorkspace();
+  const nav = useAksNav();
+  const actions = useAksActions();
+  const ws = useMemo(() => ({ ...nav, ...actions }), [nav, actions]);
 
   const buildMenu = useCallback((secret: SecretInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(secret.name) },

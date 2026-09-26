@@ -8,7 +8,8 @@ import { substituteVariables, previewVariables, isLikelySecret } from "@/lib/var
 import { unresolvedVariableNames } from "@/lib/variableHighlight";
 import { authSubstitutedText } from "@/lib/auth-variables";
 import { saveSecret, getSecret, deleteSecret } from "@/lib/tauri-bridge";
-import { METHOD_META, methodMeta, toneTextStyle, CountBadge } from "./method-badge";
+import { CountBadge } from "./method-badge";
+import { METHOD_META, methodMeta, toneTextStyle } from "./method-meta";
 import { GraphQlPanel } from "./GraphQlPanel";
 import { VariableInput } from "./VariableInput";
 import { WebSocketPanel } from "./WebSocketPanel";
@@ -45,9 +46,11 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSnapshotRef = useRef<HttpRequestEntry>(request);
   const onSaveRef = useRef(onSave);
-  onSaveRef.current = onSave;
   const persistSecretRef = useRef(persistSecret);
-  persistSecretRef.current = persistSecret;
+  useEffect(() => {
+    onSaveRef.current = onSave;
+    persistSecretRef.current = persistSecret;
+  });
 
   const handleSave = useCallback(async () => {
     if (secretSaveTimer.current) {
@@ -151,6 +154,7 @@ export function RequestEditor({ request, onChange, onSend, onSave, sending, vari
       });
     } else if (auth.credentialKey) {
       // Legacy: the collections.json value itself is the secret.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync fallback of a credential-load effect whose primary path is async (keyvault fetch)
       setAuthSecretInput(auth.credentialKey);
     } else {
       setAuthSecretInput(auth.credentialSecret ?? "");

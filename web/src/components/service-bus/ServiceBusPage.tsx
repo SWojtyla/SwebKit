@@ -12,7 +12,7 @@ import {
 } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { EntityTree } from "./EntityTree";
@@ -180,6 +180,7 @@ export function ServiceBusPage() {
 
   useEffect(() => {
     if (peekData) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors fetched data into a locally-mutable window (loadMore appends to it); Date.now() can't run during render
       setMessageWindow(peekData);
       setLastSeq(maxSequenceNumber(peekData));
       setLastBatchLength(peekData.length);

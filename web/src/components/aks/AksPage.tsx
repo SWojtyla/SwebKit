@@ -1,12 +1,17 @@
+import { AksWorkspaceProvider } from "./shared/AksWorkspaceContext";
 import {
-    AksWorkspaceProvider,
-    useAksWorkspace,
+    useAksCluster,
+    useAksNav,
+    useAksQueries,
+    useAksOps,
+    useAksOverlays,
+    useAksActions,
     aksRefreshIntervals,
     directTabs,
     networkTabs,
     extraTabs,
     networkTabIds,
-} from "./shared/AksWorkspaceContext";
+} from "./shared/aks-workspace-context";
 import { useScreenStateProvider } from "../../lib/stores/screen-state";
 import { DeploymentsTab } from "./DeploymentsTab";
 import { PodsTab } from "./PodsTab";
@@ -55,7 +60,14 @@ export function AksPage() {
 }
 
 function AksPageContent() {
-    const ws = useAksWorkspace();
+    const ws = {
+        ...useAksCluster(),
+        ...useAksNav(),
+        ...useAksQueries(),
+        ...useAksOps(),
+        ...useAksOverlays(),
+        ...useAksActions(),
+    };
     const navigate = useNavigate();
     const isNetworkTabActive = networkTabIds.has(ws.activeTab);
 

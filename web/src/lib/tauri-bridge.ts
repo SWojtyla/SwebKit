@@ -22,29 +22,7 @@ export async function writeClipboard(text: string): Promise<void> {
   }
 }
 
-export async function readClipboard(): Promise<string> {
-  if (isTauri()) {
-    return invoke<string>("read_clipboard");
-  }
-  return navigator.clipboard.readText();
-}
-
 // ── File Dialogs ─────────────────────────────────────────────────────────────
-
-export async function pickFile(title?: string): Promise<string | null> {
-  if (isTauri()) {
-    return invoke<string | null>("pick_file", { title: title ?? null });
-  }
-  // Web fallback: use a hidden input element
-  return new Promise((resolve) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.onchange = () => {
-      resolve(input.files?.[0]?.name ?? null);
-    };
-    input.click();
-  });
-}
 
 export async function pickFileWithContent(title?: string): Promise<{ path: string; content: string } | null> {
   if (isTauri()) {
@@ -76,21 +54,6 @@ export async function pickDirectory(title?: string): Promise<string | null> {
 }
 
 // ── Dialogs ──────────────────────────────────────────────────────────────────
-
-export async function confirmDialog(title: string, message: string): Promise<boolean> {
-  if (isTauri()) {
-    return invoke<boolean>("confirm_dialog", { title, message });
-  }
-  return window.confirm(message);
-}
-
-export async function alertDialog(title: string, message: string): Promise<void> {
-  if (isTauri()) {
-    await invoke("alert_dialog", { title, message });
-  } else {
-    window.alert(message);
-  }
-}
 
 // ── Port Forward ─────────────────────────────────────────────────────────────
 
@@ -379,21 +342,6 @@ export async function readFile(path: string): Promise<string> {
   throw new Error("Filesystem access requires the Tauri desktop app");
 }
 
-export async function writeFile(path: string, content: string): Promise<void> {
-  if (isTauri()) {
-    await invoke("write_file", { path, content });
-  } else {
-    throw new Error("Filesystem access requires the Tauri desktop app");
-  }
-}
-
-export async function listDir(path: string): Promise<string[]> {
-  if (isTauri()) {
-    return await invoke<string[]>("list_dir", { path });
-  }
-  throw new Error("Filesystem access requires the Tauri desktop app");
-}
-
 // ── Notifications ────────────────────────────────────────────────────────────
 
 export async function showNotification(title: string, body: string): Promise<void> {
@@ -486,10 +434,4 @@ export async function deleteSecret(key: string): Promise<void> {
   localStorage.setItem(WEB_SECRET_VAULT_KEY, JSON.stringify(vault));
 }
 
-export async function listSecrets(prefix?: string): Promise<string[]> {
-  if (isTauri()) {
-    return invoke<string[]>("list_secrets", { prefix: prefix ?? null });
-  }
-  const vault = JSON.parse(localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}");
-  return Object.keys(vault).filter((k) => !prefix || k.startsWith(prefix));
-}
+

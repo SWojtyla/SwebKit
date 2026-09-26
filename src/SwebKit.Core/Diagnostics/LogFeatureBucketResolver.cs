@@ -26,14 +26,8 @@ public static class LogFeatureBucketResolver
         if (StartsWith(category, "SwebKit.Azure.Storage."))
             return "storage";
 
-        if (StartsWith(category, "SwebKit.DevOps."))
-            return "devops";
-
         if (StartsWith(category, "SwebKit.Observability."))
             return "observability";
-
-        if (Contains(category, "IncidentTimeline"))
-            return "incident-timeline";
 
         if (Contains(category, "Monitoring") || Contains(category, "Alert"))
             return "monitoring";

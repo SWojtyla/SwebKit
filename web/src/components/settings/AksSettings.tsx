@@ -1,6 +1,6 @@
 import { useProfile, useUpdateProfile } from "@/lib/hooks";
 import { useAksTestConnection } from "@/lib/hooks/useAks";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { clampInt } from "@/lib/clamp-int";
 import type { AksConfig } from "@/lib/types";
 import { DraftInput } from "./DraftInput";

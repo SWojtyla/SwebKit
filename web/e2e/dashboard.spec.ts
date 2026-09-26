@@ -138,7 +138,7 @@ test.describe("Dashboard", () => {
   test("pins a resource and shows it in the pinned list", async ({ page }) => {
     await setDemoMode(page, true);
     await page.goto("/");
-    await expect(page.getByTestId("dashboard-resource-rows")).toBeVisible();
+    await expect(page.getByTestId("service-cards")).toBeVisible();
     await page.getByTestId("pin-resource-redis").click();
     await expect(page.getByTestId("pinned-resource-redis")).toBeVisible();
     await expect(page.getByTestId("pin-resource-redis")).toHaveAttribute("aria-label", "Unpin Redis");

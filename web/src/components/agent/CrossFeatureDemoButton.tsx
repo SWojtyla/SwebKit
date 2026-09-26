@@ -2,7 +2,7 @@ import { useNavigate } from "react-router";
 import { useAgentConversationStore } from "@/lib/stores/agent-conversation";
 import { useDemoMode, useToggleDemoMode } from "@/lib/hooks";
 import { getCrossFeatureScenario } from "@/lib/demo-scenarios";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { Rocket } from "lucide-react";
 
 export function CrossFeatureDemoButton({ className }: { className?: string }) {

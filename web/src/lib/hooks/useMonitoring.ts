@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
     SIDECAR_BASE_URL,
     getMonitoringRules,
@@ -11,7 +11,7 @@ import {
     deleteMonitoringInsight,
     openInsightChat,
 } from "../api";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import type {
     MonitoringAlertRule,
     AlertFiredEvent,
@@ -142,14 +142,10 @@ export function useMonitoringStream(
     onEvaluation?: (evt: AlertEvaluatedEvent) => void,
     onInsightStatus?: (evt: ProactiveInsightStatusEvent) => void,
 ) {
-    const cbRef = useRef(onEvent);
-    cbRef.current = onEvent;
-    const insightCbRef = useRef(onInsightReady);
-    insightCbRef.current = onInsightReady;
-    const evalCbRef = useRef(onEvaluation);
-    evalCbRef.current = onEvaluation;
-    const statusCbRef = useRef(onInsightStatus);
-    statusCbRef.current = onInsightStatus;
+    const onEventEffect = useEffectEvent(onEvent);
+    const onInsightReadyEffect = useEffectEvent((evt: ProactiveInsightReadyEvent) => onInsightReady?.(evt));
+    const onEvaluationEffect = useEffectEvent((evt: AlertEvaluatedEvent) => onEvaluation?.(evt));
+    const onInsightStatusEffect = useEffectEvent((evt: ProactiveInsightStatusEvent) => onInsightStatus?.(evt));
 
     useEffect(() => {
         const es = new EventSource(`${SIDECAR_BASE_URL}/api/monitoring/stream`);
@@ -160,15 +156,15 @@ export function useMonitoringStream(
                     event: unknown;
                 };
                 if (frame.kind === "alertFired") {
-                    cbRef.current(frame.event as AlertFiredEvent);
+                    onEventEffect(frame.event as AlertFiredEvent);
                 } else if (frame.kind === "proactiveInsightReady") {
-                    insightCbRef.current?.(
+                    onInsightReadyEffect(
                         frame.event as ProactiveInsightReadyEvent,
                     );
                 } else if (frame.kind === "evaluationCompleted") {
-                    evalCbRef.current?.(frame.event as AlertEvaluatedEvent);
+                    onEvaluationEffect(frame.event as AlertEvaluatedEvent);
                 } else if (frame.kind === "proactiveInsightStatus") {
-                    statusCbRef.current?.(
+                    onInsightStatusEffect(
                         frame.event as ProactiveInsightStatusEvent,
                     );
                 }

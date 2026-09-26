@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildNamespaceTree, collectAllNamespacePaths, collectSubtreeKeys } from "./RedisPageContext";
+import { buildNamespaceTree, collectAllNamespacePaths, collectSubtreeKeys } from "./redis-namespace-tree";
 
 // Fixture: a two-level keyspace (`user:*`, `cache:products:*`) plus one root-level bare key
 // (`session`) that has no separator at all, so it falls into the synthetic "(no prefix)" bucket.

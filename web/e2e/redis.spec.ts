@@ -387,4 +387,21 @@ test.describe("Redis", () => {
 
     await expect(page.getByTestId("redis-detail-key-ttl")).toHaveText("TTL: No expiry");
   });
+
+  test("bulk delete sends selected keys in one request", async ({ page }) => {
+    await page.goto("/redis");
+    await expandAll(page);
+
+    const checkboxes = page.locator("[data-testid^='redis-key-checkbox-']");
+    await checkboxes.nth(0).check();
+    await checkboxes.nth(1).check();
+
+    await page.getByTestId("redis-batch-delete").click();
+    const requestPromise = page.waitForRequest((request) =>
+      request.method() === "POST" && request.url().endsWith("/keys/delete"),
+    );
+    await page.getByTestId("redis-confirm-yes").click();
+    const request = await requestPromise;
+    expect((request.postDataJSON() as { keys: string[] }).keys).toHaveLength(2);
+  });
 });

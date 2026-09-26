@@ -11,7 +11,7 @@ interface Props {
  * When adding a `window`-level keydown binding elsewhere (see `AksWorkspaceContext.tsx` for AKS's
  * r/l/y, `ServiceBusPage.tsx` for Ctrl+Shift+E), add its entry here in the same change.
  */
-export const KEYBOARD_SHORTCUTS = [
+const KEYBOARD_SHORTCUTS = [
   { keys: "Ctrl+K", description: "Open command palette" },
   { keys: "Ctrl+G", description: "Go to Settings" },
   { keys: "Ctrl+B", description: "Toggle sidebar navigation" },

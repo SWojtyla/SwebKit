@@ -8,7 +8,7 @@ export interface ActionRuntimeContext {
   response?: ApiClientExecutionResponse | null;
 }
 
-export function delay(ms: number): Promise<void> {
+function delay(ms: number): Promise<void> {
   const safe = Math.max(0, ms);
   return new Promise((resolve) => setTimeout(resolve, safe));
 }

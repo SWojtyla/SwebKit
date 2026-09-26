@@ -28,14 +28,14 @@ export interface FilterOperatorOption {
   label: string;
 }
 
-export const TEXT_OPERATORS: FilterOperatorOption[] = [
+const TEXT_OPERATORS: FilterOperatorOption[] = [
   { value: "contains", label: "Contains" },
   { value: "equals", label: "Equals" },
   { value: "not-equals", label: "Not equals" },
   { value: "regex", label: "Regex" },
 ];
 
-export const NUMERIC_OPERATORS: FilterOperatorOption[] = [
+const NUMERIC_OPERATORS: FilterOperatorOption[] = [
   { value: "equals", label: "Equals" },
   { value: "not-equals", label: "Not equals" },
   { value: "gt", label: ">" },
@@ -44,7 +44,7 @@ export const NUMERIC_OPERATORS: FilterOperatorOption[] = [
   { value: "lte", label: "<=" },
 ];
 
-export const DATE_OPERATORS: FilterOperatorOption[] = [
+const DATE_OPERATORS: FilterOperatorOption[] = [
   { value: "equals", label: "Equals" },
   { value: "before", label: "Before" },
   { value: "on-or-before", label: "On or before" },

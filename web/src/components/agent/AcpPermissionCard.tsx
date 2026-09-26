@@ -1,17 +1,7 @@
-import { useEffect, useState } from "react";
 import { useRespondAcpPermission } from "@/lib/hooks/useAgent";
-import { formatExpiryCountdown } from "./PendingActionCard";
+import { useNow } from "@/lib/hooks";
+import { formatExpiryCountdown } from "./pending-actions";
 import type { AcpPermission } from "@/lib/types";
-
-/** Ticks once a second so the expiry countdown actually counts down. */
-function useNow(intervalMs = 1000): number {
- const [now, setNow] = useState(() => Date.now());
- useEffect(() => {
-  const id = setInterval(() => setNow(Date.now()), intervalMs);
-  return () => clearInterval(id);
- }, [intervalMs]);
- return now;
-}
 
 function optionClassName(kind: string | null): string {
  if (kind?.startsWith("reject"))

@@ -28,9 +28,12 @@ export function DraftInput({ value, onCommit, onDraftChange, onKeyDown, ...rest 
   // Latest draft and callback, for the unmount commit below — a cleanup closure captures
   // the values from the render it was created in, which would be stale by then.
   const draftRef = useRef(draft);
-  draftRef.current = draft;
   const onCommitRef = useRef(onCommit);
-  onCommitRef.current = onCommit;
+  const skipNextBlurRef = useRef(false);
+  useEffect(() => {
+    draftRef.current = draft;
+    onCommitRef.current = onCommit;
+  });
 
   // Re-sync when the stored value diverges from what we last committed — another save
   // landing, a different record being rendered into the same input, or a commit that the
@@ -72,13 +75,21 @@ export function DraftInput({ value, onCommit, onDraftChange, onKeyDown, ...rest 
         setDraft(e.target.value);
         onDraftChange?.(e.target.value);
       }}
-      onBlur={commit}
+      onBlur={() => {
+        if (skipNextBlurRef.current) {
+          skipNextBlurRef.current = false;
+          return;
+        }
+        commit();
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           commit();
           // Blur too, so Enter and click-away feel the same and the value is visibly settled.
           (e.target as HTMLInputElement).blur();
         } else if (e.key === "Escape") {
+          skipNextBlurRef.current = true;
+          draftRef.current = committedRef.current;
           setDraft(committedRef.current);
           (e.target as HTMLInputElement).blur();
         }

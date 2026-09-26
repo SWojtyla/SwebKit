@@ -2,100 +2,109 @@
 
 ## What Is Supported
 
-- Configure multiple Redis cache entries per environment, each authenticated either via connection
-  string or Entra ID (AAD) against Azure Cache for Redis (see Credential Modes below).
-- Import Redis connection-list exports (`.txt` or `.json`) from the Redis settings section, merging cache profiles by endpoint and applying the dominant namespace separator when imported files mix separator values.
-- Redis settings uses the wider settings content layout so large imported cache inventories stay readable instead of being constrained to the narrow form width.
-- Select active cache and database index.
-- Connection test for configured cache.
-- Pattern-based key scan with server-side full-keyspace `MATCH` semantics and progressive loaded-match pagination (`Load more matches` support).
-- Unified key tree view: keys organized hierarchically by configurable separator (default `-`, persisted across sessions).
-- Key detail inspection by type (string, hash, list, set, zset).
-- Incremental set-member paging in key detail, using source-backed `SSCAN` continuation cursors.
-- TTL read/set/remove operations.
-- **TTL visualisation**: human-readable label (e.g. "2h 22m remaining"), colour-coded expiry progress bar (green → amber → red), live client-side countdown (1 s tick), and 30-second server-side drift correction.
-- String/hash value updates.
-- Key deletion and explicit checkbox-driven bulk delete for the currently loaded key set.
-- Full string value inspection with scrollable, copyable value output for long payloads.
-- Stronger selected-row treatment in the key tree so active rows remain clearly visible during detail inspection and bulk workflows, including namespace rows that represent a partially or fully selected loaded subtree.
-- Prefix memory analysis workflow.
-- **Keyspace Health Explorer**: read-only risk analysis for no-TTL keys, oversized values, heavy prefixes, and possible hot keys, including severity counts, filtering, and key drill-through.
-- Scan coverage/confidence reporting (loaded keys vs estimated keyspace) to make partial analysis explicit.
+- Configure multiple caches with connection-string or Entra authentication.
+- Import Redis connection lists in Settings and test each connection.
+- Select/persist the active cache and database index.
+- Scan the full keyspace with Redis `MATCH` semantics and progressive cursor-backed loading.
+- Group loaded keys into a namespace tree using a configurable separator.
+- Browse/edit string, hash, list, set, and sorted-set values.
+- Page list/set members from the source instead of fabricating client offsets.
+- Read/set/remove TTL; show a live human-readable countdown and expiry severity.
+- Rename, copy/export, delete, and bulk-delete explicitly selected loaded keys.
+- Inspect server info, slow log, Pub/Sub, prefix memory, operational insights, and keyspace-health findings.
+- Drill from prefix/health/slow-log findings back to key detail.
+- Run against demo data without a real Redis server.
 
 ## Credential Modes
 
-| Mode                        | Config                    | Connection                                                                                    |
-| ---------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------- |
-| Connection string (default) | `ConnectionString`         | `RedisClient.BuildConnectionOptions(connectionString)` — parsed directly by StackExchange.Redis |
-| Entra ID (`UseAad = true`)  | `CacheName` required       | `RedisClient.BuildAadConnectionOptionsAsync` connects to `<CacheName>.redis.cache.windows.net:6380` using `SwebKit.Core.Services.AzureCredentialFactory.CreateDefault()` via `Microsoft.Azure.StackExchangeRedis`'s `ConfigureForAzureWithTokenCredentialAsync` |
+| Mode | Configuration | Connection |
+| --- | --- | --- |
+| Connection string | credential-store reference / endpoint config | StackExchange.Redis parsed options |
+| Entra | Azure cache name | TLS endpoint with `DefaultAzureCredential` via Microsoft Azure StackExchange.Redis extensions |
 
-AAD mode targets classic Azure Cache for Redis only (`*.redis.cache.windows.net`), not Azure
-Managed Redis's differently-named endpoints.
+The Entra path targets classic Azure Cache for Redis endpoints. Database index is clamped to `0..15`.
 
-## Core Runtime Flow
+## Frontend Architecture
 
-1. `RedisPage` reads the persisted Redis config.
-2. In demo mode it creates `DemoRedisClient`; otherwise `SwebKit.Redis.RedisClient`.
-3. `RedisConfigForm` can import connection-list exports and map them into `RedisCacheEntry` records for the active environment config.
-4. Page renders immediately with loading indicator; connection and scan run asynchronously (non-blocking navigation).
-5. Scan walks Redis cursor pages with the requested `MATCH` pattern across the full keyspace, stops after a bounded loaded-match page for the tree, buffers any SCAN overflow beyond that cap, and resumes from the same filtered cursor when the user clicks `Load more matches`.
-6. The page builds the namespace tree for the currently loaded matches with `RedisKeyGrouper.BuildNamespaceTree`.
-7. Tree nodes are either namespace prefixes (expandable) or key leaves (clickable to load details when browse mode is active); key-type badges are filled with lightweight batched type lookups so the initial tree does not wait on full key metadata for every match, and new scan/filter/cache contexts supersede older badge batches before stale writes reach the tree.
-8. The key tree always exposes selection controls: key checkboxes toggle loaded keys, namespace selection controls toggle loaded descendants, and clicking a key row opens detail without changing selection.
-9. Detail pane actions dispatch typed operations through `IRedisClient`, and long string values render in a scrollable copyable viewer instead of being truncated.
-10. Bulk cleanup stays selection-driven: the toolbar can `Select all loaded`, namespace row toggles stay scoped to loaded descendants only, and delete still flows through explicit confirmation of the selected keys.
-11. Health, prefix memory, slowlog, and Pub/Sub insights are available from a collapsed insights drawer so they do not compete with browse/detail work by default.
-12. Health analysis (on-demand) loads full metadata for currently loaded keys, computes findings via `RedisKeyspaceHealthAnalyzer`, and supports drill-through to key detail.
+`RedisPageContext` is split into six churn-scoped contexts:
+
+- connection/cache selection;
+- URL-backed navigation;
+- query/mutation facades;
+- key browser/search/tree/selection;
+- high-churn value editor state; and
+- refresh/confirmation operations.
+
+This keeps an editor keystroke from rerendering the virtualized key tree and confines auto-refresh ticks to operation consumers. Query and mutation objects use `web/src/lib/queryFacade.ts` where consumers need stable facade identity.
+
+The page tabs are:
+
+- Keys (`KeyBrowserPanel` + `KeyDetailPanel`)
+- Server info
+- Slow log
+- Keyspace health
+- Prefix memory
+- Operations
+- Pub/Sub
+
+The active tab is URL-backed. Per-cache search patterns and active cache selection are persisted so a return visit restores the operator's working scope.
+
+## Scan and Selection Semantics
+
+```text
+RedisPageProvider
+  → useRedisScan(cache, pattern, cursor)
+  → sidecar /api/redis/{cacheId}/scan
+  → IRedisConnectionPool
+  → RedisClient SCAN MATCH
+  → cursor + loaded matching keys
+  → namespace tree over loaded keys
+```
+
+Redis may return more items than requested for one SCAN count. The UI keeps a bounded loaded page, carries overflow forward, and advances from the opaque server cursor. `Select all loaded` and namespace selection operate only on keys currently represented in the tree; no hidden wildcard delete occurs.
+
+A guarded load-all loop advances once per distinct cursor and stops on cursor zero. Filter/cache changes reset cursor, loaded keys, selection, and expansion state.
+
+## Key Details and Analysis
+
+- Type-specific hooks load values and perform mutations.
+- Set paging uses `SSCAN`; cursor zero alone means complete.
+- Secret/large values remain explicit user-driven reads and copy/export actions.
+- Keyspace health loads best-effort metadata (`MEMORY USAGE`, encoding, frequency/idle time where supported) and reports scan coverage so partial analysis is visible.
+- Mutations/scans invalidate stale health findings.
+- Redis cannot store empty hash/list/set/zset values; import skips these with warnings rather than creating placeholders.
 
 ## Main Code Locations
 
-- `src/SwebKit.App/Components/Pages/RedisPage.razor`
-- `src/SwebKit.App/Components/Pages/RedisConfigForm.razor`
-- `src/SwebKit.Core/Services/RedisConnectionImportParser.cs`
-- `src/SwebKit.App/Components/Redis/RedisNamespaceTree.razor`
-- `src/SwebKit.App/Components/Redis/RedisNamespaceTreeNode.razor`
-- `src/SwebKit.App/Components/Redis/RedisKeyDetail.razor` — key details + TTL visualisation
-- `src/SwebKit.App/Components/Redis/RedisPrefixMemory.razor`
-- `src/SwebKit.App/Components/Redis/RedisKeyspaceHealthExplorer.razor`
+- `web/src/components/redis/RedisPage.tsx`
+- `web/src/components/redis/RedisPageContext.tsx`
+- `web/src/components/redis/tabs/KeyBrowserPanel.tsx`
+- `web/src/components/redis/tabs/KeyDetailPanel.tsx`
+- `web/src/components/redis/tabs/KeyspaceTab.tsx`
+- `web/src/components/redis/tabs/PrefixTab.tsx`
+- `web/src/components/redis/tabs/OpsTab.tsx`
+- `web/src/components/redis/PubSubPanel.tsx`
+- `web/src/components/settings/RedisSettings.tsx`
+- `web/src/lib/hooks/useRedis.ts`
+- `src-sidecar/Endpoints/RedisEndpoints.cs`
+- `src-sidecar/Services/SidecarRedisConnectionPool.cs`
 - `src/SwebKit.Core/Abstractions/IRedisClient.cs`
-- `src/SwebKit.Core/Services/TtlFormatter.cs` — human-readable TTL formatting and bar math
+- `src/SwebKit.Core/Services/RedisConnectionImportParser.cs`
 - `src/SwebKit.Core/Services/RedisKeyspaceHealthAnalyzer.cs`
 - `src/SwebKit.Core/Services/RedisScanPageAccumulator.cs`
 - `src/SwebKit.Redis/RedisClient.cs`
 - `src/SwebKit.Redis/RedisScanResponseParser.cs`
 - `src/SwebKit.Core/Services/DemoRedisClient.cs`
-- `src/SwebKit.Core/Models/RedisConnectionImportModels.cs`
-- `src/SwebKit.Core/Services/RedisKeyGrouper.cs`
-- `src/SwebKit.Core/Models/RedisModels.cs` (namespace tree + health report contracts)
-- `web/src/components/settings/RedisSettings.tsx` — connection-string vs Entra ID (AAD) mode toggle
-
-## Important Notes
-
-- Runtime client uses `StackExchange.Redis` and issues raw `SCAN`/`MEMORY USAGE`/`OBJECT ENCODING` commands as needed.
-- Health metadata retrieval also uses best-effort `OBJECT FREQ` and `OBJECT IDLETIME`; unsupported commands degrade gracefully.
-- Database index is clamped to 0..15 in client setup and config form.
-- Potentially destructive actions remain confirmation-gated; the main Redis page no longer exposes a direct full-database purge CTA and instead keeps destructive scope visible through the selected-key count.
-- Namespace separator is persisted in `RedisConfig.NamespaceSeparator` and saved via `AppStateService.SaveConfigAsync()`.
-- Connection-list imports target Redis settings, not the Redis key browser. Imported separators are collapsed to one global value because namespace grouping is still app-level, not per cache.
-- Page navigation (Redis and AKS) uses non-blocking async loading to avoid UI freeze; Redis intentionally keeps the currently loaded match page bounded so large keyspaces do not saturate the render path.
-- If Redis returns more keys than requested for one `SCAN COUNT`, the page shows only one loaded-match page immediately and carries the overflow forward to the next `Load more matches` action.
-- Set-member paging is source-backed: `RedisClient.GetSetMembersPageAsync()` issues raw `SSCAN`, `RedisScanResponseParser` preserves the returned cursor, and `SetScanResult.Cursor` must be treated as opaque source state instead of a fabricated offset.
-- `SetScanResult.IsComplete` becomes `true` only when Redis returns cursor `0`.
-- Health findings are invalidated on scans and key mutations to prevent stale risk output.
-- Redis cannot persist empty hashes, lists, sets, or sorted sets; import skips those entries explicitly and reports warnings instead of inventing synthetic placeholder values.
-- `Select all loaded`, key checkboxes, and namespace selection controls operate on the keys currently loaded into the page tree only; no wildcard or hidden prefix delete pass is introduced behind the UI.
-- The toolbar copy must keep the distinction explicit: filter patterns are keyspace-wide, while the tree, badges, and bulk helpers only cover the currently loaded matches.
-- Manual rescans, filter changes, and cache changes cancel or supersede older badge-loading work so stale type badges do not populate a newer tree state.
 
 ## Validation Pointers
 
-- `tests/SwebKit.Core.Tests/TtlFormatterTests.cs` (22 tests)
+- `web/e2e/redis.spec.ts`
+- `web/e2e/redis-deferred.spec.ts`
+- `web/src/components/redis/RedisPageContext.test.ts`
 - `tests/SwebKit.Core.Tests/DemoRedisClientTests.cs`
 - `tests/SwebKit.Core.Tests/RedisImportParserTests.cs`
 - `tests/SwebKit.Core.Tests/RedisKeyGrouperTests.cs`
-- `tests/SwebKit.Core.Tests/RedisConfigMigrationTests.cs`
-- `tests/SwebKit.Core.Tests/RedisClientTests.cs` — connection-string and Entra ID (AAD) guard tests, `RedisConfig.Validate()` cases for both modes
-- `tests/SwebKit.Core.Tests/RedisScanResponseParserTests.cs`
-- `tests/SwebKit.Core.Tests/RedisValueHelpersTests.cs`
 - `tests/SwebKit.Core.Tests/RedisKeyspaceHealthAnalyzerTests.cs`
-- `tests/SwebKit.App.Tests/RedisKeyspaceHealthExplorerTests.cs`
+- `tests/SwebKit.Core.Tests/RedisScanResponseParserTests.cs`
+- `tests/SwebKit.Sidecar.Tests/RedisEndpointsMutationTests.cs`
+- `tests/SwebKit.Sidecar.Tests/SidecarRedisConnectionPoolTests.cs`

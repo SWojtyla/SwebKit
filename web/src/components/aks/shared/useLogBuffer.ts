@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { parseLogLine, type LogEntry } from "@/lib/log-window";
 
 /// Collects log lines off one or more SSE streams and hands them to React at a fixed
 /// ~10 fps instead of once per line.
 ///
 /// A busy pod emits far faster than the browser can paint. Rendering per line saturates
-/// the render queue and freezes the UI — pitfall BL-8 in `docs/pitfalls/blazor-maui.md`,
+/// the render queue and freezes the UI — see "Never render per received message" in
+/// `docs/pitfalls/react-frontend.md`,
 /// re-stated as a hard constraint by the archived logs feature ("do not render per log
 /// line"). `PodLogView` had its own buffer for this reason; `MultiPodLogView` did not,
 /// and called `setLogs` on every message of every pod.
@@ -26,19 +27,21 @@ export interface UseLogBufferResult {
   resetPending: () => void;
 }
 
+const NEVER_FROZEN: RefObject<boolean> = { current: false };
+
 export function useLogBuffer(options: {
   /** Oldest entries are dropped past this, so a long tail cannot exhaust memory. */
   maxBuffer: number;
-  /** While true, arrivals still buffer but count towards `pending`. */
-  frozen: boolean;
+  /** Read at push time — a ref because the caller's frozen flag is derived from
+   * the buffered window itself, so passing a boolean would be a render-order
+   * cycle. Omit for streams that never freeze. */
+  frozenRef?: RefObject<boolean>;
 }): UseLogBufferResult {
-  const { maxBuffer, frozen } = options;
+  const { maxBuffer, frozenRef = NEVER_FROZEN } = options;
 
   const bufferRef = useRef<LogEntry[]>([]);
   const seqRef = useRef(0);
   const pendingRef = useRef(0);
-  const frozenRef = useRef(frozen);
-  frozenRef.current = frozen;
 
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [pending, setPending] = useState(0);
@@ -55,7 +58,7 @@ export function useLogBuffer(options: {
         pendingRef.current += 1;
       }
     },
-    [maxBuffer],
+    [maxBuffer, frozenRef],
   );
 
   const clear = useCallback(() => {

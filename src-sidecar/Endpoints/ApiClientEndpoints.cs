@@ -1,3 +1,4 @@
+using SwebKit.Sidecar.Services;
 using System.Text.Json.Nodes;
 using Json.Path;
 using SwebKit.Core.Abstractions;

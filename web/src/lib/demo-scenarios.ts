@@ -1,8 +1,8 @@
 import type { ChatMessage } from "./types";
 
-export const CROSS_FEATURE_SCENARIO_ID = "cross-feature";
+const CROSS_FEATURE_SCENARIO_ID = "cross-feature";
 
-export const CROSS_FEATURE_USER_PROMPT = `My order-api is failing in AKS. Can you investigate across AKS logs, App Insights dependencies, and Service Bus to find the root cause and show me a timeline and topology of the incident?`;
+const CROSS_FEATURE_USER_PROMPT = `My order-api is failing in AKS. Can you investigate across AKS logs, App Insights dependencies, and Service Bus to find the root cause and show me a timeline and topology of the incident?`;
 
 const CROSS_FEATURE_ASSISTANT_CONTENT = `<!-- scenario:cross-feature -->
 I correlated AKS pod state, App Insights dependency telemetry, and Service Bus queue depth for the \`order-api\` service. Here is what I found:
@@ -64,7 +64,7 @@ sequenceDiagram
 }
 \`\`\``;
 
-export function getCrossFeatureScenarioMessages(): ChatMessage[] {
+function getCrossFeatureScenarioMessages(): ChatMessage[] {
   return [
     { id: "demo-scenario-user", role: "user", content: CROSS_FEATURE_USER_PROMPT },
     {

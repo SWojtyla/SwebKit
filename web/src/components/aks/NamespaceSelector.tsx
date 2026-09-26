@@ -43,9 +43,13 @@ export function NamespaceSelector({
   const [pending, setPending] = useState<string[]>(selected);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // Re-snapshot the external selection whenever it moves or the dropdown toggles —
+  // done during render so the draft never paints stale for a frame.
+  const [prevSync, setPrevSync] = useState({ selected, open });
+  if (prevSync.selected !== selected || prevSync.open !== open) {
+    setPrevSync({ selected, open });
     setPending(selected);
-  }, [selected, open]);
+  }
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {

@@ -10,7 +10,7 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 
-export const AKS_KEY_PREFIX = "aks-";
+const AKS_KEY_PREFIX = "aks-";
 
 /**
  * Cluster-level queries that are not per-namespace resources. `aks-namespaces` in

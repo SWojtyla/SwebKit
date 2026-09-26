@@ -37,27 +37,11 @@ public class LogFeatureBucketResolverTests
     }
 
     [Fact]
-    public void Resolve_DevOpsCategory_ResolvesToDevOps()
-    {
-        var result = LogFeatureBucketResolver.Resolve("SwebKit.DevOps.DevOpsClient");
-
-        Assert.Equal("devops", result);
-    }
-
-    [Fact]
     public void Resolve_ObservabilityCategory_ResolvesToObservability()
     {
         var result = LogFeatureBucketResolver.Resolve("SwebKit.Observability.AzureAppInsightsProvider");
 
         Assert.Equal("observability", result);
-    }
-
-    [Fact]
-    public void Resolve_IncidentTimelineCategory_ResolvesToIncidentTimeline()
-    {
-        var result = LogFeatureBucketResolver.Resolve("SwebKit.App.Services.IncidentTimelineService");
-
-        Assert.Equal("incident-timeline", result);
     }
 
     [Theory]

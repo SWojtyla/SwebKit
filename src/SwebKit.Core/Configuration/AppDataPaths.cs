@@ -25,7 +25,6 @@ public static class AppDataPaths
     public static string LegacyUiStateJson => Path.Combine(LegacyRoot, "ui-state.json");
     public static string UserSettingsJson => Path.Combine(Root, "user-settings.json");
     public static string ScheduledMessagesJson => Path.Combine(Root, "scheduled-messages.json");
-    public static string ReleasesJson => Path.Combine(Root, "releases.json");
     public static string MonitoringAlertsJson => Path.Combine(Root, "monitoring-alerts.json");
     public static string MonitoringInsightsJson => Path.Combine(Root, "monitoring-insights.json");
     public static string CollectionsJson => Path.Combine(Root, "collections.json");

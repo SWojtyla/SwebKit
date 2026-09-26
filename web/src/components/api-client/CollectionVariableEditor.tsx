@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import { VariableList, type VariableListItem } from "./VariableList";
 import { collectionVariableToListItem, listItemToCollectionVariable } from "@/lib/variable-utils";
@@ -24,10 +24,11 @@ export function CollectionVariableEditor({ collection, onSave, onClose }: Collec
   // them. Re-sync when the stored variables change. Safe against clobbering an edit
   // in progress: the dialog closes on save, so while it is open this component is
   // the only writer and an identity change means the data genuinely moved.
-  useEffect(() => {
+  const [prevSource, setPrevSource] = useState({ id: collection.id, vars: collection.variables });
+  if (prevSource.id !== collection.id || prevSource.vars !== collection.variables) {
+    setPrevSource({ id: collection.id, vars: collection.variables });
     setVariables(toListItems(collection));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collection.id, collection.variables]);
+  }
 
   const handleSave = () => {
     onSave(variables.map(listItemToCollectionVariable).filter((v) => v.key.trim()));

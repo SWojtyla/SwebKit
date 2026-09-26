@@ -1,11 +1,15 @@
+import { useMemo } from "react";
 import { RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { QueryState } from "@/components/shared/QueryState";
+import { StoragePageProvider } from "./StoragePageContext";
 import {
-    StoragePageProvider,
-    useStoragePageContext,
-} from "./StoragePageContext";
+    useStorageAccount,
+    useStorageNav,
+    useStorageQueries,
+    useStorageShare,
+} from "./storage-context";
 import { BlobBrowserPanel } from "./BlobBrowserPanel";
 import { BlobDetailPanel } from "./BlobDetailPanel";
 import { BlobRecoveryPanel } from "./BlobRecoveryPanel";
@@ -22,7 +26,14 @@ export function StoragePage() {
 }
 
 function StoragePageContent() {
-    const ctx = useStoragePageContext();
+    const account = useStorageAccount();
+    const nav = useStorageNav();
+    const share = useStorageShare();
+    const queries = useStorageQueries();
+    const ctx = useMemo(
+        () => ({ ...account, ...nav, ...share, ...queries }),
+        [account, nav, share, queries],
+    );
     const navigate = useNavigate();
 
     if (!ctx.resolvedAccountId) {

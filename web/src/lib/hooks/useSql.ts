@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend } from "../api";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import type {
   SavedSqlQuery,
   SqlCompletionContext,

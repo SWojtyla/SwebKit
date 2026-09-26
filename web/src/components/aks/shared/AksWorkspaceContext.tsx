@@ -1,7 +1,5 @@
 import {
-    createContext,
     useCallback,
-    useContext,
     useEffect,
     useMemo,
     useRef,
@@ -12,7 +10,7 @@ import {
 } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient, useIsFetching } from "@tanstack/react-query";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import {
     useAksNamespaces,
     useAksTestConnection,
@@ -40,223 +38,39 @@ import type {
     ConfigMapInfo,
     HelmReleaseInfo,
     HttpRouteInfo,
-    KubeContextInfo,
 } from "@/lib/types";
 
-export const directTabs = [
-    { id: "deployments", label: "Deployments" },
-    { id: "statefulsets", label: "StatefulSets" },
-    { id: "pods", label: "Pods" },
-    { id: "configmaps", label: "ConfigMaps" },
-    { id: "secrets", label: "Secrets" },
-    { id: "helm", label: "Helm" },
-    { id: "jobs", label: "Jobs" },
-    { id: "cronjobs", label: "CronJobs" },
-] as const;
-
-export const networkTabs = [
-    { id: "services", label: "Services" },
-    { id: "ingresses", label: "Ingresses" },
-    { id: "gatewayclasses", label: "GatewayClasses" },
-    { id: "gateways", label: "Gateways" },
-    { id: "httproutes", label: "HTTPRoutes" },
-    { id: "envoy", label: "Envoy" },
-] as const;
-
-export const extraTabs = [
-    // The URL id stays "hpa" so existing deep links keep working; the tab now
-    // covers all autoscaling (plain HPAs, KEDA ScaledObjects and ScaledJobs).
-    { id: "hpa", label: "Autoscaling" },
-    { id: "events", label: "Events" },
-    { id: "portforward", label: "Port-Forward" },
-    { id: "analysis", label: "Analysis" },
-] as const;
-
-export const allTabs = [...directTabs, ...networkTabs, ...extraTabs] as const;
-export type TabId = (typeof allTabs)[number]["id"];
-
-export const networkTabIds = new Set<string>(networkTabs.map((t) => t.id));
-
-// URL key helpers — these serialize AKS drill-down state into query params
-// so back/forward and deep links preserve the current view.
-function makeKey(ns: string, name: string): string {
-    return `${encodeURIComponent(ns)}/${encodeURIComponent(name)}`;
-}
-
-function parseKey(key: string | null): { ns: string; name: string } | null {
-    if (!key) return null;
-    const slash = key.indexOf("/");
-    if (slash === -1) return null;
-    return {
-        ns: decodeURIComponent(key.slice(0, slash)),
-        name: decodeURIComponent(key.slice(slash + 1)),
-    };
-}
-
-function makeYamlKey(kind: string, ns: string, name: string): string {
-    return `${kind}:${makeKey(ns, name)}`;
-}
-
-function parseYamlKey(
-    key: string | null,
-): { kind: string; namespace: string; name: string } | null {
-    if (!key) return null;
-    const colon = key.indexOf(":");
-    if (colon === -1) return null;
-    const kind = key.slice(0, colon);
-    const parsed = parseKey(key.slice(colon + 1));
-    if (!parsed) return null;
-    return { kind, namespace: parsed.ns, name: parsed.name };
-}
-
-function encodeNamespaces(namespaces: string[]): string | null {
-    if (namespaces.length === 0) return null;
-    if (namespaces.includes("*")) return "*";
-    return namespaces.join(",");
-}
-
-function parseNamespaces(value: string | null): string[] {
-    if (!value) return [];
-    if (value === "*") return ["*"];
-    return value.split(",").filter(Boolean);
-}
-
-function parseTab(value: string | null): TabId {
-    return allTabs.find((t) => t.id === value)?.id ?? "deployments";
-}
-
-interface ContextMenuState {
-    x: number;
-    y: number;
-    items: ContextMenuItem[];
-}
-
-interface PendingConfirm {
-    message: string;
-    requireTypedName?: string;
-    onConfirm: () => void;
-}
-
-export interface AksWorkspaceContextValue {
-    activeTab: TabId;
-    setActiveTab: (tab: TabId) => void;
-    networkMenuOpen: boolean;
-    setNetworkMenuOpen: (open: boolean | ((v: boolean) => boolean)) => void;
-    selectedNamespaces: string[];
-    setSelectedNamespaces: (namespaces: string[]) => void;
-    namespaceToken: string | null;
-    isMultiNamespace: boolean;
-    namespaces: string[] | undefined;
-    nsLoading: boolean;
-    /**
-     * Why the namespace list is unavailable, or null when it loaded. Without this a failed
-     * `/api/aks/namespaces` (an expired Azure sign-in, a broken kubelogin/az install) rendered as an
-     * empty picker saying "No namespaces found" — indistinguishable from an empty cluster.
-     */
-    nsError: string | null;
-    contextLoading: boolean;
-    /** Context being switched to while the POST is in flight, for "Switching to X…" labels. */
-    pendingContext: string | null;
-    isAksFetching: boolean;
-    contexts: KubeContextInfo[] | undefined;
-    currentContext: string | null;
-    /** True once the profile query has resolved — gates the first-run "not configured" state. */
-    profileLoaded: boolean;
-    isDemoMode: boolean;
-    testResult: { connected: boolean; error?: string } | undefined;
-    handleContextChange: (context: string, defaultNamespace?: string) => void;
-    allPods: PodInfo[] | undefined;
-    podsFetching: boolean;
-    refetchPods: () => Promise<{ data: PodInfo[] | undefined }>;
-    selectedPod: PodInfo | null;
-    yamlResource: { kind: string; namespace: string; name: string } | null;
-    helmRelease: HelmReleaseInfo | null;
-    selectedSecret: SecretInfo | null;
-    selectedConfigMap: ConfigMapInfo | null;
-    selectedHttpRoute: HttpRouteInfo | null;
-    shellPod: PodInfo | null;
-    askAiPod: PodInfo | null;
-    /** Kubeconfig path from the active profile, passed to native commands (pod shell, port-forward). */
-    kubeconfigPath: string | null;
-    containerDetail: { podName: string; namespace: string } | null;
-    multiPodNames: string[];
-    multiPodNamespace: string | null;
-    showMultiPodLogs: boolean;
-    autoRefresh: boolean;
-    setAutoRefresh: (v: boolean) => void;
-    refreshInterval: number;
-    setRefreshInterval: (v: number) => void;
-    /** `Date.now()` of the last completed refresh, or null before the first one. */
-    lastRefreshedAt: number | null;
-    /** True when auto-refresh is enabled but held because a detail panel is open. */
-    autoRefreshPaused: boolean;
-    copyToClipboard: (text: string) => void;
-    openYaml: (kind: string, name: string, namespace: string) => void;
-    openLogs: (pod: PodInfo) => void;
-    openMultiPodLogs: (pods: PodInfo[]) => void;
-    closeMultiPodLogs: () => void;
-    openContainerDetails: (podName: string, namespace: string) => void;
-    setHelmRelease: (rel: HelmReleaseInfo | null) => void;
-    setSelectedSecret: (secret: SecretInfo | null) => void;
-    setSelectedConfigMap: (configMap: ConfigMapInfo | null) => void;
-    setSelectedHttpRoute: (route: HttpRouteInfo | null) => void;
-    setShellPod: (pod: PodInfo | null) => void;
-    setAskAiPod: (pod: PodInfo | null) => void;
-    setPodKey: (
-        pod: PodInfo | null,
-        options?: { clearOthers?: boolean },
-    ) => void;
-    setYamlResource: (
-        res: { kind: string; namespace: string; name: string } | null,
-    ) => void;
-    setContainerDetail: (
-        detail: { podName: string; namespace: string } | null,
-    ) => void;
-    requestConfirm: (opts: {
-        message: string;
-        resourceName: string;
-        onConfirm: () => void;
-    }) => void;
-    resolvePodsForSelector: (
-        namespace: string,
-        selectorLabels: Record<string, string>,
-    ) => Promise<PodInfo[]>;
-    navigateToAnalysis: () => void;
-    openPortForward: (pod: PodInfo) => void;
-    showContextMenu: (e: MouseEvent, items: ContextMenuItem[]) => void;
-    handleManualRefresh: () => void;
-    pendingConfirm: PendingConfirm | null;
-    setPendingConfirm: (v: PendingConfirm | null) => void;
-    contextMenu: ContextMenuState | null;
-    setContextMenu: (v: ContextMenuState | null) => void;
-    isProduction: boolean;
-}
-
-const AUTO_REFRESH_PREF = "aks-auto-refresh";
-const REFRESH_INTERVAL_PREF = "aks-refresh-interval";
-const DEFAULT_REFRESH_SECONDS = 10;
-const SELECTED_NS_PREF_PREFIX = "aks-selected-ns";
-
-/** Per-cluster storage key: each kube context remembers its own last-selected namespace(s). */
-function selectedNsPrefKey(context: string): string {
-    return `${SELECTED_NS_PREF_PREFIX}:${context}`;
-}
-
-/** Selectable auto-refresh cadences, in seconds. */
-export const aksRefreshIntervals = [5, 10, 30, 60] as const;
-
-const AksWorkspaceContext = createContext<AksWorkspaceContextValue | null>(
-    null,
-);
-
-export function useAksWorkspace(): AksWorkspaceContextValue {
-    const ctx = useContext(AksWorkspaceContext);
-    if (!ctx)
-        throw new Error(
-            "useAksWorkspace must be used within AksWorkspaceProvider",
-        );
-    return ctx;
-}
+import {
+    AUTO_REFRESH_PREF,
+    AksActionsContext,
+    AksClusterContext,
+    AksNavContext,
+    AksOpsContext,
+    AksOverlaysContext,
+    AksQueriesContext,
+    DEFAULT_REFRESH_SECONDS,
+    REFRESH_INTERVAL_PREF,
+    aksRefreshIntervals,
+    encodeNamespaces,
+    makeKey,
+    makeYamlKey,
+    parseKey,
+    parseNamespaces,
+    parseTab,
+    parseYamlKey,
+    selectedNsPrefKey,
+} from "./aks-workspace-context";
+import type {
+    AksActionsValue,
+    AksClusterValue,
+    AksNavValue,
+    AksOpsValue,
+    AksOverlaysValue,
+    AksQueriesValue,
+    ContextMenuState,
+    PendingConfirm,
+    TabId,
+} from "./aks-workspace-context";
 
 export function AksWorkspaceProvider({
     children,
@@ -323,9 +137,13 @@ export function AksWorkspaceProvider({
     const { data: demoMode } = useDemoMode();
     const isDemoMode = demoMode?.isDemoMode ?? false;
     const setContextMutation = useAksSetContext();
+    // `mutate`/`variables` are referentially stable; the mutation object itself is
+    // fresh every render and would churn `handleContextChange`'s identity.
+    const { mutate: setContextMutate, variables: setContextVariables } =
+        setContextMutation;
     const contextLoading = setContextMutation.isPending;
     const pendingContext = contextLoading
-        ? (setContextMutation.variables?.context ?? null)
+        ? (setContextVariables?.context ?? null)
         : null;
     const profileLoaded = profile !== undefined;
     const isAksFetching =
@@ -605,7 +423,12 @@ export function AksWorkspaceProvider({
                     : defaultNamespace
                       ? [defaultNamespace]
                       : [];
-            const previousNs = searchParams.get("ns");
+            // Read from the live URL, not the render-time searchParams snapshot —
+            // the same reason useUpdateSearchParams exists. Keeping this dep-free
+            // stops handleContextChange churning identity on every URL change.
+            const previousNs = new URLSearchParams(window.location.search).get(
+                "ns",
+            );
             updateParams({
                 ns: encodeNamespaces(restored),
                 pod: null,
@@ -624,7 +447,7 @@ export function AksWorkspaceProvider({
             setAskAiPod(null);
             // "Updated 3s ago" would otherwise keep describing the previous cluster's data.
             setLastRefreshedAt(null);
-            setContextMutation.mutate(
+            setContextMutate(
                 { context, defaultNamespace },
                 {
                     onSuccess: (data) => {
@@ -664,8 +487,7 @@ export function AksWorkspaceProvider({
         },
         [
             currentContextName,
-            searchParams,
-            setContextMutation,
+            setContextMutate,
             updateParams,
             notify,
         ],
@@ -710,7 +532,7 @@ export function AksWorkspaceProvider({
                 .map(([k, v]) => `${k}=${v}`)
                 .join(",");
             return apiFetch<PodInfo[]>(
-                `/api/aks/${namespace}/pods?labelSelector=${labelSelector}`,
+                `/api/aks/${namespace}/pods?labelSelector=${encodeURIComponent(labelSelector)}`,
             );
         },
         [],
@@ -900,7 +722,44 @@ export function AksWorkspaceProvider({
         [],
     );
 
-    const value: AksWorkspaceContextValue = useMemo(
+    const kubeconfigContext =
+        profile?.config.aksConfig?.kubeconfigContext ?? null;
+    const kubeconfigPath = profile?.config.aksConfig?.kubeconfigPath ?? null;
+
+    const clusterValue: AksClusterValue = useMemo(
+        () => ({
+            namespaces,
+            nsLoading,
+            nsError,
+            contextLoading,
+            pendingContext,
+            contexts,
+            currentContext: kubeconfigContext,
+            profileLoaded,
+            isDemoMode,
+            testResult,
+            handleContextChange,
+            kubeconfigPath,
+            isProduction,
+        }),
+        [
+            namespaces,
+            nsLoading,
+            nsError,
+            contextLoading,
+            pendingContext,
+            contexts,
+            kubeconfigContext,
+            profileLoaded,
+            isDemoMode,
+            testResult,
+            handleContextChange,
+            kubeconfigPath,
+            isProduction,
+        ],
+    );
+
+    const navValue: AksNavValue = useMemo(
         () => ({
             activeTab,
             setActiveTab,
@@ -910,22 +769,6 @@ export function AksWorkspaceProvider({
             setSelectedNamespaces,
             namespaceToken,
             isMultiNamespace,
-            namespaces,
-            nsLoading,
-            nsError,
-            contextLoading,
-            pendingContext,
-            isAksFetching,
-            contexts,
-            currentContext:
-                profile?.config.aksConfig?.kubeconfigContext ?? null,
-            profileLoaded,
-            isDemoMode,
-            testResult,
-            handleContextChange,
-            allPods,
-            podsFetching,
-            refetchPods,
             selectedPod,
             yamlResource,
             helmRelease,
@@ -934,23 +777,10 @@ export function AksWorkspaceProvider({
             selectedHttpRoute,
             shellPod,
             askAiPod,
-            kubeconfigPath: profile?.config.aksConfig?.kubeconfigPath ?? null,
             containerDetail,
             multiPodNames,
             multiPodNamespace,
             showMultiPodLogs,
-            autoRefresh,
-            setAutoRefresh,
-            refreshInterval,
-            setRefreshInterval,
-            lastRefreshedAt,
-            autoRefreshPaused,
-            copyToClipboard,
-            openYaml,
-            openLogs,
-            openMultiPodLogs,
-            closeMultiPodLogs,
-            openContainerDetails,
             setHelmRelease,
             setSelectedSecret,
             setSelectedConfigMap,
@@ -960,17 +790,6 @@ export function AksWorkspaceProvider({
             setPodKey,
             setYamlResource,
             setContainerDetail,
-            requestConfirm,
-            resolvePodsForSelector,
-            navigateToAnalysis,
-            openPortForward,
-            showContextMenu,
-            handleManualRefresh,
-            pendingConfirm,
-            setPendingConfirm,
-            contextMenu,
-            setContextMenu,
-            isProduction,
         }),
         [
             activeTab,
@@ -980,21 +799,6 @@ export function AksWorkspaceProvider({
             setSelectedNamespaces,
             namespaceToken,
             isMultiNamespace,
-            namespaces,
-            nsLoading,
-            nsError,
-            contextLoading,
-            pendingContext,
-            isAksFetching,
-            contexts,
-            profile?.config.aksConfig?.kubeconfigContext,
-            profileLoaded,
-            isDemoMode,
-            testResult,
-            handleContextChange,
-            allPods,
-            podsFetching,
-            refetchPods,
             selectedPod,
             yamlResource,
             helmRelease,
@@ -1003,47 +807,97 @@ export function AksWorkspaceProvider({
             selectedHttpRoute,
             shellPod,
             askAiPod,
-            profile?.config.aksConfig?.kubeconfigPath,
             containerDetail,
             multiPodNames,
             multiPodNamespace,
             showMultiPodLogs,
+            setHelmRelease,
+            setPodKey,
+            setYamlResource,
+            setContainerDetail,
+        ],
+    );
+
+    const queriesValue: AksQueriesValue = useMemo(
+        () => ({ allPods, podsFetching, refetchPods }),
+        [allPods, podsFetching, refetchPods],
+    );
+
+    const opsValue: AksOpsValue = useMemo(
+        () => ({
             autoRefresh,
             setAutoRefresh,
             refreshInterval,
             setRefreshInterval,
             lastRefreshedAt,
             autoRefreshPaused,
+            isAksFetching,
+            handleManualRefresh,
+        }),
+        [
+            autoRefresh,
+            setAutoRefresh,
+            refreshInterval,
+            setRefreshInterval,
+            lastRefreshedAt,
+            autoRefreshPaused,
+            isAksFetching,
+            handleManualRefresh,
+        ],
+    );
+
+    const overlaysValue: AksOverlaysValue = useMemo(
+        () => ({
+            pendingConfirm,
+            setPendingConfirm,
+            contextMenu,
+            setContextMenu,
+        }),
+        [pendingConfirm, contextMenu],
+    );
+
+    const actionsValue: AksActionsValue = useMemo(
+        () => ({
             copyToClipboard,
             openYaml,
             openLogs,
             openMultiPodLogs,
             closeMultiPodLogs,
             openContainerDetails,
-            setHelmRelease,
-            setSelectedSecret,
-            setSelectedConfigMap,
-            setSelectedHttpRoute,
-            setShellPod,
-            setAskAiPod,
-            setPodKey,
-            setYamlResource,
-            setContainerDetail,
             requestConfirm,
             resolvePodsForSelector,
             navigateToAnalysis,
             openPortForward,
             showContextMenu,
-            handleManualRefresh,
-            pendingConfirm,
-            contextMenu,
-            isProduction,
+        }),
+        [
+            copyToClipboard,
+            openYaml,
+            openLogs,
+            openMultiPodLogs,
+            closeMultiPodLogs,
+            openContainerDetails,
+            requestConfirm,
+            resolvePodsForSelector,
+            navigateToAnalysis,
+            openPortForward,
+            showContextMenu,
         ],
     );
 
     return (
-        <AksWorkspaceContext.Provider value={value}>
-            {children}
-        </AksWorkspaceContext.Provider>
+        <AksClusterContext.Provider value={clusterValue}>
+            <AksNavContext.Provider value={navValue}>
+                <AksQueriesContext.Provider value={queriesValue}>
+                    <AksOpsContext.Provider value={opsValue}>
+                        <AksOverlaysContext.Provider value={overlaysValue}>
+                            <AksActionsContext.Provider value={actionsValue}>
+                                {children}
+                            </AksActionsContext.Provider>
+                        </AksOverlaysContext.Provider>
+                    </AksOpsContext.Provider>
+                </AksQueriesContext.Provider>
+            </AksNavContext.Provider>
+        </AksClusterContext.Provider>
     );
 }

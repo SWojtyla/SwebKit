@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { useAksEvents } from "@/lib/hooks";
-import { useAksWorkspace, type TabId } from "./shared/AksWorkspaceContext";
+import { useAksNav, type TabId } from "./shared/aks-workspace-context";
 import { formatLocalTime } from "@/lib/datetime";
 
 /** Kubernetes `involvedObject.kind` -> the AKS tab that shows that resource, for click-through.
@@ -25,7 +25,7 @@ const KIND_TO_TAB: Partial<Record<string, TabId>> = {
 
 export function EventsTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
     const { data: events, isLoading, error } = useAksEvents(ns);
-    const ws = useAksWorkspace();
+    const ws = useAksNav();
     const [warningsOnly, setWarningsOnly] = useState(false);
 
     const visibleEvents = useMemo(() => {

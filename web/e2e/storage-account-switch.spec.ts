@@ -62,4 +62,12 @@ test.describe("Storage account switching", () => {
     await page.getByTestId("storage-account-select").selectOption("acct-b");
     await expect(page.getByTestId("storage-view-recovery")).toBeDisabled();
   });
+
+  test("switching accounts clears the previous file-share path", async ({ page }) => {
+    await page.goto("/storage?account=acct-a&share=old-share&dir=docs&file=docs%2Freadme.md");
+
+    await page.getByTestId("storage-account-select").selectOption("acct-b");
+    await expect(page).toHaveURL(/account=acct-b/);
+    await expect(page).not.toHaveURL(/[?&](share|dir|file)=/);
+  });
 });

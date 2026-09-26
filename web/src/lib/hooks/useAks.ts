@@ -176,7 +176,7 @@ export function useAksPods(
         queryKey: ["aks-pods", ctx, ns, labelSelector],
         queryFn: ({ signal }) =>
             apiFetch<PodInfo[]>(
-                `/api/aks/${ns}/pods${labelSelector ? `?labelSelector=${labelSelector}` : ""}`,
+                `/api/aks/${ns}/pods${labelSelector ? `?labelSelector=${encodeURIComponent(labelSelector)}` : ""}`,
                 { signal },
             ),
         enabled: !!ns && enabled,

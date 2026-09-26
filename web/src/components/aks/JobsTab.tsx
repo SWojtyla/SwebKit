@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent } from "react";
 import { useAksJobs } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { JobInfo } from "@/lib/types";
 
@@ -39,7 +39,7 @@ const columns: Column<JobInfo>[] = [
 
 export function JobsTab({ ns, isMulti }: JobsTabProps) {
   const { data: jobs, isLoading, error } = useAksJobs(ns);
-  const ws = useAksWorkspace();
+  const ws = useAksActions();
 
   const buildMenu = useCallback((job: JobInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(job.name) },

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Copy, Loader2, MessageSquare, Trash2, Wrench } from "lucide-react";
 import type { ProactiveInsightReport } from "../../lib/api";
-import { useNotification } from "../layout/NotificationSystem";
+import { useNotification } from "../layout/notification-context";
 import {
     formatInsightTime,
     insightSeverityBadge,

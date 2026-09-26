@@ -1,7 +1,7 @@
-import { useCallback, type MouseEvent } from "react";
+import { useCallback, useMemo, type MouseEvent } from "react";
 import { useAksConfigMaps } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions, useAksNav } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { ConfigMapInfo } from "@/lib/types";
 
@@ -20,7 +20,9 @@ const columns: Column<ConfigMapInfo>[] = [
 
 export function ConfigMapsTab({ ns, isMulti }: ConfigMapsTabProps) {
   const { data: configmaps, isLoading, error } = useAksConfigMaps(ns);
-  const ws = useAksWorkspace();
+  const nav = useAksNav();
+  const actions = useAksActions();
+  const ws = useMemo(() => ({ ...nav, ...actions }), [nav, actions]);
 
   const buildMenu = useCallback((cm: ConfigMapInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(cm.name) },

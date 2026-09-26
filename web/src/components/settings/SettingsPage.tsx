@@ -47,7 +47,7 @@ const DEMO_AFFECTED_TABS: ReadonlySet<TabId> = new Set([
 
 // The tabs `useSettingsReadiness` has an opinion about — one entry per area with a real
 // "configured or not" concept. `TabId` and `SettingsReadinessArea` happen to share the same
-// string values for these four, which is what makes the direct index below type-check.
+// string values for these five, which is what makes the direct index below type-check.
 const READINESS_TABS: ReadonlySet<TabId> = new Set([
     "service-bus",
     "aks",
@@ -70,6 +70,7 @@ export function SettingsPage() {
     useEffect(() => {
         const state = location.state as { tab?: string } | null;
         if (state?.tab && TAB_IDS.has(state.tab)) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
             setActiveTab(state.tab as TabId);
             navigate(location.pathname, { replace: true, state: null });
         }

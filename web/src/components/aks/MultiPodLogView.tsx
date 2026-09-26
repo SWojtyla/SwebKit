@@ -48,9 +48,11 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
   // is memoised off the URL param upstream, so this re-syncs only when the set itself
   // genuinely changes, not on every render.
   const [selectedPods, setSelectedPods] = useState<string[]>(pods);
-  useEffect(() => {
+  const [prevPods, setPrevPods] = useState(pods);
+  if (prevPods !== pods) {
+    setPrevPods(pods);
     setSelectedPods(pods);
-  }, [pods]);
+  }
 
   const [container, setContainer] = useState("");
   const [range, setRange] = useState<LogRange>("5m");
@@ -66,7 +68,7 @@ export function MultiPodLogView({ ns, pods, onClose }: Props) {
   const streamKeyRef = useRef(`${ns}::${container}::${range}`);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const buffer = useLogBuffer({ maxBuffer: MAX_BUFFER, frozen: false });
+  const buffer = useLogBuffer({ maxBuffer: MAX_BUFFER });
   const { push, clear } = buffer;
 
   // Correlation is the point of this view, and arrival order does not give it: network

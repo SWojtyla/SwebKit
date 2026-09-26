@@ -3,7 +3,7 @@
 // keeps search behavior consistent instead of each palette growing its own matcher.
 // See docs/features/active/tauri-react-primary-tool/technical-plan.md Module 5.4.
 
-export function fuzzyScore(query: string, text: string): number {
+function fuzzyScore(query: string, text: string): number {
   const q = query.toLowerCase().trim();
   const t = text.toLowerCase();
   if (!q) return 0;

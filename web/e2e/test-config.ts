@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
  * all) in the returned teardown, keeping all process management in one place.
  */
 
-export const e2eAppDataRoot = path.resolve(
+const e2eAppDataRoot = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "..",
     ".e2e-appdata",
@@ -34,7 +34,7 @@ const sidecarProject = path.resolve(
  * Best-effort kill of a process listening on a local TCP port. On Windows this
  * uses `Get-NetTCPConnection`; on Unix it uses `lsof`. Errors are ignored.
  */
-export function killProcessOnPort(port: string) {
+function killProcessOnPort(port: string) {
     try {
         if (process.platform === "win32") {
             execSync(

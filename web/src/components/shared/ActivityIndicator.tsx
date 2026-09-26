@@ -14,11 +14,16 @@ export function ActivityIndicator() {
     const busy = fetching + mutating > 0;
     const [visible, setVisible] = useState(false);
 
+    // Clear during render on the busy→idle edge (no stale "busy" frame); the effect
+    // only owns the delayed-show timer.
+    const [prevBusy, setPrevBusy] = useState(busy);
+    if (busy !== prevBusy) {
+        setPrevBusy(busy);
+        if (!busy) setVisible(false);
+    }
+
     useEffect(() => {
-        if (!busy) {
-            setVisible(false);
-            return;
-        }
+        if (!busy) return;
         const t = setTimeout(() => setVisible(true), SHOW_AFTER_MS);
         return () => clearTimeout(t);
     }, [busy]);

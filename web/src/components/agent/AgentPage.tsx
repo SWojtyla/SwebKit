@@ -3,7 +3,8 @@ import { useSearchParams } from "react-router";
 import { useGlobalAgentConversation } from "@/lib/hooks/useGlobalAgentConversation";
 import { useAcpPermissions, usePendingActionsFeed } from "@/lib/hooks/useAgent";
 import { AgentMarkdown } from "./AgentMarkdown";
-import { AgentVisualizationPanel, parseVisualBlocks } from "./AgentVisualizationPanel";
+import { AgentVisualizationPanel } from "./AgentVisualizationPanel";
+import { parseVisualBlocks } from "./visual-blocks";
 import { PendingActionCard, PendingActionExpiredNotice } from "./PendingActionCard";
 import { AcpPermissionCard } from "./AcpPermissionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
@@ -44,6 +45,7 @@ export function AgentPage() {
   useEffect(() => {
     const scenario = searchParams.get("scenario");
     if (scenario && lastAssistantContent.includes(scenario)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot URL-param deep-link consumption; the paired setSearchParams must live in an effect anyway
       setShowVisuals(true);
       if (searchParams.has("scenario")) {
         const next = new URLSearchParams(searchParams);

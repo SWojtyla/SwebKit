@@ -121,10 +121,13 @@ function EditorBody({
 export function ResponseBodyViewer({ body, contentType, wrap }: ResponseBodyViewerProps) {
   const [forceHighlight, setForceHighlight] = useState(false);
 
-  // A new response resets the user's per-response override.
-  useEffect(() => {
+  // A new response resets the user's per-response override — adjusted during render
+  // so the old body never paints with the override applied.
+  const [prevBody, setPrevBody] = useState(body);
+  if (prevBody !== body) {
+    setPrevBody(body);
     setForceHighlight(false);
-  }, [body]);
+  }
 
   const detectedLanguage = useMemo(() => selectBodyLanguage(contentType, body), [contentType, body]);
   const mode = useMemo(() => selectBodyRenderMode(body.length, forceHighlight), [body.length, forceHighlight]);

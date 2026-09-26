@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend, exportSettings, importSettings } from "../api";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import type {
   ProfileData,
   UserSettings,
@@ -56,37 +56,38 @@ export function useUpdateProfile() {
   });
 }
 
-export function usePinnedResources() {
-  const { data: profile, ...query } = useProfile();
-  return {
-    ...query,
-    data: profile?.config.favoriteResources ?? [],
-  };
-}
-
 export function useTogglePinnedResource() {
   const qc = useQueryClient();
   const { notify } = useNotification();
-  return useMutation({
-    mutationFn: (vars: { profile: ProfileData; resource: FavoriteResource; pinned: boolean }) => {
+  return useMutation<ProfileData, Error, { resource: FavoriteResource; pinned: boolean }>({
+    scope: { id: "profile" },
+    mutationFn: async (vars) => {
+      const profile = qc.getQueryData<ProfileData>(["profile"]);
+      if (!profile) throw new Error("Profile is not loaded");
+
       const favorites = vars.pinned
         ? [
-            ...vars.profile.config.favoriteResources.filter(
+            ...profile.config.favoriteResources.filter(
               (favorite) => favorite.snapshot.resource.key !== vars.resource.snapshot.resource.key,
             ),
             vars.resource,
           ]
-        : vars.profile.config.favoriteResources.filter(
+        : profile.config.favoriteResources.filter(
             (favorite) => favorite.snapshot.resource.key !== vars.resource.snapshot.resource.key,
           );
+      const data = {
+        ...profile,
+        config: { ...profile.config, favoriteResources: favorites },
+      };
 
-      return apiSend("/api/config/profiles", "PUT", {
-        ...vars.profile,
-        config: { ...vars.profile.config, favoriteResources: favorites },
-      });
+      await apiSend("/api/config/profiles", "PUT", data);
+      return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
-    onError: (error) => notify("error", "Couldn't update pinned resources", String(error)),
+    onSuccess: (data) => qc.setQueryData(["profile"], data),
+    onError: (error) => {
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      notify("error", "Couldn't update pinned resources", String(error));
+    },
   });
 }
 
@@ -222,7 +223,7 @@ export function useObservabilityResources() {
 // ── Settings readiness ───────────────────────────────────────────────────────
 
 /** One entry per settings tab that has a "configured or not" concept worth signaling. */
-export type SettingsReadinessArea = "aks" | "service-bus" | "redis" | "storage";
+export type SettingsReadinessArea = "aks" | "service-bus" | "redis" | "sql" | "storage";
 
 export type SettingsReadiness = Record<SettingsReadinessArea, boolean>;
 
@@ -243,6 +244,7 @@ export function useSettingsReadiness(): SettingsReadiness | null {
     aks: isDemo || !!profile.config.aksConfig,
     "service-bus": profile.serviceBusNamespaces.length > 0,
     redis: (profile.config.redisConfig?.caches.length ?? 0) > 0,
+    sql: (profile.config.sqlConfig?.connections.length ?? 0) > 0,
     storage: profile.config.storageAccounts.length > 0,
   };
 }

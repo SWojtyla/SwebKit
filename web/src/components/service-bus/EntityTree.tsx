@@ -12,6 +12,45 @@ interface Props {
 
 type SortCol = "name" | "active" | "dlq" | "sched";
 
+function CountBadge({
+  entity,
+  count,
+  mode,
+  onSelectEntity,
+}: {
+  entity: SbEntityInfo;
+  count: number | undefined;
+  mode?: "active" | "dlq";
+  onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
+}) {
+  const value = count ?? 0;
+  if (value > 0 && mode) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onSelectEntity(entity, mode); }}
+        className={`rounded px-1.5 py-0.5 hover:opacity-80 ${
+          mode === "dlq"
+            ? "bg-destructive/20 text-destructive"
+            : "bg-secondary text-secondary-foreground"
+        }`}
+        title={`Open ${mode === "dlq" ? "dead-letter" : "active"} messages`}
+      >
+        {value}
+      </button>
+    );
+  }
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 ${
+        value > 0 ? "bg-muted text-muted-foreground" : "text-muted-foreground"
+      }`}
+    >
+      {value > 0 ? value : "–"}
+    </span>
+  );
+}
+
 function EntityStatsBadges({
   entity,
   onSelectEntity,
@@ -27,40 +66,6 @@ function EntityStatsBadges({
    */
   dlqRollup?: number | null;
 }) {
-  const CountBadge = ({
-    count,
-    mode,
-  }: {
-    count: number | undefined;
-    mode?: "active" | "dlq";
-  }) => {
-    const value = count ?? 0;
-    if (value > 0 && mode) {
-      return (
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onSelectEntity(entity, mode); }}
-          className={`rounded px-1.5 py-0.5 hover:opacity-80 ${
-            mode === "dlq"
-              ? "bg-destructive/20 text-destructive"
-              : "bg-secondary text-secondary-foreground"
-          }`}
-          title={`Open ${mode === "dlq" ? "dead-letter" : "active"} messages`}
-        >
-          {value}
-        </button>
-      );
-    }
-    return (
-      <span
-        className={`rounded px-1.5 py-0.5 ${
-          value > 0 ? "bg-muted text-muted-foreground" : "text-muted-foreground"
-        }`}
-      >
-        {value > 0 ? value : "–"}
-      </span>
-    );
-  };
 
   if (entity.isTopic) {
     return (
@@ -90,9 +95,9 @@ function EntityStatsBadges({
 
   return (
     <span className="ml-auto flex gap-1 text-xs">
-      <CountBadge count={entity.stats.activeMessageCount} mode="active" />
-      <CountBadge count={entity.stats.deadLetterMessageCount} mode="dlq" />
-      <CountBadge count={entity.stats.scheduledMessageCount} />
+      <CountBadge entity={entity} count={entity.stats.activeMessageCount} mode="active" onSelectEntity={onSelectEntity} />
+      <CountBadge entity={entity} count={entity.stats.deadLetterMessageCount} mode="dlq" onSelectEntity={onSelectEntity} />
+      <CountBadge entity={entity} count={entity.stats.scheduledMessageCount} onSelectEntity={onSelectEntity} />
     </span>
   );
 }
@@ -116,6 +121,11 @@ const EntityIcon = ({ entity }: { entity: SbEntityInfo }) => {
   }
   return <Mail className="h-4 w-4 text-muted-foreground" />;
 };
+
+function SortArrow({ active, asc }: { active: boolean; asc: boolean }) {
+  if (!active) return null;
+  return asc ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />;
+}
 
 export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
   const { data: queues, isLoading: queuesLoading, isError: queuesIsError, error: queuesError } = useSbQueues(nsId);
@@ -150,11 +160,6 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
 
   const sortedQueues = useMemo(() => queues ? sortItems(queues) : [], [queues, sortItems]);
   const sortedTopics = useMemo(() => topics ? sortItems(topics) : [], [topics, sortItems]);
-
-  const SortArrow = ({ col }: { col: SortCol }) => {
-    if (sortCol !== col) return null;
-    return sortAsc ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />;
-  };
 
   if (!nsId) {
     return (
@@ -196,16 +201,16 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
       {/* Column headers */}
       <div className="flex items-center gap-1 border-b px-3 py-1 text-xs text-muted-foreground">
         <button onClick={() => toggleSort("name")} className="flex-1 text-left font-medium hover:text-foreground">
-          Name <SortArrow col="name" />
+          Name <SortArrow active={sortCol === "name"} asc={sortAsc} />
         </button>
         <button onClick={() => toggleSort("active")} className="w-10 text-center font-medium hover:text-foreground" title="Active count">
-          A <SortArrow col="active" />
+          A <SortArrow active={sortCol === "active"} asc={sortAsc} />
         </button>
         <button onClick={() => toggleSort("dlq")} className="w-10 text-center font-medium hover:text-foreground" title="Dead-letter count">
-          DLQ <SortArrow col="dlq" />
+          DLQ <SortArrow active={sortCol === "dlq"} asc={sortAsc} />
         </button>
         <button onClick={() => toggleSort("sched")} className="w-10 text-center font-medium hover:text-foreground" title="Scheduled count">
-          Sch <SortArrow col="sched" />
+          Sch <SortArrow active={sortCol === "sched"} asc={sortAsc} />
         </button>
       </div>
 

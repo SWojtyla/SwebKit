@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useNow } from "@/lib/hooks";
 
 interface LastRefreshedProps {
   at: number | null;
@@ -24,19 +24,13 @@ export function LastRefreshed({
   pausedReason = "Auto-refresh is currently paused",
   testId = "last-refreshed",
 }: LastRefreshedProps) {
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    if (at === null) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, [at]);
+  const now = useNow(1000, at !== null);
 
   const label = (() => {
     if (isFetching) return "refreshing…";
     if (paused) return "auto paused";
     if (at === null) return "";
-    const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
+    const seconds = Math.max(0, Math.round((now - at) / 1000));
     if (seconds < 60) return `updated ${seconds}s ago`;
     return `updated ${Math.floor(seconds / 60)}m ago`;
   })();

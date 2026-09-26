@@ -10,7 +10,6 @@ public sealed class ConfigurationBundle
     public ProfileData Profiles { get; set; } = new();
     public UiState UiState { get; set; } = new();
     public UserSettings UserSettings { get; set; } = new();
-    public ReleaseStoreData Releases { get; set; } = new();
     public List<ScheduledMessageEntry> ScheduledMessages { get; set; } = [];
 
     // ── API Client data (nullable — bundles without these fields restore cleanly) ──

@@ -5,7 +5,7 @@
  * completed chunk a completed unit of work (the server operations are per-message
  * anyway, so partial completion semantics are unchanged).
  */
-export const BULK_CHUNK_SIZE = 25;
+const BULK_CHUNK_SIZE = 25;
 
 /**
  * Processes `items` in chunks of `chunkSize`, awaiting `run` per chunk and calling

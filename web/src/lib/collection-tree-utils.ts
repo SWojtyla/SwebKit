@@ -35,7 +35,7 @@ interface RemovalResult {
 }
 
 /** True when `node` (or, for a folder, any descendant) matches `query` by name, URL or method. */
-export function matchesSearch(node: ApiCollectionNode, query: string): boolean {
+function matchesSearch(node: ApiCollectionNode, query: string): boolean {
   if (!query) return true;
   const q = query.toLowerCase();
   if (node.name.toLowerCase().includes(q)) return true;
@@ -63,7 +63,7 @@ export function filterNodes(nodes: ApiCollectionNode[], query: string): ApiColle
 }
 
 /** Synthesizes the collection-root row a `CollectionTree` renders above its top-level nodes. */
-export function collectionRootNode(collection: ApiCollection): ApiCollectionNode {
+function collectionRootNode(collection: ApiCollection): ApiCollectionNode {
   return {
     id: collection.id,
     type: "Folder",

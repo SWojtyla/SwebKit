@@ -7,10 +7,8 @@ import {
     usePendingActionsFeed,
 } from "@/lib/hooks/useAgent";
 import { AgentMarkdown } from "./AgentMarkdown";
-import {
-    AgentVisualizationPanel,
-    parseVisualBlocks,
-} from "./AgentVisualizationPanel";
+import { AgentVisualizationPanel } from "./AgentVisualizationPanel";
+import { parseVisualBlocks } from "./visual-blocks";
 import { useUserSettings } from "@/lib/hooks";
 import {
     PendingActionCard,

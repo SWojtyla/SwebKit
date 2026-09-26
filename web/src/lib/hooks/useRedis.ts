@@ -8,7 +8,7 @@ import {
   analyzeRedisKeyspace,
   getRedisPrefixMemory,
 } from "../api";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import type {
   RedisKeyScanResult,
   RedisKeyInfo,
@@ -160,22 +160,6 @@ export function useRedisHashFields(cacheId: string | null, key: string | null, k
   });
 }
 
-export function useRedisListItems(cacheId: string | null, key: string | null, keyType: string | null) {
-  return useQuery({
-    queryKey: ["redis", cacheId, "keys", key, "list"],
-    queryFn: ({ signal }) => apiFetch<string[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/list`, { signal }),
-    enabled: !!cacheId && !!key && keyType === "list",
-  });
-}
-
-export function useRedisSetMembers(cacheId: string | null, key: string | null, keyType: string | null) {
-  return useQuery({
-    queryKey: ["redis", cacheId, "keys", key, "set"],
-    queryFn: ({ signal }) => apiFetch<string[]>(`/api/redis/${cacheId}/keys/${encodeURIComponent(key!)}/set`, { signal }),
-    enabled: !!cacheId && !!key && keyType === "set",
-  });
-}
-
 export function useRedisSortedSetMembers(cacheId: string | null, key: string | null, keyType: string | null) {
   return useQuery({
     queryKey: ["redis", cacheId, "keys", key, "zset"],
@@ -209,6 +193,22 @@ export function useRedisDeleteKey(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
     onError: (error) => notify("error", "Couldn't delete key", String(error)),
+  });
+}
+
+export function useRedisDeleteKeys(cacheId: string | null) {
+  const qc = useQueryClient();
+  const { notify } = useNotification();
+  return useMutation({
+    mutationFn: async (keys: string[]) => {
+      for (let offset = 0; offset < keys.length; offset += 500) {
+        await apiSend(`/api/redis/${cacheId}/keys/delete`, "POST", { keys: keys.slice(offset, offset + 500) });
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["redis", cacheId] });
+    },
+    onError: (error) => notify("error", "Couldn't delete keys", String(error)),
   });
 }
 

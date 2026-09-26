@@ -106,4 +106,4 @@ See `blazor-expert.agent.md` and `dotnet-expert.agent.md` → "Before starting w
 
 ---
 
-_See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_
+_See also: [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

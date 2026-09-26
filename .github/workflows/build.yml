@@ -9,15 +9,14 @@ on:
 jobs:
   # Inspects the diff and flags which areas of the repo actually changed, so
   # every job below only runs when it could plausibly be affected — e.g. a
-  # web/-only change skips the MAUI build entirely, and vice versa. Shared
-  # .NET libraries (SwebKit.Core, SwebKit.Azure, ...) are consumed by both the
-  # MAUI app and the sidecar, so a change there fans out to both.
+  # web/-only change skips the sidecar build entirely, and vice versa. Shared
+  # .NET libraries (SwebKit.Core, SwebKit.Azure, ...) are consumed by the
+  # sidecar, so a change there fans out to the sidecar job too.
   changes:
     name: Detect changed areas
     runs-on: ubuntu-latest
     outputs:
       shared_dotnet: ${{ steps.filter.outputs.shared_dotnet }}
-      maui: ${{ steps.filter.outputs.maui }}
       sidecar: ${{ steps.filter.outputs.sidecar }}
       web: ${{ steps.filter.outputs.web }}
       rust: ${{ steps.filter.outputs.rust }}
@@ -39,19 +38,16 @@ jobs:
               - 'src/SwebKit.Azure/**'
               - 'src/SwebKit.Kubernetes/**'
               - 'src/SwebKit.Redis/**'
-              - 'src/SwebKit.DevOps/**'
+              - 'src/SwebKit.Sql/**'
               - 'src/SwebKit.Observability/**'
               - 'src/SwebKit.Agents/**'
               - 'tests/SwebKit.Core.Tests/**'
               - 'tests/SwebKit.Azure.Tests/**'
               - 'tests/SwebKit.Kubernetes.Tests/**'
-              - 'tests/SwebKit.DevOps.Tests/**'
               - 'tests/SwebKit.Agents.Tests/**'
+              - 'tests/SwebKit.Sql.Tests/**'
               - 'Directory.Packages.props'
               - 'global.json'
-            maui:
-              - 'src/SwebKit.App/**'
-              - 'tests/SwebKit.App.Tests/**'
             sidecar:
               - 'src-sidecar/**'
               - 'tests/SwebKit.Sidecar.Tests/**'
@@ -72,13 +68,13 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Build non-MAUI projects
+      - name: Build shared libraries
         run: |
           dotnet build src/SwebKit.Core/SwebKit.Core.csproj
           dotnet build src/SwebKit.Azure/SwebKit.Azure.csproj
           dotnet build src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj
           dotnet build src/SwebKit.Redis/SwebKit.Redis.csproj
-          dotnet build src/SwebKit.DevOps/SwebKit.DevOps.csproj
+          dotnet build src/SwebKit.Sql/SwebKit.Sql.csproj
           dotnet build src/SwebKit.Observability/SwebKit.Observability.csproj
           dotnet build src/SwebKit.Agents/SwebKit.Agents.csproj
 
@@ -91,11 +87,11 @@ jobs:
       - name: Test Kubernetes
         run: dotnet test tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj --verbosity normal
 
-      - name: Test DevOps
-        run: dotnet test tests/SwebKit.DevOps.Tests/SwebKit.DevOps.Tests.csproj --verbosity normal
-
       - name: Test Agents
         run: dotnet test tests/SwebKit.Agents.Tests/SwebKit.Agents.Tests.csproj --verbosity normal
+
+      - name: Test Sql
+        run: dotnet test tests/SwebKit.Sql.Tests/SwebKit.Sql.Tests.csproj --verbosity normal
 
       - name: Check for floating package versions
         run: |
@@ -107,33 +103,6 @@ jobs:
       - name: Vulnerability scan
         run: dotnet list src/SwebKit.Core/SwebKit.Core.csproj package --vulnerable --include-transitive
         continue-on-error: true
-
-  maui:
-    name: MAUI Build (Windows)
-    needs: changes
-    if: needs.changes.outputs.maui == 'true' || needs.changes.outputs.shared_dotnet == 'true'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
-
-      - name: Install MAUI workload
-        run: dotnet workload install maui
-
-      - name: Restore MAUI app
-        run: dotnet restore src/SwebKit.App/SwebKit.App.csproj
-
-      - name: Build MAUI app
-        run: dotnet build src/SwebKit.App/SwebKit.App.csproj -f net10.0-windows10.0.19041.0 --no-restore -p:AppxPackageSigningEnabled=false
-
-      - name: Build App.Tests
-        run: dotnet build tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj
-
-      - name: Test App
-        run: dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj --no-build --verbosity normal
 
   sidecar:
     name: Sidecar Build & Test

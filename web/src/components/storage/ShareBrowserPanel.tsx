@@ -1,5 +1,9 @@
+import { useMemo } from "react";
 import { File, Folder } from "lucide-react";
-import { useStoragePageContext } from "./StoragePageContext";
+import {
+    useStorageQueries,
+    useStorageShare,
+} from "./storage-context";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatLocalDateTime } from "@/lib/datetime";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
@@ -11,7 +15,9 @@ import { LastRefreshed } from "@/components/shared/LastRefreshed";
  * Share listings are small enough to skip the virtualizer.
  */
 export function ShareBrowserPanel() {
-    const ctx = useStoragePageContext();
+    const share = useStorageShare();
+    const queries = useStorageQueries();
+    const ctx = useMemo(() => ({ ...share, ...queries }), [share, queries]);
 
     const dirPrefix = ctx.shareDir ? `${ctx.shareDir}/` : "";
     const dirSegments = ctx.shareDir.split("/").filter(Boolean);

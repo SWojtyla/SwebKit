@@ -2,20 +2,15 @@ import { useState } from "react";
 import { Copy, Pencil, Check, X, Clock, Trash2, Plus, Sparkles } from "lucide-react";
 import { formatTtl, parseTtl, getTtlColorClass } from "@/lib/redis-format";
 import { formatBytes } from "@/lib/format-bytes";
-import { useRedisPageContext } from "../RedisPageContext";
+import {
+  useRedisConnection,
+  useRedisEditor,
+  useRedisNav,
+  useRedisQueries,
+} from "../redis-context";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { useScreenStateProvider } from "@/lib/stores/screen-state";
-
-// Exported so `KeyBrowserPanel` can reuse the same type→color mapping for the tree's type dot
-// (derived by swapping the `text-` prefix for `bg-`) instead of duplicating the color choices.
-export const typeColors: Record<string, string> = {
-  string: "text-green-400",
-  hash: "text-blue-400",
-  list: "text-yellow-400",
-  set: "text-purple-400",
-  zset: "text-orange-400",
-  none: "text-muted-foreground",
-};
+import { typeColors } from "../type-colors";
 
 function TtlBar({ ttl }: { ttl: string | null }) {
   const ms = parseTtl(ttl);
@@ -35,7 +30,12 @@ function TtlBar({ ttl }: { ttl: string | null }) {
 }
 
 export function KeyDetailPanel() {
-  const ctx = useRedisPageContext();
+  const ctx = {
+    ...useRedisConnection(),
+    ...useRedisNav(),
+    ...useRedisQueries(),
+    ...useRedisEditor(),
+  };
   const [askAiOpen, setAskAiOpen] = useState(false);
 
   // Screen-state snapshot (agent-workspace-awareness M1) — bounded previews only; returns null

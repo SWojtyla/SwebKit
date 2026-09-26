@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend, streamAgentChat } from "../api";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import type {
   AcpPermission,
   AgentActionApplyResult,
@@ -118,6 +118,7 @@ export function usePendingActionsFeed() {
   const [feed, setFeed] = useState<PendingActionFeedItem[]>([]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reconciles local feed with each poll result; Date.now() can't run during render
     setFeed((prev) => reconcilePendingActionsFeed(prev, query.data, Date.now()));
     // new Date.now() every render would defeat the reconciliation instead of only running it once
     // per actual poll result.
@@ -259,6 +260,7 @@ export function useAgentChatStream(sessionId?: string) {
 
   const send = useCallback(
     (message: string, options?: StreamSendOptions) => {
+      abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
       setIsStreaming(true);
@@ -304,7 +306,10 @@ export function useAgentChatStream(sessionId?: string) {
             if (!settled) reject(err instanceof Error ? err : new Error(String(err)));
           })
           .finally(() => {
-            setIsStreaming(false);
+            if (abortRef.current === controller) {
+              abortRef.current = null;
+              setIsStreaming(false);
+            }
             qc.invalidateQueries({ queryKey: ["agent", "status", sessionKey(sessionId)] });
           });
       });
@@ -315,6 +320,8 @@ export function useAgentChatStream(sessionId?: string) {
   const cancel = useCallback(() => {
     abortRef.current?.abort();
   }, []);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   return { send, isStreaming, cancel };
 }

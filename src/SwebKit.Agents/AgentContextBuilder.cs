@@ -7,7 +7,7 @@ namespace SwebKit.Agents;
 /// <summary>
 /// Default implementation of <see cref="IAgentContextBuilder"/>.
 /// Builds context from the current SwebKit workspace configuration including
-/// Kubernetes, Service Bus, Redis, Storage, DevOps, and Observability settings.
+/// Kubernetes, Service Bus, Redis, Storage, and Observability settings.
 /// </summary>
 public sealed class AgentContextBuilder : IAgentContextBuilder
 {
@@ -76,13 +76,6 @@ public sealed class AgentContextBuilder : IAgentContextBuilder
             contextParts.Add("Storage: configured");
         }
 
-        // DevOps context
-        var devOpsConfig = config.DevOpsConfig;
-        if (devOpsConfig != null && !string.IsNullOrWhiteSpace(devOpsConfig.Organization))
-        {
-            contextParts.Add("DevOps: " + devOpsConfig.Organization);
-        }
-
         // Add selection context
         var selections = new List<string>();
         var knownAreas = new[] { "aks", "servicebus", "redis", "storage", "observability" };
@@ -140,7 +133,6 @@ public sealed class AgentContext
     public string? ObservabilityResource { get; set; }
     public bool RedisConfigured { get; set; }
     public bool StorageConfigured { get; set; }
-    public string? DevOpsOrganization { get; set; }
 
     public override string ToString()
     {
@@ -169,10 +161,6 @@ public sealed class AgentContext
         if (StorageConfigured)
         {
             parts.Add("Storage: configured");
-        }
-        if (!string.IsNullOrWhiteSpace(DevOpsOrganization))
-        {
-            parts.Add("DevOps: " + DevOpsOrganization);
         }
         return string.Join(" | ", parts);
     }

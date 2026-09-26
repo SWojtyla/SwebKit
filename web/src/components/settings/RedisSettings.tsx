@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useProfile, useUpdateProfile } from "@/lib/hooks";
 import { useRedisTestConnection } from "@/lib/hooks/useRedis";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { clampInt } from "@/lib/clamp-int";
 import type { RedisCacheEntry } from "@/lib/types";
 import { DraftInput } from "./DraftInput";

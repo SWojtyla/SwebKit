@@ -1,8 +1,8 @@
 import type { SbMessage } from "@/lib/types";
 import type { AdvancedFilterRule, FilterOperator } from "./filterTypes";
-import { isRuleConfigured, requiresPropertyName } from "./filterTypes";
+import { isRuleConfigured } from "./filterTypes";
 
-export function matchesTextFilter(message: SbMessage, text: string): boolean {
+function matchesTextFilter(message: SbMessage, text: string): boolean {
   const q = text.toLowerCase();
   return (
     message.messageId.toLowerCase().includes(q) ||
@@ -170,4 +170,3 @@ export function applyFilters(
   return query;
 }
 
-export { requiresPropertyName };

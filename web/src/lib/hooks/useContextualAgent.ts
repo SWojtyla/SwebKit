@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useAgentChatStream, useAgentClear, useAgentStatus } from "./useAgent";
 import type {
     AgentChatMode,
@@ -30,10 +30,9 @@ export function useContextualAgent(
         defaultScope?: AgentChatScope;
     },
 ) {
-    const sessionIdRef = useRef<string>(
-        options?.sessionId ?? crypto.randomUUID(),
+    const [sessionId] = useState<string>(
+        () => options?.sessionId ?? crypto.randomUUID(),
     );
-    const sessionId = sessionIdRef.current;
 
     // Ask is the default and stays the default for every fresh conversation — see ux-plan.md: a
     // conversation never starts on Ask & do just because a previous one was switched to it.

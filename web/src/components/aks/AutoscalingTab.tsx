@@ -10,9 +10,14 @@ import {
     useAksSetScaledJobScalingEnabled,
 } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/aks-workspace-context";
+import {
+    actionsColumn,
+    confirmMutation,
+    resourceMenuItems,
+} from "./shared/resource-actions";
 import { Dialog } from "@/components/shared/Dialog";
-import { MoreHorizontal, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { HpaInfo, ScaledJobInfo } from "@/lib/types";
 
@@ -64,7 +69,7 @@ function HpaTable({
     error: unknown;
     isMulti?: boolean;
 }) {
-    const ws = useAksWorkspace();
+    const ws = useAksActions();
     const scaleMutation = useAksScaleHpa();
     const deleteMutation = useAksDeleteHpa();
     const toggleMutation = useAksSetHpaScalingEnabled();
@@ -79,17 +84,13 @@ function HpaTable({
             // Route through the same confirm step Delete/Toggle-scaling already use on this same tab —
             // scaling min/max replicas is at least as consequential as either, and Deployments/
             // StatefulSets' own Scale flows already confirm this way.
-            ws.requestConfirm({
-                message: `Scale HPA "${hpa.name}" to min ${min} / max ${max} replicas?`,
-                resourceName: hpa.name,
-                onConfirm: () =>
-                    scaleMutation.mutate({
-                        ns: hpa.namespace,
-                        name: hpa.name,
-                        minReplicas: min,
-                        maxReplicas: max,
-                    }),
-            });
+            confirmMutation(
+                ws,
+                scaleMutation,
+                `Scale HPA "${hpa.name}" to min ${min} / max ${max} replicas?`,
+                hpa.name,
+                { ns: hpa.namespace, name: hpa.name, minReplicas: min, maxReplicas: max },
+            );
         },
         [ws, scaleTarget, scaleMutation],
     );
@@ -99,17 +100,15 @@ function HpaTable({
             // A KEDA-managed HPA cannot outlive its ScaledObject — the backend deletes the ScaledObject
             // itself for these, and the confirm has to say so because the ScaledObject, not the generated
             // HPA, is the resource the user actually owns.
-            ws.requestConfirm({
-                message: hpa.isKedaManaged
+            confirmMutation(
+                ws,
+                deleteMutation,
+                hpa.isKedaManaged
                     ? `"${hpa.name}" is managed by KEDA ScaledObject "${hpa.scaledObjectName ?? "?"}". Delete the ScaledObject to remove autoscaling?`
                     : `Delete HPA ${hpa.name} in ${hpa.namespace}?`,
-                resourceName: hpa.name,
-                onConfirm: () =>
-                    deleteMutation.mutate({
-                        ns: hpa.namespace,
-                        name: hpa.name,
-                    }),
-            });
+                hpa.name,
+                { ns: hpa.namespace, name: hpa.name },
+            );
         },
         [ws, deleteMutation],
     );
@@ -117,55 +116,33 @@ function HpaTable({
     const handleToggleScaling = useCallback(
         (hpa: HpaInfo) => {
             const next = !hpa.isScalingDisabled;
-            const action = next ? "disable" : "enable";
-            ws.requestConfirm({
-                message: `${action === "disable" ? "Disable" : "Enable"} scaling for ${hpa.name}?`,
-                resourceName: hpa.name,
-                onConfirm: () =>
-                    toggleMutation.mutate({
-                        ns: hpa.namespace,
-                        name: hpa.name,
-                        enabled: !next,
-                    }),
-            });
+            confirmMutation(
+                ws,
+                toggleMutation,
+                `${next ? "Disable" : "Enable"} scaling for ${hpa.name}?`,
+                hpa.name,
+                { ns: hpa.namespace, name: hpa.name, enabled: !next },
+            );
         },
         [ws, toggleMutation],
     );
 
     const buildMenu = useCallback(
-        (hpa: HpaInfo): ContextMenuItem[] => [
-            {
-                label: "Copy name",
-                icon: "📋",
-                onClick: () => ws.copyToClipboard(hpa.name),
-            },
-            {
-                label: "View YAML",
-                icon: "{ }",
-                onClick: () =>
-                    ws.openYaml(
-                        "horizontalpodautoscaler",
-                        hpa.name,
-                        hpa.namespace,
-                    ),
-            },
-            { label: "", separator: true, onClick: () => {} },
-            { label: "Scale…", icon: "⇳", onClick: () => setScaleTarget(hpa) },
-            {
-                label: hpa.isScalingDisabled
-                    ? "Enable autoscaling"
-                    : "Disable autoscaling",
-                icon: "⏸",
-                onClick: () => handleToggleScaling(hpa),
-            },
-            { label: "", separator: true, onClick: () => {} },
-            {
-                label: "Delete",
-                icon: "✕",
-                onClick: () => handleDelete(hpa),
-                destructive: true,
-            },
-        ],
+        (hpa: HpaInfo): ContextMenuItem[] =>
+            resourceMenuItems(ws, hpa, "horizontalpodautoscaler", {
+                middle: [
+                    { label: "", separator: true, onClick: () => {} },
+                    { label: "Scale…", icon: "⇳", onClick: () => setScaleTarget(hpa) },
+                    {
+                        label: hpa.isScalingDisabled
+                            ? "Enable autoscaling"
+                            : "Disable autoscaling",
+                        icon: "⏸",
+                        onClick: () => handleToggleScaling(hpa),
+                    },
+                ],
+                onDelete: () => handleDelete(hpa),
+            }),
         [ws, handleToggleScaling, handleDelete],
     );
 
@@ -258,35 +235,10 @@ function HpaTable({
                     </div>
                 ),
             },
-            {
-                header: "Actions",
-                className: "py-2 pr-4 w-px whitespace-nowrap",
-                cell: (hpa) => (
-                    <div
-                        className="flex items-center gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <button
-                            onClick={() => setScaleTarget(hpa)}
-                            className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
-                            data-testid={`hpa-scale-${hpa.name}`}
-                        >
-                            Scale
-                        </button>
-                        <button
-                            onClick={(e) =>
-                                ws.showContextMenu(e, buildMenu(hpa))
-                            }
-                            className="rounded border border-border px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent/50"
-                            aria-label={`More actions for ${hpa.name}`}
-                            title="More actions"
-                            data-testid={`hpa-actions-${hpa.name}`}
-                        >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                        </button>
-                    </div>
-                ),
-            },
+            actionsColumn(ws, buildMenu, {
+                onPrimary: setScaleTarget,
+                testIdPrefix: "hpa",
+            }),
         ],
         [ws, buildMenu],
     );
@@ -351,7 +303,7 @@ function ScaledJobsTable({
     error: unknown;
     isMulti?: boolean;
 }) {
-    const ws = useAksWorkspace();
+    const ws = useAksActions();
     const scaleMutation = useAksScaleScaledJob();
     const deleteMutation = useAksDeleteScaledJob();
     const toggleMutation = useAksSetScaledJobScalingEnabled();
@@ -363,32 +315,26 @@ function ScaledJobsTable({
             if (!scaleTarget) return;
             const job = scaleTarget;
             setScaleTarget(null);
-            ws.requestConfirm({
-                message: `Scale ScaledJob "${job.name}" to min ${min} / max ${max} replicas?`,
-                resourceName: job.name,
-                onConfirm: () =>
-                    scaleMutation.mutate({
-                        ns: job.namespace,
-                        name: job.name,
-                        minReplicas: min,
-                        maxReplicas: max,
-                    }),
-            });
+            confirmMutation(
+                ws,
+                scaleMutation,
+                `Scale ScaledJob "${job.name}" to min ${min} / max ${max} replicas?`,
+                job.name,
+                { ns: job.namespace, name: job.name, minReplicas: min, maxReplicas: max },
+            );
         },
         [ws, scaleTarget, scaleMutation],
     );
 
     const handleDelete = useCallback(
         (job: ScaledJobInfo) => {
-            ws.requestConfirm({
-                message: `Delete ScaledJob ${job.name} in ${job.namespace}?`,
-                resourceName: job.name,
-                onConfirm: () =>
-                    deleteMutation.mutate({
-                        ns: job.namespace,
-                        name: job.name,
-                    }),
-            });
+            confirmMutation(
+                ws,
+                deleteMutation,
+                `Delete ScaledJob ${job.name} in ${job.namespace}?`,
+                job.name,
+                { ns: job.namespace, name: job.name },
+            );
         },
         [ws, deleteMutation],
     );
@@ -396,48 +342,31 @@ function ScaledJobsTable({
     const handleToggleScaling = useCallback(
         (job: ScaledJobInfo) => {
             const enable = job.isPaused;
-            ws.requestConfirm({
-                message: `${enable ? "Resume" : "Pause"} KEDA scaling for ${job.name}?`,
-                resourceName: job.name,
-                onConfirm: () =>
-                    toggleMutation.mutate({
-                        ns: job.namespace,
-                        name: job.name,
-                        enabled: enable,
-                    }),
-            });
+            confirmMutation(
+                ws,
+                toggleMutation,
+                `${enable ? "Resume" : "Pause"} KEDA scaling for ${job.name}?`,
+                job.name,
+                { ns: job.namespace, name: job.name, enabled: enable },
+            );
         },
         [ws, toggleMutation],
     );
 
     const buildMenu = useCallback(
-        (job: ScaledJobInfo): ContextMenuItem[] => [
-            {
-                label: "Copy name",
-                icon: "📋",
-                onClick: () => ws.copyToClipboard(job.name),
-            },
-            {
-                label: "View YAML",
-                icon: "{ }",
-                onClick: () =>
-                    ws.openYaml("scaledjob", job.name, job.namespace),
-            },
-            { label: "", separator: true, onClick: () => {} },
-            { label: "Scale…", icon: "⇳", onClick: () => setScaleTarget(job) },
-            {
-                label: job.isPaused ? "Resume scaling" : "Pause scaling",
-                icon: "⏸",
-                onClick: () => handleToggleScaling(job),
-            },
-            { label: "", separator: true, onClick: () => {} },
-            {
-                label: "Delete",
-                icon: "✕",
-                onClick: () => handleDelete(job),
-                destructive: true,
-            },
-        ],
+        (job: ScaledJobInfo): ContextMenuItem[] =>
+            resourceMenuItems(ws, job, "scaledjob", {
+                middle: [
+                    { label: "", separator: true, onClick: () => {} },
+                    { label: "Scale…", icon: "⇳", onClick: () => setScaleTarget(job) },
+                    {
+                        label: job.isPaused ? "Resume scaling" : "Pause scaling",
+                        icon: "⏸",
+                        onClick: () => handleToggleScaling(job),
+                    },
+                ],
+                onDelete: () => handleDelete(job),
+            }),
         [ws, handleToggleScaling, handleDelete],
     );
 
@@ -488,35 +417,10 @@ function ScaledJobsTable({
                     ),
                 sortValue: (job) => (job.isPaused ? 0 : 1),
             },
-            {
-                header: "Actions",
-                className: "py-2 pr-4 w-px whitespace-nowrap",
-                cell: (job) => (
-                    <div
-                        className="flex items-center gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <button
-                            onClick={() => setScaleTarget(job)}
-                            className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
-                            data-testid={`scaledjob-scale-${job.name}`}
-                        >
-                            Scale
-                        </button>
-                        <button
-                            onClick={(e) =>
-                                ws.showContextMenu(e, buildMenu(job))
-                            }
-                            className="rounded border border-border px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent/50"
-                            aria-label={`More actions for ${job.name}`}
-                            title="More actions"
-                            data-testid={`scaledjob-actions-${job.name}`}
-                        >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                        </button>
-                    </div>
-                ),
-            },
+            actionsColumn(ws, buildMenu, {
+                onPrimary: setScaleTarget,
+                testIdPrefix: "scaledjob",
+            }),
         ],
         [ws, buildMenu],
     );

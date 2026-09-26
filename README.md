@@ -34,7 +34,6 @@ helpers, and more in a single developer-centric app.
 - [Architecture Router](docs/architecture/index.md)
 - [Pitfalls](docs/pitfalls/index.md)
 - [Scripts & Packaging](scripts/README.md)
-- [Documentation Migration Notes](docs/MIGRATION-NOTES.md)
 
 ## Install SwebKit (Windows)
 
@@ -139,14 +138,12 @@ src/
   SwebKit.OpenTelemetry/ # OTLP provider
 tests/
   SwebKit.<Area>.Tests/ # xUnit per area
-scripts/                # tauri/ (current) + maui/ (legacy) build scripts
+scripts/                # tauri/ build + dev scripts
 docs/                   # context.md, features/, architecture/, pitfalls/
 ```
 
-## Legacy (reference only)
+## History
 
-`src/SwebKit.App/` (the original .NET MAUI Blazor Hybrid app), `src/SwebKit.WinUI/`,
-`src/SwebKit.Agent.PocConsole/`, and their test projects are kept as reference.
-They are not built or shipped — the MAUI install script still lives at
-`scripts/maui/install.ps1` for anyone who needs the old MSIX, and
-[docs/packaging-and-install.md](docs/packaging-and-install.md) documents that flow.
+SwebKit started life as a .NET MAUI Blazor Hybrid app; the current app is the
+Tauri + React + .NET sidecar stack described above. The legacy code was removed —
+dig it up in git history if needed (`git log -- src/SwebKit.App`).

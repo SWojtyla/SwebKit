@@ -20,7 +20,7 @@ import {
 } from "@/lib/hooks";
 import { downloadText, downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import {
     loadViewPreference,
     saveViewPreference,

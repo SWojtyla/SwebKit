@@ -6,7 +6,7 @@ import {
     useSqlBrowseDatabases,
     useSqlDiscovery,
 } from "@/lib/hooks/useSql";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import type { SqlConnectionEntry, SqlDatabaseInfo } from "@/lib/types";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";

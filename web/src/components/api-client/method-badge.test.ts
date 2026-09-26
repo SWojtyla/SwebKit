@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { METHOD_META, methodMeta, statusTone } from "./method-badge";
+import { METHOD_META, methodMeta, statusTone } from "./method-meta";
 import type { ApiRequestMethod } from "@/lib/types";
 
 const ALL_METHODS: ApiRequestMethod[] = [

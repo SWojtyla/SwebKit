@@ -1,10 +1,9 @@
 import {
-  createContext,
-  useContext,
   useState,
   useMemo,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
   type JSX,
 } from "react";
@@ -19,11 +18,20 @@ import {
 } from "@/lib/hooks";
 import type { ResponseHistoryEntry } from "./ResponseViewer";
 import type { RequestTab } from "./RequestTabStrip";
+import {
+  ApiClientPageContext,
+  ApiClientTabsContext,
+  type ApiClientPageContextValue,
+  type ApiClientTabsContextValue,
+  type ConfirmDialogState,
+  type NameDialogState,
+  type TabState,
+} from "./api-client-context";
 import { buildVariableScope } from "@/lib/variable-utils";
 import { getSecret } from "@/lib/tauri-bridge";
 import { buildResponseExample } from "@/lib/response-example";
 import { runRequestActions } from "@/lib/request-action-runner";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { useScreenStateProvider } from "@/lib/stores/screen-state";
 import {
   moveNode,
@@ -212,18 +220,6 @@ function renameNodeInNodes(
 /** Newest-first cap on per-tab response history. Session-only, as documented. */
 const HISTORY_LIMIT = 20;
 
-interface TabState {
-  draft: HttpRequestEntry;
-  response: ApiClientExecutionResponse | null;
-  sending: boolean;
-  dirty: boolean;
-  /**
-   * Owned here rather than in `ResponseViewer` so history survives a remount and
-   * is scoped per tab instead of per mounted component.
-   */
-  history: ResponseHistoryEntry[];
-}
-
 function emptyTabState(draft: HttpRequestEntry): TabState {
   return { draft, response: null, sending: false, dirty: false, history: [] };
 }
@@ -235,112 +231,6 @@ function appendHistory(state: TabState | undefined, response: ApiClientExecution
   return [{ id: nextId, response, timestamp: Date.now() }, ...existing].slice(0, HISTORY_LIMIT);
 }
 
-export interface NameDialogState {
-  title: string;
-  label: string;
-  defaultValue: string;
-  confirmText: string;
-  onConfirm: (name: string) => void;
-}
-
-export interface ConfirmDialogState {
-  message: string;
-  onConfirm: () => void;
-  /**
-   * The confirm button's label. Reserve "Delete" (the `ConfirmDialog` default)
-   * for actual deletion — a tab close or a git revert is a different action
-   * with a different consequence and should say so.
-   */
-  confirmText?: string;
-}
-
-export interface ApiClientPageContextValue {
-  collections: ApiCollection[];
-  isLoading: boolean;
-
-  environments: ApiEnvironment[];
-  activeEnvironmentId: string | null;
-  /** The layer that wins — the scoped one when set, otherwise the global one. */
-  activeEnvironment: ApiEnvironment | null;
-  /** The global layer, applied to every collection. */
-  activeGlobalEnvironment: ApiEnvironment | null;
-  /** The layer scoped to the current collection, applied over the global one. */
-  activeScopedEnvironment: ApiEnvironment | null;
-  /** The collection the environment pickers work against: the open tab's, else the tree selection. */
-  currentCollection: ApiCollection | null;
-  /** Active collection-scoped environment per collection id, for display in the manager. */
-  activeEnvironmentIdByCollection: Record<string, string>;
-  handleSetActiveEnvironment: (envId: string | null) => void;
-  handleSetScopedEnvironment: (collectionId: string, envId: string | null) => void;
-  handleSaveEnvironments: (envs: ApiEnvironment[], activeId: string | null) => void;
-
-  selectedNodeId: string | null;
-  selectedCollectionId: string | null;
-  selectedCollection: ApiCollection | null;
-  handleSelectNode: (node: ApiCollectionNode, collectionId: string) => void;
-
-  tabs: RequestTab[];
-  activeTabId: string | null;
-  setActiveTabId: (tabId: string | null) => void;
-  tabStates: Record<string, TabState>;
-  closeTab: (tabId: string) => void;
-  closeOtherTabs: (tabId: string) => void;
-  closeAllTabs: () => void;
-  promoteTab: (tabId: string) => void;
-  updateTabDraft: (tabId: string, draft: HttpRequestEntry) => void;
-
-  activeTab: RequestTab | null;
-  activeCollection: ApiCollection | null | undefined;
-  variableScope: Record<string, string | null>;
-
-  handleAddCollection: () => void;
-  handleAddRequest: (collectionId: string, parentId?: string) => void;
-  handleAddFolder: (collectionId: string, parentId?: string) => void;
-  handleDeleteNode: (nodeId: string, collectionId: string) => void;
-  handleRenameNode: (nodeId: string, collectionId: string, newName: string) => void;
-  handleMoveNode: (nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => void;
-  handleMoveCollection: (collectionId: string, target: MoveCollectionTarget) => void;
-
-  handleSave: () => Promise<boolean>;
-  handleSend: () => Promise<void>;
-  handleSaveExample: (name: string, response: ApiClientExecutionResponse) => Promise<void>;
-
-  conflict: { message: string } | null;
-  dismissConflict: () => void;
-  handleReloadConflict: () => Promise<void>;
-  handleOverwriteConflict: () => Promise<void>;
-  handleSaveAsCopy: () => Promise<void>;
-
-  legacySecretCount: number;
-  legacyNoticeDismissed: boolean;
-  dismissLegacyNotice: () => void;
-
-  showEnvManager: boolean;
-  setShowEnvManager: (v: boolean) => void;
-  showColVarEditor: boolean;
-  setShowColVarEditor: (v: boolean) => void;
-  exportCollectionId: string | null;
-  setExportCollectionId: (v: string | null) => void;
-  exportCollection: ApiCollection | null;
-  showGitPanel: boolean;
-  setShowGitPanel: (v: boolean) => void;
-
-  nameDialog: NameDialogState | null;
-  setNameDialog: (v: NameDialogState | null) => void;
-  confirmDialog: ConfirmDialogState | null;
-  setConfirmDialog: (v: ConfirmDialogState | null) => void;
-
-  handleSaveCollectionVariables: (variables: CollectionVariable[]) => void;
-}
-
-const ApiClientPageContext = createContext<ApiClientPageContextValue | null>(null);
-
-export function useApiClientPageContext(): ApiClientPageContextValue {
-  const ctx = useContext(ApiClientPageContext);
-  if (!ctx) throw new Error("useApiClientPageContext must be used within ApiClientPageProvider");
-  return ctx;
-}
-
 export function ApiClientPageProvider({ children }: { children: ReactNode }): JSX.Element {
   const { notify } = useNotification();
   const { data: collections = [], isLoading } = useCollections();
@@ -348,11 +238,15 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   const executeRequest = useExecuteRequest();
   const { data: envData } = useEnvironments();
   const updateEnvironments = useUpdateEnvironments();
+  // Mutation objects are fresh each render; their mutate functions are stable.
+  const { mutate: updateCollectionsMutate, mutateAsync: updateCollectionsMutateAsync } = updateCollections;
+  const { mutateAsync: executeRequestMutateAsync } = executeRequest;
+  const { mutate: updateEnvironmentsMutate } = updateEnvironments;
   const location = useLocation();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const environments = envData?.environments ?? [];
+  const environments = useMemo(() => envData?.environments ?? [], [envData]);
   const uiState = envData?.uiState;
   const activeEnvironmentId = uiState?.activeEnvironmentId ?? null;
 
@@ -365,7 +259,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   ///
   /// Used by both the preview scope and the send payload. Resolving it twice is how
   /// the preview would start describing something other than what is sent.
-  const resolveEnvironmentLayers = (collectionId: string | null | undefined) => {
+  const resolveEnvironmentLayers = useCallback((collectionId: string | null | undefined) => {
     const selected = environments.find((e) => e.id === activeEnvironmentId) ?? null;
 
     // The global slot can still hold a collection-scoped environment picked before
@@ -381,7 +275,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
       (selected && collectionId && selected.collectionId === collectionId ? selected : null);
 
     return { global, scoped };
-  };
+  }, [environments, activeEnvironmentId, uiState?.activeEnvironmentIdByCollection]);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
@@ -400,6 +294,19 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
 
+  // Refs mirror the per-keystroke tab state so handlers living in the *page*
+  // context (delete-node, conflict resolution, select-node) can read it without
+  // depending on it — otherwise their identity, and the whole page-context
+  // value, would churn on every editor keystroke.
+  const tabsRef = useRef(tabs);
+  const tabStatesRef = useRef(tabStates);
+  const activeTabIdRef = useRef(activeTabId);
+  useEffect(() => {
+    tabsRef.current = tabs;
+    tabStatesRef.current = tabStates;
+    activeTabIdRef.current = activeTabId;
+  });
+
   /**
    * `preview: true` (single-click tree navigation) reuses the one preview tab
    * instead of opening a new permanent one — browsing a collection should not
@@ -410,7 +317,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     if (node.type !== "Request" || !node.request) return;
     const preview = opts?.preview ?? false;
 
-    const existingTab = tabs.find((t) => t.nodeId === node.id);
+    const existingTab = tabsRef.current.find((t) => t.nodeId === node.id);
     if (existingTab) {
       // Deliberately reopening an already-open tab (not from a preview click)
       // is a revisit, not a throwaway peek — promote it if it was a preview.
@@ -422,7 +329,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     }
 
     const existingPreviewTab = preview
-      ? tabs.find((t) => t.isPreview && !tabStates[t.id]?.dirty)
+      ? tabsRef.current.find((t) => t.isPreview && !tabStatesRef.current[t.id]?.dirty)
       : undefined;
     if (existingPreviewTab) {
       setTabs((prev) =>
@@ -456,7 +363,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
       [tabId]: emptyTabState(deepClone(node.request!)),
     }));
     setActiveTabId(tabId);
-  }, [tabs, tabStates]);
+  }, []);
 
   useEffect(() => {
     const state = location.state as { collectionId?: string; nodeId?: string } | null;
@@ -464,6 +371,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     const collection = collections.find((c) => c.id === state.collectionId);
     const node = collection ? findRequestNode(collection.nodes, state.nodeId) : null;
     if (node?.type === "Request" && node.request) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
       setSelectedCollectionId(state.collectionId);
       setSelectedNodeId(state.nodeId);
       openTab(node, state.collectionId);
@@ -558,15 +466,15 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     setTabs((prev) => prev.map((t) => t.id === tabId ? { ...t, name: draft.name, method: draft.method, dirty: true, isPreview: false } : t));
   }, []);
 
-  const handleSelectNode = (node: ApiCollectionNode, collectionId: string) => {
+  const handleSelectNode = useCallback((node: ApiCollectionNode, collectionId: string) => {
     setSelectedNodeId(node.id);
     setSelectedCollectionId(collectionId);
     if (node.type === "Request" && node.request) {
       openTab(node, collectionId, { preview: true });
     }
-  };
+  }, [openTab]);
 
-  const handleAddCollection = () => {
+  const handleAddCollection = useCallback(() => {
     setNameDialog({
       title: "New Collection",
       label: "Collection name",
@@ -582,13 +490,13 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           createdAt: now(),
           updatedAt: now(),
         };
-        updateCollections.mutate((prev) => [...prev, collection]);
+        updateCollectionsMutate((prev) => [...prev, collection]);
         setNameDialog(null);
       },
     });
-  };
+  }, [updateCollectionsMutate]);
 
-  const handleAddRequest = (collectionId: string, parentId?: string) => {
+  const handleAddRequest = useCallback((collectionId: string, parentId?: string) => {
     const request = emptyRequest();
     setNameDialog({
       title: "New Request",
@@ -606,7 +514,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           defaultAuth: null,
           request,
         };
-        updateCollections.mutate((prev) => insertIntoCollection(prev, collectionId, node, parentId), {
+        updateCollectionsMutate((prev) => insertIntoCollection(prev, collectionId, node, parentId), {
           onSuccess: () => {
             setSelectedNodeId(node.id);
             setSelectedCollectionId(collectionId);
@@ -631,9 +539,9 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         setNameDialog(null);
       },
     });
-  };
+  }, [updateCollectionsMutate]);
 
-  const handleAddFolder = (collectionId: string, parentId?: string) => {
+  const handleAddFolder = useCallback((collectionId: string, parentId?: string) => {
     setNameDialog({
       title: "New Folder",
       label: "Folder name",
@@ -651,29 +559,29 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
           defaultAuth: null,
           request: null,
         };
-        updateCollections.mutate((prev) => insertIntoCollection(prev, collectionId, node, parentId));
+        updateCollectionsMutate((prev) => insertIntoCollection(prev, collectionId, node, parentId));
         setNameDialog(null);
       },
     });
-  };
+  }, [updateCollectionsMutate]);
 
-  const handleDeleteNode = (nodeId: string, collectionId: string) => {
+  const handleDeleteNode = useCallback((nodeId: string, collectionId: string) => {
     const info = describeNodeForDelete(collections, nodeId, collectionId);
     setConfirmDialog({
       message: formatDeleteMessage(info),
       confirmText: "Delete",
       onConfirm: () => {
-        updateCollections.mutate((prev) => removeNode(prev, nodeId), {
+        updateCollectionsMutate((prev) => removeNode(prev, nodeId), {
           onSuccess: () => {
             if (selectedNodeId === nodeId) {
               setSelectedNodeId(null);
               // Close tab for deleted node — same neighbor-activation rule as
               // a manual tab close (unit 4.1).
-              const tabToClose = tabs.find((t) => t.nodeId === nodeId);
+              const tabToClose = tabsRef.current.find((t) => t.nodeId === nodeId);
               if (tabToClose) {
                 setTabs((prev) => prev.filter((t) => t.id !== tabToClose.id));
                 setTabStates((prev) => { const next = { ...prev }; delete next[tabToClose.id]; return next; });
-                if (activeTabId === tabToClose.id) setActiveTabId(pickNeighborTabId(tabs, tabToClose.id));
+                if (activeTabIdRef.current === tabToClose.id) setActiveTabId(pickNeighborTabId(tabsRef.current, tabToClose.id));
               }
               setSelectedCollectionId(collectionId === nodeId ? null : collectionId);
             }
@@ -682,15 +590,15 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         setConfirmDialog(null);
       },
     });
-  };
+  }, [collections, selectedNodeId, updateCollectionsMutate]);
 
-  const handleRenameNode = (_nodeId: string, _collectionId: string, newName: string) => {
-    updateCollections.mutate((prev) => renameNodeInCollections(prev, _nodeId, newName));
+  const handleRenameNode = useCallback((_nodeId: string, _collectionId: string, newName: string) => {
+    updateCollectionsMutate((prev) => renameNodeInCollections(prev, _nodeId, newName));
     // Update tab name if open
     setTabs((prev) => prev.map((t) => t.nodeId === _nodeId ? { ...t, name: newName } : t));
-  };
+  }, [updateCollectionsMutate]);
 
-  const handleMoveNode = (nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => {
+  const handleMoveNode = useCallback((nodeId: string, sourceCollectionId: string, target: MoveNodeTarget) => {
     // No snapshot-based no-op guard here on purpose: a node created moments ago
     // may not be in this render's `collections` yet, `moveNode` returns its input
     // unchanged when it cannot find the source, and bailing on that swallowed the
@@ -702,24 +610,25 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         setSelectedCollectionId(target.targetCollectionId);
       }
     }
-    updateCollections.mutate((prev) => moveNode(prev, nodeId, target), {
+    updateCollectionsMutate((prev) => moveNode(prev, nodeId, target), {
       onSuccess: () => notify("success", "Moved", "Request moved."),
       onError: (err) => notify("error", "Move failed", err.message),
     });
-  };
+  }, [selectedNodeId, updateCollectionsMutate, notify]);
 
-  const handleMoveCollection = (collectionId: string, target: MoveCollectionTarget) => {
-    updateCollections.mutate((prev) => moveCollection(prev, collectionId, target), {
+  const handleMoveCollection = useCallback((collectionId: string, target: MoveCollectionTarget) => {
+    updateCollectionsMutate((prev) => moveCollection(prev, collectionId, target), {
       onSuccess: () => notify("success", "Moved", "Collection moved."),
       onError: (err) => notify("error", "Move failed", err.message),
     });
-  };
+  }, [updateCollectionsMutate, notify]);
 
-  const saveActiveTab = async (baseCollections?: ApiCollection[]): Promise<boolean> => {
+  const saveActiveTab = useCallback(async (baseCollections?: ApiCollection[]): Promise<boolean> => {
+    const activeTabId = activeTabIdRef.current;
     if (!activeTabId) return false;
-    const tabState = tabStates[activeTabId];
+    const tabState = tabStatesRef.current[activeTabId];
     if (!tabState) return false;
-    const tab = tabs.find((t) => t.id === activeTabId);
+    const tab = tabsRef.current.find((t) => t.id === activeTabId);
     if (!tab) return false;
     // The transient credentialSecret must never be written to collections.json.
     const draftForSave = deepClone(tabState.draft);
@@ -729,7 +638,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     try {
       // An explicit base is an overwrite-after-conflict, which must send exactly
       // what the caller resolved; otherwise derive from the freshest store.
-      await updateCollections.mutateAsync(
+      await updateCollectionsMutateAsync(
         baseCollections
           ? updateRequestInCollections(baseCollections, tab.nodeId, draftForSave)
           : (prev) => updateRequestInCollections(prev, tab.nodeId, draftForSave),
@@ -749,15 +658,16 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
       }
       return false;
     }
-  };
+  }, [updateCollectionsMutateAsync]);
 
-  const handleSave = async () => saveActiveTab();
+  const handleSave = useCallback(async () => saveActiveTab(), [saveActiveTab]);
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
+    const activeTabId = activeTabIdRef.current;
     if (!activeTabId) return;
-    const tabState = tabStates[activeTabId];
+    const tabState = tabStatesRef.current[activeTabId];
     if (!tabState) return;
-    const tab = tabs.find((t) => t.id === activeTabId);
+    const tab = tabsRef.current.find((t) => t.id === activeTabId);
     if (!tab) return;
     const saved = await handleSave();
     if (!saved) return;
@@ -780,7 +690,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
       );
 
       const layers = resolveEnvironmentLayers(tab.collectionId);
-      const result = await executeRequest.mutateAsync({
+      const result = await executeRequestMutateAsync({
         request,
         collectionId: tab.collectionId ?? undefined,
         // Both layers travel to the backend, which applies the same precedence.
@@ -837,13 +747,14 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         },
       }));
     }
-  };
+  }, [handleSave, executeRequestMutateAsync, notify, resolveEnvironmentLayers]);
 
   /** Saves a scrubbed example onto the active request and persists it. */
-  const handleSaveExample = async (name: string, response: ApiClientExecutionResponse) => {
+  const handleSaveExample = useCallback(async (name: string, response: ApiClientExecutionResponse) => {
+    const activeTabId = activeTabIdRef.current;
     if (!activeTabId) return;
-    const tabState = tabStates[activeTabId];
-    const tab = tabs.find((t) => t.id === activeTabId);
+    const tabState = tabStatesRef.current[activeTabId];
+    const tab = tabsRef.current.find((t) => t.id === activeTabId);
     if (!tabState || !tab) return;
 
     const example = buildResponseExample(newId(), name, response, now());
@@ -861,23 +772,27 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
       draftForSave.auth = { ...draftForSave.auth, credentialSecret: null };
     }
     try {
-      await updateCollections.mutateAsync((prev) =>
+      await updateCollectionsMutateAsync((prev) =>
         updateRequestInCollections(prev, tab.nodeId, draftForSave),
       );
     } catch (err) {
       console.error("Failed to save response example", err);
     }
-  };
+  }, [updateCollectionsMutateAsync]);
 
-  const getLatestCollections = () =>
-    qc.getQueryData<CollectionsStoreResponse>(["collections"])?.collections ?? collections;
+  const getLatestCollections = useCallback(
+    () =>
+      qc.getQueryData<CollectionsStoreResponse>(["collections"])?.collections ?? collections,
+    [qc, collections],
+  );
 
-  const handleReloadConflict = async () => {
+  const handleReloadConflict = useCallback(async () => {
     setConflict(null);
     await qc.refetchQueries({ queryKey: ["collections"] });
     const latest = getLatestCollections();
+    const activeTabId = activeTabIdRef.current;
     if (!activeTabId) return;
-    const tab = tabs.find((t) => t.id === activeTabId);
+    const tab = tabsRef.current.find((t) => t.id === activeTabId);
     if (!tab) return;
     for (const col of latest) {
       const node = findRequestNode(col.nodes, tab.nodeId);
@@ -887,21 +802,22 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         break;
       }
     }
-  };
+  }, [qc, getLatestCollections]);
 
-  const handleOverwriteConflict = async () => {
+  const handleOverwriteConflict = useCallback(async () => {
     setConflict(null);
     await qc.refetchQueries({ queryKey: ["collections"] });
     const latest = getLatestCollections();
     await saveActiveTab(latest);
-  };
+  }, [qc, getLatestCollections, saveActiveTab]);
 
-  const handleSaveAsCopy = async () => {
+  const handleSaveAsCopy = useCallback(async () => {
     setConflict(null);
     await qc.refetchQueries({ queryKey: ["collections"] });
     const latest = getLatestCollections();
-    const tab = tabs.find((t) => t.id === activeTabId);
-    const tabState = activeTabId ? tabStates[activeTabId] : null;
+    const activeTabId = activeTabIdRef.current;
+    const tab = tabsRef.current.find((t) => t.id === activeTabId);
+    const tabState = activeTabId ? tabStatesRef.current[activeTabId] : null;
     if (!tab || !tabState) return;
     const collection = latest.find((c) => c.id === tab.collectionId);
     if (!collection) return;
@@ -912,7 +828,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     copy.updatedAt = now();
     const node: ApiCollectionNode = { id: copy.id, type: "Request", name: copy.name, isExpanded: true, children: [], defaultAuth: null, request: copy };
     try {
-      await updateCollections.mutateAsync((prev) => insertIntoCollection(prev, collection.id, node));
+      await updateCollectionsMutateAsync((prev) => insertIntoCollection(prev, collection.id, node));
       const tabId = newId();
       setTabs((prev) => [...prev, { id: tabId, nodeId: node.id, collectionId: collection.id, name: node.name, method: copy.method, dirty: false }]);
       setTabStates((prev) => ({ ...prev, [tabId]: emptyTabState(deepClone(copy)) }));
@@ -929,10 +845,10 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         console.error("Failed to save as copy", err);
       }
     }
-  };
+  }, [qc, getLatestCollections, updateCollectionsMutateAsync]);
 
-  const handleSaveEnvironments = (envs: ApiEnvironment[], activeId: string | null) => {
-    updateEnvironments.mutate({
+  const handleSaveEnvironments = useCallback((envs: ApiEnvironment[], activeId: string | null) => {
+    updateEnvironmentsMutate({
       schemaVersion: 1,
       environments: envs,
       uiState: {
@@ -941,10 +857,10 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         lastSelectedRequestIdByCollection: uiState?.lastSelectedRequestIdByCollection ?? {},
       },
     });
-  };
+  }, [uiState, updateEnvironmentsMutate]);
 
-  const handleSetActiveEnvironment = (envId: string | null) => {
-    updateEnvironments.mutate({
+  const handleSetActiveEnvironment = useCallback((envId: string | null) => {
+    updateEnvironmentsMutate({
       schemaVersion: 1,
       environments,
       uiState: {
@@ -953,17 +869,17 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         lastSelectedRequestIdByCollection: uiState?.lastSelectedRequestIdByCollection ?? {},
       },
     });
-  };
+  }, [environments, uiState, updateEnvironmentsMutate]);
 
   /// Sets the collection-scoped layer. Kept separate from the global slot so
   /// switching a project's target does not disturb the shared environment, which is
   /// the whole point of having two layers.
-  const handleSetScopedEnvironment = (collectionId: string, envId: string | null) => {
+  const handleSetScopedEnvironment = useCallback((collectionId: string, envId: string | null) => {
     const byCollection = { ...(uiState?.activeEnvironmentIdByCollection ?? {}) };
     if (envId === null) delete byCollection[collectionId];
     else byCollection[collectionId] = envId;
 
-    updateEnvironments.mutate({
+    updateEnvironmentsMutate({
       schemaVersion: 1,
       environments,
       uiState: {
@@ -978,11 +894,11 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         lastSelectedRequestIdByCollection: uiState?.lastSelectedRequestIdByCollection ?? {},
       },
     });
-  };
+  }, [environments, uiState, activeEnvironmentId, updateEnvironmentsMutate]);
 
-  const handleSaveCollectionVariables = (variables: CollectionVariable[]) => {
+  const handleSaveCollectionVariables = useCallback((variables: CollectionVariable[]) => {
     if (!selectedCollectionId) return;
-    updateCollections.mutate(
+    updateCollectionsMutate(
       (prev) => prev.map((c) => (c.id === selectedCollectionId ? { ...c, variables } : c)),
       {
         // Without this a rejected save (a stale concurrency token, say) was
@@ -991,7 +907,7 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
         onError: (err) => notify("error", "Saving collection variables failed", err.message),
       },
     );
-  };
+  }, [selectedCollectionId, updateCollectionsMutate, notify]);
 
   const selectedCollection = useMemo(
     () => collections.find((c) => c.id === selectedCollectionId) ?? null,
@@ -1049,14 +965,52 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     };
   }, [activeTabId, tabStates, activeCollection, currentCollection, activeEnvironment, tabs]);
 
-  const dismissConflict = () => setConflict(null);
+  const dismissConflict = useCallback(() => setConflict(null), []);
 
-  const dismissLegacyNotice = () => {
+  const dismissLegacyNotice = useCallback(() => {
     localStorage.setItem("swokit-legacy-secret-notice", "dismissed");
     setLegacyNoticeDismissed(true);
-  };
+  }, []);
 
-  const value: ApiClientPageContextValue = {
+  // Tabs state churns per editor keystroke (updateTabDraft bumps `tabs` and
+  // `tabStates`). It lives in its own context so the page, collection tree and
+  // dialogs don't re-render on every keystroke — only the tab strip, request
+  // editor and response viewer subscribe here.
+  const tabsValue: ApiClientTabsContextValue = useMemo(
+    () => ({
+      tabs,
+      activeTabId,
+      setActiveTabId,
+      tabStates,
+      closeTab,
+      closeOtherTabs,
+      closeAllTabs,
+      promoteTab,
+      updateTabDraft,
+      activeTab,
+      activeCollection,
+      handleSave,
+      handleSend,
+      handleSaveExample,
+    }),
+    [
+      tabs,
+      activeTabId,
+      tabStates,
+      closeTab,
+      closeOtherTabs,
+      closeAllTabs,
+      promoteTab,
+      updateTabDraft,
+      activeTab,
+      activeCollection,
+      handleSave,
+      handleSend,
+      handleSaveExample,
+    ],
+  );
+
+  const value: ApiClientPageContextValue = useMemo(() => ({
     collections,
     isLoading,
 
@@ -1074,20 +1028,12 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     selectedNodeId,
     selectedCollectionId,
     selectedCollection,
+    // These handlers read the tab-state mirror refs at event time only — by
+    // design (see the refs comment above); the rule flags their transitive
+    // reachability from this render-built object.
+    // eslint-disable-next-line react-hooks/refs
     handleSelectNode,
 
-    tabs,
-    activeTabId,
-    setActiveTabId,
-    tabStates,
-    closeTab,
-    closeOtherTabs,
-    closeAllTabs,
-    promoteTab,
-    updateTabDraft,
-
-    activeTab,
-    activeCollection,
     variableScope,
 
     handleAddCollection,
@@ -1098,14 +1044,13 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     handleMoveNode,
     handleMoveCollection,
 
-    handleSave,
-    handleSend,
-    handleSaveExample,
-
     conflict,
     dismissConflict,
+    // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
     handleReloadConflict,
+    // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
     handleOverwriteConflict,
+    // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
     handleSaveAsCopy,
 
     legacySecretCount,
@@ -1128,7 +1073,54 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     setConfirmDialog,
 
     handleSaveCollectionVariables,
-  };
+  }), [
+    collections,
+    isLoading,
+    environments,
+    activeEnvironmentId,
+    activeEnvironment,
+    activeGlobalEnvironment,
+    activeScopedEnvironment,
+    currentCollection,
+    uiState?.activeEnvironmentIdByCollection,
+    handleSetActiveEnvironment,
+    handleSetScopedEnvironment,
+    handleSaveEnvironments,
+    selectedNodeId,
+    selectedCollectionId,
+    selectedCollection,
+    handleSelectNode,
+    variableScope,
+    handleAddCollection,
+    handleAddRequest,
+    handleAddFolder,
+    handleDeleteNode,
+    handleRenameNode,
+    handleMoveNode,
+    handleMoveCollection,
+    conflict,
+    dismissConflict,
+    handleReloadConflict,
+    handleOverwriteConflict,
+    handleSaveAsCopy,
+    legacySecretCount,
+    legacyNoticeDismissed,
+    dismissLegacyNotice,
+    showEnvManager,
+    showColVarEditor,
+    exportCollectionId,
+    exportCollection,
+    showGitPanel,
+    nameDialog,
+    confirmDialog,
+    handleSaveCollectionVariables,
+  ]);
 
-  return <ApiClientPageContext.Provider value={value}>{children}</ApiClientPageContext.Provider>;
+  return (
+    <ApiClientPageContext.Provider value={value}>
+      <ApiClientTabsContext.Provider value={tabsValue}>
+        {children}
+      </ApiClientTabsContext.Provider>
+    </ApiClientPageContext.Provider>
+  );
 }

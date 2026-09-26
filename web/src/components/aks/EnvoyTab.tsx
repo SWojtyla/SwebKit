@@ -1,7 +1,7 @@
 import { useCallback, useState, type MouseEvent } from "react";
 import { useAksEnvoyResources } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksWorkspace } from "./shared/AksWorkspaceContext";
+import { useAksActions } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { EnvoyResourceInfo } from "@/lib/types";
 
@@ -62,7 +62,7 @@ const columns: Column<EnvoyResourceInfo>[] = [
 export function EnvoyTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
     const [plural, setPlural] = useState<EnvoyPlural>("backendtrafficpolicies");
     const { data, isLoading, error } = useAksEnvoyResources(ns, plural);
-    const ws = useAksWorkspace();
+    const ws = useAksActions();
 
     const kind = ENVOY_KINDS.find((k) => k.plural === plural)!;
 

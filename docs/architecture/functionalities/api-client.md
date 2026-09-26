@@ -18,7 +18,7 @@
 - **Response body size policy** — bodies under 2 kB render as a span-highlighted `<pre>`; larger bodies use a virtualized read-only CodeMirror view; above 512 kB language parsing is dropped (with a visible notice and an opt-in override) so the 4 MB sidecar cap stays scrollable.
 - **Method and status colour vocabulary** — one shared `METHOD_META` table supplies each method's short label and tone, and response statuses map onto the same tones. All colour comes from Aurora design tokens, so badges follow the active theme.
 - **Panel layout** — a three-pane split where the collections tree stays roughly fixed and the request/response panes share the leftover width as fractions. Widths persist per user, and the dividers are keyboard-operable (`role="separator"`, arrow keys, `Home`/`End`, double-click to reset).
-- **Authentication** — Bearer Token, API Key, Basic, OAuth 2 client credentials, and OAuth 2 authorization code with PKCE through MAUI `WebAuthenticator` using `sweb://oauth`.
+- **Authentication** — Bearer Token, API Key (header or query), Basic, and OAuth 2 client credentials. `SidecarAuthHeaderBuilder` resolves variables/secrets at send time and caches client-credential access tokens until shortly before expiry.
 - **Post-request capture** — JSONPath, response header, and status-code capture rules that write into collection or environment variables without scripting.
 - **GraphQL** — query and variables editors, operation parsing, schema introspection cache, GraphQL error rendering, and `graphql-ws` subscriptions.
 - **WebSocket** — URL/headers/subprotocol, connection state, bounded virtualized message log, text/binary composer, and saved message templates.
@@ -31,7 +31,8 @@
 ## Current Deferrals
 
 - Pre-request scripts, arbitrary code execution, hosted collaboration, mock servers, gRPC, and automatic cookie jar remain out of scope.
-- **Linked `.swebkit-api` collection roots** — the Blazor model where collections and environments loaded *from* a repository, with content-stamp conflict detection on linked files, has no React equivalent. The React app treats a repository as a folder containing API files and scopes Git operations to a configured subpath instead.
+- **OAuth 2 authorization code / PKCE** — the editor can retain imported authorization-code fields, but the sidecar deliberately implements client credentials only; authorization-code requests are sent without an injected token until a Tauri-native browser/callback flow exists.
+- **Linked `.swebkit-api` collection roots** — loading collections and environments directly from a repository with content-stamp conflict detection has no current React equivalent. The app treats a repository as a folder containing API files and scopes Git operations to a configured subpath instead.
 - **Git rebase, stash, merge and conflict resolution** — conflicted files are listed and can be diffed, but not resolved in-app. `pull` and `push` are implemented.
 
 ## Core Runtime Flow

@@ -101,25 +101,6 @@ public class RepositoryLoadFailureLoggingTests
     }
 
     [Fact]
-    public async Task ReleaseRepository_PreservesUnreadableFile_WhenFileIsCorrupt()
-    {
-        using var _ = new AppDataSandbox();
-        AppDataPaths.EnsureDirectoryExists();
-        await File.WriteAllTextAsync(AppDataPaths.ReleasesJson, "{ broken");
-
-        var logger = new CapturingLogger<ReleaseRepository>();
-        var repo = new ReleaseRepository(logger);
-
-        await repo.LoadAsync();
-
-        Assert.Empty(repo.AllReleases);
-        Assert.Empty(repo.AllSnapshots);
-        Assert.Empty(repo.AllValidationSnapshots);
-        Assert.Contains(logger.Entries, e => e.Level == LogLevel.Warning && e.Exception is not null);
-        Assert.Equal("{ broken", await File.ReadAllTextAsync(AppDataFileStore.GetUnreadableSnapshotPath(AppDataPaths.ReleasesJson)));
-    }
-
-    [Fact]
     public async Task ScheduledMessageRepository_PreservesUnreadableFile_WhenFileIsCorrupt()
     {
         using var _ = new AppDataSandbox();

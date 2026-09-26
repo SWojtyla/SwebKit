@@ -15,7 +15,7 @@ import {
   loadGitRepoState, saveGitRepoState, addRepo, removeRepo, setApiSubpath, selectedRepo,
   type GitRepoState,
 } from "@/lib/stores/git-repo-preferences";
-import { useNotification } from "@/components/layout/NotificationSystem";
+import { useNotification } from "@/components/layout/notification-context";
 import { NameDialog, ConfirmDialog } from "./Dialogs";
 import { GitFileList } from "./GitFileList";
 import { GitDiffPane } from "./GitDiffPane";
@@ -112,6 +112,7 @@ export function GitPanel() {
   }, [repoPath, subpath]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async initial load; refresh's sync setLoading is part of the fetch lifecycle
     void refresh();
   }, [refresh]);
 
@@ -529,10 +530,13 @@ function SubpathInput({
 }) {
   const [draft, setDraft] = useState(value ?? "");
 
-  // Follow external changes (switching repository) without fighting local typing.
-  useEffect(() => {
+  // Follow external changes (switching repository) without fighting local typing —
+  // adjusted during render so the draft never paints one stale frame.
+  const [prevValue, setPrevValue] = useState(value);
+  if (prevValue !== value) {
+    setPrevValue(value);
     setDraft(value ?? "");
-  }, [value]);
+  }
 
   const commit = () => {
     const trimmed = draft.trim();

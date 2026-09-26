@@ -1,3 +1,4 @@
+using SwebKit.Sidecar.Services;
 using System.Linq;
 using SwebKit.Core.Domain;
 using SwebKit.Sidecar.Endpoints;

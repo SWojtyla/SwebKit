@@ -67,10 +67,16 @@ export function GitDiffPane({ repoPath, file, onClose }: GitDiffPaneProps) {
   const [error, setError] = useState<string | null>(null);
   const [sideBySide, setSideBySide] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Clear the previous file's result during render — the new diff isn't loaded yet.
+  const [prevTarget, setPrevTarget] = useState({ repoPath, file });
+  if (prevTarget.repoPath !== repoPath || prevTarget.file !== file) {
+    setPrevTarget({ repoPath, file });
     setDiff(null);
     setError(null);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
     gitDiffFile(repoPath, file)
       .then((d) => { if (!cancelled) setDiff(d); })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); });
