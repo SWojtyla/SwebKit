@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import type { AuthType, AuthConfig } from "@/lib/types";
 import { VariableInput } from "../VariableInput";
+import {
+  startOAuth2Authorize,
+  getOAuth2Result,
+} from "@/lib/api";
+import { openExternal } from "@/lib/tauri-bridge";
 
 const authTypes: { value: AuthType; label: string }[] = [
   { value: "None", label: "None" },
@@ -112,6 +117,61 @@ export function AuthPanel({
   // and only one secret field is visible at a time, so a single flag covers every auth type.
   const [revealed, setRevealed] = useState(false);
   const toggleReveal = () => setRevealed((r) => !r);
+
+  // ── Authorization-code + PKCE sign-in ──────────────────────────────────────
+  // The flow is browser-mediated and async: "Sign in" hands the user to their provider, the
+  // sidecar's loopback callback does the code exchange, and this polls for the outcome. The
+  // attempt counter cancels an in-flight poll when the panel unmounts or a new sign-in starts.
+  const [signInWaiting, setSignInWaiting] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const signInAttempt = useRef(0);
+  useEffect(() => () => { signInAttempt.current++; }, []);
+
+  const signedIn = !!auth.oAuth2TokenCredentialKey;
+
+  const startSignIn = async () => {
+    const attempt = ++signInAttempt.current;
+    setSignInWaiting(true);
+    setSignInError(null);
+    try {
+      const { transactionId, authorizeUrl } = await startOAuth2Authorize({
+        authUrl: auth.oAuth2AuthUrl ?? "",
+        tokenUrl: auth.oAuth2TokenUrl ?? "",
+        clientId: auth.oAuth2ClientId ?? "",
+        credentialKey: auth.credentialKey,
+        scopes: auth.oAuth2Scopes,
+      });
+      await openExternal(authorizeUrl);
+
+      const deadline = Date.now() + 10 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1500));
+        if (attempt !== signInAttempt.current) return;
+        const result = await getOAuth2Result(transactionId);
+        if (result.status === "done") {
+          onAuthPatch({ oAuth2TokenCredentialKey: result.credentialKey });
+          setSignInWaiting(false);
+          return;
+        }
+        if (result.status === "error" || result.status === "expired") {
+          setSignInWaiting(false);
+          setSignInError(
+            result.error ??
+              (result.status === "expired"
+                ? "The sign-in window expired — try again."
+                : "Sign-in failed."),
+          );
+          return;
+        }
+      }
+      setSignInWaiting(false);
+      setSignInError("Timed out waiting for the browser sign-in to finish.");
+    } catch (err) {
+      if (attempt !== signInAttempt.current) return;
+      setSignInWaiting(false);
+      setSignInError(String(err));
+    }
+  };
 
   return (
     <div data-testid="auth-tab">
@@ -226,14 +286,57 @@ export function AuthPanel({
             className="w-full rounded border bg-background px-2 py-1 text-sm"
           />
           {auth.oAuth2GrantType === "AuthorizationCode" && (
-            <input
-              data-testid="auth-oauth2-auth-url"
-              type="text"
-              value={auth.oAuth2AuthUrl ?? ""}
-              onChange={(e) => onAuthPatch({ oAuth2AuthUrl: e.target.value })}
-              placeholder="Authorization URL"
-              className="w-full rounded border bg-background px-2 py-1 text-sm"
-            />
+            <>
+              <input
+                data-testid="auth-oauth2-auth-url"
+                type="text"
+                value={auth.oAuth2AuthUrl ?? ""}
+                onChange={(e) => onAuthPatch({ oAuth2AuthUrl: e.target.value })}
+                placeholder="Authorization URL"
+                className="w-full rounded border bg-background px-2 py-1 text-sm"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="auth-oauth2-signin"
+                  onClick={() => void startSignIn()}
+                  disabled={
+                    signInWaiting ||
+                    !auth.oAuth2AuthUrl ||
+                    !auth.oAuth2TokenUrl ||
+                    !auth.oAuth2ClientId
+                  }
+                  title={
+                    !auth.oAuth2AuthUrl || !auth.oAuth2TokenUrl || !auth.oAuth2ClientId
+                      ? "Fill in the authorization URL, token URL and client ID first"
+                      : "Sign in via your browser — the token lands in the OS credential store"
+                  }
+                  className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                >
+                  {signInWaiting
+                    ? "Waiting for sign-in…"
+                    : signedIn
+                      ? "Re-authorize"
+                      : "Sign in"}
+                </button>
+                {signedIn && !signInWaiting && (
+                  <span
+                    className="text-xs text-success"
+                    data-testid="auth-oauth2-signed-in"
+                  >
+                    Signed in — token in credential store
+                  </span>
+                )}
+                {signInError && (
+                  <span
+                    className="text-xs text-destructive"
+                    data-testid="auth-oauth2-signin-error"
+                  >
+                    {signInError}
+                  </span>
+                )}
+              </div>
+            </>
           )}
           <input
             data-testid="auth-oauth2-scopes"

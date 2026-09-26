@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Routes, Route } from "react-router";
 import { AppLayout } from "./components/layout/AppLayout";
+import { MonitoringStreamProvider } from "./components/layout/MonitoringStreamProvider";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 
 // Each feature page is code-split so the initial bundle only carries the shell.
@@ -57,9 +58,13 @@ export default function App() {
         <Routes>
             <Route
                 element={
-                    <Suspense fallback={null}>
-                        <AppLayout />
-                    </Suspense>
+                    // The provider owns the app's single monitoring EventSource — it must
+                    // wrap AppLayout (an always-mounted subscriber) and every routed page.
+                    <MonitoringStreamProvider>
+                        <Suspense fallback={null}>
+                            <AppLayout />
+                        </Suspense>
+                    </MonitoringStreamProvider>
                 }
             >
                 <Route

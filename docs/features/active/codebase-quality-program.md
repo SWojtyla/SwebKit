@@ -537,13 +537,13 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   could mark the hook idle during the other stream. A new send now aborts its
   predecessor, only the current controller can clear streaming state, and
   unmount aborts outstanding work.
-- **Monitoring stream fan-out is a deferred architecture finding** — `AppLayout`,
-  `DashboardPage`, and `MonitoringPage` each open their own EventSource, so the
-  dashboard has three sidecar SSE connections and other pages keep two. A
-  single shell-owned event store/provider would avoid duplicate transports and
-  would let dashboard insight cards include reports completed before dashboard
-  mount. This is not safe as an inline hook tweak because all three consumers
-  need distinct replay/dismissal semantics.
+- ~~Monitoring stream fan-out~~ — **resolved on `feat/redis-credential-references`**:
+  a shell-owned `MonitoringStreamProvider` now holds the single `EventSource`
+  and fans events out to subscribers through `useMonitoringStream` (same hook
+  signature, unchanged consumers). `AppLayout`, `DashboardPage`, and
+  `MonitoringPage` share one sidecar connection; a bounded replay buffer feeds
+  late-mounting consumers (dashboard insight cards see events fired before
+  mount), while per-consumer dismissal semantics stay untouched.
 - **SQL browse state is now table-scoped** — `BrowsePanel` retained page,
   filter-column/text, and ordering state when the selected table changed. A
   column valid on table A could be sent against table B, or a later page could
@@ -592,17 +592,39 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   rewrite complete**: Dashboard, Service Bus, Settings/Configuration, AKS,
   Agent, Observability, Redis, and Storage now document the live React/Tauri/
   sidecar flows and current validation paths. API Client's false MAUI
-  `WebAuthenticator` claim was corrected: the sidecar supports OAuth client
-  credentials; authorization-code/PKCE remains deferred. Remaining MAUI
+  `WebAuthenticator` claim was corrected — and authorization-code/PKCE has
+  since been implemented for real (see the OAuth entry below). Remaining MAUI
   mentions in this directory are explicit historical contrast in otherwise
   current documents, not implementation guidance.
-- `git.rs` (1.3k) — command table + parsing in one file; split candidate if the
-  git surface grows.
-- `MessageList.tsx` (~1420 after column extraction) — the ~860-line JSX return
-  is still monolithic; toolbar/filter-panel/row subsections share dozens of
-  locals, so a proper split wants a small internal context or grouped prop
-  objects rather than raw prop-drilling. Defer until the next Service Bus
-  feature touches this file.
+- ~~`git.rs` (1.3k)~~ — **resolved**: the production half was cohesive
+  (~657 lines of parsers → client impls → thin command wrappers), so splitting
+  it would have shuffled code without value. The ~700 lines of tests were
+  extracted instead: pure parser/unit tests → `git_tests.rs`, real-repository
+  integration tests → `git_repo_tests.rs`. All 64 Rust tests pass.
+- ~~`MessageList.tsx` (~1420 after column extraction)~~ — **resolved**: the JSX
+  monolith was split into focused sections — `MessageListToolbar.tsx` (search,
+  filters, saved filters, and the column-visibility panel),
+  `MessageListBulkBar.tsx` (selection + bulk actions + confirm), and
+  `MessageListTable.tsx` (header, row renderer, empty state, footer). The
+  parent keeps state + the virtualizer and composes the sections;
+  `MessageList.tsx` is now ~764 lines. The earlier deferral note about dozens
+  of shared locals was handled by sectioning at natural prop boundaries rather
+  than introducing an internal context.
+- **OAuth authorization-code + PKCE — resolved on this branch**:
+  `OAuth2PkceFlowService` runs the loopback flow — `POST /api/api-client/oauth/
+  authorize` builds the provider URL with an S256 challenge + state, the
+  provider redirects to `GET .../oauth/callback` (a closeable HTML page), the
+  sidecar exchanges the code server-side and persists the token record in
+  `ICredentialStore` under an opaque key stored on `AuthConfig.
+  OAuth2TokenCredentialKey`. `GET .../oauth/result/{id}` backs frontend
+  polling. `SidecarAuthHeaderBuilder` resolves/refreshes the stored record and
+  warns when sign-in is missing or the token can't be refreshed. The Auth tab
+  gained a Sign in/Re-authorize button that opens the system browser
+  (`shell:allow-open` capability added; `window.open` fallback in web mode).
+  E2E: a Node stub plays the provider — the suite asserts the real PKCE
+  verifier reaches the token endpoint, forged-state callbacks are rejected
+  without killing the legitimate flow, and tokens never land in
+  `collections.json`.
 - Config-readiness/probe feature (`ConfigurationHealthService`/`ConfigurationProbeService`)
   existed only in the deleted MAUI app. The Settings deep dive confirmed the current
   product deliberately separates configured-state dots from explicit per-connection

@@ -434,4 +434,18 @@ export async function deleteSecret(key: string): Promise<void> {
   localStorage.setItem(WEB_SECRET_VAULT_KEY, JSON.stringify(vault));
 }
 
+// ── External browser ─────────────────────────────────────────────────────────
+
+/// Opens a URL in the user's *system* browser — required for OAuth flows, where the
+/// provider login must not run inside the app's webview (cookie isolation, conditional
+/// access policies, password managers). Falls back to a new tab in plain-web mode.
+export async function openExternal(url: string): Promise<void> {
+  if (isTauri()) {
+    const { open } = await import("@tauri-apps/plugin-shell");
+    await open(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener");
+}
+
 

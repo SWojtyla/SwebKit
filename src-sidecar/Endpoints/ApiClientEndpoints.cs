@@ -81,6 +81,52 @@ public static class ApiClientEndpoints
             PreviewCredential(req, store));
 
         app.MapPost("/api/api-client/evaluate-jsonpath", EvaluateJsonPathAsync);
+
+        // OAuth 2.0 authorization-code + PKCE: the frontend asks for an authorize URL, opens it in
+        // the system browser, and the provider redirects back to the loopback callback below — the
+        // sidecar *is* a localhost server, so no deep-link/protocol registration is needed.
+        app.MapPost("/api/api-client/oauth/authorize", (
+            OAuth2PkceFlowService.StartRequest req,
+            HttpRequest http,
+            OAuth2PkceFlowService flow) =>
+        {
+            try
+            {
+                var result = flow.Start(req, $"{http.Scheme}://{http.Host}");
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ApiErrors.BadRequest(ex.Message);
+            }
+        });
+
+        app.MapGet("/api/api-client/oauth/callback", async (
+            string? code,
+            string? state,
+            string? error,
+            string? error_description,
+            OAuth2PkceFlowService flow,
+            CancellationToken ct) =>
+        {
+            var result = await flow.HandleCallbackAsync(code, state, error, error_description, ct);
+            // The browser stays on this page after the redirect — a readable HTML close-me page
+            // instead of raw JSON so the user isn't staring at a protocol blob.
+            var ok = result.Status == "done";
+            var html = $$"""
+                <!doctype html><html><head><title>SwebKit sign-in</title>
+                <style>body{font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;background:#111;color:#eee}</style>
+                </head><body><div>
+                <h2>{{(ok ? "Signed in" : "Sign-in failed")}}</h2>
+                <p>{{(ok ? "You can close this tab and return to SwebKit." : result.Error)}}</p>
+                </div></body></html>
+                """;
+            return Results.Content(html, "text/html");
+        });
+
+        app.MapGet("/api/api-client/oauth/result/{transactionId}", (
+            string transactionId,
+            OAuth2PkceFlowService flow) => Results.Ok(flow.GetResult(transactionId)));
     }
 
     internal static IResult EvaluateJsonPathAsync(EvaluateJsonPathRequest req)

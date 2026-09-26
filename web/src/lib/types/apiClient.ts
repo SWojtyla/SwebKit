@@ -151,6 +151,9 @@ export interface AuthConfig {
     oAuth2TokenUrl: string | null;
     oAuth2AuthUrl: string | null;
     oAuth2Scopes: string | null;
+    /** Authorization-code flow only: credential-store key holding the signed-in token record
+     * (access + refresh + expiry as JSON). Set by the loopback PKCE flow, never entered by hand. */
+    oAuth2TokenCredentialKey?: string | null;
 }
 
 export interface CollectionVariable {

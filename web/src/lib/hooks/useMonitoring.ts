@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
-    SIDECAR_BASE_URL,
     getMonitoringRules,
     createMonitoringRule,
     updateMonitoringRule,
@@ -12,6 +11,7 @@ import {
     openInsightChat,
 } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
+import { useMonitoringStreamApi } from "@/lib/monitoring-stream-context";
 import type {
     MonitoringAlertRule,
     AlertFiredEvent,
@@ -127,14 +127,15 @@ export interface MonitoringEvaluationState {
 }
 
 /**
- * Subscribes to the sidecar's SSE alert stream. New fired events are merged into the
- * supplied callback (typically to seed/extend the history feed). Mirrors the AKS pod-log
- * EventSource lifecycle pattern used elsewhere in the app.
+ * Subscribes to the monitoring event stream shared app-wide by
+ * `MonitoringStreamProvider` — registering a listener on the shell's single EventSource
+ * rather than opening a per-consumer connection. Buffered frames replay on subscribe, so a
+ * page mounted late still sees an insight (or alert) that fired while it wasn't mounted.
  *
- * Each frame is a `{kind, event}` envelope (workspace-intelligence Module 4) so this one stream can
- * carry both `AlertFiredEvent` (`kind: "alertFired"`) and the new `ProactiveInsightReadyEvent`
- * (`kind: "proactiveInsightReady"`) — `onInsightReady` is optional since most callers only care
- * about the pre-existing fired-alert feed.
+ * Each frame is a `{kind, event}` envelope (workspace-intelligence Module 4) so the one stream
+ * carries `AlertFiredEvent` (`kind: "alertFired"`), `ProactiveInsightReadyEvent`
+ * (`kind: "proactiveInsightReady"`), `AlertEvaluatedEvent` (`kind: "evaluationCompleted"`), and
+ * `ProactiveInsightStatusEvent` (`kind: "proactiveInsightStatus"`).
  */
 export function useMonitoringStream(
     onEvent: (evt: AlertFiredEvent) => void,
@@ -142,38 +143,34 @@ export function useMonitoringStream(
     onEvaluation?: (evt: AlertEvaluatedEvent) => void,
     onInsightStatus?: (evt: ProactiveInsightStatusEvent) => void,
 ) {
+    const stream = useMonitoringStreamApi();
     const onEventEffect = useEffectEvent(onEvent);
     const onInsightReadyEffect = useEffectEvent((evt: ProactiveInsightReadyEvent) => onInsightReady?.(evt));
     const onEvaluationEffect = useEffectEvent((evt: AlertEvaluatedEvent) => onEvaluation?.(evt));
     const onInsightStatusEffect = useEffectEvent((evt: ProactiveInsightStatusEvent) => onInsightStatus?.(evt));
 
+    // Highest seq this subscription has already consumed — replaying only newer frames keeps
+    // a StrictMode re-subscribe from double-appending buffered events into subscriber state.
+    const cursorRef = useRef(0);
+
     useEffect(() => {
-        const es = new EventSource(`${SIDECAR_BASE_URL}/api/monitoring/stream`);
-        es.onmessage = (msg) => {
-            try {
-                const frame = JSON.parse(msg.data) as {
-                    kind: string;
-                    event: unknown;
-                };
-                if (frame.kind === "alertFired") {
-                    onEventEffect(frame.event as AlertFiredEvent);
-                } else if (frame.kind === "proactiveInsightReady") {
-                    onInsightReadyEffect(
-                        frame.event as ProactiveInsightReadyEvent,
-                    );
-                } else if (frame.kind === "evaluationCompleted") {
-                    onEvaluationEffect(frame.event as AlertEvaluatedEvent);
-                } else if (frame.kind === "proactiveInsightStatus") {
-                    onInsightStatusEffect(
-                        frame.event as ProactiveInsightStatusEvent,
-                    );
-                }
-            } catch {
-                /* ignore malformed frames */
+        return stream.subscribe((frame) => {
+            cursorRef.current = frame.seq;
+            if (frame.kind === "alertFired") {
+                onEventEffect(frame.event as AlertFiredEvent);
+            } else if (frame.kind === "proactiveInsightReady") {
+                onInsightReadyEffect(
+                    frame.event as ProactiveInsightReadyEvent,
+                );
+            } else if (frame.kind === "evaluationCompleted") {
+                onEvaluationEffect(frame.event as AlertEvaluatedEvent);
+            } else if (frame.kind === "proactiveInsightStatus") {
+                onInsightStatusEffect(
+                    frame.event as ProactiveInsightStatusEvent,
+                );
             }
-        };
-        return () => es.close();
-    }, []);
+        }, cursorRef.current);
+    }, [stream]);
 }
 
 const DISMISSED_INSIGHTS_STORAGE_KEY = "swebkit:dismissed-proactive-insights";

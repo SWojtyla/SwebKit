@@ -282,6 +282,7 @@ builder.Services.AddSingleton<IVariableGeneratorService, VariableGeneratorServic
 builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
 builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();
 builder.Services.AddSingleton<IAuthHeaderBuilder, SidecarAuthHeaderBuilder>();
+builder.Services.AddSingleton<OAuth2PkceFlowService>();
 builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
 builder.Services.AddSingleton<IHttpRequestExecutor, HttpRequestExecutor>();
 
