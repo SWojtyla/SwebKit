@@ -415,7 +415,14 @@ app.UseExceptionHandler(ex =>
 });
 
 // Load config repositories on startup
-await app.Services.GetRequiredService<ProfileRepository>().LoadAsync();
+var profileRepository = app.Services.GetRequiredService<ProfileRepository>();
+await profileRepository.LoadAsync();
+// Move any plaintext Redis connection strings persisted by older versions into the OS
+// credential store, then write the profile back without the secrets. TrySaveAsync (not
+// SaveAsync) — a blocked persistence (failed load) must not turn the migration into a
+// profile-destroying write.
+if (RedisCredentialMigration.MigrateCaches(profileRepository.Config.RedisConfig, app.Services.GetRequiredService<ICredentialStore>()))
+    await profileRepository.TrySaveAsync();
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
 await userSettingsRepository.LoadAsync();

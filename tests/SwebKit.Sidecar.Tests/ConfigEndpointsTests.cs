@@ -132,10 +132,10 @@ public class ConfigEndpointsTests
 
         // Import into a fresh service/repository set (still sandboxed) to prove the round trip
         // actually persists via the extracted handler rather than relying on shared in-memory state.
-        var importSvc = BuildService(out var importCollections, out _);
+        var importSvc = BuildService(out var importCollections, out var importProfiles);
         var ctx = BuildImportHttpContext(exportedJson);
 
-        var result = await ConfigEndpoints.ImportAsync(importSvc, ctx.Request);
+        var result = await ConfigEndpoints.ImportAsync(importSvc, ctx.Request, new FakeCredentialStore());
 
         Assert.Equal(200, result.StatusCode);
         await importCollections.LoadAsync();
@@ -150,7 +150,7 @@ public class ConfigEndpointsTests
         var badJson = """{"schemaVersion":99}""";
         var ctx = BuildImportHttpContext(badJson);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => ConfigEndpoints.ImportAsync(svc, ctx.Request));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ConfigEndpoints.ImportAsync(svc, ctx.Request, new FakeCredentialStore()));
 
         // Nothing should have been written for an unsupported schema version.
         Assert.Empty(collections.Collections);
@@ -208,7 +208,7 @@ public class ConfigEndpointsTests
             new TrackingRedisConnectionPool(),
             new TrackingServiceBusConnectionPool(),
             new TrackingSqlConnectionPool(),
-            new TrackingMonitoringConnectionPool());
+            new TrackingMonitoringConnectionPool(), new FakeCredentialStore());
 
         var reloaded = new ProfileRepository();
         await reloaded.LoadAsync();
@@ -252,7 +252,7 @@ public class ConfigEndpointsTests
             new TrackingRedisConnectionPool(),
             new TrackingServiceBusConnectionPool(),
             new TrackingSqlConnectionPool(),
-            new TrackingMonitoringConnectionPool());
+            new TrackingMonitoringConnectionPool(), new FakeCredentialStore());
 
         var stored = profile.GetProfileData();
         Assert.Single(stored.ServiceBusNamespaces);
@@ -306,7 +306,7 @@ public class ConfigEndpointsTests
         var sqlPool = new TrackingSqlConnectionPool();
         var monitoringPool = new TrackingMonitoringConnectionPool();
 
-        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool, redisPool, serviceBusPool, sqlPool, monitoringPool);
+        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool, redisPool, serviceBusPool, sqlPool, monitoringPool, new FakeCredentialStore());
 
         Assert.Equal(1, storagePool.InvalidateAllCallCount);
         Assert.Equal(1, serviceBusPool.InvalidateAllCallCount);
@@ -354,7 +354,7 @@ public class ConfigEndpointsTests
             new TrackingRedisConnectionPool(),
             new TrackingServiceBusConnectionPool(),
             new TrackingSqlConnectionPool(),
-            monitoringPool);
+            monitoringPool, new FakeCredentialStore());
 
         // A kubeconfig path change invalidates every pooled AKS client (they were all built from
         // the old file); the Service Bus FQDN change evicts that namespace's client under both
@@ -382,7 +382,7 @@ public class ConfigEndpointsTests
             new TrackingRedisConnectionPool(),
             new TrackingServiceBusConnectionPool(),
             new TrackingSqlConnectionPool(),
-            monitoringPool);
+            monitoringPool, new FakeCredentialStore());
 
         Assert.Equal(0, monitoringPool.EvictAksClientsCallCount);
     }
@@ -466,7 +466,100 @@ public class ConfigEndpointsTests
 
         Assert.Equal(
             ["connstring-changed", "aad-changed", "removed"],
-            ConfigEndpoints.StaleRedisCacheIds(before, after).ToList());
+            ConfigEndpoints.StaleRedisCacheIds(before, after, new FakeCredentialStore()).ToList());
+    }
+
+    [Fact]
+    public void StaleRedisCacheIds_MigratedEntryResolvingToSameSecret_IsNotStale()
+    {
+        // A cache whose plaintext connection string was just moved into the credential store holds
+        // the *same* secret under a new key — evicting its pooled client would be pointless churn.
+        var store = new FakeCredentialStore();
+        store.Save("sw-secret:redis:same:abc123", "a:6379");
+        store.Save("sw-secret:redis:rotated:def456", "new:6379");
+
+        var before = new List<RedisCacheEntry>
+        {
+            new() { Id = "same", ConnectionString = "a:6379" },
+            new() { Id = "rotated", CredentialKey = "sw-secret:redis:rotated:old999" },
+        };
+        store.Save("sw-secret:redis:rotated:old999", "old:6379");
+        var after = new List<RedisCacheEntry>
+        {
+            new() { Id = "same", CredentialKey = "sw-secret:redis:same:abc123" },
+            new() { Id = "rotated", CredentialKey = "sw-secret:redis:rotated:def456" },
+        };
+
+        Assert.Equal(["rotated"], ConfigEndpoints.StaleRedisCacheIds(before, after, store).ToList());
+    }
+
+    [Fact]
+    public async Task SaveProfileAsync_MovesPlaintextRedisConnectionString_IntoCredentialStore()
+    {
+        using var sandbox = new AppDataSandbox();
+        var profile = new ProfileRepository();
+        var store = new FakeCredentialStore();
+        var data = new ProfileData();
+        data.Config.RedisConfig = new RedisConfig
+        {
+            Caches =
+            [
+                new RedisCacheEntry { Id = "cache-a", ConnectionString = "secret:6380,password=hunter2" },
+                new RedisCacheEntry { Id = "cache-b", UseAad = true, CacheName = "entra-cache" },
+            ],
+            ActiveCacheId = "cache-a",
+        };
+
+        await ConfigEndpoints.SaveProfileAsync(
+            profile,
+            data,
+            new NoopStorageConnectionPool(),
+            new TrackingRedisConnectionPool(),
+            new TrackingServiceBusConnectionPool(),
+            new TrackingSqlConnectionPool(),
+            new TrackingMonitoringConnectionPool(),
+            store);
+
+        var stored = profile.GetProfileData().Config.RedisConfig!.Caches;
+        var migrated = Assert.Single(stored, c => c.Id == "cache-a");
+        Assert.Empty(migrated.ConnectionString);
+        Assert.StartsWith("sw-secret:redis:cache-a:", migrated.CredentialKey);
+        Assert.Equal("secret:6380,password=hunter2", store.Get(migrated.CredentialKey));
+
+        // Entra entries hold no secret — nothing to move.
+        Assert.Single(stored, c => c.Id == "cache-b" && c.CredentialKey == "");
+
+        // And what lands on disk carries the key, not the secret.
+        var reloaded = new ProfileRepository();
+        await reloaded.LoadAsync();
+        Assert.Empty(reloaded.Config.RedisConfig!.Caches[0].ConnectionString);
+        Assert.Equal(migrated.CredentialKey, reloaded.Config.RedisConfig.Caches[0].CredentialKey);
+    }
+
+    [Fact]
+    public async Task SaveProfileAsync_DeletesCredentialKey_ForRemovedCache()
+    {
+        using var sandbox = new AppDataSandbox();
+        var store = new FakeCredentialStore();
+        store.Save("sw-secret:redis:gone:abc12345", "x:6379");
+        var profile = new ProfileRepository();
+        profile.GetProfileData().Config.RedisConfig = new RedisConfig
+        {
+            Caches = [new RedisCacheEntry { Id = "gone", CredentialKey = "sw-secret:redis:gone:abc12345" }],
+        };
+
+        var data = new ProfileData(); // empty cache list — the cache was removed
+        await ConfigEndpoints.SaveProfileAsync(
+            profile,
+            data,
+            new NoopStorageConnectionPool(),
+            new TrackingRedisConnectionPool(),
+            new TrackingServiceBusConnectionPool(),
+            new TrackingSqlConnectionPool(),
+            new TrackingMonitoringConnectionPool(),
+            store);
+
+        Assert.Null(store.Get("sw-secret:redis:gone:abc12345"));
     }
 
     // ── Environments ─────────────────────────────────────────────────────────

@@ -5,16 +5,6 @@ namespace SwebKit.Core.Tests;
 public class RedisValueHelpersTests
 {
     [Fact]
-    public void MaskConnectionString_MasksPasswordSegment()
-    {
-        var value = "localhost:6379,password=super-secret,ssl=true";
-
-        var masked = RedisValueHelpers.MaskConnectionString(value);
-
-        Assert.Equal("localhost:6379,password=***,ssl=true", masked);
-    }
-
-    [Fact]
     public void TruncateValue_WhenOverLimit_AppendsMarker()
     {
         var value = new string('a', 12);
@@ -52,29 +42,6 @@ public class RedisValueHelpersTests
     public void TypeToBadgeClass_MapsEachKnownType(string? type, string expected)
     {
         Assert.Equal(expected, RedisValueHelpers.TypeToBadgeClass(type));
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void MaskConnectionString_BlankInput_ReturnsEmpty(string? input)
-    {
-        Assert.Equal(string.Empty, RedisValueHelpers.MaskConnectionString(input));
-    }
-
-    [Fact]
-    public void MaskConnectionString_WithoutPassword_ReturnsUnchanged()
-    {
-        var value = "localhost:6379,ssl=true";
-        Assert.Equal(value, RedisValueHelpers.MaskConnectionString(value));
-    }
-
-    [Fact]
-    public void MaskConnectionString_IsCaseInsensitiveForPasswordKey()
-    {
-        var masked = RedisValueHelpers.MaskConnectionString("host:6379,PassWord=secret");
-        Assert.Equal("host:6379,password=***", masked);
     }
 
     [Fact]

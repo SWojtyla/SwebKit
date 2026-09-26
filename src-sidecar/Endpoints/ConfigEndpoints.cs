@@ -39,11 +39,18 @@ public static class ConfigEndpoints
         return TypedResults.Text(svc.Serialize(bundle), "application/json");
     }
 
-    internal static async Task<Ok> ImportAsync(ConfigurationBundleService svc, HttpRequest req)
+    internal static async Task<Ok> ImportAsync(
+        ConfigurationBundleService svc,
+        HttpRequest req,
+        ICredentialStore credentialStore)
     {
         using var reader = new StreamReader(req.Body);
         var json = await reader.ReadToEndAsync().ConfigureAwait(false);
         var bundle = svc.Deserialize(json);
+        // Migrate *before* ImportAsync persists: bundles exported by older versions carry plaintext
+        // Redis connection strings, and ProfileRepository.ImportAsync writes straight to
+        // profiles.json — post-import migration would leave the secret on disk in between.
+        RedisCredentialMigration.MigrateCaches(bundle.Profiles?.Config?.RedisConfig, credentialStore);
         await svc.ImportAsync(bundle).ConfigureAwait(false);
         return TypedResults.Ok();
     }
@@ -91,7 +98,8 @@ public static class ConfigEndpoints
         IRedisConnectionPool redisPool,
         IServiceBusConnectionPool serviceBusPool,
         ISqlConnectionPool sqlPool,
-        IMonitoringConnectionPool monitoringPool)
+        IMonitoringConnectionPool monitoringPool,
+        ICredentialStore credentialStore)
     {
         // The profile GET overlays demo entities while demo mode is on and saves round-trip the
         // whole profile — strip the demo ids so a save can't persist them as real configuration.
@@ -122,6 +130,12 @@ public static class ConfigEndpoints
         var previousAks = previous?.AksConfig;
         var previousSbNamespaces = repo.GetProfileData().ServiceBusNamespaces;
 
+        // Any plaintext Redis connection string that arrived in the payload (older frontend,
+        // hand-edited profile, imported bundle) is moved into the OS credential store before
+        // the profile lands on disk — profiles.json must never hold the secret itself.
+        RedisCredentialMigration.MigrateCaches(data.Config?.RedisConfig, credentialStore);
+        RedisCredentialMigration.DeleteOrphanedKeys(previousRedisCaches, data.Config?.RedisConfig?.Caches, credentialStore);
+
         repo.ReplaceProfileData(data);
         await repo.SaveAsync();
         // A save may have edited a connection string, credential key or auth mode; drop every
@@ -134,7 +148,7 @@ public static class ConfigEndpoints
         // selected cache on every switch (that PUT lands here), and tearing down every pooled
         // connection for an ActiveCacheId-only change would force a reconnect — and could dispose
         // a client an in-flight request is still using — on each switch.
-        foreach (var staleId in StaleRedisCacheIds(previousRedisCaches, data.Config?.RedisConfig?.Caches))
+        foreach (var staleId in StaleRedisCacheIds(previousRedisCaches, data.Config?.RedisConfig?.Caches, credentialStore))
             redisPool.Evict(staleId);
         // SQL gets the same targeted eviction: the pool keys clients by connection id alone, so a
         // Server/Database edit used to leave a pooled ISqlClient aimed at the old server and
@@ -156,7 +170,7 @@ public static class ConfigEndpoints
             monitoringPool.EvictServiceBusClient(stale.Alias);
             monitoringPool.EvictServiceBusClient(stale.Id.ToString("N"));
         }
-        foreach (var staleId in StaleRedisCacheIds(previousRedisCaches, data.Config?.RedisConfig?.Caches))
+        foreach (var staleId in StaleRedisCacheIds(previousRedisCaches, data.Config?.RedisConfig?.Caches, credentialStore))
         {
             var staleCache = previousRedisCaches?.FirstOrDefault(c => c.Id == staleId);
             if (staleCache is not null)
@@ -196,16 +210,21 @@ public static class ConfigEndpoints
     /// </summary>
     internal static IEnumerable<string> StaleRedisCacheIds(
         IReadOnlyList<RedisCacheEntry>? before,
-        IReadOnlyList<RedisCacheEntry>? after)
+        IReadOnlyList<RedisCacheEntry>? after,
+        ICredentialStore credentialStore)
     {
         var afterById = (after ?? []).ToDictionary(c => c.Id);
         foreach (var old in before ?? [])
-            if (!afterById.TryGetValue(old.Id, out var updated) || !SameConnection(old, updated))
+            if (!afterById.TryGetValue(old.Id, out var updated) || !SameConnection(old, updated, credentialStore))
                 yield return old.Id;
     }
 
-    private static bool SameConnection(RedisCacheEntry a, RedisCacheEntry b) =>
-        a.ConnectionString == b.ConnectionString &&
+    // Compares the *resolved* connection string rather than the key name or inline field — a
+    // migrated entry (plaintext → fresh credential key) holds the same secret, so it must not
+    // evict the warm pooled client; a genuinely rotated secret resolves differently and does.
+    private static bool SameConnection(RedisCacheEntry a, RedisCacheEntry b, ICredentialStore credentialStore) =>
+        RedisCredentialMigration.ResolveConnectionString(a, credentialStore) ==
+            RedisCredentialMigration.ResolveConnectionString(b, credentialStore) &&
         a.Database == b.Database &&
         a.UseAad == b.UseAad &&
         a.CacheName == b.CacheName;

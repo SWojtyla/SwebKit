@@ -505,11 +505,18 @@ A knip dead-export sweep ran across `web/src` + `web/e2e`. Real removals:
   the synchronous blur handler still closed over and committed the pre-reset
   draft, so an apparent cancel saved the edit. Escape now suppresses that blur
   commit; Playwright covers the no-PUT behavior.
-- **Redis credential storage remains a structural security finding** — unlike
-  Service Bus/Storage credential-key indirection, non-Entra Redis connection
-  strings (including passwords) are persisted in `profiles.json`. Migrating
-  existing profiles to credential-store references requires a versioned model /
-  migration and is not safe as an inline Settings-only change.
+- **Redis credential migration landed on `feat/redis-credential-references`** —
+  plaintext non-Entra connection strings no longer sit in `profiles.json`.
+  `RedisCacheEntry.CredentialKey` holds a `sw-secret:redis:{id}:{nonce}`
+  reference resolved sidecar-side via `ICredentialStore` (the same OS-keychain
+  pattern Service Bus uses). `RedisCredentialMigration` runs at all three
+  choke points — startup post-`LoadAsync`, `SaveProfileAsync` pre-persist, and
+  bundle import pre-persist — so plaintext never reaches disk on any path.
+  `StaleRedisCacheIds` compares *resolved* secrets, so a plaintext→key
+  migration does not evict a warm pooled client while a genuinely rotated
+  secret does. Orphaned keys are deleted on cache removal/rotation, and the
+  Settings UI stores new credentials via `POST /api/api-client/credentials`
+  and shows a "stored in credential store" state instead of the secret.
 - **Storage account switch fixed for File Shares** — `handleSelectAccount`
   cleared container/prefix/blob URL state but left `share`/`dir`/`file` from the
   previous account, causing the new account to query a stale share path. All

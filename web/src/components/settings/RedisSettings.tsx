@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useProfile, useUpdateProfile } from "@/lib/hooks";
+import { saveCredential } from "@/lib/api";
 import { useRedisTestConnection } from "@/lib/hooks/useRedis";
 import { useNotification } from "@/components/layout/notification-context";
 import { clampInt } from "@/lib/clamp-int";
@@ -12,7 +13,9 @@ import { ProfileListLayout } from "./ProfileListLayout";
  * "New Cache" placeholder can go without the extra click. */
 function isConfigured(cache: RedisCacheEntry): boolean {
     return (
-        cache.connectionString.trim() !== "" || cache.cacheName.trim() !== ""
+        cache.connectionString.trim() !== "" ||
+        cache.credentialKey.trim() !== "" ||
+        cache.cacheName.trim() !== ""
     );
 }
 
@@ -49,6 +52,7 @@ export function RedisSettings() {
         const entry: RedisCacheEntry = {
             id: crypto.randomUUID().slice(0, 8),
             displayName: "New Cache",
+            credentialKey: "",
             connectionString: "",
             database: 0,
             useAad: false,
@@ -126,7 +130,10 @@ export function RedisSettings() {
                 getKey={(c) => c.id}
                 getTitle={(c) => c.displayName}
                 getSubtitle={(c) =>
-                    c.useAad ? c.cacheName : c.connectionString
+                    c.useAad
+                        ? c.cacheName
+                        : c.connectionString ||
+                          (c.credentialKey ? "Credential store" : "")
                 }
                 isActive={(c) => c.id === redis.activeCacheId}
                 testIdPrefix="redis"
@@ -188,6 +195,34 @@ function CacheRow({
 }: CacheRowProps) {
     // `enabled: false`: only fires when "Test connection" is clicked, not on every render.
     const test = useRedisTestConnection(cache.id, { enabled: false });
+    const { notify } = useNotification();
+    const [editingCredential, setEditingCredential] = useState(false);
+
+    // The connection string goes straight into the OS credential store via the sidecar and the
+    // profile keeps only the generated key — the secret never travels inside the profile PUT or
+    // lands in profiles.json. A fresh key per write is deliberate: the sidecar's stale-client diff
+    // compares credential keys, so rotating the key is what evicts the pooled connection.
+    const commitConnectionString = async (raw: string) => {
+        const value = raw.trim();
+        // Empty or unchanged: nothing to store — just fall back to the stored-credential view.
+        if (!value || value === cache.connectionString) {
+            setEditingCredential(false);
+            return;
+        }
+        const key = `sw-secret:redis:${cache.id}:${crypto.randomUUID().slice(0, 8)}`;
+        try {
+            await saveCredential(key, value);
+        } catch {
+            notify(
+                "error",
+                "Couldn't store credential",
+                "The connection string never reached the OS credential store — nothing was saved.",
+            );
+            return;
+        }
+        setEditingCredential(false);
+        onUpdate({ credentialKey: key, connectionString: "" });
+    };
 
     return (
         <div
@@ -252,22 +287,42 @@ function CacheRow({
                 </div>
             ) : (
                 <div>
-                    <DraftInput
-                        type="text"
-                        value={cache.connectionString}
-                        onCommit={(v) => onUpdate({ connectionString: v })}
-                        className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-                        placeholder="localhost:6379"
-                    />
+                    {cache.credentialKey && !editingCredential ? (
+                        <div className="flex items-center gap-2">
+                            <span
+                                className="text-sm text-muted-foreground"
+                                data-testid={`redis-credential-stored-${cache.id}`}
+                            >
+                                Connection string stored in your OS credential
+                                store
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setEditingCredential(true)}
+                                className="rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                                data-testid={`redis-credential-replace-${cache.id}`}
+                            >
+                                Replace
+                            </button>
+                        </div>
+                    ) : (
+                        <DraftInput
+                            type="password"
+                            value={cache.connectionString}
+                            onCommit={(v) => void commitConnectionString(v)}
+                            className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                            placeholder="localhost:6379"
+                            data-testid={`redis-connection-string-${cache.id}`}
+                        />
+                    )}
                     <p className="mt-1 text-xs text-muted-foreground">
                         StackExchange.Redis connection string, e.g.{" "}
                         <code>localhost:6379</code> or{" "}
                         <code>
                             mycache.redis.cache.windows.net:6380,ssl=True,password=...
                         </code>
-                        . Unlike Storage/Service Bus's credential-store key
-                        indirection, this is stored as plain text in your local
-                        profile (<code>profiles.json</code>), password included.
+                        . Saved into your OS credential store — the profile keeps
+                        only a key reference, never the secret itself.
                     </p>
                 </div>
             )}
