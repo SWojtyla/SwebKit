@@ -34,10 +34,31 @@ export interface AgentProfile {
     credentialEnvVar: string;
     /** When true, ACP session/request_permission calls surface as approval cards instead of being auto-approved. */
     requireToolApproval: boolean;
+    /** External MCP servers handed to the agent at session/new alongside SwebKit's tools — these
+     * are NOT SwebKit tools: calls to them bypass the propose/confirm pipeline, so
+     * requireToolApproval is the only gate they get. */
+    extraMcpServers: AgentMcpServer[];
     /** Reserved: ACP fs/* client capability — designed in, handlers not implemented. */
     enableFileSystem: boolean;
     /** Reserved: ACP terminal client capability — see enableFileSystem. */
     enableTerminal: boolean;
+}
+
+/** One external MCP server an ACP profile attaches at session/new — the agent spawns or connects
+ * to it directly; the sidecar only forwards the descriptor. Mirrors AgentMcpServer (SwebKit.Core). */
+export interface AgentMcpServer {
+    id: string;
+    /** MCP server name as advertised to the agent. */
+    name: string;
+    enabled: boolean;
+    /** "http" = remote endpoint (url + headers); "stdio" = the agent spawns it (command + args + env). */
+    transport: "http" | "stdio";
+    url: string;
+    headers: Record<string, string>;
+    command: string;
+    /** Single arg string, split with shell-style quoting rules sidecar-side. */
+    arguments: string;
+    environmentVariables: Record<string, string>;
 }
 
 export interface AgentCapabilityTestResult {

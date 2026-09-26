@@ -12,6 +12,8 @@ Chat appears in three forms that share the same sidecar/session model:
 
 The frontend streams responses over SSE. `SidecarAgentChatService` owns context budgeting, prompt construction, provider routing, tool orchestration, sessions, and pending actions.
 
+> How the tool model, MCP bridge, and ACP plumbing actually work — with wire schemas and diagrams — lives in `docs/architecture/ai-and-mcp.md`.
+
 ## Provider Model
 
 `AgentModelClientRouter` selects an `IAgentModelClient` from the active `AgentProfile`:
@@ -80,6 +82,8 @@ session/cancel → provider cancellation
 ```
 
 The external agent owns its transcript and internal loop. SwebKit exposes permitted domain tools through `SwebKitToolsMcpBridge`, a stateless streamable-HTTP MCP endpoint. The bridge URL includes the orchestrator's per-request allowlist; an empty allowlist exposes no tools.
+
+Profiles may also attach **external MCP servers** (`AgentProfile.ExtraMcpServers`, http or stdio) — forwarded to the agent in the same `session/new` alongside the SwebKit entry. Calls to them bypass the propose/confirm pipeline, so `RequireToolApproval` is their only gate (the settings UI enables it by default on first attach). Wire details in `docs/architecture/ai-and-mcp.md`.
 
 SwebKit does not advertise filesystem or terminal ACP client capabilities. Calls to unsupported client methods receive JSON-RPC method-not-found.
 

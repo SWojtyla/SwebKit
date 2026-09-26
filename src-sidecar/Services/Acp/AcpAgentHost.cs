@@ -149,7 +149,9 @@ public sealed class AcpAgentHost : IAsyncDisposable
         AgentProfile profile, string sessionKey, string? mcpUrl, CancellationToken ct)
     {
         var caps = await EnsureStartedAsync(profile, ct);
-        var spec = mcpUrl ?? string.Empty;
+        // The spec is what a session was created for: the allowlisted bridge URL plus the enabled
+        // external MCP descriptors. Any change forces a fresh session (mcpServers is session-fixed).
+        var spec = (mcpUrl ?? string.Empty) + '\n' + SerializeExtras(profile);
 
         if (_sessionsByKey.TryGetValue(sessionKey, out var existing) &&
             existing.Spec == spec &&
@@ -162,15 +164,9 @@ public sealed class AcpAgentHost : IAsyncDisposable
             ? profile.WorkingDirectory
             : Directory.GetCurrentDirectory();
 
-        // headers must be present even when empty: the ACP schema marks it required for http/sse
-        // servers, and adapters (verified against claude-agent-acp) silently drop entries missing
-        // it — the session then comes up with no SwebKit tools at all.
-        object[] mcpServers = caps.McpHttp && mcpUrl is not null
-            ? [new { type = "http", name = "swebkit", url = mcpUrl, headers = Array.Empty<object>() }]
-            : [];
-        if (mcpUrl is not null && !caps.McpHttp)
-            _logger.LogWarning(
-                "ACP agent does not advertise http MCP capability — SwebKit tools unavailable this session.");
+        var mcpServers = BuildMcpServers(profile, caps, mcpUrl, out var mcpWarnings);
+        foreach (var warning in mcpWarnings)
+            _logger.LogWarning("{Warning}", warning);
 
         JsonElement result;
         try
@@ -462,6 +458,94 @@ public sealed class AcpAgentHost : IAsyncDisposable
         string.Join('\n',
             new[] { p.Command, p.Arguments, p.WorkingDirectory, p.CredentialEnvVar }
                 .Concat(p.EnvironmentVariables.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")));
+
+    /// <summary>The serialized form of the enabled external MCP descriptors — part of the session
+    /// spec so editing them forces a fresh ACP session rather than silently keeping the old set.</summary>
+    private static string SerializeExtras(AgentProfile profile) =>
+        JsonSerializer.Serialize(
+            profile.ExtraMcpServers
+                .Where(e => e.Enabled)
+                .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList());
+
+    /// <summary>Builds the <c>session/new → mcpServers</c> array: the SwebKit tools bridge first,
+    /// then the profile's enabled external MCP servers. http entries require the agent's
+    /// mcpCapabilities.http — an agent without it keeps working, just without those servers.
+    /// <c>headers</c> must be present even when empty: the ACP schema marks it required for
+    /// http/sse servers, and adapters (verified against claude-agent-acp) silently drop entries
+    /// missing it — the session then comes up with no tools at all.</summary>
+    internal static object[] BuildMcpServers(
+        AgentProfile profile,
+        AcpAgentCapabilities caps,
+        string? mcpUrl,
+        out List<string> warnings)
+    {
+        warnings = [];
+        var servers = new List<object>();
+        if (caps.McpHttp && mcpUrl is not null)
+        {
+            servers.Add(new { type = "http", name = "swebkit", url = mcpUrl, headers = Array.Empty<object>() });
+        }
+        else if (mcpUrl is not null)
+        {
+            warnings.Add(
+                "ACP agent does not advertise http MCP capability — SwebKit tools unavailable this session.");
+        }
+
+        foreach (var extra in profile.ExtraMcpServers.Where(e => e.Enabled))
+        {
+            if (string.IsNullOrWhiteSpace(extra.Name))
+            {
+                warnings.Add("Skipping external MCP server with no name.");
+                continue;
+            }
+
+            if (string.Equals(extra.Transport, "stdio", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(extra.Command))
+                {
+                    warnings.Add($"Skipping stdio MCP server '{extra.Name}' — no command configured.");
+                    continue;
+                }
+                servers.Add(new
+                {
+                    type = "stdio",
+                    name = extra.Name,
+                    command = extra.Command,
+                    args = AcpProcessLauncher.SplitArguments(extra.Arguments).ToArray(),
+                    env = extra.EnvironmentVariables
+                        .Select(kv => new { name = kv.Key, value = kv.Value })
+                        .ToArray(),
+                });
+            }
+            else
+            {
+                if (!caps.McpHttp)
+                {
+                    warnings.Add(
+                        $"Skipping http MCP server '{extra.Name}' — agent does not advertise http MCP capability.");
+                    continue;
+                }
+                if (string.IsNullOrWhiteSpace(extra.Url) ||
+                    !Uri.TryCreate(extra.Url, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                {
+                    warnings.Add($"Skipping http MCP server '{extra.Name}' — no valid absolute http(s) URL.");
+                    continue;
+                }
+                servers.Add(new
+                {
+                    type = "http",
+                    name = extra.Name,
+                    url = extra.Url,
+                    headers = extra.Headers
+                        .Select(kv => new { name = kv.Key, value = kv.Value })
+                        .ToArray(),
+                });
+            }
+        }
+        return servers.ToArray();
+    }
 
     private static string AuthRequiredMessage(AcpAgentCapabilities caps) =>
         "The ACP agent requires authentication" +
