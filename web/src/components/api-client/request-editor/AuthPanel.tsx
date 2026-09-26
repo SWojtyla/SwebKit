@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FocusEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import type { AuthType, AuthConfig } from "@/lib/types";
 import { VariableInput } from "../VariableInput";
@@ -118,6 +118,15 @@ export function AuthPanel({
   const [revealed, setRevealed] = useState(false);
   const toggleReveal = () => setRevealed((r) => !r);
 
+  // Usernames, key names, client ids, URLs: edge whitespace is invisible, breaks auth, and
+  // arrives via copy/paste — trimmed on blur (not per keystroke, so mid-typing spaces survive).
+  const blurTrim =
+    (field: "basicUsername" | "apiKeyParamName" | "oAuth2ClientId" | "oAuth2TokenUrl" | "oAuth2AuthUrl" | "oAuth2Scopes") =>
+    (e: FocusEvent<HTMLInputElement>) => {
+      const trimmed = e.target.value.trim();
+      if (trimmed !== e.target.value) onAuthPatch({ [field]: trimmed });
+    };
+
   // ── Authorization-code + PKCE sign-in ──────────────────────────────────────
   // The flow is browser-mediated and async: "Sign in" hands the user to their provider, the
   // sidecar's loopback callback does the code exchange, and this polls for the outcome. The
@@ -207,6 +216,7 @@ export function AuthPanel({
             type="text"
             value={auth.basicUsername ?? ""}
             onChange={(e) => onAuthPatch({ basicUsername: e.target.value })}
+            onBlur={blurTrim("basicUsername")}
             placeholder="Username"
             className="flex-1 rounded border bg-background px-2 py-1 text-sm"
           />
@@ -230,6 +240,7 @@ export function AuthPanel({
             type="text"
             value={auth.apiKeyParamName ?? ""}
             onChange={(e) => onAuthPatch({ apiKeyParamName: e.target.value })}
+            onBlur={blurTrim("apiKeyParamName")}
             placeholder="Key name"
             className="w-32 rounded border bg-background px-2 py-1 text-sm"
           />
@@ -274,6 +285,7 @@ export function AuthPanel({
             type="text"
             value={auth.oAuth2ClientId ?? ""}
             onChange={(e) => onAuthPatch({ oAuth2ClientId: e.target.value })}
+            onBlur={blurTrim("oAuth2ClientId")}
             placeholder="Client ID"
             className="w-full rounded border bg-background px-2 py-1 text-sm"
           />
@@ -282,6 +294,7 @@ export function AuthPanel({
             type="text"
             value={auth.oAuth2TokenUrl ?? ""}
             onChange={(e) => onAuthPatch({ oAuth2TokenUrl: e.target.value })}
+            onBlur={blurTrim("oAuth2TokenUrl")}
             placeholder="Token URL"
             className="w-full rounded border bg-background px-2 py-1 text-sm"
           />
@@ -292,6 +305,7 @@ export function AuthPanel({
                 type="text"
                 value={auth.oAuth2AuthUrl ?? ""}
                 onChange={(e) => onAuthPatch({ oAuth2AuthUrl: e.target.value })}
+                onBlur={blurTrim("oAuth2AuthUrl")}
                 placeholder="Authorization URL"
                 className="w-full rounded border bg-background px-2 py-1 text-sm"
               />
@@ -343,6 +357,7 @@ export function AuthPanel({
             type="text"
             value={auth.oAuth2Scopes ?? ""}
             onChange={(e) => onAuthPatch({ oAuth2Scopes: e.target.value })}
+            onBlur={blurTrim("oAuth2Scopes")}
             placeholder="Scopes (space-separated)"
             className="w-full rounded border bg-background px-2 py-1 text-sm"
           />

@@ -55,16 +55,24 @@ export function DraftInput({ value, onCommit, onDraftChange, onKeyDown, ...rest 
   // switching settings tabs or navigating unmounts the input, and React fires no blur.
   useEffect(() => {
     return () => {
-      if (draftRef.current !== committedRef.current) {
-        onCommitRef.current(draftRef.current);
+      const next = draftRef.current.trim();
+      if (next !== committedRef.current) {
+        onCommitRef.current(next);
       }
     };
   }, []);
 
   const commit = () => {
-    if (draft === committedRef.current) return;
-    committedRef.current = draft;
-    onCommit(draft);
+    // Settings values are identifiers (URLs, hosts, keys, names) — edge whitespace is never
+    // meaningful but is invisible in the box and breaks connection tests when pasted in.
+    const next = draft.trim();
+    if (next !== draft) {
+      setDraft(next);
+      draftRef.current = next;
+    }
+    if (next === committedRef.current) return;
+    committedRef.current = next;
+    onCommit(next);
   };
 
   return (
@@ -73,7 +81,9 @@ export function DraftInput({ value, onCommit, onDraftChange, onKeyDown, ...rest 
       value={draft}
       onChange={(e) => {
         setDraft(e.target.value);
-        onDraftChange?.(e.target.value);
+        // "Test what I typed" consumers get the value as it will be committed — trimmed —
+        // so a paste with a stray trailing space tests the same string that will be saved.
+        onDraftChange?.(e.target.value.trim());
       }}
       onBlur={() => {
         if (skipNextBlurRef.current) {

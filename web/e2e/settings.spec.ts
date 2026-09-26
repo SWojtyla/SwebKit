@@ -246,6 +246,40 @@ test.describe("Settings", () => {
         expect(saves).toBe(0);
     });
 
+    test("a pasted connection value with stray whitespace is trimmed on commit", async ({
+        page,
+    }) => {
+        // The reported bug: copying a namespace out of a portal picked up an invisible
+        // trailing space, and "Test connection" then failed on a value the user couldn't
+        // see was wrong. Commit trims it — visibly — and the trimmed value is what persists.
+        await page.goto("/settings");
+        await page.getByTestId("settings-tab-service-bus").click();
+        await page.getByRole("button", { name: "Add Namespace" }).click();
+        await page.locator('[data-testid^="sb-item-"]').last().click();
+
+        const fqdn = page
+            .getByPlaceholder(
+                "e.g. sb-dev-shared-sb-weu.servicebus.windows.net",
+            )
+            .last();
+        await fqdn.click();
+        await fqdn.pressSequentially(" sb-trimmed.servicebus.windows.net  ");
+        await fqdn.blur();
+
+        // The box shows exactly what was committed — the space is gone, not just hidden.
+        await expect(fqdn).toHaveValue("sb-trimmed.servicebus.windows.net");
+
+        await page.reload();
+        await page.getByTestId("settings-tab-service-bus").click();
+        await expect(
+            page
+                .getByPlaceholder(
+                    "e.g. sb-dev-shared-sb-weu.servicebus.windows.net",
+                )
+                .last(),
+        ).toHaveValue("sb-trimmed.servicebus.windows.net");
+    });
+
     test("agent profile base URL persists across reload", async ({ page }) => {
         // Batch 8.4 migrated this field to DraftInput (commit on blur/Enter), matching every
         // other settings section — so the edit must be committed with a blur before reloading.

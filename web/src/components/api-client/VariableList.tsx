@@ -172,6 +172,10 @@ export function VariableList({
               type="text"
               value={v.key}
               onChange={(e) => updateVariable(v.id, { key: e.target.value })}
+              onBlur={(e) => {
+                const trimmed = e.target.value.trim();
+                if (trimmed !== e.target.value) updateVariable(v.id, { key: trimmed });
+              }}
               placeholder="Key"
               title={v.key || undefined}
               className="min-w-32 flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
@@ -198,6 +202,10 @@ export function VariableList({
                 type="text"
                 value={v.credentialKey ?? ""}
                 onChange={(e) => updateVariable(v.id, { credentialKey: e.target.value })}
+                onBlur={(e) => {
+                  const trimmed = e.target.value.trim();
+                  if (trimmed !== e.target.value) updateVariable(v.id, { credentialKey: trimmed });
+                }}
                 placeholder="Credential key"
                 className="min-w-0 flex-[2] rounded border bg-background px-2 py-1 text-sm font-mono"
                 data-testid={`${testIdPrefix}-value-${index}`}
@@ -329,6 +337,10 @@ function KeyVaultField({ variable, index, keyVaults, onChange, onPreview, previe
         type="text"
         value={variable.credentialKey ?? ""}
         onChange={(e) => onChange({ credentialKey: e.target.value })}
+        onBlur={(e) => {
+          const trimmed = e.target.value.trim();
+          if (trimmed !== e.target.value) onChange({ credentialKey: trimmed });
+        }}
         placeholder="Secret name"
         className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-sm font-mono"
         data-testid={`${testIdPrefix}-value-${index}`}
@@ -380,7 +392,9 @@ function CredentialField({ variable, index, onChange, onPreview, preview, testId
   }, [key]);
 
   async function persist() {
-    const value = inputRef.current;
+    // Stored value is trimmed at write only — writing it back mid-typing would eat a
+    // trailing space the user may still be building on (passphrases contain spaces).
+    const value = inputRef.current.trim();
     const k = keyRef.current;
     if (!k) return;
     try {
@@ -414,6 +428,10 @@ function CredentialField({ variable, index, onChange, onPreview, preview, testId
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
+    // Leaving the field settles it — the box now shows exactly what was stored.
+    const trimmed = inputRef.current.trim();
+    inputRef.current = trimmed;
+    setSecretInput(trimmed);
     void persist();
   };
 
