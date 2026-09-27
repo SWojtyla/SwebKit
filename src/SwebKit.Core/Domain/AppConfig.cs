@@ -3,7 +3,17 @@ namespace SwebKit.Core.Domain;
 public class AppConfig
 {
     public string Name { get; set; } = "Default";
+
+    /// <summary>Flags the profile as production — the shell shows a destructive-tinted PRD badge
+    /// and banner, and mutation surfaces (e.g. AKS) tighten their confirmations.</summary>
     public bool IsProduction { get; set; }
+
+    /// <summary>Free-form environment tag (e.g. <c>dev</c>/<c>stg</c>/<c>prd</c>) shown on the
+    /// shell's environment badge. When set it is authoritative — the badge classifier only falls
+    /// back to <see cref="IsProduction"/> and then <see cref="Name"/> heuristics when this is
+    /// blank. Named "Tag" (not "Environment") so it can't collide with the API Client's request
+    /// environments (<c>ApiEnvironment</c>).</summary>
+    public string? EnvironmentTag { get; set; }
     public List<SbEntityLink> ServiceBusEntityLinks { get; set; } = [];
     public AksConfig? AksConfig { get; set; }
     public RedisConfig? RedisConfig { get; set; }

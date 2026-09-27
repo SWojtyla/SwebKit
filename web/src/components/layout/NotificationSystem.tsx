@@ -11,6 +11,12 @@ import {
 } from "lucide-react";
 import { formatLocalTime } from "@/lib/datetime";
 import {
+    findDedupeTarget,
+    mergeIntoHistory,
+    mergeNotification,
+    notificationDedupeKey,
+} from "@/lib/notification-dedupe";
+import {
     NotificationContext,
     type NotificationAction,
     type NotificationItem,
@@ -54,16 +60,26 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     // state inside another setState updater — StrictMode double-invokes updaters,
     // which used to push the same toast into the bell's history twice.
     const activeItems = useRef(new Map<string, NotificationItem>());
+    // Per-toast auto-dismiss timer ids — dedupe bumps re-arm the SAME toast's
+    // timer, so the id has to be tracked to cancel it.
+    const dismissTimers = useRef(
+        new Map<string, ReturnType<typeof setTimeout>>(),
+    );
 
     const dismiss = (id: string) => {
         // The delete also makes dismiss idempotent: a manual close racing the
         // auto-expire timer can't record the entry twice.
+        const timer = dismissTimers.current.get(id);
+        if (timer !== undefined) {
+            clearTimeout(timer);
+            dismissTimers.current.delete(id);
+        }
         const item = activeItems.current.get(id);
         if (item) {
             activeItems.current.delete(id);
-            setHistory((h) =>
-                [{ ...item, read: false }, ...h].slice(0, 50),
-            );
+            // Same-key unread rows absorb the dismissal (count adds, timestamp
+            // refreshes) rather than stacking one entry per firing.
+            setHistory((h) => mergeIntoHistory(h, item));
         }
         setNotifications((prev) => prev.filter((n) => n.id !== id));
     };
@@ -76,10 +92,34 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         link?: string,
     ) => {
         const item = createNotification(type, title, body, action, link);
+        const key = notificationDedupeKey(item);
+        if (key !== null) {
+            const existing = findDedupeTarget(
+                activeItems.current.values(),
+                key,
+            );
+            if (existing) {
+                // Same toast firing again (e.g. a monitoring alert each eval
+                // tick): bump ×N, refresh the timestamp and re-arm the 5s timer
+                // so a burst expires 5s after its LAST firing, not mid-burst.
+                const merged = mergeNotification(existing, item);
+                activeItems.current.set(existing.id, merged);
+                setNotifications((prev) =>
+                    prev.map((n) => (n.id === existing.id ? merged : n)),
+                );
+                const timer = dismissTimers.current.get(existing.id);
+                if (timer !== undefined) clearTimeout(timer);
+                dismissTimers.current.set(
+                    existing.id,
+                    setTimeout(() => dismiss(existing.id), 5000),
+                );
+                return;
+            }
+        }
         const id = item.id;
         activeItems.current.set(id, item);
         setNotifications((prev) => [...prev, item]);
-        setTimeout(() => dismiss(id), 5000);
+        dismissTimers.current.set(id, setTimeout(() => dismiss(id), 5000));
     };
 
     const markRead = (id: string) =>
@@ -196,6 +236,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
                                             >
                                                 {n.title}
                                             </span>
+                                            {(n.count ?? 1) > 1 && (
+                                                <span
+                                                    className="rounded bg-muted px-1 text-[10px] font-semibold text-muted-foreground"
+                                                    data-testid={`notification-history-count-${n.id}`}
+                                                >
+                                                    ×{n.count}
+                                                </span>
+                                            )}
                                             {!n.read && (
                                                 <span
                                                     className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
@@ -242,7 +290,17 @@ function Toast({
         >
             <NotificationIcon type={notification.type} />
             <div className="flex-1">
-                <div className="text-sm font-medium">{notification.title}</div>
+                <div className="text-sm font-medium">
+                    {notification.title}
+                    {(notification.count ?? 1) > 1 && (
+                        <span
+                            className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] font-semibold text-muted-foreground"
+                            data-testid={`notification-count-${notification.id}`}
+                        >
+                            ×{notification.count}
+                        </span>
+                    )}
+                </div>
                 {notification.body && (
                     <div className="mt-0.5 text-xs text-muted-foreground">
                         {notification.body}

@@ -23,19 +23,26 @@ import {
     Keyboard,
     Waves,
     Clock,
+    AlertTriangle,
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
+import { EnvironmentBadge } from "./EnvironmentBadge";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
 import { GlobalAgentPanel } from "@/components/agent/GlobalAgentPanel";
 import { DemoTour } from "./DemoTour";
 import {
     useDemoMode,
     useHealth,
+    useProfile,
     useToggleDemoMode,
     useUserSettings,
     useUpdateUserSettings,
     useWorkspaceWarmup,
 } from "@/lib/hooks";
+import {
+    classifyEnvironment,
+    environmentBadgeTitle,
+} from "@/lib/env-badge";
 import {
     loadViewPreference,
     saveViewPreference,
@@ -101,6 +108,10 @@ export function AppLayout() {
 
     const { data: health } = useHealth();
     const { data: demoData } = useDemoMode();
+    // Environment badge (ux-power-pack §3): one classification drives the top-bar
+    // pill, the status-bar label and — for PRD — the banner under the header.
+    const { data: profile } = useProfile();
+    const env = profile ? classifyEnvironment(profile.config) : null;
     const serviceHealth = useServiceHealth();
     const toggleDemoMode = useToggleDemoMode();
     const { theme, toggleTheme, setTheme } = useSettingsStore();
@@ -442,6 +453,7 @@ export function AppLayout() {
                     >
                         {contextTitle}
                     </span>
+                    {env && <EnvironmentBadge env={env} />}
                     <button
                         onClick={() => setPaletteOpen(true)}
                         className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground transition-all hover:border-primary/30 hover:bg-accent"
@@ -515,6 +527,16 @@ export function AppLayout() {
                         </button>
                     </div>
                 </header>
+
+                {env?.tier === "prd" && (
+                    <div
+                        className="flex items-center gap-2 border-b bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive"
+                        data-testid="env-prd-banner"
+                    >
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        Production profile — mutations guarded
+                    </div>
+                )}
 
                 <main className="flex-1 overflow-auto">
                     <Outlet />
@@ -596,6 +618,21 @@ export function AppLayout() {
                             data-testid="status-bar-demo"
                         >
                             Demo Mode
+                        </span>
+                    )}
+                    {env && (
+                        <span
+                            className={
+                                env.tier === "prd"
+                                    ? "font-semibold text-destructive"
+                                    : env.tier === "stg"
+                                      ? "text-warning"
+                                      : ""
+                            }
+                            title={environmentBadgeTitle(env)}
+                            data-testid="status-bar-env"
+                        >
+                            {env.label}
                         </span>
                     )}
                     <span

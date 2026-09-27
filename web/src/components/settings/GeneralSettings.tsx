@@ -5,6 +5,8 @@ import { useNotification } from "@/components/layout/notification-context";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 
+const ENV_TAG_PRESETS = ["dev", "stg", "prd"];
+
 export function GeneralSettings() {
   const { data: settings, isLoading } = useUserSettings();
   const { data: profile } = useProfile();
@@ -17,6 +19,12 @@ export function GeneralSettings() {
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [pendingImportBundle, setPendingImportBundle] = useState<unknown>(null);
   const { notify } = useNotification();
+
+  // A tag profiles.json holds that isn't one of the presets keeps its own option
+  // so the select shows it instead of snapping to Auto.
+  const envTag = profile?.config.environmentTag ?? "";
+  const customEnvTag =
+    envTag && !ENV_TAG_PRESETS.includes(envTag) ? envTag : null;
 
   const runImport = async (bundle: unknown) => {
     try {
@@ -58,6 +66,91 @@ export function GeneralSettings() {
           ))}
         </div>
       </section>
+
+      {profile && (
+        <section data-testid="profile-settings">
+          <h2 className="mb-1 text-lg font-semibold">Profile</h2>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Workspace identity — drives the environment badge in the top bar.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-sm" htmlFor="profile-name-input">
+                Profile name
+              </label>
+              <DraftInput
+                id="profile-name-input"
+                type="text"
+                value={profile.config.name}
+                onCommit={(name) =>
+                  updateProfile.mutate((prev) => ({
+                    ...prev,
+                    config: { ...prev.config, name: name || "Default" },
+                  }))
+                }
+                className="w-64 rounded border bg-background px-2 py-1 text-sm"
+                data-testid="profile-name-input"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm" htmlFor="profile-env-tag">
+                Environment tag
+              </label>
+              {/* Discrete control → commit immediately (no DraftInput debounce). */}
+              <select
+                id="profile-env-tag"
+                value={envTag}
+                onChange={(e) => {
+                  // Capture before mutate: the updater runs after React restores
+                  // the DOM, so reading e.target inside it would see the reverted value.
+                  const environmentTag = e.target.value || null;
+                  updateProfile.mutate((prev) => ({
+                    ...prev,
+                    config: { ...prev.config, environmentTag },
+                  }));
+                }}
+                className="rounded border bg-background px-2 py-1 text-sm"
+                data-testid="profile-env-tag"
+              >
+                <option value="">Auto-detect</option>
+                {ENV_TAG_PRESETS.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {tag}
+                  </option>
+                ))}
+                {customEnvTag && (
+                  <option value={customEnvTag}>{customEnvTag}</option>
+                )}
+              </select>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Explicit tag wins over auto-detection; any value works, but
+                dev/stg/prd get the tier tinting.
+              </p>
+            </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={profile.config.isProduction}
+                  onChange={(e) => {
+                    const isProduction = e.target.checked;
+                    updateProfile.mutate((prev) => ({
+                      ...prev,
+                      config: { ...prev.config, isProduction },
+                    }));
+                  }}
+                  data-testid="profile-is-production"
+                />
+                Production profile
+              </label>
+              <p className="mt-0.5 pl-6 text-xs text-muted-foreground">
+                Shows the PRD badge and a banner under the top bar, and tightens
+                destructive-action prompts (e.g. AKS type-to-confirm).
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="mb-3 text-lg font-semibold">API Client</h2>

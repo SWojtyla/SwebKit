@@ -17,6 +17,10 @@ export interface ProfileData {
 export interface AppConfig {
     name: string;
     isProduction: boolean;
+    /** Free-form environment tag (dev/stg/prd/…) for the shell badge. Optional:
+     * older profiles.json simply don't carry it and the classifier falls back to
+     * `isProduction`/name heuristics. */
+    environmentTag?: string | null;
     aksConfig: AksConfig | null;
     redisConfig: RedisConfig | null;
     sqlConfig: SqlConfig | null;
