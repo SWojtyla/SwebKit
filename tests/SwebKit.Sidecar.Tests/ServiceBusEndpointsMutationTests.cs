@@ -30,6 +30,11 @@ internal sealed class CountingServiceBusClient : IServiceBusClient
     public int ResubmitDeadLetterCallCount { get; private set; }
     public int ResendMessagesCallCount { get; private set; }
     public int DeadLetterMessagesCallCount { get; private set; }
+    public int PeekSessionsCallCount { get; private set; }
+    public int ResubmitEditedCallCount { get; private set; }
+    public string? LastResubmitEditedEntityPath { get; private set; }
+    public string? LastResubmitEditedTargetPath { get; private set; }
+    public SbMessage? LastResubmitEditedMessage { get; private set; }
 
     public Exception? ThrowOnPeekMessages { get; set; }
     public Exception? ThrowOnPeekDeadLetter { get; set; }
@@ -38,6 +43,8 @@ internal sealed class CountingServiceBusClient : IServiceBusClient
     public Exception? ThrowOnResubmit { get; set; }
     public Exception? ThrowOnResend { get; set; }
     public Exception? ThrowOnDeadLetter { get; set; }
+    public Exception? ThrowOnPeekSessions { get; set; }
+    public Exception? ThrowOnResubmitEdited { get; set; }
 
     public Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default) => _inner.GetNamespaceInfoAsync(ct);
     public Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default) => _inner.ListQueuesAsync(ct);
@@ -90,6 +97,22 @@ internal sealed class CountingServiceBusClient : IServiceBusClient
     }
 
     public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) => _inner.CompleteDeadLetterAsync(entityPath, sequenceNumbers, ct);
+
+    public Task<IReadOnlyList<SbSessionSummary>> PeekSessionsAsync(string entityPath, int count, CancellationToken ct = default)
+    {
+        PeekSessionsCallCount++;
+        return ThrowOnPeekSessions is not null ? Task.FromException<IReadOnlyList<SbSessionSummary>>(ThrowOnPeekSessions) : _inner.PeekSessionsAsync(entityPath, count, ct);
+    }
+
+    public Task ResubmitEditedDeadLetterAsync(string entityPath, long sequenceNumber, SbMessage message, string? targetEntityPath, CancellationToken ct = default)
+    {
+        ResubmitEditedCallCount++;
+        LastResubmitEditedEntityPath = entityPath;
+        LastResubmitEditedTargetPath = targetEntityPath;
+        LastResubmitEditedMessage = message;
+        return ThrowOnResubmitEdited is not null ? Task.FromException(ThrowOnResubmitEdited) : _inner.ResubmitEditedDeadLetterAsync(entityPath, sequenceNumber, message, targetEntityPath, ct);
+    }
+
     public Task<bool> TestConnectionAsync(CancellationToken ct = default) => _inner.TestConnectionAsync(ct);
 }
 
@@ -422,5 +445,122 @@ public class ServiceBusEndpointsMutationTests
             () => ServiceBusEndpoints.DeadLetterMessagesAsync(nsId.ToString(), EntityPath, [4501], profile, factory, demo, CancellationToken.None));
         Assert.Equal("service bus unavailable", ex.Message);
         Assert.Equal(1, faulty.DeadLetterMessagesCallCount); // still called exactly once even though it threw
+    }
+
+    // ── Sessions peek — read-only, but a new endpoint so it gets the same tripwires ────────
+
+    [Fact]
+    public async Task PeekSessionsAsync_Success_ReturnsSummaries_AndCallsClientExactlyOnce()
+    {
+        var counting = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
+        var (profile, demo, factory, nsId) = Build(counting);
+
+        var result = await ServiceBusEndpoints.PeekSessionsAsync(nsId.ToString(), "order-sessions", 32, profile, factory, demo, CancellationToken.None);
+
+        var sessions = Assert.IsAssignableFrom<IReadOnlyList<SbSessionSummary>>(
+            Assert.IsAssignableFrom<IValueHttpResult>(result).Value);
+        Assert.NotEmpty(sessions);
+        Assert.Equal(1, counting.PeekSessionsCallCount);
+    }
+
+    [Fact]
+    public async Task PeekSessionsAsync_NamespaceNotFound_ReturnsNotFound_AndNeverCallsClient()
+    {
+        var counting = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
+        var (profile, demo, factory, _) = Build(counting);
+
+        var result = await ServiceBusEndpoints.PeekSessionsAsync(Guid.NewGuid().ToString(), "order-sessions", 32, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Equal(0, counting.PeekSessionsCallCount);
+    }
+
+    // ── Resubmit-with-edit — the settle-original-after-send contract lives in the client ───
+
+    private static SbMessage EditedMessage() => new()
+    {
+        MessageId = "edited-id",
+        Subject = "EditedSubject",
+        Body = """{"edited":true}""",
+        ContentType = "application/json",
+        ApplicationProperties = new Dictionary<string, object> { ["edited"] = true },
+    };
+
+    [Fact]
+    public async Task ResubmitEditedDeadLetterAsync_Success_CallsUnderlyingClientExactlyOnce()
+    {
+        var counting = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
+        var (profile, demo, factory, nsId) = Build(counting);
+        var req = new ServiceBusEndpoints.ResubmitEditedRequest
+        {
+            SequenceNumber = 4411,
+            Message = EditedMessage(),
+            TargetEntityPath = "order-created",
+        };
+
+        var result = await ServiceBusEndpoints.ResubmitEditedDeadLetterAsync(nsId.ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(200, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Equal(1, counting.ResubmitEditedCallCount);
+        Assert.Equal(EntityPath, counting.LastResubmitEditedEntityPath);
+        Assert.Equal("order-created", counting.LastResubmitEditedTargetPath);
+        Assert.Equal("edited-id", counting.LastResubmitEditedMessage!.MessageId);
+    }
+
+    [Fact]
+    public async Task ResubmitEditedDeadLetterAsync_DecodesSubscriptionEntityPath()
+    {
+        var counting = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
+        var (profile, demo, factory, nsId) = Build(counting);
+        var req = new ServiceBusEndpoints.ResubmitEditedRequest { SequenceNumber = 4411, Message = EditedMessage() };
+
+        // Subscription paths arrive URL-encoded because the route template can't carry '/'.
+        await ServiceBusEndpoints.ResubmitEditedDeadLetterAsync(
+            nsId.ToString(), "billing-events%2Fsubscriptions%2Faudit", req, profile, factory, demo, CancellationToken.None);
+
+        Assert.Equal("billing-events/subscriptions/audit", counting.LastResubmitEditedEntityPath);
+    }
+
+    [Fact]
+    public async Task ResubmitEditedDeadLetterAsync_NullMessage_ReturnsBadRequest_AndNeverCallsClient()
+    {
+        var counting = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
+        var (profile, demo, factory, nsId) = Build(counting);
+        var req = new ServiceBusEndpoints.ResubmitEditedRequest { SequenceNumber = 4411, Message = null! };
+
+        var result = await ServiceBusEndpoints.ResubmitEditedDeadLetterAsync(nsId.ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(400, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Equal(0, counting.ResubmitEditedCallCount);
+    }
+
+    [Fact]
+    public async Task ResubmitEditedDeadLetterAsync_NamespaceNotFound_ReturnsNotFound_AndNeverCallsClient()
+    {
+        var counting = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev());
+        var (profile, demo, factory, _) = Build(counting);
+        var req = new ServiceBusEndpoints.ResubmitEditedRequest { SequenceNumber = 4411, Message = EditedMessage() };
+
+        var result = await ServiceBusEndpoints.ResubmitEditedDeadLetterAsync(Guid.NewGuid().ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Equal(0, counting.ResubmitEditedCallCount);
+    }
+
+    [Fact]
+    public async Task ResubmitEditedDeadLetterAsync_ClientThrows_ExceptionPropagates_NotSwallowed()
+    {
+        var faulty = new CountingServiceBusClient(DemoServiceBusClient.OrdersDev()) { ThrowOnResubmitEdited = new InvalidOperationException("service bus unavailable") };
+        var (profile, demo, factory, nsId) = Build(faulty);
+        var req = new ServiceBusEndpoints.ResubmitEditedRequest { SequenceNumber = 4411, Message = EditedMessage() };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ServiceBusEndpoints.ResubmitEditedDeadLetterAsync(nsId.ToString(), EntityPath, req, profile, factory, demo, CancellationToken.None));
+        Assert.Equal("service bus unavailable", ex.Message);
+        Assert.Equal(1, faulty.ResubmitEditedCallCount); // still called exactly once even though it threw
     }
 }

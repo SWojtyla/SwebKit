@@ -8,6 +8,8 @@ import {
   useSbPeekDlq,
   useSbEntityStats,
   useSbPurgeMessages,
+  useSbQueues,
+  useSbSubscriptions,
   invalidateServiceBusQueries,
 } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +31,7 @@ import { TemplateManager } from "./TemplateManager";
 import { NamespaceOverview } from "./NamespaceOverview";
 import { loadSbPreferences } from "@/lib/stores/sb-preferences";
 import { loadLastNamespace, saveLastNamespace, loadLastEntity, saveLastEntity } from "@/lib/stores/sb-selection";
+import { requiresSessions, SESSIONS_NOT_SUPPORTED_TOOLTIP } from "./sessionHelpers";
 import { useScreenStateProvider } from "@/lib/stores/screen-state";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
 
@@ -44,8 +47,17 @@ function messageKey(m: SbMessage): string {
 
 function composerTitle(mode: ComposerMode): string {
   if (mode === "schedule") return "Schedule Message";
+  if (mode === "editResubmit") return "Edit & Resubmit (settles DLQ original)";
   if (mode === "replay" || mode === "edit") return "Replay Message";
   return "Compose Message";
+}
+
+/** `entity/subscriptions/name` → `entity`; everything else → null. */
+function topicFromEntityPath(entityPath: string | null | undefined): string | null {
+  if (!entityPath) return null;
+  const marker = "/subscriptions/";
+  const idx = entityPath.indexOf(marker);
+  return idx > 0 ? entityPath.slice(0, idx) : null;
 }
 
 export function ServiceBusPage() {
@@ -108,10 +120,33 @@ export function ServiceBusPage() {
 
   const entityStats = useSbEntityStats(selectedNsId, urlEntity?.entityPath ?? null);
 
+  // The selected entity is reconstructed from the URL (path + name only), so topology facts like
+  // `requiresSession` would be lost on a restored/deep-linked selection. Look the entity up in the
+  // already-loaded queue/subscription lists instead — these queries share cache keys with the
+  // entity tree, so the lookup costs no extra request and revives as soon as topology lands.
+  const { data: topologyQueues } = useSbQueues(selectedNsId);
+  const { data: topologySubs } = useSbSubscriptions(
+    selectedNsId,
+    topicFromEntityPath(urlEntity?.entityPath),
+  );
+  const topologyEntity = useMemo(
+    () =>
+      urlEntity
+        ? (topologyQueues?.find((e) => e.entityPath === urlEntity.entityPath) ??
+          topologySubs?.find((e) => e.entityPath === urlEntity.entityPath) ??
+          null)
+        : null,
+    [urlEntity, topologyQueues, topologySubs],
+  );
+
   const selectedEntity = useMemo<SbEntityInfo | null>(() => {
     if (!urlEntity) return null;
-    return { ...urlEntity, stats: entityStats.data ?? null };
-  }, [urlEntity, entityStats.data]);
+    return {
+      ...urlEntity,
+      stats: entityStats.data ?? null,
+      requiresSession: topologyEntity?.requiresSession ?? false,
+    };
+  }, [urlEntity, entityStats.data, topologyEntity]);
   const setSelectedEntity = useCallback(
     (entity: SbEntityInfo | null) => {
       updateParams({
@@ -289,11 +324,25 @@ export function ServiceBusPage() {
     }
     // Previously fell through every branch — presented as a working destructive action while
     // doing nothing. Routes through the same entity-level confirm as the toolbar's Purge All.
-    if (action === "purge") setShowPurgeConfirm(true);
-  }, [queryClient, selectedNsId, setSelectedEntity, setViewMode, openComposer]);
+    // Session entities can't purge (receive-complete needs session receivers) — say so inline.
+    if (action === "purge") {
+      if (requiresSessions(entity)) {
+        notify("error", "Couldn't purge messages", SESSIONS_NOT_SUPPORTED_TOOLTIP);
+        return;
+      }
+      setShowPurgeConfirm(true);
+    }
+  }, [queryClient, selectedNsId, setSelectedEntity, setViewMode, openComposer, notify]);
 
   const onPurgeAll = useCallback(() => {
     if (!selectedNsId || !selectedEntity) return;
+    // Purge rides a plain receive-complete loop — session entities reject it; say so instead of
+    // letting the broker error surface after the confirm bar already implied it would run.
+    if (requiresSessions(selectedEntity)) {
+      notify("error", "Couldn't purge messages", SESSIONS_NOT_SUPPORTED_TOOLTIP);
+      setShowPurgeConfirm(false);
+      return;
+    }
     const scope = viewMode === "dlq" ? "dead-lettered" : "active";
     purgeMutation.mutate(
       { nsId: selectedNsId, entityPath: selectedEntity.entityPath, deadLetter: viewMode === "dlq" },
@@ -391,9 +440,15 @@ export function ServiceBusPage() {
           <button
             data-testid="sb-purge-all-button"
             onClick={() => setShowPurgeConfirm(true)}
-            disabled={purgeMutation.isPending}
+            disabled={
+              purgeMutation.isPending || requiresSessions(selectedEntity)
+            }
             className="shrink-0 border-l px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
-            title={`Purge all ${viewMode === "dlq" ? "dead-lettered" : "active"} messages in this entity — cannot be undone`}
+            title={
+              requiresSessions(selectedEntity)
+                ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                : `Purge all ${viewMode === "dlq" ? "dead-lettered" : "active"} messages in this entity — cannot be undone`
+            }
           >
             Purge All
           </button>
@@ -573,8 +628,14 @@ export function ServiceBusPage() {
                     setShowActionsMenu(false);
                     setShowBatchReplay(true);
                   }}
-                  disabled={!selectedEntity}
-                  title={!selectedEntity ? "Select a queue or topic first" : "Resubmit dead-lettered messages on this entity"}
+                  disabled={!selectedEntity || requiresSessions(selectedEntity)}
+                  title={
+                    !selectedEntity
+                      ? "Select a queue or topic first"
+                      : requiresSessions(selectedEntity)
+                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                        : "Resubmit dead-lettered messages on this entity"
+                  }
                   className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -648,7 +709,7 @@ export function ServiceBusPage() {
               nsId={selectedNsId}
               entity={selectedEntity}
               viewMode={viewMode}
-              onEditResubmit={(msg) => { selectMessage(msg); openComposer("edit"); }}
+              onEditResubmit={(msg) => { selectMessage(msg); openComposer(viewMode === "dlq" ? "editResubmit" : "edit"); }}
               onReplay={(msg) => { selectMessage(msg); openComposer("replay"); }}
               onSchedule={(msg) => { selectMessage(msg); openComposer("schedule"); }}
             />
@@ -674,7 +735,7 @@ export function ServiceBusPage() {
               nsId={selectedNsId}
               namespaces={namespaces}
               entity={selectedEntity}
-              sourceMessage={composerMode === "replay" || composerMode === "edit" ? selectedMessage : null}
+              sourceMessage={composerMode === "replay" || composerMode === "edit" || composerMode === "editResubmit" ? selectedMessage : null}
               initialTemplate={composerTemplate}
               onClose={() => setComposerMode(null)}
             />

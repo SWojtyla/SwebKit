@@ -97,7 +97,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             {
                 Name = q.Name,
                 EntityPath = q.Name,
-                IsDisabled = IsEntityDisabled(q.Status)
+                IsDisabled = IsEntityDisabled(q.Status),
+                RequiresSession = q.RequiresSession
             });
         }
 
@@ -212,7 +213,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             {
                 Name = q.Value.Name,
                 EntityPath = q.Value.Name,
-                IsDisabled = IsEntityDisabled(q.Value.Status)
+                IsDisabled = IsEntityDisabled(q.Value.Status),
+                RequiresSession = q.Value.RequiresSession
             };
             entity.Stats = await GetEntityStatsAsync(entity.EntityPath, ct).ConfigureAwait(false);
             result.Add(entity);
@@ -274,7 +276,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
                 EntityPath = $"{topicName}/subscriptions/{s.SubscriptionName}",
                 IsSubscription = true,
                 TopicName = topicName,
-                IsDisabled = IsEntityDisabled(s.Status)
+                IsDisabled = IsEntityDisabled(s.Status),
+                RequiresSession = s.RequiresSession
             });
         }
 
@@ -397,6 +400,18 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             ? await receiver.PeekMessagesAsync(count, seq, ct).ConfigureAwait(false)
             : await receiver.PeekMessagesAsync(count, cancellationToken: ct).ConfigureAwait(false);
         return messages.Select(MapMessage).ToList();
+    }
+
+    /// <summary>
+    /// Peeks the active window and groups it by session id. Deliberately a plain receiver —
+    /// <c>AcceptNextSessionAsync</c> would take a session lock just to enumerate, and the SDK
+    /// offers no management-plane session listing, so the peek window is the honest answer.
+    /// </summary>
+    public async Task<IReadOnlyList<SbSessionSummary>> PeekSessionsAsync(string entityPath, int count, CancellationToken ct = default)
+    {
+        await using var receiver = _client.CreateReceiver(entityPath);
+        var messages = await receiver.PeekMessagesAsync(count, cancellationToken: ct).ConfigureAwait(false);
+        return SbSessionSummary.Summarize(messages.Select(MapMessage));
     }
 
     public async Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)
@@ -580,6 +595,84 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             },
             (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
             ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The receive→send→settle half of "Edit &amp; Resubmit": unlike resend-as-copy this completes
+    /// the DLQ original once the edited clone is sent, so the pre-edit message cannot linger as a
+    /// duplicate next to the edited copy.
+    /// </summary>
+    public async Task ResubmitEditedDeadLetterAsync(string entityPath, long sequenceNumber, SbMessage message, string? targetEntityPath, CancellationToken ct = default)
+    {
+        var dlqPath = $"{entityPath}/$DeadLetterQueue";
+        // Same fallback rule as plain resubmit: a subscription is receive-only, so the
+        // sendable fallback is the parent topic.
+        var target = targetEntityPath
+            ?? (TryParseSubscriptionPath(entityPath, out var fallbackTopic, out _) ? fallbackTopic : entityPath);
+
+        await using var receiver = _client.CreateReceiver(dlqPath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = 0
+        });
+        await using var sender = _client.CreateSender(target);
+
+        await MessageSequenceProcessor.ProcessAsync(
+            new HashSet<long> { sequenceNumber },
+            MaxReceiveBatchSize,
+            ReceiveWaitTime,
+            (count, waitTime, token) => receiver.ReceiveMessagesAsync(count, waitTime, token),
+            static message => message.SequenceNumber,
+            async (original, token) =>
+            {
+                var forwarded = BuildEditedResubmitMessage(original, message);
+                await sender.SendMessageAsync(forwarded, token).ConfigureAwait(false);
+                await receiver.CompleteMessageAsync(original, token).ConfigureAwait(false);
+            },
+            (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Builds the outbound half of a resubmit-edited: starts from the broker copy so fields
+    /// <see cref="SbMessage"/> doesn't model (To, ReplyTo, TTL, partition key) survive the
+    /// round-trip, then overlays the user's edits. Dead-letter metadata and the broker-stamped
+    /// application properties are stripped — they're status, not payload, and forwarding them
+    /// would make the resent copy look pre-dead-lettered.
+    /// </summary>
+    /// <remarks>
+    /// The Message ID comes from the edit: the composer already generates a fresh GUID per open
+    /// (reusing the original is an explicit "Restore original" choice there), and a blank id —
+    /// the only case where nothing was chosen — falls back to a fresh GUID here.
+    /// </remarks>
+    internal static ServiceBusMessage BuildEditedResubmitMessage(ServiceBusReceivedMessage original, SbMessage edited)
+    {
+        var forwarded = new ServiceBusMessage(original)
+        {
+            MessageId = string.IsNullOrWhiteSpace(edited.MessageId)
+                ? Guid.NewGuid().ToString()
+                : edited.MessageId,
+            Body = BinaryData.FromString(edited.Body),
+            Subject = edited.Subject,
+            CorrelationId = edited.CorrelationId,
+            ContentType = edited.ContentType,
+            SessionId = edited.SessionId
+        };
+
+        // The edited property set replaces the original wholesale — a property the user removed
+        // in the composer must not reappear — then the broker's dead-letter stamp comes off.
+        forwarded.ApplicationProperties.Clear();
+        if (edited.ApplicationProperties is not null)
+        {
+            foreach (var (key, value) in edited.ApplicationProperties)
+            {
+                forwarded.ApplicationProperties[key] = NormalizePropertyValue(value);
+            }
+        }
+        forwarded.ApplicationProperties.Remove("DeadLetterReason");
+        forwarded.ApplicationProperties.Remove("DeadLetterErrorDescription");
+
+        return forwarded;
     }
 
     private static void ApplyRemapRules(ServiceBusMessage message, RemapRules? rules)
@@ -801,7 +894,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         return parsed;
     }
 
-    private static SbMessage MapMessage(ServiceBusReceivedMessage m) => new()
+    internal static SbMessage MapMessage(ServiceBusReceivedMessage m) => new()
     {
         MessageId = m.MessageId,
         CorrelationId = m.CorrelationId,

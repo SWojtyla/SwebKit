@@ -125,6 +125,8 @@ public static class ServiceBusEndpoints
 
         app.MapGet("/api/servicebus/{nsId}/entities/{entityPath}/dlq", PeekDeadLetterAsync);
 
+        app.MapGet("/api/servicebus/{nsId}/entities/{entityPath}/sessions", PeekSessionsAsync);
+
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/send", async (
             string nsId,
             string entityPath,
@@ -257,6 +259,8 @@ public static class ServiceBusEndpoints
 
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/resubmit", ResubmitDeadLetterAsync);
 
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/dlq/resubmit-edited", ResubmitEditedDeadLetterAsync);
+
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/resend", ResendMessagesAsync);
 
         // ── Message Templates ──────────────────────────────────────────────────
@@ -326,6 +330,28 @@ public static class ServiceBusEndpoints
         var client = pool.GetOrCreate(ns);
         var messages = await client.PeekDeadLetterAsync(entityPath, ClampCount(count), ct, fromSequenceNumber: fromSeq);
         return Results.Ok(messages);
+    }
+
+    /// <summary>
+    /// Handler body for the session-summary endpoint — the peek window grouped by session id.
+    /// Clamped like peek for the same reason: sessions beyond the window are absent by design.
+    /// </summary>
+    internal static async Task<IResult> PeekSessionsAsync(
+        string nsId,
+        string entityPath,
+        int count,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        CancellationToken ct)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+
+        var client = pool.GetOrCreate(ns);
+        var sessions = await client.PeekSessionsAsync(entityPath, ClampCount(count), ct);
+        return Results.Ok(sessions);
     }
 
     /// <summary>
@@ -441,6 +467,34 @@ public static class ServiceBusEndpoints
         return Results.Ok(new { resent });
     }
 
+    /// <summary>
+    /// Handler body for resubmit-with-edit: the client settles the DLQ original after sending the
+    /// edited clone, so the pre-edit message can't linger next to its edited copy — the duplicate
+    /// trap the old copy-only composer flow created.
+    /// </summary>
+    internal static async Task<IResult> ResubmitEditedDeadLetterAsync(
+        string nsId,
+        string entityPath,
+        ResubmitEditedRequest req,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        CancellationToken ct)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+
+        if (req.Message is null)
+        {
+            return ApiErrors.BadRequest("message is required");
+        }
+
+        var client = pool.GetOrCreate(ns);
+        await client.ResubmitEditedDeadLetterAsync(entityPath, req.SequenceNumber, req.Message, req.TargetEntityPath, ct);
+        return Results.Ok();
+    }
+
     private static string DecodeEntityPath(string entityPath) => Uri.UnescapeDataString(entityPath);
 
     private static ServiceBusNamespace? ResolveNamespace(
@@ -472,6 +526,15 @@ public static class ServiceBusEndpoints
         public string[] SequenceNumbers { get; set; } = [];
         public string? TargetEntityPath { get; set; }
         public RemapRules? RemapRules { get; set; }
+    }
+
+    public sealed class ResubmitEditedRequest
+    {
+        /// <summary>Sequence number of the dead-lettered original to settle after the edit is sent.</summary>
+        public long SequenceNumber { get; set; }
+        public SbMessage Message { get; set; } = null!;
+        /// <summary>Optional destination override; defaults to the entity the DLQ belongs to.</summary>
+        public string? TargetEntityPath { get; set; }
     }
 
     public sealed class PurgeRequest

@@ -52,6 +52,24 @@ export interface SbEntityInfo {
      * its backlog without the tree fetching every topic's subscriptions. `null` elsewhere or when unreadable.
      */
     subscriptionDeadLetterCount: number | null;
+    /**
+     * `RequiresSession` from the queue/subscription properties. Session-enabled entities reject
+     * the plain receivers every settle path uses (complete/dead-letter/resubmit/resend/purge), so
+     * the UI badges them and disables those actions rather than letting them 502 on the broker.
+     */
+    requiresSession: boolean;
+}
+
+/**
+ * One session's footprint inside the peek window — produced by
+ * `GET .../entities/{path}/sessions` (and by `groupMessagesBySession` client-side over the
+ * loaded window when the endpoint hasn't answered yet). Sessions beyond the window are absent.
+ */
+export interface SbSessionSummary {
+    sessionId: string;
+    messageCount: number;
+    firstEnqueuedAt: string;
+    lastEnqueuedAt: string;
 }
 
 export interface SbEntityStats {

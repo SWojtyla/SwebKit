@@ -43,7 +43,8 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         [
             Entity("order-created"),
             Entity("order-processed"),
-            Entity("order-failed")
+            Entity("order-failed"),
+            Entity("order-sessions")
         ];
         return Task.FromResult(queues);
     }
@@ -151,6 +152,15 @@ public sealed class DemoServiceBusClient : IServiceBusClient
                 ? d.DeadLetterMessages.Where(m => fromSequenceNumber is null || m.SequenceNumber >= fromSequenceNumber).Take(count).ToList()
                 : []);
 
+    public Task<IReadOnlyList<SbSessionSummary>> PeekSessionsAsync(string entityPath, int count, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        IReadOnlyList<SbSessionSummary> sessions = _entityData.TryGetValue(entityPath, out var d)
+            ? SbSessionSummary.Summarize(d.ActiveMessages.Take(count))
+            : [];
+        return Task.FromResult(sessions);
+    }
+
     public Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
@@ -244,8 +254,122 @@ public sealed class DemoServiceBusClient : IServiceBusClient
     public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) =>
         Task.CompletedTask;
 
-    public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default) =>
-        Task.CompletedTask;
+    /// <summary>
+    /// Move-semantics resubmit, mirroring <see cref="Azure-side"/> behavior: each requested DLQ
+    /// message is cloned (fresh MessageId, dead-letter stamp stripped, remap rules applied) onto
+    /// the target — <paramref name="targetEntityPath"/>, or the entity itself — and removed from
+    /// the store's DLQ. No-op-ing here would let e2e "pass" while never exercising a mutation.
+    /// </summary>
+    public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (sequenceNumbers.Count == 0 || !_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            return Task.CompletedTask;
+        }
+
+        var requested = ParseSequenceNumbers(sequenceNumbers);
+        var target = targetEntityPath ?? SendableFallback(entityPath);
+
+        var kept = new List<SbMessage>(entityData.DeadLetterMessages.Count);
+        var moved = new List<SbMessage>();
+        foreach (var message in entityData.DeadLetterMessages)
+        {
+            if (message.SequenceNumber is { } seq && requested.Remove(seq))
+            {
+                var props = new Dictionary<string, object>(message.ApplicationProperties);
+                props.Remove("DeadLetterReason");
+                props.Remove("DeadLetterErrorDescription");
+                var clone = new SbMessage
+                {
+                    MessageId = Guid.NewGuid().ToString(),
+                    CorrelationId = message.CorrelationId,
+                    Subject = message.Subject,
+                    ContentType = message.ContentType,
+                    Body = message.Body,
+                    ApplicationProperties = props,
+                    EnqueuedAt = DateTimeOffset.UtcNow,
+                    SequenceNumber = Interlocked.Increment(ref _nextSequence),
+                    SessionId = message.SessionId
+                };
+                ApplyRemapRules(clone, remapRules);
+                moved.Add(clone);
+            }
+            else
+            {
+                kept.Add(message);
+            }
+        }
+
+        _entityData[entityPath] = entityData with { DeadLetterMessages = kept };
+        foreach (var clone in moved)
+        {
+            AppendMessage(target, clone);
+        }
+
+        // Same contract as the Azure path: unmatched sequence numbers are an explicit failure,
+        // not a silent partial success — even though the matched ones already moved.
+        if (requested.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"The operation could not find the requested sequence numbers: {string.Join(", ", requested.Order())}.");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Edited resubmit: the DLQ original is replaced by the caller's edited message — same settle
+    /// semantics as <see cref="ResubmitDeadLetterAsync"/> but the outgoing shape comes from the
+    /// edit, not from re-serializing the original.
+    /// </summary>
+    public Task ResubmitEditedDeadLetterAsync(string entityPath, long sequenceNumber, SbMessage message, string? targetEntityPath, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (!_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            throw new InvalidOperationException(
+                $"The operation could not find the requested sequence numbers: {sequenceNumber}.");
+        }
+
+        var original = entityData.DeadLetterMessages
+            .FirstOrDefault(m => m.SequenceNumber == sequenceNumber);
+        if (original is null)
+        {
+            throw new InvalidOperationException(
+                $"The operation could not find the requested sequence numbers: {sequenceNumber}.");
+        }
+
+        var target = targetEntityPath ?? SendableFallback(entityPath);
+        var props = new Dictionary<string, object>(message.ApplicationProperties);
+        props.Remove("DeadLetterReason");
+        props.Remove("DeadLetterErrorDescription");
+        var clone = new SbMessage
+        {
+            MessageId = string.IsNullOrWhiteSpace(message.MessageId)
+                ? Guid.NewGuid().ToString()
+                : message.MessageId,
+            CorrelationId = message.CorrelationId,
+            Subject = message.Subject,
+            ContentType = message.ContentType,
+            Body = message.Body,
+            ApplicationProperties = props,
+            EnqueuedAt = DateTimeOffset.UtcNow,
+            SequenceNumber = Interlocked.Increment(ref _nextSequence),
+            SessionId = message.SessionId
+        };
+
+        _entityData[entityPath] = entityData with
+        {
+            DeadLetterMessages = entityData.DeadLetterMessages
+                .Where(m => m.SequenceNumber != sequenceNumber)
+                .ToList()
+        };
+        AppendMessage(target, clone);
+        return Task.CompletedTask;
+    }
 
     public Task<int> ResendMessagesAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, bool deadLetter, CancellationToken ct = default)
     {
@@ -256,16 +380,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             return Task.FromResult(0);
         }
 
-        var requested = new HashSet<long>();
-        foreach (var s in sequenceNumbers)
-        {
-            if (!long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
-            {
-                throw new InvalidOperationException($"Sequence number '{s}' is not valid.");
-            }
-
-            requested.Add(parsed);
-        }
+        var requested = ParseSequenceNumbers(sequenceNumbers);
 
         // Move semantics, mirroring the Azure client: the copy (fresh MessageId, broker fields
         // cleared) lands on the NServiceBus.FailedQ target — or the source entity when the header
@@ -305,10 +420,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
 
         foreach (var (target, clone) in moved)
         {
-            var targetData = _entityData.TryGetValue(target, out var existing)
-                ? existing
-                : new DemoEntityData([], []);
-            _entityData[target] = targetData with { ActiveMessages = [.. targetData.ActiveMessages, clone] };
+            AppendMessage(target, clone);
         }
 
         return Task.FromResult(moved.Count);
@@ -324,13 +436,103 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         }
 
         // Subscriptions are receive-only — the sendable fallback is the parent topic.
-        const string marker = "/subscriptions/";
-        var markerIndex = fallbackEntityPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        return markerIndex > 0 ? fallbackEntityPath[..markerIndex] : fallbackEntityPath;
+        return SendableFallback(fallbackEntityPath);
     }
 
-    public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) =>
-        Task.CompletedTask;
+    /// <summary>
+    /// The sendable path for an entity: a subscription's DLQ resubmit must target the parent
+    /// topic — `topic/subscriptions/name` rejects sends on the real broker too.
+    /// </summary>
+    private static string SendableFallback(string entityPath)
+    {
+        const string marker = "/subscriptions/";
+        var markerIndex = entityPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        return markerIndex > 0 ? entityPath[..markerIndex] : entityPath;
+    }
+
+    private static HashSet<long> ParseSequenceNumbers(IReadOnlyList<string> sequenceNumbers)
+    {
+        var requested = new HashSet<long>();
+        foreach (var s in sequenceNumbers)
+        {
+            if (!long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                throw new InvalidOperationException($"Sequence number '{s}' is not valid.");
+            }
+
+            requested.Add(parsed);
+        }
+
+        return requested;
+    }
+
+    private void AppendMessage(string entityPath, SbMessage message)
+    {
+        var targetData = _entityData.TryGetValue(entityPath, out var existing)
+            ? existing
+            : new DemoEntityData([], []);
+        _entityData[entityPath] = targetData with { ActiveMessages = [.. targetData.ActiveMessages, message] };
+    }
+
+    private static void ApplyRemapRules(SbMessage message, RemapRules? rules)
+    {
+        if (rules is null || rules.IsEmpty)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(rules.OverrideSubject))
+        {
+            message.Subject = rules.OverrideSubject;
+        }
+
+        if (!string.IsNullOrWhiteSpace(rules.OverrideCorrelationId))
+        {
+            message.CorrelationId = rules.OverrideCorrelationId;
+        }
+
+        foreach (var (oldKey, newKey) in rules.PropertyRenames)
+        {
+            if (message.ApplicationProperties.TryGetValue(oldKey, out var value))
+            {
+                message.ApplicationProperties.Remove(oldKey);
+                if (!string.IsNullOrWhiteSpace(newKey))
+                {
+                    message.ApplicationProperties[newKey] = value;
+                }
+            }
+        }
+
+        foreach (var removeKey in rules.PropertyRemoves)
+        {
+            message.ApplicationProperties.Remove(removeKey);
+        }
+    }
+
+    /// <summary>Broker-settle honesty: requested DLQ messages actually leave the store's DLQ.</summary>
+    public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (sequenceNumbers.Count == 0 || !_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            return Task.CompletedTask;
+        }
+
+        var requested = ParseSequenceNumbers(sequenceNumbers);
+        var kept = entityData.DeadLetterMessages
+            .Where(m => m.SequenceNumber is not { } seq || !requested.Remove(seq))
+            .ToList();
+        _entityData[entityPath] = entityData with { DeadLetterMessages = kept };
+
+        if (requested.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"The operation could not find the requested sequence numbers: {string.Join(", ", requested.Order())}.");
+        }
+
+        return Task.CompletedTask;
+    }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -344,6 +546,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         Name = name,
         EntityPath = name,
         IsDisabled = IsDisabled(name),
+        RequiresSession = _entityData.TryGetValue(name, out var data) && data.RequiresSession,
         Stats = new SbEntityStats
         {
             ActiveMessageCount = CountFor(name, false),
@@ -422,6 +625,33 @@ public sealed class DemoServiceBusClient : IServiceBusClient
                         """{"orderId":"ORD-12100","reason":"inventory-unavailable"}""",
                         now.AddHours(-5), 10, 3210)
                 ]),
+            // A session-required queue: the badge/gating UI and PeekSessionsAsync need one
+            // entity whose messages genuinely carry session ids across multiple sessions.
+            ["order-sessions"] = new(
+                [
+                    SessionMsg("os-001", "SessionOrderStep", "sess-alpha",
+                        """{"orderId":"ORD-13001","step":1}""",
+                        now.AddMinutes(-14), 1, 4601, new() { ["source"] = "scheduler" }),
+                    SessionMsg("os-002", "SessionOrderStep", "sess-alpha",
+                        """{"orderId":"ORD-13001","step":2}""",
+                        now.AddMinutes(-11), 1, 4602, new() { ["source"] = "scheduler" }),
+                    SessionMsg("os-003", "SessionOrderStep", "sess-beta",
+                        """{"orderId":"ORD-13002","step":1}""",
+                        now.AddMinutes(-8), 1, 4603, new() { ["source"] = "api" }),
+                    SessionMsg("os-004", "SessionOrderStep", "sess-beta",
+                        """{"orderId":"ORD-13002","step":2}""",
+                        now.AddMinutes(-6), 1, 4604, new() { ["source"] = "api" }),
+                    SessionMsg("os-005", "SessionOrderStep", "sess-gamma",
+                        """{"orderId":"ORD-13003","step":1}""",
+                        now.AddMinutes(-2), 1, 4605, new() { ["source"] = "web-checkout" })
+                ],
+                [
+                    DlqMsg("os-dlq-001", "SessionOrderFailed", "SessionLockLost",
+                        "Session consumer crashed mid-processing",
+                        """{"orderId":"ORD-12900","step":4}""",
+                        now.AddHours(-2), 5, 4590)
+                ],
+                RequiresSession: true),
             ["user-events/subscriptions/consumer-a"] = new(
                 [
                     Msg("ue-a-001", "UserCreated", null,
@@ -513,7 +743,24 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             SequenceNumber = sequenceNumber
         };
 
+    private static SbMessage SessionMsg(
+        string id, string subject, string sessionId, string body,
+        DateTimeOffset enqueuedAt, int deliveryCount, long sequenceNumber,
+        Dictionary<string, object> props) => new()
+        {
+            MessageId = id,
+            Subject = subject,
+            SessionId = sessionId,
+            ContentType = "application/json",
+            Body = body,
+            EnqueuedAt = enqueuedAt,
+            DeliveryCount = deliveryCount,
+            SequenceNumber = sequenceNumber,
+            ApplicationProperties = props
+        };
+
     private sealed record DemoEntityData(
         IReadOnlyList<SbMessage> ActiveMessages,
-        IReadOnlyList<SbMessage> DeadLetterMessages);
+        IReadOnlyList<SbMessage> DeadLetterMessages,
+        bool RequiresSession = false);
 }

@@ -21,6 +21,18 @@ public interface IServiceBusClient
     Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null);
     /// <summary>Peeks up to <paramref name="count"/> dead-lettered messages. See <see cref="PeekMessagesAsync"/> for <paramref name="fromSequenceNumber"/> semantics.</summary>
     Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null);
+    /// <summary>
+    /// Groups the entity's active-message peek window by session id — one summary per session
+    /// with its count and enqueue span. The SDK has no session enumeration and taking session
+    /// receivers would lock sessions, so this is a peek-shaped approximation: sessions beyond the
+    /// peek window are simply absent.
+    /// </summary>
+    /// <remarks>
+    /// The default throws so pre-existing <see cref="IServiceBusClient"/> implementations (test
+    /// fakes, legacy shells) that never served sessions keep compiling; real clients must override.
+    /// </remarks>
+    Task<IReadOnlyList<SbSessionSummary>> PeekSessionsAsync(string entityPath, int count, CancellationToken ct = default) =>
+        throw new NotSupportedException("Session peek is not supported by this Service Bus client.");
     Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default);
     Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default);
     Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default);
@@ -58,6 +70,20 @@ public interface IServiceBusClient
     /// </remarks>
     Task<int> DeadLetterMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default) =>
         throw new NotSupportedException("Dead-lettering is not supported by this Service Bus client.");
+    /// <summary>
+    /// Resubmits a single dead-lettered message after the user edited it: receives the message
+    /// identified by <paramref name="sequenceNumber"/> under peek-lock from the entity's
+    /// dead-letter sub-queue, sends the edited clone to <paramref name="targetEntityPath"/> (or the
+    /// entity itself when null — subscription paths normalize to the parent topic, which is the
+    /// sendable address), then completes the original. Move semantics: the DLQ copy is settled, so
+    /// an edit-and-resubmit never leaves the pre-edit original behind as a duplicate.
+    /// </summary>
+    /// <remarks>
+    /// The default throws so pre-existing <see cref="IServiceBusClient"/> implementations (test
+    /// fakes, legacy shells) keep compiling; real clients must override.
+    /// </remarks>
+    Task ResubmitEditedDeadLetterAsync(string entityPath, long sequenceNumber, SbMessage message, string? targetEntityPath, CancellationToken ct = default) =>
+        throw new NotSupportedException("Resubmit-edited is not supported by this Service Bus client.");
     Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
 }

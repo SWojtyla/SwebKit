@@ -1068,4 +1068,81 @@ test.describe("Service Bus", () => {
             before + 100,
         );
     });
+
+    test("session-required queue badges, lists session chips, and gates settle actions", async ({
+        page,
+    }) => {
+        // Session entities used to surface settle failures as opaque broker 502s. The tree now
+        // carries the flag from the list payload and every mutating control explains itself
+        // instead of letting the action through to fail.
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+
+        // The badge is in the tree row before the entity is even selected.
+        await expect(
+            page.getByTestId("entity-tree-session-order-sessions"),
+        ).toBeVisible();
+        await page.getByTestId("entity-tree-queue-order-sessions").click();
+        await expect(page.getByTestId("message-list")).toBeVisible();
+
+        // One chip per session in the peek window; clicking a chip drives the existing
+        // pin filter rather than filtering on its own, so the two can never disagree.
+        await expect(page.getByTestId("session-chip-bar")).toBeVisible();
+        await expect(page.getByTestId("session-chip-sess-alpha")).toContainText(
+            "sess-alpha (2)",
+        );
+        await page.getByTestId("session-chip-sess-alpha").click();
+        await expect(page.getByTestId("session-pin-filter")).toHaveValue(
+            "sess-alpha",
+        );
+        await expect(page.getByTestId("message-item-4601")).toBeVisible();
+        await expect(page.getByTestId("message-item-4603")).not.toBeVisible();
+        await page.getByTestId("session-chip-sess-alpha").click(); // unpin
+        await expect(page.getByTestId("session-pin-filter")).toHaveValue("");
+
+        // Settle actions are disabled with an explanation, not sent to the broker to fail.
+        await page.getByTestId("message-item-4601").click();
+        await expect(page.getByTestId("message-detail")).toBeVisible();
+        await expect(
+            page.getByTestId("message-complete-button"),
+        ).toBeDisabled();
+        await expect(page.getByTestId("sb-purge-all-button")).toBeDisabled();
+    });
+
+    test("edit & resubmit sends the edited copy and settles the DLQ original", async ({
+        page,
+    }) => {
+        // The old flow was copy-only: it sent the edit but left the dead-lettered original
+        // behind, so the same message existed twice. The dedicated endpoint settles the
+        // original by sequence number once the edited clone lands.
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+        await page.getByTestId("entity-tree-queue-order-created").click();
+        await page.getByTestId("sb-view-dlq").click();
+        await expect(page.getByTestId("message-item-4410")).toBeVisible();
+
+        await page.getByTestId("message-item-4410").click();
+        await expect(page.getByTestId("message-detail")).toBeVisible();
+        await page.getByTestId("message-edit-resubmit").click();
+
+        await expect(page.getByTestId("message-composer")).toBeVisible();
+        await expect(
+            page.getByTestId("composer-edit-resubmit-note"),
+        ).toContainText("seq #4410");
+        await page.getByTestId("composer-subject").fill("ResubmitEditedE2E");
+        await page.getByTestId("composer-send").click();
+        await expect(page.getByTestId("message-composer")).not.toBeVisible();
+
+        // The original left the DLQ — not copy-only anymore.
+        await expect(page.getByTestId("message-item-4410")).not.toBeVisible();
+
+        // And the edited copy landed on the active list with the new subject.
+        await page.getByTestId("sb-view-active").click();
+        await expect(page.getByTestId("message-list")).toBeVisible();
+        await expect(page.getByText("ResubmitEditedE2E")).toBeVisible();
+    });
 });

@@ -77,6 +77,74 @@ public class SbEntityInfo
     /// topic list self-sufficient so those queries can wait until a topic is actually expanded.
     /// </remarks>
     public long? SubscriptionDeadLetterCount { get; set; }
+
+    /// <summary>
+    /// Whether the entity requires sessions (<c>RequiresSession</c> on the queue/subscription
+    /// properties). Populated from the pageable list payloads — no extra broker call.
+    /// </summary>
+    /// <remarks>
+    /// Session-enabled entities reject the plain receivers every settle path here uses
+    /// (complete/dead-letter/resubmit/resend/purge), which previously surfaced as an opaque
+    /// broker error. The UI reads this flag to badge the entity and gate those actions with an
+    /// explanation instead of letting them 502.
+    /// </remarks>
+    public bool RequiresSession { get; set; }
+}
+
+/// <summary>
+/// One session's footprint within a peeked window: how many of the peeked messages carry the
+/// session id and the enqueue-time span they cover. Produced by <c>PeekSessionsAsync</c>, which
+/// groups the ordinary peek window — the Service Bus SDK has no session-enumeration API and
+/// session receivers would lock the session.
+/// </summary>
+public sealed class SbSessionSummary
+{
+    public required string SessionId { get; set; }
+    public int MessageCount { get; set; }
+    public DateTimeOffset FirstEnqueuedAt { get; set; }
+    public DateTimeOffset LastEnqueuedAt { get; set; }
+
+    /// <summary>
+    /// Groups a peeked message window by <see cref="SbMessage.SessionId"/> into per-session
+    /// summaries, most recently active first. Messages without a session id are skipped —
+    /// on a session-required entity that should be none of them, but a mixed peek stays honest.
+    /// </summary>
+    public static IReadOnlyList<SbSessionSummary> Summarize(IEnumerable<SbMessage> messages)
+    {
+        var groups = new Dictionary<string, SbSessionSummary>(StringComparer.Ordinal);
+        foreach (var message in messages)
+        {
+            if (string.IsNullOrEmpty(message.SessionId))
+            {
+                continue;
+            }
+
+            if (!groups.TryGetValue(message.SessionId, out var summary))
+            {
+                summary = new SbSessionSummary
+                {
+                    SessionId = message.SessionId,
+                    FirstEnqueuedAt = message.EnqueuedAt,
+                    LastEnqueuedAt = message.EnqueuedAt,
+                };
+                groups[message.SessionId] = summary;
+            }
+
+            summary.MessageCount++;
+            if (message.EnqueuedAt < summary.FirstEnqueuedAt)
+            {
+                summary.FirstEnqueuedAt = message.EnqueuedAt;
+            }
+            if (message.EnqueuedAt > summary.LastEnqueuedAt)
+            {
+                summary.LastEnqueuedAt = message.EnqueuedAt;
+            }
+        }
+
+        return groups.Values
+            .OrderByDescending(s => s.LastEnqueuedAt)
+            .ToList();
+    }
 }
 
 public class SbEntityStats

@@ -12,6 +12,7 @@ import type {
     SbMessage,
     SbNamespaceInfo,
     SbMessageTemplate,
+    SbSessionSummary,
     ScheduledMessageEntry,
 } from "../types";
 
@@ -146,6 +147,29 @@ export function useSbPeekDlq(
 }
 
 /**
+ * Session summaries for the entity's peek window — the "who holds sessions here" answer behind
+ * the chip bar. The endpoint groups the peek window server-side (there is no session-listing
+ * API in the SDK); callers only enable it on `requiresSession` entities, so the extra request
+ * never fires on ordinary queues.
+ */
+export function useSbSessions(
+    nsId: string | null,
+    entityPath: string | null,
+    options?: { enabled?: boolean },
+) {
+    return useQuery({
+        queryKey: ["sb-sessions", nsId, entityPath],
+        queryFn: ({ signal }) =>
+            apiFetch<SbSessionSummary[]>(
+                `/api/servicebus/${nsId}/entities/${entitySegment(entityPath!)}/sessions?count=250`,
+                { signal },
+            ),
+        enabled: !!nsId && !!entityPath && (options?.enabled ?? true),
+        retry: 1, // same reasoning as useSbPeekMessages
+    });
+}
+
+/**
  * Finds an entity's already-loaded counts in the cached queue/topic/subscription lists.
  *
  * The tree fetches counts for every entity it lists, so selecting one and then fetching its `/stats`
@@ -225,6 +249,7 @@ export function invalidateServiceBusQueries(
     qc.invalidateQueries({ queryKey: ["sb-dlq", nsId, entityPath] });
     qc.invalidateQueries({ queryKey: ["sb-entity-stats", nsId, entityPath] });
     qc.invalidateQueries({ queryKey: ["sb-scheduled", nsId, entityPath] });
+    qc.invalidateQueries({ queryKey: ["sb-sessions", nsId, entityPath] });
 
     // Message mutations change the counts the entity-tree badges render from the
     // queue/topic lists — one request each, cheap enough to refresh on every
@@ -466,5 +491,43 @@ export function useSbResubmitDlq() {
         },
         onError: (error) =>
             notify("error", "Couldn't resubmit messages", String(error)),
+    });
+}
+
+/**
+ * The DLQ "Edit & Resubmit" path: sends the edited message to the target entity and — unlike a
+ * plain send — settles the DLQ original by sequence number, so the pre-edit copy can't linger as
+ * a duplicate next to the edited one. Same-namespace operation; `targetEntityPath` is a
+ * destination override within it.
+ */
+export function useSbResubmitEditedDlq() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: {
+            nsId: string;
+            entityPath: string;
+            sequenceNumber: number;
+            message: SbMessage;
+            targetEntityPath?: string | null;
+        }) =>
+            apiSend(
+                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/dlq/resubmit-edited`,
+                "POST",
+                {
+                    sequenceNumber: vars.sequenceNumber,
+                    message: vars.message,
+                    targetEntityPath: vars.targetEntityPath ?? null,
+                },
+            ),
+        onSuccess: (_data, vars) => {
+            invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
+        },
+        onError: (error) =>
+            notify(
+                "error",
+                "Couldn't resubmit edited message",
+                String(error),
+            ),
     });
 }

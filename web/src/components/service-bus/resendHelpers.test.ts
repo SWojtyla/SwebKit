@@ -32,6 +32,7 @@ function makeEntity(overrides: Partial<SbEntityInfo> = {}): SbEntityInfo {
     isSubscription: false,
     topicName: null,
     subscriptionDeadLetterCount: null,
+    requiresSession: false,
     ...overrides,
   };
 }

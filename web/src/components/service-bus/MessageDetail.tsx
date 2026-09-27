@@ -28,6 +28,10 @@ import {
 import { tryPrettifyJson } from "@/lib/pretty-json";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
 import { messageToDownloadObject, safeFileName } from "./exportHelpers";
+import {
+    requiresSessions,
+    SESSIONS_NOT_SUPPORTED_TOOLTIP,
+} from "./sessionHelpers";
 import { formatBytesLong } from "@/lib/format-bytes";
 import { formatLocalDateTime } from "@/lib/datetime";
 
@@ -61,6 +65,9 @@ export function MessageDetail({
     const completeMutation = useSbCompleteMessages();
     const completeDlqMutation = useSbCompleteDlq();
     const resubmitMutation = useSbResubmitDlq();
+    // Session-required entities reject the plain receivers these settle actions ride on — gate
+    // them with an explanation rather than surfacing the broker's opaque error after the click.
+    const sessionBlocked = requiresSessions(entity);
     const [activeTab, setActiveTab] = useState<DetailTab>("body");
     const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -304,11 +311,16 @@ export function MessageDetail({
                             <button
                                 data-testid="message-complete-button"
                                 onClick={onComplete}
-                                disabled={completeMutation.isPending}
+                                disabled={
+                                    completeMutation.isPending ||
+                                    sessionBlocked
+                                }
                                 title={
-                                    completeMutation.isPending
-                                        ? "Completing…"
-                                        : "Settle this message — permanently removed from the queue"
+                                    sessionBlocked
+                                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                                        : completeMutation.isPending
+                                          ? "Completing…"
+                                          : "Settle this message — permanently removed from the queue"
                                 }
                                 className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
                             >
@@ -320,11 +332,16 @@ export function MessageDetail({
                                 <button
                                     data-testid="message-resubmit-button"
                                     onClick={onResubmit}
-                                    disabled={resubmitMutation.isPending}
+                                    disabled={
+                                        resubmitMutation.isPending ||
+                                        sessionBlocked
+                                    }
                                     title={
-                                        resubmitMutation.isPending
-                                            ? "Resubmitting…"
-                                            : `Send this message back to ${entity?.entityPath ?? "the source entity"} with a new Message ID, then remove it from the dead-letter queue`
+                                        sessionBlocked
+                                            ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                                            : resubmitMutation.isPending
+                                              ? "Resubmitting…"
+                                              : `Send this message back to ${entity?.entityPath ?? "the source entity"} with a new Message ID, then remove it from the dead-letter queue`
                                     }
                                     className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
                                 >
@@ -333,11 +350,16 @@ export function MessageDetail({
                                 <button
                                     data-testid="message-complete-dlq-button"
                                     onClick={onCompleteDlq}
-                                    disabled={completeDlqMutation.isPending}
+                                    disabled={
+                                        completeDlqMutation.isPending ||
+                                        sessionBlocked
+                                    }
                                     title={
-                                        completeDlqMutation.isPending
-                                            ? "Completing…"
-                                            : "Permanently remove this message from the dead-letter queue"
+                                        sessionBlocked
+                                            ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                                            : completeDlqMutation.isPending
+                                              ? "Completing…"
+                                              : "Permanently remove this message from the dead-letter queue"
                                     }
                                     className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
                                 >
@@ -412,8 +434,15 @@ export function MessageDetail({
                         <button
                             data-testid="message-edit-resubmit"
                             onClick={() => onEditResubmit(message)}
-                            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-                            title="Edit and resubmit this message"
+                            disabled={sessionBlocked && viewMode === "dlq"}
+                            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                            title={
+                                sessionBlocked && viewMode === "dlq"
+                                    ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                                    : viewMode === "dlq"
+                                      ? "Edit this message, send it back, and settle the dead-lettered original"
+                                      : "Edit and resubmit this message"
+                            }
                         >
                             <Pencil className="h-3 w-3" /> Edit & Resubmit
                         </button>

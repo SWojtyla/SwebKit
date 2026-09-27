@@ -40,6 +40,7 @@ describe("invalidateServiceBusQueries", () => {
             ["sb-dlq", nsId, entityPath, 50],
             ["sb-entity-stats", nsId, entityPath],
             ["sb-scheduled", nsId, entityPath],
+            ["sb-sessions", nsId, entityPath],
         ]);
 
         invalidateServiceBusQueries(qc, nsId, entityPath);
@@ -52,6 +53,7 @@ describe("invalidateServiceBusQueries", () => {
         expect(isInvalidated(qc, ["sb-scheduled", nsId, entityPath])).toBe(
             true,
         );
+        expect(isInvalidated(qc, ["sb-sessions", nsId, entityPath])).toBe(true);
     });
 
     it("invalidates the count-bearing lists but not unrelated subscription lists", () => {
@@ -157,6 +159,7 @@ describe("findCachedEntityStats", () => {
         isSubscription: false,
         topicName: null,
         subscriptionDeadLetterCount: null,
+        requiresSession: false,
     });
 
     it("finds a queue's counts already loaded by the tree", () => {

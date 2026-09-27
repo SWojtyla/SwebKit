@@ -122,6 +122,23 @@ const EntityIcon = ({ entity }: { entity: SbEntityInfo }) => {
   return <Mail className="h-4 w-4 text-muted-foreground" />;
 };
 
+/**
+ * Marker for `requiresSession` entities — the reason it matters (settle actions are gated there)
+ * is spelled out in the badge's tooltip rather than learned from a broker error after the fact.
+ */
+const SessionBadge = ({ entity }: { entity: SbEntityInfo }) => {
+  if (!entity.requiresSession) return null;
+  return (
+    <span
+      data-testid={`entity-tree-session-${entity.name}`}
+      title="Requires sessions — settle actions (complete, dead-letter, resubmit, resend, purge) are unavailable on this entity"
+      className="shrink-0 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium uppercase leading-none text-amber-600 dark:text-amber-400"
+    >
+      session
+    </span>
+  );
+};
+
 function SortArrow({ active, asc }: { active: boolean; asc: boolean }) {
   if (!active) return null;
   return asc ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />;
@@ -267,6 +284,7 @@ export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
                 >
                   <EntityIcon entity={queue} />
                   <span className="truncate flex-1">{queue.name}</span>
+                  <SessionBadge entity={queue} />
                   <EntityStatsBadges entity={queue} onSelectEntity={onSelectEntity} />
                 </div>
               ))}
@@ -496,6 +514,7 @@ function SubscriptionRows({
         >
           <Mail className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="truncate flex-1">{sub.name}</span>
+          <SessionBadge entity={sub} />
           <EntityStatsBadges entity={sub} onSelectEntity={onSelectEntity} />
         </div>
       ))}

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertCircle, RefreshCw } from "lucide-react";
-import { invalidateServiceBusQueries } from "@/lib/hooks";
+import { invalidateServiceBusQueries, useSbSessions } from "@/lib/hooks";
 import { apiSend } from "@/lib/api";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
@@ -34,8 +34,10 @@ import {
     MessageListToolbar,
     ColumnTogglePanel,
     SessionPinFilter,
+    SessionChipBar,
     AdvancedFilterSection,
 } from "./MessageListToolbar";
+import { requiresSessions, sessionChips } from "./sessionHelpers";
 import {
     BulkActionBar,
     BulkConfirmBar,
@@ -134,6 +136,19 @@ export function MessageList({
 
     const entityPath = entity?.entityPath;
 
+    // Session-awareness: only a requiresSession entity gets the sessions query — on ordinary
+    // queues it would be a wasted peek. The chip bar falls back to grouping the already-loaded
+    // window while the endpoint hasn't answered (or if it failed), so the chips and the pin
+    // filter they feed can never disagree about which sessions exist.
+    const sessionEntity = requiresSessions(entity);
+    const sessionsQuery = useSbSessions(nsId ?? null, entityPath ?? null, {
+        enabled: sessionEntity,
+    });
+    const sessions = useMemo(
+        () => (sessionEntity ? sessionChips(sessionsQuery.data, messages) : []),
+        [sessionEntity, sessionsQuery.data, messages],
+    );
+
     // Reload prefs when entity changes
     useEffect(() => {
         if (nsId && entityPath) {
@@ -205,38 +220,38 @@ export function MessageList({
     const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null);
 
     const handleBulkComplete = useCallback(() => {
-        if (!nsId || !entity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
         const seqNumbers = messages
             .filter((m) => selectedMsgs.has(sbMessageKey(m)))
             .map((m) => m.sequenceNumber)
             .filter((n): n is number => n !== null);
         if (seqNumbers.length === 0) return;
         setPendingBulkConfirm({ kind: "complete", seqNumbers });
-    }, [nsId, entity, selectedMsgs, messages]);
+    }, [nsId, entity, sessionEntity, selectedMsgs, messages]);
 
     const handleBulkResubmit = useCallback(() => {
-        if (!nsId || !entity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
         const seqNumbers = messages
             .filter((m) => selectedMsgs.has(sbMessageKey(m)))
             .map((m) => m.sequenceNumber)
             .filter((n): n is number => n !== null);
         if (seqNumbers.length === 0) return;
         setPendingBulkConfirm({ kind: "resubmit", seqNumbers });
-    }, [nsId, entity, selectedMsgs, messages]);
+    }, [nsId, entity, sessionEntity, selectedMsgs, messages]);
 
     // Dead-letter is the broker's own move-to-DLQ settlement
     // (DeadLetterMessageAsync): the message leaves the active list and lands in
     // the entity's DLQ with a recorded reason — not a copy-and-delete. Only
     // meaningful on the active view.
     const handleBulkDeadLetter = useCallback(() => {
-        if (!nsId || !entity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
         const seqNumbers = messages
             .filter((m) => selectedMsgs.has(sbMessageKey(m)))
             .map((m) => m.sequenceNumber)
             .filter((n): n is number => n !== null);
         if (seqNumbers.length === 0) return;
         setPendingBulkConfirm({ kind: "deadletter", seqNumbers });
-    }, [nsId, entity, selectedMsgs, messages]);
+    }, [nsId, entity, sessionEntity, selectedMsgs, messages]);
 
     // Resend is move-to-origin semantics: the sidecar forwards each selected
     // message to the queue it failed in (NServiceBus.FailedQ, falling back to this
@@ -245,13 +260,13 @@ export function MessageList({
     // confirm text and sequence numbers stay stable even if the list refreshes
     // before confirm.
     const handleBulkResend = useCallback(() => {
-        if (!nsId || !entity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
         const selected = messages.filter((m) =>
             selectedMsgs.has(sbMessageKey(m)),
         );
         if (selected.length === 0) return;
         setPendingBulkConfirm({ kind: "resend", messages: selected });
-    }, [nsId, entity, selectedMsgs, messages]);
+    }, [nsId, entity, sessionEntity, selectedMsgs, messages]);
 
     // Bulk runs are chunked so the progress bar reflects real completed work —
     // a single request gives no signal until it finishes. The selection stays
@@ -638,6 +653,14 @@ export function MessageList({
                 pinnedSessionId={pinnedSessionId}
                 onChange={setPinnedSessionId}
             />
+
+            {sessionEntity && (
+                <SessionChipBar
+                    sessions={sessions}
+                    pinnedSessionId={pinnedSessionId}
+                    onPin={setPinnedSessionId}
+                />
+            )}
 
             {advancedEnabled && (
                 <AdvancedFilterSection
