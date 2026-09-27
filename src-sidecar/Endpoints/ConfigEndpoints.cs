@@ -1,10 +1,12 @@
 using SwebKit.Sidecar.Services;
+using SwebKit.Sidecar.Services.AccessProbes;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Security;
 using SwebKit.Core.Serialization;
 using SwebKit.Core.Services;
 
@@ -42,7 +44,8 @@ public static class ConfigEndpoints
     internal static async Task<Ok> ImportAsync(
         ConfigurationBundleService svc,
         HttpRequest req,
-        ICredentialStore credentialStore)
+        ICredentialStore credentialStore,
+        IAccessReportService accessReports)
     {
         using var reader = new StreamReader(req.Body);
         var json = await reader.ReadToEndAsync().ConfigureAwait(false);
@@ -52,6 +55,8 @@ public static class ConfigEndpoints
         // profiles.json — post-import migration would leave the secret on disk in between.
         RedisCredentialMigration.MigrateCaches(bundle.Profiles?.Config?.RedisConfig, credentialStore);
         await svc.ImportAsync(bundle).ConfigureAwait(false);
+        // An import replaces the whole profile — every cached probe result belongs to the old one.
+        accessReports.InvalidateAll();
         return TypedResults.Ok();
     }
 
@@ -99,7 +104,8 @@ public static class ConfigEndpoints
         IServiceBusConnectionPool serviceBusPool,
         ISqlConnectionPool sqlPool,
         IMonitoringConnectionPool monitoringPool,
-        ICredentialStore credentialStore)
+        ICredentialStore credentialStore,
+        IAccessReportService accessReports)
     {
         // The profile GET overlays demo entities while demo mode is on and saves round-trip the
         // whole profile — strip the demo ids so a save can't persist them as real configuration.
@@ -144,17 +150,32 @@ public static class ConfigEndpoints
         // reason storage does, so they go stale the same way.
         storagePool.InvalidateAll();
         serviceBusPool.InvalidateAll();
+        // The access-report cache follows the same staleness rules: a rotated credential or
+        // flipped auth mode can turn an Ok row Denied, and a removed connection's rows must
+        // disappear rather than linger for the TTL. Storage and Service Bus are invalidated
+        // wholesale, matching their pools above; Redis/SQL/AKS get the same targeted treatment
+        // their pools get.
+        accessReports.Invalidate(StorageAccessProbes.Area);
+        accessReports.Invalidate(ServiceBusAccessProbes.Area);
         // Redis gets targeted eviction instead of InvalidateAll: the Redis page persists its
         // selected cache on every switch (that PUT lands here), and tearing down every pooled
         // connection for an ActiveCacheId-only change would force a reconnect — and could dispose
         // a client an in-flight request is still using — on each switch.
         foreach (var staleId in StaleRedisCacheIds(previousRedisCaches, data.Config?.RedisConfig?.Caches, credentialStore))
+        {
             redisPool.Evict(staleId);
+            accessReports.Invalidate(RedisAccessProbes.Area, staleId);
+        }
         // SQL gets the same targeted eviction: the pool keys clients by connection id alone, so a
         // Server/Database edit used to leave a pooled ISqlClient aimed at the old server and
         // "Test connection" silently exercised the stale one.
         foreach (var staleId in StaleSqlConnectionIds(previousSqlConnections, data.Config?.SqlConfig?.Connections))
+        {
             sqlPool.Evict(staleId);
+            accessReports.Invalidate(SqlAccessProbes.Area, staleId);
+        }
+        if (!string.Equals(previous?.ObservabilityConfig?.SelectedResourceId, data.Config?.ObservabilityConfig?.SelectedResourceId, StringComparison.OrdinalIgnoreCase))
+            accessReports.Invalidate(ObservabilityAccessProbes.Area);
 
         // The monitoring pool (signal sources) caches AKS/Service Bus/Redis clients of its own
         // and used to keep them forever — a credential or kubeconfig-path edit left signal
@@ -162,7 +183,10 @@ public static class ConfigEndpoints
         // page pools are: the Redis page PUTs the profile on every cache switch, and a blanket
         // drain would drop the warm AKS client (and its 5-minute namespace cache) on each flip.
         if (!string.Equals(previousAks?.KubeconfigPath, data.Config?.AksConfig?.KubeconfigPath, StringComparison.OrdinalIgnoreCase))
+        {
             monitoringPool.EvictAksClients();
+            accessReports.Invalidate(AksAccessProbes.Area);
+        }
         foreach (var stale in StaleServiceBusNamespaces(previousSbNamespaces, data.ServiceBusNamespaces))
         {
             // The pool keys clients by whatever identifier the caller resolved — alias or id —

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 using SwebKit.Sidecar.Endpoints;
 
@@ -85,6 +86,26 @@ internal sealed class TrackingMonitoringConnectionPool : IMonitoringConnectionPo
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
+/// <summary>Records the invalidations a profile save/import issues to the access-report cache.</summary>
+internal sealed class TrackingAccessReportService : IAccessReportService
+{
+    public List<(string FeatureArea, string? ConnectionKey)> Invalidations { get; } = [];
+    public int InvalidateAllCallCount { get; private set; }
+    public AccessReport Report { get; set; } = new([], DateTimeOffset.UtcNow);
+
+    public Task<AccessReport> GetReportAsync(bool forceRefresh = false, CancellationToken ct = default) =>
+        Task.FromResult(Report);
+    public void Invalidate(string featureArea, string? connectionKey = null) =>
+        Invalidations.Add((featureArea, connectionKey));
+    public void InvalidateAll() => InvalidateAllCallCount++;
+    public void RecordObservedDenial(AccessDenial denial, string connectionKey) { }
+    public bool TryGetKnownDenial(string featureArea, string connectionKey, string capability, out AccessDenial denial)
+    {
+        denial = null!;
+        return false;
+    }
+}
+
 public class ConfigEndpointsTests
 {
     private static ConfigurationBundleService BuildService(out CollectionRepository collections, out ProfileRepository profiles)
@@ -135,7 +156,7 @@ public class ConfigEndpointsTests
         var importSvc = BuildService(out var importCollections, out var importProfiles);
         var ctx = BuildImportHttpContext(exportedJson);
 
-        var result = await ConfigEndpoints.ImportAsync(importSvc, ctx.Request, new FakeCredentialStore());
+        var result = await ConfigEndpoints.ImportAsync(importSvc, ctx.Request, new FakeCredentialStore(), new TrackingAccessReportService());
 
         Assert.Equal(200, result.StatusCode);
         await importCollections.LoadAsync();
@@ -150,7 +171,7 @@ public class ConfigEndpointsTests
         var badJson = """{"schemaVersion":99}""";
         var ctx = BuildImportHttpContext(badJson);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => ConfigEndpoints.ImportAsync(svc, ctx.Request, new FakeCredentialStore()));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ConfigEndpoints.ImportAsync(svc, ctx.Request, new FakeCredentialStore(), new TrackingAccessReportService()));
 
         // Nothing should have been written for an unsupported schema version.
         Assert.Empty(collections.Collections);
@@ -208,7 +229,8 @@ public class ConfigEndpointsTests
             new TrackingRedisConnectionPool(),
             new TrackingServiceBusConnectionPool(),
             new TrackingSqlConnectionPool(),
-            new TrackingMonitoringConnectionPool(), new FakeCredentialStore());
+            new TrackingMonitoringConnectionPool(), new FakeCredentialStore(),
+            new TrackingAccessReportService());
 
         var reloaded = new ProfileRepository();
         await reloaded.LoadAsync();
@@ -252,7 +274,8 @@ public class ConfigEndpointsTests
             new TrackingRedisConnectionPool(),
             new TrackingServiceBusConnectionPool(),
             new TrackingSqlConnectionPool(),
-            new TrackingMonitoringConnectionPool(), new FakeCredentialStore());
+            new TrackingMonitoringConnectionPool(), new FakeCredentialStore(),
+            new TrackingAccessReportService());
 
         var stored = profile.GetProfileData();
         Assert.Single(stored.ServiceBusNamespaces);
@@ -306,7 +329,8 @@ public class ConfigEndpointsTests
         var sqlPool = new TrackingSqlConnectionPool();
         var monitoringPool = new TrackingMonitoringConnectionPool();
 
-        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool, redisPool, serviceBusPool, sqlPool, monitoringPool, new FakeCredentialStore());
+        var accessReports = new TrackingAccessReportService();
+        await ConfigEndpoints.SaveProfileAsync(profile, data, storagePool, redisPool, serviceBusPool, sqlPool, monitoringPool, new FakeCredentialStore(), accessReports);
 
         Assert.Equal(1, storagePool.InvalidateAllCallCount);
         Assert.Equal(1, serviceBusPool.InvalidateAllCallCount);
@@ -354,7 +378,8 @@ public class ConfigEndpointsTests
             new TrackingRedisConnectionPool(),
             new TrackingServiceBusConnectionPool(),
             new TrackingSqlConnectionPool(),
-            monitoringPool, new FakeCredentialStore());
+            monitoringPool, new FakeCredentialStore(),
+            new TrackingAccessReportService());
 
         // A kubeconfig path change invalidates every pooled AKS client (they were all built from
         // the old file); the Service Bus FQDN change evicts that namespace's client under both
@@ -382,7 +407,8 @@ public class ConfigEndpointsTests
             new TrackingRedisConnectionPool(),
             new TrackingServiceBusConnectionPool(),
             new TrackingSqlConnectionPool(),
-            monitoringPool, new FakeCredentialStore());
+            monitoringPool, new FakeCredentialStore(),
+            new TrackingAccessReportService());
 
         Assert.Equal(0, monitoringPool.EvictAksClientsCallCount);
     }
@@ -518,7 +544,8 @@ public class ConfigEndpointsTests
             new TrackingServiceBusConnectionPool(),
             new TrackingSqlConnectionPool(),
             new TrackingMonitoringConnectionPool(),
-            store);
+            store,
+            new TrackingAccessReportService());
 
         var stored = profile.GetProfileData().Config.RedisConfig!.Caches;
         var migrated = Assert.Single(stored, c => c.Id == "cache-a");
@@ -557,7 +584,8 @@ public class ConfigEndpointsTests
             new TrackingServiceBusConnectionPool(),
             new TrackingSqlConnectionPool(),
             new TrackingMonitoringConnectionPool(),
-            store);
+            store,
+            new TrackingAccessReportService());
 
         Assert.Null(store.Get("sw-secret:redis:gone:abc12345"));
     }

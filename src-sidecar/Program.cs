@@ -98,6 +98,12 @@ builder.Services.AddSingleton<SwebKit.Sidecar.Services.SidecarMonitoringConnecti
 builder.Services.AddSingleton<SwebKit.Core.Abstractions.IMonitoringConnectionPool>(
     sp => sp.GetRequiredService<SwebKit.Sidecar.Services.SidecarMonitoringConnectionPool>());
 
+// Per-environment access report — probes each capability through the existing pooled
+// clients, caches 5 min, feeds the Settings "Access" surface and the agent's
+// known-denial short-circuit.
+builder.Services.AddSingleton<SwebKit.Core.Security.IAccessReportService,
+    SwebKit.Sidecar.Services.AccessReportService>();
+
 // Each signal source is registered both as its concrete type and as IAlertSignalSource so the
 // engine can resolve the full IAlertSignalSource list via DI.
 builder.Services.AddSingleton<SwebKit.Kubernetes.AksClient.AksPodHealthSignalSource>();
@@ -449,6 +455,10 @@ app.MapSystemEndpoints();
 // ── Config: Profiles, Environments, Collections, User Settings, Import/Export ─
 
 app.MapConfigEndpoints();
+
+// ── Access report (per-environment capability probing) ──────────────────────
+
+app.MapAccessEndpoints();
 
 // ── Service Bus ──────────────────────────────────────────────────────────────
 
