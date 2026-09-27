@@ -263,6 +263,59 @@ public static class ServiceBusEndpoints
 
         app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/resend", ResendMessagesAsync);
 
+        // DLQ triage beyond the peek window — resubmit everything matching a reason/description
+        // pair, server-side, up to a limit.
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/dlq/requeue-by-filter", ResubmitDeadLetterByFilterAsync);
+
+        // ── Reach-message power op ───────────────────────────────────────────
+        // The op service is constructed here rather than registered in Program.cs (which a
+        // concurrent workstream owns): dependencies are all resolvable from app.Services, and the
+        // instance is captured by the lambdas below — effectively a singleton for the app's life.
+        var sbOperationJournal = new SbOperationJournalRepository(
+            app.Services.GetService<ILogger<SbOperationJournalRepository>>());
+        var sbOperations = new SbOperationService(
+            sbOperationJournal,
+            app.Services.GetService<ILogger<SbOperationService>>());
+
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/reach-message/preview",
+            (string nsId, string entityPath, ReachMessageRequest req,
+             ProfileRepository profile, IServiceBusConnectionPool pool, DemoModeService demo,
+             CancellationToken ct) =>
+                ReachMessagePreviewAsync(nsId, entityPath, req, profile, pool, demo, sbOperations, ct));
+
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/reach-message/start",
+            (string nsId, string entityPath, ReachMessageRequest req,
+             ProfileRepository profile, IServiceBusConnectionPool pool, DemoModeService demo,
+             CancellationToken ct) =>
+                ReachMessageStartAsync(nsId, entityPath, req, profile, pool, demo, sbOperations, ct));
+
+        app.MapGet("/api/servicebus/{nsId}/operations/{operationId}",
+            (string nsId, string operationId,
+             ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+                GetOperationAsync(nsId, operationId, profile, demo, sbOperations, ct));
+
+        app.MapPost("/api/servicebus/{nsId}/operations/{operationId}/cancel",
+            (string nsId, string operationId,
+             ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+                CancelOperationAsync(nsId, operationId, profile, demo, sbOperations, ct));
+
+        app.MapPost("/api/servicebus/{nsId}/operations/{operationId}/resume",
+            (string nsId, string operationId,
+             ProfileRepository profile, IServiceBusConnectionPool pool, DemoModeService demo,
+             CancellationToken ct) =>
+                ResumeOperationAsync(nsId, operationId, profile, pool, demo, sbOperations, ct));
+
+        app.MapPost("/api/servicebus/{nsId}/operations/{operationId}/dismiss",
+            (string nsId, string operationId,
+             ProfileRepository profile, DemoModeService demo, CancellationToken ct) =>
+                DismissOperationAsync(nsId, operationId, profile, demo, sbOperations, ct));
+
+        app.MapGet("/api/servicebus/{nsId}/operations",
+            (string nsId, string? entity,
+             ProfileRepository profile, IServiceBusConnectionPool pool, DemoModeService demo,
+             CancellationToken ct) =>
+                ListOperationsAsync(nsId, entity, profile, pool, demo, sbOperations, ct));
+
         // ── Message Templates ──────────────────────────────────────────────────
         app.MapGet("/api/servicebus/templates", (ProfileRepository profile) =>
         Results.Ok(profile.MessageTemplates));
@@ -495,6 +548,426 @@ public static class ServiceBusEndpoints
         return Results.Ok();
     }
 
+    // ── Reach-message power op ────────────────────────────────────────────────
+    //
+    // The endpoints are deliberately thin: preview computes consequences + refusals, the
+    // SbOperationService owns the background state machine, and the client's park/restore
+    // primitives do the broker work. The UI must never oversell restore — the consequences
+    // text below is the plan's honest contract, verbatim.
+
+    /// <summary>How many messages the preview peeks to locate the target in the current window.</summary>
+    private const int ReachPreviewPeekCount = 1000;
+    /// <summary>DLQ requeue-by-filter ceiling per call.</summary>
+    private const int RequeueByFilterLimitCap = 5000;
+
+    /// <summary>Clamps an optional caller cap to the plan's 1,000 default / 5,000 ceiling.</summary>
+    internal static int ClampMaxParked(int? requested) =>
+        requested is null or <= 0
+            ? SbOperationService.DefaultMaxParked
+            : Math.Min(requested.Value, SbOperationService.AbsoluteMaxParked);
+
+    /// <summary>
+    /// Looks the entity up in the namespace topology so preview/start can refuse session-required
+    /// entities (every settle path here uses plain receivers — the broker would reject them) and
+    /// bare topics (receive-only parents). Returns null when the entity can't be found — the caller
+    /// treats that as a warning, not a refusal, since topology listing can lag.
+    /// </summary>
+    internal static async Task<SbEntityInfo?> FindEntityInfoAsync(IServiceBusClient client, string entityPath, CancellationToken ct)
+    {
+        const string marker = "/subscriptions/";
+        var markerIndex = entityPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex > 0)
+        {
+            var topic = entityPath[..markerIndex];
+            var subs = await client.ListSubscriptionsAsync(topic, ct).ConfigureAwait(false);
+            return subs.FirstOrDefault(s => string.Equals(s.EntityPath, entityPath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var queues = await client.ListQueuesAsync(ct).ConfigureAwait(false);
+        var queue = queues.FirstOrDefault(q => string.Equals(q.EntityPath, entityPath, StringComparison.OrdinalIgnoreCase));
+        if (queue is not null)
+        {
+            return queue;
+        }
+
+        // Bare topic names resolve here so the refusal can say "topics aren't receivable" instead
+        // of pretending the entity doesn't exist.
+        var topics = await client.ListTopicsAsync(ct).ConfigureAwait(false);
+        return topics.FirstOrDefault(t => string.Equals(t.EntityPath, entityPath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Refusal checks shared by preview and start. Returns a human-readable reason, or null when the
+    /// op may proceed to its window analysis. Session entities are refused outright — the plan gates
+    /// them before any receive starts because every settle path needs session receivers.
+    /// </summary>
+    private static async Task<string?> EntityRefusalAsync(IServiceBusClient client, string entityPath, CancellationToken ct)
+    {
+        var entity = await FindEntityInfoAsync(client, entityPath, ct).ConfigureAwait(false);
+        if (entity is null)
+        {
+            return null; // unknown to topology — warn downstream, don't refuse
+        }
+        if (entity.IsTopic && !entity.IsSubscription)
+        {
+            return $"'{entityPath}' is a topic — topics aren't receivable. Select one of its subscriptions instead.";
+        }
+        if (entity.RequiresSession)
+        {
+            return $"'{entityPath}' requires sessions — reach-message needs plain peek-lock receivers, which session entities reject. Session entities aren't supported yet.";
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The consequences block the UI must render — the plan's honest contract in words. "Like
+    /// nothing happened" is never promised: restored messages are new tail-appended copies that
+    /// keep only payload + relative order.
+    /// </summary>
+    internal static List<string> BuildReachConsequences(ReachMessageRequest req, long? prefixCount, string entityPath)
+    {
+        var prefix = prefixCount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "an unknown number of";
+        var consequences = new List<string>
+        {
+            $"Will park {prefix} message(s) ahead of sequence {req.TargetSequenceNumber} into {entityPath}'s dead-letter queue — each stamped with this operation's id in the same settlement call, so a crash can never silently strand them.",
+            req.Action switch
+            {
+                SbReachTargetAction.Complete =>
+                    $"Will complete the target message at sequence {req.TargetSequenceNumber} — settled and removed, no copy returns.",
+                SbReachTargetAction.DeadLetter =>
+                    $"Will dead-letter the target message at sequence {req.TargetSequenceNumber} — it stays in the DLQ with reason {SbRequeueStamp.TargetDeadLetterReason}.",
+                _ =>
+                    $"Will resubmit the target message at sequence {req.TargetSequenceNumber} — its copy lands at the queue tail {(req.RestoreBeforeTarget ? "after" : "before")} the restored prefix copies.",
+            },
+            $"Will restore the parked messages as NEW copies appended at the tail of {entityPath}. Bodies, subjects, correlation ids and application properties survive, and the restored copies keep their original relative order — but sequence numbers, queue positions, enqueue times and delivery counts are NOT restored. Restored copies are stamped SwebKit.RequeueRestored so their provenance is visible.",
+        };
+        return consequences;
+    }
+
+    /// <summary>Warnings every preview carries — plus the beyond-window warning when relevant.</summary>
+    internal static List<string> BuildReachWarnings(bool targetBeyondWindow, int maxParked)
+    {
+        var warnings = new List<string>
+        {
+            "Other consumers racing this entity can't be detected — a message a consumer completes first is skipped, and restore tolerates the gap.",
+            "If you cancel or the app closes mid-operation, in-flight message locks expire within ~5 minutes; already-parked messages stay in the dead-letter queue until you resume or dismiss the operation.",
+            "Messages can expire by TTL mid-operation — restore skips any that disappeared and reports the difference.",
+        };
+        if (targetBeyondWindow)
+        {
+            warnings.Add($"The target is beyond the current peek window, so the prefix count is unknown — the operation parks up to {maxParked} messages and stops honestly if the cap is hit before the target.");
+        }
+        return warnings;
+    }
+
+    /// <summary>
+    /// Preview: refuse clearly for session entities / topics / already-running ops / deferred
+    /// targets; otherwise compute the prefix estimate from the peek window and return the honest
+    /// consequences list the wizard renders before confirmation.
+    /// </summary>
+    internal static async Task<IResult> ReachMessagePreviewAsync(
+        string nsId,
+        string entityPath,
+        ReachMessageRequest req,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        SbOperationService ops,
+        CancellationToken ct)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+        if (req.TargetSequenceNumber <= 0)
+        {
+            return ApiErrors.BadRequest("targetSequenceNumber must be a positive sequence number.");
+        }
+
+        var maxParked = ClampMaxParked(req.MaxParked);
+        var client = pool.GetOrCreate(ns);
+
+        var refusal = await EntityRefusalAsync(client, entityPath, ct);
+        if (refusal is not null)
+        {
+            return Results.Ok(ReachMessagePreview.Refused(refusal, maxParked));
+        }
+        if (await ops.HasRunningAsync(ns.Id, entityPath))
+        {
+            return Results.Ok(ReachMessagePreview.Refused(
+                "A reach-message operation is already running on this entity — wait for it or cancel it first.", maxParked));
+        }
+
+        var window = await client.PeekMessagesAsync(entityPath, ReachPreviewPeekCount, ct);
+        var inWindow = window.Any(m => m.SequenceNumber == req.TargetSequenceNumber);
+        long? prefixCount = null;
+        var targetBeyondWindow = false;
+        string? windowRefusal = null;
+
+        if (inWindow)
+        {
+            prefixCount = window.Count(m => m.SequenceNumber < req.TargetSequenceNumber);
+            if (prefixCount > maxParked)
+            {
+                windowRefusal = $"{prefixCount} messages sit ahead of the target — over the {maxParked} park cap. Raise maxParked (up to {SbOperationService.AbsoluteMaxParked}) or pick a closer target.";
+            }
+        }
+        else
+        {
+            var maxSeen = window.Count > 0 ? window.Max(m => m.SequenceNumber ?? 0) : (long?)null;
+            if (maxSeen is null)
+            {
+                windowRefusal = "The entity has no active messages in its peek window — nothing to reach.";
+            }
+            else if (req.TargetSequenceNumber > maxSeen)
+            {
+                // Target beyond the window is allowed — the park loop itself is sequence-bound and
+                // stops at the cap or first overshoot — but the prefix count is unknowable.
+                targetBeyondWindow = true;
+            }
+            else
+            {
+                // Target inside the peeked seq range but absent from peek = invisible to FIFO
+                // receive — almost certainly deferred. Deferred messages can't be reached by this
+                // operation.
+                windowRefusal = $"Sequence {req.TargetSequenceNumber} sits inside the peeked range but isn't peekable — it's almost certainly deferred. Reach-message can't act on deferred messages (they're invisible to ordered receive); settle it with a deferred-receive flow first.";
+            }
+        }
+
+        if (windowRefusal is not null)
+        {
+            return Results.Ok(ReachMessagePreview.Refused(windowRefusal, maxParked));
+        }
+
+        return Results.Ok(new ReachMessagePreview
+        {
+            CanStart = true,
+            RefusalReason = null,
+            PrefixCount = prefixCount,
+            TargetBeyondWindow = targetBeyondWindow,
+            MaxParked = maxParked,
+            Consequences = BuildReachConsequences(req, prefixCount, entityPath),
+            Warnings = BuildReachWarnings(targetBeyondWindow, maxParked),
+        });
+    }
+
+    /// <summary>
+    /// Start: same refusals as preview (the client could skip preview), then hand the op to the
+    /// service — the journal write happens before the first park batch.
+    /// </summary>
+    internal static async Task<IResult> ReachMessageStartAsync(
+        string nsId,
+        string entityPath,
+        ReachMessageRequest req,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        SbOperationService ops,
+        CancellationToken ct)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+        if (req.TargetSequenceNumber <= 0)
+        {
+            return ApiErrors.BadRequest("targetSequenceNumber must be a positive sequence number.");
+        }
+
+        var client = pool.GetOrCreate(ns);
+        var refusal = await EntityRefusalAsync(client, entityPath, ct);
+        if (refusal is not null)
+        {
+            return ApiErrors.Status(StatusCodes.Status409Conflict, refusal);
+        }
+
+        var started = await ops.TryStartReachAsync(
+            ns.Id, entityPath, req.TargetSequenceNumber, req.Action,
+            req.RestoreBeforeTarget, ClampMaxParked(req.MaxParked), client);
+        if (started is null)
+        {
+            return ApiErrors.Status(StatusCodes.Status409Conflict,
+                "A reach-message operation is already running on this entity — wait for it or cancel it first.");
+        }
+
+        return Results.Ok(started);
+    }
+
+    /// <summary>Poll — the op snapshot or 404.</summary>
+    internal static async Task<IResult> GetOperationAsync(
+        string nsId,
+        string operationId,
+        ProfileRepository profile,
+        DemoModeService demo,
+        SbOperationService ops,
+        CancellationToken ct)
+    {
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+        if (!Guid.TryParse(operationId, out var opId)) return ApiErrors.BadRequest("Invalid operation id");
+
+        var status = await ops.GetAsync(opId);
+        return status is null || status.NamespaceId != ns.Id
+            ? ApiErrors.NotFound("Operation not found")
+            : Results.Ok(status);
+    }
+
+    /// <summary>Cancel — observed between receive batches; in-flight locks expire harmlessly.</summary>
+    internal static async Task<IResult> CancelOperationAsync(
+        string nsId,
+        string operationId,
+        ProfileRepository profile,
+        DemoModeService demo,
+        SbOperationService ops,
+        CancellationToken ct)
+    {
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+        if (!Guid.TryParse(operationId, out var opId)) return ApiErrors.BadRequest("Invalid operation id");
+
+        var status = await ops.CancelAsync(opId);
+        if (status is null || status.NamespaceId != ns.Id)
+        {
+            return ApiErrors.NotFound("Operation not found or not running");
+        }
+        return Results.Ok(status);
+    }
+
+    /// <summary>
+    /// Resume = re-run the restore phase against the entity's DLQ stamp set. Valid for interrupted,
+    /// failed and cancelled ops — the only states with parked messages that may still need it.
+    /// </summary>
+    internal static async Task<IResult> ResumeOperationAsync(
+        string nsId,
+        string operationId,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        SbOperationService ops,
+        CancellationToken ct)
+    {
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+        if (!Guid.TryParse(operationId, out var opId)) return ApiErrors.BadRequest("Invalid operation id");
+
+        var existing = await ops.GetAsync(opId);
+        if (existing is null || existing.NamespaceId != ns.Id)
+        {
+            return ApiErrors.NotFound("Operation not found");
+        }
+
+        var client = pool.GetOrCreate(ns);
+        var resumed = await ops.ResumeAsync(opId, client);
+        return resumed is null
+            ? ApiErrors.Status(StatusCodes.Status409Conflict, $"Operation is {existing.State} — only interrupted, failed or cancelled operations can resume.")
+            : Results.Ok(resumed);
+    }
+
+    /// <summary>"Leave in DLQ" — terminal; the parked copies keep their stamps as a record.</summary>
+    internal static async Task<IResult> DismissOperationAsync(
+        string nsId,
+        string operationId,
+        ProfileRepository profile,
+        DemoModeService demo,
+        SbOperationService ops,
+        CancellationToken ct)
+    {
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+        if (!Guid.TryParse(operationId, out var opId)) return ApiErrors.BadRequest("Invalid operation id");
+
+        var existing = await ops.GetAsync(opId);
+        if (existing is not null && existing.NamespaceId != ns.Id)
+        {
+            return ApiErrors.NotFound("Operation not found");
+        }
+
+        var dismissed = await ops.DismissAsync(opId);
+        return dismissed is null
+            ? ApiErrors.Status(StatusCodes.Status409Conflict, "Only interrupted, failed or cancelled operations can be dismissed.")
+            : Results.Ok(dismissed);
+    }
+
+    /// <summary>
+    /// Per-entity op listing — powers the "interrupted operation" banner. Non-terminal ops get a
+    /// live DLQ stamp scan so the banner can say "N messages parked" from the broker's truth, not
+    /// just the journal's last write.
+    /// </summary>
+    internal static async Task<IResult> ListOperationsAsync(
+        string nsId,
+        string? entity,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        SbOperationService ops,
+        CancellationToken ct)
+    {
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+
+        var ops_ = await ops.ListAsync(ns.Id, entity);
+        var client = pool.GetOrCreate(ns);
+        foreach (var op in ops_)
+        {
+            if (op.State is SbOperationState.Interrupted or SbOperationState.Failed or SbOperationState.Cancelled)
+            {
+                try
+                {
+                    var scan = await client.ScanParkedAsync(op.EntityPath, op.Id.ToString("N"), ct);
+                    op.ParkedInDlq = scan.ParkedCount;
+                }
+                catch (NotSupportedException)
+                {
+                    // Client can't scan — fall back to the journal count.
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Scan failure is enrichment loss, not a listing failure.
+                }
+            }
+        }
+
+        return Results.Ok(ops_);
+    }
+
+    /// <summary>
+    /// DLQ triage past the peek window: resubmit every DLQ message matching reason (+ optional
+    /// description), capped by <c>limit</c>. Same session-entity refusal as reach-message — it rides
+    /// the same plain receive/settle path.
+    /// </summary>
+    internal static async Task<IResult> ResubmitDeadLetterByFilterAsync(
+        string nsId,
+        string entityPath,
+        DlqRequeueByFilterRequest req,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        CancellationToken ct)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+        if (string.IsNullOrWhiteSpace(req.Reason))
+        {
+            return ApiErrors.BadRequest("reason is required — a group is identified by its dead-letter reason.");
+        }
+
+        var client = pool.GetOrCreate(ns);
+        var entity = await FindEntityInfoAsync(client, entityPath, ct);
+        if (entity?.RequiresSession == true)
+        {
+            return ApiErrors.Status(StatusCodes.Status409Conflict,
+                $"'{entityPath}' requires sessions — settle actions need session receivers, which aren't supported yet.");
+        }
+
+        var resubmitted = await client.ResubmitDeadLetterByFilterAsync(
+            entityPath, req.Reason, req.Description,
+            Math.Clamp(req.Limit, 1, RequeueByFilterLimitCap), ct);
+        return Results.Ok(new { resubmitted });
+    }
+
     private static string DecodeEntityPath(string entityPath) => Uri.UnescapeDataString(entityPath);
 
     private static ServiceBusNamespace? ResolveNamespace(
@@ -554,5 +1027,60 @@ public static class ServiceBusEndpoints
     {
         public SbMessage Message { get; set; } = null!;
         public DateTimeOffset ScheduledEnqueueTime { get; set; }
+    }
+
+    /// <summary>Body for reach-message preview and start.</summary>
+    public sealed class ReachMessageRequest
+    {
+        /// <summary>The message to reach, by broker sequence number.</summary>
+        public long TargetSequenceNumber { get; set; }
+        /// <summary>What to do when the target is reached — complete / dead-letter / resubmit.</summary>
+        public SbReachTargetAction Action { get; set; }
+        /// <summary>
+        /// Resubmit only: when true the target's copy lands at the tail AFTER the restored prefix
+        /// copies (closest to original relative order); when false it lands first.
+        /// </summary>
+        public bool RestoreBeforeTarget { get; set; } = true;
+        /// <summary>Park cap override — defaults to 1,000; hard ceiling 5,000 (clamped server-side).</summary>
+        public int? MaxParked { get; set; }
+    }
+
+    /// <summary>
+    /// The preview contract the wizard renders: consequences are written literally — "park into the
+    /// DLQ, restore as new tail-appended copies" — never "put back like nothing happened".
+    /// </summary>
+    public sealed class ReachMessagePreview
+    {
+        public bool CanStart { get; set; }
+        /// <summary>Why the op is refused when <see cref="CanStart"/> is false.</summary>
+        public string? RefusalReason { get; set; }
+        /// <summary>Exact count of messages ahead of the target — null when the target is beyond the peek window.</summary>
+        public long? PrefixCount { get; set; }
+        /// <summary>True when the target wasn't in the peek window but sits past its max — prefix count unknowable.</summary>
+        public bool TargetBeyondWindow { get; set; }
+        /// <summary>The park cap that applies to this op.</summary>
+        public int MaxParked { get; set; }
+        /// <summary>What the op will do — render verbatim.</summary>
+        public List<string> Consequences { get; set; } = [];
+        /// <summary>Honest failure modes — render verbatim.</summary>
+        public List<string> Warnings { get; set; } = [];
+
+        public static ReachMessagePreview Refused(string reason, int maxParked) => new()
+        {
+            CanStart = false,
+            RefusalReason = reason,
+            MaxParked = maxParked,
+        };
+    }
+
+    /// <summary>Body for <c>dlq/requeue-by-filter</c> — resubmit a whole reason/description group server-side.</summary>
+    public sealed class DlqRequeueByFilterRequest
+    {
+        /// <summary>The <c>DeadLetterReason</c> to match — required (it identifies the triage group).</summary>
+        public string Reason { get; set; } = "";
+        /// <summary>Optional <c>DeadLetterErrorDescription</c> to narrow the group; null matches every description under the reason.</summary>
+        public string? Description { get; set; }
+        /// <summary>Max messages to resubmit — clamped to 5,000.</summary>
+        public int Limit { get; set; } = 500;
     }
 }

@@ -25,6 +25,12 @@ public static class AppDataPaths
     public static string LegacyUiStateJson => Path.Combine(LegacyRoot, "ui-state.json");
     public static string UserSettingsJson => Path.Combine(Root, "user-settings.json");
     public static string ScheduledMessagesJson => Path.Combine(Root, "scheduled-messages.json");
+    /// <summary>
+    /// Crash journal for Service Bus power ops (reach-message). An entry left "running" here after
+    /// a restart marks an interrupted operation — the broker-side stamp scan then rediscovers how
+    /// many messages actually parked.
+    /// </summary>
+    public static string SbOperationsJournalJson => Path.Combine(Root, "sb-operations-journal.json");
     public static string MonitoringAlertsJson => Path.Combine(Root, "monitoring-alerts.json");
     public static string MonitoringInsightsJson => Path.Combine(Root, "monitoring-insights.json");
     public static string MonitoringSilencesJson => Path.Combine(Root, "monitoring-silences.json");

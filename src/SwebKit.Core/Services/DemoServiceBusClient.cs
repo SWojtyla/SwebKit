@@ -509,6 +509,259 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         }
     }
 
+    /// <summary>
+    /// Honest demo park: walks the store's active list in order and dead-letter-moves everything
+    /// before the target with the operation stamp written into the message's application properties
+    /// — the same place <c>propertiesToModify</c> puts it on the real broker. Target actions mirror
+    /// the Azure path: complete drops the message, dead-letter moves it UNSTAMPED (the user asked
+    /// for it to stay), resubmit parks it stamped as role "target". The first sequence past the
+    /// target stops the walk — sequence-bound stopping, same as the broker loop.
+    /// </summary>
+    public Task<SbParkResult> ParkForReachAsync(string entityPath, long targetSequenceNumber, string operationId, SbReachTargetAction targetAction, int maxParked, IProgress<int>? progress = null, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var result = new SbParkResult();
+        if (!_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            return Task.FromResult(result);
+        }
+
+        var kept = new List<SbMessage>(entityData.ActiveMessages.Count);
+        var parkedIntoDlq = new List<SbMessage>();
+        var stop = false;
+
+        foreach (var message in entityData.ActiveMessages)
+        {
+            ct.ThrowIfCancellationRequested();
+            var sequenceNumber = message.SequenceNumber;
+
+            if (stop || sequenceNumber is null)
+            {
+                kept.Add(message);
+                continue;
+            }
+
+            if (sequenceNumber < targetSequenceNumber)
+            {
+                if (result.ParkedCount >= maxParked)
+                {
+                    result.CapHit = true;
+                    result.OvershootAbandoned++;
+                    result.FirstSequenceBeyondTarget ??= sequenceNumber;
+                    kept.Add(message);
+                    stop = true;
+                    continue;
+                }
+
+                ApplyParkStamp(message, operationId, "prefix");
+                message.DeadLetterReason = SbRequeueStamp.ParkDeadLetterReason;
+                message.DeadLetterErrorDescription = $"Parked by reach-message operation {operationId}";
+                parkedIntoDlq.Add(message);
+                result.ParkedCount++;
+                progress?.Report(result.ParkedCount);
+            }
+            else if (sequenceNumber == targetSequenceNumber)
+            {
+                result.TargetReached = true;
+                stop = true;
+                switch (targetAction)
+                {
+                    case SbReachTargetAction.Complete:
+                        // Settled — the message leaves the store entirely.
+                        break;
+                    case SbReachTargetAction.DeadLetter:
+                        message.DeadLetterReason = SbRequeueStamp.TargetDeadLetterReason;
+                        message.DeadLetterErrorDescription = "Dead-lettered as the target of a reach-message operation";
+                        parkedIntoDlq.Add(message);
+                        break;
+                    case SbReachTargetAction.Resubmit:
+                        ApplyParkStamp(message, operationId, "target");
+                        message.DeadLetterReason = SbRequeueStamp.ParkDeadLetterReason;
+                        message.DeadLetterErrorDescription = $"Resubmit target of reach-message operation {operationId}";
+                        parkedIntoDlq.Add(message);
+                        break;
+                }
+            }
+            else
+            {
+                result.OvershootAbandoned++;
+                result.FirstSequenceBeyondTarget ??= sequenceNumber;
+                kept.Add(message);
+                stop = true;
+            }
+        }
+
+        _entityData[entityPath] = entityData with
+        {
+            ActiveMessages = kept,
+            DeadLetterMessages = [.. entityData.DeadLetterMessages, .. parkedIntoDlq]
+        };
+        return Task.FromResult(result);
+    }
+
+    private static void ApplyParkStamp(SbMessage message, string operationId, string role)
+    {
+        message.ApplicationProperties[SbRequeueStamp.OperationId] = operationId;
+        message.ApplicationProperties[SbRequeueStamp.ParkedRole] = role;
+        if (message.SequenceNumber is { } seq)
+        {
+            message.ApplicationProperties[SbRequeueStamp.OriginalSequence] = seq;
+        }
+        message.ApplicationProperties[SbRequeueStamp.OriginalDeliveryCount] = message.DeliveryCount;
+        message.ApplicationProperties[SbRequeueStamp.OriginalEnqueuedAt] = message.EnqueuedAt.ToString("O", CultureInfo.InvariantCulture);
+    }
+
+    private static bool IsParkedBy(SbMessage message, string operationId) =>
+        message.ApplicationProperties.TryGetValue(SbRequeueStamp.OperationId, out var value) &&
+        value is string id && string.Equals(id, operationId, StringComparison.Ordinal);
+
+    private static long OriginalSequenceOf(SbMessage message) =>
+        message.ApplicationProperties.TryGetValue(SbRequeueStamp.OriginalSequence, out var value) &&
+        value is long seq ? seq : long.MaxValue;
+
+    /// <summary>
+    /// Honest demo restore: stamped DLQ copies become new active messages appended at the tail —
+    /// fresh MessageId, fresh sequence number, fresh enqueue time — preserving relative order among
+    /// the restored set, with the "target"-stamped message ordered per <paramref name="targetAfterPrefix"/>.
+    /// The stamp stays on the copy as provenance; positions and broker fields are NOT restored.
+    /// </summary>
+    public Task<SbRestoreResult> RestoreParkedCopiesAsync(string entityPath, string operationId, bool targetAfterPrefix, IProgress<int>? progress = null, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var result = new SbRestoreResult();
+        if (!_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            return Task.FromResult(result);
+        }
+
+        var kept = new List<SbMessage>(entityData.DeadLetterMessages.Count);
+        var parked = new List<SbMessage>();
+        foreach (var message in entityData.DeadLetterMessages)
+        {
+            if (IsParkedBy(message, operationId))
+            {
+                parked.Add(message);
+            }
+            else
+            {
+                kept.Add(message);
+            }
+        }
+
+        var ordered = parked
+            .OrderBy(m => (ParkedRoleOf(m) == "target") == targetAfterPrefix ? 1 : 0)
+            .ThenBy(OriginalSequenceOf)
+            .ToList();
+
+        // Restored copies land on the sendable path — a subscription's DLQ resends to the parent
+        // topic, same fallback as resubmit. For demo entities (queues) this is the entity itself.
+        var sendTarget = SendableFallback(entityPath);
+        var restored = new List<SbMessage>(ordered.Count);
+        foreach (var message in ordered)
+        {
+            ct.ThrowIfCancellationRequested();
+            var props = new Dictionary<string, object>(message.ApplicationProperties)
+            {
+                [SbRequeueStamp.Restored] = true
+            };
+            props.Remove("DeadLetterReason");
+            props.Remove("DeadLetterErrorDescription");
+            restored.Add(new SbMessage
+            {
+                MessageId = Guid.NewGuid().ToString(),
+                CorrelationId = message.CorrelationId,
+                Subject = message.Subject,
+                ContentType = message.ContentType,
+                Body = message.Body,
+                ApplicationProperties = props,
+                EnqueuedAt = DateTimeOffset.UtcNow,
+                SequenceNumber = Interlocked.Increment(ref _nextSequence),
+                SessionId = message.SessionId
+            });
+            result.RestoredCount++;
+            progress?.Report(result.RestoredCount);
+        }
+
+        _entityData[entityPath] = entityData with { DeadLetterMessages = kept };
+        foreach (var clone in restored)
+        {
+            AppendMessage(sendTarget, clone);
+        }
+        return Task.FromResult(result);
+    }
+
+    private static string? ParkedRoleOf(SbMessage message) =>
+        message.ApplicationProperties.TryGetValue(SbRequeueStamp.ParkedRole, out var value) ? value as string : null;
+
+    /// <summary>Honest demo scan: counts stamped DLQ messages without mutating anything.</summary>
+    public Task<SbParkedScanResult> ScanParkedAsync(string entityPath, string operationId, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var result = new SbParkedScanResult();
+        if (_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            result.ParkedCount = entityData.DeadLetterMessages.Count(m => IsParkedBy(m, operationId));
+        }
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Honest demo filter-resubmit: DLQ messages matching reason (+ optional description) are cloned
+    /// onto the entity — fresh MessageId/sequence — and removed from the DLQ, capped at
+    /// <paramref name="limit"/>.
+    /// </summary>
+    public Task<int> ResubmitDeadLetterByFilterAsync(string entityPath, string deadLetterReason, string? deadLetterErrorDescription, int limit, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (limit <= 0 || !_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            return Task.FromResult(0);
+        }
+
+        // Same sendable-fallback rule as resubmit/restore: a subscription's copies go to the topic.
+        var sendTarget = SendableFallback(entityPath);
+        var kept = new List<SbMessage>(entityData.DeadLetterMessages.Count);
+        var moved = new List<SbMessage>();
+        foreach (var message in entityData.DeadLetterMessages)
+        {
+            if (moved.Count < limit &&
+                string.Equals(message.DeadLetterReason, deadLetterReason, StringComparison.Ordinal) &&
+                (deadLetterErrorDescription is null ||
+                 string.Equals(message.DeadLetterErrorDescription, deadLetterErrorDescription, StringComparison.Ordinal)))
+            {
+                var props = new Dictionary<string, object>(message.ApplicationProperties);
+                props.Remove("DeadLetterReason");
+                props.Remove("DeadLetterErrorDescription");
+                moved.Add(new SbMessage
+                {
+                    MessageId = Guid.NewGuid().ToString(),
+                    CorrelationId = message.CorrelationId,
+                    Subject = message.Subject,
+                    ContentType = message.ContentType,
+                    Body = message.Body,
+                    ApplicationProperties = props,
+                    EnqueuedAt = DateTimeOffset.UtcNow,
+                    SequenceNumber = Interlocked.Increment(ref _nextSequence),
+                    SessionId = message.SessionId
+                });
+            }
+            else
+            {
+                kept.Add(message);
+            }
+        }
+
+        _entityData[entityPath] = entityData with { DeadLetterMessages = kept };
+        foreach (var clone in moved)
+        {
+            AppendMessage(sendTarget, clone);
+        }
+        return Task.FromResult(moved.Count);
+    }
+
     /// <summary>Broker-settle honesty: requested DLQ messages actually leave the store's DLQ.</summary>
     public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default)
     {

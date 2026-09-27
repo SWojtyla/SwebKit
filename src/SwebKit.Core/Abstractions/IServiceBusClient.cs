@@ -84,6 +84,62 @@ public interface IServiceBusClient
     /// </remarks>
     Task ResubmitEditedDeadLetterAsync(string entityPath, long sequenceNumber, SbMessage message, string? targetEntityPath, CancellationToken ct = default) =>
         throw new NotSupportedException("Resubmit-edited is not supported by this Service Bus client.");
+    /// <summary>
+    /// Park phase of the reach-message operation: peek-lock receives active messages in batches and,
+    /// for every message with a sequence number below <paramref name="targetSequenceNumber"/>,
+    /// dead-letters it with the operation stamp written via <c>propertiesToModify</c> in the SAME
+    /// settlement call (<see cref="SbRequeueStamp"/> — the stamp is the crash marker; a stamped DLQ
+    /// message means "parked, not yet restored"). On the target sequence number it applies
+    /// <paramref name="targetAction"/>: complete settles it, dead-letter leaves it unstamped in the
+    /// DLQ, resubmit parks it stamped with role "target" so restore resends it. The first message
+    /// past the target is abandoned and the loop stops — sequence-bound stopping only.
+    /// </summary>
+    /// <param name="maxParked">Hard cap on prefix parks; when hit the loop stops with <see cref="SbParkResult.CapHit"/> and the target is reported unreached.</param>
+    /// <remarks>
+    /// The default throws so pre-existing <see cref="IServiceBusClient"/> implementations (test
+    /// fakes, legacy shells) keep compiling; real clients must override.
+    /// </remarks>
+    Task<SbParkResult> ParkForReachAsync(string entityPath, long targetSequenceNumber, string operationId, SbReachTargetAction targetAction, int maxParked, IProgress<int>? progress = null, CancellationToken ct = default) =>
+        throw new NotSupportedException("Reach-message park is not supported by this Service Bus client.");
+    /// <summary>
+    /// Restore phase: receives the entity's dead-letter queue, selects messages stamped with
+    /// <paramref name="operationId"/>, resends each as a clone (fresh message id, provenance stamp
+    /// kept) appended at the tail in original relative order — the message stamped role "target"
+    /// goes last when <paramref name="targetAfterPrefix"/> is set, first otherwise — then completes
+    /// the stamped DLQ copy. At-least-once: a crash between send and complete leaves the DLQ copy,
+    /// so re-running restore can duplicate — the parked copies are the recovery record.
+    /// </summary>
+    /// <remarks>
+    /// The default throws so pre-existing <see cref="IServiceBusClient"/> implementations (test
+    /// fakes, legacy shells) keep compiling; real clients must override.
+    /// </remarks>
+    Task<SbRestoreResult> RestoreParkedCopiesAsync(string entityPath, string operationId, bool targetAfterPrefix, IProgress<int>? progress = null, CancellationToken ct = default) =>
+        throw new NotSupportedException("Reach-message restore is not supported by this Service Bus client.");
+    /// <summary>
+    /// Non-destructively counts the entity's dead-letter messages still stamped with
+    /// <paramref name="operationId"/> — peeks, never receives, so it can't disturb parked state.
+    /// This is how a restarted sidecar answers "was interrupted, N messages parked" even when the
+    /// journal entry never recorded the count.
+    /// </summary>
+    /// <remarks>
+    /// The default throws so pre-existing <see cref="IServiceBusClient"/> implementations (test
+    /// fakes, legacy shells) keep compiling; real clients must override.
+    /// </remarks>
+    Task<SbParkedScanResult> ScanParkedAsync(string entityPath, string operationId, CancellationToken ct = default) =>
+        throw new NotSupportedException("Parked-message scan is not supported by this Service Bus client.");
+    /// <summary>
+    /// DLQ triage beyond the peek window: receives dead-lettered messages under peek-lock, resends
+    /// (send clone → complete original, move semantics) up to <paramref name="limit"/> messages whose
+    /// <c>DeadLetterReason</c> matches <paramref name="deadLetterReason"/> and — when
+    /// <paramref name="deadLetterErrorDescription"/> is non-null — whose error description matches.
+    /// Non-matching messages are abandoned. Returns the number resubmitted.
+    /// </summary>
+    /// <remarks>
+    /// The default throws so pre-existing <see cref="IServiceBusClient"/> implementations (test
+    /// fakes, legacy shells) keep compiling; real clients must override.
+    /// </remarks>
+    Task<int> ResubmitDeadLetterByFilterAsync(string entityPath, string deadLetterReason, string? deadLetterErrorDescription, int limit, CancellationToken ct = default) =>
+        throw new NotSupportedException("DLQ resubmit-by-filter is not supported by this Service Bus client.");
     Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
 }

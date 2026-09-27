@@ -116,6 +116,20 @@ internal sealed class CountingServiceBusClient : IServiceBusClient
         return ThrowOnResubmitEdited is not null ? Task.FromException(ThrowOnResubmitEdited) : Task.CompletedTask;
     }
 
+    // Reach-message / triage primitives — delegate so endpoint tests exercise the real
+    // demo store rather than the interface's throwing defaults.
+    public Task<SbParkResult> ParkForReachAsync(string entityPath, long targetSequenceNumber, string operationId, SbReachTargetAction targetAction, int maxParked, IProgress<int>? progress = null, CancellationToken ct = default) =>
+        _inner.ParkForReachAsync(entityPath, targetSequenceNumber, operationId, targetAction, maxParked, progress, ct);
+
+    public Task<SbRestoreResult> RestoreParkedCopiesAsync(string entityPath, string operationId, bool targetAfterPrefix, IProgress<int>? progress = null, CancellationToken ct = default) =>
+        _inner.RestoreParkedCopiesAsync(entityPath, operationId, targetAfterPrefix, progress, ct);
+
+    public Task<SbParkedScanResult> ScanParkedAsync(string entityPath, string operationId, CancellationToken ct = default) =>
+        _inner.ScanParkedAsync(entityPath, operationId, ct);
+
+    public Task<int> ResubmitDeadLetterByFilterAsync(string entityPath, string deadLetterReason, string? deadLetterErrorDescription, int limit, CancellationToken ct = default) =>
+        _inner.ResubmitDeadLetterByFilterAsync(entityPath, deadLetterReason, deadLetterErrorDescription, limit, ct);
+
     public Task<bool> TestConnectionAsync(CancellationToken ct = default) => _inner.TestConnectionAsync(ct);
 }
 

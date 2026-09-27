@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
-import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, ChevronDown, Sparkles, FileText } from "lucide-react";
+import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, ChevronDown, Sparkles, FileText, Crosshair, Layers } from "lucide-react";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import {
   useProfile,
@@ -27,6 +27,9 @@ import { BatchSendPanel } from "./BatchSendPanel";
 import { ScheduledMessages } from "./ScheduledMessages";
 import { EntityCommandPalette, type EntityAction } from "./EntityCommandPalette";
 import { BatchReplayPanel } from "./BatchReplayPanel";
+import { ReachMessagePanel } from "./ReachMessagePanel";
+import { DlqTriagePanel } from "./DlqTriagePanel";
+import { SbOperationsBanner } from "./SbOperationsBanner";
 import { TemplateManager } from "./TemplateManager";
 import { NamespaceOverview } from "./NamespaceOverview";
 import { loadSbPreferences } from "@/lib/stores/sb-preferences";
@@ -72,6 +75,8 @@ export function ServiceBusPage() {
   const [showScheduled, setShowScheduled] = useState(false);
   const [showEntityPalette, setShowEntityPalette] = useState(false);
   const [showBatchReplay, setShowBatchReplay] = useState(false);
+  const [showReachPanel, setShowReachPanel] = useState(false);
+  const [showDlqTriage, setShowDlqTriage] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showEntityTree, setShowEntityTree] = useState(true);
@@ -471,6 +476,11 @@ export function ServiceBusPage() {
           cancelTestId="purge-confirm-cancel"
         />
       )}
+      {/* Interrupted/running reach-message ops for this entity — the crash-recovery
+          surface. Counts come from a live DLQ stamp scan, not just the journal. */}
+      {selectedEntity && selectedNsId && (
+        <SbOperationsBanner nsId={selectedNsId} entity={selectedEntity} />
+      )}
       {selectedEntity ? (
         <MessageList
           nsId={selectedNsId}
@@ -642,6 +652,51 @@ export function ServiceBusPage() {
                   Batch Replay
                   <span className="ml-auto text-muted-foreground">DLQ</span>
                 </button>
+                {/* Reach-message rides peek-lock receive/settle — the same
+                    session-entity limitation as every other settle action, so
+                    it disables identically rather than failing at preview. */}
+                <button
+                  data-testid="sb-reach-message-button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowReachPanel(true);
+                  }}
+                  disabled={!selectedEntity || requiresSessions(selectedEntity)}
+                  title={
+                    !selectedEntity
+                      ? "Select a queue or topic first"
+                      : requiresSessions(selectedEntity)
+                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                        : "Park, act on a target message, and restore copies at the tail"
+                  }
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50"
+                >
+                  <Crosshair className="h-3.5 w-3.5" />
+                  Reach Message
+                  <span className="ml-auto text-muted-foreground">this entity</span>
+                </button>
+                <button
+                  data-testid="sb-dlq-triage-button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowDlqTriage(true);
+                  }}
+                  disabled={!selectedEntity || requiresSessions(selectedEntity)}
+                  title={
+                    !selectedEntity
+                      ? "Select a queue or topic first"
+                      : requiresSessions(selectedEntity)
+                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                        : "Group the DLQ by reason/description and act per group"
+                  }
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50"
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  DLQ Triage
+                  <span className="ml-auto text-muted-foreground">this entity</span>
+                </button>
               </div>
             </>
           )}
@@ -768,6 +823,29 @@ export function ServiceBusPage() {
           nsId={selectedNsId}
           entity={selectedEntity}
           onClose={() => setShowBatchReplay(false)}
+        />
+      )}
+
+      {/* Reach-message wizard — prefills the target from the selected message
+          when the active view has one. */}
+      {showReachPanel && selectedNsId && selectedEntity && (
+        <ReachMessagePanel
+          nsId={selectedNsId}
+          entity={selectedEntity}
+          defaultTarget={
+            viewMode === "active" ? selectedMessage?.sequenceNumber : null
+          }
+          onClose={() => setShowReachPanel(false)}
+        />
+      )}
+
+      {/* DLQ triage modal — reason/description groups over the peek window plus
+          server-side requeue for groups bigger than the window. */}
+      {showDlqTriage && selectedNsId && selectedEntity && (
+        <DlqTriagePanel
+          nsId={selectedNsId}
+          entity={selectedEntity}
+          onClose={() => setShowDlqTriage(false)}
         />
       )}
 
