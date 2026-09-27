@@ -1,6 +1,7 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools;
@@ -8,7 +9,7 @@ namespace SwebKit.Agents.Tools;
 /// <summary>
 /// Retrieves metric data from Application Insights for various resources.
 /// </summary>
-public sealed class GetMetricsTool : IAgentTool
+public sealed class GetMetricsTool : IAccessAwareTool
 {
     private readonly IObservabilityProviderFactory _providerFactory;
     private readonly AppStateService _appState;
@@ -28,6 +29,15 @@ public sealed class GetMetricsTool : IAgentTool
         "latency, exceptions, and dependency health. Returns aggregated metrics for the specified time range.";
 
     public FeatureArea FeatureArea => FeatureArea.Observability;
+
+    // Metrics go through the same provider as queries — the report's single observability.logs row.
+    public string Capability => AccessCapabilities.ObservabilityLogs;
+
+    public string? GetConnectionKey(JsonElement arguments) =>
+        _appState.Config.ObservabilityConfig?.SelectedResourceId is { Length: > 0 } resourceId
+            ? resourceId
+            // The demo-mode probe row is keyed "demo-observability" when no resource is selected.
+            : _appState.UseDemoData ? "demo-observability" : null;
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -108,6 +118,12 @@ public sealed class GetMetricsTool : IAgentTool
                 time_range_end = timeRange.End.ToString("o"),
                 data = result
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

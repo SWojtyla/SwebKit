@@ -1,12 +1,13 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Storage;
 
 /// <summary>Returns full properties (size, content type, tier, metadata, tags) for a single blob.</summary>
-public sealed class GetStorageBlobPropertiesTool : IAgentTool
+public sealed class GetStorageBlobPropertiesTool : IAccessAwareTool
 {
     private readonly AppStateService _appState;
     private readonly ProfileRepository _profiles;
@@ -22,6 +23,15 @@ public sealed class GetStorageBlobPropertiesTool : IAgentTool
     public string Name => "get_storage_blob_properties";
     public string Description => "Returns full properties for a single blob: size, content type, last modified, access tier, lease state, metadata, and tags.";
     public FeatureArea FeatureArea => FeatureArea.Storage;
+
+    // Blob property reads are data-plane — matching the report's storage.blobs row.
+    public string Capability => AccessCapabilities.StorageBlobs;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var accountId = arguments.TryGetProperty("account_id", out var a) ? a.GetString() : null;
+        return StorageToolContext.ResolveAccount(_appState, _profiles, accountId)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -64,6 +74,12 @@ public sealed class GetStorageBlobPropertiesTool : IAgentTool
                 metadata = props.Metadata,
                 tags = props.Tags,
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

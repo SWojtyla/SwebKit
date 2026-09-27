@@ -1,12 +1,13 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Sql;
 
 /// <summary>Describes one table/view: columns with types, nullability, keys, indexes, FKs.</summary>
-public sealed class DescribeSqlTableTool : IAgentTool
+public sealed class DescribeSqlTableTool : IAccessAwareTool
 {
     private readonly AppStateService _appState;
     private readonly ProfileRepository _profiles;
@@ -22,6 +23,15 @@ public sealed class DescribeSqlTableTool : IAgentTool
     public string Name => "describe_sql_table";
     public string Description => "Describes a table or view: columns with types and nullability, primary key, indexes, foreign keys.";
     public FeatureArea FeatureArea => FeatureArea.Sql;
+
+    // Reads the schema catalog — requires VIEW DEFINITION, matching the report's sql.metadata row.
+    public string Capability => AccessCapabilities.SqlMetadata;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var connectionId = arguments.TryGetProperty("connection_id", out var c) ? c.GetString() : null;
+        return SqlToolContext.ResolveConnection(_appState, _profiles, connectionId)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -79,6 +89,12 @@ public sealed class DescribeSqlTableTool : IAgentTool
                     references = f.ReferencedObject,
                 }),
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

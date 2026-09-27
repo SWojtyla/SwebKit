@@ -1,12 +1,13 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Redis;
 
 /// <summary>Lists Redis keys matching a pattern, capped to a small page for a chat context.</summary>
-public sealed class ListRedisKeysTool : IAgentTool
+public sealed class ListRedisKeysTool : IAccessAwareTool
 {
     private const int MaxKeys = 50;
 
@@ -24,6 +25,15 @@ public sealed class ListRedisKeysTool : IAgentTool
     public string Name => "list_redis_keys";
     public string Description => $"Lists up to {MaxKeys} Redis keys matching a glob pattern (default '*' for all).";
     public FeatureArea FeatureArea => FeatureArea.Redis;
+
+    // SCAN is a data-plane command — matching the report's redis.data row.
+    public string Capability => AccessCapabilities.RedisData;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var cacheId = arguments.TryGetProperty("cache_id", out var c) ? c.GetString() : null;
+        return RedisToolContext.ResolveCache(_appState, _profiles, cacheId)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -57,6 +67,12 @@ public sealed class ListRedisKeysTool : IAgentTool
                 keys = result.Keys,
                 more_available = !result.IsComplete,
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

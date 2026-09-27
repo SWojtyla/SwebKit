@@ -15,6 +15,33 @@ internal static class StorageToolContext
 {
     public readonly record struct Resolution(IStorageClient? Client, StorageConfig? Account, string? Error);
 
+    /// <summary>
+    /// Resolves which account a call would use <em>without creating a client</em> — the account
+    /// half of <see cref="Resolve"/>. Used by <see cref="IAccessAwareTool.GetConnectionKey"/>
+    /// implementations, where building an SDK client just to learn the key would defeat the
+    /// point of a short-circuit. Returns null when the target can't be determined.
+    /// </summary>
+    public static StorageConfig? ResolveAccount(
+        AppStateService appState, ProfileRepository profiles, string? requestedAccountId)
+    {
+        if (appState.UseDemoData)
+            return new DemoStorageClient().Config;
+
+        var accounts = profiles.GetProfileData().Config.StorageAccounts;
+        if (accounts.Count == 0)
+            return null;
+
+        // agent-correlation Module 5 widened the match beyond Id: workspace-topology nodes key on
+        // the account *name* (e.g. "mystorageacct"), and the model is more likely to pass either
+        // the name or the display label it saw in the system prompt than the opaque id.
+        return requestedAccountId is not null
+            ? accounts.FirstOrDefault(a =>
+                a.Id == requestedAccountId ||
+                string.Equals(a.AccountName, requestedAccountId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(a.DisplayName, requestedAccountId, StringComparison.OrdinalIgnoreCase))
+            : accounts[0];
+    }
+
     public static Resolution Resolve(
         AppStateService appState,
         ProfileRepository profiles,
@@ -31,16 +58,7 @@ internal static class StorageToolContext
         if (accounts.Count == 0)
             return new Resolution(null, null, "Storage is not configured. Add an account in settings.");
 
-        // agent-correlation Module 5 widened the match beyond Id: workspace-topology nodes key on
-        // the account *name* (e.g. "mystorageacct"), and the model is more likely to pass either
-        // the name or the display label it saw in the system prompt than the opaque id.
-        var account = requestedAccountId is not null
-            ? accounts.FirstOrDefault(a =>
-                a.Id == requestedAccountId ||
-                string.Equals(a.AccountName, requestedAccountId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(a.DisplayName, requestedAccountId, StringComparison.OrdinalIgnoreCase))
-            : accounts[0];
-
+        var account = ResolveAccount(appState, profiles, requestedAccountId);
         if (account is null)
             return new Resolution(null, null, $"Storage account '{requestedAccountId}' not found.");
 

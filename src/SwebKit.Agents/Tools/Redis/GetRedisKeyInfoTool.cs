@@ -1,12 +1,13 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Redis;
 
 /// <summary>Returns type, TTL, size, and encoding for a single Redis key.</summary>
-public sealed class GetRedisKeyInfoTool : IAgentTool
+public sealed class GetRedisKeyInfoTool : IAccessAwareTool
 {
     private readonly AppStateService _appState;
     private readonly ProfileRepository _profiles;
@@ -22,6 +23,15 @@ public sealed class GetRedisKeyInfoTool : IAgentTool
     public string Name => "get_redis_key_info";
     public string Description => "Returns type, TTL, memory size, and encoding for a single Redis key.";
     public FeatureArea FeatureArea => FeatureArea.Redis;
+
+    // TYPE/TTL/MEMORY are data-plane commands — matching the report's redis.data row.
+    public string Capability => AccessCapabilities.RedisData;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var cacheId = arguments.TryGetProperty("cache_id", out var c) ? c.GetString() : null;
+        return RedisToolContext.ResolveCache(_appState, _profiles, cacheId)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -61,6 +71,12 @@ public sealed class GetRedisKeyInfoTool : IAgentTool
                 encoding = info.Encoding,
                 idle_seconds = info.IdleSeconds,
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

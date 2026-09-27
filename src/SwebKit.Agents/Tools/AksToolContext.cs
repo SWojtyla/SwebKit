@@ -15,6 +15,11 @@ namespace SwebKit.Agents.Tools;
 /// </summary>
 internal static class AksToolContext
 {
+    /// <summary>The fixed connection key the access report uses for the configured cluster —
+    /// matches <c>AksAccessProbes.ConnectionKey</c> in the sidecar (a single configured cluster
+    /// gets one row).</summary>
+    public const string ConfiguredClusterKey = "aks";
+
     /// <summary>Reads the optional <c>context</c> tool argument; null when absent, non-string, or
     /// blank (blank falls back to the configured context rather than erroring — the model emits
     /// empty strings often enough that failing on one punishes the user for the model's quirk).</summary>
@@ -22,6 +27,26 @@ internal static class AksToolContext
         arguments.TryGetProperty("context", out var el) && el.ValueKind == JsonValueKind.String
             ? el.GetString()
             : null;
+
+    /// <summary>
+    /// Maps a call's resolved target to the access report's connection key:
+    /// <see cref="ConfiguredClusterKey"/> in demo mode (the report probes the demo client under
+    /// the same key) and when the call targets the configured cluster (no explicit context, or one
+    /// matching <c>AksConfig.KubeconfigContext</c>); null when the call targets a different,
+    /// un-probed cluster — a denial recorded against the configured cluster must not pre-empt
+    /// calls to another kubeconfig context.
+    /// </summary>
+    public static string? ResolveConnectionKey(AppStateService appState, string? context)
+    {
+        if (appState.UseDemoData)
+            return ConfiguredClusterKey;
+        if (appState.Config.AksConfig is not { } aks)
+            return null;
+        return string.IsNullOrWhiteSpace(context)
+            || string.Equals(context, aks.KubeconfigContext, StringComparison.OrdinalIgnoreCase)
+            ? ConfiguredClusterKey
+            : null;
+    }
 
     /// <summary>Resolves the client for one tool call: the demo client in demo mode (demo tools
     /// only ever see demo data — a requested context does not escape it), otherwise a client for

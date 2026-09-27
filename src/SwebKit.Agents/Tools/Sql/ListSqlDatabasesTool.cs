@@ -1,12 +1,13 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Sql;
 
 /// <summary>Lists databases on the configured SQL connection.</summary>
-public sealed class ListSqlDatabasesTool : IAgentTool
+public sealed class ListSqlDatabasesTool : IAccessAwareTool
 {
     private readonly AppStateService _appState;
     private readonly ProfileRepository _profiles;
@@ -22,6 +23,15 @@ public sealed class ListSqlDatabasesTool : IAgentTool
     public string Name => "list_sql_databases";
     public string Description => "Lists the databases visible on a configured SQL connection.";
     public FeatureArea FeatureArea => FeatureArea.Sql;
+
+    // Listing databases is a data-plane query (sys.databases) — matching the report's sql.query row.
+    public string Capability => AccessCapabilities.SqlQuery;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var connectionId = arguments.TryGetProperty("connection_id", out var c) ? c.GetString() : null;
+        return SqlToolContext.ResolveConnection(_appState, _profiles, connectionId)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -48,6 +58,12 @@ public sealed class ListSqlDatabasesTool : IAgentTool
                 connection = resolution.Connection!.DisplayName,
                 databases = databases.Select(d => new { name = d.Name, status = d.State }),
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

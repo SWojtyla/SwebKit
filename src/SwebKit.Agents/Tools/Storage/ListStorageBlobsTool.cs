@@ -1,12 +1,13 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Storage;
 
 /// <summary>Lists blobs (and virtual folder prefixes) in a container, one page at a time.</summary>
-public sealed class ListStorageBlobsTool : IAgentTool
+public sealed class ListStorageBlobsTool : IAccessAwareTool
 {
     private readonly AppStateService _appState;
     private readonly ProfileRepository _profiles;
@@ -22,6 +23,15 @@ public sealed class ListStorageBlobsTool : IAgentTool
     public string Name => "list_storage_blobs";
     public string Description => "Lists blobs and folders inside a storage container. Returns one page (up to 100 items); use the returned continuation_token to page further.";
     public FeatureArea FeatureArea => FeatureArea.Storage;
+
+    // Blob listing is a data-plane read — matching the report's storage.blobs row.
+    public string Capability => AccessCapabilities.StorageBlobs;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var accountId = arguments.TryGetProperty("account_id", out var a) ? a.GetString() : null;
+        return StorageToolContext.ResolveAccount(_appState, _profiles, accountId)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -65,6 +75,12 @@ public sealed class ListStorageBlobsTool : IAgentTool
                 }),
                 continuation_token = page.ContinuationToken,
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

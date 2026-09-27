@@ -35,10 +35,14 @@ public sealed class ListSqlConnectionsTool : IAgentTool
             return Task.FromResult(JsonSerializer.Serialize(new
             {
                 demo_mode = true,
-                connections = new[]
+                connections = SqlToolContext.GetConnections(_appState, _profiles).Select(c => new
                 {
-                    new { id = SqlToolContext.DemoConnectionId, display_name = "orders-dev-sql", server = "orders-dev-sql.database.windows.net", database = "orders", read_only = true },
-                },
+                    id = c.Id,
+                    display_name = c.DisplayName,
+                    server = c.Server,
+                    database = c.Database,
+                    read_only = !c.AllowWrites,
+                }),
             }));
         }
 

@@ -9,7 +9,7 @@ namespace SwebKit.Agents.Tools;
 /// Fetches the most recent log lines from a pod container.
 /// Returns up to <c>tail_lines</c> (default 100) lines as plain text.
 /// </summary>
-public sealed class GetPodLogsTool : IAgentTool
+public sealed class GetPodLogsTool : IAccessAwareTool
 {
     private readonly IAksClientFactory _aksFactory;
     private readonly DemoAksClient _demoAksClient;
@@ -29,6 +29,12 @@ public sealed class GetPodLogsTool : IAgentTool
         "Defaults to the last 100 lines of the first container.";
 
     public FeatureArea FeatureArea => FeatureArea.Aks;
+
+    // Log streaming is a cluster read — matching the report's kubernetes.read row.
+    public string Capability => AccessCapabilities.KubernetesRead;
+
+    public string? GetConnectionKey(JsonElement arguments) =>
+        AksToolContext.ResolveConnectionKey(_appState, AksToolContext.GetContext(arguments));
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {

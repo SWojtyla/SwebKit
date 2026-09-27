@@ -8,7 +8,7 @@ namespace SwebKit.Agents.Tools;
 /// Returns Kubernetes events for a namespace, optionally filtered to a specific object.
 /// Warning events are sorted first to highlight the most important information.
 /// </summary>
-public sealed class GetPodEventsTool : IAgentTool
+public sealed class GetPodEventsTool : IAccessAwareTool
 {
     private readonly IAksClientFactory _aksFactory;
     private readonly DemoAksClient _demoAksClient;
@@ -28,6 +28,12 @@ public sealed class GetPodEventsTool : IAgentTool
         "Warning events are returned first. Useful for diagnosing scheduling failures, probe errors, and OOMKills.";
 
     public FeatureArea FeatureArea => FeatureArea.Aks;
+
+    // Event reads — matching the report's kubernetes.read row.
+    public string Capability => AccessCapabilities.KubernetesRead;
+
+    public string? GetConnectionKey(JsonElement arguments) =>
+        AksToolContext.ResolveConnectionKey(_appState, AksToolContext.GetContext(arguments));
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {

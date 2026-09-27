@@ -7,7 +7,7 @@ namespace SwebKit.Agents.Tools;
 /// <summary>
 /// Returns a list of pods in a Kubernetes namespace, with optional label-selector filtering.
 /// </summary>
-public sealed class ListPodsTool : IAgentTool
+public sealed class ListPodsTool : IAccessAwareTool
 {
     private readonly IAksClientFactory _aksFactory;
     private readonly DemoAksClient _demoAksClient;
@@ -34,6 +34,12 @@ public sealed class ListPodsTool : IAgentTool
         "the goal is diagnosing a specific pod rather than browsing the namespace.";
 
     public FeatureArea FeatureArea => FeatureArea.Aks;
+
+    // Pod listing is a cluster read — matching the report's kubernetes.read row.
+    public string Capability => AccessCapabilities.KubernetesRead;
+
+    public string? GetConnectionKey(JsonElement arguments) =>
+        AksToolContext.ResolveConnectionKey(_appState, AksToolContext.GetContext(arguments));
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools;
@@ -8,7 +9,7 @@ namespace SwebKit.Agents.Tools;
 /// <summary>
 /// Retrieves messages from a Service Bus queue or dead-letter queue.
 /// </summary>
-public sealed class GetQueueMessagesTool : IAgentTool
+public sealed class GetQueueMessagesTool : IAccessAwareTool
 {
     private readonly IServiceBusConnectionPool _pool;
     private readonly AppStateService _appState;
@@ -28,6 +29,19 @@ public sealed class GetQueueMessagesTool : IAgentTool
         "pulling message bodies into context.";
 
     public FeatureArea FeatureArea => FeatureArea.ServiceBus;
+
+    // Peeking is a data-plane operation (Data Receiver) — matches the report's servicebus.peek row.
+    public string Capability => AccessCapabilities.ServiceBusPeek;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        // Demo mode never resolves a namespace — the call goes to a synthetic client instead.
+        if (_appState.UseDemoData)
+            return null;
+        var requested = arguments.TryGetProperty("namespace", out var nsEl) ? nsEl.GetString() : null;
+        var resolution = ServiceBusToolContext.ResolveNamespace(_appState, requested);
+        return resolution.IsSuccess ? resolution.Namespace!.Id.ToString() : null;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -95,6 +109,12 @@ public sealed class GetQueueMessagesTool : IAgentTool
                 messages_returned = messageList.Count,
                 messages = messageList
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

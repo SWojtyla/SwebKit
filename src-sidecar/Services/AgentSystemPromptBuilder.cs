@@ -88,6 +88,9 @@ public sealed class AgentSystemPromptBuilder
                 that permission — do not retry it. Collect each one and close the report with an
                 "Access gaps" section naming the requiredAccess role for each, so the user knows
                 exactly what to request.
+              - Tools may be skipped without running when access is already known to be denied
+                for that connection — such results carry "status": "access_denied" with
+                "cached": true; treat them exactly like a live denial.
               """
             : BuildToolPolicySection(hasToolCalling, normalizedMode);
 
@@ -270,6 +273,9 @@ public sealed class AgentSystemPromptBuilder
                 - A tool result with "status": "access_denied" means the signed-in identity lacks
                   that permission — do not retry it; report it as an access gap naming the
                   requiredAccess role, and keep investigating with what you can reach.
+                - Tools may be skipped without running when access is already known to be denied
+                  for that connection — such results carry "status": "access_denied" with
+                  "cached": true; treat them exactly like a live denial.
                 - Do not expose internal JSON schemas or tool names in your replies.
                 """;
         }
@@ -284,6 +290,9 @@ public sealed class AgentSystemPromptBuilder
             - A tool result with "status": "access_denied" means the signed-in identity lacks
               that permission — do not retry it; report it as an access gap naming the
               requiredAccess role, and keep investigating with what you can reach.
+            - Tools may be skipped without running when access is already known to be denied
+              for that connection — such results carry "status": "access_denied" with
+              "cached": true; treat them exactly like a live denial.
             - Do not expose internal JSON schemas or tool names in your replies.
             """;
     }
