@@ -110,7 +110,10 @@ internal sealed class CountingServiceBusClient : IServiceBusClient
         LastResubmitEditedEntityPath = entityPath;
         LastResubmitEditedTargetPath = targetEntityPath;
         LastResubmitEditedMessage = message;
-        return ThrowOnResubmitEdited is not null ? Task.FromException(ThrowOnResubmitEdited) : _inner.ResubmitEditedDeadLetterAsync(entityPath, sequenceNumber, message, targetEntityPath, ct);
+        // No _inner delegation — endpoint tests verify plumbing (path decoding, call
+        // forwarding, 400s), not demo move semantics; DemoServiceBusClientPowerOpsTests
+        // covers those, and delegating would couple these to the demo seed seq numbers.
+        return ThrowOnResubmitEdited is not null ? Task.FromException(ThrowOnResubmitEdited) : Task.CompletedTask;
     }
 
     public Task<bool> TestConnectionAsync(CancellationToken ct = default) => _inner.TestConnectionAsync(ct);
