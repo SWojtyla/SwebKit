@@ -1,6 +1,6 @@
 # Service Bus Power Ops — reach-message, DLQ triage, sessions, replay
 
-State: Planned
+State: In Progress
 
 ## Goal
 
@@ -87,15 +87,16 @@ order    → prefix restored first (original seq order), target's reprocessed co
 
 ## Implementation tasks
 
-- [ ] Models: `RequiresSession`, `SbSessionSummary`, preview/op/journal records,
-      replay/resubmit-edited requests
-- [ ] `IServiceBusClient` additions (throwing defaults like resend): entity props,
-      PeekSessions, ResubmitEdited, Replay, park/restore primitives
+- [x] Models: `RequiresSession`, `SbSessionSummary`, resubmit-edited request
+      (commit d6b51aae); preview/op/journal records, replay request still open
+- [x] `IServiceBusClient`: PeekSessions, ResubmitEdited (throwing defaults);
+      entity props, Replay, park/restore primitives still open
 - [ ] `SbOperationService` (in-memory ops + background task + journal) + endpoints
-- [ ] `ReachMessagePanel` wizard + progress polling; `DlqTriagePanel`; composer
-      `editResubmit` mode; `ReplayToPanel`; session badges/gating
-- [ ] Demo client: implement ops honestly (store mutates already) + session-flagged
-      demo entity; **fix no-op `ResubmitDeadLetterAsync`/`CompleteDeadLetterAsync`**
+- [ ] `ReachMessagePanel` wizard + progress polling; `DlqTriagePanel`;
+      `ReplayToPanel`
+- [x] composer `editResubmit` mode + session badges/gating (commit d6b51aae)
+- [x] Demo client: honest resubmit/complete + `order-sessions` session-flagged
+      demo entity (commit d6b51aae)
 
 ## Test plan
 

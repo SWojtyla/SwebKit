@@ -1,6 +1,6 @@
 # Access Awareness Phases 2–4 — access report, request artifacts, declared-object SQL, request webhook
 
-State: Planned
+State: In Progress
 
 Phase 1 (classification + agent `access_denied` results + SQL `MetadataHidden`) is shipped —
 see `access-denial-awareness.md`. This plan covers the rest of the arc.
@@ -105,8 +105,9 @@ see `access-denial-awareness.md`. This plan covers the rest of the arc.
 
 ## Implementation tasks
 
-- [ ] Core models + `IAccessReportService` contract + `AccessRemedy` extension
-- [ ] `AccessReportService` + per-area probe adapters + endpoints + save-invalidation
+- [x] Core models + `IAccessReportService` contract (commit 41754ac1)
+- [x] `AccessReportService` + per-area probe adapters + endpoints + save-invalidation
+      (commit 41754ac1 — `RecordObservedDenial`/`TryGetKnownDenial` in place)
 - [ ] `IAccessAwareTool` + registry known-denial short-circuit + observed-denial feed +
       fix exception-swallowing tools + `demo-sql-prd` in `SqlToolContext`
 - [ ] Access Settings tab + report UI

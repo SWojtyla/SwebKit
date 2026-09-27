@@ -31,7 +31,19 @@ replaces the former AKS-only `PodHealthMonitorService` with a general alert engi
   evaluation scheduling.
 - `SemaphoreSlim(4)` caps concurrent signal-source evaluations.
 - Per-rule cooldown dictionary prevents alert spam.
-- In-memory ring buffer (200 events) for recent alert history, exposed via `/api/monitoring/history`.
+- In-memory ring buffer (200 events) for recent alert history, merged at read time with the
+  durable `AlertHistoryRepository` (`monitoring-history.json`, 2000-entry cap, kinds:
+  `Fired`/`Resolved`/`Suppressed`) and exposed via `/api/monitoring/history`.
+- **Silencing** (monitoring-closed-loop): a `MonitoringSilence` window (global or per
+  `RuleIds`, from `MonitoringSilenceRepository` → `monitoring-silences.json`) or a rule's
+  `MutedUntil` suppresses evaluation **at firing time** — the firing still claims cooldown
+  and lands in the ring buffer + durable history as `Suppressed`, raises `AlertFired` with
+  `Suppressed`/`SuppressedBy` set, but produces only a quiet in-app toast (no OS
+  notification) and short-circuits the proactive investigation to `Skipped`. Suppression is
+  never recorded as `Skipped` evaluation, so it doesn't trigger backoff.
+- `_openIncidents` tracks rules that fired (including suppressed firings); the first `Ok`
+  evaluation afterward appends a `Resolved` history row and emits `AlertResolved` over the
+  SSE stream. `ReloadRulesAsync` prunes incidents for deleted rules.
 - On fire: the engine raises an `AlertFired` event; `MonitoringEndpoints` pushes it to clients
   over an SSE stream (`/api/monitoring/stream`). The React UI then calls the Tauri
   `showNotification` bridge **and** the in-app `NotificationSystem` toast (Critical → error,
@@ -52,6 +64,9 @@ replaces the former AKS-only `PodHealthMonitorService` with a general alert engi
 
 - Rules stored in `%APPDATA%/SwebKit/monitoring-alerts.json` via `AlertRuleRepository`
   (`SwebKit.Core/Configuration/`), loaded by the sidecar at startup.
+- Silences in `monitoring-silences.json` (`MonitoringSilenceRepository`, 500 cap); durable
+  alert history in `monitoring-history.json` (`AlertHistoryRepository`, 2000 cap,
+  newest-first, append-only).
 - Atomic write via `AppDataFileStore.SaveAsync` with a `.bak` fallback and
   `PreserveUnreadableFile` on load failure (hardened pattern).
 
@@ -94,8 +109,10 @@ that validation — or via the agent tool — can carry one.
 | `/api/monitoring/rules`      | POST   | Create a rule (triggers engine reload)                                                             |
 | `/api/monitoring/rules/{id}` | PUT    | Update a rule (triggers engine reload)                                                             |
 | `/api/monitoring/rules/{id}` | DELETE | Delete a rule (triggers engine reload)                                                             |
-| `/api/monitoring/history`    | GET    | Ring-buffer snapshot (up to 200 events)                                                            |
-| `/api/monitoring/stream`     | GET    | SSE: `alertFired`, `evaluationCompleted`, `proactiveInsightReady`, `proactiveInsightStatus` frames |
+| `/api/monitoring/history`    | GET    | Durable history merged with the ring buffer (deduped, newest first)                               |
+| `/api/monitoring/silences`   | GET/POST/DELETE | Silence windows (global or per-rule)                                              |
+| `/api/monitoring/rules/{id}/mute` | POST | Mute/unmute a rule until a timestamp (past `until` normalizes to unmuted)                        |
+| `/api/monitoring/stream`     | GET    | SSE: `alertFired`, `alertResolved`, `evaluationCompleted`, `proactiveInsightReady`, `proactiveInsightStatus` frames |
 
 All routes are demo-mode gated and use the `IsAllowedOrigin` CORS predicate established by
 `tauri-security-hardening`.
@@ -108,9 +125,11 @@ All components live in `web/src/components/monitoring/`.
 | -------------------------- | -------------------------------------------------------------------- |
 | `MonitoringPage.tsx`       | Routed page at `/monitoring`; orchestrates rules + history tabs      |
 | `AlertRuleGroups.tsx`      | Source-grouped collapsible rule list                                 |
-| `AlertRuleRow.tsx`         | Single rule row with live status dot, enable/disable, edit/delete    |
+| `AlertRuleRow.tsx`         | Single rule row with live status dot, enable/disable, mute menu, edit/delete |
 | `AlertRuleDialog.tsx`      | Source-aware create/edit form (AKS / Service Bus / Redis inputs)     |
-| `AlertHistoryPanel.tsx`    | Live alert firing history (seeded from history + SSE), with snooze   |
+| `RuleMuteControl.tsx`      | Portal menu: mute 1h / until tomorrow / indefinite, or unmute        |
+| `SilencesSection.tsx`      | Create/list/delete maintenance windows on the Rules tab             |
+| `AlertHistoryPanel.tsx`    | Durable + live history (Fired/Resolved/Suppressed badges); its snooze button performs a real mute |
 | `ProactiveInsightCard.tsx` | Completed background AI investigation: hypothesis + evidence bullets |
 
 ## Proactive AI investigation (agent-workspace-awareness)

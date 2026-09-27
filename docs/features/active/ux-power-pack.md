@@ -1,6 +1,6 @@
 # UX Power Pack — palette, pinned rail, env badge, keyboard grids, toast dedupe
 
-State: Planned
+State: In Progress
 
 ## Goal
 
@@ -68,9 +68,10 @@ precedent (`CollectionTree`), notification center (`NotificationSystem`).
 - [ ] deep-link consumers: Aks `state.context`, Sql `state.sql`, SB `state.compose`,
       Redis `?cache=`
 - [ ] `PinnedRail` + per-surface pin buttons
-- [ ] `EnvironmentTag` model + Settings UI + `EnvironmentBadge` + PRD banner
+- [x] `EnvironmentTag` model + Settings UI + `EnvironmentBadge` + PRD banner
+      (commit 16f6bfa6)
 - [ ] `useGridKeyboardNav` + five grid integrations (staged)
-- [ ] `notification-dedupe.ts` + NotificationSystem merge
+- [x] `notification-dedupe.ts` + NotificationSystem merge (commit 16f6bfa6)
 
 ## Test plan
 

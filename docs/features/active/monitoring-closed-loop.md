@@ -1,6 +1,6 @@
 # Monitoring → Closed Loop — autofix proposals, rule suggestions, silences, ops dashboard
 
-State: Planned
+State: In Progress
 
 ## Goal
 
@@ -90,8 +90,8 @@ background run is safe-by-construction: worst case is a parked card.
 
 ## Implementation tasks
 
-- [ ] `AlertHistoryRepository` + Resolved events (unlocks downstream)
-- [ ] Silence model + engine suppression + endpoints + UI
+- [x] `AlertHistoryRepository` + Resolved events (commit 44355119)
+- [x] Silence model + engine suppression + endpoints + UI (commit 44355119)
 - [ ] `prefillRule` deep link + bell-icon hook points
 - [ ] New `propose_*` tools + `ServiceBusActionExecutor` + action types
 - [ ] `BackgroundProposalEligible` gate + per-rule opt-in + runner plumbing
