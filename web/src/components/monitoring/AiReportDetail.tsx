@@ -1,7 +1,10 @@
 import { useState } from "react";
-import { Copy, Loader2, MessageSquare, Trash2, Wrench } from "lucide-react";
+import { Copy, Loader2, MessageSquare, Trash2, Wrench, Zap } from "lucide-react";
 import type { ProactiveInsightReport } from "../../lib/api";
 import { useNotification } from "../layout/notification-context";
+import { usePendingApprovals } from "@/lib/hooks/useAgent";
+import { PendingActionCard } from "../agent/PendingActionCard";
+import { proposalsLinkedToReport } from "./proposalLinks";
 import {
     formatInsightTime,
     insightSeverityBadge,
@@ -33,6 +36,13 @@ export function AiReportDetail({
     // Two-click inline confirm — window.confirm is unreliable under automation
     // (see swebkit-ui-ux-guardrails escape hatches).
     const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+    // Remediation proposals this investigation parked (monitoring-closed-loop 1c) — the report
+    // carries their ids, the live approvals list carries the confirmable card. Actions confirmed,
+    // rejected, or expired drop out of the live list and render as a resolved note instead.
+    const pendingApprovals = usePendingApprovals();
+    const linkedIds = report.pendingActionIds ?? [];
+    const liveProposals = proposalsLinkedToReport(report, pendingApprovals.data ?? []);
 
     const copyFix = () => {
         if (!report.proposedFix?.snippet) return;
@@ -130,6 +140,36 @@ export function AiReportDetail({
                             <li key={i}>{item}</li>
                         ))}
                     </ul>
+                </section>
+            )}
+
+            {linkedIds.length > 0 && (
+                <section data-testid="ai-report-proposed-actions">
+                    <h4 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Zap className="h-3 w-3" /> Proposed actions
+                    </h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        The investigation proposed these remediations — nothing
+                        runs until you confirm one.
+                    </p>
+                    <div className="mt-2 space-y-2">
+                        {liveProposals.map((action) => (
+                            <PendingActionCard
+                                key={action.id}
+                                action={action}
+                            />
+                        ))}
+                        {liveProposals.length < linkedIds.length && (
+                            <p
+                                className="text-xs text-muted-foreground"
+                                data-testid="ai-report-proposals-resolved-note"
+                            >
+                                {linkedIds.length - liveProposals.length} of{" "}
+                                {linkedIds.length} proposal(s) already resolved
+                                or expired.
+                            </p>
+                        )}
+                    </div>
                 </section>
             )}
 

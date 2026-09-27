@@ -231,6 +231,21 @@ export function AppLayout() {
                 "/monitoring",
             );
         },
+        undefined,
+        // An opted-in investigation parked a remediation proposal (monitoring-closed-loop 1c) —
+        // invalidate the approvals list instantly so the pending card shows without waiting for
+        // the 30s poll or the finished report, and toast "AI proposes X" so it surfaces even when
+        // nobody is watching the monitoring page.
+        (proposal) => {
+            queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
+            notify(
+                "info",
+                `AI proposes a fix — ${proposal.ruleName}`,
+                proposal.summary,
+                undefined,
+                "/monitoring?tab=reports",
+            );
+        },
     );
 
     // Fathom's "thank you" moment: sessionCount lands on the threshold exactly once (it only ever

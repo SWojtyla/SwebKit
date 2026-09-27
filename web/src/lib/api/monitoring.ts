@@ -49,6 +49,10 @@ export interface MonitoringAlertRule {
     /** When true (default), a firing triggers a background AI investigation that posts a
      * proactive insight. Old persisted rules without the field deserialize to true. */
     aiInvestigationEnabled: boolean;
+    /** Per-rule opt-in (monitoring-closed-loop 1b): when true, an investigation may also park
+     * confirmable remediation proposals (propose_* tools). Default false — and even when on,
+     * nothing mutates without explicit user confirmation. */
+    autoFixProposalsEnabled?: boolean;
     /** Per-rule snooze (ISO timestamp): while in the future the rule's firings are recorded
      * but flagged `suppressed` — no toast storm, no AI investigation. Null/past = not muted. */
     mutedUntil?: string | null;
@@ -162,6 +166,22 @@ export interface ProactiveInsightReadyEvent {
     evidence?: string[];
 }
 
+/** Pushed the moment an opted-in investigation parks a remediation proposal
+ * (monitoring-closed-loop 1c) — enough to surface "AI proposes X" and invalidate the
+ * pending-approvals query without waiting for the finished report. */
+export interface PendingActionProposedEvent {
+    ruleId: string;
+    firedAt: string;
+    ruleName: string;
+    /** The originating report/session id (`proactive-{ruleId}-{firedAt ms}`). */
+    sessionId: string;
+    actionId: string;
+    /** `AgentActionType` name, e.g. "RestartAksDeployment". */
+    actionType: string;
+    summary: string;
+    risk: string;
+}
+
 export async function getMonitoringRules(
     signal?: AbortSignal,
 ): Promise<MonitoringAlertRule[]> {
@@ -260,6 +280,9 @@ export interface ProactiveInsightReport {
     proposedFix?: ProposedFix | null;
     toolsUsed: string[];
     hitMaxRounds: boolean;
+    /** Ids of the pending actions this investigation parked via propose_* tools — the linkage
+     * that lets the report render live confirm/reject cards (monitoring-closed-loop 1c). */
+    pendingActionIds?: string[];
     sessionId: string;
     createdAt: string;
 }

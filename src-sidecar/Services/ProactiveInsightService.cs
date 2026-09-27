@@ -37,6 +37,20 @@ public sealed record ProactiveInsightStatusEvent(
     ProactiveInsightStage Stage,
     string? Reason = null);
 
+/// <summary>Pushed the moment a background investigation parks a remediation proposal —
+/// monitoring-closed-loop 1c's "AI proposes X" signal. Carries enough of the parked
+/// <see cref="PendingAgentAction"/> for the UI to surface the card without the report being
+/// persisted yet (and to invalidate the pending-approvals query immediately).</summary>
+public sealed record PendingActionProposedEvent(
+    string RuleId,
+    DateTimeOffset FiredAt,
+    string RuleName,
+    string SessionId,
+    string ActionId,
+    string ActionType,
+    string Summary,
+    string Risk);
+
 /// <summary>
 /// Subscribes to <see cref="MonitoringAlertEvaluationService.AlertFired"/> (workspace-intelligence
 /// Module 4) and, when a fired rule's resource maps to a node in the user-curated workspace
@@ -75,6 +89,9 @@ public sealed class ProactiveInsightService
     private readonly UserSettingsRepository _settings;
     private readonly SidecarAgentChatService _chatService;
     private readonly ProactiveInvestigationRunner _investigationRunner;
+    /// <summary>Proposals the run parks surface here via <c>ActionRegistered</c> — optional
+    /// because pre-closed-loop tests construct the service without one (DI always injects it).</summary>
+    private readonly IAgentActionCoordinator? _actionCoordinator;
     private readonly ILogger<ProactiveInsightService> _logger;
     private int _busy;
     /// <summary>Rule ids with an open firing episode — an investigation already covered this
@@ -96,6 +113,11 @@ public sealed class ProactiveInsightService
     /// still produces an explanation.</summary>
     public event Action<ProactiveInsightStatusEvent>? InsightStatus;
 
+    /// <summary>Raised the moment an investigation's <c>propose_*</c> call parks a pending action
+    /// (monitoring-closed-loop 1c) — streamed to the UI so "AI proposes X" surfaces without
+    /// waiting for the report.</summary>
+    public event Action<PendingActionProposedEvent>? PendingActionProposed;
+
     public ProactiveInsightService(
         MonitoringAlertEvaluationService engine,
         IAlertRuleRepository rules,
@@ -106,7 +128,8 @@ public sealed class ProactiveInsightService
         UserSettingsRepository settings,
         SidecarAgentChatService chatService,
         ProactiveInvestigationRunner investigationRunner,
-        ILogger<ProactiveInsightService> logger)
+        ILogger<ProactiveInsightService> logger,
+        IAgentActionCoordinator? actionCoordinator = null)
     {
         _rules = rules;
         _reports = reports;
@@ -116,6 +139,7 @@ public sealed class ProactiveInsightService
         _settings = settings;
         _chatService = chatService;
         _investigationRunner = investigationRunner;
+        _actionCoordinator = actionCoordinator;
         _logger = logger;
 
         engine.AlertFired += OnAlertFired;
@@ -241,22 +265,58 @@ public sealed class ProactiveInsightService
 
             RaiseStatus(evt, ProactiveInsightStage.Started);
 
+            // The report/session id is derivable before anything runs — stamping it into the run's
+            // ambient selection is what links each parked proposal back to this report
+            // (monitoring-closed-loop 1c).
+            var sessionId = $"proactive-{evt.RuleId}-{evt.FiredAt.ToUnixTimeMilliseconds()}";
+
+            // Collect every action this run parks (matching by origin session — the single-flight
+            // gate means at most one run is live, but the id check keeps this correct even if
+            // that ever relaxes). Each one also raises PendingActionProposed immediately so the
+            // UI can surface "AI proposes X" without waiting for the finished report.
+            var proposedActionIds = new List<string>();
+            void OnActionRegistered(PendingAgentAction a)
+            {
+                if (a.OriginSessionId != sessionId)
+                    return;
+                lock (proposedActionIds)
+                    proposedActionIds.Add(a.Id);
+                try
+                {
+                    PendingActionProposed?.Invoke(new PendingActionProposedEvent(
+                        evt.RuleId, evt.FiredAt, evt.RuleName, sessionId,
+                        a.Id, a.Type.ToString(), a.Summary, a.Risk.ToString()));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "PendingActionProposed handler threw for rule {RuleId}", evt.RuleId);
+                }
+            }
+
             // agent-workspace-awareness Module 2: prefer the bounded model-driven investigation
             // (the model picks its own read-only evidence path across the workspace). When it
             // can't produce a result — budget exceeded, empty response — fall back to the Module 4
             // single-shot topology probe + model-drafted structured report so an alert still yields
             // an insight.
             ProactiveInvestigationResult? result = null;
+            if (_actionCoordinator is not null)
+                _actionCoordinator.ActionRegistered += OnActionRegistered;
             try
             {
                 result = await _investigationRunner.InvestigateAsync(
-                    evt, DescribeStart(start.Value, effectiveContext), match?.Map, CancellationToken.None);
+                    evt, DescribeStart(start.Value, effectiveContext), match?.Map, CancellationToken.None,
+                    allowAutofixProposals: rule.AutoFixProposalsEnabled, sessionId: sessionId);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex,
                     "Model-driven investigation for rule {RuleId} ({RuleName}) failed — falling back to the single-shot path.",
                     evt.RuleId, evt.RuleName);
+            }
+            finally
+            {
+                if (_actionCoordinator is not null)
+                    _actionCoordinator.ActionRegistered -= OnActionRegistered;
             }
 
             string summary;
@@ -315,11 +375,11 @@ public sealed class ProactiveInsightService
                 report.ToolsUsed = [.. fallback.ToolsUsed];
             }
 
-            var sessionId = $"proactive-{evt.RuleId}-{evt.FiredAt.ToUnixTimeMilliseconds()}";
             report.Id = sessionId;
             report.SessionId = sessionId;
             report.Hypothesis = summary;
             report.ReportJson = reportJson;
+            report.PendingActionIds = [.. proposedActionIds];
 
             _chatService.SeedProactiveInsightSession(sessionId, evt.RuleName, evt.Message, FormatReportMarkdown(report));
 

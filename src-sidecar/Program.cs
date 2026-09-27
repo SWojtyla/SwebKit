@@ -204,14 +204,21 @@ builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
 builder.Services.AddSingleton<IAgentTool, ResolvePodEnvTool>();
 builder.Services.AddSingleton<IAgentTool, GetAksResourceYamlTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApplyAksYamlTool>();
+// monitoring-closed-loop remediations — BackgroundProposalEligible, so an opted-in alert rule's
+// background investigation may park these for confirmation.
+builder.Services.AddSingleton<IAgentTool, ProposeRestartAksDeploymentTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeDeleteAksPodTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
+builder.Services.AddSingleton<IAgentTool, SwebKit.Agents.Tools.ProposePurgeDeadLettersTool>();
+builder.Services.AddSingleton<IAgentTool, SwebKit.Agents.Tools.ProposeResubmitDeadLettersTool>();
 builder.Services.AddSingleton<IAgentTool, GetRedisKeyInfoTool>();
 builder.Services.AddSingleton<IAgentTool, ListRedisKeysTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeCacheHealthTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeDeleteRedisKeyTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeSetRedisKeyTtlTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeFlushRedisDatabaseTool>();
 builder.Services.AddSingleton<IAgentTool, ListStorageBlobsTool>();
 builder.Services.AddSingleton<IAgentTool, GetStorageBlobPropertiesTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeStorageHealthTool>();
@@ -270,6 +277,9 @@ builder.Services.AddSingleton<IAgentActionExecutor, AksActionExecutor>();
 // sidecar-hosted MonitoringAlertEvaluationService for the post-upsert reload.
 builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.MonitoringActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.ExternalMcpActionExecutor>();
+// Lives in the sidecar (not SwebKit.Agents) — it resolves the pooled IServiceBusClient through
+// IServiceBusConnectionPool, the same seam the purge/resubmit endpoints use.
+builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.ServiceBusActionExecutor>();
 builder.Services.AddSingleton<AgentActionApplier>();
 
 // HTTP client used by the API client request executor

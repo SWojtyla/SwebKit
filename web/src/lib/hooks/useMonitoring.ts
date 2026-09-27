@@ -26,6 +26,7 @@ import type {
     AlertEvaluatedEvent,
     ProactiveInsightReadyEvent,
     ProactiveInsightStatusEvent,
+    PendingActionProposedEvent,
 } from "../api";
 
 // ── Monitoring hooks ──────────────────────────────────────────────────────────
@@ -205,8 +206,10 @@ export interface MonitoringEvaluationState {
  * Each frame is a `{kind, event}` envelope (workspace-intelligence Module 4) so the one stream
  * carries `AlertFiredEvent` (`kind: "alertFired"`), `ProactiveInsightReadyEvent`
  * (`kind: "proactiveInsightReady"`), `AlertEvaluatedEvent` (`kind: "evaluationCompleted"`),
- * `ProactiveInsightStatusEvent` (`kind: "proactiveInsightStatus"`), and `AlertResolvedEvent`
- * (`kind: "alertResolved"` — the recovery signal when a firing rule evaluates Ok again).
+ * `ProactiveInsightStatusEvent` (`kind: "proactiveInsightStatus"`), `AlertResolvedEvent`
+ * (`kind: "alertResolved"` — the recovery signal when a firing rule evaluates Ok again), and
+ * `PendingActionProposedEvent` (`kind: "pendingActionProposed"` — an opted-in investigation just
+ * parked a confirmable remediation proposal).
  */
 export function useMonitoringStream(
     onEvent: (evt: AlertFiredEvent) => void,
@@ -214,6 +217,7 @@ export function useMonitoringStream(
     onEvaluation?: (evt: AlertEvaluatedEvent) => void,
     onInsightStatus?: (evt: ProactiveInsightStatusEvent) => void,
     onResolved?: (evt: AlertResolvedEvent) => void,
+    onPendingActionProposed?: (evt: PendingActionProposedEvent) => void,
 ) {
     const stream = useMonitoringStreamApi();
     const onEventEffect = useEffectEvent(onEvent);
@@ -221,6 +225,7 @@ export function useMonitoringStream(
     const onEvaluationEffect = useEffectEvent((evt: AlertEvaluatedEvent) => onEvaluation?.(evt));
     const onInsightStatusEffect = useEffectEvent((evt: ProactiveInsightStatusEvent) => onInsightStatus?.(evt));
     const onResolvedEffect = useEffectEvent((evt: AlertResolvedEvent) => onResolved?.(evt));
+    const onPendingActionProposedEffect = useEffectEvent((evt: PendingActionProposedEvent) => onPendingActionProposed?.(evt));
 
     // Highest seq this subscription has already consumed — replaying only newer frames keeps
     // a StrictMode re-subscribe from double-appending buffered events into subscriber state.
@@ -243,6 +248,10 @@ export function useMonitoringStream(
                 );
             } else if (frame.kind === "alertResolved") {
                 onResolvedEffect(frame.event as AlertResolvedEvent);
+            } else if (frame.kind === "pendingActionProposed") {
+                onPendingActionProposedEffect(
+                    frame.event as PendingActionProposedEvent,
+                );
             }
         }, cursorRef.current);
     }, [stream]);

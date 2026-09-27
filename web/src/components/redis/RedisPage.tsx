@@ -2,7 +2,7 @@ import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useNavigate } from "react-router";
-import { Clock, RefreshCw } from "lucide-react";
+import { Bell, Clock, RefreshCw } from "lucide-react";
 import { RedisPageProvider } from "./RedisPageContext";
 import {
   useRedisConnection,
@@ -100,6 +100,31 @@ function RedisPageContent() {
           </span>
         )}
         <div className="ml-auto flex items-center gap-3">
+          {/* "Watch this" deep link (monitoring-closed-loop): opens Monitoring → New Rule prefilled
+              with this cache's alias and a memory-usage threshold. */}
+          <button
+            onClick={() =>
+              navigate("/monitoring", {
+                state: {
+                  prefillRule: {
+                    name: `Redis memory — ${caches.find((c) => c.id === resolvedCacheId)?.displayName ?? "cache"}`,
+                    source: "RedisMemoryUsage",
+                    redisAlertParams: {
+                      connectionAlias:
+                        caches.find((c) => c.id === resolvedCacheId)?.displayName ?? "",
+                      memoryUsageThresholdPercent: 80,
+                    },
+                  },
+                },
+              })
+            }
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="Create an alert rule watching this cache's memory usage"
+            data-testid="redis-watch-cache"
+          >
+            <Bell className="h-3 w-3" />
+            Watch
+          </button>
           <label className="flex items-center gap-1.5 text-xs" data-testid="redis-auto-refresh">
             <Clock className="h-3.5 w-3.5" />
             <input

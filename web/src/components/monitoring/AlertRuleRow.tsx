@@ -131,6 +131,16 @@ export function AlertRuleRow({
                                 AI
                             </span>
                         )}
+                        {rule.autoFixProposalsEnabled &&
+                            rule.aiInvestigationEnabled && (
+                                <span
+                                    className="flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary"
+                                    title="May propose fixes — investigations can park confirmable remediation actions (restart, resubmit, flush…). Nothing runs without your confirmation."
+                                    data-testid={`monitoring-rule-autofix-badge-${rule.id}`}
+                                >
+                                    +fix
+                                </span>
+                            )}
                         {muted && (
                             <span
                                 className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs text-warning bg-warning/10"

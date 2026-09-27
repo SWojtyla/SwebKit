@@ -22,7 +22,7 @@ namespace SwebKit.Sidecar.Services;
 /// <see cref="ResolvedPrincipal.ObjectId"/>/<see cref="ResolvedPrincipal.AppId"/> and the
 /// caller words artifacts accordingly.
 /// </summary>
-public sealed class AzurePrincipalContext : IAzurePrincipalContext
+public sealed class AzurePrincipalContext : IAzurePrincipalContext, IDisposable
 {
     private static readonly string[] ArmScopes = ["https://management.azure.com/.default"];
 
@@ -84,6 +84,8 @@ public sealed class AzurePrincipalContext : IAzurePrincipalContext
             _gate.Release();
         }
     }
+
+    public void Dispose() => _gate.Dispose();
 
     /// <summary>
     /// Decodes the JWT payload segment (no signature validation — the token came straight from

@@ -186,6 +186,12 @@ export interface PendingAction {
     risk: "None" | "Low" | "High";
     preview: string;
     expiresAt: string;
+    /** What parked this action (monitoring-closed-loop 1c): "investigation" for a background
+     * alert-investigation proposal, absent for an interactive chat turn. */
+    origin?: string | null;
+    /** The originating insight report/session id when `origin` is set
+     * (`proactive-{ruleId}-{firedAt ms}`). */
+    originSessionId?: string | null;
 }
 
 export interface AgentActionApplyResult {

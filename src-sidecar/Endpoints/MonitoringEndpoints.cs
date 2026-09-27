@@ -76,6 +76,7 @@ public static class MonitoringEndpoints
         void OnAlertResolved(AlertResolvedEvent evt) => stream.Enqueue("alertResolved", evt);
         void OnInsightReady(ProactiveInsightReadyEvent evt) => stream.Enqueue("proactiveInsightReady", evt);
         void OnInsightStatus(ProactiveInsightStatusEvent evt) => stream.Enqueue("proactiveInsightStatus", evt);
+        void OnPendingActionProposed(PendingActionProposedEvent evt) => stream.Enqueue("pendingActionProposed", evt);
         void OnEvaluationCompleted(AlertEvaluatedEvent evt) => stream.Enqueue("evaluationCompleted", evt);
 
         engine.AlertFired += OnAlertFired;
@@ -83,6 +84,7 @@ public static class MonitoringEndpoints
         engine.EvaluationCompleted += OnEvaluationCompleted;
         insights.InsightReady += OnInsightReady;
         insights.InsightStatus += OnInsightStatus;
+        insights.PendingActionProposed += OnPendingActionProposed;
         try
         {
             await stream.RunAsync(context, context.RequestAborted);
@@ -94,6 +96,7 @@ public static class MonitoringEndpoints
             engine.EvaluationCompleted -= OnEvaluationCompleted;
             insights.InsightReady -= OnInsightReady;
             insights.InsightStatus -= OnInsightStatus;
+            insights.PendingActionProposed -= OnPendingActionProposed;
             stream.Complete();
         }
     }

@@ -23,13 +23,24 @@ const FEATURE_AREA_BY_ACTION_TYPE: Record<string, string> = {
   CopyBlob: "Storage",
   ExecuteSql: "SQL",
   ApplyAksYaml: "AKS",
+  RestartAksDeployment: "AKS",
+  DeleteAksPod: "AKS",
+  PurgeServiceBusDeadLetters: "Service Bus",
+  ResubmitServiceBusDeadLetters: "Service Bus",
+  FlushRedisDatabase: "Redis",
   CreateAlertRule: "Monitoring",
   ExternalMcpCall: "External MCP",
 };
 
-export function describePendingActionOrigin(action: Pick<PendingAction, "type" | "target">): string {
+export function describePendingActionOrigin(
+  action: Pick<PendingAction, "type" | "target" | "origin">,
+): string {
   const area = FEATURE_AREA_BY_ACTION_TYPE[action.type] ?? "Agent";
-  return `${area} · ${action.target}`;
+  // Investigation-parked proposals get their provenance up front — "Alert investigation · AKS ·
+  // dev/Pod/x" reads as "the AI proposed this" without needing the report open.
+  return action.origin === "investigation"
+    ? `Alert investigation · ${area} · ${action.target}`
+    : `${area} · ${action.target}`;
 }
 
 /** Formats the time remaining until `expiresAt` as a short, live-updating countdown ("expires in

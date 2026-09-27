@@ -108,11 +108,11 @@ see `access-denial-awareness.md`. This plan covers the rest of the arc.
 - [x] Core models + `IAccessReportService` contract (commit 41754ac1)
 - [x] `AccessReportService` + per-area probe adapters + endpoints + save-invalidation
       (commit 41754ac1 — `RecordObservedDenial`/`TryGetKnownDenial` in place)
-- [ ] `IAccessAwareTool` + registry known-denial short-circuit + observed-denial feed +
-      fix exception-swallowing tools + `demo-sql-prd` in `SqlToolContext`
-- [ ] Access Settings tab + report UI
-- [ ] `IAzurePrincipalContext` + ARM fields + `ScopeResolver` + artifact endpoint +
-      dialog
+- [x] `IAccessAwareTool` + registry known-denial short-circuit + observed-denial feed +
+      fix exception-swallowing tools + `demo-sql-prd` in `SqlToolContext` (commit 8e127eff)
+- [x] Access Settings tab + report UI (commit 952d8b1a)
+- [x] `IAzurePrincipalContext` + ARM fields + `ScopeResolver` + artifact endpoint +
+      dialog (commit 952d8b1a — PascalCase remedy-kind wire contract pinned by test)
 - [ ] `DeclaredObjects` + schema merge + columns endpoint + SchemaTree/settings UI
 - [ ] `AccessRequestConfig` + credential-store plumbing + sender + webhook UI
 

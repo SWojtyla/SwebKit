@@ -92,12 +92,19 @@ background run is safe-by-construction: worst case is a parked card.
 
 - [x] `AlertHistoryRepository` + Resolved events (commit 44355119)
 - [x] Silence model + engine suppression + endpoints + UI (commit 44355119)
-- [ ] `prefillRule` deep link + bell-icon hook points
-- [ ] New `propose_*` tools + `ServiceBusActionExecutor` + action types
-- [ ] `BackgroundProposalEligible` gate + per-rule opt-in + runner plumbing
-- [ ] Origin stamping + extended expiry/cap + SSE `pendingActionProposed` + report cards
+- [x] `prefillRule` deep link + bell-icon hook points (PodsTab, RedisPage)
+- [x] New `propose_*` tools + `ServiceBusActionExecutor` + action types —
+      pod restart/delete, DLQ purge/resubmit, Redis flush
+- [x] `BackgroundProposalEligible` gate + per-rule `AutoFixProposalsEnabled`
+      opt-in (default off) + runner plumbing
+- [x] Origin stamping (`Origin`/`OriginSessionId`) + `pendingActionProposed`
+      SSE frame + report card linkage (`PendingActionIds` on the report)
 - [ ] Ops tab + history summary endpoint
 - [ ] `AGENT.md`/`monitoring.md` posture revision documented
+- [ ] Validation pending: the autofix slice landed from an interrupted agent
+      run — targeted tests green (Agents 42, sidecar 57) but the full matrix
+      (all four .NET suites + vitest + playwright monitoring/service-bus)
+      has NOT been re-run end-to-end.
 
 ## Test plan
 

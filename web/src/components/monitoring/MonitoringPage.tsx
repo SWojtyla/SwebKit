@@ -39,6 +39,7 @@ import { AlertHistoryPanel } from "./AlertHistoryPanel";
 import { SilencesSection } from "./SilencesSection";
 import { ProactiveInsightCard } from "./ProactiveInsightCard";
 import { AiReportsPanel } from "./AiReportsPanel";
+import { buildPrefilledRuleDraft } from "./prefillRule";
 
 // Keeps a burst of proactive insights from pushing the tab strip below the fold — a "+N more"
 // toggle (scrollable once expanded) surfaces the rest without an unbounded list.
@@ -117,6 +118,25 @@ export function MonitoringPage() {
             }
         }
     }, [location, rules, navigate, setActiveTab]);
+
+    // "Watch this" deep link (monitoring-closed-loop): feature pages navigate here with
+    // `state: { prefillRule }` carrying a partial rule (source + params/threshold from the
+    // surface's context — e.g. an AKS pod view prefills namespace/restart threshold). It opens
+    // the rule dialog as a *new* rule (id "" → the existing create path), pre-filled but still
+    // fully editable before saving.
+    useEffect(() => {
+        const state = location.state as {
+            prefillRule?: Partial<MonitoringAlertRule>;
+        } | null;
+        if (state?.prefillRule) {
+            /* eslint-disable react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway */
+            setActiveTab("rules");
+            setEditingRule(buildPrefilledRuleDraft(state.prefillRule));
+            setShowEditor(true);
+            /* eslint-enable react-hooks/set-state-in-effect */
+            navigate(location.pathname, { replace: true, state: null });
+        }
+    }, [location, navigate, setActiveTab]);
     // Live status dots, derived from a synthetic evaluation event merged in from the stream + history.
     const [statuses, setStatuses] = useState<Record<string, AlertSignalStatus>>(
         {},
@@ -188,6 +208,13 @@ export function MonitoringPage() {
         // explicit "the incident is over" frame, so it's safe to land the dot on Ok here.
         (evt: AlertResolvedEvent) => {
             setStatuses((s) => ({ ...s, [evt.ruleId]: "Ok" }));
+        },
+        // An opted-in investigation just parked a remediation proposal — refresh the approvals
+        // list immediately rather than on the next 30s poll, so the pending-action card is there
+        // when the user looks. (The toast for this lives in AppLayout's always-mounted
+        // subscription — toasting here too would double-notify.)
+        () => {
+            queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
         },
     );
 

@@ -32,6 +32,12 @@ public sealed class MonitoringAlertRule
     /// investigation (ProactiveInsightService). Default true preserves the pre-flag
     /// auto-investigate behavior; rules persisted before the flag existed deserialize to true.</summary>
     public bool AiInvestigationEnabled { get; set; } = true;
+    /// <summary>Per-rule opt-in (monitoring-closed-loop 1b): when true, a background
+    /// investigation of a firing may also call the whitelisted <c>propose_*</c> tools to park
+    /// confirmable remediation actions. Default FALSE — today's posture
+    /// is unchanged for existing rules, and even when enabled every proposal still needs explicit
+    /// user confirmation before anything mutates.</summary>
+    public bool AutoFixProposalsEnabled { get; set; }
     /// <summary>Per-rule snooze (monitoring-closed-loop item 3): while set and in the future,
     /// a firing of this rule is suppressed at the engine's firing stage — the event still
     /// records and streams, but with <see cref="AlertFiredEvent.Suppressed"/> set, so
@@ -194,6 +200,10 @@ public sealed class ProactiveInsightReport
     /// <summary>Audit trail of which tools the investigation loop actually called.</summary>
     public List<string> ToolsUsed { get; set; } = [];
     public bool HitMaxRounds { get; set; }
+    /// <summary>Ids of the pending actions the investigation parked via
+    /// <c>propose_*</c> tools (monitoring-closed-loop 1c) — the linkage that lets a report card
+    /// render confirm/reject UI against the action store.</summary>
+    public List<string> PendingActionIds { get; set; } = [];
     /// <summary>Structured result JSON (model-driven path) or raw investigate_workspace_issue
     /// output (fallback path) — the payload the seeded chat session carries for follow-up
     /// questions. Not rendered in the reports UI.</summary>

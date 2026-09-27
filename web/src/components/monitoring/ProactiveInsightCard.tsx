@@ -1,5 +1,8 @@
 import { X } from "lucide-react";
 import type { ProactiveInsightReadyEvent } from "../../lib/api";
+import { usePendingApprovals } from "@/lib/hooks/useAgent";
+import { PendingActionCard } from "../agent/PendingActionCard";
+import { proposalsForSession } from "./proposalLinks";
 
 interface ProactiveInsightCardProps {
     insight: ProactiveInsightReadyEvent;
@@ -13,49 +16,68 @@ interface ProactiveInsightCardProps {
  * not a raw signal) and from a chat message. Short and scannable per ux-plan.md: what fired, a
  * one-line generated hypothesis, a "View report" button that deep-links to the persisted report
  * in the AI Reports tab (ai-insight-reports) — never a full unprompted essay.
+ *
+ * When the run parked remediation proposals (monitoring-closed-loop 1c), their live
+ * confirm/reject cards render inline — the insight's sessionId is the proposals'
+ * `originSessionId`, so no report fetch is needed to link them.
  */
 export function ProactiveInsightCard({
     insight,
     onViewReport,
     onDismiss,
 }: ProactiveInsightCardProps) {
+    const pendingApprovals = usePendingApprovals();
+    const proposals = proposalsForSession(insight.sessionId, pendingApprovals.data ?? []);
+
     return (
         <div
-            className="flex items-start justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3"
+            className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3"
             data-testid={`proactive-insight-${insight.ruleId}-${insight.firedAt}`}
         >
-            <div className="min-w-0">
-                <div className="text-sm font-semibold">
-                    {insight.ruleName} — possibly related
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="text-sm font-semibold">
+                        {insight.ruleName} — possibly related
+                    </div>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                        {insight.summary}
+                    </p>
+                    {insight.evidence && insight.evidence.length > 0 && (
+                        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-muted-foreground/80">
+                            {insight.evidence.slice(0, 4).map((item, i) => (
+                                <li key={i}>{item}</li>
+                            ))}
+                        </ul>
+                    )}
                 </div>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                    {insight.summary}
-                </p>
-                {insight.evidence && insight.evidence.length > 0 && (
-                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-muted-foreground/80">
-                        {insight.evidence.slice(0, 4).map((item, i) => (
-                            <li key={i}>{item}</li>
-                        ))}
-                    </ul>
-                )}
+                <div className="flex shrink-0 items-center gap-2">
+                    <button
+                        onClick={() => onViewReport(insight)}
+                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+                        data-testid={`proactive-insight-view-report-${insight.ruleId}-${insight.firedAt}`}
+                    >
+                        View report
+                    </button>
+                    <button
+                        onClick={() => onDismiss(insight)}
+                        className="rounded-md p-1.5 hover:bg-accent"
+                        title="Dismiss"
+                        data-testid={`proactive-insight-dismiss-${insight.ruleId}-${insight.firedAt}`}
+                    >
+                        <X className="h-3.5 w-3.5" />
+                    </button>
+                </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-                <button
-                    onClick={() => onViewReport(insight)}
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
-                    data-testid={`proactive-insight-view-report-${insight.ruleId}-${insight.firedAt}`}
+            {proposals.length > 0 && (
+                <div
+                    className="mt-2 space-y-2"
+                    data-testid={`proactive-insight-proposals-${insight.ruleId}-${insight.firedAt}`}
                 >
-                    View report
-                </button>
-                <button
-                    onClick={() => onDismiss(insight)}
-                    className="rounded-md p-1.5 hover:bg-accent"
-                    title="Dismiss"
-                    data-testid={`proactive-insight-dismiss-${insight.ruleId}-${insight.firedAt}`}
-                >
-                    <X className="h-3.5 w-3.5" />
-                </button>
-            </div>
+                    {proposals.map((action) => (
+                        <PendingActionCard key={action.id} action={action} />
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

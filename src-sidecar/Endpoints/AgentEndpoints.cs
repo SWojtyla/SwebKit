@@ -241,6 +241,8 @@ public static class AgentEndpoints
                 Risk = a.Risk.ToString(),
                 Preview = a.Preview,
                 ExpiresAt = a.ExpiresAt,
+                Origin = a.Origin,
+                OriginSessionId = a.OriginSessionId,
             })
             .ToList();
         return TypedResults.Ok<IReadOnlyList<PendingActionSummary>>(summaries);
@@ -333,6 +335,16 @@ public sealed class PendingActionSummary
     public required string Risk { get; init; }
     public required string Preview { get; init; }
     public required DateTimeOffset ExpiresAt { get; init; }
+
+    /// <summary>What parked this action (monitoring-closed-loop): null for an interactive chat
+    /// turn, "investigation" for a background proactive-investigation proposal — the UI uses it
+    /// to badge "AI proposes…" cards differently from user-driven ones.</summary>
+    public string? Origin { get; init; }
+
+    /// <summary>The originating report/session id when <see cref="Origin"/> is set
+    /// (<c>proactive-{ruleId}-{firedAtMs}</c>) — links a confirm card back to its insight
+    /// report.</summary>
+    public string? OriginSessionId { get; init; }
 }
 
 public sealed class AgentChatRequest
