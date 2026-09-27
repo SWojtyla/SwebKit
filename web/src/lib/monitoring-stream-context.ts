@@ -12,8 +12,8 @@ import { createContext, useContext } from "react";
  * replay cursors — it is not a server value. */
 export interface MonitoringStreamFrame {
     seq: number;
-    /** The envelope's `kind` field — e.g. `alertFired`, `proactiveInsightReady`,
-     * `evaluationCompleted`, `proactiveInsightStatus`. */
+    /** The envelope's `kind` field — e.g. `alertFired`, `alertResolved`,
+     * `proactiveInsightReady`, `evaluationCompleted`, `proactiveInsightStatus`. */
     kind: string;
     event: unknown;
 }

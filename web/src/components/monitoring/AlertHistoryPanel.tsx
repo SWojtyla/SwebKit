@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { BellOff } from "lucide-react";
-import type { AlertFiredEvent } from "../../lib/api";
+import type { AlertHistoryEntry } from "../../lib/api";
+import { RuleMuteControl } from "./RuleMuteControl";
 import {
     filterAndSortHistory,
     type HistorySeverityFilter,
@@ -20,10 +20,17 @@ const severityRowAccent: Record<string, string> = {
 
 export function AlertHistoryPanel({
     events,
-    onSnooze,
+    onMute,
+    mutedUntilByRule = {},
 }: {
-    events: AlertFiredEvent[];
-    onSnooze?: (evt: AlertFiredEvent) => void;
+    /** Durable history rows (monitoring-closed-loop 4a): persisted Fired/Suppressed/Resolved
+     * entries merged with any live events not yet flushed to the store. */
+    events: AlertHistoryEntry[];
+    /** Per-rule mute (monitoring-closed-loop item 3) — the snooze action that used to
+     * only hide the row for the session now sets the rule's `mutedUntil` server-side too. */
+    onMute?: (ruleId: string, until: string | null) => void;
+    /** ruleId → current `mutedUntil`, so the mute menu can offer Unmute on a muted rule. */
+    mutedUntilByRule?: Record<string, string | null | undefined>;
 }) {
     const [snoozed, setSnoozed] = useState<Record<string, boolean>>({});
     const [severityFilter, setSeverityFilter] =
@@ -107,7 +114,7 @@ export function AlertHistoryPanel({
                         </thead>
                         <tbody>
                             {visibleEvents.map((evt, i) => {
-                                const key = `${evt.ruleId}-${evt.firedAt}-${i}`;
+                                const key = `${evt.id}-${i}`;
                                 if (snoozed[key]) return null;
                                 return (
                                     <tr
@@ -124,33 +131,49 @@ export function AlertHistoryPanel({
                                             >
                                                 {evt.severity}
                                             </span>
-                                        </td>
-                                        <td className="px-3 py-2 text-xs text-muted-foreground">
-                                            {formatLocalDateTime(evt.firedAt)}
-                                        </td>
-                                        <td className="px-3 py-2 text-xs">
-                                            <div>{evt.message}</div>
-                                            {evt.detail && (
-                                                <div className="text-muted-foreground">
-                                                    {evt.detail}
-                                                </div>
+                                            {evt.kind === "Suppressed" && (
+                                                <span
+                                                    className="ml-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                                                    title="Suppressed by a silence window or rule mute"
+                                                    data-testid={`monitoring-history-silenced-${i}`}
+                                                >
+                                                    silenced
+                                                </span>
+                                            )}
+                                            {evt.kind === "Resolved" && (
+                                                <span
+                                                    className="ml-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-success-foreground bg-success"
+                                                    title="The rule recovered — incident closed"
+                                                    data-testid={`monitoring-history-resolved-${i}`}
+                                                >
+                                                    resolved
+                                                </span>
                                             )}
                                         </td>
+                                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                                            {formatLocalDateTime(evt.at)}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs">
+                                            {evt.message}
+                                        </td>
                                         <td className="px-3 py-2 text-right">
-                                            <button
-                                                onClick={() => {
-                                                    setSnoozed((s) => ({
-                                                        ...s,
-                                                        [key]: true,
-                                                    }));
-                                                    onSnooze?.(evt);
+                                            <RuleMuteControl
+                                                ruleId={evt.ruleId}
+                                                mutedUntil={
+                                                    mutedUntilByRule[evt.ruleId]
+                                                }
+                                                onMute={(ruleId, until) => {
+                                                    if (until !== null) {
+                                                        setSnoozed((s) => ({
+                                                            ...s,
+                                                            [key]: true,
+                                                        }));
+                                                    }
+                                                    onMute?.(ruleId, until);
                                                 }}
-                                                className="rounded p-1 hover:bg-accent"
-                                                title="Snooze (this session)"
-                                                data-testid={`monitoring-history-snooze-${i}`}
-                                            >
-                                                <BellOff className="h-3.5 w-3.5" />
-                                            </button>
+                                                title="Snooze — mute this rule"
+                                                testIdPrefix={`monitoring-history-snooze-${i}`}
+                                            />
                                         </td>
                                     </tr>
                                 );

@@ -164,6 +164,20 @@ public sealed class ProactiveInsightService
 
     private async Task HandleAlertFiredAsync(AlertFiredEvent evt)
     {
+        // A firing suppressed by a silence window or rule mute must not trigger an
+        // investigation — that would spend an LLM run on an alert nobody was meant to hear.
+        // Reported as Skipped for audit so the suppression is visible, not a silent drop.
+        // Checked before the _busy claim: a silenced firing shouldn't hold the single-flight
+        // slot against a real alert arriving in the same instant.
+        if (evt.Suppressed)
+        {
+            _logger.LogInformation(
+                "Skipped proactive insight for rule {RuleId} ({RuleName}) — firing suppressed ({SuppressedBy}).",
+                evt.RuleId, evt.RuleName, evt.SuppressedBy);
+            RaiseStatus(evt, ProactiveInsightStage.Skipped, "silenced by maintenance window");
+            return;
+        }
+
         if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
         {
             _logger.LogInformation(

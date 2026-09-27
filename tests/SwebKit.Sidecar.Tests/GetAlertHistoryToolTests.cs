@@ -14,7 +14,8 @@ public class GetAlertHistoryToolTests
 {
     private static MonitoringAlertEvaluationService BuildEngine(IAlertRuleRepository repo, params IAlertSignalSource[] sources) =>
         new(repo, new FakeConnectionPool(), sources,
-            new ProfileRepository(), NullLogger<MonitoringAlertEvaluationService>.Instance);
+            new ProfileRepository(), new InMemoryMonitoringSilenceRepository(),
+            new InMemoryAlertHistoryRepository(), NullLogger<MonitoringAlertEvaluationService>.Instance);
 
     private static MonitoringAlertRule Rule(string id) => new()
     {

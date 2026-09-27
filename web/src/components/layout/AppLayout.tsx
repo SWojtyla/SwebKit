@@ -181,6 +181,19 @@ export function AppLayout() {
     // deliberately don't toast, so an event can't double-notify.
     useMonitoringStream(
         (evt) => {
+            // A firing suppressed by a silence window or rule mute is audit info only
+            // (monitoring-closed-loop item 3): quiet in-app toast, no OS notification —
+            // making noise here would defeat the point of silencing.
+            if (evt.suppressed) {
+                notify(
+                    "info",
+                    `${evt.ruleName} — silenced`,
+                    evt.suppressedBy ? `${evt.message} (${evt.suppressedBy})` : evt.message,
+                    undefined,
+                    "/monitoring",
+                );
+                return;
+            }
             void showNotification(evt.ruleName, evt.message);
             notify(
                 evt.severity === "Critical" ? "error" : "success",

@@ -27,6 +27,8 @@ public static class AppDataPaths
     public static string ScheduledMessagesJson => Path.Combine(Root, "scheduled-messages.json");
     public static string MonitoringAlertsJson => Path.Combine(Root, "monitoring-alerts.json");
     public static string MonitoringInsightsJson => Path.Combine(Root, "monitoring-insights.json");
+    public static string MonitoringSilencesJson => Path.Combine(Root, "monitoring-silences.json");
+    public static string MonitoringHistoryJson => Path.Combine(Root, "monitoring-history.json");
     public static string CollectionsJson => Path.Combine(Root, "collections.json");
     public static string EnvironmentsJson => Path.Combine(Root, "environments.json");
     public static string ApiLinkedRootsJson => Path.Combine(Root, "api-linked-roots.json");

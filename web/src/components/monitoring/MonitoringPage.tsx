@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, AlertCircle, Loader2, Sparkles, X } from "lucide-react";
 import { SkeletonRows } from "@/components/shared/Skeleton";
+import { firedEventToHistoryEntry } from "../../lib/api";
 import type {
     AlertSignalStatus,
     MonitoringAlertRule,
     AlertFiredEvent,
+    AlertHistoryEntry,
+    AlertResolvedEvent,
     AlertEvaluatedEvent,
     ProactiveInsightReadyEvent,
     ProactiveInsightStatusEvent,
@@ -22,6 +25,7 @@ import {
     useMonitoringInsights,
     useDeleteMonitoringInsight,
     useOpenInsightChat,
+    useMuteMonitoringRule,
     useMonitoringStream,
     useProactiveInsightsFeed,
     useUpdateSearchParams,
@@ -32,6 +36,7 @@ import { ContextualAssistant } from "../agent/ContextualAssistant";
 import { AlertRuleGroups } from "./AlertRuleGroups";
 import { AlertRuleDialog } from "./AlertRuleDialog";
 import { AlertHistoryPanel } from "./AlertHistoryPanel";
+import { SilencesSection } from "./SilencesSection";
 import { ProactiveInsightCard } from "./ProactiveInsightCard";
 import { AiReportsPanel } from "./AiReportsPanel";
 
@@ -63,6 +68,7 @@ export function MonitoringPage() {
     const createRule = useCreateMonitoringRule();
     const updateRule = useUpdateMonitoringRule();
     const deleteRule = useDeleteMonitoringRule();
+    const muteRule = useMuteMonitoringRule();
     const { notify } = useNotification();
     const navigate = useNavigate();
     const location = useLocation();
@@ -177,6 +183,12 @@ export function MonitoringPage() {
             const key = `${evt.ruleId}|${evt.firedAt}`;
             setInsightStatuses((s) => ({ ...s, [key]: evt }));
         },
+        // Recovery signal (monitoring-closed-loop 4a): an Ok tick can't clear a Firing dot on
+        // its own — it might just be "nothing new transitioned". alertResolved is the engine's
+        // explicit "the incident is over" frame, so it's safe to land the dot on Ok here.
+        (evt: AlertResolvedEvent) => {
+            setStatuses((s) => ({ ...s, [evt.ruleId]: "Ok" }));
+        },
     );
 
     // Screen-state snapshot (agent-workspace-awareness M1) — which rules are on screen and
@@ -252,9 +264,22 @@ export function MonitoringPage() {
         });
     };
 
-    const mergedHistory = [...liveEvents, ...history].sort(
-        (a, b) => new Date(b.firedAt).getTime() - new Date(a.firedAt).getTime(),
-    );
+    // History rows are the durable Fired/Suppressed/Resolved entries plus live alertFired
+    // events not yet flushed to the persisted store — deduped by ruleId|at|kind so an event
+    // that already landed in monitoring-history.json doesn't double-render between polls.
+    const mergedHistory = useMemo<AlertHistoryEntry[]>(() => {
+        const persistedKeys = new Set(
+            history.map((h) => `${h.ruleId}|${h.at}|${h.kind}`),
+        );
+        const liveRows = liveEvents
+            .map(firedEventToHistoryEntry)
+            .filter(
+                (e) => !persistedKeys.has(`${e.ruleId}|${e.at}|${e.kind}`),
+            );
+        return [...liveRows, ...history].sort(
+            (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+        );
+    }, [liveEvents, history]);
 
     const toggleRule = (rule: MonitoringAlertRule) => {
         const nextEnabled = !rule.enabled;
@@ -296,6 +321,14 @@ export function MonitoringPage() {
     const handleDelete = (rule: MonitoringAlertRule) => {
         if (rule.id) deleteRule.mutate(rule.id);
     };
+
+    // Per-rule mute — shared by the rule rows and the history panel's snooze action.
+    const handleMute = (ruleId: string, until: string | null) =>
+        muteRule.mutate({ id: ruleId, until });
+
+    const mutedUntilByRule = Object.fromEntries(
+        rules.map((r) => [r.id, r.mutedUntil]),
+    );
 
     const dismissInsightStatus = (key: string) =>
         setInsightStatuses((s) => {
@@ -481,8 +514,11 @@ export function MonitoringPage() {
                                     setShowEditor(true);
                                 }}
                                 onDelete={handleDelete}
+                                onMute={handleMute}
                             />
                         )}
+
+                        <SilencesSection rules={rules} />
                     </div>
                 )}
 
@@ -502,7 +538,11 @@ export function MonitoringPage() {
                     ) : historyIsLoading ? (
                         <SkeletonRows count={4} />
                     ) : (
-                        <AlertHistoryPanel events={mergedHistory} />
+                        <AlertHistoryPanel
+                            events={mergedHistory}
+                            onMute={handleMute}
+                            mutedUntilByRule={mutedUntilByRule}
+                        />
                     ))}
 
                 {activeTab === "reports" && (

@@ -75,7 +75,9 @@ public class ProactiveInsightServiceTests
         var reportRepo = new ProactiveInsightReportRepository();
         var profiles = new ProfileRepository();
         var engine = new MonitoringAlertEvaluationService(
-            ruleRepo, new FakeConnectionPool(), sources, profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+            ruleRepo, new FakeConnectionPool(), sources, profiles,
+            new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
+            NullLogger<MonitoringAlertEvaluationService>.Instance);
 
         var registry = new FakeToolRegistryForProactiveInsight();
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => "A short hypothesis." };
@@ -188,6 +190,33 @@ public class ProactiveInsightServiceTests
     }
 
     [Fact]
+    public async Task AlertFired_SuppressedByMute_ReportsSkipped_NeverInvestigates()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, _, _, registry, _, _) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        var rule = AksRule("prod");
+        rule.MutedUntil = DateTimeOffset.UtcNow.AddHours(1);
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var statuses = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => statuses.Add(e);
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+
+        await engine.RunEvaluationOnceAsync();
+        await insights.DrainAsync();
+
+        // A suppressed firing is audit info only: the investigation never runs, but the
+        // skip is still reported so the suppression is visible rather than a silent drop.
+        var skipped = Assert.Single(statuses);
+        Assert.Equal(ProactiveInsightStage.Skipped, skipped.Stage);
+        Assert.Equal("silenced by maintenance window", skipped.Reason);
+        Assert.Null(ready);
+        Assert.Empty(registry.Calls);
+    }
+
+    [Fact]
     public async Task AlertFired_SuccessfulInvestigation_ReportsStartedBeforeReady()
     {
         using var _sandbox = new AppDataSandbox();
@@ -283,7 +312,7 @@ public class ProactiveInsightServiceTests
         var ruleRepo = new AlertRuleRepository();
         var profiles = new ProfileRepository();
         var signalSource = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
-        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(), NullLogger<MonitoringAlertEvaluationService>.Instance);
         var registry = new FakeToolRegistryForProactiveInsight();
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => throw new InvalidOperationException("summarizer unreachable") };
         var settings = SettingsWithCapability(AgentCapability.ToolCalling);
@@ -378,7 +407,9 @@ public class ProactiveInsightServiceTests
         var aksSource = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
         var sbSource = new FakeSignalSource(AlertRuleSource.ServiceBusDlqDepth, AlertSignalStatus.Firing);
         var engine = new MonitoringAlertEvaluationService(
-            ruleRepo, new FakeConnectionPool(), [aksSource, sbSource], profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+            ruleRepo, new FakeConnectionPool(), [aksSource, sbSource], profiles,
+            new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
+            NullLogger<MonitoringAlertEvaluationService>.Instance);
 
         var registry = new FakeToolRegistryForProactiveInsight { BlockUntil = gate.Task };
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => "hypothesis" };
@@ -464,7 +495,7 @@ public class ProactiveInsightServiceTests
         var reportRepo = new ProactiveInsightReportRepository();
         var profiles = new ProfileRepository();
         var signalSource = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
-        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(), NullLogger<MonitoringAlertEvaluationService>.Instance);
         var registry = new FakeToolRegistryForProactiveInsight();
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => throw new InvalidOperationException("summarizer unreachable") };
         var settings = SettingsWithCapability(AgentCapability.ToolCalling);
@@ -599,7 +630,7 @@ public class ProactiveInsightServiceTests
         var reportRepo = new ProactiveInsightReportRepository();
         var profiles = new ProfileRepository();
         var signalSource = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
-        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(), NullLogger<MonitoringAlertEvaluationService>.Instance);
         var registry = new FakeToolRegistryForProactiveInsight();
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => throw new InvalidOperationException("summarizer unreachable") };
         var settings = SettingsWithCapability(AgentCapability.ToolCalling);

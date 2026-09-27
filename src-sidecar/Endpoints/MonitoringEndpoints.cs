@@ -23,6 +23,16 @@ public static class MonitoringEndpoints
 
         group.MapDelete("/rules/{id}", DeleteRuleAsync);
 
+        // ── Silences + per-rule mute (monitoring-closed-loop item 3) ────────
+
+        group.MapGet("/silences", GetSilencesAsync);
+
+        group.MapPost("/silences", CreateSilenceAsync);
+
+        group.MapDelete("/silences/{id}", DeleteSilenceAsync);
+
+        group.MapPost("/rules/{id}/mute", MuteRuleAsync);
+
         // ── History snapshot ────────────────────────────────────────────────
 
         group.MapGet("/history", GetHistory);
@@ -63,11 +73,13 @@ public static class MonitoringEndpoints
         var stream = new MonitoringEventStream(logger);
 
         void OnAlertFired(AlertFiredEvent evt) => stream.Enqueue("alertFired", evt);
+        void OnAlertResolved(AlertResolvedEvent evt) => stream.Enqueue("alertResolved", evt);
         void OnInsightReady(ProactiveInsightReadyEvent evt) => stream.Enqueue("proactiveInsightReady", evt);
         void OnInsightStatus(ProactiveInsightStatusEvent evt) => stream.Enqueue("proactiveInsightStatus", evt);
         void OnEvaluationCompleted(AlertEvaluatedEvent evt) => stream.Enqueue("evaluationCompleted", evt);
 
         engine.AlertFired += OnAlertFired;
+        engine.AlertResolved += OnAlertResolved;
         engine.EvaluationCompleted += OnEvaluationCompleted;
         insights.InsightReady += OnInsightReady;
         insights.InsightStatus += OnInsightStatus;
@@ -78,6 +90,7 @@ public static class MonitoringEndpoints
         finally
         {
             engine.AlertFired -= OnAlertFired;
+            engine.AlertResolved -= OnAlertResolved;
             engine.EvaluationCompleted -= OnEvaluationCompleted;
             insights.InsightReady -= OnInsightReady;
             insights.InsightStatus -= OnInsightStatus;
@@ -128,8 +141,84 @@ public static class MonitoringEndpoints
         return TypedResults.NoContent();
     }
 
-    internal static Ok<IReadOnlyList<AlertFiredEvent>> GetHistory(MonitoringAlertEvaluationService engine) =>
-        TypedResults.Ok(engine.RecentAlerts);
+    /// <summary>Durable alert history (monitoring-closed-loop 4a): the persisted
+    /// Fired/Suppressed/Resolved record, merged with the engine's in-memory ring buffer so a
+    /// firing that failed to persist still surfaces until the process exits. Newest first.</summary>
+    internal static async Task<Ok<IReadOnlyList<AlertHistoryEntry>>> GetHistory(
+        MonitoringAlertEvaluationService engine,
+        IAlertHistoryRepository history)
+    {
+        var persisted = await history.GetAllAsync();
+        var seen = new HashSet<string>(persisted.Select(Key));
+
+        var merged = persisted
+            .Concat(engine.RecentAlerts
+                .Select(ToEntry)
+                .Where(e => seen.Add(Key(e))))
+            .OrderByDescending(e => e.At)
+            .ToList();
+        return TypedResults.Ok((IReadOnlyList<AlertHistoryEntry>)merged);
+
+        static string Key(AlertHistoryEntry e) => $"{e.RuleId}|{e.At.UtcTicks}|{e.Kind}";
+
+        static AlertHistoryEntry ToEntry(AlertFiredEvent a) => new()
+        {
+            RuleId = a.RuleId,
+            RuleName = a.RuleName,
+            Source = a.Source,
+            Severity = a.Severity,
+            Kind = a.Suppressed ? AlertHistoryKind.Suppressed : AlertHistoryKind.Fired,
+            At = a.FiredAt,
+            Message = a.SuppressedBy is { } by ? $"{a.Message} (silenced: {by})" : a.Message,
+        };
+    }
+
+    // ── Silences + per-rule mute (monitoring-closed-loop item 3) ──────────────
+
+    internal static async Task<Ok<IReadOnlyList<MonitoringSilence>>> GetSilencesAsync(
+        IMonitoringSilenceRepository repo) =>
+        TypedResults.Ok(await repo.GetAllAsync());
+
+    internal static async Task<Results<Created<MonitoringSilence>, BadRequest<string>>> CreateSilenceAsync(
+        MonitoringSilence silence,
+        IMonitoringSilenceRepository repo)
+    {
+        if (silence.EndUtc <= silence.StartUtc)
+            return TypedResults.BadRequest("endUtc must be after startUtc");
+        if (string.IsNullOrWhiteSpace(silence.Id))
+            silence.Id = Guid.NewGuid().ToString("N");
+        await repo.UpsertAsync(silence);
+        return TypedResults.Created($"/api/monitoring/silences/{silence.Id}", silence);
+    }
+
+    internal static async Task<NoContent> DeleteSilenceAsync(
+        string id,
+        IMonitoringSilenceRepository repo)
+    {
+        await repo.DeleteAsync(id);
+        return TypedResults.NoContent();
+    }
+
+    /// <summary>Sets (or clears, when <c>until</c> is null) a rule's per-rule mute. Goes through
+    /// the normal rule upsert + engine reload — the muted rule keeps evaluating, so its status
+    /// dot stays honest while its firings come out flagged <c>suppressed</c>.</summary>
+    internal static async Task<Results<Ok<MonitoringAlertRule>, NotFound>> MuteRuleAsync(
+        string id,
+        MuteRuleRequest request,
+        IAlertRuleRepository repo,
+        MonitoringAlertEvaluationService engine)
+    {
+        var rule = await repo.GetByIdAsync(id);
+        if (rule is null)
+            return TypedResults.NotFound();
+
+        // A timestamp in the past is a no-op mute — normalize to "not muted" so the stored
+        // value always means what it says.
+        rule.MutedUntil = request.Until is { } until && until > DateTimeOffset.UtcNow ? until : null;
+        await repo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+        return TypedResults.Ok(rule);
+    }
 
     internal static async Task<Ok<IReadOnlyList<ProactiveInsightReport>>> GetInsightsAsync(
         IProactiveInsightReportRepository repo) =>
@@ -163,6 +252,10 @@ public static class MonitoringEndpoints
         });
     }
 }
+
+/// <summary>Body of <c>POST /api/monitoring/rules/{id}/mute</c> — <c>until</c> is an ISO
+/// timestamp; null (or a past timestamp, normalized server-side) unmutes the rule.</summary>
+public sealed record MuteRuleRequest(DateTimeOffset? Until);
 
 /// <summary>Response of <c>POST /api/monitoring/insights/{id}/open-chat</c>.</summary>
 public sealed class InsightChatSession

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { filterAndSortHistory } from "./historyFilterSort";
-import type { AlertFiredEvent } from "../../lib/api";
+import type { AlertFiredEvent, AlertHistoryEntry } from "../../lib/api";
 
 function event(overrides: Partial<AlertFiredEvent>): AlertFiredEvent {
   return {
@@ -47,5 +47,18 @@ describe("filterAndSortHistory", () => {
     const copy = [...events];
     filterAndSortHistory(events, "All", "severity");
     expect(events).toEqual(copy);
+  });
+
+  // monitoring-closed-loop 4a: the panel now consumes durable AlertHistoryEntry rows
+  // (Fired/Suppressed/Resolved) — the filter/sort must work on that shape too.
+  it("works on durable AlertHistoryEntry rows of every kind", () => {
+    const entries: AlertHistoryEntry[] = [
+      { id: "1", ruleId: "a", ruleName: "A", source: "AksPodHealth", severity: "Warning", kind: "Fired", at: "2026-01-03T00:00:00Z", message: "m" },
+      { id: "2", ruleId: "b", ruleName: "B", source: "AksPodHealth", severity: "Critical", kind: "Resolved", at: "2026-01-02T00:00:00Z", message: "m" },
+      { id: "3", ruleId: "c", ruleName: "C", source: "AksPodHealth", severity: "Warning", kind: "Suppressed", at: "2026-01-01T00:00:00Z", message: "m" },
+    ];
+
+    expect(filterAndSortHistory(entries, "Critical", "time").map((e) => e.id)).toEqual(["2"]);
+    expect(filterAndSortHistory(entries, "All", "severity").map((e) => e.id)).toEqual(["2", "1", "3"]);
   });
 });

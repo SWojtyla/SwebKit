@@ -14,6 +14,7 @@ public class MonitoringActionExecutorTests
         var repo = new AlertRuleRepository();
         var engine = new MonitoringAlertEvaluationService(
             repo, new FakeConnectionPool(), [], new ProfileRepository(),
+            new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
             NullLogger<MonitoringAlertEvaluationService>.Instance);
         return (new MonitoringActionExecutor(repo, engine, NullLogger<MonitoringActionExecutor>.Instance), repo);
     }

@@ -10,7 +10,8 @@ export type AlertRuleSource =
     | "ServiceBusActiveDepth"
     | "ServiceBusDeadSubscription"
     | "RedisMemoryUsage"
-    | "RedisConnectedClients";
+    | "RedisConnectedClients"
+    | "StorageBlobCount";
 
 export type AlertSeverity = "Warning" | "Critical";
 export type AlertSignalStatus = "Ok" | "Firing" | "Skipped" | "Error";
@@ -48,6 +49,9 @@ export interface MonitoringAlertRule {
     /** When true (default), a firing triggers a background AI investigation that posts a
      * proactive insight. Old persisted rules without the field deserialize to true. */
     aiInvestigationEnabled: boolean;
+    /** Per-rule snooze (ISO timestamp): while in the future the rule's firings are recorded
+     * but flagged `suppressed` — no toast storm, no AI investigation. Null/past = not muted. */
+    mutedUntil?: string | null;
     lastEvaluatedAt?: string | null;
     lastFiredAt?: string | null;
 }
@@ -61,6 +65,66 @@ export interface AlertFiredEvent {
     detail: string;
     firedAt: string;
     profileName: string;
+    /** True when a silence window or per-rule mute suppressed this firing — it is still
+     * recorded and streamed, but subscribers downgrade it to a quiet audit entry. */
+    suppressed?: boolean;
+    /** Human-readable suppression cause (silence reason or "rule muted until …"). */
+    suppressedBy?: string | null;
+}
+
+/** Recovery signal for a rule whose incident was open: emitted on the first Ok evaluation
+ * after a firing. Clears the status dot a `Firing` evaluation would otherwise leave stuck —
+ * an Ok `evaluationCompleted` can't distinguish "never fired" from "recovered". */
+export interface AlertResolvedEvent {
+    ruleId: string;
+    ruleName: string;
+    source: AlertRuleSource;
+    severity: AlertSeverity;
+    resolvedAt: string;
+    message?: string | null;
+}
+
+/** One row of the durable alert history (monitoring-closed-loop 4a) — what
+ * `GET /api/monitoring/history` returns. `kind` distinguishes a firing from its
+ * recovery and from a firing a silence/mute suppressed. */
+export type AlertHistoryKind = "Fired" | "Resolved" | "Suppressed";
+
+export interface AlertHistoryEntry {
+    id: string;
+    ruleId: string;
+    ruleName: string;
+    source: AlertRuleSource;
+    severity: AlertSeverity;
+    kind: AlertHistoryKind;
+    at: string;
+    message: string;
+}
+
+/** Maps a live `alertFired` stream event into the durable-history row shape so the History
+ * tab can merge both feeds before the persisted store catches up on the next poll. */
+export function firedEventToHistoryEntry(evt: AlertFiredEvent): AlertHistoryEntry {
+    return {
+        id: `live-${evt.ruleId}-${evt.firedAt}`,
+        ruleId: evt.ruleId,
+        ruleName: evt.ruleName,
+        source: evt.source,
+        severity: evt.severity,
+        kind: evt.suppressed ? "Suppressed" : "Fired",
+        at: evt.firedAt,
+        message: evt.suppressedBy
+            ? `${evt.message} (silenced: ${evt.suppressedBy})`
+            : evt.message,
+    };
+}
+
+/** A persisted time window during which matching rules fire suppressed.
+ * `ruleIds` absent/empty = the silence covers every rule. */
+export interface MonitoringSilence {
+    id: string;
+    startUtc: string;
+    endUtc: string;
+    ruleIds?: string[] | null;
+    reason: string;
 }
 
 /** Emitted after every rule evaluation so the UI can show each rule's real health —
@@ -126,8 +190,47 @@ export async function deleteMonitoringRule(id: string): Promise<void> {
 
 export async function getMonitoringHistory(
     signal?: AbortSignal,
-): Promise<AlertFiredEvent[]> {
-    return apiFetch<AlertFiredEvent[]>("/api/monitoring/history", { signal });
+): Promise<AlertHistoryEntry[]> {
+    return apiFetch<AlertHistoryEntry[]>("/api/monitoring/history", { signal });
+}
+
+// ── Silences + per-rule mute (monitoring-closed-loop item 3) ─────────────────
+
+export async function getMonitoringSilences(
+    signal?: AbortSignal,
+): Promise<MonitoringSilence[]> {
+    return apiFetch<MonitoringSilence[]>("/api/monitoring/silences", {
+        signal,
+    });
+}
+
+export async function createMonitoringSilence(
+    silence: Omit<MonitoringSilence, "id">,
+): Promise<MonitoringSilence> {
+    return apiSend<MonitoringSilence>(
+        "/api/monitoring/silences",
+        "POST",
+        silence,
+    );
+}
+
+export async function deleteMonitoringSilence(id: string): Promise<void> {
+    await apiSend<void>(
+        `/api/monitoring/silences/${encodeURIComponent(id)}`,
+        "DELETE",
+    );
+}
+
+/** Sets (or clears, when `until` is null) a rule's mute. Returns the updated rule. */
+export async function muteMonitoringRule(
+    id: string,
+    until: string | null,
+): Promise<MonitoringAlertRule> {
+    return apiSend<MonitoringAlertRule>(
+        `/api/monitoring/rules/${encodeURIComponent(id)}/mute`,
+        "POST",
+        { until },
+    );
 }
 
 // ── AI insight reports (ai-insight-reports) ──────────────────────────────────

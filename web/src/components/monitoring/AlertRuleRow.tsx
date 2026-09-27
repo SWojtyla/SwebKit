@@ -3,6 +3,8 @@ import { Pencil, Trash2, Sparkles } from "lucide-react";
 import { formatLocalTime } from "@/lib/datetime";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { RuleMuteControl } from "./RuleMuteControl";
+import { isRuleMuted, muteBadgeLabel } from "./silenceWindows";
 import type {
     MonitoringAlertRule,
     AlertSignalStatus,
@@ -58,6 +60,7 @@ export function AlertRuleRow({
     onToggle,
     onEdit,
     onDelete,
+    onMute,
 }: {
     rule: MonitoringAlertRule;
     status?: AlertSignalStatus;
@@ -67,9 +70,12 @@ export function AlertRuleRow({
     onToggle: (rule: MonitoringAlertRule) => void;
     onEdit: (rule: MonitoringAlertRule) => void;
     onDelete: (rule: MonitoringAlertRule) => void;
+    /** Per-rule mute (monitoring-closed-loop item 3) — `until` is an ISO timestamp, null unmutes. */
+    onMute: (ruleId: string, until: string | null) => void;
 }) {
     const [askAiOpen, setAskAiOpen] = useState(false);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
+    const muted = isRuleMuted(rule.mutedUntil);
 
     return (
         <div
@@ -123,6 +129,15 @@ export function AlertRuleRow({
                             >
                                 <Sparkles className="h-3 w-3" />
                                 AI
+                            </span>
+                        )}
+                        {muted && (
+                            <span
+                                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs text-warning bg-warning/10"
+                                title={`${muteBadgeLabel(rule.mutedUntil)} — firings are still recorded, just suppressed`}
+                                data-testid={`monitoring-rule-muted-badge-${rule.id}`}
+                            >
+                                {muteBadgeLabel(rule.mutedUntil)}
                             </span>
                         )}
                     </div>
@@ -183,6 +198,12 @@ export function AlertRuleRow({
                     />
                     enabled
                 </label>
+                <RuleMuteControl
+                    ruleId={rule.id}
+                    mutedUntil={rule.mutedUntil}
+                    onMute={onMute}
+                    testIdPrefix={`monitoring-rule-mute-${rule.id}`}
+                />
                 <button
                     onClick={() => setAskAiOpen(true)}
                     className="rounded p-1 hover:bg-accent"

@@ -303,7 +303,8 @@ test.describe("Monitoring", () => {
         page,
     }) => {
         await page.goto("/monitoring");
-        const row = await createRule(page, `Notify ${Date.now()}`);
+        const ruleName = `Notify ${Date.now()}`;
+        const row = await createRule(page, ruleName);
 
         // Disabling the rule fires a "Rule disabled" toast; after its 5s lifetime it moves into
         // the notification center as an UNREAD entry (agent-workspace-awareness).
@@ -314,13 +315,16 @@ test.describe("Monitoring", () => {
 
         await page.getByTestId("notification-bell").click();
         await expect(page.getByTestId("notification-history")).toBeVisible();
-        // Exactly one entry — a side effect inside a setState updater used to
-        // double-record the expired toast under StrictMode.
+        // Exactly one entry FOR THIS RULE — a side effect inside a setState updater used to
+        // double-record the expired toast under StrictMode. Scoped to the unique rule name
+        // because rules created by earlier tests keep evaluating on the shared sidecar and
+        // their alert toasts land in the same center.
+        const ownItems = page
+            .locator("[data-testid^='notification-item-']")
+            .filter({ hasText: ruleName });
+        await expect(ownItems).toHaveCount(1);
         await expect(
-            page.locator("[data-testid^='notification-item-']"),
-        ).toHaveCount(1);
-        await expect(
-            page.getByTestId("notification-unread-dot"),
+            ownItems.getByTestId("notification-unread-dot"),
         ).toHaveCount(1);
 
         await page.getByTestId("notification-mark-all-read").click();
@@ -479,7 +483,7 @@ test.describe("Monitoring", () => {
         }
     });
 
-    test("snoozing a history event removes it for the session", async ({
+    test("snoozing a history event mutes the rule and removes the row", async ({
         page,
     }) => {
         await page.goto("/monitoring");
@@ -495,10 +499,76 @@ test.describe("Monitoring", () => {
         await expect(row).toBeVisible();
         const rowTestId = await row.getAttribute("data-testid");
         if (!rowTestId) throw new Error("History row is missing its test ID");
+
+        // monitoring-closed-loop item 3: snooze is no longer session-cosmetic — it opens the
+        // shared mute menu and picks a real per-rule mute; the row then hides as before.
         await row
             .locator("[data-testid^='monitoring-history-snooze-']")
             .click();
+        await page
+            .locator("[data-testid^='monitoring-history-snooze-'][data-testid$='-1h']")
+            .click();
         await expect(page.getByTestId(rowTestId)).not.toBeVisible();
+    });
+
+    // ── monitoring-closed-loop item 3 — per-rule mute + silence windows ─────────
+
+    test("muting a rule shows the muted badge; unmuting removes it", async ({
+        page,
+    }) => {
+        await page.goto("/monitoring");
+        const row = await createRule(page, `Mute Alert ${Date.now()}`);
+        const ruleId = (await row
+            .locator("[data-testid^='monitoring-rule-mute-']")
+            .first()
+            .getAttribute("data-testid"))!.replace(
+            /^monitoring-rule-mute-/,
+            "",
+        );
+
+        await page.getByTestId(`monitoring-rule-mute-${ruleId}`).click();
+        await page.getByTestId(`monitoring-rule-mute-${ruleId}-1h`).click();
+
+        await expect(
+            row.getByTestId(`monitoring-rule-muted-badge-${ruleId}`),
+        ).toBeVisible();
+
+        await page.getByTestId(`monitoring-rule-mute-${ruleId}`).click();
+        await page
+            .getByTestId(`monitoring-rule-mute-${ruleId}-unmute`)
+            .click();
+        await expect(
+            row.getByTestId(`monitoring-rule-muted-badge-${ruleId}`),
+        ).toHaveCount(0);
+    });
+
+    test("the Silences section creates and deletes a maintenance window", async ({
+        page,
+    }) => {
+        await page.goto("/monitoring");
+        const section = page.getByTestId("monitoring-silences");
+        await expect(section).toBeVisible();
+
+        await page.getByTestId("monitoring-silence-add").click();
+        await page
+            .getByTestId("monitoring-silence-reason")
+            .fill(`E2E window ${Date.now()}`);
+        await page.getByTestId("monitoring-silence-save").click();
+
+        const silenceRow = section.locator(
+            "[data-testid^='monitoring-silence-row-']",
+        );
+        await expect(silenceRow.first()).toBeVisible();
+        await expect(silenceRow.first()).toContainText("E2E window");
+        await expect(silenceRow.first()).toContainText("All rules");
+
+        await silenceRow
+            .first()
+            .locator("[data-testid^='monitoring-silence-delete-']")
+            .click();
+        await expect(
+            section.getByTestId("monitoring-silences-empty"),
+        ).toBeVisible();
     });
 
     // ── Unit 5.4 — severity filter/sort in History ───────────────────────────────
@@ -506,36 +576,38 @@ test.describe("Monitoring", () => {
     test("History tab can filter by severity and sort by severity", async ({
         page,
     }) => {
+        // Durable alert-history rows (monitoring-closed-loop 4a) — GET /api/monitoring/history
+        // returns AlertHistoryEntry, not the live AlertFiredEvent shape.
         const events = [
             {
+                id: "h1",
                 ruleId: "r-warn-1",
                 ruleName: "Warn One",
                 source: "AksPodHealth",
                 severity: "Warning",
+                kind: "Fired",
+                at: "2026-01-03T00:00:00Z",
                 message: "m1",
-                detail: "",
-                firedAt: "2026-01-03T00:00:00Z",
-                profileName: "default",
             },
             {
+                id: "h2",
                 ruleId: "r-crit-1",
                 ruleName: "Crit One",
                 source: "AksPodHealth",
                 severity: "Critical",
+                kind: "Fired",
+                at: "2026-01-02T00:00:00Z",
                 message: "m2",
-                detail: "",
-                firedAt: "2026-01-02T00:00:00Z",
-                profileName: "default",
             },
             {
+                id: "h3",
                 ruleId: "r-warn-2",
                 ruleName: "Warn Two",
                 source: "AksPodHealth",
                 severity: "Warning",
+                kind: "Fired",
+                at: "2026-01-01T00:00:00Z",
                 message: "m3",
-                detail: "",
-                firedAt: "2026-01-01T00:00:00Z",
-                profileName: "default",
             },
         ];
         await page.route("**/api/monitoring/history", async (route) => {
@@ -590,14 +662,14 @@ test.describe("Monitoring", () => {
     }) => {
         const events = [
             {
+                id: "h1",
                 ruleId: "r-warn-1",
                 ruleName: "Warn One",
                 source: "AksPodHealth",
                 severity: "Warning",
+                kind: "Fired",
+                at: "2026-01-03T00:00:00Z",
                 message: "m1",
-                detail: "",
-                firedAt: "2026-01-03T00:00:00Z",
-                profileName: "default",
             },
         ];
         await page.route("**/api/monitoring/history", async (route) => {

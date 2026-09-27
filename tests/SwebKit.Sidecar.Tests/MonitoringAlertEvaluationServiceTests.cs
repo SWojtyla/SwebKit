@@ -59,6 +59,13 @@ public class MonitoringAlertEvaluationServiceTests
 {
     private static MonitoringAlertEvaluationService Build(
         IAlertRuleRepository repo,
+        params IAlertSignalSource[] sources) =>
+        Build(repo, new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(), sources);
+
+    private static MonitoringAlertEvaluationService Build(
+        IAlertRuleRepository repo,
+        IMonitoringSilenceRepository silences,
+        InMemoryAlertHistoryRepository history,
         params IAlertSignalSource[] sources)
     {
         return new MonitoringAlertEvaluationService(
@@ -66,6 +73,8 @@ public class MonitoringAlertEvaluationServiceTests
             new FakeConnectionPool(),
             sources,
             new ProfileRepository(),
+            silences,
+            history,
             NullLogger<MonitoringAlertEvaluationService>.Instance);
     }
 
@@ -262,5 +271,242 @@ public class MonitoringAlertEvaluationServiceTests
 
         Assert.Equal(2, fireCount);
         Assert.Equal(2, engine.RecentAlerts.Count);
+    }
+
+    // ── Silence windows + per-rule mute (monitoring-closed-loop item 3) ─────────
+
+    [Fact]
+    public async Task Firing_UnderAnActiveGlobalSilence_StillEmitsAlertFired_Suppressed()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+        var silences = new InMemoryMonitoringSilenceRepository();
+        var history = new InMemoryAlertHistoryRepository();
+        var source = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
+        var engine = Build(repo, silences, history, source);
+
+        var rule = Rule(AlertRuleSource.AksPodHealth);
+        await repo.UpsertAsync(rule);
+        var now = DateTimeOffset.UtcNow;
+        await silences.UpsertAsync(new MonitoringSilence
+        {
+            StartUtc = now.AddMinutes(-5),
+            EndUtc = now.AddHours(1),
+            Reason = "weekend deploy freeze",
+            RuleIds = null, // covers every rule
+        });
+        await engine.ReloadRulesAsync();
+
+        AlertFiredEvent? fired = null;
+        engine.AlertFired += e => fired = e;
+        await engine.RunEvaluationOnceAsync();
+
+        // Suppression happens at the firing stage — the event still emits, flagged.
+        Assert.NotNull(fired);
+        Assert.True(fired!.Suppressed);
+        Assert.Equal("weekend deploy freeze", fired.SuppressedBy);
+        Assert.Single(engine.RecentAlerts);
+
+        // ...and the durable history records it as Suppressed, not Fired.
+        var entry = Assert.Single(history.Entries);
+        Assert.Equal(AlertHistoryKind.Suppressed, entry.Kind);
+        Assert.Contains("weekend deploy freeze", entry.Message);
+    }
+
+    [Fact]
+    public async Task Firing_UnderARuleScopedSilence_OnlySuppressesMatchingRules()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+        var silences = new InMemoryMonitoringSilenceRepository();
+        var history = new InMemoryAlertHistoryRepository();
+        var source = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
+        var engine = Build(repo, silences, history, source);
+
+        var covered = Rule(AlertRuleSource.AksPodHealth);
+        var uncovered = Rule(AlertRuleSource.AksPodHealth);
+        await repo.SaveAllAsync([covered, uncovered]);
+        var now = DateTimeOffset.UtcNow;
+        await silences.UpsertAsync(new MonitoringSilence
+        {
+            StartUtc = now.AddMinutes(-5),
+            EndUtc = now.AddHours(1),
+            Reason = "scoped window",
+            RuleIds = [covered.Id],
+        });
+        await engine.ReloadRulesAsync();
+
+        var fired = new List<AlertFiredEvent>();
+        engine.AlertFired += e => fired.Add(e);
+        await engine.RunEvaluationOnceAsync();
+
+        var suppressed = Assert.Single(fired, e => e.RuleId == covered.Id);
+        Assert.True(suppressed.Suppressed);
+        var unsuppressed = Assert.Single(fired, e => e.RuleId == uncovered.Id);
+        Assert.False(unsuppressed.Suppressed);
+        Assert.Null(unsuppressed.SuppressedBy);
+    }
+
+    [Fact]
+    public async Task MutedUntil_SuppressesFiring_AndExpiresBackToNormal()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+        var history = new InMemoryAlertHistoryRepository();
+        var source = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
+        var engine = Build(repo, new InMemoryMonitoringSilenceRepository(), history, source);
+
+        var rule = Rule(AlertRuleSource.AksPodHealth);
+        rule.MutedUntil = DateTimeOffset.UtcNow.AddHours(1);
+        await repo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        AlertFiredEvent? fired = null;
+        engine.AlertFired += e => fired = e;
+        await engine.RunEvaluationOnceAsync();
+
+        Assert.NotNull(fired);
+        Assert.True(fired!.Suppressed);
+        Assert.Contains("rule muted until", fired.SuppressedBy);
+
+        // Cooldown is claimed even for a suppressed firing — a second pass must not re-emit.
+        fired = null;
+        await engine.RunEvaluationOnceAsync();
+        Assert.Null(fired);
+        Assert.Single(engine.RecentAlerts);
+
+        // A mute timestamp in the past is no mute at all — the next firing is normal.
+        // Reload clears the claimed cooldown so the expiry path itself is what we observe.
+        rule.MutedUntil = DateTimeOffset.UtcNow.AddMinutes(-1);
+        await repo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+        await engine.RunEvaluationOnceAsync();
+
+        Assert.NotNull(fired);
+        Assert.False(fired!.Suppressed);
+        Assert.Null(fired.SuppressedBy);
+    }
+
+    [Fact]
+    public async Task ExpiredSilence_DoesNotSuppress_TheNextFiring()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+        var silences = new InMemoryMonitoringSilenceRepository();
+        var source = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
+        var engine = Build(repo, silences, new InMemoryAlertHistoryRepository(), source);
+
+        var rule = Rule(AlertRuleSource.AksPodHealth);
+        await repo.UpsertAsync(rule);
+        var now = DateTimeOffset.UtcNow;
+        await silences.UpsertAsync(new MonitoringSilence
+        {
+            StartUtc = now.AddHours(-2),
+            EndUtc = now.AddHours(-1), // already over
+            Reason = "past window",
+        });
+        await engine.ReloadRulesAsync();
+
+        AlertFiredEvent? fired = null;
+        engine.AlertFired += e => fired = e;
+        await engine.RunEvaluationOnceAsync();
+
+        Assert.NotNull(fired);
+        Assert.False(fired!.Suppressed);
+    }
+
+    // ── Durable history + recovery signal (monitoring-closed-loop 4a) ───────────
+
+    [Fact]
+    public async Task Firing_AppendsAFiredEntry_ToDurableHistory()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+        var history = new InMemoryAlertHistoryRepository();
+        var source = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
+        var engine = Build(repo, new InMemoryMonitoringSilenceRepository(), history, source);
+
+        var rule = Rule(AlertRuleSource.AksPodHealth);
+        await repo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        await engine.RunEvaluationOnceAsync();
+
+        var entry = Assert.Single(history.Entries);
+        Assert.Equal(AlertHistoryKind.Fired, entry.Kind);
+        Assert.Equal(rule.Id, entry.RuleId);
+        Assert.Equal(rule.Name, entry.RuleName);
+    }
+
+    [Fact]
+    public async Task OkEvaluation_AfterAFiring_EmitsAlertResolved_AndAppendsAResolvedEntry()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+        var history = new InMemoryAlertHistoryRepository();
+        var source = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
+        var engine = Build(repo, new InMemoryMonitoringSilenceRepository(), history, source);
+
+        var rule = Rule(AlertRuleSource.AksPodHealth);
+        await repo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        AlertResolvedEvent? resolved = null;
+        engine.AlertResolved += e => resolved = e;
+
+        await engine.RunEvaluationOnceAsync(); // fires — incident opens
+        Assert.Null(resolved);
+
+        // Recovery: flip the source to Ok. Reload clears the schedule so the rule is due.
+        source.Status = AlertSignalStatus.Ok;
+        await engine.ReloadRulesAsync();
+        await engine.RunEvaluationOnceAsync();
+
+        Assert.NotNull(resolved);
+        Assert.Equal(rule.Id, resolved!.RuleId);
+        Assert.Equal(rule.Name, resolved.RuleName);
+
+        Assert.Equal(
+            [AlertHistoryKind.Resolved, AlertHistoryKind.Fired],
+            history.Entries.Select(e => e.Kind).ToList()); // newest first
+
+        // A healthy rule that never fired does not emit a resolution.
+        resolved = null;
+        await engine.ReloadRulesAsync();
+        await engine.RunEvaluationOnceAsync();
+        Assert.Null(resolved);
+    }
+
+    [Fact]
+    public async Task SuppressedFiring_OpensTheIncident_SoRecoveryStillResolvesIt()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+        var history = new InMemoryAlertHistoryRepository();
+        var source = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
+        var engine = Build(repo, new InMemoryMonitoringSilenceRepository(), history, source);
+
+        // A suppressed firing is still a real incident — the underlying condition fired, the
+        // notification just didn't go out. Its recovery still produces a Resolved entry.
+        var rule = Rule(AlertRuleSource.AksPodHealth);
+        rule.MutedUntil = DateTimeOffset.UtcNow.AddHours(1);
+        await repo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        AlertResolvedEvent? resolved = null;
+        engine.AlertResolved += e => resolved = e;
+
+        await engine.RunEvaluationOnceAsync(); // suppressed firing — incident opens
+
+        source.Status = AlertSignalStatus.Ok;
+        rule.MutedUntil = null; // mute lapsed between the firing and the recovery
+        await repo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+        await engine.RunEvaluationOnceAsync();
+
+        Assert.NotNull(resolved);
+        Assert.Equal(
+            [AlertHistoryKind.Resolved, AlertHistoryKind.Suppressed],
+            history.Entries.Select(e => e.Kind).ToList());
     }
 }

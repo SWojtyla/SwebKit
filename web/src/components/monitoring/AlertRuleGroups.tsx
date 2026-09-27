@@ -29,6 +29,7 @@ export function AlertRuleGroups({
     onToggle,
     onEdit,
     onDelete,
+    onMute,
 }: {
     rules: MonitoringAlertRule[];
     statuses: Record<string, AlertSignalStatus>;
@@ -40,6 +41,7 @@ export function AlertRuleGroups({
     onToggle: (rule: MonitoringAlertRule) => void;
     onEdit: (rule: MonitoringAlertRule) => void;
     onDelete: (rule: MonitoringAlertRule) => void;
+    onMute: (ruleId: string, until: string | null) => void;
 }) {
     if (rules.length === 0) {
         return (
@@ -116,6 +118,7 @@ export function AlertRuleGroups({
                                         onToggle={onToggle}
                                         onEdit={onEdit}
                                         onDelete={onDelete}
+                                        onMute={onMute}
                                     />
                                 ))}
                             </div>
