@@ -14,6 +14,12 @@ Plan files are the shared intent record: any tool or later session reads them to
 - `codebase-quality-program.md` — phased deep-scan megaplan: hygiene, architecture, per-feature deep dives, Dashboard AI cockpit.
 - `agent-mcp-evolution.md` — external MCP passthrough for ACP profiles, harness tool-quality pass (composite tools, memoization, projection caps), standalone MCP exposure of the SwebKit tools bridge (read-only default), and an MCP client adapter proxying external tools into non-ACP profiles with a confirm-before-execute pipeline.
 - `access-denial-awareness.md` — phase 1: structured `access_denied` agent tool results with least-privilege remedies, SQL hidden-metadata detection via `sys.fn_my_permissions`, restricted demo connection.
+- `access-awareness-pipeline.md` — phases 2–4: per-env access report, request artifacts (principal/scope/`az` line), declared-object SQL browsing, generic request webhook (Teams Power App hook point).
+- `agent-colleague.md` — deep-linked evidence, structured access gaps, "watch this"→rule draft, entity-indexed screen state, feedback capture, change timeline, cross-env compare.
+- `monitoring-closed-loop.md` — alert→autofix proposals (BackgroundProposalEligible gate), rule suggestions from surfaces, silence windows, persisted alert history + ops dashboard.
+- `service-bus-power-ops.md` — reach-message DLQ-park/restore op, DLQ triage + resend-with-edit fix, session awareness, cross-env replay.
+- `ux-power-pack.md` — palette deepening, pinned rail, env badgeing, keyboard grids, toast dedupe.
+- `distribution-onboarding.md` — team workspace packs, "PRD day" demo tour stop, update channel, `swebkit://` deep links.
 
 ## Plan file contract
 
