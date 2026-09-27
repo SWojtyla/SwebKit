@@ -24,7 +24,7 @@ internal static class RedisAccessProbes
             // caches get no ARM scope or az artifacts.
             var authMode = cache.UseAad ? null : "connectionString";
 
-            yield return new AccessProbeSpec(Area, cache.Id, CapabilityData, label, null, authMode,
+            yield return new AccessProbeSpec(Area, cache.Id, CapabilityData, label, cache.ResourceId, authMode,
                 async ct =>
                 {
                     var client = await pool.GetOrCreateAsync(cache, ct).ConfigureAwait(false);

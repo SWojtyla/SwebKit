@@ -284,6 +284,18 @@ function CacheRow({
                         <code>&lt;name&gt;.redis.cache.windows.net</code> using
                         your signed-in Azure identity.
                     </p>
+                    <DraftInput
+                        type="text"
+                        value={cache.resourceId ?? ""}
+                        onCommit={(v) => onUpdate({ resourceId: v || null })}
+                        className="mt-2 w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                        placeholder="Azure resource ID (optional)"
+                        data-testid={`redis-resource-id-${cache.id}`}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Used to scope access requests — leave empty if unknown;
+                        it's never guessed from the hostname.
+                    </p>
                 </div>
             ) : (
                 <div>

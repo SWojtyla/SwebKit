@@ -12,7 +12,12 @@ public sealed record AccessDenial(
     string Capability,
     string RequiredAccess,
     string Guidance,
-    string Detail);
+    string Detail,
+    /// <summary>The structured remedy behind <see cref="RequiredAccess"/>/<see cref="Guidance"/>
+    /// — null only for denials constructed before Phase 3a fields existed.</summary>
+    AccessRemedy? Remedy = null,
+    /// <summary>Reserved for a future PIM eligible-assignment variant — <c>"permanent"</c>.</summary>
+    string AssignmentKind = "permanent");
 
 /// <summary>
 /// Recognizes authorization failures across the SDKs this app uses and maps them to
@@ -97,9 +102,26 @@ public static class AccessAdvisor
             ? remedy
             : ("resource.data", "read access",
                 "Ask a resource owner for read access — the signed-in identity was denied.");
-        denial = new AccessDenial(featureArea, capability, required, guidance, ex.Message);
+        denial = new AccessDenial(featureArea, capability, required, guidance, ex.Message,
+            Remedy: new AccessRemedy(RemedyKindFor(featureArea), required, null, guidance));
         return true;
     }
+
+    /// <summary>
+    /// Feature area → remedy kind for the denials <see cref="TryCreateDenial"/> produces. Kept
+    /// deliberately coarse (one kind per area); the artifact endpoint's per-capability map in
+    /// the sidecar is the precise version — a Service Bus send denial and a peek denial share
+    /// this <see cref="AccessRemedyKind.ArmRole"/> kind but get different role names there.
+    /// </summary>
+    private static AccessRemedyKind RemedyKindFor(string featureArea) =>
+        featureArea switch
+        {
+            "Sql" => AccessRemedyKind.SqlGrant,
+            "Redis" => AccessRemedyKind.RedisAcl,
+            "Aks" => AccessRemedyKind.KubeRbac,
+            "ServiceBus" or "Storage" or "Observability" or "Monitoring" => AccessRemedyKind.ArmRole,
+            _ => AccessRemedyKind.Other,
+        };
 
     private static bool ClassifySingle(Exception e)
     {

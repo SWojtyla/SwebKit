@@ -51,6 +51,7 @@ public sealed class SqlServerDiscoveryService : ISqlResourceDiscovery, IDisposab
                         Name = server.Data.Name ?? server.Id.Name,
                         ResourceGroup = server.Id.ResourceGroupName ?? string.Empty,
                         SubscriptionId = subId,
+                        ResourceId = server.Id.ToString(),
                         SubscriptionName = subName,
                         Location = server.Data.Location.ToString(),
                     };

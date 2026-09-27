@@ -58,4 +58,21 @@ public class SqlConnectionEntry
 
     /// <summary>Inactive connections stay configured but are skipped by the page pickers.</summary>
     public bool Active { get; set; } = true;
+
+    // ── Optional ARM identity (access-awareness Phase 3a) ─────────────────────
+    // Populated automatically when the connection is added from ARM discovery; editable
+    // by hand in settings. Never inferred from the server hostname — a connection without
+    // these simply can't produce a scoped access-request artifact.
+
+    /// <summary>Azure subscription GUID hosting the server, when known.</summary>
+    public string? SubscriptionId { get; set; }
+
+    /// <summary>Resource group hosting the server, when known.</summary>
+    public string? ResourceGroup { get; set; }
+
+    /// <summary>Full ARM resource id of the server
+    /// (/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Sql/servers/{name}),
+    /// when known. Takes precedence over composing from <see cref="SubscriptionId"/> +
+    /// <see cref="ResourceGroup"/>.</summary>
+    public string? ResourceId { get; set; }
 }

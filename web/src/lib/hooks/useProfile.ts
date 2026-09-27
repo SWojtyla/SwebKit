@@ -46,6 +46,10 @@ export function useUpdateProfile() {
     // round-trips and a full settings re-render per character.
     onSuccess: (data) => {
       qc.setQueryData(["profile"], data);
+      // The access report probes the connection graph — a saved profile may have added,
+      // removed or re-scoped connections, so drop the client-side copy (the sidecar
+      // already invalidated its probe cache on save).
+      qc.invalidateQueries({ queryKey: ["access"] });
     },
     // A failed save leaves the cache describing something the server never accepted, so
     // resync rather than letting the UI quietly disagree with disk.

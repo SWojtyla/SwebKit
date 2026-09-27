@@ -24,7 +24,7 @@ internal static class AksAccessProbes
             ? config!.KubeconfigContext
             : "Kubernetes cluster";
 
-        return new AccessProbeSpec(Area, ConnectionKey, CapabilityRead, label, null, null,
+        return new AccessProbeSpec(Area, ConnectionKey, CapabilityRead, label, config?.ResourceId, null,
             async ct =>
             {
                 var client = pool.GetAksClient()

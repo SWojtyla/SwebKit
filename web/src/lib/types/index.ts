@@ -10,3 +10,4 @@ export * from "./redis";
 export * from "./storage";
 export * from "./sql";
 export * from "./observability";
+export * from "./access";

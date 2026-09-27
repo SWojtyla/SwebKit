@@ -18,6 +18,9 @@ export interface ServiceBusNamespace {
     authMode: "DefaultAzureCredential" | "ConnectionString";
     credentialKey: string;
     transportType: "Amqp" | "AmqpWebSockets";
+    /** Optional full ARM resource id of the namespace — scopes access-request artifacts
+     * for Entra-authenticated namespaces. Never derived from the FQDN. */
+    resourceId?: string | null;
     createdAt: string;
 }
 
@@ -127,6 +130,92 @@ export interface RemapRules {
     overrideCorrelationId: string | null;
     propertyRenames: Record<string, string>;
     propertyRemoves: string[];
+}
+
+// ── Power ops (reach-message + DLQ triage) ──────────────────────────────────
+// Shapes mirror ServiceBusEndpoints' request/response records. Enums travel as
+// strings — the sidecar registers JsonStringEnumConverter for HTTP JSON.
+
+/** What the reach-message op does when it reaches the target sequence. */
+export type SbReachTargetAction = "Complete" | "DeadLetter" | "Resubmit";
+
+/** Body for reach-message preview and start. */
+export interface ReachMessageRequest {
+    /** The message to reach, by broker sequence number. */
+    targetSequenceNumber: number;
+    action: SbReachTargetAction;
+    /**
+     * Resubmit only: when true the target's copy lands at the tail AFTER the
+     * restored prefix copies; when false it lands first.
+     */
+    restoreBeforeTarget: boolean;
+    /** Park cap override — defaults to 1,000; hard ceiling 5,000 (clamped server-side). */
+    maxParked?: number | null;
+}
+
+/**
+ * Preview contract the wizard renders verbatim — the honest "what will happen"
+ * statement: park into the DLQ, restore as new tail-appended copies. Never
+ * "put back like nothing happened".
+ */
+export interface ReachMessagePreview {
+    canStart: boolean;
+    /** Why the op is refused when canStart is false. */
+    refusalReason: string | null;
+    /** Messages ahead of the target — null when the target is beyond the peek window. */
+    prefixCount: number | null;
+    /** Target sits past the peeked window's max — the prefix count is unknowable. */
+    targetBeyondWindow: boolean;
+    /** The park cap that applies to this op. */
+    maxParked: number;
+    /** What the op will do — render verbatim. */
+    consequences: string[];
+    /** Honest failure modes — render verbatim. */
+    warnings: string[];
+}
+
+export type SbOperationState =
+    | "Running"
+    | "Completed"
+    | "Cancelled"
+    | "Failed"
+    | "Interrupted"
+    | "Dismissed";
+
+export type SbOperationPhase = "Parking" | "Restoring";
+
+/**
+ * API-facing snapshot of a reach-message operation — the wizard polls this.
+ * `parkedInDlq` is enriched by a live DLQ stamp scan on the list endpoint:
+ * the crash-recovery truth when the journal was lost mid-op.
+ */
+export interface SbOperationStatus {
+    id: string;
+    namespaceId: string;
+    entityPath: string;
+    kind: string;
+    targetSequenceNumber: number;
+    targetAction: SbReachTargetAction;
+    restoreBeforeTarget: boolean;
+    state: SbOperationState;
+    phase: SbOperationPhase | null;
+    parkedCount: number;
+    restoredCount: number;
+    parkedInDlq: number | null;
+    error: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** Body for dlq/requeue-by-filter — resubmit a whole reason/description group server-side. */
+export interface DlqRequeueByFilterRequest {
+    reason: string;
+    description?: string | null;
+    limit: number;
+}
+
+export interface DlqRequeueByFilterResult {
+    resubmitted: number;
 }
 
 // ── AKS / Kubernetes ─────────────────────────────────────────────────────────

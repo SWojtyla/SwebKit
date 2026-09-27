@@ -22,7 +22,8 @@ internal static class SqlAccessProbes
         new(Area, CapabilityMetadata,
             "VIEW DEFINITION",
             "Ask a DBA for VIEW DEFINITION (or db_datareader) on this database so schema browsing works.",
-            detail);
+            detail,
+            Remedy: AccessScopeResolver.RemedyFor(CapabilityMetadata));
 
     public static IEnumerable<AccessProbeSpec> Build(
         IReadOnlyList<SqlConnectionEntry> connections,
@@ -32,7 +33,7 @@ internal static class SqlAccessProbes
         {
             var label = string.IsNullOrWhiteSpace(connection.DisplayName) ? connection.Server : connection.DisplayName;
 
-            yield return new AccessProbeSpec(Area, connection.Id, CapabilityQuery, label, null, null,
+            yield return new AccessProbeSpec(Area, connection.Id, CapabilityQuery, label, AccessScopeResolver.SqlServerScope(connection), null,
                 async ct =>
                 {
                     var client = await pool.GetOrCreateAsync(connection, ct).ConfigureAwait(false);
@@ -45,7 +46,7 @@ internal static class SqlAccessProbes
                         : ProbeOutcome.Unknown("Permission probe returned no data.");
                 });
 
-            yield return new AccessProbeSpec(Area, connection.Id, CapabilityMetadata, label, null, null,
+            yield return new AccessProbeSpec(Area, connection.Id, CapabilityMetadata, label, AccessScopeResolver.SqlServerScope(connection), null,
                 async ct =>
                 {
                     var client = await pool.GetOrCreateAsync(connection, ct).ConfigureAwait(false);

@@ -209,6 +209,30 @@ function NamespaceRow({
                 </label>
             </div>
 
+            {ns.authMode === "DefaultAzureCredential" && (
+                <div>
+                    <DraftInput
+                        type="text"
+                        value={ns.resourceId ?? ""}
+                        onCommit={(resourceId) =>
+                            onUpdate({ resourceId: resourceId || null })
+                        }
+                        className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                        placeholder="Azure resource ID (optional)"
+                        data-testid={`sb-resource-id-${ns.id}`}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        e.g.{" "}
+                        <code>
+                            /subscriptions/…/resourceGroups/…/providers/Microsoft.ServiceBus/namespaces/…
+                        </code>
+                        — the access report uses it to scope access requests.
+                        Leave empty if unknown; it's never guessed from the
+                        namespace hostname.
+                    </p>
+                </div>
+            )}
+
             {ns.authMode === "ConnectionString" && (
                 <div>
                     <DraftInput

@@ -31,4 +31,12 @@ public sealed class StorageConfig
     /// Defaults to false so all existing environments remain read-only without configuration changes.
     /// </summary>
     public bool AllowMutations { get; set; }
+
+    /// <summary>
+    /// Optional full ARM resource id of the storage account
+    /// (/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}).
+    /// Never derived from <see cref="AccountName"/> — scopes access-request artifacts for
+    /// Entra-authenticated accounts (access-awareness Phase 3a).
+    /// </summary>
+    public string? ResourceId { get; set; }
 }

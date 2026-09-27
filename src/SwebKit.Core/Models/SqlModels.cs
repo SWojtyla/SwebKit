@@ -171,6 +171,9 @@ public sealed class SqlDiscoveredServer
     public string Name { get; set; } = string.Empty;
     public string ResourceGroup { get; set; } = string.Empty;
     public string SubscriptionId { get; set; } = string.Empty;
+    /// <summary>Full ARM resource id of the server — seeds <c>SqlConnectionEntry.ResourceId</c>
+    /// so a connection added from discovery carries its ARM scope (access-awareness Phase 3a).</summary>
+    public string ResourceId { get; set; } = string.Empty;
     public string SubscriptionName { get; set; } = string.Empty;
     public string Location { get; set; } = string.Empty;
     public List<string> Databases { get; set; } = [];

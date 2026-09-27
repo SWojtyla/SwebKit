@@ -176,6 +176,15 @@ export function SqlSettings() {
                                                 server: server.serverFqdn,
                                                 database:
                                                     server.databases[0] ?? "",
+                                                // ARM discovery knows exactly which
+                                                // resource this is — carry the scope
+                                                // onto the saved entry so access
+                                                // requests can reference it.
+                                                subscriptionId:
+                                                    server.subscriptionId,
+                                                resourceGroup:
+                                                    server.resourceGroup,
+                                                resourceId: server.resourceId,
                                             });
                                             notify(
                                                 "success",
@@ -208,6 +217,12 @@ export function SqlSettings() {
                                                             displayName: db,
                                                             server: server.serverFqdn,
                                                             database: db,
+                                                            subscriptionId:
+                                                                server.subscriptionId,
+                                                            resourceGroup:
+                                                                server.resourceGroup,
+                                                            resourceId:
+                                                                server.resourceId,
                                                         });
                                                         notify(
                                                             "success",
@@ -379,6 +394,23 @@ function ConnectionRow({
                     placeholder="Database (optional — pick per-session on the SQL page)"
                     data-testid={`sql-database-${connection.id}`}
                 />
+            </div>
+
+            <div>
+                <DraftInput
+                    type="text"
+                    value={connection.resourceId ?? ""}
+                    onCommit={(v) => onUpdate({ resourceId: v || null })}
+                    className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                    placeholder="Azure resource ID (optional)"
+                    data-testid={`sql-resource-id-${connection.id}`}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                    Filled automatically when you add a server from Azure
+                    discovery — the access report uses it to scope access
+                    requests. Leave empty if unknown; it's never guessed from
+                    the hostname.
+                </p>
             </div>
 
             <label className="flex items-center gap-2 text-sm">

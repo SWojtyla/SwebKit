@@ -14,6 +14,11 @@ export interface SqlConnectionEntry {
     database: string;
     allowWrites: boolean;
     active: boolean;
+    /** Optional ARM identity — seeded automatically when the connection is added from
+     * Azure discovery; never guessed from the hostname. Scopes access-request artifacts. */
+    subscriptionId?: string | null;
+    resourceGroup?: string | null;
+    resourceId?: string | null;
 }
 
 export interface SqlDatabaseInfo {
@@ -103,6 +108,8 @@ export interface SqlDiscoveredServer {
     name: string;
     resourceGroup: string;
     subscriptionId: string;
+    /** Full ARM resource id — carried onto the SqlConnectionEntry when added. */
+    resourceId: string;
     subscriptionName: string;
     location: string;
     databases: string[];

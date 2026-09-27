@@ -34,14 +34,14 @@ internal static class ServiceBusAccessProbes
             // is marked so no ARM-scope/az artifacts are offered for it.
             var authMode = ns.AuthMode == SbAuthMode.ConnectionString ? "connectionString" : null;
 
-            yield return new AccessProbeSpec(Area, connectionKey, CapabilityManage, label, null, authMode,
+            yield return new AccessProbeSpec(Area, connectionKey, CapabilityManage, label, ns.ResourceId, authMode,
                 async ct =>
                 {
                     await pool.GetOrCreate(ns).GetNamespaceInfoAsync(ct).ConfigureAwait(false);
                     return ProbeOutcome.Ok;
                 });
 
-            yield return new AccessProbeSpec(Area, connectionKey, CapabilityPeek, label, null, authMode,
+            yield return new AccessProbeSpec(Area, connectionKey, CapabilityPeek, label, ns.ResourceId, authMode,
                 async ct =>
                 {
                     var client = pool.GetOrCreate(ns);
@@ -62,7 +62,7 @@ internal static class ServiceBusAccessProbes
                     return ProbeOutcome.Ok;
                 });
 
-            yield return new AccessProbeSpec(Area, connectionKey, CapabilitySend, label, null, authMode,
+            yield return new AccessProbeSpec(Area, connectionKey, CapabilitySend, label, ns.ResourceId, authMode,
                 ct =>
                 {
                     var observed = knownDenial(Area, connectionKey, CapabilitySend);

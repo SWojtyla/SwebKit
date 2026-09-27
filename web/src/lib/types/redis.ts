@@ -16,6 +16,9 @@ export interface RedisCacheEntry {
     database: number;
     useAad: boolean;
     cacheName: string;
+    /** Optional full ARM resource id of the cache — scopes access-request artifacts for
+     * Entra-authenticated caches. Never derived from the hostname. */
+    resourceId?: string | null;
 }
 
 // ── SQL (sql-database-explorer) ──────────────────────────────────────────────

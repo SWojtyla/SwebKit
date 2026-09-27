@@ -107,4 +107,12 @@ public class RedisCacheEntry
 
     /// <summary>Azure Cache for Redis resource name (e.g. "my-cache"), required when <see cref="UseAad"/> is true.</summary>
     public string CacheName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional full ARM resource id of the cache
+    /// (/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Cache/redis/{name}).
+    /// Never derived from the hostname — scopes access-request artifacts when the cache
+    /// authenticates with Entra ID (access-awareness Phase 3a).
+    /// </summary>
+    public string? ResourceId { get; set; }
 }

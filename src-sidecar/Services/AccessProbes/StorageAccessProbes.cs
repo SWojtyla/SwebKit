@@ -23,7 +23,7 @@ internal static class StorageAccessProbes
             var label = string.IsNullOrWhiteSpace(account.DisplayName) ? account.AccountName : account.DisplayName;
             var authMode = account.UseAad ? null : "connectionString";
 
-            yield return new AccessProbeSpec(Area, account.Id, CapabilityBlobs, label, null, authMode,
+            yield return new AccessProbeSpec(Area, account.Id, CapabilityBlobs, label, account.ResourceId, authMode,
                 async ct =>
                 {
                     var client = demo.IsDemoMode ? demo.GetStorageClient() : pool.GetOrCreate(account);

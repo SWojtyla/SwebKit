@@ -4,6 +4,7 @@
 // (Module 2, 2.4) for the rationale behind this per-domain split.
 
 export * from "./useProfile";
+export * from "./useAccess";
 export * from "./useServiceBus";
 export * from "./useAks";
 export * from "./useRedis";

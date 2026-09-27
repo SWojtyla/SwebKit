@@ -15,6 +15,7 @@ import {
     Network,
     Stethoscope,
     Palette,
+    ShieldCheck,
 } from "lucide-react";
 import { useProfile } from "./useProfile";
 import { useCollections } from "./useApiClient";
@@ -174,6 +175,15 @@ const staticCommandPaletteItems: CommandPaletteItem[] = [
         icon: FolderOpen,
         to: "/settings",
         state: { tab: "storage" },
+    },
+    {
+        id: "settings-access",
+        type: "nav",
+        label: "Access Settings",
+        keywords: "settings access permissions denied rbac request",
+        icon: ShieldCheck,
+        to: "/settings",
+        state: { tab: "access" },
     },
     {
         id: "settings-agent",

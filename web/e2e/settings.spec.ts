@@ -32,6 +32,7 @@ test.describe("Settings", () => {
             "aks",
             "redis",
             "storage",
+            "access",
             "agent",
             "map",
             "diagnostics",
