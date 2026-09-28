@@ -20,6 +20,16 @@ public sealed class DemoModeService : IDisposable
     /// schema tree is empty while queries still work. Demonstrates the metadata-hidden state.</summary>
     public const string DemoSqlConnectionIdRestricted = "demo-sql-prd";
 
+    /// <summary>A working dev vault — the canned secrets below resolve here.</summary>
+    public const string DemoKeyVaultDevId = "demo-kv-dev";
+    /// <summary>A locked-down prod vault — <see cref="DemoAwareKeyVaultResolver"/> denies every
+    /// lookup against it (the <c>*prod*</c>/<c>*restricted*</c> name rule), the same way a real
+    /// vault denies an identity without <c>secrets/get</c>.</summary>
+    public const string DemoKeyVaultProdId = "demo-kv-prod";
+
+    private const string DemoKeyVaultDevName = "dev-secrets";
+    private const string DemoKeyVaultProdName = "prod-secrets";
+
     private DemoServiceBusClient _ordersClient = DemoServiceBusClient.OrdersDev();
     private DemoServiceBusClient _paymentsClient = DemoServiceBusClient.PaymentsDev();
     private readonly DemoAksClient _aksClient = new();
@@ -48,6 +58,11 @@ public sealed class DemoModeService : IDisposable
         DisplayName = "orders-prd-sql (restricted)",
         Server = "orders-prd-sql.database.windows.net",
         Database = "orders",
+        // Declared objects are the whole point of a locked-down connection: the catalog is
+        // hidden but these names keep the tree alive. v_orders is granted (columns + browse
+        // work), p_recalc demonstrates a runnable proc, and v_audit carries an object-level
+        // DENY so the per-object failure path is exercisable too.
+        DeclaredObjects = ["prd.v_orders", "exec:prd.p_recalc", "prd.v_audit"],
     }, variant: 2);
 
     private bool _isDemoMode;
@@ -144,6 +159,61 @@ public sealed class DemoModeService : IDisposable
         DemoSqlConnectionIdRestricted => _sqlClientRestricted,
         _ => _sqlClient,
     };
+
+    /// <summary>The demo vault pair overlaid onto the profile while demo mode is on — a working
+    /// dev vault and a prod vault every secret lookup is denied against.</summary>
+    public IReadOnlyList<KeyVaultEntry> GetDemoKeyVaults() =>
+    [
+        new KeyVaultEntry
+        {
+            Id = DemoKeyVaultDevId,
+            Name = DemoKeyVaultDevName,
+            Url = "https://dev-secrets.vault.azure.net/",
+        },
+        new KeyVaultEntry
+        {
+            Id = DemoKeyVaultProdId,
+            Name = DemoKeyVaultProdName,
+            Url = "https://prod-secrets.vault.azure.net/",
+        },
+    ];
+
+    /// <summary>
+    /// The demo "no prod access" rule: any vault reference — the friendly name or the vault URL —
+    /// containing <c>prod</c> or <c>restricted</c> is denied.
+    /// </summary>
+    public static bool IsDeniedVaultName(string? name) =>
+        name?.Contains("prod", StringComparison.OrdinalIgnoreCase) == true
+        || name?.Contains("restricted", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>Canned dev-vault secrets — enough for the demo API collection's
+    /// Key Vault-sourced environment variables to resolve to plausible-looking values.</summary>
+    private static readonly IReadOnlyDictionary<string, string> DemoSecrets =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["payments-api-key"] = "demo-payments-key-0000",
+            ["orders-api-key"] = "demo-orders-key-0000",
+        };
+
+    /// <summary>
+    /// Demo-mode secret resolution. A denied vault returns <c>null</c> — the same shape a real
+    /// denied vault produces through <c>IKeyVaultSecretResolver</c> (the contract collapses
+    /// denial and missing-secret to null), so callers exercise the real failure path. Unknown
+    /// vaults and unknown secret names are likewise null.
+    /// </summary>
+    public string? GetDemoSecret(string secretName, string? vaultName)
+    {
+        if (IsDeniedVaultName(vaultName))
+            return null;
+
+        var isDevVault = vaultName is null
+            || string.Equals(vaultName, DemoKeyVaultDevName, StringComparison.OrdinalIgnoreCase)
+            || vaultName.Contains("dev-secrets", StringComparison.OrdinalIgnoreCase);
+        if (!isDevVault)
+            return null;
+
+        return DemoSecrets.TryGetValue(secretName, out var value) ? value : null;
+    }
 
     public void Dispose() => _redisClient.Dispose();
 }

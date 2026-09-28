@@ -1,3 +1,5 @@
+import type { AccessDenial } from "./access";
+
 /** Mirrors `SwebKit.Core.Domain.SqlConfig`. Entra-only by design — no credential
  * fields; the sidecar acquires tokens through the shared credential factory. */
 export interface SqlConfig {
@@ -19,6 +21,11 @@ export interface SqlConnectionEntry {
     subscriptionId?: string | null;
     resourceGroup?: string | null;
     resourceId?: string | null;
+    /** User-declared objects merged into the schema tree when catalog metadata is hidden
+     * (VIEW DEFINITION denied): `"schema.name"` for queryable views/tables,
+     * `"exec:schema.name"` for runnable procedures. Normalized server-side — trimmed,
+     * deduped, malformed entries dropped. */
+    declaredObjects?: string[];
 }
 
 export interface SqlDatabaseInfo {
@@ -47,7 +54,12 @@ export interface SqlForeignKeyInfo {
 
 export interface SqlObjectInfo {
     name: string;
+    /** "table" | "view" for catalog-discovered objects; "proc" for a declared procedure. */
     kind: string;
+    /** True when the object came from the connection's `declaredObjects` list rather than
+     * the catalog — a name the user asserted exists. Columns load lazily through the
+     * columns endpoint (SELECT TOP 0) on expand. */
+    isDeclared?: boolean;
     columns: SqlColumnInfo[];
     indexes: SqlIndexInfo[];
     foreignKeys: SqlForeignKeyInfo[];
@@ -64,8 +76,24 @@ export interface SqlSchemaModel {
     /** The caller's effective database permissions from sys.fn_my_permissions (empty when the probe couldn't run). */
     effectivePermissions?: string[];
     /** True when the catalog came back empty while the identity holds query rights but no
-     *  VIEW DEFINITION — metadata is hidden by policy, not because the database is empty. */
+     *  VIEW DEFINITION — metadata is hidden by policy, not because the database is empty.
+     *  Declared objects don't count: a tree holding only declarations still reports true,
+     *  so the UI can present it as a partial tree. */
     metadataHidden?: boolean;
+}
+
+/** What `GET /api/sql/{id}/objects/{schema}/{name}/columns` returns — per-object lazy
+ * column introspection (SELECT TOP 0). Always 200 once the connection resolves; a
+ * denied or broken object carries `denied`/`error` in the payload instead of an HTTP
+ * error so one bad object can't take the tree down. */
+export interface SqlObjectColumnsResult {
+    schema: string;
+    name: string;
+    columns: SqlColumnInfo[];
+    denied: boolean;
+    /** Structured denial (Sql remedy) when `denied` — mirrors `AccessDenial`. */
+    denial?: AccessDenial | null;
+    error?: string | null;
 }
 
 export interface SqlResultColumn {

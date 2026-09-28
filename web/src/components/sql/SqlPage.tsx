@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Play, Save } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import {
     useProfile,
     useSaveSqlQuery,
@@ -11,7 +11,10 @@ import {
     useUpdateSearchParams,
 } from "@/lib/hooks";
 import type { SqlQueryResult } from "@/lib/types";
+import { quoteSqlIdent } from "@/lib/sql-declared";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
+import { PinResourceButton } from "@/components/shared/PinResourceButton";
+import { pinSqlConnection } from "@/lib/pinned-resources";
 import { SchemaTree } from "./SchemaTree";
 import { SqlEditor } from "./SqlEditor";
 import { ResultsGrid } from "./ResultsGrid";
@@ -32,6 +35,7 @@ export function SqlPage() {
     const { data: profile } = useProfile();
     const updateProfile = useUpdateProfile();
     const navigate = useNavigate();
+    const location = useLocation();
 
     const connections = useMemo(
         () =>
@@ -72,10 +76,12 @@ export function SqlPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only consumption.
     }, []);
 
-    // The active connection follows the deep-link target, then the profile's persisted
-    // choice, then the first configured one — same order SqlToolContext resolves.
+    // The active connection follows the live `?connection=` param first (a
+    // palette/deep-link navigation can retarget an already-mounted page), then
+    // the profile's persisted choice, then the first configured one — same
+    // order SqlToolContext resolves.
     const resolvedConnectionId =
-        connections.find((c) => c.id === deepLink.connection)?.id ??
+        connections.find((c) => c.id === searchParams.get("connection"))?.id ??
         connections.find(
             (c) => c.id === profile?.config.sqlConfig?.activeConnectionId,
         )?.id ??
@@ -150,6 +156,28 @@ export function SqlPage() {
             { onSuccess: (r) => setResult(r) },
         );
     };
+
+    // Palette/deep-link: `state.sql` loads a statement into the editor (saved-
+    // query items send `{ text }`); `run: true` additionally executes it.
+    // Consumed once, then cleared so history navigation doesn't replay it.
+    useEffect(() => {
+        const state = location.state as {
+            sql?: { text?: string; run?: boolean };
+        } | null;
+        if (!state?.sql) return;
+        const { text, run: autoRun } = state.sql;
+        if (text) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- deep-link consumption.
+            setEditorSql(text);
+            setActiveTab("query");
+            if (autoRun) run(text);
+        }
+        navigate(location.pathname + location.search, {
+            replace: true,
+            state: null,
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- `run` is rebuilt each render; location.state is the real trigger.
+    }, [location, navigate]);
 
     if (!resolvedConnectionId) {
         return (
@@ -244,6 +272,12 @@ export function SqlPage() {
                         Writes enabled
                     </span>
                 )}
+                {connection && (
+                    <PinResourceButton
+                        resource={pinSqlConnection(connection)}
+                        testId="sql-pin-connection"
+                    />
+                )}
             </div>
 
             <div className="flex gap-1 border-b px-6" data-testid="sql-tabs">
@@ -270,8 +304,18 @@ export function SqlPage() {
                         schema={schema.data}
                         isLoading={schema.isLoading}
                         error={schema.error}
+                        connectionId={resolvedConnectionId}
+                        database={effectiveDatabase}
                         selected={selectedTable}
-                        onSelect={(s, name) => {
+                        onSelect={(s, name, kind) => {
+                            if (kind === "proc") {
+                                // Procedures aren't browsable — selecting one hands the
+                                // user a runnable EXEC. The read-only guard still applies
+                                // on run, same as any other statement.
+                                setEditorSql(`EXEC ${quoteSqlIdent(s)}.${quoteSqlIdent(name)}`);
+                                setActiveTab("query");
+                                return;
+                            }
                             setSelectedTable({ schema: s, name });
                             setActiveTab("browse");
                         }}
@@ -281,7 +325,12 @@ export function SqlPage() {
                 <div className="flex min-w-0 flex-1 flex-col">
                     {activeTab === "query" && (
                         <div className="flex min-h-0 flex-1 flex-col p-3">
-                            <QueryBuilderPanel schema={schema.data} onInsert={setEditorSql} />
+                            <QueryBuilderPanel
+                                schema={schema.data}
+                                onInsert={setEditorSql}
+                                connectionId={resolvedConnectionId}
+                                database={effectiveDatabase}
+                            />
                             <div className="flex h-40 flex-col">
                                 <SqlEditor
                                     value={editorSql}

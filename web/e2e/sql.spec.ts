@@ -160,7 +160,7 @@ test.describe("SQL", () => {
         ).toContainText("products");
     });
 
-    test("restricted connection shows the hidden-schema state, not an empty tree", async ({
+    test("restricted connection browses declared objects with lazy columns", async ({
         page,
     }) => {
         await page.goto("/sql");
@@ -168,13 +168,46 @@ test.describe("SQL", () => {
             .getByTestId("sql-connection-select")
             .selectOption("demo-sql-prd");
 
-        // The catalog reads empty but the identity holds SELECT/EXECUTE — the UI must say
-        // "hidden by permissions", never the misleading "no objects" empty state.
-        await expect(page.getByTestId("sql-schema-hidden")).toBeVisible();
-        await expect(page.getByTestId("sql-schema-hidden")).toContainText(
-            /VIEW DEFINITION|db_datareader/,
-        );
+        // demo-sql-prd declares prd.v_orders / exec:prd.p_recalc / prd.v_audit — the
+        // catalog is hidden, so the tree is those declarations alone plus a banner
+        // saying so (never the misleading "no objects" empty state).
+        await expect(page.getByTestId("sql-schema-partial")).toBeVisible();
+        await expect(page.getByTestId("sql-schema-hidden")).toHaveCount(0);
         await expect(page.getByTestId("sql-schema-empty")).toHaveCount(0);
-        await expect(page.getByTestId("sql-schema-tree")).toHaveCount(0);
+
+        await page.getByTestId("sql-schema-prd").click();
+        const orders = page.getByTestId("sql-object-prd.v_orders");
+        await expect(orders).toBeVisible();
+        await expect(
+            page.getByTestId("sql-declared-badge-prd.v_orders"),
+        ).toBeVisible();
+
+        // Expanding a declared object lazy-loads columns via SELECT TOP 0 — granted on
+        // v_orders, so the columns arrive without any catalog rights.
+        await page.getByTestId("sql-object-expand-prd.v_orders").click();
+        await expect(page.getByTestId("sql-columns-prd.v_orders")).toContainText(
+            "total",
+        );
+
+        // v_audit carries an object-level DENY in the demo — the failure surfaces on the
+        // object itself, not as a global error.
+        await page.getByTestId("sql-object-expand-prd.v_audit").click();
+        await expect(
+            page.getByTestId("sql-columns-denied-prd.v_audit"),
+        ).toBeVisible();
+
+        // A declared procedure lists as runnable and offers no column fetch — selecting
+        // it hands the editor an EXEC.
+        await expect(
+            page.getByTestId("sql-proc-hint-prd.p_recalc"),
+        ).toHaveCount(0);
+        await page.getByTestId("sql-object-expand-prd.p_recalc").click();
+        await expect(
+            page.getByTestId("sql-proc-hint-prd.p_recalc"),
+        ).toBeVisible();
+        await page.getByTestId("sql-object-prd.p_recalc").click();
+        await expect(page.getByTestId("sql-editor-input")).toHaveValue(
+            "EXEC [prd].[p_recalc]",
+        );
     });
 });

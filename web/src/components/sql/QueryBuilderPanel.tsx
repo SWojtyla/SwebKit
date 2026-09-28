@@ -1,17 +1,22 @@
 import { useMemo, useState } from "react";
 import { Plus, Trash2, WandSparkles } from "lucide-react";
+import { useSqlObjectColumns } from "@/lib/hooks/useSql";
 import type { SqlObjectInfo, SqlSchemaModel } from "@/lib/types";
 import { buildSelectQuery, type SqlFilterOperator, type SqlQueryFilter } from "@/lib/sql-query-builder";
 
 interface QueryBuilderPanelProps {
   schema: SqlSchemaModel | undefined;
   onInsert: (sql: string) => void;
+  /** Connection/database needed for the lazy column fetch when a declared object
+   * (no catalog columns) is picked. */
+  connectionId: string | null;
+  database: string | null;
 }
 
 const operators: SqlFilterOperator[] = ["=", "<>", ">", ">=", "<", "<=", "LIKE", "IS NULL", "IS NOT NULL"];
 const emptyFilter = (): SqlQueryFilter => ({ column: "", operator: "=", value: "" });
 
-export function QueryBuilderPanel({ schema, onInsert }: QueryBuilderPanelProps) {
+export function QueryBuilderPanel({ schema, onInsert, connectionId, database }: QueryBuilderPanelProps) {
   const [open, setOpen] = useState(false);
   const [objectKey, setObjectKey] = useState("");
   const [columns, setColumns] = useState<string[]>([]);
@@ -21,11 +26,29 @@ export function QueryBuilderPanel({ schema, onInsert }: QueryBuilderPanelProps) 
   const [top, setTop] = useState(100);
 
   const objects = useMemo(
-    () => (schema?.schemas ?? []).flatMap((group) => group.objects.map((object) => ({ group: group.name, object }))),
+    () => (schema?.schemas ?? []).flatMap((group) =>
+      group.objects
+        // The builder emits SELECT — declared procedures ("proc") are runnable, not
+        // selectable, so they stay out of the picker.
+        .filter((object) => object.kind !== "proc")
+        .map((object) => ({ group: group.name, object }))),
     [schema],
   );
   const selected = objects.find(({ group, object }) => `${group}.${object.name}` === objectKey);
   const selectedObject: SqlObjectInfo | undefined = selected?.object;
+
+  // A declared object arrives with no catalog columns — fire the same SELECT TOP 0
+  // introspection the tree uses on expand. The hook merges results into the schema
+  // cache, so `selectedObject.columns` populates on its own once it resolves.
+  const declaredNeedsColumns =
+    !!selectedObject && !!selectedObject.isDeclared && selectedObject.columns.length === 0;
+  const objectColumns = useSqlObjectColumns(
+    connectionId,
+    database,
+    selected?.group ?? null,
+    selected?.object.name ?? null,
+    open && declaredNeedsColumns,
+  );
 
   const selectObject = (key: string) => {
     setObjectKey(key);
@@ -62,7 +85,7 @@ export function QueryBuilderPanel({ schema, onInsert }: QueryBuilderPanelProps) 
               <option value="">choose a table…</option>
               {objects.map(({ group, object }) => (
                 <option key={`${group}.${object.name}`} value={`${group}.${object.name}`}>
-                  {group}.{object.name}
+                  {group}.{object.name}{object.isDeclared ? " (declared)" : ""}
                 </option>
               ))}
             </select>
@@ -81,6 +104,27 @@ export function QueryBuilderPanel({ schema, onInsert }: QueryBuilderPanelProps) 
 
           {selected && selectedObject && (
             <>
+              {declaredNeedsColumns && objectColumns.isPending && (
+                <p className="text-muted-foreground" data-testid="sql-builder-columns-loading">
+                  Loading declared object's columns…
+                </p>
+              )}
+              {declaredNeedsColumns && objectColumns.data?.denied && (
+                <p className="text-destructive" data-testid="sql-builder-columns-denied">
+                  Access denied on {selected.group}.{selected.object.name}
+                  {objectColumns.data.denial?.requiredAccess
+                    ? ` — needs ${objectColumns.data.denial.requiredAccess}`
+                    : ""}
+                </p>
+              )}
+              {declaredNeedsColumns && (objectColumns.isError || objectColumns.data?.error) && (
+                <p className="text-destructive" data-testid="sql-builder-columns-error">
+                  {objectColumns.data?.error ??
+                    (objectColumns.error instanceof Error
+                      ? objectColumns.error.message
+                      : String(objectColumns.error))}
+                </p>
+              )}
               <fieldset>
                 <legend className="mb-1 font-medium">Columns</legend>
                 <div className="flex flex-wrap gap-x-3 gap-y-1">

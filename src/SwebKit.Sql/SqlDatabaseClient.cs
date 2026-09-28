@@ -196,6 +196,11 @@ public sealed class SqlDatabaseClient : ISqlClient
             }
         }
 
+        // Declared objects merge here — in the client layer — so every consumer gets them:
+        // the schema endpoint, the completion context, and the agent's SQL tools (which
+        // build clients through the factory, not the endpoint). A catalog-discovered object
+        // of the same name always wins over a declaration.
+        model.MergeDeclaredObjects(Connection.DeclaredObjects);
         return model;
     }
 
@@ -213,6 +218,35 @@ public sealed class SqlDatabaseClient : ISqlClient
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
             permissions.Add(reader.GetString(0));
         return permissions;
+    }
+
+    public async Task<IReadOnlyList<SqlColumnInfo>> GetObjectColumnsAsync(
+        string schemaName, string objectName, string? database, CancellationToken ct = default)
+    {
+        // SELECT TOP 0 reads no rows — only the result-set shape — and requires SELECT on the
+        // object rather than catalog rights, which is exactly the grant a locked-down identity
+        // holds on a declared object. Identifiers are bracket-quoted, never parameterized.
+        await using var conn = CreateConnection(database);
+        await conn.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new SqlCommand(
+            $"SELECT TOP 0 * FROM {Quote(schemaName)}.{Quote(objectName)}", conn)
+        { CommandTimeout = 30 };
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+
+        // GetColumnSchema() reports the provider's full column metadata (nullability included)
+        // even with zero rows returned. IsPrimaryKey is unknowable without catalog rights —
+        // it stays false, which the UI treats as "not a PK", so declared trees never fabricate keys.
+        var columns = new List<SqlColumnInfo>();
+        foreach (var column in reader.GetColumnSchema())
+        {
+            columns.Add(new SqlColumnInfo
+            {
+                Name = column.ColumnName,
+                DataType = column.DataTypeName ?? string.Empty,
+                IsNullable = column.AllowDBNull ?? false,
+            });
+        }
+        return columns;
     }
 
     public async Task<SqlQueryResult> ExecuteQueryAsync(string sql, string? database, int maxRows, bool allowWrites, CancellationToken ct = default)

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
+import { mergeObjectColumns } from "../sql-declared";
 import type {
   SavedSqlQuery,
   SqlCompletionContext,
@@ -8,6 +9,7 @@ import type {
   SqlDatabaseInfo,
   SqlDiscoveredServer,
   SqlHistoryEntry,
+  SqlObjectColumnsResult,
   SqlQueryResult,
   SqlSchemaCompareResult,
   SqlSchemaModel,
@@ -120,15 +122,59 @@ export function useSqlTableRows(connectionId: string | null, schema: string | nu
   });
 }
 
+/** Lazy column introspection for one object (SELECT TOP 0 on the server) — fired when a
+ * declared schema node expands. `enabled` is the expand flag: the query only runs while
+ * the node is open and its columns aren't already known. On success the columns merge
+ * into the schema query's cached model so the editor autocomplete and query builder see
+ * them without a second fetch. Denials/errors arrive in the payload, not as a thrown
+ * query error — one denied object must not fail the tree. */
+export function useSqlObjectColumns(
+  connectionId: string | null,
+  database: string | null,
+  schema: string | null,
+  name: string | null,
+  enabled = true,
+) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["sql", connectionId, "object-columns", database ?? "", schema ?? "", name ?? ""],
+    queryFn: async ({ signal }) => {
+      const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+      const result = await apiFetch<SqlObjectColumnsResult>(
+        `/api/sql/${connectionId}/objects/${encodeURIComponent(schema!)}/${encodeURIComponent(name!)}/columns${qs}`,
+        { signal },
+      );
+      if (!result.denied && !result.error && result.columns.length > 0) {
+        qc.setQueryData<SqlSchemaModel>(
+          ["sql", connectionId, "schema", database ?? ""],
+          (prev) => mergeObjectColumns(prev, schema!, name!, result.columns),
+        );
+      }
+      return result;
+    },
+    enabled: enabled && !!connectionId && !!schema && !!name,
+    staleTime: 60_000,
+    // A denied object is a payload, not a failure — but a transport failure shouldn't
+    // storm retry the server either while a node sits expanded.
+    retry: 1,
+  });
+}
+
 // ── Saved queries & history ──────────────────────────────────────────────────
 
-export function useSavedSqlQueries(connectionId: string | null) {
+export function useSavedSqlQueries(
+  connectionId: string | null,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ["sql", "queries", connectionId ?? "all"],
     queryFn: ({ signal }) => {
       const qs = connectionId ? `?connectionId=${encodeURIComponent(connectionId)}` : "";
       return apiFetch<SavedSqlQuery[]>(`/api/sql/queries${qs}`, { signal });
     },
+    // The palette passes `null` + a lazy flag so opening it is the only thing
+    // that pays for the cross-connection list.
+    enabled: options?.enabled ?? true,
   });
 }
 

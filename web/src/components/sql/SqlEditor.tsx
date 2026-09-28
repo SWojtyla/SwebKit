@@ -43,10 +43,14 @@ function buildSchemaCompletionOptions(schema: SqlSchemaModel | undefined) {
     if (schema) {
         for (const group of schema.schemas) {
             for (const obj of group.objects) {
+                // Declared objects reach here the moment they're merged into the schema
+                // model — including lazily-introspected columns once expanded.
                 tables.push({
                     label: obj.name,
-                    type: obj.kind === "view" ? "class" : "property",
-                    detail: `${group.name} (${obj.kind})`,
+                    type: obj.kind === "view" ? "class" : obj.kind === "proc" ? "function" : "property",
+                    detail: obj.isDeclared
+                        ? `${group.name} (${obj.kind}, declared)`
+                        : `${group.name} (${obj.kind})`,
                 });
                 for (const col of obj.columns) {
                     columns.push({

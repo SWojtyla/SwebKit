@@ -103,6 +103,22 @@ public class SqlSchemaComparerTests
     }
 
     [Fact]
+    public void Compare_ExcludesDeclaredObjects()
+    {
+        // A declared name is a user assertion, not an observed catalog fact — it must
+        // never surface as "only in source/target" in a catalog compare.
+        var declared = Table("v_orders");
+        declared.IsDeclared = true;
+        var source = Model(("prd", declared));
+        var target = Model(("dbo", Table("t")));
+
+        var result = SqlSchemaComparer.Compare(source, target);
+
+        Assert.Empty(result.OnlyInSource);
+        Assert.Equal("t", Assert.Single(result.OnlyInTarget).Name);
+    }
+
+    [Fact]
     public void Compare_IsCaseInsensitiveOnNames()
     {
         var source = Model(("dbo", Table("Customers", Col("Id", "int"))));
