@@ -9,13 +9,20 @@ using Xunit;
 namespace SwebKit.Sidecar.Tests;
 
 /// <summary>Exercises <see cref="GetAlertHistoryTool"/> against a real
-/// <see cref="MonitoringAlertEvaluationService"/> driven by a firing fake signal source.</summary>
+/// <see cref="MonitoringAlertEvaluationService"/> driven by a firing fake signal source. The
+/// engine and the tool share one <see cref="InMemoryAlertHistoryRepository"/> so the tool's
+/// durable-store merge is exercised, not just the ring buffer.</summary>
 public class GetAlertHistoryToolTests
 {
-    private static MonitoringAlertEvaluationService BuildEngine(IAlertRuleRepository repo, params IAlertSignalSource[] sources) =>
-        new(repo, new FakeConnectionPool(), sources,
+    private static (MonitoringAlertEvaluationService Engine, GetAlertHistoryTool Tool) Build(
+        IAlertRuleRepository repo, params IAlertSignalSource[] sources)
+    {
+        var history = new InMemoryAlertHistoryRepository();
+        var engine = new MonitoringAlertEvaluationService(repo, new FakeConnectionPool(), sources,
             new ProfileRepository(), new InMemoryMonitoringSilenceRepository(),
-            new InMemoryAlertHistoryRepository(), NullLogger<MonitoringAlertEvaluationService>.Instance);
+            history, NullLogger<MonitoringAlertEvaluationService>.Instance);
+        return (engine, new GetAlertHistoryTool(engine, history));
+    }
 
     private static MonitoringAlertRule Rule(string id) => new()
     {
@@ -35,24 +42,24 @@ public class GetAlertHistoryToolTests
         using var _ = new AppDataSandbox();
         var repo = new AlertRuleRepository();
         await repo.UpsertAsync(Rule("r1"));
-        var engine = BuildEngine(repo, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        var (engine, tool) = Build(repo, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
         await engine.ReloadRulesAsync();
         await engine.RunEvaluationOnceAsync();
 
-        var tool = new GetAlertHistoryTool(engine);
         var result = Parse(await tool.ExecuteAsync(JsonDocument.Parse("{}").RootElement, CancellationToken.None));
 
         Assert.Equal(1, result.GetProperty("alert_count").GetInt32());
         var alert = result.GetProperty("alerts")[0];
         Assert.Equal("r1", alert.GetProperty("rule_id").GetString());
         Assert.Equal("AksPodHealth", alert.GetProperty("source").GetString());
+        Assert.Equal("Fired", alert.GetProperty("kind").GetString());
     }
 
     [Fact]
     public async Task EmptyHistory_ReturnsEmptyList()
     {
         using var _ = new AppDataSandbox();
-        var tool = new GetAlertHistoryTool(BuildEngine(new AlertRuleRepository()));
+        var (_, tool) = Build(new AlertRuleRepository());
         var result = Parse(await tool.ExecuteAsync(JsonDocument.Parse("{}").RootElement, CancellationToken.None));
 
         Assert.Equal(0, result.GetProperty("alert_count").GetInt32());
@@ -63,7 +70,7 @@ public class GetAlertHistoryToolTests
     public async Task RuleIdFilter_ReturnsNoMatch()
     {
         using var _ = new AppDataSandbox();
-        var tool = new GetAlertHistoryTool(BuildEngine(new AlertRuleRepository()));
+        var (_, tool) = Build(new AlertRuleRepository());
         var result = Parse(await tool.ExecuteAsync(
             JsonDocument.Parse("""{"rule_id": "nope"}""").RootElement, CancellationToken.None));
 

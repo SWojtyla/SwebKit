@@ -32,10 +32,10 @@ public static class AccessEndpoints
     /// service's 5-minute TTL cache answers.</summary>
     internal static async Task<IResult> GetReportAsync(
         IAccessReportService accessReports,
-        bool refresh,
+        bool? refresh,
         CancellationToken ct)
     {
-        var report = await accessReports.GetReportAsync(refresh, ct);
+        var report = await accessReports.GetReportAsync(refresh ?? false, ct);
         return Results.Ok(report);
     }
 
